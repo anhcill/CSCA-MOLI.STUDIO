@@ -1,12 +1,12 @@
 const jwt = require("jsonwebtoken");
+const db = require("../config/database");
 
 /**
  * Auth Middleware
- * Verify JWT token and attach user to request
+ * Verifies the JWT, checks blacklist, and attaches decoded payload to req.user.
  */
 const authMiddleware = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -16,9 +16,7 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
-    // Extract token
     const token = authHeader.split(" ")[1];
-
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -27,13 +25,35 @@ const authMiddleware = async (req, res, next) => {
     }
 
     try {
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Attach user to request
+      if (!decoded.id) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid token payload" });
+      }
+
+      // ── Blacklist check ──────────────────────────────────
+      if (decoded.jti) {
+        const { rows } = await db.query(
+          "SELECT id FROM token_blacklist WHERE token_jti = $1 LIMIT 1",
+          [decoded.jti],
+        );
+        if (rows.length > 0) {
+          return res.status(401).json({
+            success: false,
+            message: "Token đã bị thu hồi, vui lòng đăng nhập lại",
+            code: "TOKEN_REVOKED",
+          });
+        }
+      }
+
       req.user = {
         id: decoded.id,
         email: decoded.email,
+        role: decoded.role || "student",
+        jti: decoded.jti,
+        exp: decoded.exp,
       };
 
       next();
@@ -45,56 +65,66 @@ const authMiddleware = async (req, res, next) => {
           code: "TOKEN_EXPIRED",
         });
       }
-
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token",
-      });
+      return res.status(401).json({ success: false, message: "Invalid token" });
     }
   } catch (error) {
     console.error("Auth middleware error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error in authentication",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error in authentication" });
   }
 };
 
 /**
- * Check if user has specific role
- * @param {string[]} roles - Allowed roles
+ * Role-based authorization — checks req.user.role set by authMiddleware
  */
 const authorize = (...roles) => {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized",
-      });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
-
-    const User = require("../models/User");
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    if (!roles.includes(user.role)) {
+    if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Insufficient permissions.",
       });
     }
-
     next();
   };
 };
 
+/**
+ * Optional authentication — does NOT fail if token is absent.
+ * ✅ P1 fix: No DB query.
+ */
+const optionalAuth = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) return next();
+
+    const token = authHeader.split(" ")[1];
+    if (!token) return next();
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded.id) {
+        req.user = {
+          id: decoded.id,
+          email: decoded.email,
+          role: decoded.role || "student",
+        };
+      }
+    } catch {
+      // Invalid/expired token — just continue without user
+    }
+    next();
+  } catch {
+    next();
+  }
+};
+
 module.exports = {
   authenticate: authMiddleware,
-  authorize
+  optionalAuth,
+  authorize,
 };

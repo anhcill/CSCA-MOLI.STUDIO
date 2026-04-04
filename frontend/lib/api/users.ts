@@ -28,34 +28,28 @@ export interface UserStats {
   total_comments: number;
 }
 
-/**
- * Get user by ID
- */
 export const getUserById = async (id: number): Promise<{ success: boolean; data: { user: User } }> => {
   const response = await axios.get(`/users/${id}`);
   return response.data;
 };
 
-/**
- * Update user profile
- */
 export const updateProfile = async (id: number, data: UpdateProfileData): Promise<{ success: boolean; message: string; data: { user: User } }> => {
   const response = await axios.put(`/users/${id}`, data);
   return response.data;
 };
 
-/**
- * Update user avatar
- */
 export const updateAvatar = async (id: number, avatar: string): Promise<{ success: boolean; message: string; data: { user: User } }> => {
   const response = await axios.post(`/users/${id}/avatar`, { avatar });
   return response.data;
 };
 
-/**
- * Get user stats
- */
 export const getUserStats = async (id: number): Promise<{ success: boolean; data: UserStats }> => {
   const response = await axios.get(`/users/${id}/stats`);
   return response.data;
 };
+
+export const changePassword = async (id: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post(`/users/${id}/change-password`, { currentPassword, newPassword });
+  return response.data;
+};
+

@@ -1,35 +1,33 @@
+import type { Metadata } from 'next';
 import Banner from '@/components/layout/Banner';
 import Header from '@/components/layout/Header';
-import Link from 'next/link';
+import HomeContent from '@/components/layout/HomeContent';
+
+export const metadata: Metadata = {
+  title: 'CSCA - Ôn Thi Học Bổng Trung Quốc',
+  description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi Toán, Vật Lý, Hóa Học, Tiếng Trung. AI phân tích lộ trình cá nhân, 10,000+ học viên.',
+  openGraph: {
+    title: 'CSCA - Ôn Thi Học Bổng Trung Quốc',
+    description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi, AI phân tích lộ trình và 10,000+ học viên.',
+    url: '/',
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'CSCA - Ôn thi học bổng Trung Quốc' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'CSCA - Ôn Thi Học Bổng Trung Quốc',
+    description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi, AI phân tích lộ trình.',
+    images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
+  },
+};
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-100">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
-      
-      {/* Banner - Full Width */}
-      <div className="px-6 py-8">
-        <div className="max-w-[1920px] mx-auto">
-          <Banner />
-        </div>
-      </div>
-      
-      <main className="container mx-auto px-6 py-12 max-w-[1400px]">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Chào mừng đến với CSCA
-          </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Nền tảng luyện thi tiếng Trung toàn diện
-          </p>
-          <Link 
-            href="/forum"
-            className="inline-block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg text-lg font-semibold"
-          >
-            Vào Diễn Đàn
-          </Link>
-        </div>
-      </main>
+      {/* Hero Banner — full width, no padding */}
+      <Banner />
+      {/* All homepage sections */}
+      <HomeContent />
     </div>
   );
 }

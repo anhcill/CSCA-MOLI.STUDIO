@@ -1,11 +1,12 @@
-require("dotenv").config();
+require("dotenv").config(); // reload env - 2026-02-19
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
 const morgan = require("morgan");
-const path = require("path");
+const rateLimit = require("express-rate-limit");
 const db = require("./config/database");
+const { runOptimizations } = require("./config/migrations");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,20 +14,93 @@ const PORT = process.env.PORT || 5000;
 // ====================================
 // MIDDLEWARE
 // ====================================
-app.use(helmet()); // Security headers
+
+// Security headers + CSP
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "https://accounts.google.com",
+          "https://apis.google.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https://res.cloudinary.com",
+          "https://ui-avatars.com",
+          "https://lh3.googleusercontent.com",
+        ],
+        connectSrc: [
+          "'self'",
+          process.env.FRONTEND_URL || "http://localhost:3000",
+        ],
+        // Cho phép frontend nhúng PDF từ backend vào iframe
+        frameAncestors: [
+          "'self'",
+          process.env.FRONTEND_URL || "http://localhost:3000",
+        ],
+        objectSrc: ["'none'"],
+      },
+    },
+    // Tắt X-Frame-Options để không conflict với frameAncestors CSP
+    frameguard: false,
+  }),
+);
+
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
-  })
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cache-Control",
+      "Pragma",
+      "X-Requested-With",
+    ],
+  }),
 );
 app.use(compression()); // Compress responses
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use(morgan("dev")); // HTTP request logger
+app.use(express.json({ limit: "50kb" })); // Body size limit – prevent DoS
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
-// Serve static files (uploaded images)
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// ====================================
+// RATE LIMITING
+// ====================================
+// Global limiter: 100 requests per 15 minutes per IP
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Quá nhiều yêu cầu, vui lòng thử lại sau",
+  },
+});
+
+// Strict auth limiter: 20 requests per 15 minutes per IP (login, register, forgot-password)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Quá nhiều yêu cầu xác thực, vui lòng thử lại sau 15 phút",
+  },
+  skipSuccessfulRequests: true, // only count failed requests
+});
+
+app.use("/api", globalLimiter);
+app.use("/api/auth", authLimiter);
 
 // ====================================
 // ROUTES
@@ -43,6 +117,7 @@ app.get("/", (req, res) => {
       exams: "/api/exams",
       stats: "/api/stats",
       materials: "/api/materials",
+      vocabulary: "/api/vocabulary",
     },
   });
 });
@@ -50,19 +125,11 @@ app.get("/", (req, res) => {
 // Health check
 app.get("/health", async (req, res) => {
   try {
-    // Test database connection
-    await db.query("SELECT NOW()");
-    res.json({
-      status: "healthy",
-      database: "connected",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: "unhealthy",
-      database: "disconnected",
-      error: error.message,
-    });
+    await db.query("SELECT 1");
+    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+  } catch {
+    // Don't expose DB error details publicly
+    res.status(503).json({ status: "unhealthy" });
   }
 });
 
@@ -73,20 +140,26 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api", require("./routes/exams"));
 app.use("/api", require("./routes/upload"));
-// app.use('/api/posts', require('./routes/posts'));
-// app.use('/api/stats', require('./routes/stats'));
-// app.use('/api/materials', require('./routes/materials'));
+app.use("/api/subjects", require("./routes/subjects"));
+app.use("/api/posts", require("./routes/posts"));
+app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/admin/exams", require("./routes/adminExamRoutes"));
+app.use("/api/admin/images", require("./routes/imageRoutes"));
+app.use("/api/materials", require("./routes/materials"));
+app.use("/api/vocabulary", require("./routes/vocabulary"));
+app.use("/api/search", require("./routes/search")); // Global search
+app.use("/api/stats", require("./routes/stats")); // Public stats (C8)
+app.use("/api/leaderboard", require("./routes/leaderboard")); // Leaderboard
+app.use("/api/settings", require("./routes/settings")); // Site settings (exam date)
+app.use("/api/ai", require("./routes/ai")); // AI Analysis
+app.use("/api/notifications", require("./routes/notifications")); // Notifications
 
 // ====================================
 // ERROR HANDLING
 // ====================================
 // 404 handler
-app.use((req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-    path: req.originalUrl,
-  });
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Not Found" });
 });
 
 // Global error handler
@@ -103,19 +176,22 @@ app.use((err, req, res, next) => {
 // ====================================
 // START SERVER
 // ====================================
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║     CSCA API Server Started            ║
 ╠════════════════════════════════════════╣
 ║  Port:        ${PORT}                     ║
-║  Environment: ${process.env.NODE_ENV || "development"}          ║
-║  Database:    ${process.env.DB_NAME || "csca_db"}             ║
+║  Environment: ${process.env.NODE_ENV || "development"}            ║
+║  Database:    ${process.env.DB_NAME || "csca_db"}                ║
 ╚════════════════════════════════════════╝
   `);
   console.log(`🚀 Server running at http://localhost:${PORT}`);
   console.log(`📚 API Docs: http://localhost:${PORT}/`);
   console.log(`❤️  Health: http://localhost:${PORT}/health`);
+
+  // Run database optimizations: tạo indexes mới + migrate schema
+  await runOptimizations();
 });
 
 // Handle unhandled promise rejections

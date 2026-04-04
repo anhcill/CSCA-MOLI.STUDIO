@@ -9,7 +9,7 @@ router.post(
   "/upload/question-image",
   authenticate,
   upload.single("image"),
-  uploadController.uploadQuestionImage
+  uploadController.uploadQuestionImage,
 );
 
 // Upload multiple images
@@ -17,14 +17,14 @@ router.post(
   "/upload/question-images",
   authenticate,
   upload.array("images", 10), // Tối đa 10 ảnh
-  uploadController.uploadMultipleImages
+  uploadController.uploadMultipleImages,
 );
 
 // Delete image
 router.delete(
-  "/upload/question-image/:filename",
+  "/upload/question-image/:publicId",
   authenticate,
-  uploadController.deleteImage
+  uploadController.deleteImage,
 );
 
 module.exports = router;

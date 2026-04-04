@@ -23,6 +23,16 @@ const config: Config = {
           950: '#172554',
         },
       },
+      keyframes: {
+        progress: {
+          '0%': { transform: 'translateX(-100%)' },
+          '50%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      animation: {
+        progress: 'progress 1.4s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

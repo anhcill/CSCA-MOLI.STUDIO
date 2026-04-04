@@ -107,10 +107,10 @@ const ExamAttempt = {
       // Calculate scores
       const statsQuery = `
         SELECT 
-          COUNT(*) as total_answered,
-          SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END) as total_correct,
-          SUM(CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END) as total_incorrect,
-          SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END) as total_score
+          COALESCE(COUNT(*), 0) as total_answered,
+          COALESCE(SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END), 0) as total_correct,
+          COALESCE(SUM(CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END), 0) as total_incorrect,
+          COALESCE(SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END), 0) as total_score
         FROM user_answers ua
         INNER JOIN questions q ON ua.question_id = q.id
         WHERE ua.attempt_id = $1
@@ -149,11 +149,11 @@ const ExamAttempt = {
       `;
 
       const result = await client.query(updateQuery, [
-        examInfo.duration,
-        parseFloat(stats.total_score),
-        parseInt(stats.total_correct),
-        parseInt(stats.total_incorrect),
-        totalUnanswered,
+        examInfo.duration || 0,
+        parseFloat(stats.total_score) || 0,
+        parseInt(stats.total_correct) || 0,
+        parseInt(stats.total_incorrect) || 0,
+        Math.max(0, totalUnanswered),
         attemptId,
       ]);
 
@@ -274,27 +274,91 @@ const ExamAttempt = {
 
     const attempt = attemptResult.rows[0];
 
-    // Get all answers with questions
-    const answersQuery = `
+    // Get all questions with answers
+    const questionsQuery = `
       SELECT 
-        ua.*,
+        q.id,
         q.question_number,
         q.question_text,
         q.question_text_cn,
         q.points,
-        a_selected.answer_text as selected_answer_text,
-        a_correct.answer_key as correct_answer_key,
-        a_correct.answer_text as correct_answer_text
-      FROM user_answers ua
-      INNER JOIN questions q ON ua.question_id = q.id
-      INNER JOIN answers a_selected ON ua.selected_answer_id = a_selected.id
-      LEFT JOIN answers a_correct ON q.id = a_correct.question_id AND a_correct.is_correct = true
-      WHERE ua.attempt_id = $1
+        q.explanation,
+        ua.selected_answer_key as user_answer,
+        ua.is_correct,
+        (SELECT answer_key FROM answers WHERE question_id = q.id AND is_correct = true LIMIT 1) as correct_answer
+      FROM questions q
+      LEFT JOIN user_answers ua ON q.id = ua.question_id AND ua.attempt_id = $1
+      WHERE q.exam_id = $2
       ORDER BY q.question_number
     `;
 
-    const answersResult = await pool.query(answersQuery, [attemptId]);
-    attempt.answers = answersResult.rows;
+    const questionsResult = await pool.query(questionsQuery, [
+      attemptId,
+      attempt.exam_id,
+    ]);
+
+    // FIX N+1: Fetch ALL answers for all questions in a single query
+    const allAnswersResult = await pool.query(
+      `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.is_correct
+       FROM answers a
+       INNER JOIN questions q ON a.question_id = q.id
+       WHERE q.exam_id = $1
+       ORDER BY a.question_id, a.answer_key`,
+      [attempt.exam_id]
+    );
+
+    // Group answers by question_id in memory
+    const answersByQuestion = {};
+    for (const a of allAnswersResult.rows) {
+      if (!answersByQuestion[a.question_id]) {
+        answersByQuestion[a.question_id] = [];
+      }
+      answersByQuestion[a.question_id].push(a);
+    }
+
+    // Build formatted answers array
+    const formattedAnswers = [];
+
+    for (const question of questionsResult.rows) {
+      const questionAnswers = answersByQuestion[question.id] || [];
+
+      // Build a map: { 'A': 'text...', 'B': 'text...' }
+      const optionMap = {};
+      questionAnswers.forEach((a) => {
+        optionMap[a.answer_key] = a.answer_text;
+      });
+
+      const userAnswerKey = question.user_answer;
+      const correctAnswerKey = question.correct_answer;
+
+      formattedAnswers.push({
+        question_number: question.question_number,
+        question_text: question.question_text,
+        question_text_cn: question.question_text_cn,
+        selected_answer_key: userAnswerKey,
+        selected_answer_text: userAnswerKey
+          ? `${userAnswerKey}. ${optionMap[userAnswerKey] || ""}`
+          : "Bỏ qua",
+        correct_answer_key: correctAnswerKey,
+        correct_answer_text: correctAnswerKey
+          ? `${correctAnswerKey}. ${optionMap[correctAnswerKey] || ""}`
+          : "",
+        is_correct: question.is_correct || false,
+        points: question.points,
+        explanation: question.explanation,
+        options: questionAnswers.map((a) => ({
+          key: a.answer_key,
+          text: a.answer_text,
+          text_cn:
+            a.answer_text_cn && a.answer_text_cn !== a.answer_text
+              ? a.answer_text_cn
+              : null,
+          is_correct: a.is_correct,
+        })),
+      });
+    }
+
+    attempt.answers = formattedAnswers;
 
     return attempt;
   },

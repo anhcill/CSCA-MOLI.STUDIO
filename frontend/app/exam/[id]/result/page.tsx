@@ -44,7 +44,7 @@ function ExamResultContent() {
   const fetchResult = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const response = await fetch(`http://localhost:5000/api/attempts/${attemptId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,

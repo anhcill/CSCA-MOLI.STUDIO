@@ -1,9 +1,29 @@
-const path = require("path");
-const fs = require("fs");
+const { v2: cloudinary } = require("cloudinary");
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Helper: Upload buffer to Cloudinary
+function uploadToCloudinary(buffer, folder = "csca/questions") {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      },
+    );
+    stream.end(buffer);
+  });
+}
 
 const uploadController = {
   // Upload ảnh cho câu hỏi
-  uploadQuestionImage(req, res) {
+  async uploadQuestionImage(req, res) {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -12,15 +32,18 @@ const uploadController = {
         });
       }
 
-      // Trả về URL của ảnh
-      const imageUrl = `/uploads/questions/${req.file.filename}`;
+      // Upload lên Cloudinary
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "csca/questions",
+      );
 
       res.json({
         success: true,
         message: "Upload ảnh thành công",
         data: {
-          filename: req.file.filename,
-          url: imageUrl,
+          url: result.secure_url,
+          publicId: result.public_id,
           size: req.file.size,
           mimetype: req.file.mimetype,
         },
@@ -36,7 +59,7 @@ const uploadController = {
   },
 
   // Upload nhiều ảnh cùng lúc
-  uploadMultipleImages(req, res) {
+  async uploadMultipleImages(req, res) {
     try {
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
@@ -45,11 +68,17 @@ const uploadController = {
         });
       }
 
-      const images = req.files.map((file) => ({
-        filename: file.filename,
-        url: `/uploads/questions/${file.filename}`,
-        size: file.size,
-        mimetype: file.mimetype,
+      // Upload tất cả ảnh lên Cloudinary
+      const uploadPromises = req.files.map((file) =>
+        uploadToCloudinary(file.buffer, "csca/questions"),
+      );
+      const results = await Promise.all(uploadPromises);
+
+      const images = results.map((result, index) => ({
+        url: result.secure_url,
+        publicId: result.public_id,
+        size: req.files[index].size,
+        mimetype: req.files[index].mimetype,
       }));
 
       res.json({
@@ -67,26 +96,20 @@ const uploadController = {
     }
   },
 
-  // Xóa ảnh
-  deleteImage(req, res) {
+  // Xóa ảnh từ Cloudinary
+  async deleteImage(req, res) {
     try {
-      const { filename } = req.params;
-      const filePath = path.join(
-        __dirname,
-        "../../uploads/questions",
-        filename
-      );
+      const { publicId } = req.params;
 
-      // Kiểm tra file có tồn tại không
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({
+      if (!publicId) {
+        return res.status(400).json({
           success: false,
-          message: "Không tìm thấy file",
+          message: "Không có publicId",
         });
       }
 
-      // Xóa file
-      fs.unlinkSync(filePath);
+      // Xóa từ Cloudinary
+      await cloudinary.uploader.destroy(publicId);
 
       res.json({
         success: true,
@@ -102,5 +125,7 @@ const uploadController = {
     }
   },
 };
+
+module.exports = uploadController;
 
 module.exports = uploadController;

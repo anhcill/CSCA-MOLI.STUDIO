@@ -12,19 +12,18 @@ const pool = new Pool({
   database: process.env.DB_NAME || "csca_db",
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return error after 2 seconds if connection could not be established
+  connectionTimeoutMillis: 10000, // Return error after 10 seconds if connection could not be established
 });
 
 // ====================================
 // Connection Event Handlers
 // ====================================
-pool.on("connect", () => {
-  console.log("✅ Database connected successfully");
-});
+// Log only errors, not every connection
+// pool.on('connect') removed to reduce startup noise
 
 pool.on("error", (err) => {
-  console.error("❌ Unexpected database error:", err);
-  process.exit(-1);
+  // Log the error but do NOT kill the server — the pool will attempt to recover
+  console.error("⚠️  Unexpected database pool error (non-fatal):", err.message);
 });
 
 // ====================================
@@ -36,7 +35,9 @@ const query = async (text, params) => {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
 
-    if (process.env.NODE_ENV === "development") {
+    // Query logging disabled to reduce noise
+    // Enable with DEBUG_QUERIES=1 if needed
+    if (process.env.DEBUG_QUERIES) {
       console.log("Executed query", { text, duration, rows: res.rowCount });
     }
 
@@ -66,8 +67,7 @@ const testConnection = async () => {
   }
 };
 
-// Test connection on startup
-testConnection();
+// testConnection() is called from index.js startup instead
 
 // ====================================
 // Export

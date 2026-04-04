@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const examController = require("../controllers/examController");
-const { authenticate } = require("../middleware/authMiddleware");
+const { authenticate, authorize } = require("../middleware/authMiddleware");
 
 // Public routes
 router.get("/subjects/:subjectCode/exams", examController.getExamsBySubject);
@@ -31,13 +31,14 @@ router.get(
   examController.getTopicStats
 );
 
-// Admin routes - Require admin role
-router.post("/exams", authenticate, examController.createExam);
-router.put("/exams/:examId", authenticate, examController.updateExam);
-router.delete("/exams/:examId", authenticate, examController.deleteExam);
+// Admin routes - Require admin role ✅
+router.post("/exams", authenticate, authorize("admin"), examController.createExam);
+router.put("/exams/:examId", authenticate, authorize("admin"), examController.updateExam);
+router.delete("/exams/:examId", authenticate, authorize("admin"), examController.deleteExam);
 router.post(
   "/exams/:examId/questions",
   authenticate,
+  authorize("admin"),
   examController.createQuestion
 );
 

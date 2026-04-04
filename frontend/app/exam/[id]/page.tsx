@@ -43,15 +43,15 @@ export default function ExamPage() {
   const startExam = async () => {
     try {
       setLoading(true);
-      
+
       // Check token
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       console.log('Token exists:', !!token);
       console.log('Exam ID:', examId);
-      
+
       const response = await examApi.startExam(examId);
       console.log('Start exam response:', response);
-      
+
       setExam(response.exam);
       setQuestions(response.questions);
       setAttemptId(response.attemptId);
@@ -60,7 +60,7 @@ export default function ExamPage() {
       console.error('Error starting exam:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      
+
       const errorMessage = error.response?.data?.message || 'Không thể bắt đầu làm bài';
       alert(errorMessage + '. Vui lòng đăng nhập!');
       router.push('/login');
@@ -73,7 +73,7 @@ export default function ExamPage() {
     if (!attemptId || submitting) return;
 
     const questionId = questions[currentQuestionIndex].id;
-    
+
     // Update UI immediately for better UX
     setSelectedAnswers({
       ...selectedAnswers,
@@ -100,7 +100,7 @@ export default function ExamPage() {
     try {
       setSubmitting(true);
       const result = await examApi.submitExam(attemptId);
-      
+
       // Redirect to result page
       router.push(`/exam/${examId}/result?attemptId=${attemptId}`);
     } catch (error) {
@@ -163,9 +163,8 @@ export default function ExamPage() {
             </div>
             <div className="flex items-center space-x-6">
               {/* Timer */}
-              <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
-                timeLeft < 300 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-              }`}>
+              <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${timeLeft < 300 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                }`}>
                 <FiClock size={20} />
                 <span className="font-bold text-lg">{formatTime(timeLeft)}</span>
               </div>
@@ -195,9 +194,9 @@ export default function ExamPage() {
                 <p className="text-lg text-gray-800 leading-relaxed whitespace-pre-wrap">
                   {currentQuestion.question_text}
                 </p>
-                {currentQuestion.question_text_zh && (
+                {currentQuestion.question_text_cn && currentQuestion.question_text_cn !== currentQuestion.question_text && (
                   <p className="text-lg text-gray-600 mt-4 leading-relaxed">
-                    {currentQuestion.question_text_zh}
+                    {currentQuestion.question_text_cn}
                   </p>
                 )}
               </div>
@@ -219,26 +218,31 @@ export default function ExamPage() {
                   <button
                     key={answer.id}
                     onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                      currentQuestionAnswer === answer.id
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${currentQuestionAnswer === answer.id
                         ? 'border-blue-600 bg-blue-50'
                         : 'border-gray-200 hover:border-blue-300 bg-white'
-                    }`}
+                      }`}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                        currentQuestionAnswer === answer.id
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1 ${currentQuestionAnswer === answer.id
                           ? 'border-blue-600 bg-blue-600'
                           : 'border-gray-400'
-                      }`}>
+                        }`}>
                         {currentQuestionAnswer === answer.id && (
                           <FiCheckCircle className="text-white" size={16} />
                         )}
                       </div>
                       <div className="flex-1">
                         <p className="text-gray-900">{answer.answer_text}</p>
-                        {answer.answer_text_zh && (
-                          <p className="text-gray-600 text-sm mt-1">{answer.answer_text_zh}</p>
+                        {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
+                          <p className="text-gray-600 text-sm mt-1">{answer.answer_text_cn}</p>
+                        )}
+                        {answer.image_url && (
+                          <img
+                            src={answer.image_url}
+                            alt={`Option ${answer.answer_key}`}
+                            className="mt-3 max-w-xs rounded-lg shadow-sm border border-gray-200"
+                          />
                         )}
                       </div>
                     </div>
@@ -275,13 +279,12 @@ export default function ExamPage() {
                   <button
                     key={q.id}
                     onClick={() => setCurrentQuestionIndex(index)}
-                    className={`aspect-square rounded-lg font-semibold text-sm transition-all ${
-                      index === currentQuestionIndex
+                    className={`aspect-square rounded-lg font-semibold text-sm transition-all ${index === currentQuestionIndex
                         ? 'bg-blue-600 text-white ring-2 ring-blue-400'
                         : selectedAnswers[q.id]
-                        ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                          ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     {index + 1}
                   </button>

@@ -21,7 +21,7 @@ export interface Question {
   id: number;
   question_number: number;
   question_text: string;
-  question_text_zh?: string;
+  question_text_cn?: string;
   image_url?: string;
   points: number;
   answers?: Answer[];
@@ -31,7 +31,8 @@ export interface Answer {
   id: number;
   answer_key: string;
   answer_text: string;
-  answer_text_zh?: string;
+  answer_text_cn?: string;
+  image_url?: string;
   is_correct?: boolean;
 }
 
@@ -110,6 +111,11 @@ const examApi = {
   async getAttemptDetail(attemptId: number) {
     const response = await axios.get(`/attempts/${attemptId}`);
     return response.data.data;
+  },
+
+  // Alias for getAttemptDetail
+  async getAttemptDetails(attemptId: string) {
+    return this.getAttemptDetail(parseInt(attemptId));
   }
 };
 

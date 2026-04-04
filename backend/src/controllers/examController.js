@@ -1,5 +1,6 @@
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
+const { cache, TTL } = require("../config/cache");
 
 const examController = {
   // Lấy danh sách đề thi theo môn
@@ -8,7 +9,17 @@ const examController = {
       const { subjectCode } = req.params;
       const userId = req.user?.id;
 
+      // Cache key theo subjectCode và userId (logged-in users thấy attempt count của họ)
+      const cacheKey = `exams:${subjectCode}:${userId || "guest"}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return res.json({ success: true, data: cached, fromCache: true });
+      }
+
       const exams = await Exam.getBySubject(subjectCode, userId);
+
+      // Cache 5 phút
+      cache.set(cacheKey, exams, TTL.MEDIUM);
 
       res.json({
         success: true,
@@ -62,6 +73,9 @@ const examController = {
       };
 
       const exam = await Exam.create(examData);
+
+      // Xóa cache exams vì có dữ liệu mới
+      cache.delByPrefix("exams:");
 
       res.status(201).json({
         success: true,
@@ -121,10 +135,10 @@ const examController = {
       const userId = req.user.id;
 
       const attempt = await ExamAttempt.start(userId, examId);
-      
+
       // Get exam details with questions
       const exam = await Exam.getById(examId);
-      
+
       if (!exam) {
         return res.status(404).json({
           success: false,
@@ -299,6 +313,9 @@ const examController = {
         });
       }
 
+      // Xóa cache exams khi có cập nhật
+      cache.delByPrefix("exams:");
+
       res.json({
         success: true,
         message: "Cập nhật đề thi thành công",
@@ -327,6 +344,9 @@ const examController = {
           message: "Không tìm thấy đề thi",
         });
       }
+
+      // Xóa cache exams khi xóa đề thi
+      cache.delByPrefix("exams:");
 
       res.json({
         success: true,

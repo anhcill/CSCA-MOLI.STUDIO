@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
+import { clearTokenCache } from '../utils/axios';
 
 interface AuthState {
   user: User | null;
@@ -8,7 +9,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  
+
   // Actions
   setUser: (user: User) => void;
   setTokens: (token: string, refreshToken: string) => void;
@@ -27,18 +28,18 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
 
-      setUser: (user) => 
+      setUser: (user) =>
         set({ user, isAuthenticated: true }),
 
       setTokens: (token, refreshToken) =>
         set({ token, refreshToken }),
 
       login: (user, token, refreshToken) => {
-        // Save to localStorage
-        localStorage.setItem('token', token);
-        localStorage.setItem('refreshToken', refreshToken);
-        localStorage.setItem('user', JSON.stringify(user));
-        
+        // Save to sessionStorage (per-tab isolation)
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('refreshToken', refreshToken);
+        sessionStorage.setItem('user', JSON.stringify(user));
+
         set({
           user,
           token,
@@ -49,11 +50,14 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear localStorage
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        
+        // Clear sessionStorage
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('user');
+
+        // Clear axios token cache
+        clearTokenCache();
+
         set({
           user: null,
           token: null,
@@ -73,6 +77,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      storage: {
+        getItem: (name) => {
+          const str = sessionStorage.getItem(name);
+          return str ? JSON.parse(str) : null;
+        },
+        setItem: (name, value) => {
+          sessionStorage.setItem(name, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          sessionStorage.removeItem(name);
+        },
+      },
       partialize: (state) => ({
         user: state.user,
         token: state.token,

@@ -1,39 +1,30 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import Link from 'next/link';
-import { FiFileText, FiMessageSquare, FiCreditCard, FiLogOut } from 'react-icons/fi';
 import { BsCheckCircle, BsController, BsTrophy } from 'react-icons/bs';
 
 export default function LeftSidebar() {
-  const { user, isAuthenticated, logout } = useAuthStore();
-
-  if (!isAuthenticated || !user) {
-    return (
-      <aside className="w-full lg:w-64 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-6 sticky top-20 h-fit">
-        <div className="text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-3xl">👤</span>
-          </div>
-          <h3 className="font-bold text-gray-900 mb-2">Chào mừng!</h3>
-          <p className="text-sm text-gray-600 mb-4">Đăng nhập để sử dụng đầy đủ tính năng</p>
-          <Link href="/login" className="block w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg">
-            Đăng nhập
-          </Link>
-        </div>
-      </aside>
-    );
-  }
+  const { user, isAuthenticated } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const menuItems = [
-    { icon: FiFileText, label: 'Bài viết của tôi', href: '/my-posts' },
-    { icon: FiMessageSquare, label: 'Đóng góp ý kiến', href: '/feedback' },
-    { icon: FiCreditCard, label: 'Nâng cấp tài khoản', href: '/upgrade' },
+    { icon: '📚', label: 'Cấu trúc đề', href: '/cau-truc-de', color: 'from-blue-500 to-blue-600' },
+    { icon: '📖', label: 'Lý Thuyết', href: '/ly-thuyet', color: 'from-green-500 to-green-600' },
+    { icon: '🔮', label: 'Tư Vấn', href: '/tu-vang', color: 'from-purple-500 to-purple-600' },
+    { icon: '📝', label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'from-orange-500 to-orange-600' },
+    { icon: '📈', label: 'Tự luận nâng cao', href: '/tu-luan-nang-cao', color: 'from-red-500 to-red-600' },
+    { icon: '📅', label: 'Lịch sử làm bài', href: '/lich-su', color: 'from-indigo-500 to-indigo-600' },
+    { icon: '👤', label: 'Lộ trình học cá nhân', href: '/lo-trinh', color: 'from-pink-500 to-pink-600' },
+    { icon: '⚙️', label: 'Tài khoản', href: '/profile', color: 'from-gray-500 to-gray-600' },
   ];
 
   return (
     <aside className="w-full space-y-6 sticky top-20 h-fit">
       {/* Profile Card */}
+      {mounted && isAuthenticated && user ? (
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
         {/* Gradient Header */}
         <div className="h-24 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative">
@@ -72,8 +63,23 @@ export default function LeftSidebar() {
           </span>
         </div>
       </div>
+      ) : (
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-6">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <span className="text-3xl">👤</span>
+            </div>
+            <h3 className="font-bold text-gray-900 mb-2">Chào mừng!</h3>
+            <p className="text-sm text-gray-600 mb-4">Đăng nhập để sử dụng đầy đủ tính năng</p>
+            <Link href="/login" className="block w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg">
+              Đăng nhập
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
+      {mounted && isAuthenticated && user && (
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl text-center hover:shadow-lg hover:scale-105 transition-all cursor-pointer border border-blue-200">
           <BsCheckCircle className="mx-auto mb-2 text-blue-600" size={24} />
@@ -93,6 +99,7 @@ export default function LeftSidebar() {
           <p className="text-2xl font-bold text-yellow-700 mt-2">-</p>
         </div>
       </div>
+      )}
 
       {/* Menu Items */}
       <nav className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
@@ -100,20 +107,12 @@ export default function LeftSidebar() {
           <Link
             key={index}
             href={item.href}
-            className="flex items-center space-x-3 px-5 py-4 text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 transition-all border-b border-gray-100 last:border-0"
+            className="flex items-center space-x-3 px-5 py-4 text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 transition-all border-b border-gray-100 last:border-0 group"
           >
-            <item.icon size={20} />
-            <span className="text-sm font-medium">{item.label}</span>
+            <span className="text-2xl">{item.icon}</span>
+            <span className="text-sm font-medium group-hover:font-bold transition-all">{item.label}</span>
           </Link>
         ))}
-        
-        <button
-          onClick={logout}
-          className="flex items-center space-x-3 px-5 py-4 text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 transition-all w-full"
-        >
-          <FiLogOut size={20} />
-          <span className="text-sm font-medium">Đăng xuất</span>
-        </button>
       </nav>
     </aside>
   );

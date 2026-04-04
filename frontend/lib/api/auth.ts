@@ -72,3 +72,11 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
   const response = await axios.post('/auth/refresh', { refreshToken });
   return response.data;
 };
+
+/**
+ * Google OAuth authentication
+ */
+export const googleAuth = async (credential: string): Promise<AuthResponse> => {
+  const response = await axios.post('/auth/google', { credential });
+  return response.data;
+};

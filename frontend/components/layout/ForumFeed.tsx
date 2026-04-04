@@ -59,16 +59,25 @@ export default function ForumFeed() {
 
   return (
     <div className="space-y-5">
-      {/* Search Box */}
-      <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5">
+      {/* Title */}
+      <div className="text-center mb-6">
+        <h1 className="text-5xl font-black bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
+          Diễn Đàn Thảo Luận 💬
+        </h1>
+        <p className="text-gray-600 text-lg">
+          Trao đổi, học hỏi và kết nối với cộng đồng CSCA
+        </p>
+      </div>
+
+      {/* Post Box */}
+      <div className="genz-card p-6">
         <div className="relative">
-          <input
-            type="text"
-            placeholder="Bạn đang thắc mắc điều gì?"
-            className="w-full px-6 py-3.5 pr-14 rounded-full bg-blue-50 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:bg-blue-100 transition-all text-base"
+          <textarea
+            placeholder="Bạn đang thắc mắc điều gì? Chia sẻ câu hỏi của bạn... 💭"
+            className="w-full px-6 py-4 rounded-2xl bg-gradient-to-r from-pink-50 to-purple-50 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-pink-300 transition-all text-base font-semibold border-2 border-transparent focus:border-pink-400 resize-none h-24"
           />
-          <button className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-full transition-all hover:scale-105 shadow-md">
-            <FiSearch size={20} />
+          <button className="mt-3 bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 hover:from-pink-700 hover:via-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-xl font-bold transition-all hover:scale-105 shadow-lg">
+            Đăng bài 🚀
           </button>
         </div>
       </div>
