@@ -2,6 +2,16 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // API Proxy - chuyển /api requests sang Railway backend
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/:path*`,
+      },
+    ];
+  },
+
   // Image optimization
   images: {
     remotePatterns: [
@@ -16,6 +26,10 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "ui-avatars.com",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
       },
     ],
     formats: ["image/webp", "image/avif"],
