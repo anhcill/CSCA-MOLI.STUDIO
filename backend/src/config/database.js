@@ -6,10 +6,13 @@ require("dotenv").config();
 // Support both Railway (DATABASE_URL) and manual config
 // ====================================
 const getPoolConfig = () => {
-  // Railway provides DATABASE_URL as a single connection string
-  if (process.env.DATABASE_URL) {
+  // Railway may expose DATABASE_URL or DATABASE_PUBLIC_URL depending on setup
+  const railwayConnectionString =
+    process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+
+  if (railwayConnectionString) {
     return {
-      connectionString: process.env.DATABASE_URL,
+      connectionString: railwayConnectionString,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -79,7 +82,9 @@ const testConnection = async () => {
     return true;
   } catch (error) {
     console.error("❌ Database connection failed:", error.message);
-    console.error("   Please check your database configuration in .env file");
+    console.error(
+      "   Please check DATABASE_URL / DATABASE_PUBLIC_URL or local DB_* variables"
+    );
     return false;
   }
 };
