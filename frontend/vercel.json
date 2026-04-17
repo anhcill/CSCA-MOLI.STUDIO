@@ -18,7 +18,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://web-tieng-trung.railway.app/api/:path*"
+      "destination": "https://csca-molistudio-production.up.railway.app/api/:path*"
     }
   ],
   "env": {
