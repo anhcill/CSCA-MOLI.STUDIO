@@ -3,7 +3,7 @@
 import { ReactNode, useState } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
-import { ProUpgradeModal } from './ProUpgradeModal';
+import { ProUpgradeModal } from './ProModal';
 
 interface VipGateProps {
   children: ReactNode;

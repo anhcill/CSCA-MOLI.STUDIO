@@ -52,7 +52,7 @@ export default function ExamResultListPage() {
     const loadRecentResults = async () => {
         try {
             setLoading(true);
-            const data = await examApi.getExamHistory();
+            const data = await examApi.getHistory(undefined, 10);
             // data should be an array of attempts, or { attempts: [...] }
             const attemptList = Array.isArray(data) ? data : (data.attempts || []);
             setAttempts(attemptList.slice(0, 10)); // chỉ lấy 10 kết quả gần nhất

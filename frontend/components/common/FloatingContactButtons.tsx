@@ -36,7 +36,7 @@ const CONTACT_ITEMS: ContactItem[] = [
   {
     label: 'Facebook Fanpage',
     href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr',
-    bg: 'bg-[#1877F2]',
+    bgClass: 'bg-[#1877F2]',
     content: <FiFacebook size={18} color="white" />,
   },
   {

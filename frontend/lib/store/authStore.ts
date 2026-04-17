@@ -32,13 +32,16 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 // Sync VIP fields from live JWT token (called on app init)
-function syncVipFromToken(user: User, token: string | null): User | null {
+function syncVipFromToken(user: User | null, token: string | null): User | null {
   if (!user || !token) return user;
   const payload = decodeJwtPayload(token);
   if (!payload) return user;
 
   const isVip = payload.is_vip === true;
-  const vipExpiresAt = (payload.vip_expires_at as string) || null;
+  const vipExpiresAt =
+    typeof payload.vip_expires_at === 'string' && payload.vip_expires_at.length > 0
+      ? payload.vip_expires_at
+      : undefined;
 
   // Only update if different from stored
   if (user.is_vip !== isVip || user.vip_expires_at !== vipExpiresAt) {
