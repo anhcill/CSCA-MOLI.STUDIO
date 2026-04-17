@@ -1,0 +1,33 @@
+# Kế hoạch phát triển Backend: Phòng Thi & Lộ Trình
+
+Để biến hai giao diện Phòng thi và Lộ trình từ trạng thái "dữ liệu giả" (Mock Data) thành ứng dụng thực tế chạy Real-time tương tác với Database, mình đề xuất kế hoạch sau:
+
+## 1. Phòng Thi (Live Exam Lobby)
+
+**Vấn đề:** Bảng `exams` hiện tại chỉ có field `exam_date` (Ngày thi) nhưng không có giờ giấc cụ thể (`start_time`, `end_time`). Không có cái này thì khó tính toán bộ đếm ngược "LIVE" và "UPCOMING" chuẩn xác.
+
+**Giải pháp:**
+- (Tùy chọn) Viết 1 file Migration nhỏ để Alter bảng `exams`: thêm 2 cột `start_time` (TIMESTAMP) và `end_time` (TIMESTAMP) cho các kỳ thi `exam_type = 'official'`.
+- Viết API `GET /api/exams/lobby`:
+  - Thực hiện 3 câu query song song gom dữ liệu:
+    - **Live:** Lấy các kỳ thi có thời gian hiện tại nằm trong khoảng `start_time` đến `end_time`. (Tính thêm số lượng `user_exam_attempts` để quy số "Thí sinh đang thi").
+    - **Upcoming:** Lấy các kỳ thi có `start_time` > Now().
+    - **Public:** Lấy danh sách các bài thi luyện tập `exam_type = 'mock' | 'practice'`.
+- Chỉnh sửa `app/exam-room/page.tsx` để xóa Mock Data, cài `axios` tự động móc vào lấy dữ liệu, render lên các khối UI siêu đẹp mà mình làm trước đó.
+
+## 2. Giao diện Lộ Trình (Roadmap Milestones)
+
+**Vấn đề:** Giao diện Skill Tree đang dùng mảng Hardcode: *Khởi đầu vững chắc, Vượt chướng ngại vật...* Trạng thái (hiện màu xanh hay xám khóa) là giả định.
+
+**Giải pháp:**
+- Viết API `GET /api/users/roadmap`:
+  - Đọc thẳng vào bảng `user_exam_attempts` và `user_stats` để phỏng đoán "Hạng" học tập của user.
+  - Xây dựng 1 cây tiến trình mẫu (Ví dụ theo số lượng đề đã giải và điểm trung bình):
+    - Level 1: Làm xong bài đánh giá đầu vào -> `completed`.
+    - Level 2: Đang cày Đề HSK4 hoặc Đề cơ bản thi đại học -> Tùy số lượng bài tập -> `current/completed`.
+    - Level 3: Đề VIP nâng cao (Áp lực 180 phút) -> Kiểm tra nếu user đạt trên X điểm thì unlock.
+- Cập nhật file `lo-trinh/page.tsx` kết nối thông minh giữa trạng thái Roadmap Milestones này kết hợp với bản phân tích của AI bên dưới.
+
+## Open Questions
+> [!IMPORTANT]
+> Mình sẽ phải thêm cột `start_time` và `end_time` bằng lệnh ALTER TABLE cho bảng `exams` để làm Hệ thống Phòng thi LIVE đếm ngược. Bạn có đồng ý cho phép mình chạy Migration chạy lệnh SQL này không? Mình sẽ viết script cẩn thận không ảnh hưởng dữ liệu cũ.

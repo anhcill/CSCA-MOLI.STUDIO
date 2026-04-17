@@ -9,10 +9,11 @@ export default function RegisterPage() {
         <div className="hidden lg:flex flex-col flex-1 space-y-6">
           {/* Logo */}
           <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <span className="text-white font-bold text-2xl">C</span>
+            <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_10px_22px_rgba(14,116,244,0.35)] group-hover:scale-110 transition-transform">
+              <span className="text-white font-black text-2xl lowercase">m</span>
+              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-cyan-100 border border-white"></span>
             </div>
-            <span className="text-2xl font-bold text-gray-900">CSCA</span>
+            <span className="text-3xl font-black lowercase bg-gradient-to-r from-blue-700 via-sky-600 to-cyan-500 bg-clip-text text-transparent">moly.study</span>
           </Link>
 
           {/* Heading */}

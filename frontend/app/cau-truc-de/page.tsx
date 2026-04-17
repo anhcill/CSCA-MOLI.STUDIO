@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
 import { FiFileText, FiExternalLink, FiDownload, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
@@ -14,6 +14,38 @@ interface Material {
   topic: string;
   created_at: string;
 }
+
+let materialsCache: Material[] | null = null;
+let materialsRequest: Promise<Material[]> | null = null;
+
+const extractMaterials = (payload: unknown): Material[] => {
+  const rows = (payload as { data?: Material[] } | undefined)?.data;
+  return Array.isArray(rows) ? rows : [];
+};
+
+const fetchCauTrucDeMaterials = async (): Promise<Material[]> => {
+  if (materialsCache) return materialsCache;
+  if (materialsRequest) return materialsRequest;
+
+  materialsRequest = axios.get('/materials?category=cau-truc-de', {
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
+  })
+    .then((response) => {
+      if (response.status === 304) return materialsCache || [];
+      const rows = extractMaterials(response.data);
+      materialsCache = rows;
+      return rows;
+    })
+    .catch((error) => {
+      if (error?.response?.status === 304) return materialsCache || [];
+      throw error;
+    })
+    .finally(() => {
+      materialsRequest = null;
+    });
+
+  return materialsRequest;
+};
 
 const SUBJECTS = [
   { value: '', label: 'Tất cả', emoji: '📋' },
@@ -125,16 +157,28 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 export default function CauTrucDePage() {
   const [allMaterials, setAllMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [activeSubject, setActiveSubject] = useState('');
   const [viewing, setViewing] = useState<Material | null>(null);
 
-  useEffect(() => {
-    axios.get('/materials?category=cau-truc-de')
-      .then(r => setAllMaterials(r.data.data || []))
-      .catch(() => setAllMaterials([]))
-      .finally(() => setLoading(false));
+  const loadMaterials = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const rows = await fetchCauTrucDeMaterials();
+      setAllMaterials(rows);
+    } catch {
+      setLoadError('Tải tài liệu chưa thành công. Bạn thử lại giúp mình nhé.');
+      setAllMaterials(materialsCache || []);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadMaterials();
+  }, [loadMaterials]);
 
   const filtered = useMemo(() => allMaterials.filter(m => {
     const matchSubject = !activeSubject || m.subject === activeSubject;
@@ -194,6 +238,17 @@ export default function CauTrucDePage() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[...Array(6)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />)}
+            </div>
+          ) : loadError && allMaterials.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">⚠️</div>
+              <p className="text-gray-600 mb-4">{loadError}</p>
+              <button
+                onClick={loadMaterials}
+                className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition-colors"
+              >
+                Tải lại
+              </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-20">

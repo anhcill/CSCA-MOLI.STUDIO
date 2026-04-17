@@ -6,6 +6,8 @@ export interface ExamCreateData {
     duration?: number;
     totalPoints?: number;
     description?: string;
+    allow_download?: boolean;
+    is_premium?: boolean;
 }
 
 export interface QuestionData {

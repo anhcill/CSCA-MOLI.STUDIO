@@ -19,11 +19,7 @@ const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      const { title, subjectId, duration, totalPoints, description } = req.body;
+      const { title, subjectId, duration, totalPoints, description, is_premium } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -34,8 +30,8 @@ const AdminExamController = {
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW())
+        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7)
          RETURNING *`,
         [
           examCode,
@@ -44,6 +40,7 @@ const AdminExamController = {
           duration || 90,
           parsedTotalPoints,
           description || "",
+          is_premium === true,
         ],
       );
 
@@ -60,28 +57,25 @@ const AdminExamController = {
   // Update exam
   async updateExam(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
           : parsePositiveNumber(totalPoints, 100);
 
       const result = await pool.query(
-        `UPDATE exams 
+        `UPDATE exams
          SET title = COALESCE($1, title),
              duration = COALESCE($2, duration),
              total_points = COALESCE($3, total_points),
              description = COALESCE($4, description),
              status = COALESCE($5, status),
+             is_premium = COALESCE($6, is_premium),
              updated_at = NOW()
-         WHERE id = $6
+         WHERE id = $7
          RETURNING *`,
-        [title, duration, parsedTotalPoints, description, status, examId],
+        [title, duration, parsedTotalPoints, description, status, is_premium === true ? true : null, examId],
       );
 
       if (result.rows.length === 0) {
@@ -141,10 +135,6 @@ const AdminExamController = {
   // Add question to exam
   async addQuestion(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const { examId } = req.params;
       const {
         questionText,
@@ -255,10 +245,6 @@ const AdminExamController = {
   // Update question
   async updateQuestion(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const { questionId } = req.params;
       const {
         questionText,
@@ -364,10 +350,6 @@ const AdminExamController = {
   // Delete question
   async deleteQuestion(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const { questionId } = req.params;
 
       const client = await pool.connect();
@@ -410,10 +392,6 @@ const AdminExamController = {
   // Get all exams (for admin dashboard)
   async getAllExams(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
@@ -427,14 +405,16 @@ const AdminExamController = {
 
       // Get exams with subject info
       const examsResult = await pool.query(
-        `SELECT 
+        `SELECT
                     e.id,
                     e.code,
                     e.title,
                     e.duration,
                     e.total_points,
                     e.total_questions,
+          e.total_questions as questions_count,
                     e.status,
+                    e.is_premium,
                     e.created_at,
                     s.name as subject_name,
                     s.code as subject_code,
@@ -466,10 +446,6 @@ const AdminExamController = {
   // Get exam with questions
   async getExamWithQuestions(req, res) {
     try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
       const { examId } = req.params;
 
       const examResult = await pool.query("SELECT * FROM exams WHERE id = $1", [
@@ -508,6 +484,180 @@ const AdminExamController = {
     } catch (error) {
       console.error("Get exam error:", error);
       res.status(500).json({ message: "Failed to get exam" });
+    }
+  },
+  // ── Ngày 11-12: Quản lý lịch thi (Live / Upcoming schedule) ──────────────
+  // GET /api/admin/exams/:examId/schedule - Get current schedule
+  async getSchedule(req, res) {
+    try {
+      const { examId } = req.params;
+      const result = await pool.query(
+        `SELECT id, title, status, start_time, end_time, max_participants,
+                (SELECT json_agg(l ORDER BY l.changed_at DESC) FROM (
+                  SELECT changed_by_name, old_start_time, old_end_time, new_start_time, new_end_time, reason, changed_at
+                  FROM exam_schedule_logs WHERE exam_id = $1 ORDER BY changed_at DESC LIMIT 10
+                ) l) as change_log
+         FROM exams WHERE id = $1`,
+        [examId]
+      );
+      if (!result.rows[0]) return res.status(404).json({ message: 'Exam not found' });
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+      console.error('Get schedule error:', error);
+      res.status(500).json({ message: 'Failed to get schedule' });
+    }
+  },
+
+  // PUT /api/admin/exams/:examId/schedule - Set or update schedule
+  async setSchedule(req, res) {
+    try {
+      const { examId } = req.params;
+      const { startTime, endTime, maxParticipants, reason } = req.body;
+      const adminId = req.user.id;
+      const adminName = req.user.full_name || req.user.username || `User#${adminId}`;
+
+      if (!startTime || !endTime) {
+        return res.status(400).json({ message: 'startTime và endTime là bắt buộc' });
+      }
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      if (isNaN(start) || isNaN(end) || end <= start) {
+        return res.status(400).json({ message: 'Thời gian không hợp lệ: end_time phải sau start_time' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // Lấy lịch cũ để ghi log diff
+        const oldRes = await client.query('SELECT start_time, end_time FROM exams WHERE id = $1', [examId]);
+        if (!oldRes.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Exam not found' }); }
+        const old = oldRes.rows[0];
+
+        await client.query(
+          `UPDATE exams SET start_time = $1, end_time = $2, max_participants = COALESCE($3, max_participants), updated_at = NOW() WHERE id = $4`,
+          [start, end, maxParticipants || null, examId]
+        );
+
+        // Ghi audit log
+        await client.query(
+          `INSERT INTO exam_schedule_logs (exam_id, changed_by, changed_by_name, old_start_time, old_end_time, new_start_time, new_end_time, reason)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [examId, adminId, adminName, old.start_time, old.end_time, start, end, reason || null]
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (
+             actor_id,
+             action,
+             target_type,
+             target_id,
+             old_value,
+             new_value,
+             ip_address,
+             user_agent,
+             metadata
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb)`,
+          [
+            adminId,
+            "exam_schedule_set",
+            "exam",
+            Number.parseInt(examId, 10),
+            JSON.stringify({
+              start_time: old.start_time,
+              end_time: old.end_time,
+            }),
+            JSON.stringify({
+              start_time: start,
+              end_time: end,
+              max_participants: maxParticipants || null,
+            }),
+            req.ip || null,
+            req.headers["user-agent"] || null,
+            JSON.stringify({ reason: reason || null }),
+          ]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Cập nhật lịch thi thành công' });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Set schedule error:', error);
+      res.status(500).json({ message: 'Failed to set schedule' });
+    }
+  },
+
+  // DELETE /api/admin/exams/:examId/schedule - Clear schedule (makes exam a free practice test)
+  async clearSchedule(req, res) {
+    try {
+      const { examId } = req.params;
+      const adminId = req.user.id;
+      const adminName = req.user.full_name || req.user.username || `User#${adminId}`;
+      const { reason } = req.body;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const oldRes = await client.query('SELECT start_time, end_time FROM exams WHERE id = $1', [examId]);
+        if (!oldRes.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Exam not found' }); }
+        const old = oldRes.rows[0];
+
+        await client.query(
+          'UPDATE exams SET start_time = NULL, end_time = NULL, max_participants = 0, updated_at = NOW() WHERE id = $1',
+          [examId]
+        );
+        await client.query(
+          `INSERT INTO exam_schedule_logs (exam_id, changed_by, changed_by_name, old_start_time, old_end_time, new_start_time, new_end_time, reason)
+           VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6)`,
+          [examId, adminId, adminName, old.start_time, old.end_time, reason || 'Xóa lịch thi']
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (
+             actor_id,
+             action,
+             target_type,
+             target_id,
+             old_value,
+             new_value,
+             ip_address,
+             user_agent,
+             metadata
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb)`,
+          [
+            adminId,
+            "exam_schedule_clear",
+            "exam",
+            Number.parseInt(examId, 10),
+            JSON.stringify({
+              start_time: old.start_time,
+              end_time: old.end_time,
+            }),
+            JSON.stringify({
+              start_time: null,
+              end_time: null,
+              max_participants: 0,
+            }),
+            req.ip || null,
+            req.headers["user-agent"] || null,
+            JSON.stringify({ reason: reason || "Xóa lịch thi" }),
+          ]
+        );
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Đã xóa lịch thi, đổi thành đề thi tự do' });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Clear schedule error:', error);
+      res.status(500).json({ message: 'Failed to clear schedule' });
     }
   },
 };

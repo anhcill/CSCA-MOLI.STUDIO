@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiPlus, FiSave, FiEye } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import { examAdminApi } from '@/lib/api/examAdmin';
+import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
+import axios from '@/lib/utils/axios';
 
 interface Subject {
     id: number;
@@ -14,6 +18,7 @@ interface Subject {
 
 export default function CreateExamPage() {
     const router = useRouter();
+    const { user, isAuthenticated } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [subjects, setSubjects] = useState<Subject[]>([]);
 
@@ -23,7 +28,8 @@ export default function CreateExamPage() {
         subjectId: 0,
         duration: 90,
         totalPoints: 100,
-        description: ''
+        description: '',
+        is_premium: false,
     });
 
     const parseDecimal = (raw: string) => {
@@ -48,8 +54,14 @@ export default function CreateExamPage() {
     }, []);
 
     useEffect(() => {
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'exams.manage'))) {
+            router.push('/');
+            return;
+        }
+
         fetchSubjects();
-    }, []);
+    }, [isAuthenticated, user, router]);
 
     // Persist currentExamId to sessionStorage
     useEffect(() => {
@@ -63,11 +75,22 @@ export default function CreateExamPage() {
 
     const fetchSubjects = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/subjects');
-            const data = await response.json();
-            setSubjects(data);
-        } catch (error) {
+            const response = await axios.get('/subjects');
+            const payload = response?.data?.data ?? response?.data;
+
+            if (Array.isArray(payload)) {
+                setSubjects(payload);
+                return;
+            }
+
+            setSubjects([]);
+        } catch (error: any) {
             console.error('Error fetching subjects:', error);
+            setSubjects([]);
+
+            if (error?.response?.status === 429) {
+                alert('Hệ thống đang giới hạn tần suất gọi API. Vui lòng thử lại sau ít giây.');
+            }
         }
     };
 
@@ -122,7 +145,7 @@ export default function CreateExamPage() {
 
             // Update local state
             const newQuestions = [...questions];
-            newQuestions[index] = data;
+            newQuestions[index] = { ...newQuestions[index], ...data };
             setQuestions(newQuestions);
         } catch (error) {
             console.error('Error saving question:', error);
@@ -198,7 +221,7 @@ export default function CreateExamPage() {
                                 disabled={!!currentExamId}
                             >
                                 <option value={0}>Select subject...</option>
-                                {subjects.map(subject => (
+                                {Array.isArray(subjects) && subjects.map(subject => (
                                     <option key={subject.id} value={subject.id}>{subject.name}</option>
                                 ))}
                             </select>
@@ -238,6 +261,27 @@ export default function CreateExamPage() {
                                 placeholder="Enter exam description..."
                                 disabled={!!currentExamId}
                             />
+                        </div>
+
+                        <div className="md:col-span-2 border-t pt-4 mt-2">
+                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={examData.is_premium}
+                                        onChange={(e) => setExamData({ ...examData, is_premium: e.target.checked })}
+                                        disabled={!!currentExamId}
+                                        className="sr-only"
+                                    />
+                                    <div className={`w-11 h-6 rounded-full transition-colors ${examData.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'}`} />
+                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${examData.is_premium ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <FaCrown className="text-amber-500" />
+                                    <span className="text-sm font-semibold text-gray-700">Đánh dấu là đề thi VIP / PRO</span>
+                                </div>
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1 ml-14">Chỉ thành viên PRO mới được làm bài thi này</p>
                         </div>
                     </div>
 

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { v2: cloudinary } = require('cloudinary');
-const { authenticate, authorize } = require('../middleware/authMiddleware');
+const { authenticate, authorizeAnyPermission } = require('../middleware/authMiddleware');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -43,8 +43,8 @@ function uploadToCloudinary(buffer, folder = 'csca/questions') {
     });
 }
 
-// All image routes require admin
-router.use(authenticate, authorize(['admin']));
+// Image routes: cho phép content_admin VÀ exam_admin (OR logic)
+router.use(authenticate, authorizeAnyPermission('content.manage', 'exams.manage'));
 
 // ── Single image upload ──────────────────────────────────────────────────────
 // POST /api/admin/images/upload  (field: 'image')
@@ -105,7 +105,7 @@ router.post('/upload-multiple', upload.array('images', 20), async (req, res) => 
 });
 
 // ── Delete image from Cloudinary ─────────────────────────────────────────────
-// DELETE /api/admin/images/:publicId  (publicId encoded as base64 or passed in body)
+// DELETE /api/admin/images/delete with { publicId } in body
 router.delete('/delete', async (req, res) => {
     try {
         const { publicId } = req.body;
@@ -117,6 +117,22 @@ router.delete('/delete', async (req, res) => {
         return res.json({ success: true, message: 'Đã xóa ảnh' });
     } catch (error) {
         console.error('Delete image error:', error);
+        return res.status(500).json({ success: false, message: 'Lỗi khi xóa ảnh', error: error.message });
+    }
+});
+
+// Backward-compatible delete by URL param: /api/admin/images/:publicId
+router.delete('/:publicId', async (req, res) => {
+    try {
+        const { publicId } = req.params;
+        if (!publicId) {
+            return res.status(400).json({ success: false, message: 'Thiếu publicId' });
+        }
+
+        await cloudinary.uploader.destroy(decodeURIComponent(publicId));
+        return res.json({ success: true, message: 'Đã xóa ảnh' });
+    } catch (error) {
+        console.error('Delete image by param error:', error);
         return res.status(500).json({ success: false, message: 'Lỗi khi xóa ảnh', error: error.message });
     }
 });

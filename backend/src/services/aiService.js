@@ -9,6 +9,7 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const hasGeminiConfig = Boolean(process.env.GEMINI_API_KEY);
 
 // Server-level rate limit state — persist sang file để survive nodemon restart
 const RATE_LIMIT_FILE = path.join(__dirname, "../../.ai_ratelimit");
@@ -121,6 +122,130 @@ async function callGemini(model, prompt) {
 // Alias cũ để không cần sửa các chỗ gọi
 const callGeminiWithRetry = callGemini;
 
+function buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats) {
+  const normalized = Object.entries(subjectStats)
+    .map(([subject, stats]) => {
+      const avg = stats.count > 0 ? (stats.total / stats.count) : 0;
+      return {
+        subject,
+        percentage: Math.max(0, Math.min(100, Math.round(avg))),
+        count: stats.count,
+      };
+    })
+    .sort((a, b) => a.percentage - b.percentage);
+
+  const weaknesses = normalized
+    .filter((item) => item.percentage < 75)
+    .slice(0, 3)
+    .map((item) => ({
+      subject: item.subject,
+      percentage: item.percentage,
+      advice:
+        item.percentage < 55
+          ? "Nên học lại ly thuyet nen tang va lam bo de muc do co ban moi ngay."
+          : "Tap trung luyen de co giai thich dap an va ghi lai loi sai thuong gap.",
+    }));
+
+  const strengths = normalized
+    .filter((item) => item.percentage >= 80)
+    .slice(-2)
+    .reverse()
+    .map((item) => ({
+      subject: item.subject,
+      percentage: item.percentage,
+      praise: "Ban dang duy tri ket qua tot, hay tiep tuc giu nhip luyen de deu dan.",
+    }));
+
+  const suggestions = [];
+  if (weaknesses.length > 0) {
+    suggestions.push(
+      `Uu tien 60 phut moi ngay cho mon ${weaknesses[0].subject} trong 7 ngay toi.`,
+    );
+  }
+  suggestions.push("Sau moi de, tong hop 5 cau sai vao so tay va on lai vao hom sau.");
+  suggestions.push(
+    "Lam it nhat 1 de tong hop moi 2 ngay de theo doi tien bo va dieu chinh lo trinh.",
+  );
+
+  return {
+    hasEnoughData: true,
+    totalExams: examAttempts.length,
+    subjectStats: normalized.map((item) => ({
+      subject: item.subject,
+      average: item.percentage.toFixed(1),
+      count: item.count,
+    })),
+    weaknesses,
+    strengths,
+    suggestions,
+  };
+}
+
+function buildRuleBasedRoadmap(weaknesses) {
+  const weakestSubject =
+    weaknesses?.weaknesses?.[0]?.subject || "mon can cai thien";
+
+  return {
+    roadmap: [
+      {
+        phase: 1,
+        days: "1-3",
+        title: "Cung co nen tang",
+        description: `On lai ly thuyet cot loi cua ${weakestSubject}.`,
+        tasks: [
+          "On lai cong thuc/chu de trong 45-60 phut moi ngay",
+          "Lam 20 cau co ban va cham lai tung cau sai",
+          "Ghi chu cac loi sai lap lai",
+        ],
+      },
+      {
+        phase: 2,
+        days: "4-6",
+        title: "Luyen theo dang bai",
+        description: "Chia nho theo tung dang cau hoi de tang do chinh xac.",
+        tasks: [
+          "Moi ngay chon 2 dang bai de luyen sau",
+          "Dat muc tieu do chinh xac toi thieu 70%",
+          "Danh dau nhung cau mat nhieu thoi gian",
+        ],
+      },
+      {
+        phase: 3,
+        days: "7-9",
+        title: "Tang toc do",
+        description: "Luyen de co gioi han thoi gian de toi uu toc do lam bai.",
+        tasks: [
+          "Lam de mini 30-40 phut",
+          "Review dap an trong 20 phut ngay sau khi nop bai",
+          "Toi uu thu tu lam cau de tranh mat diem de",
+        ],
+      },
+      {
+        phase: 4,
+        days: "10-12",
+        title: "De tong hop",
+        description: "Mo rong sang de tong hop gan voi de thi that.",
+        tasks: [
+          "Moi 2 ngay lam 1 de tong hop",
+          "So sanh diem voi lan truoc de do tien bo",
+          "Tap trung sua nhom cau sai cao nhat",
+        ],
+      },
+      {
+        phase: 5,
+        days: "13-15",
+        title: "Chot chien luoc",
+        description: "On tap co trong tam va chot chien luoc phong thi.",
+        tasks: [
+          "On lai so tay loi sai trong toan bo 2 tuan",
+          "Lam 1 de tong duyet cuoi cung",
+          "Chuan bi ke hoach phan bo thoi gian khi thi",
+        ],
+      },
+    ],
+  };
+}
+
 /**
  * Phân tích điểm yếu từ lịch sử làm bài
  * @param {Array} examAttempts - Mảng các lần thi
@@ -195,6 +320,10 @@ Trả về JSON format:
   ]
 }`;
 
+  if (!hasGeminiConfig) {
+    return buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats);
+  }
+
   try {
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
@@ -218,8 +347,11 @@ Trả về JSON format:
       ...aiResponse,
     };
   } catch (error) {
-    if (!error.isRateLimit) console.error("Gemini API Error:", error);
-    throw error; // re-throw để controller xử lý (phân biệt rate limit vs lỗi khác)
+    if (error.isRateLimit) {
+      throw error;
+    }
+    console.error("Gemini API Error (fallback mode):", error.message);
+    return buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats);
   }
 }
 
@@ -269,6 +401,10 @@ Trả về JSON:
   ]
 }`;
 
+  if (!hasGeminiConfig) {
+    return buildRuleBasedRoadmap(weaknesses);
+  }
+
   try {
     const model = genAI.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
@@ -283,8 +419,11 @@ Trả về JSON:
 
     return aiResponse;
   } catch (error) {
-    if (!error.isRateLimit) console.error("Gemini API Error:", error);
-    throw error;
+    if (error.isRateLimit) {
+      throw error;
+    }
+    console.error("Gemini API Error (fallback roadmap):", error.message);
+    return buildRuleBasedRoadmap(weaknesses);
   }
 }
 

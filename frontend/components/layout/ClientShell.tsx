@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import Footer from '@/components/layout/Footer';
+import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -11,6 +12,24 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   // ── Mounted guard (avoid SSR hydration mismatch) ─────────────────────────
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // ── Navigation state: wait for pathname to settle before showing content ──
+  const [ready, setReady] = useState(false);
+  const readyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!mounted) return;
+    // On every pathname change, hide footer briefly, then show after settle
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+    }
+    if (readyTimer.current) clearTimeout(readyTimer.current);
+    // 300ms settle window — if pathname doesn't change again, show footer
+    readyTimer.current = setTimeout(() => setReady(true), 300);
+    return () => {
+      if (readyTimer.current) clearTimeout(readyTimer.current);
+    };
+  }, [pathname, mounted]);
 
   // ── Navigation progress bar ──────────────────────────────────────────────
   const [progress, setProgress] = useState(0);
@@ -71,6 +90,10 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/reset');
   const isExam = pathname?.startsWith('/exam/');
   const noFooter = isAdmin || isAuth || isExam;
+  const showFloatingContacts = !isAdmin && !isExam;
+
+  // Only show footer when: mounted + route settled + not suppressed
+  const showFooter = mounted && ready && !noFooter;
 
   return (
     <>
@@ -92,12 +115,14 @@ export default function ClientShell({ children }: { children: React.ReactNode })
         />
       )}
 
+      {mounted && showFloatingContacts && <FloatingContactButtons />}
+
       <div className="min-h-screen flex flex-col">
         <div className="flex-1">
           {children}
         </div>
 
-        {mounted && !noFooter && (
+        {showFooter && (
           <div id="footer-shell" className="mt-auto">
             <Footer />
           </div>

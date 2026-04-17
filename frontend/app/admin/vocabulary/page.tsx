@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import { FiPlus, FiTrash2, FiEdit2, FiSearch, FiX, FiCheck, FiUpload, FiChevronLeft } from 'react-icons/fi';
 import Link from 'next/link';
@@ -62,7 +63,8 @@ export default function AdminVocabularyPage() {
   const [bulkTopic, setBulkTopic] = useState('');
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'admin') {
+    const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'content.manage'))) {
       router.push('/');
       return;
     }
@@ -89,7 +91,7 @@ export default function AdminVocabularyPage() {
 
       setItems(vocabRes.data.data || []);
       setTotal(vocabRes.data.pagination?.total || 0);
-      const uniqueTopics = [...new Set((topicsRes.data.data || []).map((t: any) => t.topic))] as string[];
+      const uniqueTopics = Array.from(new Set((topicsRes.data.data || []).map((t: any) => t.topic))) as string[];
       setTopics(uniqueTopics);
     } catch (e) {
       console.error(e);
@@ -99,7 +101,7 @@ export default function AdminVocabularyPage() {
   }, [filterSubject, filterTopic, searchQuery, offset]);
 
   useEffect(() => {
-    if (isAuthenticated && user?.role === 'admin') loadData();
+    if (isAuthenticated && hasPermission(user, 'content.manage')) loadData();
   }, [offset]);
 
   const openAdd = () => {

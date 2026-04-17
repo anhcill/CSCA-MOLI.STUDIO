@@ -3,7 +3,11 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
-import { FiDownload, FiExternalLink, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiDownload, FiExternalLink, FiSearch, FiChevronDown, FiChevronUp, FiLock } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
+import { useAuthStore } from '@/lib/store/authStore';
+import { isVipActive } from '@/lib/utils/permissions';
+import { ProUpgradeModal } from '@/components/common/ProModal';
 
 interface Material {
   id: number;
@@ -14,6 +18,7 @@ interface Material {
   category: string;
   subject: string;
   created_at: string;
+  is_premium?: boolean;
 }
 
 const CATEGORIES = [
@@ -36,13 +41,34 @@ const SUBJECTS = [
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 function PDFCard({ m }: { m: Material }) {
+  const user = useAuthStore((s) => s.user);
+  const isVip = isVipActive(user);
   const [expanded, setExpanded] = useState(false);
-  const pdfUrl = `${API_URL}/materials/pdf/${m.id}`; // proxy qua backend để bypass 401
+  const [showVipModal, setShowVipModal] = useState(false);
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+  const queryString = token ? `?token=${token}` : '';
+  const pdfUrl = `${API_URL}/materials/pdf/${m.id}${queryString}`;
+  const downloadUrl = `${API_URL}/materials/pdf/${m.id}/download${queryString}`;
   const categoryData = CATEGORIES.find(c => c.value === m.category);
   const subjectData = SUBJECTS.find(s => s.value === m.subject);
+  const locked = m.is_premium && !isVip;
+
+  const handlePdfClick = (e: React.MouseEvent) => {
+    if (locked) {
+      e.preventDefault();
+      setShowVipModal(true);
+    }
+  };
+
+  const handleDownloadClick = (e: React.MouseEvent) => {
+    if (locked) {
+      e.preventDefault();
+      setShowVipModal(true);
+    }
+  };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300">
+    <div className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 ${locked ? 'border-amber-200/70 hover:shadow-amber-500/10' : 'border-gray-200 hover:shadow-md'}`}>
       <div className="p-5">
         <div className="flex items-start gap-4">
           {/* Icon */}
@@ -52,7 +78,14 @@ function PDFCard({ m }: { m: Material }) {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-900 text-base leading-snug mb-1">{m.title}</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-bold text-base leading-snug">{m.title}</h3>
+              {m.is_premium && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
+                  <FaCrown /> PRO
+                </span>
+              )}
+            </div>
             {m.description && (
               <p className="text-sm text-gray-600 mb-3 line-clamp-2">{m.description}</p>
             )}
@@ -76,25 +109,36 @@ function PDFCard({ m }: { m: Material }) {
 
           {/* Actions */}
           <div className="flex gap-2 shrink-0">
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
-            >
-              <FiExternalLink size={14} />
-              Xem PDF
-            </a>
-            <a
-              href={pdfUrl}
-              download={m.title + '.pdf'}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center w-10 h-10 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              title="Tải xuống"
-            >
-              <FiDownload size={16} />
-            </a>
+            {locked ? (
+              <button
+                onClick={() => setShowVipModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-200 transition-all shadow-sm"
+              >
+                <FiLock size={14} />
+                Khóa PRO
+              </button>
+            ) : (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={handlePdfClick}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
+              >
+                <FiExternalLink size={14} />
+                Xem PDF
+              </a>
+            )}
+            {!locked && (
+              <a
+                href={downloadUrl}
+                onClick={handleDownloadClick}
+                className="flex items-center justify-center w-10 h-10 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                title="Tải xuống PDF"
+              >
+                <FiDownload size={16} />
+              </a>
+            )}
             <button
               onClick={() => setExpanded(v => !v)}
               className="flex items-center justify-center w-10 h-10 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -107,7 +151,7 @@ function PDFCard({ m }: { m: Material }) {
       </div>
 
       {/* Preview */}
-      {expanded && (
+      {expanded && !locked && (
         <div className="border-t border-gray-200 bg-gray-50 p-4">
           <iframe
             src={pdfUrl}
@@ -116,6 +160,27 @@ function PDFCard({ m }: { m: Material }) {
             loading="lazy"
           />
         </div>
+      )}
+      {expanded && locked && (
+        <div className="border-t border-amber-100 bg-amber-50 p-6 text-center">
+          <FaCrown className="text-amber-500 mx-auto mb-2" size={32} />
+          <p className="font-bold text-amber-800 mb-1">Tài liệu dành cho VIP</p>
+          <p className="text-sm text-amber-600 mb-3">Nâng cấp PRO để xem nội dung</p>
+          <button
+            onClick={() => setShowVipModal(true)}
+            className="px-5 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition"
+          >
+            Nâng cấp ngay
+          </button>
+        </div>
+      )}
+
+      {showVipModal && (
+        <ProUpgradeModal
+          isOpen={true}
+          onClose={() => setShowVipModal(false)}
+          title={`"${m.title}" chỉ dành cho VIP`}
+        />
       )}
     </div>
   );

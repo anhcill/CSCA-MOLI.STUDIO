@@ -11,6 +11,34 @@ import {
   type Notification,
 } from '@/lib/api/notifications';
 
+type NotificationResponse = {
+  data: Notification[];
+  unread_count: number;
+};
+
+const NOTIFICATION_CACHE_TTL = 3000;
+let notificationCache: (NotificationResponse & { cachedAt: number }) | null = null;
+let notificationRequest: Promise<NotificationResponse> | null = null;
+
+const fetchNotificationsShared = async (): Promise<NotificationResponse> => {
+  const now = Date.now();
+  if (notificationCache && now - notificationCache.cachedAt < NOTIFICATION_CACHE_TTL) {
+    return { data: notificationCache.data, unread_count: notificationCache.unread_count };
+  }
+
+  if (!notificationRequest) {
+    notificationRequest = getNotifications(20).then((res) => {
+      const payload = { data: res.data || [], unread_count: res.unread_count || 0 };
+      notificationCache = { ...payload, cachedAt: Date.now() };
+      return payload;
+    }).finally(() => {
+      notificationRequest = null;
+    });
+  }
+
+  return notificationRequest;
+};
+
 const TYPE_LABEL: Record<string, string> = {
   like_post:     'đã thích bài viết của bạn',
   comment_post:  'đã bình luận bài viết của bạn',
@@ -41,7 +69,7 @@ export default function NotificationBell() {
     if (!isAuthenticated) return;
     try {
       setLoading(true);
-      const res = await getNotifications(20);
+      const res = await fetchNotificationsShared();
       setNotifications(res.data);
       setUnread(res.unread_count);
     } catch { /* silent */ }
@@ -75,6 +103,14 @@ export default function NotificationBell() {
       // Optimistic UI: clear badge immediately
       setUnread(0);
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      if (notificationCache) {
+        notificationCache = {
+          ...notificationCache,
+          unread_count: 0,
+          data: notificationCache.data.map((n) => ({ ...n, is_read: true })),
+          cachedAt: Date.now(),
+        };
+      }
       try { await markAllRead(); } catch { /* silent */ }
     }
   };
@@ -82,6 +118,14 @@ export default function NotificationBell() {
   const handleClickNotification = async (n: Notification) => {
     if (!n.is_read) {
       try { await markRead(n.id); } catch { /* silent */ }
+      if (notificationCache) {
+        notificationCache = {
+          ...notificationCache,
+          unread_count: Math.max(0, notificationCache.unread_count - 1),
+          data: notificationCache.data.map((item) => item.id === n.id ? { ...item, is_read: true } : item),
+          cachedAt: Date.now(),
+        };
+      }
     }
     setOpen(false);
     router.push(`/forum`);
@@ -113,6 +157,14 @@ export default function NotificationBell() {
               onClick={async () => {
                 setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
                 setUnread(0);
+                if (notificationCache) {
+                  notificationCache = {
+                    ...notificationCache,
+                    unread_count: 0,
+                    data: notificationCache.data.map((n) => ({ ...n, is_read: true })),
+                    cachedAt: Date.now(),
+                  };
+                }
                 try { await markAllRead(); } catch { /* silent */ }
               }}
               className="text-xs text-violet-600 hover:text-violet-800 font-medium"

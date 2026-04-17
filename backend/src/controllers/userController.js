@@ -179,3 +179,82 @@ exports.changePassword = async (req, res) => {
     return res.status(500).json({ success: false, message: "Lỗi server, vui lòng thử lại" });
   }
 };
+
+/**
+ * @desc    Get user roadmap progress
+ * @route   GET /api/users/roadmap
+ * @access  Private
+ */
+exports.getUserRoadmap = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Get attempts statistics
+    const examRes = await db.query(
+      `SELECT COUNT(*) as total_completed, ROUND(AVG(total_score)::numeric, 1) as avg_score
+       FROM exam_attempts WHERE user_id = $1 AND status = 'completed'`, [userId]
+    );
+    
+    const attempts = parseInt(examRes.rows[0]?.total_completed) || 0;
+    const avgScore = parseFloat(examRes.rows[0]?.avg_score) || 0;
+
+    let rows = [];
+    try {
+      const milestonesResult = await db.query(
+        `SELECT
+           id,
+           title,
+           description,
+           min_attempts,
+           min_avg_score,
+           icon,
+           color,
+           sort_order
+         FROM roadmap_milestones
+         WHERE is_active = TRUE
+         ORDER BY sort_order ASC`,
+      );
+      rows = milestonesResult.rows;
+    } catch (err) {
+      rows = [
+        { id: 1, title: "Khởi đầu vững chắc", description: "Hoàn thành bài đánh giá năng lực đầu vào.", min_attempts: 1, min_avg_score: 0, icon: "FaFlagCheckered", color: "bg-green-500" },
+        { id: 2, title: "Vượt chướng ngại vật", description: "Đang ôn tập kiến thức cơ bản nền tảng (Yêu cầu: Giải 5 đề).", min_attempts: 5, min_avg_score: 0, icon: "FaMountain", color: "bg-blue-500" },
+        { id: 3, title: "Tăng tốc chạy lướt", description: "Luyện đề vận dụng cao (Yêu cầu: Giải 15 đề, điểm TB >= 6.0).", min_attempts: 15, min_avg_score: 6.0, icon: "FaRunning", color: "bg-orange-500" },
+        { id: 4, title: "Về đích huy hoàng", description: "Thi thử áp lực 180 phút phòng VIP (Yêu cầu: Giải 30 đề, điểm TB >= 8.0).", min_attempts: 30, min_avg_score: 8.0, icon: "FaTrophy", color: "bg-purple-500" },
+      ];
+    }
+    let currentAssigned = false;
+    const milestones = rows.map((row) => {
+      const minAttempts = parseInt(row.min_attempts) || 0;
+      const minAvgScore = parseFloat(row.min_avg_score) || 0;
+      const completed = attempts >= minAttempts && avgScore >= minAvgScore;
+
+      let status = "locked";
+      if (completed) {
+        status = "completed";
+      } else if (!currentAssigned) {
+        status = "current";
+        currentAssigned = true;
+      }
+
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        status,
+        icon: row.icon || "FiTarget",
+        color: row.color || "bg-indigo-500",
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        stats: { attempts, avgScore },
+        milestones
+      }
+    });
+  } catch (error) {
+    console.error("Get roadmap error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};

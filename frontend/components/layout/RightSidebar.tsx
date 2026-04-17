@@ -1,17 +1,17 @@
 'use client';
 
-import { FiFileText, FiBook, FiTarget, FiTrendingUp, FiLayers, FiCalendar, FiUser } from 'react-icons/fi';
+import { FiFileText, FiBook, FiTarget, FiTrendingUp, FiLayers, FiCalendar, FiUser, FiSettings } from 'react-icons/fi';
 
 export default function RightSidebar() {
   const menuItems = [
-    { icon: FiLayers, label: 'Cấu trúc đề', href: '/structure', color: 'text-blue-600' },
-    { icon: FiBook, label: 'Lý Thuyết', href: '/theory', color: 'text-green-600' },
-    { icon: FiTarget, label: 'Tự vững', href: '/practice', color: 'text-purple-600' },
-    { icon: FiFileText, label: 'Đề mô phỏng', href: '/mock-tests', color: 'text-orange-600' },
-    { icon: FiTrendingUp, label: 'Tự luận nâng cao', href: '/advanced', color: 'text-red-600' },
-    { icon: FiCalendar, label: 'Lịch sử làm bài', href: '/history', color: 'text-indigo-600' },
-    { icon: FiUser, label: 'Lộ trình học cá nhân', href: '/roadmap', color: 'text-pink-600' },
-    { icon: FiUser, label: 'Tài khoản', href: '/account', color: 'text-gray-600' },
+    { icon: FiLayers, label: 'Cấu trúc đề', href: '/cau-truc-de', color: 'text-blue-600' },
+    { icon: FiBook, label: 'Lý Thuyết', href: '/ly-thuyet', color: 'text-green-600' },
+    { icon: FiTarget, label: 'Từ vựng', href: '/tu-vung', color: 'text-purple-600' },
+    { icon: FiFileText, label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'text-orange-600' },
+    { icon: FiTrendingUp, label: 'Tự luận nâng cao', href: '/tu-luan-nang-cao', color: 'text-red-600' },
+    { icon: FiCalendar, label: 'Lịch sử làm bài', href: '/lich-su', color: 'text-indigo-600' },
+    { icon: FiUser, label: 'Lộ trình học cá nhân', href: '/lo-trinh', color: 'text-pink-600' },
+    { icon: FiSettings, label: 'Tài khoản', href: '/profile', color: 'text-gray-600' },
   ];
 
   return (

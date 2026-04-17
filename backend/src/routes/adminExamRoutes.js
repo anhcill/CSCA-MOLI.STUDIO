@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate, authorize } = require("../middleware/authMiddleware");
+const {
+	authenticate,
+	authorizePermission,
+} = require("../middleware/authMiddleware");
 const AdminExamController = require("../controllers/adminExamController");
 
-// All routes require authentication AND admin role
+// All routes require authentication and exam management permission
 router.use(authenticate);
-router.use(authorize("admin"));
+router.use(authorizePermission("exams.manage"));
 
 // Exam CRUD
 router.get("/", AdminExamController.getAllExams);
@@ -18,5 +21,10 @@ router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 router.post("/:examId/questions", AdminExamController.addQuestion);
 router.put("/questions/:questionId", AdminExamController.updateQuestion);
 router.delete("/questions/:questionId", AdminExamController.deleteQuestion);
+
+// ── Ngày 11-12: Schedule management (Live / Upcoming) ────────────────────────
+router.get("/:examId/schedule", AdminExamController.getSchedule);
+router.put("/:examId/schedule", AdminExamController.setSchedule);
+router.delete("/:examId/schedule", AdminExamController.clearSchedule);
 
 module.exports = router;

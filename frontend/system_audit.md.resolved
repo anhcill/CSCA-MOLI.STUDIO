@@ -1,0 +1,419 @@
+# 🔍 KIỂM TRA TOÀN BỘ HỆ THỐNG CSCA — BÁO CÁO & KẾ HOẠCH HOÀN THIỆN
+
+> **Ngày kiểm tra:** 13/04/2026 | **Thực hiện bởi:** Antigravity AI  
+> **Phạm vi:** Toàn bộ Frontend (Next.js) + Backend (Node.js/Express) + Database
+
+---
+
+## 📊 TỔNG QUAN HỆ THỐNG HIỆN TẠI
+
+### ✅ Những gì đã hoàn thiện tốt
+
+| Module | Trạng thái | Ghi chú |
+|---|---|---|
+| Authentication (Login/Register) | ✅ Hoàn chỉnh | Google OAuth, Verify Email, Forgot/Reset Password |
+| Hệ thống đề thi (Exam) | ✅ Tốt | Làm bài, nộp bài, xem kết quả |
+| Lịch sử làm bài | ✅ Tốt | Filter theo môn, phân trang |
+| AI Lộ trình cá nhân | ✅ Có | Gemini AI integration |
+| Tài liệu PDF | ✅ Có | Upload Cloudinary, stream PDF |
+| Từ vựng Tiếng Trung | ✅ Có | CRUD đầy đủ |
+| Forum bài viết | ✅ Có | Like, tạo/sửa/xóa post |
+| Bảng xếp hạng | ✅ Có | Leaderboard API |
+| Tìm kiếm toàn cục | ✅ Có | Search API |
+| Thông báo (Notifications) | ✅ Có | Bell component |
+| Admin Dashboard | ✅ Cơ bản | Stats cards, quick actions |
+| Admin: Quản lý đề thi | ✅ Tốt | Tạo/sửa/xóa, kéo thả ảnh |
+| Admin: Quản lý từ vựng | ✅ Có | Bulk import |
+| Admin: Quản lý tài liệu | ✅ Có | Upload PDF |
+| Admin: Quản lý users | ✅ Có | Danh sách users |
+| Countdown ngày thi | ✅ Tốt | Real-time, config từ admin |
+| Thống kê tổng quan (Stats API) | ✅ Có | Cache 1h |
+| SEO/Sitemap | ✅ Có | robots.ts, sitemap.ts |
+| Rate Limiting | ✅ Có | Global + Auth limiter |
+| Security Headers | ✅ Có | Helmet, CORS, CSP |
+
+---
+
+## 🚨 LỖ HỔNG NGHIÊM TRỌNG CẦN SỬA NGAY
+
+### 1. 🔴 KHÔNG CÓ HỆ THỐNG COMMENT CHO FORUM
+**Vấn đề:** Model `Post.js` có trường `comments_count` nhưng **không có route, controller hay UI nào** cho comments.  
+**Hậu quả:** Diễn đàn chỉ có post + like, không thể thảo luận — mất đi tính "forum" hoàn toàn.
+
+```
+Thiếu:
+- backend/src/models/Comment.js (không tồn tại)
+- backend/src/routes/comments.js (không tồn tại)
+- backend/src/controllers/commentController.js (không tồn tại)
+- frontend/components/forum/CommentSection.tsx
+- frontend/app/forum/[id]/page.tsx (chi tiết post)
+```
+
+### 2. 🔴 TRANG `/mon/vatly` VÀ `/mon/hoa` CÓ THỂ BỊ LỖI
+**Vấn đề:** Header nav trỏ đến `/mon/vatly` và `/mon/hoa`, nhưng trong `app/` có thư mục `vat-ly` và `hoa` — cần kiểm tra xem `/mon/` route có tồn tại không.
+
+### 3. 🔴 ADMIN: PHẦN "HOẠT ĐỘNG GẦN ĐÂY" LUÔN RỖNG
+**Vấn đề:** Code trong `admin/page.tsx` hiển thị "Chưa có hoạt động nào" — đây là **placeholder chưa implement**.  
+**Hậu quả:** Admin không biết gì đang xảy ra trong hệ thống.
+
+### 4. 🔴 KHÔNG CÓ TRANG THỐNG KÊ CHI TIẾT CHO USER
+**Vấn đề:** Không có `/stats` hay trang analytics riêng cho học viên. Chỉ có `/lich-su` (lịch sử đơn thuần) và `/lo-trinh` (AI insights).  
+**Thiếu:** Biểu đồ tiến độ, phân tích điểm yếu theo chủ đề, so sánh với trung bình.
+
+### 5. 🔴 KHÔNG CÓ FLASHCARD / SPACED REPETITION
+**Vấn đề:** Trang chủ quảng cáo `"Flashcard tiếng Trung với spaced repetition tự động"` nhưng **tính năng này KHÔNG TỒN TẠI**.  
+**Hậu quả:** Misleading với người dùng, mất điểm uy tín lớn.
+
+---
+
+## ⚠️ THIẾU SÓT QUAN TRỌNG CẦN BỔ SUNG
+
+### CLIENT SIDE
+
+| # | Tính năng thiếu | Mức độ | Ảnh hưởng |
+|---|---|---|---|
+| C1 | **Forum Post Detail page** (`/forum/[id]`) | 🔴 Cao | User không thể đọc bài đầy đủ |
+| C2 | **Hệ thống Comment** dưới forum | 🔴 Cao | Forum không có tương tác |
+| C3 | **Flashcard Từ vựng** (Spaced Repetition) | 🔴 Cao | Tính năng quảng cáo nhưng không có |
+| C4 | **Trang Thống kê cá nhân** với biểu đồ | 🟠 Trung bình | User không thấy tiến độ rõ ràng |
+| C5 | **Bookmark/Lưu tài liệu** yêu thích | 🟠 Trung bình | UX kém |
+| C6 | **Chia sẻ kết quả** lên mạng xã hội | 🟡 Thấp | Viral growth |
+| C7 | **Dark Mode** | 🟡 Thấp | UX modern |
+| C8 | **Trang lỗi 404 đẹp** | 🟡 Thấp | Polish |
+| C9 | **Mobile search** (button tìm kiếm trên mobile không mở SearchBar) | 🟠 Trung bình | UX lỗi |
+| C10 | **PWA / Offline support** | 🟡 Thấp | Mobile experience |
+| C11 | **Trang chi tiết từ vựng** (flashcard lật) | 🟠 Trung bình | Core feature còn thiếu |
+| C12 | **Subject pages** cho Vật Lý, Hóa Học, Tiếng Trung | 🟠 Trung bình | Cần verify đang hoạt động |
+
+### ADMIN SIDE
+
+| # | Tính năng thiếu | Mức độ | Ảnh hưởng |
+|---|---|---|---|
+| A1 | **Biểu đồ Analytics** trong admin | 🔴 Cao | Admin mù thông tin |
+| A2 | **Nhật ký hoạt động** (Activity Log) thực sự | 🔴 Cao | Không audit được |
+| A3 | **Kiểm duyệt Forum** (approve/reject/ban post) | 🟠 Trung bình | Quản lý nội dung |
+| A4 | **Ban/Unban User** | 🟠 Trung bình | Quản lý người dùng |
+| A5 | **Admin Settings mở rộng** (logo, màu sắc, thông báo hệ thống) | 🟡 Thấp | Cấu hình linh hoạt |
+| A6 | **Export dữ liệu** (CSV users, kết quả thi) | 🟡 Thấp | Báo cáo |
+| A7 | **Quản lý Câu hỏi** — hiện có page nhưng cần verify hoàn chỉnh | 🟠 Trung bình | Tạo đề thi |
+| A8 | **Admin Leaderboard management** | 🟡 Thấp | Reset bảng xếp hạng |
+| A9 | **Thống kê theo môn học** chi tiết | 🟠 Trung bình | Insight nội dung |
+| A10 | **Bulk operations** (xóa nhiều, activate nhiều) | 🟡 Thấp | Efficiency |
+
+### BACKEND SIDE
+
+| # | Thiếu sót | Mức độ | Ảnh hưởng |
+|---|---|---|---|
+| B1 | **Comments routes/controller/model** | 🔴 Cao | Forum không hoạt động hoàn chỉnh |
+| B2 | **Input validation** (Joi/Zod) — chưa thấy validator rõ ràng | 🟠 Trung bình | Security risk |
+| B3 | **Real-time notifications** (WebSocket/SSE) | 🟠 Trung bình | UX kém (phải refresh) |
+| B4 | **Email service thực tế** (SMTP) cho verify/reset | 🟠 Trung bình | Auth flow bị lỗi nếu chưa config |
+| B5 | **Bookmark API** | 🟡 Thấp | Lưu tài liệu yêu thích |
+| B6 | **User Analytics API** chi tiết (theo chủ đề, theo tuần) | 🟠 Trung bình | Thiếu data cho charts |
+| B7 | **Admin Activity Log** write to DB | 🔴 Cao | Audit trail |
+| B8 | **Flashcard Progress tracking** | 🔴 Cao | Core feature |
+
+---
+
+## 🗺️ KẾ HOẠCH HOÀN THIỆN — ĐỘT PHÁ
+
+### 📅 GIAI ĐOẠN 1: SỬA LỖI KHẨN CẤP (2-3 ngày)
+
+#### Ngày 1: Forum Comment System
+```
+Backend:
+  ✦ Tạo comments table (post_id, user_id, content, parent_id, created_at)
+  ✦ backend/src/controllers/commentController.js
+  ✦ POST /api/posts/:id/comments
+  ✦ GET  /api/posts/:id/comments (nested replies)
+  ✦ DELETE /api/posts/:id/comments/:cid
+
+Frontend:
+  ✦ frontend/app/forum/[id]/page.tsx — Post Detail page
+  ✦ frontend/components/forum/CommentSection.tsx
+  ✦ frontend/components/forum/CommentItem.tsx (reply support)
+  ✦ Cập nhật forum list → click vào post → mở detail
+```
+
+#### Ngày 2: Sửa Mobile Search Bug + Subject Pages
+```
+  ✦ Fix nút 🔍 trên mobile để mở SearchBar dropdown
+  ✦ Verify /mon/vatly, /mon/hoa, /mon/toan routing
+  ✦ Tạo consistent layout cho tất cả subject pages
+```
+
+#### Ngày 3: Admin Activity Log
+```
+  ✦ Tạo admin_activity_logs table
+  ✦ Middleware ghi log mọi action admin
+  ✦ Hiển thị real activity trong admin dashboard
+```
+
+---
+
+### 📅 GIAI ĐOẠN 2: TÍNH NĂNG CỐT LÕI CÒN THIẾU (5-7 ngày)
+
+#### Ngày 4-5: 🃏 Flashcard Spaced Repetition
+```
+Database:
+  ✦ flashcard_sessions (user_id, word_id, ease_factor, interval, next_review)
+  ✦ flashcard_logs (user_id, word_id, rating, reviewed_at)
+
+Backend:
+  ✦ GET  /api/vocabulary/flashcard/session — lấy set từ cần ôn hôm nay (SM-2 algorithm)
+  ✦ POST /api/vocabulary/flashcard/review  — submit rating (1-4)
+  ✦ GET  /api/vocabulary/flashcard/stats   — tiến độ học
+
+Frontend:
+  ✦ /tu-vung/flashcard/page.tsx — Giao diện flashcard lật 3D
+  ✦ Hiệu ứng flip card animation
+  ✦ Rating buttons: Không biết / Khó / Tốt / Dễ
+  ✦ Progress bar trong session
+  ✦ Ngày ôn tiếp theo
+```
+
+#### Ngày 6: 📊 Trang Thống kê cá nhân
+```
+Backend:
+  ✦ GET /api/stats/user/me — stats cá nhân chi tiết
+  ✦ Phân tích theo chủ đề (topic accuracy)
+  ✦ Trend điểm theo tuần/tháng
+
+Frontend:
+  ✦ /profile hoặc /thong-ke/page.tsx
+  ✦ Recharts: RadarChart (điểm theo môn), LineChart (trend)
+  ✦ BarChart (top 5 chủ đề yếu nhất)
+  ✦ Streak calendar (heatmap ngày học)
+```
+
+#### Ngày 7: 🔖 Bookmark Tài liệu + Chia sẻ kết quả
+```
+Backend:
+  ✦ POST /api/materials/:id/bookmark
+  ✦ GET  /api/materials/bookmarked
+  ✦ DELETE /api/materials/:id/bookmark
+
+Frontend:
+  ✦ Bookmark button trên MaterialCard
+  ✦ Tab "Đã lưu" trong /tailieu
+  ✦ Share result card (OG image generator)
+```
+
+---
+
+### 📅 GIAI ĐOẠN 3: NÂNG CẤP ADMIN (3-4 ngày)
+
+#### Ngày 8: Admin Analytics Dashboard
+```
+  ✦ Recharts trong Admin:
+    - LineChart: Số đăng ký theo ngày (30 ngày)
+    - BarChart: Số lượt thi theo môn
+    - PieChart: Phân bố điểm (Xuất sắc/Khá/TB/Yếu)
+    - AreaChart: Active users
+  ✦ Metric cards với % thay đổi (so tuần trước)
+```
+
+#### Ngày 9: Admin User Management nâng cao
+```
+  ✦ Ban/Unban user (is_banned field)
+  ✦ Xem chi tiết user: tổng bài thi, điểm TB, join date
+  ✦ Search + filter users (by role, by date joined)
+  ✦ Export CSV danh sách users
+  ✦ Bulk actions
+```
+
+#### Ngày 10: Admin Forum Moderation
+```
+  ✦ Danh sách tất cả posts với trạng thái (active/hidden/reported)
+  ✦ Ẩn/hiện post
+  ✦ Xem reports từ users
+  ✦ Report post feature cho users
+```
+
+---
+
+### 📅 GIAI ĐOẠN 4: POLISH & ĐỈNH CAO (3-4 ngày)
+
+#### Ngày 11: 🌙 Dark Mode
+```
+  ✦ CSS variables cho color tokens
+  ✦ ThemeProvider với localStorage persistence
+  ✦ Toggle button trong Header
+  ✦ Smooth transition animation
+```
+
+#### Ngày 12: ⚡ Real-time Notifications (SSE)
+```
+  ✦ Server-Sent Events endpoint: GET /api/notifications/stream
+  ✦ Push khi: có comment mới, like post, kết quả thi xong
+  ✦ NotificationBell update real-time (không cần refresh)
+```
+
+#### Ngày 13: 📱 PWA + Offline Support
+```
+  ✦ next-pwa setup
+  ✦ Service Worker cache materials PDF
+  ✦ Offline fallback page
+  ✦ Install prompt
+  ✦ App icon + manifest.json
+```
+
+#### Ngày 14-15: Final Polish
+```
+  ✦ Trang 404 đẹp với animation
+  ✦ Loading skeletons cho mọi trang
+  ✦ Error boundary toàn cục
+  ✦ Toast notifications thống nhất
+  ✦ Accessibility: ARIA labels, keyboard nav
+  ✦ Performance: lazy loading, image optimization
+  ✦ Testing: Jest + Playwright E2E tests
+```
+
+---
+
+## 🏆 THỨ TỰ ƯU TIÊN TUYỆT ĐỐI
+
+```
+MUST DO NGAY (tuần này):
+  1. 🔴 Forum Comment System — Forum không có giá trị nếu không có comment
+  2. 🔴 Flashcard Spaced Repetition — Đang quảng cáo nhưng chưa có
+  3. 🔴 Forum Post Detail Page — User click vào post không đi đâu cả
+  4. 🔴 Admin Analytics Real — Admin dashboard còn trống
+
+SHOULD DO (tuần sau):
+  5. 🟠 Trang thống kê cá nhân với biểu đồ
+  6. 🟠 Bookmark tài liệu
+  7. 🟠 Ban/Unban user trong admin
+  8. 🟠 Mobile search fix
+
+NICE TO HAVE (sau):
+  9. 🟡 Dark Mode
+  10. 🟡 PWA/Offline
+  11. 🟡 Share kết quả mạng xã hội
+  12. 🟡 Real-time notifications
+```
+
+---
+
+## 📐 KIẾN TRÚC BỔ SUNG CẦN THÊM
+
+### Database Tables Còn Thiếu
+```sql
+-- 1. Comments
+CREATE TABLE comments (
+  id SERIAL PRIMARY KEY,
+  post_id INT REFERENCES posts(id) ON DELETE CASCADE,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  parent_id INT REFERENCES comments(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  likes_count INT DEFAULT 0,
+  is_hidden BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 2. Flashcard Progress (SM-2 Algorithm)
+CREATE TABLE flashcard_progress (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  word_id INT REFERENCES vocabulary_items(id) ON DELETE CASCADE,
+  ease_factor FLOAT DEFAULT 2.5,
+  interval_days INT DEFAULT 1,
+  repetitions INT DEFAULT 0,
+  next_review DATE DEFAULT CURRENT_DATE,
+  last_reviewed TIMESTAMP,
+  UNIQUE(user_id, word_id)
+);
+
+-- 3. Bookmarks
+CREATE TABLE bookmarks (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id),
+  material_id INT REFERENCES materials(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, material_id)
+);
+
+-- 4. Admin Activity Logs
+CREATE TABLE admin_activity_logs (
+  id SERIAL PRIMARY KEY,
+  admin_id INT REFERENCES users(id),
+  action VARCHAR(100) NOT NULL,    -- 'create_exam', 'ban_user', etc.
+  entity_type VARCHAR(50),         -- 'exam', 'user', 'post'
+  entity_id INT,
+  details JSONB,
+  ip_address INET,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 5. Post Reports
+CREATE TABLE post_reports (
+  id SERIAL PRIMARY KEY,
+  post_id INT REFERENCES posts(id),
+  reporter_id INT REFERENCES users(id),
+  reason TEXT,
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### API Endpoints Cần Thêm
+```
+Comments:
+  GET    /api/posts/:id/comments
+  POST   /api/posts/:id/comments
+  DELETE /api/posts/:postId/comments/:commentId
+  POST   /api/comments/:id/like
+
+Flashcard:
+  GET    /api/vocabulary/flashcard/session
+  POST   /api/vocabulary/flashcard/review
+  GET    /api/vocabulary/flashcard/stats
+  GET    /api/vocabulary/flashcard/streak
+
+User Stats:
+  GET    /api/stats/me               — thống kê cá nhân
+  GET    /api/stats/me/subjects      — theo môn
+  GET    /api/stats/me/weak-topics   — chủ đề yếu
+  GET    /api/stats/me/trend         — trend điểm theo tuần
+
+Bookmarks:
+  GET    /api/materials/bookmarked
+  POST   /api/materials/:id/bookmark
+  DELETE /api/materials/:id/bookmark
+
+Admin Enhanced:
+  GET    /api/admin/analytics        — chart data
+  GET    /api/admin/activity-logs    — activity log
+  POST   /api/admin/users/:id/ban
+  POST   /api/admin/users/:id/unban
+  GET    /api/admin/reports          — post reports
+  PATCH  /api/admin/posts/:id/hide
+  GET    /api/admin/export/users     — CSV export
+```
+
+---
+
+## ✨ ĐIỂM MẠNH CỦA HỆ THỐNG
+
+- 🔒 **Security tốt:** Helmet, CORS, Rate Limiting, JWT, bcrypt
+- 🚀 **Performance:** Cache layer, DB indexes, compression
+- ☁️ **Cloud ready:** Cloudinary cho files, Postgres
+- 🤖 **AI Integration:** Gemini AI cho lộ trình, phân tích
+- 📱 **Responsive:** Mobile-first với Tailwind
+- 🔔 **Notifications system:** Đã có backbone
+- 🔍 **Global search:** Full-text search
+- 📊 **SEO:** Sitemap, robots.txt, Open Graph
+
+---
+
+## 🎯 KẾT LUẬN
+
+Hệ thống đã có **nền tảng rất vững chắc** (~70% hoàn thiện). Các thiếu sót chính tập trung ở:
+
+1. **Tính năng xã hội** (comments) — cần nhất để giữ user
+2. **Flashcard** — đang quảng cáo nhưng chưa làm
+3. **Analytics** — cả user lẫn admin đều thiếu data visualization
+4. **Admin** — nhiều tính năng quản lý còn empty/placeholder
+
+Nếu hoàn thành **Giai đoạn 1 + 2** (khoảng 7-10 ngày), hệ thống sẽ đạt **~90% hoàn thiện** và sẵn sàng cho người dùng thực tế.

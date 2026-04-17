@@ -17,10 +17,18 @@ export interface User {
   username: string;
   email: string;
   full_name: string;
+  display_name?: string;
   avatar: string;
   role: string;
+  roles?: string[];
+  permissions?: string[];
   bio?: string;
   target_score?: number;
+  is_vip?: boolean;
+  vip_expires_at?: string;
+  created_at?: string;
+  is_verified?: boolean;
+  is_active?: boolean;
 }
 
 export interface AuthResponse {

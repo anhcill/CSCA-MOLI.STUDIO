@@ -10,6 +10,9 @@ export default function LeftSidebar() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  const displayName = user?.full_name || (user as any)?.display_name || user?.username || 'User';
+  const displayInitial = displayName.charAt(0).toUpperCase();
+
   const menuItems = [
     { icon: '📚', label: 'Cấu trúc đề', href: '/cau-truc-de', color: 'from-blue-500 to-blue-600' },
     { icon: '📖', label: 'Lý Thuyết', href: '/ly-thuyet', color: 'from-green-500 to-green-600' },
@@ -39,13 +42,13 @@ export default function LeftSidebar() {
             {user.avatar ? (
               <img
                 src={user.avatar}
-                alt={user.display_name || user.username}
+                alt={displayName}
                 className="relative w-28 h-28 rounded-full border-4 border-white shadow-xl object-cover"
               />
             ) : (
               <div className="relative w-28 h-28 rounded-full border-4 border-white shadow-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
                 <span className="text-5xl font-bold text-white">
-                  {user.display_name?.charAt(0).toUpperCase() || user.username?.charAt(0).toUpperCase()}
+                  {displayInitial}
                 </span>
               </div>
             )}
@@ -55,7 +58,7 @@ export default function LeftSidebar() {
           {/* User Info */}
           <p className="text-sm text-blue-600 font-medium mb-1">@{user.username}</p>
           <h3 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            {user.display_name || user.full_name}
+            {displayName}
           </h3>
           <p className="text-sm text-gray-400 mb-4">CSCA{user.id.toString().padStart(10, '0')}</p>
           <span className="inline-block px-4 py-2 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 text-sm font-semibold rounded-full border border-blue-200">

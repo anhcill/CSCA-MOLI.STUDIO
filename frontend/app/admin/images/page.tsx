@@ -1,25 +1,36 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/store/authStore';
 import { FiUpload, FiCopy, FiTrash2, FiCheck, FiImage } from 'react-icons/fi';
 import { imageApi } from '@/lib/api/imageApi';
+import { hasPermission } from '@/lib/utils/permissions';
 
 interface UploadedImage {
-    filename: string;
+    publicId: string;
     url: string;
     size: number;
-    uploadedAt: string;
+    createdAt: string;
 }
 
 export default function ImageManagerPage() {
+    const router = useRouter();
+    const { user, isAuthenticated } = useAuthStore();
     const [images, setImages] = useState<UploadedImage[]>([]);
     const [uploading, setUploading] = useState(false);
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'content.manage'))) {
+            router.push('/');
+            return;
+        }
+
         loadImages();
-    }, []);
+    }, [isAuthenticated, user, router]);
 
     const loadImages = async () => {
         try {
@@ -74,17 +85,16 @@ export default function ImageManagerPage() {
     };
 
     const copyUrl = (url: string) => {
-        const fullUrl = `${window.location.origin}${url}`;
-        navigator.clipboard.writeText(fullUrl);
+        navigator.clipboard.writeText(url);
         setCopiedUrl(url);
         setTimeout(() => setCopiedUrl(null), 2000);
     };
 
-    const deleteImage = async (filename: string) => {
+    const deleteImage = async (publicId: string) => {
         if (!confirm('Xóa ảnh này?')) return;
 
         try {
-            await imageApi.deleteImage(filename);
+            await imageApi.deleteImage(publicId);
             await loadImages();
         } catch (error) {
             console.error('Delete failed:', error);
@@ -161,14 +171,14 @@ export default function ImageManagerPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {images.map((image) => (
                                 <div
-                                    key={image.filename}
+                                    key={image.publicId}
                                     className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                                 >
                                     {/* Image Preview */}
                                     <div className="aspect-video bg-gray-100 relative">
                                         <img
                                             src={image.url}
-                                            alt={image.filename}
+                                            alt={image.publicId}
                                             className="w-full h-full object-cover"
                                         />
                                     </div>
@@ -176,7 +186,7 @@ export default function ImageManagerPage() {
                                     {/* Image Info */}
                                     <div className="p-3">
                                         <p className="text-xs text-gray-500 truncate mb-2">
-                                            {image.filename}
+                                            {image.publicId}
                                         </p>
                                         <p className="text-xs text-gray-400 mb-3">
                                             {formatFileSize(image.size)}
@@ -202,7 +212,7 @@ export default function ImageManagerPage() {
                                                 )}
                                             </button>
                                             <button
-                                                onClick={() => deleteImage(image.filename)}
+                                                onClick={() => deleteImage(image.publicId)}
                                                 className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
                                             >
                                                 <FiTrash2 />

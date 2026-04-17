@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import {
     FiMessageSquare, FiTrash2, FiSearch, FiChevronLeft,
@@ -36,7 +37,8 @@ export default function AdminPostsPage() {
     const [deleting, setDeleting] = useState<number | null>(null);
 
     useEffect(() => {
-        if (!isAuthenticated || user?.role !== 'admin') {
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'forum.manage'))) {
             router.push('/');
             return;
         }
@@ -46,7 +48,7 @@ export default function AdminPostsPage() {
     const loadPosts = async () => {
         try {
             setLoading(true);
-            const res = await axios.get('/posts', { params: { limit: LIMIT, offset } });
+            const res = await axios.get('/admin/forum/posts', { params: { limit: LIMIT, offset } });
             const data = res.data;
             setPosts(data.data || []);
             setTotal(data.pagination?.total || data.data?.length || 0);
@@ -61,7 +63,7 @@ export default function AdminPostsPage() {
         if (!confirm('Xác nhận xóa bài viết này?')) return;
         try {
             setDeleting(postId);
-            await axios.delete(`/posts/${postId}`);
+            await axios.delete(`/admin/forum/posts/${postId}`);
             setPosts((prev) => prev.filter((p) => p.id !== postId));
             setTotal((t) => t - 1);
         } catch (err: any) {

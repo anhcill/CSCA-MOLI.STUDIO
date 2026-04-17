@@ -96,7 +96,7 @@ export default function SearchBar() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load recent on open
   useEffect(() => {
@@ -105,7 +105,10 @@ export default function SearchBar() {
 
   // Debounced search
   const search = useCallback((q: string) => {
-    clearTimeout(debounceRef.current);
+    const currentDebounce = debounceRef.current;
+    if (currentDebounce) {
+      clearTimeout(currentDebounce);
+    }
     if (!q.trim()) { setResults(null); setLoading(false); return; }
     setLoading(true);
     debounceRef.current = setTimeout(async () => {

@@ -19,6 +19,11 @@ async function runOptimizations() {
       )
     `);
     await pool.query(`
+      ALTER TABLE posts
+      ADD COLUMN IF NOT EXISTS post_type VARCHAR(30) DEFAULT 'community',
+      ADD COLUMN IF NOT EXISTS is_official BOOLEAN DEFAULT FALSE
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS post_likes (
         id SERIAL PRIMARY KEY,
         post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -64,6 +69,9 @@ async function runOptimizations() {
       `CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC)`,
     );
     await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_posts_type ON posts(post_type, created_at DESC)`,
+    );
+    await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id)`,
     );
     await pool.query(
@@ -86,7 +94,9 @@ async function runOptimizations() {
     await pool.query(`
       ALTER TABLE exams
       ALTER COLUMN total_points TYPE NUMERIC(6,2)
-      USING total_points::NUMERIC(6,2)
+      USING total_points::NUMERIC(6,2),
+      ADD COLUMN IF NOT EXISTS start_time TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS end_time TIMESTAMP
     `);
     await pool.query(`
       ALTER TABLE questions
@@ -161,6 +171,45 @@ async function runOptimizations() {
       `CREATE INDEX IF NOT EXISTS idx_materials_subject ON materials(subject)`,
     );
 
+    // Roadmap milestones managed by admin
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS roadmap_milestones (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        min_attempts INTEGER NOT NULL DEFAULT 0,
+        min_avg_score NUMERIC(4,2) NOT NULL DEFAULT 0,
+        icon VARCHAR(80) DEFAULT 'FiTarget',
+        color VARCHAR(80) DEFAULT 'bg-indigo-500',
+        sort_order INTEGER NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(sort_order)
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_roadmap_milestones_active_order ON roadmap_milestones(is_active, sort_order)`,
+    );
+    await pool.query(`
+      INSERT INTO roadmap_milestones (title, description, min_attempts, min_avg_score, icon, color, sort_order)
+      VALUES
+        ('Khởi đầu vững chắc', 'Hoàn thành bài đánh giá năng lực đầu vào.', 1, 0, 'FaFlagCheckered', 'bg-green-500', 1),
+        ('Vượt chướng ngại vật', 'Ôn tập kiến thức nền tảng (Yêu cầu: giải 5 đề).', 5, 0, 'FaMountain', 'bg-blue-500', 2),
+        ('Tăng tốc chạy lướt', 'Luyện đề vận dụng cao (Yêu cầu: giải 15 đề, điểm TB >= 6.0).', 15, 6.0, 'FaRunning', 'bg-orange-500', 3),
+        ('Về đích huy hoàng', 'Thi thử áp lực phòng VIP (Yêu cầu: giải 30 đề, điểm TB >= 8.0).', 30, 8.0, 'FaTrophy', 'bg-purple-500', 4)
+      ON CONFLICT (sort_order) DO UPDATE
+      SET title = EXCLUDED.title,
+          description = EXCLUDED.description,
+          min_attempts = EXCLUDED.min_attempts,
+          min_avg_score = EXCLUDED.min_avg_score,
+          icon = EXCLUDED.icon,
+          color = EXCLUDED.color,
+          updated_at = CURRENT_TIMESTAMP
+    `);
+
     // AI Insights table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ai_insights (
@@ -214,6 +263,280 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_notifications_post ON notifications(post_id)`,
     );
+
+    // RBAC foundation (Day 3): roles, permissions, assignments
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        is_system BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (role_id, permission_id)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_roles (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, role_id)
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_roles_code ON roles(code)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_permissions_code ON permissions(code)`,
+    );
+
+    await pool.query(`
+      INSERT INTO permissions (code, name, description)
+      VALUES
+        ('admin.dashboard.view', 'Admin Dashboard View', 'Truy cập dashboard quản trị tổng quan'),
+        ('system.manage', 'System Management', 'Toàn quyền quản trị hệ thống'),
+        ('users.manage', 'User Management', 'Quản lý người dùng và vai trò'),
+        ('forum.manage', 'Forum Moderation', 'Kiểm duyệt/xóa bài viết forum'),
+        ('forum.post_as_admin', 'Forum Official Posting', 'Đăng bài chính thức dưới danh nghĩa admin'),
+        ('roadmap.manage', 'Roadmap Management', 'Quản trị lộ trình học tập'),
+        ('exams.manage', 'Exam Management', 'Quản lý đề thi và lịch thi phòng thi'),
+        ('content.manage', 'Content Management', 'Quản lý tài liệu, từ vựng, media admin')
+      ON CONFLICT (code) DO UPDATE
+      SET name = EXCLUDED.name,
+          description = EXCLUDED.description
+    `);
+
+    await pool.query(`
+      INSERT INTO roles (code, name, description, is_system)
+      VALUES
+        ('super_admin', 'Super Admin', 'Quản trị viên tổng hệ thống', TRUE),
+        ('user_admin', 'User Admin', 'Quản trị người dùng', TRUE),
+        ('forum_admin', 'Forum Admin', 'Quản trị forum', TRUE),
+        ('roadmap_admin', 'Roadmap Admin', 'Quản trị lộ trình', TRUE),
+        ('exam_admin', 'Exam Admin', 'Quản trị đề thi và phòng thi', TRUE),
+        ('content_admin', 'Content Admin', 'Quản trị nội dung', TRUE),
+        ('student', 'Student', 'Người dùng học tập mặc định', TRUE)
+      ON CONFLICT (code) DO UPDATE
+      SET name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          is_system = EXCLUDED.is_system,
+          updated_at = CURRENT_TIMESTAMP
+    `);
+
+    const rolePermissions = {
+      super_admin: [
+        "admin.dashboard.view",
+        "system.manage",
+        "users.manage",
+        "forum.manage",
+        "forum.post_as_admin",
+        "roadmap.manage",
+        "exams.manage",
+        "content.manage",
+      ],
+      user_admin: ["admin.dashboard.view", "users.manage"],
+      forum_admin: ["admin.dashboard.view", "forum.manage", "forum.post_as_admin"],
+      roadmap_admin: ["admin.dashboard.view", "roadmap.manage"],
+      exam_admin: ["admin.dashboard.view", "exams.manage"],
+      content_admin: ["admin.dashboard.view", "content.manage"],
+      student: [],
+    };
+
+    for (const [roleCode, permissionCodes] of Object.entries(rolePermissions)) {
+      if (permissionCodes.length === 0) continue;
+      await pool.query(
+        `INSERT INTO role_permissions (role_id, permission_id)
+         SELECT r.id, p.id
+         FROM roles r
+         JOIN permissions p ON p.code = ANY($2::text[])
+         WHERE r.code = $1
+         ON CONFLICT (role_id, permission_id) DO NOTHING`,
+        [roleCode, permissionCodes],
+      );
+    }
+
+    // Backfill: chỉ gán super_admin nếu user admin chưa có bất kỳ admin role nào khác
+    await pool.query(`
+      INSERT INTO user_roles (user_id, role_id, assigned_by)
+      SELECT u.id, r.id, NULL
+      FROM users u
+      JOIN roles r ON r.code = CASE WHEN u.role = 'admin' THEN 'super_admin' ELSE 'student' END
+      WHERE NOT EXISTS (
+        SELECT 1 FROM user_roles ur2
+        JOIN roles r2 ON r2.id = ur2.role_id
+        WHERE ur2.user_id = u.id
+          AND r2.code = ANY(ARRAY['super_admin','user_admin','exam_admin','content_admin','forum_admin','roadmap_admin'])
+      )
+      ON CONFLICT (user_id, role_id) DO NOTHING
+    `);
+
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION sync_legacy_user_role_to_rbac()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        mapped_role_id INTEGER;
+        has_module_role BOOLEAN;
+        module_role_codes TEXT[] := ARRAY['user_admin','exam_admin','content_admin','forum_admin','roadmap_admin'];
+      BEGIN
+        -- Kiểm tra user đã có module-specific admin role chưa
+        SELECT EXISTS (
+          SELECT 1 FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = NEW.id AND r.code = ANY(module_role_codes)
+        ) INTO has_module_role;
+
+        IF NEW.role = 'admin' THEN
+          IF NOT has_module_role THEN
+            -- Chỉ gán super_admin nếu chưa có role module cụ thể
+            SELECT id INTO mapped_role_id FROM roles WHERE code = 'super_admin';
+            IF mapped_role_id IS NOT NULL THEN
+              INSERT INTO user_roles (user_id, role_id, assigned_by)
+              VALUES (NEW.id, mapped_role_id, NULL)
+              ON CONFLICT (user_id, role_id) DO NOTHING;
+            END IF;
+          END IF;
+          -- Xóa student role dù sao
+          DELETE FROM user_roles
+          WHERE user_id = NEW.id
+            AND role_id IN (SELECT id FROM roles WHERE code = 'student');
+        ELSE
+          -- Downgrade về student: xóa hết admin roles
+          SELECT id INTO mapped_role_id FROM roles WHERE code = 'student';
+          IF mapped_role_id IS NOT NULL THEN
+            INSERT INTO user_roles (user_id, role_id, assigned_by)
+            VALUES (NEW.id, mapped_role_id, NULL)
+            ON CONFLICT (user_id, role_id) DO NOTHING;
+          END IF;
+          DELETE FROM user_roles
+          WHERE user_id = NEW.id
+            AND role_id IN (
+              SELECT id FROM roles
+              WHERE code = ANY(ARRAY['super_admin'] || module_role_codes)
+            );
+        END IF;
+
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await pool.query(`DROP TRIGGER IF EXISTS trg_sync_legacy_user_role_to_rbac ON users`);
+    await pool.query(`
+      CREATE TRIGGER trg_sync_legacy_user_role_to_rbac
+      AFTER INSERT OR UPDATE OF role ON users
+      FOR EACH ROW
+      EXECUTE FUNCTION sync_legacy_user_role_to_rbac()
+    `);
+
+    // ── VIP / Subscription ────────────────────────────────────────────────────
+    // Thêm cột is_vip và vip_expires_at vào users (nếu chưa có)
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS vip_expires_at TIMESTAMPTZ
+    `);
+    // Tạo function tự động reset VIP khi hết hạn (chạy qua trigger mỗi login)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_vip ON users(is_vip) WHERE is_vip = TRUE
+    `);
+
+    // Bảng transactions (giao dịch thanh toán)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id              SERIAL PRIMARY KEY,
+        user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        amount          BIGINT NOT NULL,
+        payment_method  VARCHAR(30) DEFAULT 'momo',
+        package_duration INTEGER NOT NULL,
+        package_name    VARCHAR(100),
+        transaction_code VARCHAR(255) UNIQUE,
+        status          VARCHAR(20) DEFAULT 'pending',
+        payment_channel VARCHAR(50),
+        trans_id        VARCHAR(100),
+        raw_response    JSONB,
+        paid_at         TIMESTAMP,
+        vip_expires_at  TIMESTAMP,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // Thêm cột mới nếu bảng đã tồn tại (cho môi trường dev đang chạy)
+    await pool.query(`
+      ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS package_name VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS trans_id VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS raw_response JSONB,
+      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS vip_expires_at TIMESTAMP
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at DESC)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_transactions_code ON transactions(transaction_code)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
+    );
+
+    // Exam schedule audit log (Ngày 11-12)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS exam_schedule_logs (
+        id            SERIAL PRIMARY KEY,
+        exam_id       INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+        changed_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        changed_by_name VARCHAR(120),
+        old_start_time TIMESTAMP,
+        old_end_time   TIMESTAMP,
+        new_start_time TIMESTAMP,
+        new_end_time   TIMESTAMP,
+        reason        TEXT,
+        changed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_exam_schedule_logs_exam ON exam_schedule_logs(exam_id, changed_at DESC)`,
+    );
+
+    // Ngày 14: allow_download cho đề thi + subscription_tier cho users
+    await pool.query(`
+      ALTER TABLE exams
+      ADD COLUMN IF NOT EXISTS allow_download BOOLEAN DEFAULT FALSE
+    `);
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'basic',
+      ADD COLUMN IF NOT EXISTS full_name_edit VARCHAR(255)
+    `);
+    // Sync full_name_edit từ full_name cho users hiện tại
+    await pool.query(`
+      UPDATE users SET subscription_tier = 'vip' WHERE is_vip = TRUE AND vip_expires_at > NOW()
+    `);
 
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,

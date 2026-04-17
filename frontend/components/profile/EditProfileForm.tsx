@@ -14,9 +14,10 @@ interface EditProfileFormProps {
 
 export default function EditProfileForm({ user, onUpdate, onCancel }: EditProfileFormProps) {
   const { updateUser } = useAuthStore();
+  const currentDisplayName = (user as any)?.display_name || '';
   const [formData, setFormData] = useState({
     full_name: user.full_name || '',
-    display_name: user.display_name || '',
+    display_name: currentDisplayName,
     bio: user.bio || '',
     target_score: user.target_score || '',
   });
@@ -154,7 +155,7 @@ export default function EditProfileForm({ user, onUpdate, onCancel }: EditProfil
             ) : (
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center border-4 border-gray-200">
                 <span className="text-3xl font-bold text-white">
-                  {user.display_name?.charAt(0).toUpperCase() || user.username?.charAt(0).toUpperCase()}
+                  {(currentDisplayName || user.username || 'U').charAt(0).toUpperCase()}
                 </span>
               </div>
             )}

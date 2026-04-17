@@ -1,5 +1,7 @@
 const Post = require("../models/Post");
 const logger = require("../config/logger");
+const { hasAnyPermission } = require("../services/rbacService");
+const db = require("../config/database");
 
 /**
  * C4 — Strip HTML tags to prevent XSS stored in DB.
@@ -18,7 +20,10 @@ exports.getPosts = async (req, res) => {
     const offset = parseInt(req.query.offset) || 0;
     const userId = req.user?.id || null;
 
-    const posts = await Post.getAll(limit, offset, userId);
+    const [posts, totalResult] = await Promise.all([
+      Post.getAll(limit, offset, userId),
+      db.query("SELECT COUNT(*)::int AS total FROM posts"),
+    ]);
 
     res.json({
       success: true,
@@ -26,7 +31,7 @@ exports.getPosts = async (req, res) => {
       pagination: {
         limit,
         offset,
-        total: posts.length,
+        total: totalResult.rows[0]?.total || 0,
       },
     });
   } catch (error) {
@@ -79,18 +84,149 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// Create official forum announcement (forum.post_as_admin)
+exports.createAnnouncement = async (req, res) => {
+  try {
+    const { content, image_url } = req.body;
+    const userId = req.user.id;
+    const cleanContent = stripTags(content);
+
+    if (!cleanContent || cleanContent.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Nội dung thông báo không được để trống",
+      });
+    }
+
+    const post = await Post.create(userId, cleanContent, image_url, {
+      postType: "announcement",
+      isOfficial: true,
+    });
+    const fullPost = await Post.getById(post.id, userId);
+
+    logger.info("Announcement created", { postId: post.id, userId });
+
+    return res.status(201).json({
+      success: true,
+      message: "Đăng thông báo thành công",
+      data: fullPost,
+    });
+  } catch (error) {
+    logger.error("Create announcement error", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi đăng thông báo",
+      error: error.message,
+    });
+  }
+};
+
+// Moderation list for admin forum screen
+exports.getModerationPosts = async (req, res) => {
+  try {
+    const parsedLimit = Number.parseInt(req.query.limit, 10);
+    const parsedOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Number.isInteger(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 100)
+      : 20;
+    const offset = Number.isInteger(parsedOffset)
+      ? Math.max(parsedOffset, 0)
+      : 0;
+    const search = (req.query.search || "").trim();
+
+    const params = [limit, offset];
+    let whereClause = "";
+    let totalWhereClause = "";
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause = `WHERE p.content ILIKE $${params.length} OR u.full_name ILIKE $${params.length} OR u.email ILIKE $${params.length}`;
+      totalWhereClause = "WHERE p.content ILIKE $1 OR u.full_name ILIKE $1 OR u.email ILIKE $1";
+    }
+
+    const dataQuery = `
+      SELECT
+        p.id,
+        p.user_id,
+        p.content,
+        p.image_url,
+        p.post_type,
+        p.is_official,
+        p.created_at,
+        u.full_name AS author_name,
+        u.email AS author_email,
+        COUNT(DISTINCT pl.id)::int AS like_count,
+        COUNT(DISTINCT pc.id)::int AS comment_count
+      FROM posts p
+      INNER JOIN users u ON u.id = p.user_id
+      LEFT JOIN post_likes pl ON pl.post_id = p.id
+      LEFT JOIN post_comments pc ON pc.post_id = p.id
+      ${whereClause}
+      GROUP BY p.id, u.id
+      ORDER BY p.created_at DESC
+      LIMIT $1 OFFSET $2
+    `;
+
+    const totalQuery = `
+      SELECT COUNT(*)::int AS total
+      FROM posts p
+      INNER JOIN users u ON u.id = p.user_id
+      ${totalWhereClause}
+    `;
+
+    const totalParams = search ? [params[2]] : [];
+
+    const [dataResult, totalResult] = await Promise.all([
+      db.query(dataQuery, params),
+      db.query(totalQuery, totalParams),
+    ]);
+
+    return res.json({
+      success: true,
+      data: dataResult.rows,
+      pagination: {
+        limit,
+        offset,
+        total: totalResult.rows[0]?.total || 0,
+      },
+    });
+  } catch (error) {
+    logger.error("Get moderation posts error", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi tải danh sách moderation",
+      error: error.message,
+    });
+  }
+};
+
 // Delete post (owner or admin)
 exports.deletePost = async (req, res) => {
   try {
     const postId = req.params.id;
     const userId = req.user.id;
-    const isAdmin = req.user.role === 'admin';
+    const isLegacyAdmin = req.user.role === "admin";
+    let canModerateForum = isLegacyAdmin;
+    if (!canModerateForum) {
+      try {
+        canModerateForum = await hasAnyPermission(userId, [
+          "forum.manage",
+          "system.manage",
+        ]);
+      } catch (authzError) {
+        logger.warn("RBAC check failed, falling back to owner-only delete", {
+          userId,
+          error: authzError.message,
+        });
+      }
+    }
 
     let deletedPost;
-    if (isAdmin) {
-      // Admin: delete any post regardless of owner
-      const db = require('../config/database');
-      const result = await db.query('DELETE FROM posts WHERE id = $1 RETURNING *', [postId]);
+    if (canModerateForum) {
+      // Moderator path: delete any post regardless of owner
+      const result = await db.query(
+        "DELETE FROM posts WHERE id = $1 RETURNING *",
+        [postId],
+      );
       deletedPost = result.rows[0];
     } else {
       deletedPost = await Post.delete(postId, userId);

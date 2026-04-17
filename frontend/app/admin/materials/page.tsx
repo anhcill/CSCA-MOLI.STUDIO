@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import { FiPlus, FiTrash2, FiEdit2, FiUpload, FiX, FiExternalLink, FiCheck } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 
 interface Material {
   id: number;
@@ -16,6 +18,7 @@ interface Material {
   subject: string;
   is_active: boolean;
   created_at: string;
+  is_premium?: boolean;
 }
 
 const CATEGORIES = [
@@ -57,6 +60,7 @@ export default function AdminMaterialsPage() {
     category: 'ly-thuyet',
     subject: 'toan',
     topic: '',
+    is_premium: false,
   });
 
   // Wait for auth to hydrate before checking
@@ -64,7 +68,8 @@ export default function AdminMaterialsPage() {
 
   useEffect(() => {
     if (!mounted) return; // wait for hydration
-    if (!isAuthenticated || user?.role !== 'admin') {
+    const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'content.manage'))) {
       router.push('/');
       return;
     }
@@ -146,6 +151,7 @@ export default function AdminMaterialsPage() {
       category: material.category,
       subject: material.subject || 'toan',
       topic: (material as any).topic || '',
+      is_premium: material.is_premium || false,
     });
     setUploadedUrl(material.file_url);
     setShowModal(true);
@@ -172,6 +178,7 @@ export default function AdminMaterialsPage() {
       category: 'ly-thuyet',
       subject: 'toan',
       topic: '',
+      is_premium: false,
     });
     setUploadedUrl('');
     setEditingId(null);
@@ -228,6 +235,7 @@ export default function AdminMaterialsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Danh Mục</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Môn / Chủ đề</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Ngày Tạo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">VIP</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Thao Tác</th>
                 </tr>
               </thead>
@@ -271,6 +279,15 @@ export default function AdminMaterialsPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {new Date(material.created_at).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="px-4 py-3">
+                        {material.is_premium ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
+                            <FaCrown /> PRO
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Miễn phí</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
@@ -438,6 +455,27 @@ export default function AdminMaterialsPage() {
                   placeholder="VD: Hàm số, Đại số, Quang học..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
+              </div>
+
+              {/* VIP Toggle */}
+              <div className="border-t pt-4">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_premium}
+                      onChange={(e) => setFormData(prev => ({ ...prev, is_premium: e.target.checked }))}
+                      className="sr-only"
+                    />
+                    <div className={`w-11 h-6 rounded-full transition-colors ${formData.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.is_premium ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FaCrown className="text-amber-500" />
+                    <span className="text-sm font-semibold text-gray-700">Tài liệu VIP / PRO</span>
+                  </div>
+                </label>
+                <p className="text-xs text-gray-400 mt-1 ml-14">Chỉ thành viên PRO mới được truy cập tài liệu này</p>
               </div>
 
               {/* Actions */}

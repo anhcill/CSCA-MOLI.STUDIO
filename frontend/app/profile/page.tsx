@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import { updateProfile, updateAvatar, getUserStats, changePassword, UserStats } from '@/lib/api/users';
 import axios from '@/lib/utils/axios';
+import { canAccessAdminPanel } from '@/lib/utils/permissions';
 import Header from '@/components/layout/Header';
 import { AIInsights } from '@/components/ai/AIInsights';
 import {
@@ -11,7 +12,9 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
+  FiStar, FiZap,
 } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 const Sk = ({ className }: { className: string }) => (
@@ -107,7 +110,7 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'settings'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -240,7 +243,7 @@ export default function ProfilePage() {
     }
   };
 
-  const displayName = localUser?.full_name || localUser?.display_name || localUser?.username || 'U';
+  const displayName = localUser?.full_name || (localUser as any)?.display_name || localUser?.username || 'U';
   const avatarLetter = displayName.charAt(0).toUpperCase();
   const joinDate = localUser?.created_at
     ? new Date(localUser.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })
@@ -256,6 +259,10 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const vipDaysLeft = localUser?.is_vip && localUser?.vip_expires_at
+    ? Math.max(0, Math.ceil((new Date(localUser.vip_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -281,7 +288,17 @@ export default function ProfilePage() {
               </div>
               {/* Info */}
               <div>
-                <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
+                  {localUser?.is_vip && (
+                    <span className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                      <FaCrown size={10} /> PRO
+                      {vipDaysLeft !== null && vipDaysLeft > 0 && (
+                        <span className="ml-1 bg-white/30 px-1 rounded text-[10px]">{vipDaysLeft}d</span>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-gray-400">@{localUser.username}</p>
                 <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
                   <FiMail size={11} /><span>{localUser.email}</span>
@@ -308,7 +325,7 @@ export default function ProfilePage() {
                   Mục tiêu: <span className="font-semibold text-gray-800">{localUser.target_score} điểm</span>
                 </div>
               )}
-              {localUser.role === 'admin' && (
+              {canAccessAdminPanel(localUser) && (
                 <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-medium">Admin</span>
               )}
             </div>
@@ -321,6 +338,7 @@ export default function ProfilePage() {
             {([
               { key: 'info', label: 'Thông tin', icon: FiUser },
               { key: 'stats', label: 'Thống kê & AI 🤖', icon: FiAward },
+              { key: 'vip', label: 'VIP 🏆', icon: FaCrown },
               { key: 'settings', label: 'Cài đặt', icon: FiShield },
             ] as const).map(tab => {
               const I = tab.icon;
@@ -419,6 +437,9 @@ export default function ProfilePage() {
                   <InfoRow icon={FiBook} label="Giới thiệu" value={localUser.bio || 'Chưa có giới thiệu'} />
                   <InfoRow icon={FiTarget} label="Điểm mục tiêu" value={localUser.target_score ? `${localUser.target_score} điểm` : 'Chưa đặt'} />
                   <InfoRow icon={FiCalendar} label="Tham gia" value={joinDate} />
+                  {localUser.is_vip && localUser.vip_expires_at && (
+                    <InfoRow icon={FaCrown} label="Hạn VIP" value={new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })} />
+                  )}
                 </div>
               )}
             </div>
@@ -462,6 +483,180 @@ export default function ProfilePage() {
               {/* AI Insights */}
               <div className="border-t border-gray-100 pt-6">
                 <AIInsights userId={localUser.id} />
+              </div>
+            </div>
+          )}
+
+          {/* ── Tab: VIP ─────────────────────────────────── */}
+          {activeTab === 'vip' && (
+            <div className="p-6 space-y-6">
+              {/* VIP Status Banner */}
+              <div className={`rounded-2xl border p-6 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>
+                <div className="flex items-start gap-5">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
+                    <FaCrown className="text-white" size={24} />
+                  </div>
+                  <div className="flex-1">
+                        {localUser?.is_vip ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-lg font-black text-amber-900">Bạn đang là thành viên PRO</h3>
+                              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1">
+                                <FaCrown size={10} /> ACTIVE
+                              </span>
+                            </div>
+                            <p className="text-sm text-amber-700">
+                              VIP hết hạn:{' '}
+                              <span className="font-bold">
+                                {localUser.vip_expires_at
+                                  ? new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })
+                                  : '—'}
+                              </span>
+                              {vipDaysLeft !== null && (
+                                <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
+                                  {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
+                                </span>
+                              )}
+                            </p>
+                          </>
+                        ) : (
+                      <>
+                        <h3 className="text-lg font-black text-indigo-900 mb-1">Nâng cấp lên PRO</h3>
+                        <p className="text-sm text-indigo-700">
+                          Mở khóa tất cả đề thi, tài liệu và tính năng độc quyền để đạt điểm cao nhất!
+                        </p>
+                        <button
+                          onClick={() => window.location.href = '/vip'}
+                          className="mt-3 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all"
+                        >
+                          <FaCrown className="text-amber-300" size={14} /> Nâng cấp ngay
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 VIP Packages */}
+              <div>
+                <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <FiZap className="text-indigo-500" size={18} />
+                  Các gói PRO
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Basic */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                        <FiEye size={16} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm">Gói Xem</p>
+                        <p className="text-xs text-gray-500">Dành cho người mới</p>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <span className="text-2xl font-black text-gray-900">99K</span>
+                      <span className="text-sm text-gray-500 ml-1">/ tháng</span>
+                    </div>
+                    <ul className="space-y-2 mb-4">
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem tài liệu
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem đề thi & kết quả
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-400">
+                        <FiLock size={13} className="shrink-0" /> Làm bài thi thử
+                      </li>
+                    </ul>
+                    <button
+                      onClick={() => window.location.href = '/vip'}
+                      className="w-full py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors"
+                    >
+                      Chọn gói này
+                    </button>
+                  </div>
+
+                  {/* Pro - Popular */}
+                  <div className="bg-white rounded-xl border-2 border-indigo-400 p-5 shadow-lg shadow-indigo-100 relative">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold rounded-full shadow">
+                        Phổ biến nhất
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3 mt-2">
+                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
+                        <FiStar size={16} className="text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="font-black text-gray-900 text-sm">Gói Kiểm tra</p>
+                        <p className="text-xs text-gray-500">Nhiều người chọn nhất</p>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <span className="text-2xl font-black text-gray-900">249K</span>
+                      <span className="text-sm text-gray-500 ml-1">/ 6 tháng</span>
+                    </div>
+                    <ul className="space-y-2 mb-4">
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả gói Xem
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Làm bài thi thử
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tài liệu độc quyền
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Chữa bài tự luận AI
+                      </li>
+                    </ul>
+                    <button
+                      onClick={() => window.location.href = '/vip'}
+                      className="w-full py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all"
+                    >
+                      Chọn gói này
+                    </button>
+                  </div>
+
+                  {/* VIP Full */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                        <FaCrown size={15} className="text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900 text-sm">Gói Làm bài</p>
+                        <p className="text-xs text-gray-500">Toàn diện nhất</p>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <span className="text-2xl font-black text-gray-900">699K</span>
+                      <span className="text-sm text-gray-500 ml-1">/ năm</span>
+                    </div>
+                    <ul className="space-y-2 mb-4">
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Mọi thứ trong gói Kiểm tra
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Cập nhật đề thi mới nhất
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Bảo lưu khoá học
+                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600">
+                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Cố vấn trực tiếp 1-1
+                      </li>
+                    </ul>
+                    <button
+                      onClick={() => window.location.href = '/vip'}
+                      className="w-full py-2 text-sm font-semibold rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors"
+                    >
+                      Chọn gói này
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

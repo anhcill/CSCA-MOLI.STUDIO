@@ -226,6 +226,7 @@ async function analyzeUserPerformance(req, res) {
     }
 
     if (attempts.rows.length === 0) {
+      cleanupInflight(null);
       return res.json({
         success: true,
         hasEnoughData: false,
@@ -255,11 +256,14 @@ async function analyzeUserPerformance(req, res) {
 
     // AI Analysis — gọi trực tiếp, không cần wrap promise riêng
     // vì dedup đã được đăng ký đồng bộ ở trên rồi
-    let aiResult;
+    let weaknessAnalysis;
+    let roadmap;
+    let recommendedMaterials;
     try {
       const weakness = await aiService.analyzeWeaknesses(attempts.rows);
       if (!weakness.hasEnoughData) {
-        aiResult = null;
+        cleanupInflight(null);
+        return res.json({ success: true, ...weakness });
       } else {
         const [rm, materialsRes] = await Promise.all([
           aiService.generateRoadmap(weakness),
@@ -271,7 +275,9 @@ async function analyzeUserPerformance(req, res) {
           weakness,
           materialsRes.rows,
         );
-        aiResult = { weakness, roadmap: rm, recommendedMaterials: recommended };
+        weaknessAnalysis = weakness;
+        roadmap = rm;
+        recommendedMaterials = recommended;
       }
     } catch (aiErr) {
       cleanupInflight(null);
@@ -306,17 +312,6 @@ async function analyzeUserPerformance(req, res) {
       }
       throw aiErr;
     }
-
-    // hasEnoughData = false
-    if (aiResult === null) {
-      cleanupInflight(null);
-      const weakCheck = await aiService.analyzeWeaknesses(attempts.rows); // cheap, no API call
-      return res.json({ success: true, ...weakCheck });
-    }
-
-    weaknessAnalysis = aiResult.weakness;
-    roadmap = aiResult.roadmap;
-    recommendedMaterials = aiResult.recommendedMaterials;
 
     const fullAnalysis = {
       totalExams: attempts.rows.length,

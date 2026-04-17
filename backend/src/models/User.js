@@ -15,7 +15,7 @@ class User {
   static async findById(id) {
     try {
       const result = await db.query(
-        "SELECT id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, is_verified, is_active, created_at, updated_at FROM users WHERE id = $1",
+        "SELECT id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, vip_expires_at, created_at, updated_at FROM users WHERE id = $1",
         [id]
       );
       return result.rows[0] || null;
@@ -34,7 +34,7 @@ class User {
       // Include password for auth comparison — callers must NOT forward this to clients
       const result = await db.query(
         `SELECT id, username, email, password, full_name, avatar, role, bio,
-                is_active, is_verified, google_id, oauth_provider
+                is_active, is_verified, google_id, oauth_provider, is_vip, vip_expires_at
          FROM users WHERE email = $1`,
         [email]
       );
@@ -52,7 +52,7 @@ class User {
   static async findByUsername(username) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, role, bio, is_active
+        `SELECT id, username, email, full_name, avatar, role, bio, is_active, is_vip, vip_expires_at
          FROM users WHERE username = $1`,
         [username]
       );
@@ -70,7 +70,7 @@ class User {
   static async findByGoogleId(googleId) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id, is_vip, vip_expires_at
          FROM users WHERE google_id = $1`,
         [googleId]
       );
@@ -105,7 +105,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, avatar, is_active)
          VALUES ($1, $2, $3, $4, $5, 'google', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, vip_expires_at, created_at`,
         [
           username,
           email,
@@ -148,7 +148,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, password, full_name, role, avatar)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, username, email, full_name, avatar, role, is_active, created_at`,
+         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, vip_expires_at, created_at`,
         [
           username,
           email,
@@ -188,7 +188,7 @@ class User {
          SET google_id = $1, oauth_provider = 'google', email_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, vip_expires_at, created_at`,
         [googleId, avatarUrl, userId]
       );
       return result.rows[0];
@@ -241,7 +241,7 @@ class User {
         UPDATE users 
         SET ${fields.join(", ")}
         WHERE id = $${paramCount}
-        RETURNING id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, created_at, updated_at
+        RETURNING id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, is_vip, vip_expires_at, created_at, updated_at
       `;
 
       const result = await db.query(query, values);
@@ -265,6 +265,32 @@ class User {
         id,
       ]);
       return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Update VIP Status
+   * @param {number} id - User ID
+   * @param {number} durationDays - Number of days to add to VIP expiration
+   * @returns {Object} Updated user
+   */
+  static async updateVipStatus(id, durationDays) {
+    try {
+      const result = await db.query(
+        `UPDATE users 
+         SET is_vip = true, 
+             vip_expires_at = COALESCE(
+                 CASE WHEN vip_expires_at > NOW() THEN vip_expires_at ELSE NOW() END, 
+                 NOW()
+             ) + INTERVAL '1 day' * $1,
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING id, is_vip, vip_expires_at`,
+        [durationDays, id]
+      );
+      return result.rows[0];
     } catch (error) {
       throw error;
     }
@@ -303,7 +329,7 @@ class User {
   static async findAll(limit = 10, offset = 0) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, role, bio, target_score, created_at
+        `SELECT id, username, email, full_name, avatar, role, bio, target_score, is_vip, vip_expires_at, created_at
          FROM users
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,

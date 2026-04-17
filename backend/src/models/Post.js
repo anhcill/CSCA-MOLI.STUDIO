@@ -27,13 +27,15 @@ class Post {
   }
 
   // Create new post
-  static async create(userId, content, imageUrl = null) {
+  static async create(userId, content, imageUrl = null, options = {}) {
+    const postType = options.postType || 'community';
+    const isOfficial = options.isOfficial === true;
     const query = `
-      INSERT INTO posts (user_id, content, image_url)
-      VALUES ($1, $2, $3)
+      INSERT INTO posts (user_id, content, image_url, post_type, is_official)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const result = await pool.query(query, [userId, content, imageUrl]);
+    const result = await pool.query(query, [userId, content, imageUrl, postType, isOfficial]);
     return result.rows[0];
   }
 

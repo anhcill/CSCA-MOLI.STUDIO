@@ -17,7 +17,7 @@ async function getOverview(req, res) {
 
         const [users, exams, materials] = await Promise.all([
             db.query("SELECT COUNT(*) AS total FROM users"),
-            db.query("SELECT COUNT(*) AS total FROM exams WHERE is_active = true"),
+            db.query("SELECT COUNT(*) AS total FROM exams WHERE status = 'published'"),
             db.query("SELECT COUNT(*) AS total FROM materials WHERE is_active = true"),
         ]);
 
@@ -48,4 +48,55 @@ async function getOverview(req, res) {
     }
 }
 
-module.exports = { getOverview };
+async function getRoadmap(req, res) {
+    try {
+        const userId = req.user.id;
+        const examsRes = await db.query(
+            "SELECT count(*) as completed_count FROM exam_attempts WHERE user_id = $1 AND status = 'completed'", 
+            [userId]
+        );
+        const completedExams = parseInt(examsRes.rows[0].completed_count) || 0;
+        
+        let milestones = [
+            {
+                id: 1,
+                title: 'Khởi đầu vững chắc',
+                description: 'Hoàn thành bài kiểm tra năng lực đầu vào và phân tích yếu điểm cơ bản.',
+                status: completedExams >= 1 ? 'completed' : 'current',
+                iconName: 'FiUnlock',
+                color: 'bg-emerald-500',
+            },
+            {
+                id: 2,
+                title: 'Vượt chướng ngại vật',
+                description: 'AI đã kích hoạt lộ trình. Vui lòng xem bảng Phân Tích Thống Kê bên dưới để bám sát.',
+                status: completedExams >= 3 ? 'completed' : (completedExams >= 1 ? 'current' : 'locked'),
+                iconName: 'FiTarget',
+                color: 'bg-indigo-600',
+            },
+            {
+                id: 3,
+                title: 'Thách thức nâng cao',
+                description: 'Làm quen với các dạng đề thi áp lực cao (hơn 180 phút liên tục).',
+                status: completedExams >= 10 ? 'completed' : (completedExams >= 3 ? 'current' : 'locked'),
+                iconName: 'FiLock',
+                color: 'bg-gray-400',
+            },
+            {
+                id: 4,
+                title: 'Chinh phục Tinh Anh',
+                description: 'Sẵn sàng ứng tuyển học bổng hạng VIP siêu cường tráng.',
+                status: completedExams >= 20 ? 'completed' : (completedExams >= 10 ? 'current' : 'locked'),
+                iconName: 'FiStar',
+                color: 'bg-gray-300',
+            }
+        ];
+
+        res.json({ success: true, milestones });
+    } catch (e) {
+        console.error("Roadmap error:", e);
+        res.status(500).json({ success: false, message: "Lỗi tải lộ trình" });
+    }
+}
+
+module.exports = { getOverview, getRoadmap };

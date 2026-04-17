@@ -59,6 +59,9 @@ router.post(
   userController.changePassword,
 );
 
+// GET /api/users/roadmap
+router.get("/roadmap", authenticate, userController.getUserRoadmap);
+
 // GET  /api/users/:id
 router.get("/:id", userController.getUserById);
 

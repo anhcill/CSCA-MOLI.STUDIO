@@ -1,22 +1,52 @@
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
 const { cache, TTL } = require("../config/cache");
+const { checkVipAccess } = require("../middleware/authMiddleware");
 
 const examController = {
-  // Lấy danh sách đề thi theo môn
-  async getExamsBySubject(req, res) {
+  // Lấy dữ liệu sảnh thi (Lobby)
+  async getExamLobby(req, res) {
     try {
-      const { subjectCode } = req.params;
-      const userId = req.user?.id;
-
-      // Cache key theo subjectCode và userId (logged-in users thấy attempt count của họ)
-      const cacheKey = `exams:${subjectCode}:${userId || "guest"}`;
+      // Dùng cache để giảm tải vì sảnh thi ai cũng xem
+      const cacheKey = "exams:lobby";
       const cached = cache.get(cacheKey);
       if (cached) {
         return res.json({ success: true, data: cached, fromCache: true });
       }
 
-      const exams = await Exam.getBySubject(subjectCode, userId);
+      const Exam = require("../models/Exam");
+      const lobbyData = await Exam.getLobby();
+      cache.set(cacheKey, lobbyData, 60);
+
+      res.json({
+        success: true,
+        data: lobbyData,
+      });
+    } catch (error) {
+      console.error("Get exam lobby error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Lỗi khi lấy dữ liệu sảnh thi",
+        error: error.message,
+      });
+    }
+  },
+
+  // Lấy danh sách đề thi theo môn
+  async getExamsBySubject(req, res) {
+    try {
+      const { subjectCode } = req.params;
+      const { subjectSlug } = req.query;
+      const userId = req.user?.id;
+
+      // Cache key theo subjectCode/subjectSlug và userId
+      const cacheKey = `exams:${subjectSlug || subjectCode}:${userId || "guest"}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return res.json({ success: true, data: cached, fromCache: true });
+      }
+
+      const exams = await Exam.getBySubject(subjectCode, userId, subjectSlug);
 
       // Cache 5 phút
       cache.set(cacheKey, exams, TTL.MEDIUM);
@@ -47,6 +77,16 @@ const examController = {
         return res.status(404).json({
           success: false,
           message: "Không tìm thấy đề thi",
+        });
+      }
+
+      // VIP check: premium exams require active VIP
+      if (exam.is_premium && !checkVipAccess(req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: "Nội dung này chỉ dành cho thành viên VIP",
+          code: "VIP_REQUIRED",
+          is_vip_required: true,
         });
       }
 
@@ -134,10 +174,17 @@ const examController = {
       const { examId } = req.params;
       const userId = req.user.id;
 
-      const attempt = await ExamAttempt.start(userId, examId);
+      // Guard: reject NaN / non-integer IDs before touching the DB
+      const parsedId = parseInt(examId, 10);
+      if (!Number.isFinite(parsedId) || parsedId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID đề thi không hợp lệ",
+        });
+      }
 
       // Get exam details with questions
-      const exam = await Exam.getById(examId);
+      const exam = await Exam.getById(parsedId);
 
       if (!exam) {
         return res.status(404).json({
@@ -145,6 +192,18 @@ const examController = {
           message: "Không tìm thấy đề thi",
         });
       }
+
+      // VIP check: premium exams require active VIP
+      if (exam.is_premium && !checkVipAccess(req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: "Nội dung này chỉ dành cho thành viên VIP",
+          code: "VIP_REQUIRED",
+          is_vip_required: true,
+        });
+      }
+
+      const attempt = await ExamAttempt.start(userId, parsedId);
 
       res.json({
         success: true,

@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
-import { register, googleAuth } from '@/lib/api/auth';
+import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
+import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -83,11 +84,21 @@ export default function RegisterForm() {
       });
 
       if (response.success) {
-        const { user, token, refreshToken } = response.data;
-        setAuth(user, token, refreshToken);
+        const { user: registerUser, token, refreshToken } = response.data;
+        setAuth(registerUser, token, refreshToken);
 
-        // Redirect to home or onboarding
-        router.push('/');
+        let effectiveUser = registerUser;
+        try {
+          const me = await getCurrentUser();
+          if (me?.success && me?.data?.user) {
+            effectiveUser = me.data.user;
+            setAuth(effectiveUser, token, refreshToken);
+          }
+        } catch {
+          // Keep fallback user from /auth/register when /auth/me fails.
+        }
+
+        router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
       console.error('Register error:', error);
@@ -111,9 +122,21 @@ export default function RegisterForm() {
       const response = await googleAuth(credentialResponse.credential);
 
       if (response.success) {
-        const { user, token, refreshToken } = response.data;
-        setAuth(user, token, refreshToken);
-        router.push('/');
+        const { user: loginUser, token, refreshToken } = response.data;
+        setAuth(loginUser, token, refreshToken);
+
+        let effectiveUser = loginUser;
+        try {
+          const me = await getCurrentUser();
+          if (me?.success && me?.data?.user) {
+            effectiveUser = me.data.user;
+            setAuth(effectiveUser, token, refreshToken);
+          }
+        } catch {
+          // Keep fallback user from /auth/google when /auth/me fails.
+        }
+
+        router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
       console.error('Google signup error:', error);

@@ -1,35 +1,130 @@
 const pool = require("../config/database");
 
 const Exam = {
-  // Lấy tất cả đề thi theo môn học
-  async getBySubject(subjectCode, userId = null) {
-    const query = `
+  // Lấy danh sách sảnh thi (lobby)
+  async getLobby() {
+    // 1. Live Exams: starts_time <= NOW and end_time >= NOW
+    const liveQuery = `
       SELECT 
         e.*,
         s.name as subject_name,
-        s.code as subject_code,
-        u.full_name as created_by_name,
-        COUNT(DISTINCT q.id) as question_count,
         COALESCE(
-          (SELECT COUNT(*) FROM exam_attempts 
-           WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'), 
+          (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
           0
-        ) as user_attempt_count,
-        COALESCE(
-          (SELECT MAX(total_score) FROM exam_attempts 
-           WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'), 
-          0
-        ) as user_best_score
+        ) as participants
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
-      LEFT JOIN users u ON e.created_by = u.id
-      LEFT JOIN questions q ON e.id = q.exam_id
-      WHERE s.code = $1 AND e.status = 'published'
-      GROUP BY e.id, s.id, u.id
-      ORDER BY e.publish_date DESC, e.created_at DESC
+      WHERE e.status = 'published'
+        AND e.start_time <= CURRENT_TIMESTAMP 
+        AND e.end_time >= CURRENT_TIMESTAMP
     `;
 
-    const result = await pool.query(query, [subjectCode, userId]);
+    // 2. Upcoming Exams: start_time > NOW
+    const upcomingQuery = `
+      SELECT 
+        e.*,
+        s.name as subject_name,
+        COALESCE(
+          (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
+          0
+        ) as registered
+      FROM exams e
+      INNER JOIN subjects s ON e.subject_id = s.id
+      WHERE e.status = 'published'
+        AND e.start_time > CURRENT_TIMESTAMP
+      ORDER BY e.start_time ASC
+      LIMIT 10
+    `;
+
+    // 3. Public Exams: start_time IS NULL (Practice/Mock tests without strict schedule)
+    const publicQuery = `
+      SELECT 
+        e.*,
+        s.name as subject_name,
+        (SELECT COUNT(*) FROM questions WHERE exam_id = e.id) as question_count
+      FROM exams e
+      INNER JOIN subjects s ON e.subject_id = s.id
+      WHERE e.status = 'published'
+        AND e.start_time IS NULL
+      ORDER BY e.publish_date DESC
+      LIMIT 20
+    `;
+
+    const [liveResult, upcomingResult, publicResult] = await Promise.all([
+      pool.query(liveQuery),
+      pool.query(upcomingQuery),
+      pool.query(publicQuery)
+    ]);
+
+    return {
+      live: liveResult.rows,
+      upcoming: upcomingResult.rows,
+      public: publicResult.rows
+    };
+  },
+
+  // Lấy tất cả đề thi theo môn học
+  async getBySubject(subjectCode, userId = null, subjectSlug = null) {
+    let query, result;
+
+    if (subjectSlug) {
+      // Filter by slug (URL-friendly slug like 'toan', 'vat-ly')
+      query = `
+        SELECT
+          e.*,
+          s.name as subject_name,
+          s.code as subject_code,
+          u.full_name as created_by_name,
+          COUNT(DISTINCT q.id) as question_count,
+          COALESCE(
+            (SELECT COUNT(*) FROM exam_attempts
+             WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+            0
+          ) as user_attempt_count,
+          COALESCE(
+            (SELECT MAX(total_score) FROM exam_attempts
+             WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+            0
+          ) as user_best_score
+        FROM exams e
+        INNER JOIN subjects s ON e.subject_id = s.id
+        LEFT JOIN users u ON e.created_by = u.id
+        LEFT JOIN questions q ON e.id = q.exam_id
+        WHERE s.slug = $1 AND e.status = 'published'
+        GROUP BY e.id, s.id, u.id
+        ORDER BY e.publish_date DESC, e.created_at DESC
+      `;
+      result = await pool.query(query, [subjectSlug, userId]);
+    } else {
+      // Filter by subject code (MATH, PHYSICS, etc.)
+      query = `
+        SELECT
+          e.*,
+          s.name as subject_name,
+          s.code as subject_code,
+          u.full_name as created_by_name,
+          COUNT(DISTINCT q.id) as question_count,
+          COALESCE(
+            (SELECT COUNT(*) FROM exam_attempts
+             WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+            0
+          ) as user_attempt_count,
+          COALESCE(
+            (SELECT MAX(total_score) FROM exam_attempts
+             WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+            0
+          ) as user_best_score
+        FROM exams e
+        INNER JOIN subjects s ON e.subject_id = s.id
+        LEFT JOIN users u ON e.created_by = u.id
+        LEFT JOIN questions q ON e.id = q.exam_id
+        WHERE s.code = $1 AND e.status = 'published'
+        GROUP BY e.id, s.id, u.id
+        ORDER BY e.publish_date DESC, e.created_at DESC
+      `;
+      result = await pool.query(query, [subjectCode, userId]);
+    }
+
     return result.rows;
   },
 

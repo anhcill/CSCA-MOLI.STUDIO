@@ -74,22 +74,32 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 // ====================================
 // RATE LIMITING
 // ====================================
-// Global limiter: 100 requests per 15 minutes per IP
+const isProduction = process.env.NODE_ENV === "production";
+const globalWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000);
+const globalMax = Number(process.env.RATE_LIMIT_MAX || (isProduction ? 400 : 5000));
+
+// Global limiter: broad protection for all API routes.
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: globalWindowMs,
+  max: globalMax,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS",
   message: {
     success: false,
     message: "Quá nhiều yêu cầu, vui lòng thử lại sau",
   },
 });
 
-// Strict auth limiter: 20 requests per 15 minutes per IP (login, register, forgot-password)
+const authWindowMs = Number(
+  process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000,
+);
+const authMax = Number(process.env.AUTH_RATE_LIMIT_MAX || (isProduction ? 40 : 400));
+
+// Strict auth limiter: only for brute-force sensitive auth endpoints.
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
+  windowMs: authWindowMs,
+  max: authMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -100,7 +110,12 @@ const authLimiter = rateLimit({
 });
 
 app.use("/api", globalLimiter);
-app.use("/api/auth", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/google", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/reset-password", authLimiter);
+app.use("/api/auth/verify-email", authLimiter);
 
 // ====================================
 // ROUTES
@@ -145,6 +160,9 @@ app.use("/api/posts", require("./routes/posts"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/admin/exams", require("./routes/adminExamRoutes"));
 app.use("/api/admin/images", require("./routes/imageRoutes"));
+app.use("/api/admin/forum", require("./routes/adminForumRoutes"));
+app.use("/api/admin/roadmap", require("./routes/adminRoadmapRoutes"));
+app.use("/api/admin/vip", require("./routes/adminVipRoutes"));
 app.use("/api/materials", require("./routes/materials"));
 app.use("/api/vocabulary", require("./routes/vocabulary"));
 app.use("/api/search", require("./routes/search")); // Global search
@@ -153,6 +171,7 @@ app.use("/api/leaderboard", require("./routes/leaderboard")); // Leaderboard
 app.use("/api/settings", require("./routes/settings")); // Site settings (exam date)
 app.use("/api/ai", require("./routes/ai")); // AI Analysis
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
+app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 
 // ====================================
 // ERROR HANDLING

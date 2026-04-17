@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
+import { hasPermission } from '@/lib/utils/permissions';
 import { FiChevronLeft, FiSearch, FiBookOpen, FiChevronRight } from 'react-icons/fi';
 
 interface Exam {
@@ -38,7 +39,8 @@ export default function AdminQuestionsPage() {
     const [totalExams, setTotalExams] = useState(0);
 
     useEffect(() => {
-        if (!isAuthenticated || user?.role !== 'admin') { router.push('/'); return; }
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'exams.manage'))) { router.push('/'); return; }
         loadExams();
     }, [isAuthenticated, user, page]);
 

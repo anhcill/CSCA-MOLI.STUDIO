@@ -15,6 +15,8 @@ export interface Exam {
   question_count: number;
   user_attempt_count: number;
   user_best_score: number;
+  publish_date?: string;
+  is_premium?: boolean;
 }
 
 export interface Question {
@@ -58,8 +60,10 @@ export interface TopicStats {
 
 const examApi = {
   // Lấy danh sách đề thi theo môn
-  async getExamsBySubject(subjectCode: string): Promise<Exam[]> {
-    const response = await axios.get(`/subjects/${subjectCode}/exams`);
+  async getExamsBySubject(subjectCode: string, subjectSlug?: string): Promise<Exam[]> {
+    const response = await axios.get(`/subjects/${subjectCode}/exams`, {
+      params: subjectSlug ? { subjectSlug } : undefined
+    });
     return response.data.data;
   },
 

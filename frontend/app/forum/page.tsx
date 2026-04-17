@@ -1,10 +1,11 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiHeart, FiMessageCircle, FiShare2, FiMoreHorizontal,
   FiEdit2, FiTrash2, FiSend, FiLoader, FiChevronDown,
   FiFeather, FiZap, FiTrendingUp, FiUsers, FiBookOpen,
+  FiStar, FiTarget, FiHash
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import * as postsApi from '@/lib/api/posts';
@@ -15,35 +16,40 @@ import Header from '@/components/layout/Header';
 const TAGS = ['Tất cả', 'HSK', 'Toán', 'Vật Lý', 'Hóa Học', 'Tiếng Anh', 'Kinh nghiệm', 'Học bổng', 'Chia sẻ'];
 
 const TAG_COLORS: Record<string, string> = {
-  'Tất cả': 'from-violet-500 to-purple-600',
-  'HSK': 'from-red-400 to-rose-500',
-  'Toán': 'from-blue-400 to-cyan-500',
-  'Vật Lý': 'from-indigo-400 to-blue-500',
-  'Hóa Học': 'from-emerald-400 to-teal-500',
-  'Tiếng Anh': 'from-orange-400 to-amber-500',
-  'Kinh nghiệm': 'from-pink-400 to-rose-500',
-  'Học bổng': 'from-yellow-400 to-orange-400',
-  'Chia sẻ': 'from-purple-400 to-violet-500',
+  'Tất cả': 'from-violet-600 to-indigo-600',
+  'HSK': 'from-rose-500 to-pink-600',
+  'Toán': 'from-cyan-500 to-blue-600',
+  'Vật Lý': 'from-indigo-500 to-purple-600',
+  'Hóa Học': 'from-teal-400 to-emerald-500',
+  'Tiếng Anh': 'from-amber-500 to-orange-500',
+  'Kinh nghiệm': 'from-fuchsia-500 to-pink-600',
+  'Học bổng': 'from-yellow-400 to-amber-500',
+  'Chia sẻ': 'from-purple-500 to-violet-600',
 };
 
 const QUICK_STATS = [
-  { icon: FiUsers, label: '10,000+ học viên', color: 'text-violet-500' },
-  { icon: FiTrendingUp, label: 'Cộng đồng sôi nổi', color: 'text-pink-500' },
-  { icon: FiBookOpen, label: 'Ôn thi hiệu quả', color: 'text-cyan-500' },
+  { icon: FiUsers, label: '10,000+ thành viên', sub: 'Sinh viên tích cực', color: 'bg-violet-100 text-violet-600' },
+  { icon: FiTrendingUp, label: '500+ chủ đề hot', sub: 'Thảo luận mỗi ngày', color: 'bg-pink-100 text-pink-600' },
+  { icon: FiBookOpen, label: 'Bí kíp học bổng', sub: 'Từ chuyên gia CSCA', color: 'bg-emerald-100 text-emerald-600' },
 ];
 
 /* ─── Avatar ─────────────────────────────────────────────── */
-function Avatar({ src, name, size = 40 }: { src?: string; name?: string; size?: number }) {
-  return src ? (
-    <img src={src} alt={name} width={size} height={size}
-      className="rounded-full object-cover shrink-0 ring-2 ring-white"
-      style={{ width: size, height: size }} />
-  ) : (
-    <div
-      className="rounded-full bg-gradient-to-br from-violet-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shrink-0 select-none ring-2 ring-white shadow-sm"
-      style={{ width: size, height: size, fontSize: size * 0.38 }}
-    >
-      {name?.charAt(0)?.toUpperCase() || '?'}
+function Avatar({ src, name, size = 42 }: { src?: string; name?: string; size?: number }) {
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      {src ? (
+        <img src={src} alt={name} width={size} height={size}
+          className="rounded-2xl object-cover ring-2 ring-white/50 shadow-md h-full w-full"
+        />
+      ) : (
+        <div
+          className="rounded-2xl bg-gradient-to-br from-violet-600 to-pink-500 flex items-center justify-center text-white font-black shrink-0 ring-2 ring-white/50 shadow-md w-full h-full"
+          style={{ fontSize: size * 0.4 }}
+        >
+          {name?.charAt(0)?.toUpperCase() || '?'}
+        </div>
+      )}
+      <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white" />
     </div>
   );
 }
@@ -82,22 +88,18 @@ function AutoTextarea({ value, onChange, placeholder, className, onKeyDown, minR
 /* ─── Skeleton ────────────────────────────────────────────── */
 function PostSkeleton() {
   return (
-    <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-white/80 p-5 space-y-4 animate-pulse shadow-sm">
-      <div className="flex gap-3 items-center">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 shrink-0" />
-        <div className="space-y-1.5 flex-1">
-          <div className="h-3 w-28 bg-gray-200 rounded-full" />
-          <div className="h-2.5 w-16 bg-gray-100 rounded-full" />
+    <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/50 p-6 space-y-5 animate-pulse shadow-sm">
+      <div className="flex gap-4 items-center">
+        <div className="w-12 h-12 rounded-2xl bg-gray-200" />
+        <div className="space-y-2 flex-1">
+          <div className="h-3 w-32 bg-gray-200 rounded-full" />
+          <div className="h-2 w-20 bg-gray-100 rounded-full" />
         </div>
       </div>
-      <div className="space-y-2">
-        <div className="h-3 bg-gray-200 rounded-full w-full" />
-        <div className="h-3 bg-gray-200 rounded-full w-5/6" />
-        <div className="h-3 bg-gray-100 rounded-full w-2/3" />
-      </div>
-      <div className="flex gap-3 pt-1">
-        <div className="h-8 w-20 bg-gray-100 rounded-xl" />
-        <div className="h-8 w-24 bg-gray-100 rounded-xl" />
+      <div className="space-y-3">
+        <div className="h-4 bg-gray-100 rounded-full w-full" />
+        <div className="h-4 bg-gray-100 rounded-full w-5/6" />
+        <div className="h-4 bg-gray-50 rounded-full w-2/3" />
       </div>
     </div>
   );
@@ -224,37 +226,36 @@ export default function ForumPage() {
   const isAuth = mounted && isAuthenticated;
 
   return (
-    <div className="min-h-screen" style={{
-      background: 'linear-gradient(135deg, #f0f4ff 0%, #faf0ff 40%, #fff0f8 70%, #f0fbff 100%)'
-    }}>
+    <div className="min-h-screen bg-[#f8fafc] relative overflow-hidden flex flex-col">
+      {/* Premium Ambient Background */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-violet-200/40 to-pink-200/40 blur-[120px] rounded-full mix-blend-multiply pointer-events-none" />
+      <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-gradient-to-tr from-cyan-100/40 to-indigo-200/40 blur-[120px] rounded-full mix-blend-multiply pointer-events-none -translate-x-1/2" />
+
       <Header />
 
       {/* ── Sticky filter bar ── */}
-      <div className="sticky top-0 z-30 backdrop-blur-xl border-b"
-        style={{ background: 'rgba(255,255,255,0.85)', borderColor: 'rgba(139,92,246,0.1)' }}>
-        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
-          {/* Brand mark */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center">
-              <FiZap size={14} className="text-white" />
-            </div>
-            <span className="text-sm font-bold bg-gradient-to-r from-violet-600 to-pink-600 bg-clip-text text-transparent hidden sm:block">
-              Diễn Đàn
-            </span>
+      <div className="sticky top-[64px] z-30 bg-white/70 backdrop-blur-2xl border-b border-gray-200/50 shadow-sm">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-6">
+          <div className="flex items-center gap-2 shrink-0 hidden md:flex">
+             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+               <FiZap size={16} className="text-white" />
+             </div>
+             <span className="font-black tracking-tight text-gray-900">Mạng Lưới</span>
           </div>
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
+          <div className="w-px h-6 bg-gray-200 shrink-0 hidden md:block" />
 
           {/* Tag pills */}
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-none flex-1">
+          <div className="flex gap-2 overflow-x-auto scrollbar-none flex-1 pb-1 pt-1 -my-1">
             {TAGS.map(tag => (
               <button
                 key={tag}
                 onClick={() => setActiveTag(tag)}
-                className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-full transition-all duration-200 ${activeTag === tag
-                  ? `bg-gradient-to-r ${TAG_COLORS[tag] || 'from-violet-500 to-purple-600'} text-white shadow-md scale-105`
-                  : 'bg-white text-gray-500 hover:bg-violet-50 hover:text-violet-600 border border-gray-200'
+                className={`shrink-0 px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 ${activeTag === tag
+                  ? `bg-gradient-to-r ${TAG_COLORS[tag] || 'from-violet-600 to-indigo-600'} text-white shadow-lg scale-105`
+                  : 'bg-white text-gray-500 hover:bg-gray-100/80 hover:text-gray-900 border border-gray-200/60 shadow-sm'
                   }`}
               >
+                {activeTag === tag && <FiHash className="inline-block mr-1 opacity-80" size={12} />}
                 {tag}
               </button>
             ))}
@@ -263,67 +264,71 @@ export default function ForumPage() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+      <main className="flex-1 max-w-[1200px] mx-auto w-full px-4 sm:px-6 py-8 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
           {/* ── Feed column ── */}
-          <div className="space-y-4">
+          <div className="lg:col-span-8 space-y-6">
 
-            {/* ── Composer ── */}
+            {/* ── Composer Glassmorphism ── */}
             {isAuth ? (
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white shadow-md overflow-hidden"
-                style={{ boxShadow: '0 4px 24px rgba(139,92,246,0.08)' }}>
+              <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/50 shadow-xl shadow-indigo-100/50 overflow-hidden transition-all duration-300">
                 {!composerOpen ? (
                   <button
                     onClick={() => setComposerOpen(true)}
-                    className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-violet-50/50 transition-all"
+                    className="w-full flex items-center gap-4 p-4 md:p-6 text-left group"
                   >
-                    <Avatar src={user?.avatar} name={user?.full_name} size={40} />
-                    <span className="flex-1 text-sm text-gray-400 bg-gray-50 hover:bg-violet-50 rounded-full px-4 py-2.5 transition-all border border-gray-100">
-                      {user?.full_name?.split(' ').pop() || 'Bạn'} đang nghĩ gì? ✨
-                    </span>
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-sm">
-                      <FiFeather size={15} className="text-white" />
+                    <Avatar src={user?.avatar} name={user?.full_name} size={48} />
+                    <div className="flex-1">
+                       <div className="px-5 py-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 text-gray-400 font-medium group-hover:bg-violet-50/50 group-hover:border-violet-100 transition-colors shadow-inner flex items-center justify-between">
+                          <span>{user?.full_name?.split(' ').pop() || 'Bạn'} ơi, chia sẻ bí kíp học tập nào! ✨</span>
+                          <FiFeather className="text-violet-400 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all" size={20} />
+                       </div>
                     </div>
                   </button>
                 ) : (
-                  <div className="p-5 space-y-4">
-                    <div className="flex gap-3 items-center">
-                      <Avatar src={user?.avatar} name={user?.full_name} size={42} />
+                  <div className="p-6 space-y-5 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="flex gap-4 items-center">
+                      <Avatar src={user?.avatar} name={user?.full_name} size={48} />
                       <div>
-                        <p className="text-sm font-bold text-gray-900">{user?.full_name}</p>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                          <p className="text-xs text-gray-400">Đang đăng ở Diễn đàn CSCA</p>
+                        <p className="text-sm font-black text-gray-900 tracking-tight">{user?.full_name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 bg-green-50 px-2 py-0.5 rounded-md w-fit">
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                          <p className="text-[10px] uppercase font-bold text-green-700 tracking-wider">Đang kết nối viễn thông</p>
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-xl border border-gray-100 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 p-3.5 transition-all bg-gray-50/50">
+                    <div className="rounded-2xl border border-gray-200 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all bg-white shadow-inner">
                       <AutoTextarea
                         value={newPost}
                         onChange={setNewPost}
-                        placeholder="Chia sẻ kinh nghiệm, câu hỏi, hay bất cứ điều gì... 🚀"
-                        className="text-sm text-gray-800 placeholder-gray-400 leading-relaxed min-h-[80px]"
-                        minRows={3}
+                        placeholder="Hãy bật mí kinh nghiệm ôn thi, review tài liệu hay đặt lộ trình chung cho mọi người nhé... 🚀"
+                        className="text-[15px] text-gray-800 placeholder-gray-400 leading-relaxed min-h-[100px] font-medium"
+                        minRows={4}
                         onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCreate(); }}
                       />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-gray-400">Ctrl+Enter để đăng nhanh</p>
-                      <div className="flex gap-2">
+                    <div className="flex items-center justify-between pt-2">
+                       <div className="flex items-center gap-2 text-xs text-gray-400 font-medium bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
+                         <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200 shadow-sm text-gray-500">Ctrl</span>
+                         <span>+</span>
+                         <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200 shadow-sm text-gray-500">Enter</span>
+                         <span>để đăng bài</span>
+                       </div>
+                      <div className="flex gap-3">
                         <button
                           onClick={() => { setComposerOpen(false); setNewPost(''); }}
-                          className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl transition-colors font-medium"
+                          className="px-5 py-2.5 text-sm text-gray-500 hover:bg-gray-100 rounded-xl transition-colors font-bold"
                         >
                           Hủy
                         </button>
                         <button
                           onClick={handleCreate}
                           disabled={!newPost.trim() || submitting}
-                          className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-violet-600 to-pink-500 hover:from-violet-700 hover:to-pink-600 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-violet-200"
+                          className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-violet-500/30"
                         >
-                          {submitting ? <FiLoader size={14} className="animate-spin" /> : <FiSend size={14} />}
-                          Đăng bài
+                          {submitting ? <FiLoader size={16} className="animate-spin" /> : <FiSend size={16} />}
+                          Công bố
                         </button>
                       </div>
                     </div>
@@ -332,291 +337,325 @@ export default function ForumPage() {
               </div>
             ) : (
               mounted && (
-                <div className="rounded-2xl overflow-hidden shadow-md" style={{ boxShadow: '0 4px 24px rgba(139,92,246,0.12)' }}>
-                  <div className="bg-gradient-to-r from-violet-600 to-pink-500 p-5 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-bold text-white text-base">Tham gia cộng đồng CSCA 🎉</p>
-                      <p className="text-xs text-violet-200 mt-0.5">Đăng nhập để chia sẻ và kết nối cùng 10,000+ học viên</p>
-                    </div>
-                    <Link href="/auth"
-                      className="shrink-0 px-5 py-2.5 bg-white hover:bg-gray-50 text-violet-600 text-sm font-bold rounded-xl transition-all active:scale-95 shadow-sm"
-                    >
-                      Đăng nhập
-                    </Link>
+                <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-700 rounded-[2rem] p-8 text-white shadow-2xl relative overflow-hidden flex items-center justify-between">
+                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
+                  <div className="relative z-10 max-w-md">
+                     <h2 className="text-2xl font-black mb-2 flex items-center gap-2">Tham gia Trạm Học Tập 🚀</h2>
+                     <p className="text-violet-200 text-sm leading-relaxed">Đăng nhập để chia sẻ kinh nghiệm ôn thi học bổng, đặt câu hỏi cho cao thủ và tìm đồng đội chạy deadline.</p>
                   </div>
+                  <Link href="/auth"
+                    className="relative z-10 shrink-0 px-8 py-3.5 bg-white text-violet-700 text-sm font-bold rounded-2xl hover:scale-105 transition-transform shadow-xl shadow-indigo-900/40"
+                  >
+                    Gia Nhập Ngay
+                  </Link>
                 </div>
               )
             )}
 
             {/* ── Feed ── */}
-            {loading
-              ? Array.from({ length: 4 }).map((_, i) => <PostSkeleton key={i} />)
-              : posts.length === 0
-                ? (
-                  <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-white py-20 text-center shadow-sm">
-                    <div className="text-6xl mb-4">💬</div>
-                    <p className="font-bold text-gray-700 text-lg">Chưa có bài viết nào</p>
-                    <p className="text-sm text-gray-400 mt-2">Hãy là người đầu tiên chia sẻ! 🚀</p>
-                  </div>
-                )
-                : posts.map(post => (
-                  <article key={post.id}
-                    className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/90 shadow-sm overflow-hidden group transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-                    style={{ boxShadow: '0 2px 16px rgba(139,92,246,0.06)' }}>
-
-                    {/* Header */}
-                    <div className="flex items-start justify-between px-5 pt-5">
-                      <div className="flex gap-3 items-center">
-                        <Avatar src={post.author_avatar} name={post.author_name} size={44} />
-                        <div>
-                          <p className="font-bold text-gray-900 text-sm">{post.author_name || 'Ẩn danh'}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{timeAgo(post.created_at)}</p>
-                        </div>
+            <div className="space-y-6">
+              {loading
+                ? Array.from({ length: 4 }).map((_, i) => <PostSkeleton key={i} />)
+                : posts.length === 0
+                  ? (
+                    <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/50 p-12 text-center shadow-xl shadow-indigo-100/30 w-full flex flex-col items-center justify-center min-h-[400px]">
+                      <div className="w-24 h-24 bg-gradient-to-br from-violet-100 to-pink-100 rounded-3xl flex items-center justify-center rotate-12 mb-6 shadow-inner border border-white">
+                         <span className="text-4xl -rotate-12">🪶</span>
                       </div>
-
-                      {isAuth && user?.id === post.user_id && (
-                        <div className="relative" ref={menuPost === post.id ? menuRef : undefined}>
-                          <button
-                            onClick={() => setMenuPost(menuPost === post.id ? null : post.id)}
-                            className="p-2 rounded-xl text-gray-300 hover:text-gray-500 hover:bg-gray-100 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <FiMoreHorizontal size={17} />
-                          </button>
-                          {menuPost === post.id && (
-                            <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-20 text-sm">
-                              <button onClick={() => handleEdit(post)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors">
-                                <FiEdit2 size={14} className="text-violet-500" /> Chỉnh sửa
-                              </button>
-                              <button onClick={() => handleDelete(post.id)} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-500 hover:bg-red-50 transition-colors">
-                                <FiTrash2 size={14} /> Xóa bài
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <h3 className="text-2xl font-black text-gray-900 mb-2">Chưa có dòng tâm sự nào</h3>
+                      <p className="text-gray-500">Hãy là người tiên phong khai phá khu vực vùng đất này nhé!</p>
                     </div>
+                  )
+                  : posts.map(post => (
+                    <article key={post.id}
+                      className="bg-white/90 backdrop-blur-xl rounded-[2rem] border border-white shadow-lg shadow-gray-200/40 overflow-hidden group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/60 hover:-translate-y-1">
 
-                    {/* Content */}
-                    <div className="px-5 mt-3.5">
-                      {editingId === post.id ? (
-                        <div className="space-y-2">
-                          <div className="bg-gray-50 rounded-xl border border-gray-200 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 px-4 py-3 transition-all">
-                            <AutoTextarea value={editContent} onChange={setEditContent}
-                              className="text-sm text-gray-800 leading-relaxed" minRows={3} />
+                      {/* Header */}
+                      <div className="flex items-start justify-between px-6 pt-6 mb-4">
+                        <div className="flex gap-4 items-center">
+                          <Avatar src={post.author_avatar} name={post.author_name} size={48} />
+                          <div>
+                            <p className="font-bold text-gray-900 text-[15px]">{post.author_name || 'Học viên Ẩn danh'}</p>
+                            <p className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mt-0.5">
+                               {timeAgo(post.created_at)}
+                               <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                               <span>Công khai</span>
+                            </p>
                           </div>
-                          <div className="flex gap-2">
-                            <button onClick={handleUpdate} disabled={!editContent.trim()}
-                              className="px-4 py-2 bg-gradient-to-r from-violet-600 to-pink-500 hover:from-violet-700 hover:to-pink-600 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-all">
-                              Lưu thay đổi
+                        </div>
+
+                        {isAuth && user?.id === post.user_id && (
+                          <div className="relative" ref={menuPost === post.id ? menuRef : undefined}>
+                            <button
+                              onClick={() => setMenuPost(menuPost === post.id ? null : post.id)}
+                              className="w-10 h-10 flex items-center justify-center rounded-2xl text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                            >
+                              <FiMoreHorizontal size={20} />
                             </button>
-                            <button onClick={handleCancelEdit}
-                              className="px-4 py-2 text-gray-600 hover:bg-gray-100 text-sm font-medium rounded-lg transition-colors">
-                              Hủy
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-gray-800 text-[15px] leading-relaxed whitespace-pre-wrap">{post.content}</p>
-                      )}
-                    </div>
-
-                    {/* Image */}
-                    {post.image_url && (
-                      <div className="mt-4 overflow-hidden">
-                        <img src={post.image_url} alt="" className="w-full max-h-[480px] object-cover" loading="lazy" />
-                      </div>
-                    )}
-
-                    {/* Stats row */}
-                    {(post.like_count > 0 || post.comment_count > 0) && (
-                      <div className="flex items-center gap-3 px-5 pt-3 text-xs text-gray-400">
-                        {post.like_count > 0 && (
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-5 h-5 rounded-full bg-gradient-to-br from-red-400 to-pink-500 flex items-center justify-center text-[10px] shadow-sm">❤</span>
-                            <span className="font-medium">{post.like_count}</span>
-                          </span>
-                        )}
-                        {post.comment_count > 0 && (
-                          <button onClick={() => toggleComments(post.id)} className="hover:text-violet-500 transition-colors ml-auto font-medium">
-                            {post.comment_count} bình luận
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Action bar */}
-                    <div className="flex border-t border-gray-100 mx-4 mt-2 mb-1 gap-1">
-                      <button
-                        onClick={() => handleLike(post)}
-                        className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-150 ${post.is_liked
-                          ? 'text-red-500 bg-red-50'
-                          : 'text-gray-500 hover:bg-pink-50 hover:text-pink-500'
-                          }`}
-                      >
-                        <FiHeart size={16} className={post.is_liked ? 'fill-current' : ''} />
-                        {post.is_liked ? 'Đã thích' : 'Thích'}
-                      </button>
-
-                      <button
-                        onClick={() => toggleComments(post.id)}
-                        className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-gray-500 hover:bg-blue-50 hover:text-blue-500 rounded-xl transition-all"
-                      >
-                        <FiMessageCircle size={16} />
-                        Bình luận
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          if (navigator.share) {
-                            navigator.share({ title: `Bài viết của ${post.author_name}`, text: post.content.substring(0, 100) }).catch(() => { });
-                          } else {
-                            navigator.clipboard.writeText(window.location.href).then(() => alert('Đã sao chép link!'));
-                          }
-                        }}
-                        className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-semibold text-gray-500 hover:bg-violet-50 hover:text-violet-500 rounded-xl transition-all"
-                      >
-                        <FiShare2 size={16} />
-                        Chia sẻ
-                      </button>
-                    </div>
-
-                    {/* Comments section */}
-                    {openComments.has(post.id) && (
-                      <div className="px-5 pb-5 pt-3 border-t border-gray-100 space-y-3">
-                        {isAuth && (
-                          <div className="flex gap-2.5 items-center">
-                            <Avatar src={user?.avatar} name={user?.full_name} size={32} />
-                            <div className="flex-1 flex items-center bg-gray-50 rounded-full border border-gray-200 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 pl-4 pr-1.5 py-1 transition-all">
-                              <input
-                                type="text"
-                                value={commentText[post.id] || ''}
-                                onChange={e => setCommentText(prev => ({ ...prev, [post.id]: e.target.value }))}
-                                placeholder="Viết bình luận..."
-                                className="flex-1 bg-transparent text-sm text-gray-800 outline-none placeholder-gray-400"
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddComment(post.id); } }}
-                              />
-                              <button
-                                onClick={() => handleAddComment(post.id)}
-                                disabled={!commentText[post.id]?.trim()}
-                                className="p-1.5 rounded-full bg-gradient-to-br from-violet-500 to-pink-500 hover:from-violet-600 hover:to-pink-600 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
-                              >
-                                <FiSend size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {commentLoading.has(post.id) ? (
-                          <div className="flex justify-center py-3">
-                            <FiLoader size={18} className="animate-spin text-violet-400" />
-                          </div>
-                        ) : (
-                          <div className="space-y-2.5">
-                            {(comments[post.id] || []).map(c => (
-                              <div key={c.id} className="flex gap-2.5">
-                                <Avatar src={c.author_avatar} name={c.author_name} size={32} />
-                                <div>
-                                  <div className="inline-block bg-gray-50 hover:bg-violet-50/50 rounded-2xl px-3.5 py-2.5 transition-colors">
-                                    <p className="text-xs font-bold text-gray-900">{c.author_name}</p>
-                                    <p className="text-sm text-gray-700 mt-0.5 leading-snug">{c.content}</p>
-                                  </div>
-                                  <p className="text-xs text-gray-400 ml-2 mt-1">{timeAgo(c.created_at)}</p>
-                                </div>
+                            {menuPost === post.id && (
+                              <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 p-2 z-20 animate-in zoom-in-95 duration-200">
+                                <button onClick={() => handleEdit(post)} className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-violet-50 hover:text-violet-600 font-bold text-sm rounded-xl transition-colors">
+                                  <FiEdit2 size={16} /> Chỉnh sửa
+                                </button>
+                                <button onClick={() => handleDelete(post.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 font-bold text-sm rounded-xl transition-colors mt-1">
+                                  <FiTrash2 size={16} /> Xóa bài
+                                </button>
                               </div>
-                            ))}
-                            {comments[post.id]?.length === 0 && (
-                              <p className="text-center text-xs text-gray-400 py-2">Chưa có bình luận nào 👋</p>
                             )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </article>
-                ))
-            }
 
-            {/* Load more */}
-            {!loading && hasMore && posts.length > 0 && (
-              <div className="text-center pb-6">
-                <button
-                  onClick={() => loadPosts(posts.length)}
-                  disabled={loadingMore}
-                  className="inline-flex items-center gap-2 px-8 py-3 bg-white border border-violet-200 hover:bg-violet-50 text-violet-600 text-sm font-bold rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {loadingMore ? <FiLoader size={14} className="animate-spin" /> : <FiChevronDown size={14} />}
-                  {loadingMore ? 'Đang tải...' : 'Xem thêm bài viết'}
-                </button>
-              </div>
-            )}
-          </div>
+                      {/* Content */}
+                      <div className="px-6 mb-4">
+                        {editingId === post.id ? (
+                          <div className="space-y-3">
+                            <div className="bg-gray-50 rounded-2xl border border-gray-200 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all">
+                              <AutoTextarea value={editContent} onChange={setEditContent}
+                                className="text-[15px] text-gray-800 leading-relaxed font-medium" minRows={3} />
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                               <button onClick={handleCancelEdit}
+                                className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 text-sm font-bold rounded-xl transition-colors">
+                                Hủy sửa
+                              </button>
+                              <button onClick={handleUpdate} disabled={!editContent.trim()}
+                                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-all shadow-md shadow-violet-500/30">
+                                Cập nhật
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                        )}
+                      </div>
 
-          {/* ── Sidebar ── */}
-          <div className="hidden lg:flex flex-col gap-4 self-start sticky top-20">
+                      {/* Image Component */}
+                      {post.image_url && (
+                        <div className="px-6 pb-2">
+                           <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-inner">
+                              <img src={post.image_url} alt="" className="w-full max-h-[500px] object-cover hover:scale-105 transition-transform duration-700" loading="lazy" />
+                           </div>
+                        </div>
+                      )}
 
-            {/* Community stats */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white p-5 shadow-sm"
-              style={{ boxShadow: '0 4px 20px rgba(139,92,246,0.08)' }}>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center">
-                  <FiZap size={15} className="text-white" />
+                      {/* Stats Overview */}
+                      {(post.like_count > 0 || post.comment_count > 0) && (
+                        <div className="flex items-center justify-between px-6 py-3 mt-2">
+                          <div className="flex items-center gap-2">
+                             {post.like_count > 0 && (
+                                <div className="flex items-center gap-1.5 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
+                                  <div className="w-4 h-4 rounded-full bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center shadow-sm">
+                                    <FiHeart className="text-white fill-current w-2.5 h-2.5" />
+                                  </div>
+                                  <span className="text-xs font-bold text-rose-600">{post.like_count}</span>
+                                </div>
+                             )}
+                          </div>
+                          {post.comment_count > 0 && (
+                            <button onClick={() => toggleComments(post.id)} className="text-xs font-bold text-gray-500 hover:text-violet-600 transition-colors">
+                              {post.comment_count} Ý kiến
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action bar Premium */}
+                      <div className="flex border-t border-gray-100 px-6 py-2 gap-2 mt-2">
+                        <button
+                          onClick={() => handleLike(post)}
+                          className={`flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${post.is_liked
+                            ? 'text-rose-600 bg-rose-50 shadow-inner border border-rose-100'
+                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100'
+                            }`}
+                        >
+                          <FiHeart size={18} className={post.is_liked ? 'fill-current' : ''} />
+                          {post.is_liked ? 'Hữu Ích' : 'Cổ vũ'}
+                        </button>
+
+                        <button
+                          onClick={() => toggleComments(post.id)}
+                          className="flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-xl transition-all duration-300"
+                        >
+                          <FiMessageCircle size={18} />
+                          Thảo luận
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (navigator.share) {
+                              navigator.share({ title: `Bài viết của ${post.author_name}`, text: post.content.substring(0, 100) }).catch(() => { });
+                            } else {
+                              navigator.clipboard.writeText(window.location.href).then(() => alert('Đã sao chép link!'));
+                            }
+                          }}
+                          className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-xl transition-all duration-300"
+                        >
+                          <FiShare2 size={18} />
+                        </button>
+                      </div>
+
+                      {/* Comments UI Upgrade */}
+                      {openComments.has(post.id) && (
+                        <div className="bg-gray-50/50 border-t border-gray-100 px-6 py-5">
+                          {isAuth && (
+                            <div className="flex gap-4 items-start mb-6">
+                              <Avatar src={user?.avatar} name={user?.full_name} size={36} />
+                              <div className="flex-1 relative group">
+                                <textarea
+                                  value={commentText[post.id] || ''}
+                                  onChange={e => setCommentText(prev => ({ ...prev, [post.id]: e.target.value }))}
+                                  placeholder="Nhập ý kiến của bạn..."
+                                  rows={1}
+                                  className="w-full bg-white rounded-2xl border border-gray-200 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 outline-none placeholder-gray-400 shadow-sm resize-none"
+                                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(post.id); } }}
+                                />
+                                <button
+                                  onClick={() => handleAddComment(post.id)}
+                                  disabled={!commentText[post.id]?.trim()}
+                                  className="absolute right-2 bottom-2 p-2 rounded-xl bg-violet-100 text-violet-600 hover:bg-violet-600 hover:text-white disabled:opacity-0 disabled:scale-75 transition-all duration-300"
+                                >
+                                  <FiSend size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {commentLoading.has(post.id) ? (
+                            <div className="flex justify-center py-6">
+                              <div className="w-8 h-8 relative">
+                                <div className="w-8 h-8 rounded-full border-4 border-violet-200 border-t-violet-600 animate-spin"></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {(comments[post.id] || []).map(c => (
+                                <div key={c.id} className="flex gap-4 items-start">
+                                  <Avatar src={c.author_avatar} name={c.author_name} size={36} />
+                                  <div className="flex-1">
+                                    <div className="inline-block bg-white border border-gray-100 shadow-sm rounded-2xl rounded-tl-sm px-5 py-3">
+                                      <p className="text-[13px] font-black text-gray-900 mb-1">{c.author_name}</p>
+                                      <p className="text-[14px] text-gray-700 leading-snug font-medium">{c.content}</p>
+                                    </div>
+                                    <p className="text-[11px] font-bold text-gray-400 ml-2 mt-1.5">{timeAgo(c.created_at)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                              {comments[post.id]?.length === 0 && (
+                                <div className="text-center py-6">
+                                  <span className="text-3xl grayscale opacity-50 block mb-2">🎈</span>
+                                  <p className="text-[13px] font-bold text-gray-400">Trở thành người bình luận đầu tiên</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))
+              }
+
+              {/* Load more */}
+              {!loading && hasMore && posts.length > 0 && (
+                <div className="text-center pt-4 pb-8">
+                  <button
+                    onClick={() => loadPosts(posts.length)}
+                    disabled={loadingMore}
+                    className="inline-flex items-center justify-center gap-2 min-w-[200px] h-12 bg-white/80 backdrop-blur-md border border-violet-200 hover:bg-violet-50 hover:border-violet-300 text-violet-700 text-sm font-black tracking-wide uppercase rounded-[1rem] shadow-sm hover:shadow-md transition-all duration-300 disabled:opacity-50"
+                  >
+                    {loadingMore ? <FiLoader size={18} className="animate-spin" /> : <FiChevronDown size={18} />}
+                    {loadingMore ? 'Đang Lấy Dữ Liệu' : 'Tải Thêm Cập Nhật'}
+                  </button>
                 </div>
-                <h3 className="font-bold text-gray-900 text-sm">Cộng đồng CSCA</h3>
-              </div>
-              <div className="space-y-3">
-                {QUICK_STATS.map(({ icon: Icon, label, color }) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center ${color}`}>
-                      <Icon size={15} />
-                    </div>
-                    <span className="text-xs text-gray-600 font-medium">{label}</span>
-                  </div>
-                ))}
-              </div>
-              {!isAuth && mounted && (
-                <Link href="/auth"
-                  className="mt-4 w-full block text-center py-2.5 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:from-violet-700 hover:to-pink-600 transition-all active:scale-95 shadow-md shadow-violet-200">
-                  Tham gia ngay 🚀
-                </Link>
               )}
             </div>
+          </div>
 
-            {/* Popular topics */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white p-5 shadow-sm"
-              style={{ boxShadow: '0 4px 20px rgba(139,92,246,0.06)' }}>
-              <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center gap-2">
-                <FiTrendingUp size={15} className="text-violet-500" />
-                Chủ đề hot 🔥
+          {/* ── Sidebar Right Premium ── */}
+          <div className="hidden lg:flex lg:col-span-4 flex-col gap-6 self-start sticky top-[120px]">
+
+            {/* Community Stats Card - Glassmorphism */}
+            <div className="bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 p-6 shadow-xl shadow-gray-200/40 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-full pointer-events-none" />
+               <div className="flex items-center gap-3 mb-6 relative z-10">
+                 <div className="w-10 h-10 rounded-[1rem] bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                   <FiGlobe size={20} className="text-white" />
+                 </div>
+                 <div>
+                   <h3 className="font-black text-gray-900 text-base">Toàn cảnh CSCA</h3>
+                   <p className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Hệ sinh thái</p>
+                 </div>
+               </div>
+               
+               <div className="space-y-4 relative z-10">
+                 {QUICK_STATS.map((stat, i) => {
+                    const Icon = stat.icon;
+                    return (
+                     <div key={i} className="flex gap-4 items-center group">
+                       <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 ${stat.color} transition-transform group-hover:scale-110`}>
+                         <Icon size={20} />
+                       </div>
+                       <div>
+                         <p className="text-sm font-black text-gray-900 group-hover:text-violet-600 transition-colors">{stat.label}</p>
+                         <p className="text-xs font-medium text-gray-500 mt-0.5">{stat.sub}</p>
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+
+               {!isAuth && mounted && (
+                 <div className="mt-6 pt-6 border-t border-gray-100">
+                    <Link href="/auth" className="flex items-center justify-center w-full py-3.5 bg-gray-900 text-white hover:bg-gray-800 text-sm font-bold rounded-xl transition-colors shadow-lg">
+                      Đăng Ký Thành Viên
+                    </Link>
+                 </div>
+               )}
+            </div>
+
+            {/* Popular Topics Card */}
+            <div className="bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 p-6 shadow-xl shadow-gray-200/40">
+              <h3 className="font-black text-gray-900 text-base mb-5 flex items-center gap-2">
+                <div className="p-1.5 bg-orange-100 text-orange-500 rounded-lg"><FiTrendingUp size={16} /></div>
+                Xu hướng thao luận
               </h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2.5">
                 {TAGS.slice(1).map(tag => (
                   <button
                     key={tag}
                     onClick={() => setActiveTag(tag)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all ${activeTag === tag
-                      ? `bg-gradient-to-r ${TAG_COLORS[tag]} text-white shadow-sm`
-                      : 'bg-gray-100 text-gray-600 hover:bg-violet-50 hover:text-violet-600'
-                      }`}
+                    className="px-4 py-2 hover:scale-105 transition-transform bg-gray-50 hover:bg-white border border-gray-100 hover:border-violet-200 rounded-xl flex items-center gap-1.5 group shadow-sm hover:shadow-md"
                   >
-                    #{tag}
+                    <span className="text-violet-400 group-hover:text-violet-600 font-bold">#</span>
+                    <span className="text-xs font-bold text-gray-700 group-hover:text-gray-900">{tag}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Tip card */}
-            <div className="rounded-2xl overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)' }}>
-              <div className="p-5">
-                <p className="text-white font-bold text-sm mb-1">💡 Tip học tiếng Trung</p>
-                <p className="text-violet-100 text-xs leading-relaxed">
-                  Học chữ Hán mỗi ngày chỉ 15 phút, kiên trì 30 ngày sẽ nhớ 450 từ vựng cơ bản!
-                </p>
-              </div>
+            {/* Master Tip / Inspiration Ad Card */}
+            <div className="rounded-[2rem] p-6 shadow-xl relative overflow-hidden group">
+               <div className="absolute inset-0 bg-gradient-to-br from-indigo-800 via-purple-800 to-fuchsia-700 transition-transform duration-700 group-hover:scale-110" />
+               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay" />
+               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl" />
+               
+               <div className="relative z-10 flex flex-col items-start gap-4">
+                 <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-[1rem] flex items-center justify-center border border-white/30 shadow-lg">
+                   <span className="text-xl">🎓</span>
+                 </div>
+                 <div>
+                    <h4 className="text-white font-black text-lg mb-2">Du học sinh tương lai</h4>
+                    <p className="text-purple-100 text-[13px] leading-relaxed font-medium">Bạn có biết 85% học viên tích cực tương tác trên CSCA đạt được mức điểm học bổng mục tiêu trong 6 tháng? Đừng bỏ lỡ cơ hội rèn luyện nhé.</p>
+                 </div>
+                 <button className="px-5 py-2 mt-2 bg-white/20 backdrop-blur-md border border-white/50 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-white/30 transition-colors">
+                   Khám phá khoá học
+                 </button>
+               </div>
             </div>
 
           </div>
         </div>
-      </div>
+      </main>
 
       <style jsx global>{`
         .scrollbar-none::-webkit-scrollbar { display: none; }
@@ -625,3 +664,6 @@ export default function ForumPage() {
     </div>
   );
 }
+
+// Re-export required icons from fi that might have been missing
+import { FiGlobe } from 'react-icons/fi';

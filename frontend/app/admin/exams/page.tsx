@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
-import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCheck, FiX } from 'react-icons/fi';
+import { hasPermission } from '@/lib/utils/permissions';
+import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 
 interface Exam {
     id: number;
@@ -17,6 +20,7 @@ interface Exam {
     questions_count: number;
     attempts_count: number;
     created_at: string;
+    is_premium?: boolean;
 }
 
 interface Pagination {
@@ -39,7 +43,8 @@ export default function ExamsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!isAuthenticated || user?.role !== 'admin') {
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'exams.manage'))) {
             router.push('/');
             return;
         }
@@ -147,6 +152,9 @@ export default function ExamsPage() {
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                         Trạng thái
                                     </th>
+                                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                        VIP
+                                    </th>
                                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                         Hành động
                                     </th>
@@ -187,7 +195,23 @@ export default function ExamsPage() {
                                                 <option value="archived">Archived</option>
                                             </select>
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {exam.is_premium ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
+                                                    <FaCrown /> PRO
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 font-medium">Miễn phí</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm flex gap-2 justify-end">
+                                            <Link
+                                                href={`/admin/exams/${exam.id}/schedule`}
+                                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
+                                                title="Quản lý lịch thi"
+                                            >
+                                                <FiCalendar size={17} />
+                                            </Link>
                                             <button
                                                 onClick={() => router.push(`/admin/exams/${exam.id}`)}
                                                 className="text-blue-600 hover:text-blue-800"

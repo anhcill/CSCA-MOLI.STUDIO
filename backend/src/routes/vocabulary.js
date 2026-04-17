@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate, authorize } = require("../middleware/authMiddleware");
+const {
+  authenticate,
+  authorizePermission,
+} = require("../middleware/authMiddleware");
 const vocabularyController = require("../controllers/vocabularyController");
 const db = require("../config/database");
 
@@ -45,25 +48,25 @@ router.get("/topics", vocabularyController.getTopics);
 router.post(
   "/",
   authenticate,
-  authorize("admin"),
+  authorizePermission("content.manage"),
   vocabularyController.createVocabulary,
 );
 router.post(
   "/bulk",
   authenticate,
-  authorize("admin"),
+  authorizePermission("content.manage"),
   vocabularyController.bulkCreate,
 );
 router.put(
   "/:id",
   authenticate,
-  authorize("admin"),
+  authorizePermission("content.manage"),
   vocabularyController.updateVocabulary,
 );
 router.delete(
   "/:id",
   authenticate,
-  authorize("admin"),
+  authorizePermission("content.manage"),
   vocabularyController.deleteVocabulary,
 );
 

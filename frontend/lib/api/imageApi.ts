@@ -8,7 +8,7 @@ export const imageApi = {
             formData.append('images', file);
         });
 
-        const response = await axios.post('/admin/images/upload', formData, {
+        const response = await axios.post('/admin/images/upload-multiple', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
@@ -23,8 +23,10 @@ export const imageApi = {
     },
 
     // Delete image
-    async deleteImage(filename: string) {
-        const response = await axios.delete(`/admin/images/${filename}`);
+    async deleteImage(publicId: string) {
+        const response = await axios.delete('/admin/images/delete', {
+            data: { publicId }
+        });
         return response.data;
     }
 };

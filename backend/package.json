@@ -8,7 +8,16 @@
     "dev": "nodemon src/index.js",
     "test": "jest --watchAll --verbose",
     "db:migrate": "node src/scripts/migrate.js",
-    "db:seed": "node src/scripts/seed.js"
+    "db:seed": "node src/scripts/seed.js",
+    "db:rbac": "node scripts/setup_rbac.js",
+    "db:rbac:migrate": "node scripts/setup_rbac.js --migrate-only",
+    "db:rbac:seed": "node scripts/setup_rbac.js --seed-only",
+    "db:forum:migrate": "node scripts/apply_migration.js ../../database/migrations/006_add_forum_moderation_fields.sql",
+    "db:roadmap:migrate": "node scripts/apply_migration.js ../../database/migrations/007_create_roadmap_milestones.sql",
+    "db:exam-schedule:migrate": "node scripts/apply_migration.js ../../database/migrations/008_create_exam_schedule_logs.sql",
+    "test:forum-rbac": "node test_forum_rbac.js",
+    "test:roadmap-rbac": "node test_roadmap_rbac.js",
+    "test:exam-schedule-logs": "node test_exam_schedule_logs.js"
   },
   "keywords": [
     "csca",
@@ -20,6 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "axios": "^1.15.0",
     "bcrypt": "^5.1.1",
     "cloudinary": "^2.9.0",
     "compression": "^1.7.4",

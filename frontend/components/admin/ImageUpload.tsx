@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { FiUpload, FiX, FiImage, FiAlertCircle } from 'react-icons/fi';
+import { FiX, FiImage, FiAlertCircle } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
 
 interface ImageUploadProps {
@@ -9,10 +9,6 @@ interface ImageUploadProps {
     currentImage?: string;
     label?: string;
 }
-
-// Build backend base URL (remove /api suffix from API_URL)
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api')
-    .replace(/\/api$/, '');
 
 export default function ImageUpload({ onImageUploaded, currentImage, label = 'Upload Image' }: ImageUploadProps) {
     const [uploading, setUploading] = useState(false);
@@ -32,9 +28,9 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            // Backend returns relative path like /images/questions/img-xxx.jpg
-            const relativePath = response.data.data.url;
-            const imageUrl = `${BACKEND_URL}${relativePath}`;
+            // Backend returns full HTTPS URL from Cloudinary (e.g. https://res.cloudinary.com/...)
+            // Use it directly without any prefix concatenation
+            const imageUrl = response.data.data.url;
             setPreview(imageUrl);
             onImageUploaded(imageUrl);
         } catch (err: any) {

@@ -73,6 +73,13 @@ function VocabularyContent() {
   const closeTopic = () => { setSelectedTopic(''); setWords([]); setSearchQuery(''); };
   const getMeta = (subject: string) => SUBJECT_META[subject] || { label: subject, icon: '📚', color: 'from-gray-500 to-gray-600' };
 
+  const exportPdf = () => {
+    const params = new URLSearchParams();
+    if (selectedSubject) params.set('subject', selectedSubject);
+    if (selectedTopic) params.set('topic', selectedTopic);
+    window.open(`/tu-vung/print?${params.toString()}`, '_blank');
+  };
+
   // Group topics by subject
   const groupedTopics = topics.reduce((acc, t) => {
     if (!acc[t.subject]) acc[t.subject] = [];
@@ -114,6 +121,13 @@ function VocabularyContent() {
                   className="w-full pl-10 pr-8 py-2 bg-white border-2 border-gray-200 rounded-xl focus:border-cyan-400 outline-none text-sm" />
                 {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><FiX size={14} /></button>}
               </div>
+              <button
+                onClick={exportPdf}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md"
+                title="Xuất danh sách từ vựng ra PDF"
+              >
+                📄 Xuất PDF
+              </button>
             </div>
             {loading ? (
               <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>

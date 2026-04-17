@@ -1,9 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const examController = require("../controllers/examController");
-const { authenticate, authorize } = require("../middleware/authMiddleware");
+const {
+  authenticate,
+  authorizePermission,
+} = require("../middleware/authMiddleware");
 
 // Public routes
+router.get("/exams/lobby", examController.getExamLobby);
 router.get("/subjects/:subjectCode/exams", examController.getExamsBySubject);
 router.get("/exams/:examId", examController.getExamDetail);
 
@@ -31,14 +35,29 @@ router.get(
   examController.getTopicStats
 );
 
-// Admin routes - Require admin role ✅
-router.post("/exams", authenticate, authorize("admin"), examController.createExam);
-router.put("/exams/:examId", authenticate, authorize("admin"), examController.updateExam);
-router.delete("/exams/:examId", authenticate, authorize("admin"), examController.deleteExam);
+// Admin routes - Require exam management permission
+router.post(
+  "/exams",
+  authenticate,
+  authorizePermission("exams.manage"),
+  examController.createExam,
+);
+router.put(
+  "/exams/:examId",
+  authenticate,
+  authorizePermission("exams.manage"),
+  examController.updateExam,
+);
+router.delete(
+  "/exams/:examId",
+  authenticate,
+  authorizePermission("exams.manage"),
+  examController.deleteExam,
+);
 router.post(
   "/exams/:examId/questions",
   authenticate,
-  authorize("admin"),
+  authorizePermission("exams.manage"),
   examController.createQuestion
 );
 

@@ -5,6 +5,7 @@ const User = require("../models/User");
 const { OAuth2Client } = require("google-auth-library");
 const emailService = require("../services/emailService");
 const db = require("../config/database");
+const { getAuthorizationContext } = require("../services/rbacService");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -79,11 +80,44 @@ const generateRefreshToken = (payload) => {
   });
 };
 
+// VIP helper — checks both flag and expiry
+const isVipActive = (user) =>
+  user &&
+  user.is_vip === true &&
+  (!user.vip_expires_at || new Date(user.vip_expires_at) > new Date());
+
 const buildTokenPayload = (user) => ({
   id: user.id,
   email: user.email,
   role: user.role || "student",
+  is_vip: isVipActive(user),
+  vip_expires_at: user.vip_expires_at || null,
 });
+
+const MODULE_ROLE_CODES = ['user_admin', 'exam_admin', 'content_admin', 'forum_admin', 'roadmap_admin'];
+
+const resolveAuthorizationContext = async (user) => {
+  let authz = { roles: [], permissions: [] };
+
+  try {
+    authz = await getAuthorizationContext(user.id);
+  } catch (error) {
+    console.error("Get auth context error:", error.message);
+  }
+
+  // Legacy fallback: chỉ áp dụng nếu user HOÀN TOÀN không có RBAC roles
+  // Không được ghi đè roles module-specific (exam_admin, forum_admin, v.v.)
+  const hasAnyModuleRole = authz.roles.some(r => MODULE_ROLE_CODES.includes(r) || r === 'super_admin');
+
+  if (!hasAnyModuleRole && user.role === 'admin') {
+    // User admin cũ chưa được migrate RBAC roles → fallback tạm thời
+    console.warn(`[RBAC] User #${user.id} (${user.email}) is 'admin' but has no RBAC roles — applying legacy fallback. Please re-assign admin roles.`);
+    authz.roles = ['super_admin'];
+    authz.permissions = ['*'];
+  }
+
+  return authz;
+};
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 const register = async (req, res) => {
@@ -164,6 +198,8 @@ const register = async (req, res) => {
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
 
+    const authz = await resolveAuthorizationContext(user);
+
     return res.status(201).json({
       success: true,
       message:
@@ -177,6 +213,11 @@ const register = async (req, res) => {
           avatar: user.avatar,
           role: user.role,
           is_verified: false,
+          is_vip: false,
+          vip_expires_at: null,
+          roles: authz.roles,
+          permissions: authz.permissions,
+          created_at: user.created_at,
         },
         token,
         refreshToken,
@@ -247,6 +288,8 @@ const login = async (req, res) => {
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
 
+    const authz = await resolveAuthorizationContext(user);
+
     return res.json({
       success: true,
       message: "Đăng nhập thành công",
@@ -260,6 +303,11 @@ const login = async (req, res) => {
           role: user.role,
           bio: user.bio,
           target_score: user.target_score,
+          is_vip: isVipActive(user),
+          vip_expires_at: user.vip_expires_at || null,
+          roles: authz.roles,
+          permissions: authz.permissions,
+          created_at: user.created_at,
         },
         token,
         refreshToken,
@@ -286,6 +334,8 @@ const getCurrentUser = async (req, res) => {
         .json({ success: false, message: "Không tìm thấy người dùng" });
     }
     // Chỉ trả về các field an toàn, không bao giờ trả password hay reset token
+    const authz = await resolveAuthorizationContext(user);
+
     return res.json({
       success: true,
       data: {
@@ -303,6 +353,10 @@ const getCurrentUser = async (req, res) => {
           target_score: user.target_score,
           is_verified: user.is_verified,
           is_active: user.is_active,
+          is_vip: isVipActive(user),
+          vip_expires_at: user.vip_expires_at || null,
+          roles: authz.roles,
+          permissions: authz.permissions,
           created_at: user.created_at,
         },
       },
@@ -455,6 +509,8 @@ const googleAuth = async (req, res) => {
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
 
+    const authz = await resolveAuthorizationContext(user);
+
     return res.json({
       success: true,
       message: "Đăng nhập Google thành công",
@@ -466,6 +522,11 @@ const googleAuth = async (req, res) => {
           full_name: user.full_name,
           avatar: user.avatar || user.avatar_url || picture,
           role: user.role || "student",
+          is_vip: isVipActive(user),
+          vip_expires_at: user.vip_expires_at || null,
+          roles: authz.roles,
+          permissions: authz.permissions,
+          created_at: user.created_at,
         },
         token,
         refreshToken,

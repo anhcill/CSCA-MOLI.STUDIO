@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
+import { hasPermission } from '@/lib/utils/permissions';
 import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiCheckCircle, FiXCircle, FiImage } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 
 interface Answer {
     id: number;
@@ -35,6 +37,8 @@ interface Exam {
     total_questions: number;
     status: string;
     description?: string;
+    allow_download: boolean;
+    is_premium?: boolean;
 }
 
 export default function AdminExamDetailPage() {
@@ -47,7 +51,8 @@ export default function AdminExamDetailPage() {
     const [deleting, setDeleting] = useState<number | null>(null);
 
     useEffect(() => {
-        if (!isAuthenticated || user?.role !== 'admin') {
+        const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+        if (!_token && (!isAuthenticated || !hasPermission(user, 'exams.manage'))) {
             router.push('/');
             return;
         }
@@ -98,6 +103,28 @@ export default function AdminExamDetailPage() {
             router.push('/admin/exams');
         } catch (error: any) {
             alert('Lỗi xóa đề thi: ' + (error.response?.data?.message || ''));
+        }
+    };
+
+    const handleToggleDownload = async () => {
+        if (!exam) return;
+        try {
+            const newVal = !exam.allow_download;
+            await examAdminApi.updateExam(Number(id), { allow_download: newVal });
+            setExam({ ...exam, allow_download: newVal });
+        } catch {
+            alert('Lỗi cập nhật quyền tải');
+        }
+    };
+
+    const handleTogglePremium = async () => {
+        if (!exam) return;
+        try {
+            const newVal = !exam.is_premium;
+            await examAdminApi.updateExam(Number(id), { is_premium: newVal });
+            setExam({ ...exam, is_premium: newVal });
+        } catch {
+            alert('Lỗi cập nhật VIP');
         }
     };
 
@@ -182,6 +209,46 @@ export default function AdminExamDetailPage() {
                     {exam.description && (
                         <p className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-600">{exam.description}</p>
                     )}
+                    {/* Download toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700">Cho phép tải PDF</p>
+                            <p className="text-xs text-gray-400">Thí sinh có thể in / tải đề thi này về máy</p>
+                        </div>
+                        <button
+                            onClick={handleToggleDownload}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.allow_download ? 'bg-green-500' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.allow_download ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
+                    </div>
+
+                    {/* VIP / Premium toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-gray-700">Nội dung VIP</p>
+                                <p className="text-xs text-gray-400">Chỉ thành viên PRO mới được làm bài thi này</p>
+                            </div>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-md">
+                                <FaCrown /> PRO
+                            </span>
+                        </div>
+                        <button
+                            onClick={handleTogglePremium}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Questions */}

@@ -1,18 +1,43 @@
 const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
-const { authenticate, authorize } = require("../middleware/authMiddleware");
+const {
+	authenticate,
+	authorizePermission,
+} = require("../middleware/authMiddleware");
 
-// All admin routes require authentication AND admin role
+// All admin routes require authentication
 router.use(authenticate);
-router.use(authorize("admin"));
 
 // Dashboard
-router.get("/stats", adminController.getDashboardStats);
+router.get(
+	"/stats",
+	authorizePermission("admin.dashboard.view"),
+	adminController.getDashboardStats,
+);
 
 // User management
-router.get("/users", adminController.getUsers);
-router.delete("/users/:userId", adminController.deleteUser);
-router.put("/users/:userId/role", adminController.updateUserRole);
+router.get("/users", authorizePermission("users.manage"), adminController.getUsers);
+router.get("/roles", authorizePermission("users.manage"), adminController.getAdminRoleOptions);
+router.delete(
+	"/users/:userId",
+	authorizePermission("users.manage"),
+	adminController.deleteUser,
+);
+router.put(
+	"/users/:userId/role",
+	authorizePermission("users.manage"),
+	adminController.updateUserRole,
+);
+router.put(
+	"/users/:userId/admin-roles",
+	authorizePermission("users.manage"),
+	adminController.updateUserAdminRoles,
+);
+router.patch(
+	"/users/:userId/profile",
+	authorizePermission("users.manage"),
+	adminController.updateUserProfile,
+);
 
 module.exports = router;

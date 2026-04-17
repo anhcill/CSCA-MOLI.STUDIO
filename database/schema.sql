@@ -31,6 +31,8 @@ CREATE TABLE users (
     target_score INTEGER,
     is_verified BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
+    is_vip BOOLEAN DEFAULT false,
+    vip_expires_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -98,6 +100,7 @@ CREATE TABLE exams (
     difficulty_level VARCHAR(20) DEFAULT 'medium', -- easy, medium, hard
     instructions TEXT,
     is_published BOOLEAN DEFAULT true,
+    is_premium BOOLEAN DEFAULT false,
     created_by INTEGER REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -283,3 +286,22 @@ CREATE TRIGGER trigger_decrement_likes AFTER DELETE ON post_likes
 -- ====================================
 -- END OF SCHEMA
 -- ====================================
+
+-- ====================================
+-- TABLE: transactions (Lịch sử giao dịch)
+-- ====================================
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+    amount INTEGER NOT NULL,
+    payment_method VARCHAR(50), -- 'bank_transfer', 'momo', 'vnpay'
+    package_duration INTEGER, -- Số ngày của gói (VD: 30, 90, 365)
+    status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'completed', 'failed', 'cancelled'
+    transaction_code VARCHAR(100) UNIQUE, -- Mã giao dịch hiển thị (ví dụ: CSCA12345)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER update_transactions_updated_at BEFORE UPDATE ON transactions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+

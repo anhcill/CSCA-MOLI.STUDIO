@@ -2,12 +2,15 @@
 
 import { User } from '@/lib/api/auth';
 import { FiMail, FiCalendar, FiTarget } from 'react-icons/fi';
+import { canAccessAdminPanel } from '@/lib/utils/permissions';
 
 interface ProfileCardProps {
   user: User;
 }
 
 export default function ProfileCard({ user }: ProfileCardProps) {
+  const isAdmin = canAccessAdminPanel(user);
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN', {
@@ -62,11 +65,11 @@ export default function ProfileCard({ user }: ProfileCardProps) {
         {/* Role Badge */}
         <div className="pt-4 border-t border-gray-200">
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-            user.role === 'admin' 
+            isAdmin
               ? 'bg-red-100 text-red-800' 
               : 'bg-blue-100 text-blue-800'
           }`}>
-            {user.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}
+            {isAdmin ? 'Quản trị viên' : 'Thành viên'}
           </span>
         </div>
       </div>

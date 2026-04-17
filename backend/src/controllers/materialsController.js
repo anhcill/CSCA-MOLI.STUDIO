@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const { checkVipAccess } = require("../middleware/authMiddleware");
 
 // GET /api/materials?category=cau-truc-de&subject=toan&topic=...&limit=20&offset=0
 exports.getMaterials = async (req, res) => {
@@ -51,6 +52,7 @@ exports.createMaterial = async (req, res) => {
       category,
       subject,
       topic,
+      is_premium,
     } = req.body;
 
     if (!title || !file_url || !category) {
@@ -61,8 +63,8 @@ exports.createMaterial = async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO materials (title, description, file_url, file_type, category, subject, topic, uploaded_by, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE) RETURNING *`,
+      `INSERT INTO materials (title, description, file_url, file_type, category, subject, topic, uploaded_by, is_active, is_premium)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9) RETURNING *`,
       [
         title,
         description,
@@ -72,6 +74,7 @@ exports.createMaterial = async (req, res) => {
         subject,
         topic || null,
         req.user.id,
+        is_premium === true,
       ],
     );
 
@@ -98,11 +101,12 @@ exports.updateMaterial = async (req, res) => {
       subject,
       topic,
       is_active,
+      is_premium,
     } = req.body;
 
     const result = await db.query(
-      `UPDATE materials SET title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6, is_active=$7, updated_at=NOW()
-       WHERE id=$8 RETURNING *`,
+      `UPDATE materials SET title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6, is_active=$7, is_premium=$8, updated_at=NOW()
+       WHERE id=$9 RETURNING *`,
       [
         title,
         description,
@@ -111,6 +115,7 @@ exports.updateMaterial = async (req, res) => {
         subject,
         topic || null,
         is_active !== false,
+        is_premium === true ? true : null,
         id,
       ],
     );

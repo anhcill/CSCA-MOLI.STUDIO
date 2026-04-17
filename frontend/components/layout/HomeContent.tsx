@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -8,15 +8,16 @@ import {
   FiClock, FiCalendar, FiBell, FiCpu, FiBarChart2,
   FiShield, FiPlay,
 } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 
 // ──────────────────── DATA ────────────────────
 const SUBJECTS = [
-  { id: 'toan',          name: 'Toán',           name_cn: '数学',    href: '/mon/toan',            emoji: '📐', gradient: 'from-blue-500 to-indigo-600',   shadow: 'hover:shadow-blue-200',   light: 'bg-blue-50 border-blue-200 text-blue-700',       desc: 'Đại số · Giải tích · Hình học' },
-  { id: 'vat-ly',        name: 'Vật Lý',          name_cn: '物理',    href: '/mon/vatly',           emoji: '⚡', gradient: 'from-yellow-400 to-orange-500', shadow: 'hover:shadow-orange-200', light: 'bg-yellow-50 border-yellow-200 text-yellow-700', desc: 'Cơ học · Điện từ · Quang học' },
-  { id: 'hoa',           name: 'Hóa Học',         name_cn: '化学',    href: '/mon/hoa',             emoji: '🧪', gradient: 'from-emerald-500 to-teal-600',  shadow: 'hover:shadow-emerald-200',light: 'bg-emerald-50 border-emerald-200 text-emerald-700', desc: 'Hóa vô cơ · Hóa hữu cơ' },
-  { id: 'tiengtrung-xh', name: 'Tiếng Trung XH',  name_cn: '中文(文)', href: '/tiengtrung-xahoi',   emoji: '📖', gradient: 'from-red-500 to-rose-600',      shadow: 'hover:shadow-red-200',    light: 'bg-red-50 border-red-200 text-red-700',          desc: 'Khối xã hội · Nhân văn' },
-  { id: 'tiengtrung-tn', name: 'Tiếng Trung TN',  name_cn: '中文(理)', href: '/tiengtrung-tunhien', emoji: '🔬', gradient: 'from-violet-500 to-purple-600', shadow: 'hover:shadow-violet-200', light: 'bg-violet-50 border-violet-200 text-violet-700', desc: 'Khối tự nhiên · Kỹ thuật' },
-  { id: 'forum',         name: 'Diễn Đàn',        name_cn: '论坛',    href: '/forum',               emoji: '💬', gradient: 'from-pink-500 to-fuchsia-600',  shadow: 'hover:shadow-pink-200',   light: 'bg-pink-50 border-pink-200 text-pink-700',       desc: 'Trao đổi · Q&A cộng đồng' },
+  { id: 'toan',             name: 'Toán',           name_cn: '数学',    href: '/toan',             emoji: '📐', gradient: 'from-blue-500 to-indigo-600',   shadow: 'hover:shadow-blue-200',   light: 'bg-blue-50 border-blue-200 text-blue-700',       desc: 'Đại số · Giải tích · Hình học' },
+  { id: 'vat-ly',           name: 'Vật Lý',         name_cn: '物理',    href: '/vat-ly',           emoji: '⚡', gradient: 'from-yellow-400 to-orange-500', shadow: 'hover:shadow-orange-200', light: 'bg-yellow-50 border-yellow-200 text-yellow-700', desc: 'Cơ học · Điện từ · Quang học' },
+  { id: 'hoa',              name: 'Hóa Học',        name_cn: '化学',    href: '/hoa',             emoji: '🧪', gradient: 'from-emerald-500 to-teal-600',  shadow: 'hover:shadow-emerald-200',light: 'bg-emerald-50 border-emerald-200 text-emerald-700', desc: 'Hóa vô cơ · Hóa hữu cơ' },
+  { id: 'tieng-trung-xh',   name: 'Tiếng Trung XH',  name_cn: '中文(文)', href: '/tiengtrung-xahoi',emoji: '📖', gradient: 'from-red-500 to-rose-600',      shadow: 'hover:shadow-red-200',    light: 'bg-red-50 border-red-200 text-red-700',          desc: 'Khối xã hội · Nhân văn' },
+  { id: 'tieng-trung-tn',   name: 'Tiếng Trung TN',  name_cn: '中文(理)', href: '/tiengtrung-tunhien',emoji: '🔬', gradient: 'from-violet-500 to-purple-600', shadow: 'hover:shadow-violet-200', light: 'bg-violet-50 border-violet-200 text-violet-700', desc: 'Khối tự nhiên · Kỹ thuật' },
+  { id: 'forum',            name: 'Diễn Đàn',        name_cn: '论坛',    href: '/forum',           emoji: '💬', gradient: 'from-pink-500 to-fuchsia-600',  shadow: 'hover:shadow-pink-200',   light: 'bg-pink-50 border-pink-200 text-pink-700',       desc: 'Trao đổi · Q&A cộng đồng' },
 ];
 
 const HOT_EXAMS = [
@@ -412,6 +413,43 @@ export default function HomeContent() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── VIP ADVERTISEMENT ───────────────────────────────────── */}
+      <section className="w-full bg-slate-50 py-24 border-t border-gray-100 relative overflow-hidden">
+        {/* Luminous background blob */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-amber-200 to-orange-400 rounded-full blur-[120px] opacity-20 pointer-events-none" />
+        
+        <div className="relative max-w-6xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-amber-100 to-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-full uppercase tracking-widest mb-6 shadow-sm">
+            👑 Premium Access
+          </div>
+          <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-6 tracking-tight">
+            Nâng cấp <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600">CSCA PRO</span> ngay hôm nay
+          </h2>
+          <p className="max-w-2xl mx-auto text-gray-600 mb-10 text-lg leading-relaxed">
+            Mở khoá toàn bộ đề thi, lời giải chi tiết và chữa bài tự luận bằng AI. Đừng bỏ lỡ cơ hội bứt phá điểm số với kho tàng tài liệu độc quyền dành riêng cho thành viên VIP.
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 mb-12">
+            {[
+              { icon: FiStar, text: 'Truy cập đầy đủ kho đề thi' },
+              { icon: FiZap, text: 'Chữa bài tự luận AI' },
+              { icon: FiTrendingUp, text: 'Gia tăng 300% tỷ lệ đậu' },
+              { icon: FiUsers, text: 'Hỗ trợ ưu tiên 24/7' }
+            ].map((f, i) => (
+               <div key={i} className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl shadow-sm border border-orange-100 text-gray-700 font-bold text-sm hover:-translate-y-1 transition-transform">
+                 <f.icon className="text-orange-500" size={18} /> {f.text}
+               </div>
+            ))}
+          </div>
+
+          <Link href="/vip"
+             className="inline-flex items-center justify-center gap-3 px-10 py-5 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-1 active:scale-95 text-lg sm:text-xl"
+          >
+             <FaCrown className="text-yellow-200 animate-pulse" size={24} /> Trở Thành Thành Viên PRO
+          </Link>
         </div>
       </section>
 
