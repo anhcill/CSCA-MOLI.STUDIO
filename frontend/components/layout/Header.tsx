@@ -152,7 +152,7 @@ export default function Header() {
             </div>
 
             <button className="md:hidden p-1.5 sm:p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Tim kiem">
-              <FiSearch size={18} sm:size={20} />
+              <FiSearch size={20} />
             </button>
 
             {mounted && (!user || !user.is_vip) && (
