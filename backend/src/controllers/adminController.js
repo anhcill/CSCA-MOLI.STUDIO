@@ -1,4 +1,5 @@
 const pool = require('../config/database');
+const UserActivity = require('../models/UserActivity');
 const { invalidateAuthorizationCache } = require('../services/rbacService');
 
 const ADMIN_ROLE_CODES = [
@@ -91,6 +92,7 @@ const AdminController = {
                     u.email,
                     u.full_name,
                     u.role,
+                    u.is_active,
                     u.created_at,
                     (SELECT COUNT(*) FROM exam_attempts WHERE user_id = u.id) AS total_attempts,
                     COALESCE(
@@ -103,7 +105,7 @@ const AdminController = {
                 FROM users u
                 LEFT JOIN user_roles ur ON ur.user_id = u.id
                 LEFT JOIN roles r ON r.id = ur.role_id
-                GROUP BY u.id, u.email, u.full_name, u.role, u.created_at
+                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
                 ORDER BY u.created_at DESC
                 LIMIT $1 OFFSET $2
             `;
@@ -154,6 +156,12 @@ const AdminController = {
             if (parseInt(userId) === req.user.id) {
                 return res.status(400).json({ message: 'Cannot delete your own account' });
             }
+
+            // Log trước khi xóa (user_id sẽ mất sau khi DELETE)
+            await UserActivity.log(req.user.id, 'admin.delete_user', {
+                deletedUserId: userId,
+                performedBy: req.user.full_name,
+            });
 
             await pool.query('DELETE FROM users WHERE id = $1', [userId]);
 
@@ -461,6 +469,81 @@ const AdminController = {
             res.json({ success: true, message: 'Cập nhật user thành công', data: result.rows[0] });
         } catch (error) {
             console.error('Error updating user profile:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    // Block / Unblock user
+    async updateUserStatus(req, res) {
+        try {
+            const { userId } = req.params;
+            const { status } = req.body; // 'active' | 'blocked'
+            const normalizedUserId = Number.parseInt(userId, 10);
+
+            if (normalizedUserId === req.user.id) {
+                return res.status(400).json({ message: 'Không thể khóa/mở khóa chính mình' });
+            }
+
+            if (!['active', 'blocked'].includes(status)) {
+                return res.status(400).json({ message: 'status phải là "active" hoặc "blocked"' });
+            }
+
+            const isActive = status === 'active';
+
+            const result = await pool.query(
+                `UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2 RETURNING id, full_name, is_active`,
+                [isActive, normalizedUserId]
+            );
+
+            if (result.rowCount === 0) {
+                return res.status(404).json({ message: 'User không tồn tại' });
+            }
+
+            // Log hành vi
+            await UserActivity.log(req.user.id, 'admin.change_user_status', {
+                targetUserId: normalizedUserId,
+                newStatus: status,
+                performedBy: req.user.full_name,
+            });
+
+            invalidateAuthorizationCache(normalizedUserId);
+
+            res.json({
+                success: true,
+                message: isActive ? 'Đã mở khóa user' : 'Đã khóa user',
+                data: result.rows[0],
+            });
+        } catch (error) {
+            console.error('Error updating user status:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    // Lấy log hành vi của một user
+    async getUserActivities(req, res) {
+        try {
+            const { userId } = req.params;
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isInteger(parsedLimit)
+                ? Math.min(Math.max(parsedLimit, 1), 100)
+                : 50;
+            const offset = (page - 1) * limit;
+
+            const result = await UserActivity.getAll(limit, offset, { userId: Number(userId) });
+
+            res.json({
+                activities: result.activities,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(result.total / limit),
+                    totalActivities: result.total,
+                    limit,
+                },
+            });
+        } catch (error) {
+            console.error('Error getting user activities:', error);
             res.status(500).json({ message: 'Server error' });
         }
     }

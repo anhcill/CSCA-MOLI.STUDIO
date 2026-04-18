@@ -1,5 +1,6 @@
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
+const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
 const { checkVipAccess } = require("../middleware/authMiddleware");
 
@@ -205,6 +206,13 @@ const examController = {
 
       const attempt = await ExamAttempt.start(userId, parsedId);
 
+      // Log hành vi bắt đầu thi
+      UserActivity.log(userId, 'exam_start', {
+        examId: parsedId,
+        examTitle: exam.title,
+        attemptId: attempt.id,
+      });
+
       res.json({
         success: true,
         message: "Bắt đầu làm bài",
@@ -263,6 +271,14 @@ const examController = {
       console.log('Submit exam request:', { attemptId });
 
       const result = await ExamAttempt.submit(attemptId);
+
+      // Log hành vi nộp bài
+      UserActivity.log(req.user.id, 'exam_submit', {
+        examId: result.exam_id,
+        attemptId: parseInt(attemptId),
+        score: result.total_score,
+        status: result.status,
+      });
 
       res.json({
         success: true,

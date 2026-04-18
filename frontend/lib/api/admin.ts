@@ -44,5 +44,19 @@ export const adminApi = {
     async updateUserAdminRoles(userId: number, roleCodes: string[]) {
         const response = await axios.put(`/admin/users/${userId}/admin-roles`, { roleCodes });
         return response.data;
+    },
+
+    // Block / Unblock user
+    async updateUserStatus(userId: number, status: 'active' | 'blocked') {
+        const response = await axios.put(`/admin/users/${userId}/status`, { status });
+        return response.data;
+    },
+
+    // Get user activity logs
+    async getUserActivities(userId: number, page = 1, limit = 50) {
+        const response = await axios.get(`/admin/users/${userId}/activities`, {
+            params: { page, limit }
+        });
+        return response.data;
     }
 };

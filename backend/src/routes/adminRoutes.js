@@ -18,7 +18,9 @@ router.get(
 
 // User management
 router.get("/users", authorizePermission("users.manage"), adminController.getUsers);
+router.get("/users/:userId/activities", authorizePermission("users.manage"), adminController.getUserActivities);
 router.get("/roles", authorizePermission("users.manage"), adminController.getAdminRoleOptions);
+router.put("/users/:userId/status", authorizePermission("users.manage"), adminController.updateUserStatus);
 router.delete(
 	"/users/:userId",
 	authorizePermission("users.manage"),

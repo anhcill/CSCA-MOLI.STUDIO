@@ -8,7 +8,8 @@ import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import {
   FiUsers, FiTrash2, FiChevronLeft, FiChevronRight,
-  FiSearch, FiEdit2, FiX, FiCheck, FiStar, FiShield
+  FiSearch, FiEdit2, FiX, FiCheck, FiStar, FiShield,
+  FiEye, FiLock, FiUnlock, FiActivity
 } from 'react-icons/fi';
 
 interface User {
@@ -21,11 +22,145 @@ interface User {
   created_at: string;
   total_attempts: number;
   is_vip?: boolean;
+  is_active?: boolean;
   vip_expires_at?: string | null;
   subscription_tier?: string;
 }
 
 interface Pagination { currentPage: number; totalPages: number; totalUsers: number; limit: number; }
+interface UserActivity {
+  id: number;
+  user_id: number;
+  action: string;
+  metadata: Record<string, any>;
+  ip_address: string | null;
+  created_at: string;
+  user_name?: string;
+  user_email?: string;
+}
+
+interface ActivityPagination { currentPage: number; totalPages: number; totalActivities: number; limit: number; }
+
+// ── Activity Log Modal ──────────────────────────────────────────────────────────
+function ActivityLogModal({ user, activities, pagination, loading, onClose, onLoadMore }: {
+  user: User;
+  activities: UserActivity[];
+  pagination: ActivityPagination;
+  loading: boolean;
+  onClose: () => void;
+  onLoadMore: (page: number) => void;
+}) {
+  const actionLabel: Record<string, string> = {
+    login: 'Đăng nhập',
+    logout: 'Đăng xuất',
+    register: 'Đăng ký',
+    google_login: 'Đăng nhập Google',
+    exam_start: 'Bắt đầu thi',
+    exam_submit: 'Nộp bài thi',
+    'admin.change_user_status': 'Admin đổi trạng thái',
+    'admin.delete_user': 'Admin xóa user',
+  };
+
+  const actionColor: Record<string, string> = {
+    login: 'bg-blue-100 text-blue-700',
+    logout: 'bg-gray-100 text-gray-600',
+    register: 'bg-green-100 text-green-700',
+    google_login: 'bg-red-100 text-red-700',
+    exam_start: 'bg-yellow-100 text-yellow-700',
+    exam_submit: 'bg-purple-100 text-purple-700',
+    'admin.change_user_status': 'bg-orange-100 text-orange-700',
+    'admin.delete_user': 'bg-red-100 text-red-700',
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center text-white font-bold">
+              {user.full_name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900 text-sm">Lịch sử hành vi — {user.full_name}</h2>
+              <p className="text-xs text-gray-400">{pagination.totalActivities} hoạt động</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500 transition-colors">
+            <FiX size={18} />
+          </button>
+        </div>
+
+        {/* Activity List */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <FiActivity className="mx-auto mb-3 opacity-50" size={32} />
+              <p>Chưa có hoạt động nào được ghi nhận</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <div className={`mt-0.5 px-2.5 py-1 rounded-lg text-xs font-semibold flex-shrink-0 ${actionColor[activity.action] || 'bg-gray-100 text-gray-600'}`}>
+                    {actionLabel[activity.action] || activity.action}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {activity.action === 'exam_submit' && activity.metadata?.score !== undefined && (
+                      <p className="text-sm text-gray-700">
+                        Nộp bài — Điểm: <span className="font-bold">{activity.metadata.score}</span>
+                        {activity.metadata.examTitle && <span className="text-gray-500"> — {activity.metadata.examTitle}</span>}
+                      </p>
+                    )}
+                    {activity.action === 'admin.change_user_status' && (
+                      <p className="text-sm text-gray-700">
+                        Admin <span className="font-semibold">{activity.metadata.performedBy}</span> đổi trạng thái thành <span className="font-semibold">{activity.metadata.newStatus === 'active' ? 'hoạt động' : 'bị khóa'}</span>
+                      </p>
+                    )}
+                    {(activity.action === 'login' || activity.action === 'logout' || activity.action === 'register' || activity.action === 'google_login') && (
+                      <p className="text-sm text-gray-700">
+                        {activity.ip_address && <span className="text-gray-400 text-xs">IP: {activity.ip_address}</span>}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(activity.created_at).toLocaleString('vi-VN')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 px-6 pb-4 flex-shrink-0 border-t border-gray-100 pt-3">
+            <button
+              onClick={() => onLoadMore(pagination.currentPage - 1)}
+              disabled={pagination.currentPage === 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              <FiChevronLeft size={16} />
+            </button>
+            <span className="px-3 py-1.5 bg-purple-600 text-white rounded-lg font-semibold text-sm">{pagination.currentPage}</span>
+            <button
+              onClick={() => onLoadMore(pagination.currentPage + 1)}
+              disabled={pagination.currentPage >= pagination.totalPages}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              <FiChevronRight size={16} />
+            </button>
+            <span className="text-xs text-gray-400 ml-2">{pagination.totalActivities} tổng</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Edit Modal ──────────────────────────────────────────────────────────────
 function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
@@ -209,6 +344,11 @@ export default function UsersPage() {
   const [changingRoleUserId, setChangingRoleUserId] = useState<number | null>(null);
   const [changingTaskUserId, setChangingTaskUserId] = useState<number | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [viewingActivitiesUser, setViewingActivitiesUser] = useState<User | null>(null);
+  const [activities, setActivities] = useState<UserActivity[]>([]);
+  const [activitiesPagination, setActivitiesPagination] = useState<ActivityPagination>({ currentPage: 1, totalPages: 1, totalActivities: 0, limit: 50 });
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [changingStatusUserId, setChangingStatusUserId] = useState<number | null>(null);
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -252,6 +392,33 @@ export default function UsersPage() {
     finally { setChangingTaskUserId(null); }
   };
 
+  const handleToggleStatus = async (userId: number, currentStatus: boolean) => {
+    const newStatus = currentStatus ? 'blocked' : 'active';
+    const action = currentStatus ? 'khóa' : 'mở khóa';
+    if (!confirm(`Bạn có chắc muốn ${action} user này?`)) return;
+    try {
+      setChangingStatusUserId(userId);
+      await adminApi.updateUserStatus(userId, newStatus as any);
+      loadUsers();
+    } catch (error: any) { alert(error.response?.data?.message || `${action} thất bại`); }
+    finally { setChangingStatusUserId(null); }
+  };
+
+  const loadActivities = async (userId: number, page = 1) => {
+    try {
+      setLoadingActivities(true);
+      const data = await adminApi.getUserActivities(userId, page, 50);
+      setActivities(data.activities);
+      setActivitiesPagination(data.pagination);
+    } catch (error) { console.error(error); }
+    finally { setLoadingActivities(false); }
+  };
+
+  const openActivities = (user: User) => {
+    setViewingActivitiesUser(user);
+    loadActivities(user.id, 1);
+  };
+
   const getRoleOptionLabel = (code: string) => {
     return roleOptions.find(opt => opt.code === code)?.name || code;
   };
@@ -278,13 +445,23 @@ export default function UsersPage() {
       {editingUser && (
         <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSaved={loadUsers} />
       )}
+      {viewingActivitiesUser && (
+        <ActivityLogModal
+          user={viewingActivitiesUser}
+          activities={activities}
+          pagination={activitiesPagination}
+          loading={loadingActivities}
+          onClose={() => setViewingActivitiesUser(null)}
+          onLoadMore={(page) => loadActivities(viewingActivitiesUser.id, page)}
+        />
+      )}
 
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Quản lý Users</h1>
-              <p className="text-gray-500 mt-0.5 text-sm">Tổng {pagination.totalUsers} người dùng — click ✏️ để chỉnh sửa thông tin & gói tài khoản</p>
+              <p className="text-gray-500 mt-0.5 text-sm">Tổng {pagination.totalUsers} người dùng — 🔒 khóa/mở khóa | 📋 xem log hành vi | ✏️ chỉnh sửa thông tin</p>
             </div>
             <button onClick={() => router.push('/admin')} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-semibold text-sm">← Dashboard</button>
           </div>
@@ -312,7 +489,7 @@ export default function UsersPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['ID', 'Tên', 'Email', 'Gói TK', 'Role', 'Nhiệm vụ Admin', 'Lượt thi', 'Ngày tạo', 'Hành động'].map(h => (
+                  {['ID', 'Tên', 'Email', 'Gói TK', 'Trạng thái', 'Role', 'Nhiệm vụ Admin', 'Lượt thi', 'Ngày tạo', 'Hành động'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -331,6 +508,15 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{user.email}</td>
                     <td className="px-4 py-3 whitespace-nowrap">{getTierBadge(user)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                        user.is_active !== false
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {user.is_active !== false ? 'Hoạt động' : 'Bị khóa'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <select
                         value={user.role}
@@ -388,6 +574,28 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openActivities(user)}
+                          className="p-1.5 text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"
+                          title="Xem lịch sử hành vi"
+                        >
+                          <FiActivity size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(user.id, user.is_active !== false)}
+                          disabled={user.id === currentUser?.id || changingStatusUserId === user.id}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            user.is_active !== false
+                              ? 'text-amber-600 hover:bg-amber-50'
+                              : 'text-emerald-600 hover:bg-emerald-50'
+                          } ${user.id === currentUser?.id || changingStatusUserId === user.id ? 'opacity-30 cursor-not-allowed' : ''}`}
+                          title={user.is_active !== false ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                        >
+                          {changingStatusUserId === user.id
+                            ? <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-current border-t-transparent" />
+                            : (user.is_active !== false ? <FiLock size={15} /> : <FiUnlock size={15} />)
+                          }
+                        </button>
                         <button
                           onClick={() => setEditingUser(user)}
                           className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"

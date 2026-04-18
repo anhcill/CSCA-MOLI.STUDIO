@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const User = require("../models/User");
+const UserActivity = require("../models/UserActivity");
 const { OAuth2Client } = require("google-auth-library");
 const emailService = require("../services/emailService");
 const db = require("../config/database");
@@ -195,6 +196,12 @@ const register = async (req, res) => {
       .sendVerificationEmail(email, user.full_name || username, verifyUrl)
       .catch(() => {});
 
+    // Log hành vi đăng ký
+    UserActivity.log(user.id, 'register', {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+    });
+
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
 
@@ -285,6 +292,12 @@ const login = async (req, res) => {
     // Success - clear attempts
     clearAttempts(email);
 
+    // Log hành vi đăng nhập
+    UserActivity.log(user.id, 'login', {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+    });
+
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
 
@@ -373,6 +386,15 @@ const getCurrentUser = async (req, res) => {
 const logout = async (req, res) => {
   try {
     const { jti, exp, id } = req.user || {};
+
+    // Log hành vi đăng xuất
+    if (id) {
+      UserActivity.log(id, 'logout', {
+        ip: req.ip || req.connection?.remoteAddress,
+        userAgent: req.get('User-Agent'),
+      });
+    }
+
     if (jti && exp) {
       const expiresAt = new Date(exp * 1000);
       // Add token to blacklist
@@ -505,6 +527,12 @@ const googleAuth = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
     }
+
+    // Log hành vi đăng nhập Google
+    UserActivity.log(user.id, 'google_login', {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+    });
 
     const token = generateToken(buildTokenPayload(user));
     const refreshToken = generateRefreshToken({ id: user.id });
