@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw } from 'react-icons/fi';
+import { examApi } from '@/lib/api/exams';
 
 interface ExamResult {
   id: number;
@@ -44,22 +45,16 @@ function ExamResultContent() {
   const fetchResult = async () => {
     try {
       setLoading(true);
-      const token = sessionStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/attempts/${attemptId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch result');
-      }
-
-      const data = await response.json();
-      setResult(data.data);
-    } catch (error) {
+      const data = await examApi.getAttemptDetail(Number(attemptId));
+      setResult(data);
+    } catch (error: any) {
       console.error('Error fetching result:', error);
-      alert('Không thể tải kết quả bài thi!');
+      if (error?.response?.status === 401) {
+        alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+        router.push('/login');
+      } else {
+        alert('Không thể tải kết quả bài thi!');
+      }
     } finally {
       setLoading(false);
     }
