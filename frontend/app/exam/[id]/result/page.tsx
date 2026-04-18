@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw } from 'react-icons/fi';
-import { examApi } from '@/lib/api/exams';
+import examApi from '@/lib/api/exams';
 
 interface ExamResult {
   id: number;
