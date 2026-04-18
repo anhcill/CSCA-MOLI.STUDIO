@@ -62,6 +62,7 @@ const QUICK_STATS = [
 export default function Banner() {
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [isTouch, setIsTouch] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startTimer = () => {
@@ -74,6 +75,19 @@ export default function Banner() {
     startTimer();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
+
+  // Detect touch device — always show arrows on touch screens
+  useEffect(() => {
+    const isTouchDevice = () => window.matchMedia('(pointer: coarse)').matches;
+    setIsTouch(isTouchDevice());
+
+    const onChange = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    const mq = window.matchMedia('(pointer: coarse)');
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const showArrows = isHovered || isTouch;
 
   const go = (dir: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -135,7 +149,7 @@ export default function Banner() {
               </div>
 
               {/* Title */}
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4 md:mb-5 leading-tight tracking-tight">
+              <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4 md:mb-5 leading-tight tracking-tight">
                 {slides[current].title}
               </h1>
 
@@ -162,7 +176,7 @@ export default function Banner() {
             </div>
 
             {/* Right: Glassmorphism info card */}
-            <div className="lg:col-span-5 hidden lg:flex justify-end">
+            <div className="lg:col-span-5 hidden md:flex justify-end">
               <div className="bg-white/10 backdrop-blur-xl border border-white/25 rounded-3xl p-7 w-80 shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center gap-3 mb-6">
@@ -227,15 +241,15 @@ export default function Banner() {
       {/* ── Nav arrows ── */}
       <button
         onClick={() => go(-1)}
-        className={`absolute left-5 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/15 backdrop-blur-md border border-white/30 hover:bg-white/30 rounded-full flex items-center justify-center transition-all z-20 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/15 backdrop-blur-md border border-white/30 hover:bg-white/30 rounded-full flex items-center justify-center transition-all z-20 ${showArrows ? 'opacity-100' : 'opacity-0'}`}
       >
-        <FiChevronLeft className="text-white" size={24} />
+        <FiChevronLeft className="text-white" size={22} />
       </button>
       <button
         onClick={() => go(1)}
-        className={`absolute right-5 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/15 backdrop-blur-md border border-white/30 hover:bg-white/30 rounded-full flex items-center justify-center transition-all z-20 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 bg-white/15 backdrop-blur-md border border-white/30 hover:bg-white/30 rounded-full flex items-center justify-center transition-all z-20 ${showArrows ? 'opacity-100' : 'opacity-0'}`}
       >
-        <FiChevronRight className="text-white" size={24} />
+        <FiChevronRight className="text-white" size={22} />
       </button>
 
       {/* ── Bottom: Dots + counter ── */}

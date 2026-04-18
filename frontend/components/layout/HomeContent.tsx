@@ -92,7 +92,7 @@ function CountdownUnit({ value, label }: { value: number | null; label: string }
       <div className="relative">
         <div className="absolute inset-0 bg-indigo-400/20 rounded-2xl blur-md" />
         <div
-          className="relative w-20 h-20 md:w-24 md:h-24 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center text-4xl md:text-5xl font-black text-white shadow-lg"
+          className="relative w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl font-black text-white shadow-lg"
           suppressHydrationWarning
         >
           {value === null ? '--' : String(value).padStart(2, '0')}
@@ -134,14 +134,14 @@ export default function HomeContent() {
     <>
       {/* ── STATS BAR ─────────────────────────────────────────── */}
       <section className="w-full bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {STATS_FALLBACK.map(s => (
             <div key={s.label} className="flex items-center gap-3">
               <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${s.bg} flex items-center justify-center text-white shrink-0 shadow-sm`}>
                 <s.icon size={20} />
               </div>
               <div>
-                <p className="font-black text-gray-900 text-xl leading-tight">
+                <p className="font-black text-gray-900 text-lg sm:text-xl leading-tight">
                   {s.format(stats[s.key])}
                 </p>
                 <p className="text-xs text-gray-500">{s.label}</p>
@@ -238,13 +238,13 @@ export default function HomeContent() {
           <h2 className="text-4xl font-black text-white mb-3">Thời gian còn lại đến ngày thi</h2>
           <p className="text-white/60 mb-10 text-lg">Đừng để thời gian trôi qua — bắt đầu ôn tập ngay hôm nay</p>
 
-          <div className="flex items-center justify-center gap-4 md:gap-8 mb-10">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 md:gap-8 mb-10">
             <CountdownUnit value={countdown?.days ?? null} label="Ngày" />
-            <span className="text-white/40 text-4xl font-light mb-6">:</span>
+            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
             <CountdownUnit value={countdown?.hours ?? null} label="Giờ" />
-            <span className="text-white/40 text-4xl font-light mb-6">:</span>
+            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
             <CountdownUnit value={countdown?.minutes ?? null} label="Phút" />
-            <span className="text-white/40 text-4xl font-light mb-6">:</span>
+            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
             <CountdownUnit value={countdown?.seconds ?? null} label="Giây" />
           </div>
 
@@ -446,9 +446,9 @@ export default function HomeContent() {
           </div>
 
           <Link href="/vip"
-             className="inline-flex items-center justify-center gap-3 px-10 py-5 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-1 active:scale-95 text-lg sm:text-xl"
+             className="inline-flex items-center justify-center gap-2 sm:gap-3 px-5 sm:px-8 md:px-10 py-4 sm:py-5 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-1 active:scale-95 text-base sm:text-lg md:text-xl"
           >
-             <FaCrown className="text-yellow-200 animate-pulse" size={24} /> Trở Thành Thành Viên PRO
+             <FaCrown className="text-yellow-200 animate-pulse" size={20} sm:size={24} /> <span className="hidden xs:inline">Trở Thành</span> Viên PRO
           </Link>
         </div>
       </section>

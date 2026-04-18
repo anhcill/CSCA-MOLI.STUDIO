@@ -145,14 +145,14 @@ export default function Header() {
           </nav>
 
           {/* ── RIGHT ACTIONS ── */}
-          <div className="flex items-center justify-end gap-3 flex-shrink-0 min-w-[300px]">
+          <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-3 flex-shrink min-w-0">
             {/* Search Bar - Hidden on very small screens, visible on md upwards */}
-            <div className="hidden md:block w-48 lg:w-60">
+            <div className="hidden md:block w-48 lg:w-60 flex-shrink-0">
               <SearchBar />
             </div>
 
-            <button className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Tim kiem">
-              <FiSearch size={20} />
+            <button className="md:hidden p-1.5 sm:p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Tim kiem">
+              <FiSearch size={18} sm:size={20} />
             </button>
 
             {mounted && (!user || !user.is_vip) && (

@@ -48,13 +48,13 @@ const SOCIALS = [
 ];
 
 export default function Footer() {
-  const year = 2025;
+  const year = new Date().getFullYear();
 
   return (
     <footer className="bg-gray-950 text-gray-400">
       {/* Main footer */}
       <div className="max-w-6xl mx-auto px-6 pt-14 pb-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 lg:gap-10">
           {/* Brand */}
           <div className="lg:col-span-1">
             <Link href="/" className="text-2xl font-black text-white flex items-center gap-2 mb-3">
