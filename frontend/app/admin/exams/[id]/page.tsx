@@ -42,6 +42,7 @@ interface Exam {
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
+    vip_tier?: string;
 }
 
 export default function AdminExamDetailPage() {
@@ -122,17 +123,6 @@ export default function AdminExamDetailPage() {
         }
     };
 
-    const handleTogglePremium = async () => {
-        if (!exam) return;
-        try {
-            const newVal = !exam.is_premium;
-            await examAdminApi.updateExam(Number(id), { is_premium: newVal });
-            setExam({ ...exam, is_premium: newVal });
-        } catch {
-            alert('Lỗi cập nhật VIP');
-        }
-    };
-
     const handleSaveVideo = async () => {
         if (!exam) return;
         try {
@@ -154,6 +144,16 @@ export default function AdminExamDetailPage() {
             setExam({ ...exam, shuffle_mode: newVal });
         } catch {
             alert('Lỗi cập nhật shuffle');
+        }
+    };
+
+    const handleSetVipTier = async (tier: string) => {
+        if (!exam) return;
+        try {
+            await examAdminApi.updateExam(Number(id), { vip_tier: tier });
+            setExam({ ...exam, vip_tier: tier });
+        } catch {
+            alert('Lỗi cập nhật phân loại VIP');
         }
     };
 
@@ -263,27 +263,40 @@ export default function AdminExamDetailPage() {
                         </button>
                     </div>
 
-                    {/* VIP / Premium toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div>
-                                <p className="text-sm font-semibold text-gray-700">Nội dung VIP</p>
-                                <p className="text-xs text-gray-400">Chỉ thành viên PRO mới được làm bài thi này</p>
-                            </div>
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-md">
-                                <FaCrown /> PRO
-                            </span>
+                    {/* VIP Tier selector */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">Phân loại nội dung</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { value: 'basic', label: 'Miễn phí', desc: 'Mọi người', color: 'gray' },
+                                { value: 'vip_thong_minh', label: 'VIP Thông minh', desc: 'Thông minh', color: 'blue' },
+                                { value: 'vip_pro', label: 'VIP Pro', desc: 'PRO', color: 'purple' },
+                            ].map(tier => (
+                                <button key={tier.value}
+                                    onClick={() => handleSetVipTier(tier.value)}
+                                    className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
+                                        exam.vip_tier === tier.value
+                                            ? tier.color === 'purple' ? 'border-purple-500 bg-purple-50' :
+                                              tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
+                                              'border-gray-500 bg-gray-100'
+                                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                                    }`}>
+                                    <p className={`text-xs font-bold ${exam.vip_tier === tier.value ? 'text-gray-900' : 'text-gray-600'}`}>
+                                        {tier.label}
+                                    </p>
+                                    {exam.vip_tier === tier.value && (
+                                        <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
+                                            tier.color === 'purple' ? 'bg-purple-500' :
+                                            tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                        }`}>
+                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
                         </div>
-                        <button
-                            onClick={handleTogglePremium}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
-                            }`}
-                        >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
-                        </button>
                     </div>
 
                     {/* Video URL */}
@@ -331,28 +344,6 @@ export default function AdminExamDetailPage() {
                         </button>
                     </div>
 
-                    {/* VIP toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div>
-                                <p className="text-sm font-semibold text-gray-700">Nội dung VIP</p>
-                                <p className="text-xs text-gray-400">Chỉ thành viên PRO mới được làm bài thi này</p>
-                            </div>
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-md">
-                                <FaCrown /> PRO
-                            </span>
-                        </div>
-                        <button
-                            onClick={handleTogglePremium}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
-                            }`}
-                        >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
-                        </button>
-                    </div>
                 </div>
 
                 {/* Questions */}

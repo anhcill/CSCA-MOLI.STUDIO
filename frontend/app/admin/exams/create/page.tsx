@@ -33,6 +33,7 @@ export default function CreateExamPage() {
         shuffle_mode: false,
         solution_video_url: '',
         solution_description: '',
+        vip_tier: 'basic',
     });
 
     const parseDecimal = (raw: string) => {
@@ -330,6 +331,43 @@ export default function CreateExamPage() {
                                 </div>
                             </label>
                             <p className="text-xs text-gray-400 mt-1 ml-14">Mỗi lần làm bài, thứ tự câu hỏi và đáp án sẽ được xáo trộn ngẫu nhiên</p>
+                        </div>
+
+                        {/* VIP Tier */}
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Phân loại nội dung</label>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
+                                    { value: 'vip_thong_minh', label: 'VIP Thông minh', desc: 'Gói VIP Thông minh', color: 'blue' },
+                                    { value: 'vip_pro', label: 'VIP Pro', desc: 'Gói VIP Pro', color: 'purple' },
+                                ].map(tier => (
+                                    <button key={tier.value}
+                                        onClick={() => setExamData({ ...examData, vip_tier: tier.value })}
+                                        className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                                            examData.vip_tier === tier.value
+                                                ? tier.color === 'purple' ? 'border-purple-500 bg-purple-50' :
+                                                  tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
+                                                  'border-gray-500 bg-gray-100'
+                                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                                        }`}>
+                                        <p className={`text-sm font-bold ${examData.vip_tier === tier.value ? 'text-gray-900' : 'text-gray-700'}`}>
+                                            {tier.label}
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-0.5">{tier.desc}</p>
+                                        {examData.vip_tier === tier.value && (
+                                            <div className={`absolute top-2 right-2 w-4 h-4 rounded-full ${
+                                                tier.color === 'purple' ? 'bg-purple-500' :
+                                                tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                            }`}>
+                                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 

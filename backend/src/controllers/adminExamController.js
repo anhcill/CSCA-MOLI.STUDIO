@@ -19,7 +19,7 @@ const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode } = req.body;
+      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -30,8 +30,8 @@ const AdminExamController = {
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10)
+        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           examCode,
@@ -44,6 +44,7 @@ const AdminExamController = {
           solution_video_url || null,
           solution_description || null,
           shuffle_mode === true,
+          vip_tier || 'basic',
         ],
       );
 
@@ -61,7 +62,7 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -80,6 +81,7 @@ const AdminExamController = {
       if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url); }
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
+      if (vip_tier !== undefined) { updates.push(`vip_tier = $${idx++}`); params.push(vip_tier); }
       updates.push(`updated_at = NOW()`);
       params.push(examId);
 

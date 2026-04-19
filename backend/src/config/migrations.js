@@ -577,7 +577,14 @@ async function runOptimizations() {
       ALTER TABLE exams
       ADD COLUMN IF NOT EXISTS solution_video_url TEXT,
       ADD COLUMN IF NOT EXISTS solution_description TEXT,
-      ADD COLUMN IF NOT EXISTS shuffle_mode BOOLEAN DEFAULT FALSE
+      ADD COLUMN IF NOT EXISTS shuffle_mode BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS vip_tier VARCHAR(20) DEFAULT 'basic'
+    `);
+
+    // VIP tier for materials
+    await pool.query(`
+      ALTER TABLE materials
+      ADD COLUMN IF NOT EXISTS vip_tier VARCHAR(20) DEFAULT 'basic'
     `);
 
     console.log(

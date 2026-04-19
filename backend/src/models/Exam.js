@@ -8,6 +8,7 @@ const Exam = {
       SELECT 
         e.*,
         s.name as subject_name,
+        s.code as subject_code,
         COALESCE(
           (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
           0
@@ -24,6 +25,7 @@ const Exam = {
       SELECT 
         e.*,
         s.name as subject_name,
+        s.code as subject_code,
         COALESCE(
           (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
           0
@@ -41,6 +43,7 @@ const Exam = {
       SELECT 
         e.*,
         s.name as subject_name,
+        s.code as subject_code,
         (SELECT COUNT(*) FROM questions WHERE exam_id = e.id) as question_count
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id

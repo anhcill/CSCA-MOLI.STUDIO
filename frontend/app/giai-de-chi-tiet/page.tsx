@@ -9,14 +9,6 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import Link from 'next/link';
 
-const SUBJECTS = [
-  { value: '', label: 'Tất cả' },
-  { value: 'toan', label: 'Toán' },
-  { value: 'tieng-trung', label: 'Tiếng Trung' },
-  { value: 'vat-ly', label: 'Vật Lý' },
-  { value: 'hoa-hoc', label: 'Hóa Học' },
-];
-
 function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: string; onClose: () => void }) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -133,35 +125,41 @@ export default function GiaiDeChiTietPage() {
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
   const [exams, setExams] = useState<Exam[]>([]);
+  const [subjects, setSubjects] = useState<{ id: number; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSubject, setActiveSubject] = useState('');
   const [search, setSearch] = useState('');
   const [playing, setPlaying] = useState<Exam | null>(null);
 
   useEffect(() => {
-    const fetchExams = async () => {
+    const fetchData = async () => {
       try {
-        const res = await axios.get('/exams/lobby');
+        const [examsRes, subjectsRes] = await Promise.all([
+          axios.get('/exams/lobby'),
+          axios.get('/subjects'),
+        ]);
         const all = [
-          ...(res.data.data?.live || []),
-          ...(res.data.data?.upcoming || []),
-          ...(res.data.data?.public || []),
+          ...(examsRes.data.data?.live || []),
+          ...(examsRes.data.data?.upcoming || []),
+          ...(examsRes.data.data?.public || []),
         ];
         setExams(all);
+        setSubjects(subjectsRes.data || []);
       } catch (err) {
-        console.error('Failed to fetch exams:', err);
+        console.error('Failed to fetch data:', err);
         setExams([]);
+        setSubjects([]);
       } finally {
         setLoading(false);
       }
     };
-    fetchExams();
+    fetchData();
   }, []);
 
   const filtered = useMemo(() => {
     return exams.filter(e => {
+      // Filter by subject_code (slug) — exact match
       const matchSubject = !activeSubject ||
-        (e.subject_name || '').toLowerCase().includes(activeSubject.toLowerCase()) ||
         (e.subject_code || '') === activeSubject;
       const q = search.toLowerCase();
       const matchSearch = !q ||
@@ -214,14 +212,22 @@ export default function GiaiDeChiTietPage() {
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
             {/* Subject tabs */}
             <div className="flex items-center gap-2 flex-wrap">
-              {SUBJECTS.map(s => (
-                <button key={s.value} onClick={() => setActiveSubject(s.value)}
+              <button onClick={() => setActiveSubject('')}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                  activeSubject === ''
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
+                }`}>
+                Tất cả
+              </button>
+              {subjects.map(s => (
+                <button key={s.code} onClick={() => setActiveSubject(s.code)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                    activeSubject === s.value
+                    activeSubject === s.code
                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
                   }`}>
-                  {s.label}
+                  {s.name}
                 </button>
               ))}
             </div>

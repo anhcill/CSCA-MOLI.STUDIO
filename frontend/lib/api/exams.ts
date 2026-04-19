@@ -21,6 +21,7 @@ export interface Exam {
   solution_video_url?: string;
   solution_description?: string;
   shuffle_mode?: boolean;
+  vip_tier?: string; // 'basic' | 'vip_thong_minh' | 'vip_pro'
 }
 
 export interface Question {
