@@ -2,9 +2,11 @@ import axios from '../utils/axios';
 
 export interface AdminRoleOption {
     code: string;
-    name: string;
-    description: string;
-    permissions: string[];
+    name?: string;
+    label?: string;
+    description?: string;
+    permissions?: string[];
+    color?: string;
 }
 
 export const adminApi = {
@@ -15,10 +17,14 @@ export const adminApi = {
     },
 
     // Get all users with pagination
-    async getUsers(page = 1, limit = 20) {
-        const response = await axios.get('/admin/users', {
-            params: { page, limit }
-        });
+    async getUsers(pageOrOptions: number | { page?: number; limit?: number; search?: string } = 1, limit = 20) {
+        let page = typeof pageOrOptions === 'object' ? (pageOrOptions.page ?? 1) : pageOrOptions;
+        let actualLimit = typeof pageOrOptions === 'object' ? (pageOrOptions.limit ?? 20) : limit;
+        let params: Record<string, unknown> = { page, limit: actualLimit };
+        if (typeof pageOrOptions === 'object' && pageOrOptions.search) {
+            params.search = pageOrOptions.search;
+        }
+        const response = await axios.get('/admin/users', { params });
         return response.data;
     },
 

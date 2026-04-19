@@ -175,6 +175,7 @@ app.use("/api/settings", require("./routes/settings")); // Site settings (exam d
 app.use("/api/ai", require("./routes/ai")); // AI Analysis
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
+app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
 
 // ====================================
 // ERROR HANDLING

@@ -175,7 +175,7 @@ export default function AdminUsersPage() {
   const handleToggleStatus = async (u: User) => {
     if (!confirm(`${u.is_active ? 'Khóa' : 'Mở khóa'} tài khoản "${u.full_name}"?`)) return;
     try {
-      await adminApi.updateUserStatus(u.id, !u.is_active);
+      await adminApi.updateUserStatus(u.id, u.is_active ? 'blocked' : 'active');
       setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: !x.is_active } : x));
     } catch { alert('Lỗi cập nhật trạng thái'); }
   };
@@ -219,7 +219,7 @@ export default function AdminUsersPage() {
       purple: 'bg-purple-100 text-purple-700', green: 'bg-green-100 text-green-700',
       orange: 'bg-orange-100 text-orange-700', cyan: 'bg-cyan-100 text-cyan-700',
     };
-    return c ? colorMap[c.color] || 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-600';
+    return c?.color ? (colorMap[c.color] || 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
   };
 
   const getRoleLabel = (code: string) => ROLE_OPTIONS.find(r => r.code === code)?.label || code;

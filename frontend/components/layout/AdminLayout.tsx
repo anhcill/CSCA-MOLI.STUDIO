@@ -8,7 +8,7 @@ import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiCrown
+  FiX, FiChevronLeft, FiChevronRight, FiLogOut
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 

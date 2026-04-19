@@ -587,6 +587,33 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS vip_tier VARCHAR(20) DEFAULT 'basic'
     `);
 
+    // VIP packages management
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vip_packages (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        duration_days INTEGER NOT NULL,
+        price INTEGER NOT NULL DEFAULT 0,
+        description TEXT,
+        features TEXT[] DEFAULT '{}',
+        is_active BOOLEAN DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default VIP packages if none exist
+    const pkgCount = await pool.query('SELECT COUNT(*)::int FROM vip_packages');
+    if (pkgCount.rows[0].count === 0) {
+      await pool.query(`
+        INSERT INTO vip_packages (name, duration_days, price, description, features, sort_order) VALUES
+        ('Gói Xem', 30, 199000, 'Truy cập nội dung lý thuyết và tài liệu VIP trong 30 ngày', ARRAY['Truy cập tài liệu VIP', 'Xem giải đề chi tiết', 'Hỗ trợ ưu tiên'], 1),
+        ('Gói Kiểm tra', 180, 499000, 'Truy cập đầy đủ trong 6 tháng - tiết kiệm 56%', ARRAY['Truy cập đề thi premium', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
+        ('Gói Làm bài', 365, 799000, 'Gói năm - truy cập toàn diện trong 12 tháng', ARRAY['Tất cả tính năng VIP', 'Thống kê học tập', 'Lộ trình cá nhân hóa', 'Hỗ trợ ưu tiên'], 3)
+      `);
+    }
+
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,
     );
