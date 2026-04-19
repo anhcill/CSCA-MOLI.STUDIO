@@ -12,6 +12,7 @@ export interface Exam {
   difficulty_level: string;
   status: string;
   subject_name: string;
+  subject_code?: string;
   question_count: number;
   user_attempt_count: number;
   user_best_score: number;
