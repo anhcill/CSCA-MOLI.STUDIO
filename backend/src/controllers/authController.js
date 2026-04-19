@@ -598,7 +598,7 @@ const googleAuth = async (req, res) => {
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
+    const token = generateToken(buildTokenPayload({ ...user, jti: googleJti, subscription_tier: user.subscription_tier || 'vip' }));
     const refreshToken = generateRefreshToken({ id: user.id });
 
     const authz = await resolveAuthorizationContext(user);

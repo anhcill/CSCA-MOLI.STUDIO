@@ -15,6 +15,9 @@ const PORT = process.env.PORT || 5000;
 // MIDDLEWARE
 // ====================================
 
+// Trust proxy (for rate limiting behind Vercel/Railway proxies)
+app.set("trust proxy", 1);
+
 // Security headers + CSP
 app.use(
   helmet({
