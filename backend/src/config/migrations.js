@@ -576,7 +576,8 @@ async function runOptimizations() {
     await pool.query(`
       ALTER TABLE exams
       ADD COLUMN IF NOT EXISTS solution_video_url TEXT,
-      ADD COLUMN IF NOT EXISTS solution_description TEXT
+      ADD COLUMN IF NOT EXISTS solution_description TEXT,
+      ADD COLUMN IF NOT EXISTS shuffle_mode BOOLEAN DEFAULT FALSE
     `);
 
     console.log(

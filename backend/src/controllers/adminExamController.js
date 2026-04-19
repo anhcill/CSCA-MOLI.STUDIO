@@ -19,7 +19,7 @@ const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description } = req.body;
+      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -30,8 +30,8 @@ const AdminExamController = {
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9)
+        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10)
          RETURNING *`,
         [
           examCode,
@@ -43,6 +43,7 @@ const AdminExamController = {
           is_premium === true,
           solution_video_url || null,
           solution_description || null,
+          shuffle_mode === true,
         ],
       );
 
@@ -60,26 +61,31 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
           : parsePositiveNumber(totalPoints, 100);
 
+      // Build dynamic update to handle shuffle_mode boolean properly
+      const updates = [];
+      const params = [];
+      let idx = 1;
+      if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(title); }
+      if (duration !== undefined) { updates.push(`duration = $${idx++}`); params.push(duration); }
+      if (parsedTotalPoints !== undefined) { updates.push(`total_points = $${idx++}`); params.push(parsedTotalPoints); }
+      if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description); }
+      if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
+      if (is_premium !== undefined) { updates.push(`is_premium = $${idx++}`); params.push(is_premium === true); }
+      if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url); }
+      if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description); }
+      if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
+      updates.push(`updated_at = NOW()`);
+      params.push(examId);
+
       const result = await pool.query(
-        `UPDATE exams
-         SET title = COALESCE($1, title),
-             duration = COALESCE($2, duration),
-             total_points = COALESCE($3, total_points),
-             description = COALESCE($4, description),
-             status = COALESCE($5, status),
-             is_premium = COALESCE($6, is_premium),
-             solution_video_url = COALESCE($7, solution_video_url),
-             solution_description = COALESCE($8, solution_description),
-             updated_at = NOW()
-         WHERE id = $9
-         RETURNING *`,
-        [title, duration, parsedTotalPoints, description, status, is_premium === true ? true : null, solution_video_url, solution_description, examId],
+        `UPDATE exams SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+        params
       );
 
       if (result.rows.length === 0) {

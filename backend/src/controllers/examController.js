@@ -213,13 +213,31 @@ const examController = {
         attemptId: attempt.id,
       });
 
+      // Shuffle questions if exam has shuffle_mode enabled
+      let questions = exam.questions || [];
+      if (exam.shuffle_mode) {
+        // Fisher-Yates shuffle
+        questions = [...questions];
+        for (let i = questions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [questions[i], questions[j]] = [questions[j], questions[i]];
+        }
+        // Also shuffle answer options for each question
+        questions = questions.map((q) => ({
+          ...q,
+          answers: q.answers
+            ? [...q.answers].sort(() => Math.random() - 0.5)
+            : [],
+        }));
+      }
+
       res.json({
         success: true,
         message: "Bắt đầu làm bài",
         data: {
           attemptId: attempt.id,
           exam: exam,
-          questions: exam.questions || [],
+          questions: questions,
         },
       });
     } catch (error) {

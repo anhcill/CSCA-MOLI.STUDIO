@@ -8,6 +8,9 @@ export interface ExamCreateData {
     description?: string;
     allow_download?: boolean;
     is_premium?: boolean;
+    solution_video_url?: string;
+    solution_description?: string;
+    shuffle_mode?: boolean;
 }
 
 export interface QuestionData {

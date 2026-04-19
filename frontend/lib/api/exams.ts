@@ -19,6 +19,7 @@ export interface Exam {
   is_premium?: boolean;
   solution_video_url?: string;
   solution_description?: string;
+  shuffle_mode?: boolean;
 }
 
 export interface Question {

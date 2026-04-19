@@ -30,6 +30,9 @@ export default function CreateExamPage() {
         totalPoints: 100,
         description: '',
         is_premium: false,
+        shuffle_mode: false,
+        solution_video_url: '',
+        solution_description: '',
     });
 
     const parseDecimal = (raw: string) => {
@@ -263,6 +266,29 @@ export default function CreateExamPage() {
                             />
                         </div>
 
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Video Giải Đề (URL)</label>
+                            <input
+                                type="url"
+                                value={examData.solution_video_url || ''}
+                                onChange={(e) => setExamData({ ...examData, solution_video_url: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="https://www.youtube.com/watch?v=..."
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Dán link YouTube để hiển thị video giải đề chi tiết</p>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Mô Tả Video</label>
+                            <textarea
+                                value={examData.solution_description || ''}
+                                onChange={(e) => setExamData({ ...examData, solution_description: e.target.value })}
+                                rows={2}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Mô tả ngắn về nội dung video..."
+                            />
+                        </div>
+
                         <div className="md:col-span-2 border-t pt-4 mt-2">
                             <label className="flex items-center gap-3 cursor-pointer select-none">
                                 <div className="relative">
@@ -282,6 +308,28 @@ export default function CreateExamPage() {
                                 </div>
                             </label>
                             <p className="text-xs text-gray-400 mt-1 ml-14">Chỉ thành viên PRO mới được làm bài thi này</p>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={examData.shuffle_mode}
+                                        onChange={(e) => setExamData({ ...examData, shuffle_mode: e.target.checked })}
+                                        className="sr-only"
+                                    />
+                                    <div className={`w-11 h-6 rounded-full transition-colors ${examData.shuffle_mode ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-300'}`} />
+                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${examData.shuffle_mode ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <svg className={`w-4 h-4 ${examData.shuffle_mode ? 'text-indigo-600' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    <span className="text-sm font-semibold text-gray-700">Chế độ xáo trộn câu hỏi</span>
+                                </div>
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1 ml-14">Mỗi lần làm bài, thứ tự câu hỏi và đáp án sẽ được xáo trộn ngẫu nhiên</p>
                         </div>
                     </div>
 

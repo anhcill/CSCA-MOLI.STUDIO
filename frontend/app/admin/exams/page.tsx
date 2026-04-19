@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Exam {
@@ -21,6 +21,9 @@ interface Exam {
     attempts_count: number;
     created_at: string;
     is_premium?: boolean;
+    solution_video_url?: string;
+    solution_description?: string;
+    shuffle_mode?: boolean;
 }
 
 interface Pagination {
@@ -196,13 +199,20 @@ export default function ExamsPage() {
                                             </select>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {exam.is_premium ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
-                                                    <FaCrown /> PRO
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs text-gray-400 font-medium">Miễn phí</span>
-                                            )}
+                                            <div className="flex items-center gap-1.5">
+                                                {exam.shuffle_mode && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">
+                                                        <FiShuffle size={10} /> Shuffle
+                                                    </span>
+                                                )}
+                                                {exam.is_premium ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
+                                                        <FaCrown /> PRO
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 font-medium">Free</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm flex gap-2 justify-end">
                                             <Link

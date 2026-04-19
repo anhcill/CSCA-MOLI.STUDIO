@@ -39,6 +39,9 @@ interface Exam {
     description?: string;
     allow_download: boolean;
     is_premium?: boolean;
+    solution_video_url?: string;
+    solution_description?: string;
+    shuffle_mode?: boolean;
 }
 
 export default function AdminExamDetailPage() {
@@ -49,6 +52,8 @@ export default function AdminExamDetailPage() {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<number | null>(null);
+    const [videoUrl, setVideoUrl] = useState('');
+    const [solutionDesc, setSolutionDesc] = useState('');
 
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -127,6 +132,37 @@ export default function AdminExamDetailPage() {
             alert('Lỗi cập nhật VIP');
         }
     };
+
+    const handleSaveVideo = async () => {
+        if (!exam) return;
+        try {
+            await examAdminApi.updateExam(Number(id), {
+                solution_video_url: videoUrl,
+                solution_description: solutionDesc,
+            });
+            setExam({ ...exam, solution_video_url: videoUrl, solution_description: solutionDesc });
+        } catch {
+            alert('Lỗi lưu video');
+        }
+    };
+
+    const handleToggleShuffle = async () => {
+        if (!exam) return;
+        try {
+            const newVal = !exam.shuffle_mode;
+            await examAdminApi.updateExam(Number(id), { shuffle_mode: newVal });
+            setExam({ ...exam, shuffle_mode: newVal });
+        } catch {
+            alert('Lỗi cập nhật shuffle');
+        }
+    };
+
+    useEffect(() => {
+        if (exam) {
+            setVideoUrl(exam.solution_video_url || '');
+            setSolutionDesc(exam.solution_description || '');
+        }
+    }, [exam]);
 
     if (loading) {
         return (
@@ -228,6 +264,74 @@ export default function AdminExamDetailPage() {
                     </div>
 
                     {/* VIP / Premium toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-gray-700">Nội dung VIP</p>
+                                <p className="text-xs text-gray-400">Chỉ thành viên PRO mới được làm bài thi này</p>
+                            </div>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-md">
+                                <FaCrown /> PRO
+                            </span>
+                        </div>
+                        <button
+                            onClick={handleTogglePremium}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
+                    </div>
+
+                    {/* Video URL */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Video Giải Đề (URL)</label>
+                        <input
+                            type="url"
+                            value={videoUrl}
+                            onChange={(e) => setVideoUrl(e.target.value)}
+                            onBlur={handleSaveVideo}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="https://www.youtube.com/watch?v=..."
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Dán link YouTube. Lưu tự động khi rời khỏi ô.</p>
+                    </div>
+
+                    {/* Solution description */}
+                    <div className="mt-3">
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Mô Tả Video</label>
+                        <textarea
+                            value={solutionDesc}
+                            onChange={(e) => setSolutionDesc(e.target.value)}
+                            onBlur={handleSaveVideo}
+                            rows={2}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="Mô tả ngắn về nội dung video..."
+                        />
+                    </div>
+
+                    {/* Shuffle toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700">Chế độ xáo trộn</p>
+                            <p className="text-xs text-gray-400">Xáo trộn câu hỏi và đáp án mỗi lần làm bài</p>
+                        </div>
+                        <button
+                            onClick={handleToggleShuffle}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.shuffle_mode ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.shuffle_mode ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
+                    </div>
+
+                    {/* VIP toggle */}
                     <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div>
