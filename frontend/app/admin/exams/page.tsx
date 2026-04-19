@@ -1,5 +1,6 @@
 'use client';
 
+import AdminLayout from '@/components/layout/AdminLayout';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -100,37 +101,9 @@ export default function ExamsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <header className="bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-3xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                                Quản lý Đề Thi
-                            </h1>
-                            <p className="text-gray-600 mt-1">Danh sách đề thi và tool import PDF</p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => router.push('/admin/exams/create')}
-                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:shadow-lg transition-shadow flex items-center gap-2"
-                            >
-                                <FiPlus /> Tạo Đề Thi Mới
-                            </button>
-                            <button
-                                onClick={() => router.push('/admin')}
-                                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-semibold"
-                            >
-                                ← Quay lại
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </header>
+        <AdminLayout title="Quản lý Đề Thi" description="Danh sách đề thi">
 
-            {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-6 py-8">
+            <div className="space-y-4">
                 {/* Exams Table */}
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div className="overflow-x-auto">
@@ -269,8 +242,7 @@ export default function ExamsPage() {
                         </div>
                     </div>
                 </div>
-            </main>
-
-        </div>
+            </div>
+        </AdminLayout>
     );
 }
