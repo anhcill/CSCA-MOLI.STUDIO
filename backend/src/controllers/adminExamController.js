@@ -19,7 +19,7 @@ const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      const { title, subjectId, duration, totalPoints, description, is_premium } = req.body;
+      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -30,8 +30,8 @@ const AdminExamController = {
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7)
+        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9)
          RETURNING *`,
         [
           examCode,
@@ -41,6 +41,8 @@ const AdminExamController = {
           parsedTotalPoints,
           description || "",
           is_premium === true,
+          solution_video_url || null,
+          solution_description || null,
         ],
       );
 
@@ -58,7 +60,7 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -72,10 +74,12 @@ const AdminExamController = {
              description = COALESCE($4, description),
              status = COALESCE($5, status),
              is_premium = COALESCE($6, is_premium),
+             solution_video_url = COALESCE($7, solution_video_url),
+             solution_description = COALESCE($8, solution_description),
              updated_at = NOW()
-         WHERE id = $7
+         WHERE id = $9
          RETURNING *`,
-        [title, duration, parsedTotalPoints, description, status, is_premium === true ? true : null, examId],
+        [title, duration, parsedTotalPoints, description, status, is_premium === true ? true : null, solution_video_url, solution_description, examId],
       );
 
       if (result.rows.length === 0) {

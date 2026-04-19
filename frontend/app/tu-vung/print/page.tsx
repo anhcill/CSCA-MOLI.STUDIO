@@ -117,31 +117,25 @@ function PrintContent() {
         </div>
 
         {topic ? (
-          /* Single topic — table layout */
+          /* Single topic — 4-column table */
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-3 py-2 text-left w-8">#</th>
-                <th className="border border-gray-300 px-3 py-2 text-left w-20">Chữ Hán</th>
-                <th className="border border-gray-300 px-3 py-2 text-left w-24">Pinyin</th>
-                <th className="border border-gray-300 px-3 py-2 text-left">Tiếng Việt</th>
-                <th className="border border-gray-300 px-3 py-2 text-left">Ví dụ</th>
+              <tr className="bg-cyan-600">
+                <th className="border border-gray-300 px-4 py-3 text-white font-black text-center w-16">#</th>
+                <th className="border border-gray-300 px-4 py-3 text-white font-black text-center">Tiếng Trung</th>
+                <th className="border border-gray-300 px-4 py-3 text-white font-black text-center">Pinyin</th>
+                <th className="border border-gray-300 px-4 py-3 text-white font-black text-center">Tiếng Anh</th>
+                <th className="border border-gray-300 px-4 py-3 text-white font-black text-center">Tiếng Việt</th>
               </tr>
             </thead>
             <tbody>
               {words.map((w, i) => (
-                <tr key={w.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="border border-gray-300 px-3 py-2 text-gray-400 text-xs">{i + 1}</td>
-                  <td className="border border-gray-300 px-3 py-2 font-bold text-xl text-gray-900">{w.word_cn}</td>
-                  <td className="border border-gray-300 px-3 py-2 text-blue-700 italic">{w.pinyin}</td>
-                  <td className="border border-gray-300 px-3 py-2 font-medium">
-                    {w.word_vn}
-                    {w.word_en && <span className="text-gray-400 text-xs ml-2">/ {w.word_en}</span>}
-                  </td>
-                  <td className="border border-gray-300 px-3 py-2 text-xs">
-                    {w.example_cn && <div className="text-red-700">{w.example_cn}</div>}
-                    {w.example_vn && <div className="text-gray-500 italic">{w.example_vn}</div>}
-                  </td>
+                <tr key={w.id} className={i % 2 === 0 ? 'bg-white' : 'bg-cyan-50/30'}>
+                  <td className="border border-gray-300 px-3 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                  <td className="border border-gray-300 px-4 py-2.5 text-center font-black text-2xl text-gray-900">{w.word_cn}</td>
+                  <td className="border border-gray-300 px-4 py-2.5 text-center text-cyan-700 italic font-semibold">{w.pinyin}</td>
+                  <td className="border border-gray-300 px-4 py-2.5 text-center text-gray-600 text-sm">{w.word_en || '—'}</td>
+                  <td className="border border-gray-300 px-4 py-2.5 text-center font-medium text-gray-800">{w.word_vn}</td>
                 </tr>
               ))}
             </tbody>
@@ -155,28 +149,22 @@ function PrintContent() {
               </h2>
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="bg-blue-50">
-                    <th className="border border-gray-300 px-2 py-1.5 text-left w-8 text-xs">#</th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-left w-16 text-xs">Chữ Hán</th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-left w-20 text-xs">Pinyin</th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-left text-xs">Tiếng Việt</th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-left text-xs">Ví dụ</th>
+                  <tr className="bg-cyan-600">
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center w-8">#</th>
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Tiếng Trung</th>
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Pinyin</th>
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">English</th>
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Tiếng Việt</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topicWords.map((w, i) => (
-                    <tr key={w.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="border border-gray-300 px-2 py-1.5 text-gray-400 text-xs">{i + 1}</td>
-                      <td className="border border-gray-300 px-2 py-1.5 font-bold text-lg text-gray-900">{w.word_cn}</td>
-                      <td className="border border-gray-300 px-2 py-1.5 text-blue-700 italic text-xs">{w.pinyin}</td>
-                      <td className="border border-gray-300 px-2 py-1.5 font-medium text-xs">
-                        {w.word_vn}
-                        {w.word_en && <span className="text-gray-400 ml-1">/ {w.word_en}</span>}
-                      </td>
-                      <td className="border border-gray-300 px-2 py-1.5 text-xs">
-                        {w.example_cn && <div className="text-red-700">{w.example_cn}</div>}
-                        {w.example_vn && <div className="text-gray-500 italic">{w.example_vn}</div>}
-                      </td>
+                    <tr key={w.id} className={i % 2 === 0 ? 'bg-white' : 'bg-cyan-50/30'}>
+                      <td className="border border-gray-300 px-2 py-1.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center font-black text-xl text-gray-900">{w.word_cn}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center text-cyan-700 italic text-xs">{w.pinyin}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center text-gray-500 text-xs">{w.word_en || '—'}</td>
+                      <td className="border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-800 text-xs">{w.word_vn}</td>
                     </tr>
                   ))}
                 </tbody>

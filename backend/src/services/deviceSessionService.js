@@ -47,10 +47,24 @@ class DeviceSessionService {
    * Register a new session (called on login)
    */
   static async registerSession({ userId, jti, deviceInfo, ipAddress, userAgent, expiresAt }) {
+    // If this jti already has an active session, just update it (same device re-login)
+    const existing = await db.query(
+      `SELECT id FROM user_sessions WHERE jti = $1 AND user_id = $2 AND expires_at > NOW()`,
+      [jti, userId]
+    );
+    if (existing.rows.length > 0) {
+      await db.query(
+        `UPDATE user_sessions SET last_active = NOW(), ip_address = COALESCE($1, ip_address)
+         WHERE jti = $2`,
+        [ipAddress, jti]
+      );
+      return;
+    }
+
+    // New device — check limit and evict oldest if needed
     const maxDevices = await this.getUserMaxDevices(userId);
     const currentCount = await this.getActiveSessionCount(userId);
 
-    // If at limit, remove the oldest session
     if (currentCount >= maxDevices) {
       const oldest = await db.query(
         `SELECT id FROM user_sessions

@@ -1,6 +1,6 @@
 'use client';
 
-import { FiFileText, FiBook, FiTarget, FiTrendingUp, FiLayers, FiCalendar, FiUser, FiSettings } from 'react-icons/fi';
+import { FiFileText, FiBook, FiTarget, FiTrendingUp, FiLayers, FiCalendar, FiUser, FiSettings, FiVideo } from 'react-icons/fi';
 
 export default function RightSidebar() {
   const menuItems = [
@@ -8,7 +8,7 @@ export default function RightSidebar() {
     { icon: FiBook, label: 'Lý Thuyết', href: '/ly-thuyet', color: 'text-green-600' },
     { icon: FiTarget, label: 'Từ vựng', href: '/tu-vung', color: 'text-purple-600' },
     { icon: FiFileText, label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'text-orange-600' },
-    { icon: FiTrendingUp, label: 'Tự luận nâng cao', href: '/tu-luan-nang-cao', color: 'text-red-600' },
+    { icon: FiVideo, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet', color: 'text-red-600' },
     { icon: FiCalendar, label: 'Lịch sử làm bài', href: '/lich-su', color: 'text-indigo-600' },
     { icon: FiUser, label: 'Lộ trình học cá nhân', href: '/lo-trinh', color: 'text-pink-600' },
     { icon: FiSettings, label: 'Tài khoản', href: '/profile', color: 'text-gray-600' },

@@ -18,7 +18,7 @@ export default function LeftSidebar() {
     { icon: '📖', label: 'Lý Thuyết', href: '/ly-thuyet', color: 'from-green-500 to-green-600' },
     { icon: '🔮', label: 'Tư Vấn', href: '/tu-vang', color: 'from-purple-500 to-purple-600' },
     { icon: '📝', label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'from-orange-500 to-orange-600' },
-    { icon: '📈', label: 'Tự luận nâng cao', href: '/tu-luan-nang-cao', color: 'from-red-500 to-red-600' },
+    { icon: '🎥', label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet', color: 'from-red-500 to-red-600' },
     { icon: '📅', label: 'Lịch sử làm bài', href: '/lich-su', color: 'from-indigo-500 to-indigo-600' },
     { icon: '👤', label: 'Lộ trình học cá nhân', href: '/lo-trinh', color: 'from-pink-500 to-pink-600' },
     { icon: '⚙️', label: 'Tài khoản', href: '/profile', color: 'from-gray-500 to-gray-600' },

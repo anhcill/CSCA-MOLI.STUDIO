@@ -56,7 +56,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
             priority: 0.8,
         },
         {
-            url: `${BASE_URL}/tu-luan-nang-cao`,
+            url: `${BASE_URL}/giai-de-chi-tiet`,
             lastModified: now,
             changeFrequency: 'monthly',
             priority: 0.6,
@@ -119,7 +119,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
             priority: 0.6,
         },
         {
-            url: `${BASE_URL}/toan/tu-luan-nang-cao`,
+            url: `${BASE_URL}/toan/giai-de-chi-tiet`,
             lastModified: now,
             changeFrequency: 'monthly',
             priority: 0.5,

@@ -134,24 +134,73 @@ function VocabularyContent() {
             ) : words.length === 0 ? (
               <div className="text-center py-20 text-gray-500">Không tìm thấy từ vựng nào</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {words.map(word => (
-                  <div key={word.id} className="bg-white rounded-2xl p-5 border-2 border-gray-100 hover:border-cyan-300 hover:shadow-lg transition-all">
-                    <h3 className="text-3xl font-black text-gray-900 mb-1">{word.word_cn}</h3>
-                    <p className="text-cyan-600 font-semibold italic mb-3">{word.pinyin}</p>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex gap-2"><span className="text-xs font-bold text-gray-400 uppercase min-w-[50px]">Việt:</span><span className="text-gray-900 font-medium">{word.word_vn}</span></div>
-                      {word.word_en && <div className="flex gap-2"><span className="text-xs font-bold text-gray-400 uppercase min-w-[50px]">EN:</span><span className="text-gray-600">{word.word_en}</span></div>}
-                      {word.example_cn && (
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                          <p className="text-red-700 text-sm">{word.example_cn}</p>
-                          {word.example_vn && <p className="text-gray-500 text-xs mt-1 italic">{word.example_vn}</p>}
-                        </div>
-                      )}
-                    </div>
+              <>
+                {/* 4-column table header */}
+                <div className="bg-gradient-to-r from-cyan-600 to-blue-600 rounded-2xl overflow-hidden shadow-lg mb-4">
+                  <div className="grid grid-cols-4 text-white text-sm font-black uppercase tracking-wider">
+                    <div className="px-5 py-3.5 text-center">Tiếng Trung</div>
+                    <div className="px-5 py-3.5 text-center border-l border-white/20">Pinyin</div>
+                    <div className="px-5 py-3.5 text-center border-l border-white/20">English</div>
+                    <div className="px-5 py-3.5 text-center border-l border-white/20">Tiếng Việt</div>
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {/* Vocabulary rows */}
+                <div className="space-y-2">
+                  {words.map((word, index) => (
+                    <div
+                      key={word.id}
+                      className="bg-white rounded-xl border border-gray-100 hover:border-cyan-300 hover:shadow-md transition-all group"
+                    >
+                      {/* Mobile: stacked cards */}
+                      <div className="hidden sm:grid sm:grid-cols-4 group-hover:bg-cyan-50/30 transition-colors rounded-xl">
+                        {/* Chinese */}
+                        <div className="px-5 py-4 flex items-center">
+                          <span className="text-2xl font-black text-gray-900 group-hover:text-cyan-700 transition-colors">
+                            {word.word_cn}
+                          </span>
+                        </div>
+                        {/* Pinyin */}
+                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
+                          <span className="text-base text-cyan-700 font-semibold italic group-hover:text-cyan-900 transition-colors">
+                            {word.pinyin}
+                          </span>
+                        </div>
+                        {/* English */}
+                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
+                          <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors">
+                            {word.word_en || '—'}
+                          </span>
+                        </div>
+                        {/* Vietnamese */}
+                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
+                          <span className="text-sm text-gray-700 font-medium group-hover:text-gray-900 transition-colors">
+                            {word.word_vn}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mobile card layout */}
+                      <div className="sm:hidden p-4 space-y-2">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-black text-gray-900">{word.word_cn}</span>
+                          <span className="text-sm text-cyan-600 italic">{word.pinyin}</span>
+                        </div>
+                        {word.word_en && (
+                          <div className="text-xs text-gray-500"><span className="font-semibold text-gray-400 uppercase">EN:</span> {word.word_en}</div>
+                        )}
+                        <div className="text-sm text-gray-700"><span className="font-semibold text-gray-400 uppercase">VN:</span> {word.word_vn}</div>
+                        {word.example_cn && (
+                          <div className="mt-2 pt-2 border-t border-gray-100">
+                            <p className="text-red-600 text-xs italic">{word.example_cn}</p>
+                            {word.example_vn && <p className="text-gray-400 text-xs mt-0.5">{word.example_vn}</p>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         ) : (

@@ -17,6 +17,8 @@ export interface Exam {
   user_best_score: number;
   publish_date?: string;
   is_premium?: boolean;
+  solution_video_url?: string;
+  solution_description?: string;
 }
 
 export interface Question {

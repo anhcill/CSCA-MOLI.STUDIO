@@ -37,7 +37,7 @@ const getDefaultMenuItems = (subjectCode: string, subjectSlug?: string): MenuIte
     { icon: BsJournalBookmark, label: 'Cấu trúc đề', href: '/cau-truc-de' },
     { icon: BsLightbulb, label: 'Lý Thuyết', href: '/ly-thuyet' },
     { icon: BsStars, label: 'Từ vựng', href: base },
-    { icon: BsGraphUp, label: 'Tự luận nâng cao', href: '/tu-luan-nang-cao' },
+    { icon: BsGraphUp, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet' },
   ];
 };
 

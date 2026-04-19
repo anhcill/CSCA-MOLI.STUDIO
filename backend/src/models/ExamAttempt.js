@@ -254,12 +254,14 @@ const ExamAttempt = {
   // Lấy chi tiết một lần làm bài
   async getAttemptDetail(attemptId, userId) {
     const attemptQuery = `
-      SELECT 
+      SELECT
         ea.*,
         e.code as exam_code,
         e.title as exam_title,
         e.total_questions,
-        s.name as subject_name
+        s.name as subject_name,
+        e.solution_video_url,
+        e.solution_description
       FROM exam_attempts ea
       INNER JOIN exams e ON ea.exam_id = e.id
       INNER JOIN subjects s ON e.subject_id = s.id
@@ -359,6 +361,10 @@ const ExamAttempt = {
     }
 
     attempt.answers = formattedAnswers;
+
+    // Attach video solution if exists
+    attempt.solution_video_url = attempt.solution_video_url || null;
+    attempt.solution_description = attempt.solution_description || null;
 
     return attempt;
   },

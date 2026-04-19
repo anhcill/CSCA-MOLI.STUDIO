@@ -295,22 +295,7 @@ const login = async (req, res) => {
     // Success - clear attempts
     clearAttempts(email);
 
-    // Check device limit for this user
-    const { allowed, reason, sessions, maxDevices } = await DeviceSessionService.checkLoginAllowed(user.id);
-    if (!allowed) {
-      return res.status(403).json({
-        success: false,
-        message: reason,
-        code: 'DEVICE_LIMIT_EXCEEDED',
-        sessions: sessions.map(s => ({
-          device_info: s.device_info,
-          last_active: s.last_active,
-          ip_address: s.ip_address,
-        })),
-        maxDevices,
-      });
-    }
-
+    // Register session (auto-evicts oldest if at device limit — no blocking)
     const jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
 
@@ -566,22 +551,7 @@ const googleAuth = async (req, res) => {
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
     }
 
-    // Check device limit for Google login too
-    const deviceCheck = await DeviceSessionService.checkLoginAllowed(user.id);
-    if (!deviceCheck.allowed) {
-      return res.status(403).json({
-        success: false,
-        message: deviceCheck.reason,
-        code: 'DEVICE_LIMIT_EXCEEDED',
-        sessions: deviceCheck.sessions.map(s => ({
-          device_info: s.device_info,
-          last_active: s.last_active,
-          ip_address: s.ip_address,
-        })),
-        maxDevices: deviceCheck.maxDevices,
-      });
-    }
-
+    // Register session for Google login (auto-evicts oldest if at limit)
     const googleJti = crypto.randomBytes(16).toString("hex");
     await DeviceSessionService.registerSession({
       userId: user.id,

@@ -572,6 +572,13 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS max_devices INTEGER DEFAULT 1
     `);
 
+    // Video giải đề chi tiết (Premium feature)
+    await pool.query(`
+      ALTER TABLE exams
+      ADD COLUMN IF NOT EXISTS solution_video_url TEXT,
+      ADD COLUMN IF NOT EXISTS solution_description TEXT
+    `);
+
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,
     );
