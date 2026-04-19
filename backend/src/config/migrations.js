@@ -538,6 +538,40 @@ async function runOptimizations() {
       UPDATE users SET subscription_tier = 'vip' WHERE is_vip = TRUE AND vip_expires_at > NOW()
     `);
 
+    // Add user_agent column to user_activities if missing
+    await pool.query(`
+      ALTER TABLE user_activities
+      ADD COLUMN IF NOT EXISTS user_agent TEXT
+    `);
+
+    // ── Device Session Management ──────────────────────────────────────────────
+    // Track active sessions per device for VIP/Premium device limits
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id            SERIAL PRIMARY KEY,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        jti           VARCHAR(64) UNIQUE NOT NULL,
+        device_info   VARCHAR(500),
+        ip_address    VARCHAR(45),
+        user_agent    TEXT,
+        last_active   TIMESTAMPTZ DEFAULT NOW(),
+        expires_at    TIMESTAMPTZ NOT NULL,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, last_active DESC)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_sessions_jti ON user_sessions(jti)`,
+    );
+
+    // Subscription tier device limits
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS max_devices INTEGER DEFAULT 1
+    `);
+
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,
     );

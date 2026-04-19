@@ -276,19 +276,20 @@ class User {
    * @param {number} durationDays - Number of days to add to VIP expiration
    * @returns {Object} Updated user
    */
-  static async updateVipStatus(id, durationDays) {
+  static async updateVipStatus(id, durationDays, tier = 'vip') {
     try {
       const result = await db.query(
-        `UPDATE users 
-         SET is_vip = true, 
+        `UPDATE users
+         SET is_vip = true,
+             subscription_tier = $3,
              vip_expires_at = COALESCE(
-                 CASE WHEN vip_expires_at > NOW() THEN vip_expires_at ELSE NOW() END, 
+                 CASE WHEN vip_expires_at > NOW() THEN vip_expires_at ELSE NOW() END,
                  NOW()
              ) + INTERVAL '1 day' * $1,
              updated_at = NOW()
          WHERE id = $2
-         RETURNING id, is_vip, vip_expires_at`,
-        [durationDays, id]
+         RETURNING id, is_vip, vip_expires_at, subscription_tier`,
+        [durationDays, id, tier]
       );
       return result.rows[0];
     } catch (error) {

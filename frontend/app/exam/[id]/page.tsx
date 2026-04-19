@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import examApi, { Exam, Question } from '@/lib/api/exams';
 import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
+import { ViolationWarning } from '@/components/common/ViolationWarning';
+import { useExamProtection } from '@/lib/hooks/useExamProtection';
 
 export default function ExamPage() {
   const params = useParams();
@@ -27,6 +29,30 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [vipError, setVipError] = useState<string | null>(null);
+  const [violations, setViolations] = useState(0);
+  const [showViolation, setShowViolation] = useState(false);
+  const [lastViolation, setLastViolation] = useState('');
+
+  const { maxViolations } = useExamProtection({
+    enabled: !!attemptId && !submitting,
+    onViolation: (type: string) => {
+      setViolations((v) => {
+        const next = v + 1;
+        setLastViolation(type);
+        if (next > 0) setShowViolation(true);
+        return next;
+      });
+    },
+  });
+
+  const handleViolationClose = useCallback(() => {
+    setShowViolation(false);
+    if (violations >= maxViolations) {
+      // Optional: auto-submit or report to admin
+      alert('Bạn đã vi phạm quá nhiều lần. Bài thi sẽ được gửi và báo cáo cho quản trị viên.');
+      handleSubmit();
+    }
+  }, [violations, maxViolations]);
 
   useEffect(() => {
     if (examId === null) return;      // params chưa sẵn sàng, chờ
@@ -186,7 +212,14 @@ export default function ExamPage() {
   const isTimeCritical = timeLeft < 300; // less than 5 min
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200">
+    <div
+      className="min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200"
+      style={{
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
+    >
       
       {/* FOCUS TOP BAR */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-gray-200 z-50 flex items-center justify-between px-4 sm:px-8 shadow-sm">
@@ -428,6 +461,15 @@ export default function ExamPage() {
 
           </div>
         </div>
+
+        {/* Anti-cheat violation warning overlay */}
+        {showViolation && (
+          <ViolationWarning
+            count={violations}
+            maxViolations={maxViolations}
+            onClose={handleViolationClose}
+          />
+        )}
 
       </div>
     </div>

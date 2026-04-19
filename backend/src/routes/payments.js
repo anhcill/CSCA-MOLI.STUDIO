@@ -8,9 +8,16 @@ const { authenticate } = require('../middleware/authMiddleware');
 
 // ── Package config ────────────────────────────────────────────────────────────
 const PACKAGES = {
-  30:  { name: 'Gói Xem',         amount: 99000  },
-  180: { name: 'Gói Kiểm tra',    amount: 249000 },
-  365: { name: 'Gói Làm bài',     amount: 699000 },
+  vip_90:   { name: 'VIP 3 Tháng',    tier: 'vip',     amount: 99000  },
+  vip_365:  { name: 'VIP 1 Năm',     tier: 'vip',     amount: 249000 },
+  pre_90:   { name: 'Premium 3 Tháng', tier: 'premium', amount: 249000 },
+  pre_365:  { name: 'Premium 1 Năm',  tier: 'premium', amount: 699000 },
+};
+
+// Duration lookup map
+const DURATION_PACKAGES = {
+  90:  { vip: 'vip_90',   pre: 'pre_90'   },
+  365: { vip: 'vip_365',  pre: 'pre_365'  },
 };
 
 // ── MOMO CONFIG ───────────────────────────────────────────────────────────────
@@ -36,7 +43,7 @@ async function createMoMoPayment(userId, durationDays, amount) {
   const orderId = `CSCA_MOMO_${userId}_${Date.now()}`;
   const orderInfo = `CSCA VIP ${PACKAGES[durationDays]?.name || 'Gói VIP'} - ${durationDays} ngày`;
 
-  const extraData = Buffer.from(JSON.stringify({ userId, durationDays })).toString('base64');
+  const extraData = Buffer.from(JSON.stringify({ userId, durationDays, tier: pkg.tier })).toString('base64');
 
   // Signature MoMo
   const rawSig = [
@@ -157,14 +164,16 @@ function createVNPayUrl(userId, durationDays, amount, ipnUrl) {
  */
 router.post('/create', authenticate, async (req, res) => {
   try {
-    const { duration_days, payment_method = 'momo' } = req.body;
+    const { duration_days, payment_method = 'momo', tier = 'vip' } = req.body;
     const userId = req.user.id;
 
-    if (!duration_days || !PACKAGES[duration_days]) {
-      return res.status(400).json({ success: false, message: 'Gói VIP không hợp lệ.' });
+    // Determine package key
+    const pkgKey = DURATION_PACKAGES[duration_days]?.[tier];
+    if (!pkgKey || !PACKAGES[pkgKey]) {
+      return res.status(400).json({ success: false, message: 'Gói không hợp lệ.' });
     }
 
-    const pkg = PACKAGES[duration_days];
+    const pkg = PACKAGES[pkgKey];
 
     // Lưu transaction pending trước
     const orderId = `CSCA_${payment_method.toUpperCase()}_${userId}_${Date.now()}`;
@@ -247,16 +256,17 @@ router.post('/momo-webhook', async (req, res) => {
       return res.status(200).json({ success: false });
     }
 
-    if (resultCode === 0) {
-      // SUCCESS
-      if (transaction.status !== 'completed') {
-        const extra = {};
-        try { Object.assign(extra, JSON.parse(Buffer.from(extraData, 'base64').toString('ascii'))); } catch (e) {}
+        if (resultCode === 0) {
+          // SUCCESS
+          if (transaction.status !== 'completed') {
+            const extra = {};
+            try { Object.assign(extra, JSON.parse(Buffer.from(extraData, 'base64').toString('ascii'))); } catch (e) {}
 
-        const durationDays = extra.durationDays || transaction.package_duration;
+            const durationDays = extra.durationDays || transaction.package_duration;
+            const tier = extra.tier || 'vip';
 
-        // Update user VIP (DB computes new expiry)
-        await User.updateVipStatus(transaction.user_id, durationDays);
+            // Update user VIP with tier
+            await User.updateVipStatus(transaction.user_id, durationDays, tier);
 
         // Fetch updated user to get new vip_expires_at
         const updatedUser = await User.findById(transaction.user_id);
@@ -326,8 +336,9 @@ router.post('/vnpay-webhook', async (req, res) => {
     // resultCode 00 = success
     if (vnp_ResponseCode === '00') {
       if (transaction.status !== 'completed') {
-        // Update user VIP
-        await User.updateVipStatus(transaction.user_id, transaction.package_duration);
+        // Update user VIP with tier from package_name
+        const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+        await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
         const updatedUser = await User.findById(transaction.user_id);
         const vipExpires = updatedUser?.vip_expires_at || null;
 
@@ -410,8 +421,8 @@ router.post('/verify-return', authenticate, async (req, res) => {
 
     // Nếu pending + user đã quay về thành công
     if (transaction.status === 'pending' && resultCode === '0') {
-      // Thử xử lý lại (đề phòng webhook chưa kịp gọi)
-      await User.updateVipStatus(transaction.user_id, transaction.package_duration);
+      const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+      await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
       const updatedUser = await User.findById(transaction.user_id);
       const vipExpires = updatedUser?.vip_expires_at || null;
 

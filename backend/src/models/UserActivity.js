@@ -23,8 +23,25 @@ class UserActivity {
                 ]
             );
         } catch (error) {
-            // Log lỗi nhưng không throw — tránh ảnh hưởng flow chính
-            console.error(`[UserActivity] Failed to log ${action} for user ${userId}:`, error.message);
+            // Graceful fallback: insert without user_agent if column missing
+            if (error.code === '42703') {
+                try {
+                    await db.query(
+                        `INSERT INTO user_activities (user_id, action, metadata, ip_address)
+                         VALUES ($1, $2, $3, $4)`,
+                        [
+                            userId,
+                            action,
+                            JSON.stringify(metadata),
+                            metadata.ip || null,
+                        ]
+                    );
+                } catch (fallbackError) {
+                    console.error(`[UserActivity] Fallback log failed for ${action} (user ${userId}):`, fallbackError.message);
+                }
+            } else {
+                console.error(`[UserActivity] Failed to log ${action} for user ${userId}:`, error.message);
+            }
         }
     }
 

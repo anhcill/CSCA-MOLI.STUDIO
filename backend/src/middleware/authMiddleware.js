@@ -50,6 +50,14 @@ const authMiddleware = async (req, res, next) => {
         }
       }
 
+      // ── Device session touch (keep session alive) ───────────────────────────
+      if (decoded.jti) {
+        db.query(
+          `UPDATE user_sessions SET last_active = NOW() WHERE jti = $1`,
+          [decoded.jti]
+        ).catch(() => {}); // non-blocking
+      }
+
       req.user = {
         id: decoded.id,
         email: decoded.email,
@@ -58,6 +66,7 @@ const authMiddleware = async (req, res, next) => {
         exp: decoded.exp,
         is_vip: decoded.is_vip === true,
         vip_expires_at: decoded.vip_expires_at || null,
+        subscription_tier: decoded.subscription_tier || 'basic',
       };
 
       next();

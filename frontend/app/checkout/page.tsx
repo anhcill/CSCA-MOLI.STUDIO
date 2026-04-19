@@ -5,73 +5,92 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import {
-  FaCrown, FaCheckCircle, FaShieldAlt, FaBolt, FaGift,
-  FaMobileAlt, FaCreditCard, FaQrcode, FaLock, FaArrowRight, FaStar
+  FaCrown, FaShieldAlt, FaBolt, FaGift,
+  FaLock, FaArrowRight, FaStar, FaQuestionCircle, FaVideo
 } from 'react-icons/fa';
-import { FiArrowLeft, FiCheck, FiLoader, FiZap } from 'react-icons/fi';
+import { FiArrowLeft, FiCheck, FiLoader } from 'react-icons/fi';
 
+// Plan definitions — matches /vip page exactly
 const PACKAGES = [
   {
-    id: 1,
-    duration_days: 30,
-    name: 'Gói Xem',
-    shortName: 'Xem',
+    id: 'vip_3m',
+    tier: 'vip',
+    name: 'VIP 3 Tháng',
+    duration_days: 90,
     price: 99000,
     priceDisplay: '99K',
-    period: '/tháng',
+    period: '/3 tháng',
+    color: 'from-indigo-500 to-purple-600',
+    badge: null,
     features: [
+      'Mở khoá toàn bộ đề thi',
+      'Xem lời giải chi tiết mọi câu',
       'Xem tài liệu PDF chất lượng cao',
-      'Xem đề thi & kết quả chi tiết',
-      'Xem lời giải từng câu',
-      'Hỗ trợ 24/7 qua Zalo',
+      'Làm bài thi thử không giới hạn',
+      'Theo dõi tiến độ học tập',
+      'Giới hạn 2 thiết bị',
     ],
     popular: false,
-    color: 'from-slate-600 to-slate-800',
-    btnColor: 'bg-slate-600 hover:bg-slate-700',
-    badge: null,
-    saving: null,
   },
   {
-    id: 2,
-    duration_days: 180,
-    name: 'Gói Kiểm tra',
-    shortName: 'Kiểm tra',
+    id: 'vip_1y',
+    tier: 'vip',
+    name: 'VIP 1 Năm',
+    duration_days: 365,
     price: 249000,
     priceDisplay: '249K',
-    period: '/6 tháng',
+    period: '/năm',
+    color: 'from-indigo-600 to-purple-700',
+    badge: 'Phổ biến',
+    saving: 'Tiết kiệm 45%',
     features: [
-      'Mọi tính năng gói Xem',
-      'Làm bài thi thử không giới hạn',
-      'Tài liệu độc quyền VIP',
-      'Chữa bài tự luận bằng AI',
-      'Báo cáo phân tích điểm yếu',
+      'Tất cả tính năng VIP 3 Tháng',
+      'Cập nhật đề thi mới nhất 2026',
+      'Bảo lưu khoá học trọn đời',
+      'Giới hạn 2 thiết bị',
     ],
     popular: true,
-    color: 'from-indigo-600 to-purple-700',
-    btnColor: 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700',
-    badge: 'Phổ biến nhất',
-    saving: 'Tiết kiệm 58%',
   },
   {
-    id: 3,
+    id: 'pre_3m',
+    tier: 'premium',
+    name: 'Premium 3 Tháng',
+    duration_days: 90,
+    price: 249000,
+    priceDisplay: '249K',
+    period: '/3 tháng',
+    color: 'from-amber-500 to-orange-600',
+    badge: null,
+    features: [
+      'Tất cả tính năng VIP',
+      'Video giải đề chính thức',
+      'Đặt câu hỏi cho team cố vấn',
+      'Được giải đề riêng từ cố vấn',
+      'Mở khoá toàn bộ đề & tài liệu',
+      'Giới hạn 3 thiết bị',
+    ],
+    popular: false,
+  },
+  {
+    id: 'pre_1y',
+    tier: 'premium',
+    name: 'Premium 1 Năm',
     duration_days: 365,
-    name: 'Gói Làm bài',
-    shortName: 'Làm bài',
     price: 699000,
     priceDisplay: '699K',
     period: '/năm',
+    color: 'from-amber-600 to-red-600',
+    badge: 'Best Value',
+    saving: 'Tiết kiệm 42%',
     features: [
-      'Mọi tính năng gói Kiểm tra',
-      'Cập nhật đề thi mới nhất 2025',
+      'Tất cả tính năng Premium 3 Tháng',
+      'Cập nhật video giải đề liên tục',
+      'Hỗ trợ ưu tiên từ cố vấn',
+      'Ưu tiên trả lời trong 24h',
       'Bảo lưu khoá học trọn đời',
-      'Cố vấn trực tiếp 1-1',
-      'Ưu tiên hỗ trợ cao cấp',
+      'Giới hạn 3 thiết bị',
     ],
     popular: false,
-    color: 'from-amber-500 to-orange-600',
-    btnColor: 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700',
-    badge: 'Best Value',
-    saving: 'Tiết kiệm 77%',
   },
 ];
 
@@ -119,7 +138,7 @@ const PAYMENT_METHODS = [
 
 const FEATURES_BANNER = [
   { icon: <FaShieldAlt size={20} />, text: 'Thanh toán bảo mật 100%' },
-  { icon: <FaBolt size={20} />, text: 'Kích hoạt VIP tức thì' },
+  { icon: <FaBolt size={20} />, text: 'Kích hoạt tức thì sau thanh toán' },
   { icon: <FaGift size={20} />, text: 'Hoàn tiền trong 7 ngày' },
 ];
 
@@ -133,14 +152,11 @@ function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; sel
           : `border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white`
         }`}
     >
-      {/* Popular glow */}
       {pkg.popular && (
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50" />
       )}
 
-      {/* Package header */}
       <div className={`relative p-5 pb-4 ${pkg.popular ? `bg-gradient-to-r ${pkg.color} text-white` : 'bg-gray-50'}`}>
-        {/* Badge */}
         {pkg.badge && (
           <div className="absolute -top-1 left-1/2 -translate-x-1/2">
             <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-lg ${pkg.popular ? 'bg-white text-indigo-700' : 'bg-gradient-to-r from-amber-400 to-orange-500 text-white'}`}>
@@ -155,10 +171,9 @@ function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; sel
               {pkg.name}
             </h3>
             <p className={`text-xs mt-0.5 ${pkg.popular ? 'text-white/70' : 'text-gray-500'}`}>
-              {pkg.duration_days} ngày sử dụng
+              {pkg.duration_days === 90 ? '3 tháng sử dụng' : '1 năm sử dụng'}
             </p>
           </div>
-          {/* Selected check */}
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
             selected ? 'bg-white border-white' : `border-transparent ${pkg.popular ? 'border-white/30' : ''}`
           }`}>
@@ -170,7 +185,6 @@ function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; sel
           </div>
         </div>
 
-        {/* Price */}
         <div className="mt-4 flex items-baseline gap-1">
           <span className={`text-4xl font-black ${selected ? 'text-white' : 'text-gray-900'}`}>
             {pkg.priceDisplay}
@@ -184,7 +198,6 @@ function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; sel
         )}
       </div>
 
-      {/* Features */}
       <div className="relative p-5 bg-white">
         <ul className="space-y-2.5">
           {pkg.features.map((f, i) => (
@@ -200,7 +213,6 @@ function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; sel
         </ul>
       </div>
 
-      {/* Select overlay indicator */}
       {!selected && (
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 group-hover:h-1.5 transition-all" />
       )}
@@ -220,14 +232,9 @@ function PaymentMethodCard({
           : `${method.border} ${method.bg} ${method.hoverBg} hover:shadow-md`
         }`}
     >
-      {/* Logo */}
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-        selected ? 'ring-2 ring-offset-2' : ''
-      }`} style={{ background: selected ? 'white' : 'white' }}>
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm bg-white">
         {method.icon}
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className={`font-black text-lg ${selected ? method.color : 'text-gray-800'}`}>
@@ -243,12 +250,8 @@ function PaymentMethodCard({
           <p className="text-xs text-gray-500 mt-0.5">{method.sub}</p>
         )}
       </div>
-
-      {/* Radio */}
       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-        selected
-          ? `border-indigo-500 bg-indigo-500`
-          : 'border-gray-300 bg-white'
+        selected ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300 bg-white'
       }`}>
         {selected && (
           <div className="w-2.5 h-2.5 rounded-full bg-white" />
@@ -268,6 +271,7 @@ function CheckoutContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const urlPlan = searchParams?.get('plan');
   const urlDuration = searchParams?.get('duration');
   const urlMethod = searchParams?.get('method');
 
@@ -276,12 +280,16 @@ function CheckoutContent() {
       router.push('/login?redirect=/checkout');
       return;
     }
-    if (urlDuration) {
+    // Match by plan ID first, then fallback to duration
+    if (urlPlan) {
+      const found = PACKAGES.find(p => p.id === urlPlan);
+      if (found) setSelectedPkg(found);
+    } else if (urlDuration) {
       const found = PACKAGES.find(p => p.duration_days === parseInt(urlDuration));
       if (found) setSelectedPkg(found);
     }
     if (urlMethod) setSelectedMethod(urlMethod);
-  }, [isAuthenticated, urlDuration, urlMethod, router]);
+  }, [isAuthenticated, urlPlan, urlDuration, urlMethod, router]);
 
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói VIP.'); return; }
@@ -291,6 +299,7 @@ function CheckoutContent() {
       const res = await axios.post('/payments/create', {
         duration_days: selectedPkg.duration_days,
         payment_method: selectedMethod,
+        tier: selectedPkg.tier,
       });
       if (res.data.success && res.data.payUrl) {
         window.location.href = res.data.payUrl;
@@ -310,26 +319,20 @@ function CheckoutContent() {
 
   return (
     <div className="space-y-8">
-
-      {/* ── Hero Header ── */}
+      {/* Hero */}
       <div className="text-center space-y-3">
-        {/* Crown badge */}
         <div className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-200 rounded-full text-amber-800 text-sm font-bold shadow-sm">
           <FaCrown size={14} className="text-amber-500" />
           Thanh toán nâng cấp CSCA PRO
         </div>
-
         <h1 className="text-3xl font-black text-gray-900">
           Mở khóa toàn bộ
-          <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"> tính năng VIP</span>
+          <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"> tính năng PRO</span>
         </h1>
-
         <p className="text-gray-500 text-sm">
-          Đang thanh toán với tài khoản
+          Thanh toán với tài khoản
           <span className="font-semibold text-gray-700 ml-1">{user.email}</span>
         </p>
-
-        {/* Feature banners */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
           {FEATURES_BANNER.map((f, i) => (
             <div key={i} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
@@ -340,13 +343,9 @@ function CheckoutContent() {
         </div>
       </div>
 
-      {/* ── Step Indicator ── */}
+      {/* Step indicator */}
       <div className="flex items-center justify-center gap-0">
-        {[
-          { n: 1, label: 'Chọn gói' },
-          { n: 2, label: 'Thanh toán' },
-          { n: 3, label: 'Hoàn tất' },
-        ].map((step, i, arr) => (
+        {[{ n: 1, label: 'Chọn gói' }, { n: 2, label: 'Thanh toán' }, { n: 3, label: 'Hoàn tất' }].map((step, i, arr) => (
           <div key={step.n} className="flex items-center">
             <div className="flex items-center gap-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all
@@ -364,14 +363,13 @@ function CheckoutContent() {
         ))}
       </div>
 
-      {/* ── Step 1: Package Selection ── */}
+      {/* Package selection */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">1</div>
-          <h2 className="text-lg font-black text-gray-900">Chọn gói VIP phù hợp với bạn</h2>
+          <h2 className="text-lg font-black text-gray-900">Chọn gói phù hợp với bạn</h2>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {PACKAGES.map(pkg => (
             <PackageCard
               key={pkg.id}
@@ -381,21 +379,19 @@ function CheckoutContent() {
             />
           ))}
         </div>
-
         {!selectedPkg && (
           <p className="text-center text-sm text-gray-400 mt-3">
-            👆 Nhấn vào gói bạn muốn để chọn
+            Nhấn vào gói bạn muốn để chọn
           </p>
         )}
       </div>
 
-      {/* ── Step 2: Payment Method ── */}
+      {/* Payment method */}
       <div>
         <div className="flex items-center gap-2 mb-4">
           <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">2</div>
           <h2 className="text-lg font-black text-gray-900">Chọn phương thức thanh toán</h2>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {PAYMENT_METHODS.map(method => (
             <PaymentMethodCard
@@ -408,15 +404,13 @@ function CheckoutContent() {
         </div>
       </div>
 
-      {/* ── Order Summary ── */}
+      {/* Order summary */}
       {selectedPkg && (
         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white space-y-4 shadow-2xl">
           <div className="flex items-center gap-2">
             <FaLock size={14} className="text-amber-400" />
             <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Xác nhận đơn hàng</h3>
           </div>
-
-          {/* Package info */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${selectedPkg.color} flex items-center justify-center`}>
@@ -424,16 +418,12 @@ function CheckoutContent() {
               </div>
               <div>
                 <p className="font-bold text-base">{selectedPkg.name}</p>
-                <p className="text-xs text-gray-400">{selectedPkg.duration_days} ngày sử dụng</p>
+                <p className="text-xs text-gray-400">{selectedPkg.duration_days === 90 ? '3 tháng sử dụng' : '1 năm sử dụng'}</p>
               </div>
             </div>
             <span className="text-2xl font-black">{selectedPkg.priceDisplay}<span className="text-sm text-gray-400">đ</span></span>
           </div>
-
-          {/* Divider */}
           <div className="border-t border-white/10" />
-
-          {/* Details */}
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-gray-400">
               <span>Phương thức</span>
@@ -444,11 +434,7 @@ function CheckoutContent() {
               <span className="text-white font-medium">{selectedPkg.features.length} quyền lợi</span>
             </div>
           </div>
-
-          {/* Divider */}
           <div className="border-t border-white/10" />
-
-          {/* Total */}
           <div className="flex justify-between items-center">
             <span className="text-gray-300 font-medium">Thành tiền</span>
             <div className="text-right">
@@ -456,16 +442,15 @@ function CheckoutContent() {
               <span className="text-gray-400 text-sm ml-0.5">đ</span>
             </div>
           </div>
-
           {selectedPkg.saving && (
             <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-2 text-center">
-              <span className="text-emerald-400 text-sm font-bold">{selectedPkg.saving} so với gói tháng</span>
+              <span className="text-emerald-400 text-sm font-bold">{selectedPkg.saving}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Error ── */}
+      {/* Error */}
       {error && (
         <div className="flex items-center gap-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-5 py-4">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -475,7 +460,7 @@ function CheckoutContent() {
         </div>
       )}
 
-      {/* ── CTA Button ── */}
+      {/* CTA */}
       <div className="space-y-3">
         <button
           onClick={handleProceed}
@@ -489,15 +474,11 @@ function CheckoutContent() {
           {loading ? (
             <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo thanh toán...</>
           ) : selectedPkg ? (
-            <>
-              Thanh toán {selectedPkg.priceDisplay}đ
-              <FaArrowRight size={18} />
-            </>
+            <>Thanh toán {selectedPkg.priceDisplay}đ<FaArrowRight size={18} /></>
           ) : (
             'Chọn gói VIP để tiếp tục'
           )}
         </button>
-
         <button
           onClick={() => router.push('/vip')}
           className="w-full flex items-center justify-center gap-2 py-3 text-gray-500 font-medium hover:text-gray-700 transition-colors"
@@ -507,7 +488,7 @@ function CheckoutContent() {
         </button>
       </div>
 
-      {/* ── Trust badges ── */}
+      {/* Trust badges */}
       <div className="grid grid-cols-3 gap-3 pt-2">
         {[
           { icon: <FaShieldAlt size={16} className="text-emerald-500" />, label: 'Bảo mật SSL' },
@@ -521,9 +502,8 @@ function CheckoutContent() {
         ))}
       </div>
 
-      {/* ── Test mode note ── */}
       <div className="text-center text-xs text-gray-400 pt-2 border-t border-gray-100">
-        🧪 Đang sử dụng chế độ test MoMo/VNPay sandbox — thanh toán thực tế sẽ hoạt động khi lên production
+        Dang su dung che do test MoMo/VNPay sandbox — thanh toan thuc te se hoat dong khi len production
       </div>
     </div>
   );
@@ -534,9 +514,7 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50 py-12 px-4 pt-28">
       <div className="w-full max-w-3xl mx-auto">
         <div className="bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-gray-100">
-          {/* Top gradient bar */}
           <div className="h-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500" />
-
           <div className="p-8 sm:p-10">
             <Suspense fallback={
               <div className="flex justify-center items-center py-24">

@@ -5,6 +5,7 @@ const User = require("../models/User");
 const UserActivity = require("../models/UserActivity");
 const { OAuth2Client } = require("google-auth-library");
 const emailService = require("../services/emailService");
+const DeviceSessionService = require("../services/deviceSessionService");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
 
@@ -93,6 +94,8 @@ const buildTokenPayload = (user) => ({
   role: user.role || "student",
   is_vip: isVipActive(user),
   vip_expires_at: user.vip_expires_at || null,
+  jti: user.jti || null,
+  subscription_tier: user.subscription_tier || 'basic',
 });
 
 const MODULE_ROLE_CODES = ['user_admin', 'exam_admin', 'content_admin', 'forum_admin', 'roadmap_admin'];
@@ -202,7 +205,7 @@ const register = async (req, res) => {
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload(user));
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
     const refreshToken = generateRefreshToken({ id: user.id });
 
     const authz = await resolveAuthorizationContext(user);
@@ -292,13 +295,41 @@ const login = async (req, res) => {
     // Success - clear attempts
     clearAttempts(email);
 
+    // Check device limit for this user
+    const { allowed, reason, sessions, maxDevices } = await DeviceSessionService.checkLoginAllowed(user.id);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: reason,
+        code: 'DEVICE_LIMIT_EXCEEDED',
+        sessions: sessions.map(s => ({
+          device_info: s.device_info,
+          last_active: s.last_active,
+          ip_address: s.ip_address,
+        })),
+        maxDevices,
+      });
+    }
+
+    const jti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
+
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+      expiresAt,
+    });
+
     // Log hành vi đăng nhập
     UserActivity.log(user.id, 'login', {
       ip: req.ip || req.connection?.remoteAddress,
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload(user));
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
     const refreshToken = generateRefreshToken({ id: user.id });
 
     const authz = await resolveAuthorizationContext(user);
@@ -397,12 +428,12 @@ const logout = async (req, res) => {
 
     if (jti && exp) {
       const expiresAt = new Date(exp * 1000);
-      // Add token to blacklist
       await db.query(
         "INSERT INTO token_blacklist (token_jti, user_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_jti) DO NOTHING",
         [jti, id, expiresAt],
       );
-      // Clean up expired tokens (opportunistic, non-blocking)
+      // Also remove from device sessions
+      await DeviceSessionService.removeSession(jti).catch(() => {});
       db.query("DELETE FROM token_blacklist WHERE expires_at < NOW()").catch(
         () => {},
       );
@@ -451,6 +482,13 @@ const refreshToken = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
     }
+
+    // Touch active sessions for this user to keep them alive
+    await db.query(
+      `UPDATE user_sessions SET last_active = NOW()
+       WHERE user_id = $1 AND expires_at > NOW()`,
+      [user.id]
+    ).catch(() => {}); // non-blocking
 
     const newToken = generateToken(buildTokenPayload(user));
     const newRefreshToken = generateRefreshToken({ id: user.id });
@@ -528,13 +566,39 @@ const googleAuth = async (req, res) => {
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
     }
 
+    // Check device limit for Google login too
+    const deviceCheck = await DeviceSessionService.checkLoginAllowed(user.id);
+    if (!deviceCheck.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: deviceCheck.reason,
+        code: 'DEVICE_LIMIT_EXCEEDED',
+        sessions: deviceCheck.sessions.map(s => ({
+          device_info: s.device_info,
+          last_active: s.last_active,
+          ip_address: s.ip_address,
+        })),
+        maxDevices: deviceCheck.maxDevices,
+      });
+    }
+
+    const googleJti = crypto.randomBytes(16).toString("hex");
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti: googleJti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Google OAuth',
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+      expiresAt: new Date(Date.now() + 604800000),
+    });
+
     // Log hành vi đăng nhập Google
     UserActivity.log(user.id, 'google_login', {
       ip: req.ip || req.connection?.remoteAddress,
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload(user));
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
     const refreshToken = generateRefreshToken({ id: user.id });
 
     const authz = await resolveAuthorizationContext(user);
