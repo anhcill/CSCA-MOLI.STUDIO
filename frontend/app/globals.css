@@ -8,6 +8,12 @@
   --background-end-rgb: 241, 245, 249;
 }
 
+.dark {
+  --foreground-rgb: 248, 250, 252;
+  --background-start-rgb: 15, 23, 42;
+  --background-end-rgb: 30, 41, 59;
+}
+
 body {
   font-family:
     "Plus Jakarta Sans",
@@ -16,7 +22,8 @@ body {
     BlinkMacSystemFont,
     sans-serif;
   color: rgb(var(--foreground-rgb));
-  background-color: rgb(249, 250, 251); /* slate-50 */
+  background-color: rgb(var(--background-start-rgb));
+  @apply transition-colors duration-300;
 }
 
 @keyframes blob {
@@ -105,4 +112,9 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #764ba2 0%, #f093fb 100%);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: rgba(30, 30, 30, 0.3);
 }

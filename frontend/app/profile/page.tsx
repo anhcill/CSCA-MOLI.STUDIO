@@ -16,12 +16,10 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
 const Sk = ({ className }: { className: string }) => (
   <div className={`animate-pulse bg-gray-100 rounded-xl ${className}`} />
 );
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon: Icon, label, value, color }: {
   icon: React.ElementType; label: string; value: number | string; color: string;
 }) => (
@@ -36,7 +34,6 @@ const StatCard = ({ icon: Icon, label, value, color }: {
   </div>
 );
 
-// ─── Info Row ────────────────────────────────────────────────────────────────
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
@@ -51,7 +48,6 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
   );
 }
 
-// ─── Password Field ───────────────────────────────────────────────────────────
 function PwField({ label, value, onChange, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string;
 }) {
@@ -79,7 +75,6 @@ function PwField({ label, value, onChange, placeholder }: {
   );
 }
 
-// ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -91,7 +86,6 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
     <div className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium
@@ -102,20 +96,17 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const { user: authUser, updateUser, logout } = useAuthStore();
 
   const [localUser, setLocalUser] = useState(authUser);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-
   const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  // Info form
   const [formData, setFormData] = useState({
     full_name: authUser?.full_name || '',
     bio: authUser?.bio || '',
@@ -124,16 +115,12 @@ export default function ProfilePage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(authUser?.avatar || '');
 
-  // Settings - password
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState('');
-
-  // Settings - toggles (local state, extendable to backend)
   const [notifEmail, setNotifEmail] = useState(true);
   const [publicProfile, setPublicProfile] = useState(true);
 
-  // Load stats non-blocking
   useEffect(() => {
     if (!authUser?.id) return;
     getUserStats(authUser.id)
@@ -166,21 +153,10 @@ export default function ProfilePage() {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      showToast(`Ảnh quá lớn! Tối đa 10MB (File của bạn: ${(file.size / 1024 / 1024).toFixed(2)}MB)`, 'error');
-      return;
-    }
-    
-    // Validate file type
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) { showToast('Ảnh quá lớn! Tối đa 10MB', 'error'); return; }
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      showToast('Chỉ chấp nhận file ảnh (JPG, PNG, GIF, WEBP)', 'error');
-      return;
-    }
-    
+    if (!allowedTypes.includes(file.type)) { showToast('Chỉ chấp nhận file ảnh (JPG, PNG, GIF, WEBP)', 'error'); return; }
     setAvatarFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setAvatarPreview(reader.result as string);
@@ -199,15 +175,12 @@ export default function ProfilePage() {
       const res = await updateProfile(localUser.id, upd);
       let updated = res.data.user;
 
-      // Upload avatar to Cloudinary if user selected a file
       if (avatarFile) {
         const uploadFormData = new FormData();
         uploadFormData.append('avatar', avatarFile);
-        
         const uploadRes = await axios.post('/users/upload-avatar', uploadFormData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        
         const avatarUrl = uploadRes.data.data.url;
         const avatarRes = await updateAvatar(localUser.id, avatarUrl);
         updated = avatarRes.data.user;
@@ -229,8 +202,8 @@ export default function ProfilePage() {
     e.preventDefault();
     setPwError('');
     if (!localUser?.id) return;
-    if (pwForm.next !== pwForm.confirm) { setPwError('Mật khẩu xác nhận không khớp'); return; }
-    if (pwForm.next.length < 8) { setPwError('Mật khẩu mới phải có ít nhất 8 ký tự'); return; }
+    if (pwForm.next !== pwForm.confirm) { setPwError('Mật khẩu không khớp'); return; }
+    if (pwForm.next.length < 8) { setPwError('Mật khẩu phải có ít nhất 8 ký tự'); return; }
     setPwSaving(true);
     try {
       await changePassword(localUser.id, pwForm.current, pwForm.next);
@@ -275,7 +248,6 @@ export default function ProfilePage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-5">
-              {/* Avatar */}
               <div className="relative shrink-0">
                 {avatarPreview ? (
                   <img src={avatarPreview} alt={displayName} className="w-20 h-20 rounded-2xl object-cover border-2 border-gray-100" />
@@ -286,7 +258,6 @@ export default function ProfilePage() {
                 )}
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
               </div>
-              {/* Info */}
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
@@ -311,7 +282,6 @@ export default function ProfilePage() {
                 {localUser.bio && <p className="mt-2 text-sm text-gray-600 max-w-sm">{localUser.bio}</p>}
               </div>
             </div>
-
             <div className="flex flex-col items-end gap-2 shrink-0">
               <button
                 onClick={isEditing ? () => setIsEditing(false) : initEdit}
@@ -337,8 +307,8 @@ export default function ProfilePage() {
           <div className="flex border-b border-gray-100">
             {([
               { key: 'info', label: 'Thông tin', icon: FiUser },
-              { key: 'stats', label: 'Thống kê & AI 🤖', icon: FiAward },
-              { key: 'vip', label: 'VIP 🏆', icon: FaCrown },
+              { key: 'stats', label: 'Thống kê', icon: FiAward },
+              { key: 'vip', label: 'VIP', icon: FaCrown },
               { key: 'settings', label: 'Cài đặt', icon: FiShield },
             ] as const).map(tab => {
               const I = tab.icon;
@@ -362,7 +332,6 @@ export default function ProfilePage() {
             <div className="p-6">
               {isEditing ? (
                 <div className="space-y-5">
-                  {/* Avatar upload */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Ảnh đại diện</label>
                     <div className="flex items-center gap-4">
@@ -375,53 +344,33 @@ export default function ProfilePage() {
                         <FiUpload size={14} />Chọn ảnh
                         <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                       </label>
-                      <span className="text-xs text-gray-500">
-                        <span className="font-medium">JPG, PNG, GIF, WEBP</span> · Tối đa <span className="font-semibold text-purple-600">10MB</span>
-                      </span>
+                      <span className="text-xs text-gray-500">JPG, PNG, GIF, WEBP · Tối đa 10MB</span>
                     </div>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Họ và tên</label>
-                    <input
-                      type="text"
-                      value={formData.full_name}
+                    <input type="text" value={formData.full_name}
                       onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900"
-                      placeholder="Nguyễn Văn A"
-                    />
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900" placeholder="Nguyễn Văn A" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Giới thiệu</label>
-                    <textarea
-                      value={formData.bio}
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Giới thiệu bản thân</label>
+                    <textarea value={formData.bio} rows={3} maxLength={500}
                       onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
-                      rows={3}
-                      maxLength={500}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900 resize-none"
-                      placeholder="Viết vài dòng về bản thân..."
-                    />
+                      placeholder="Viết vài dòng về bản thân..." />
                     <p className="text-xs text-gray-400 mt-1 text-right">{formData.bio.length}/500</p>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Điểm mục tiêu (0–100)</label>
-                    <input
-                      type="number" min="0" max="100"
-                      value={formData.target_score}
+                    <input type="number" min="0" max="100" value={formData.target_score}
                       onChange={e => setFormData(p => ({ ...p, target_score: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900"
-                      placeholder="Ví dụ: 85"
-                    />
+                      placeholder="Ví dụ: 85" />
                   </div>
-
                   <div className="flex gap-3 pt-1">
-                    <button
-                      onClick={handleSaveInfo}
-                      disabled={saving}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={handleSaveInfo} disabled={saving}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
                       <FiSave size={14} />{saving ? 'Đang lưu...' : 'Lưu thay đổi'}
                     </button>
                     <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm rounded-xl transition-colors">
@@ -445,10 +394,9 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* ── Tab: Thống kê & Lộ trình AI ────────────────── */}
+          {/* ── Tab: Thống kê ────────────────────────────── */}
           {activeTab === 'stats' && (
             <div className="p-6">
-              {/* Basic Stats */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 {statsLoading ? (
                   <><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /></>
@@ -461,7 +409,6 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
-
               {!statsLoading && stats && localUser.target_score && (
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6">
                   <div className="flex items-center justify-between mb-2">
@@ -469,18 +416,14 @@ export default function ProfilePage() {
                     <span className="text-sm font-semibold text-gray-800">{stats.avg_score}/{localUser.target_score}</span>
                   </div>
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gray-900 rounded-full transition-all duration-700"
-                      style={{ width: `${Math.min((stats.avg_score / localUser.target_score) * 100, 100)}%` }}
-                    />
+                    <div className="h-full bg-gray-900 rounded-full transition-all duration-700"
+                      style={{ width: `${Math.min((stats.avg_score / localUser.target_score) * 100, 100)}%` }} />
                   </div>
                   <p className="text-xs text-gray-400 mt-1.5">
                     {Math.round((stats.avg_score / localUser.target_score) * 100)}% đạt mục tiêu
                   </p>
                 </div>
               )}
-
-              {/* AI Insights */}
               <div className="border-t border-gray-100 pt-6">
                 <AIInsights userId={localUser.id} />
               </div>
@@ -490,45 +433,37 @@ export default function ProfilePage() {
           {/* ── Tab: VIP ─────────────────────────────────── */}
           {activeTab === 'vip' && (
             <div className="p-6 space-y-6">
-              {/* VIP Status Banner */}
               <div className={`rounded-2xl border p-6 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>
                 <div className="flex items-start gap-5">
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
                     <FaCrown className="text-white" size={24} />
                   </div>
                   <div className="flex-1">
-                        {localUser?.is_vip ? (
-                          <>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="text-lg font-black text-amber-900">Bạn đang là thành viên PRO</h3>
-                              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1">
-                                <FaCrown size={10} /> ACTIVE
-                              </span>
-                            </div>
-                            <p className="text-sm text-amber-700">
-                              VIP hết hạn:{' '}
-                              <span className="font-bold">
-                                {localUser.vip_expires_at
-                                  ? new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })
-                                  : '—'}
-                              </span>
-                              {vipDaysLeft !== null && (
-                                <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
-                                  {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
-                                </span>
-                              )}
-                            </p>
-                          </>
-                        ) : (
+                    {localUser?.is_vip ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-lg font-black text-amber-900">Bạn đang là thành viên PRO</h3>
+                          <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1">
+                            <FaCrown size={10} /> ACTIVE
+                          </span>
+                        </div>
+                        <p className="text-sm text-amber-700">
+                          Hạn VIP: <span className="font-bold">
+                            {localUser.vip_expires_at ? new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                          </span>
+                          {vipDaysLeft !== null && (
+                            <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
+                              {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
+                            </span>
+                          )}
+                        </p>
+                      </>
+                    ) : (
                       <>
                         <h3 className="text-lg font-black text-indigo-900 mb-1">Nâng cấp lên PRO</h3>
-                        <p className="text-sm text-indigo-700">
-                          Mở khóa tất cả đề thi, tài liệu và tính năng độc quyền để đạt điểm cao nhất!
-                        </p>
-                        <button
-                          onClick={() => window.location.href = '/vip'}
-                          className="mt-3 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all"
-                        >
+                        <p className="text-sm text-indigo-700">Mở khóa tất cả đề thi, tài liệu và tính năng độc quyền để đạt điểm cao nhất!</p>
+                        <button onClick={() => window.location.href = '/vip'}
+                          className="mt-3 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all">
                           <FaCrown className="text-amber-300" size={14} /> Nâng cấp ngay
                         </button>
                       </>
@@ -540,140 +475,67 @@ export default function ProfilePage() {
               {/* 3 VIP Packages */}
               <div>
                 <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <FiZap className="text-indigo-500" size={18} />
-                  Các gói PRO
+                  <FiZap className="text-indigo-500" size={18} /> Các gói PRO
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Basic */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <FiEye size={16} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm">Gói Xem</p>
-                        <p className="text-xs text-gray-500">Dành cho người mới</p>
-                      </div>
+                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><FiEye size={16} className="text-blue-600" /></div>
+                      <div><p className="font-bold text-gray-900 text-sm">Gói Xem</p><p className="text-xs text-gray-500">Dành cho người mới</p></div>
                     </div>
-                    <div className="mb-4">
-                      <span className="text-2xl font-black text-gray-900">99K</span>
-                      <span className="text-sm text-gray-500 ml-1">/ tháng</span>
-                    </div>
+                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">99K</span><span className="text-sm text-gray-500 ml-1">/ tháng</span></div>
                     <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem tài liệu
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem đề thi & kết quả
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-400">
-                        <FiLock size={13} className="shrink-0" /> Làm bài thi thử
-                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem tài liệu</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem đề thi & kết quả</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-400"><FiLock size={13} className="shrink-0" /> Làm bài thi</li>
                     </ul>
-                    <button
-                      onClick={() => window.location.href = '/vip'}
-                      className="w-full py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors"
-                    >
-                      Chọn gói này
-                    </button>
+                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors">Chọn gói</button>
                   </div>
 
-                  {/* Pro - Popular */}
                   <div className="bg-white rounded-xl border-2 border-indigo-400 p-5 shadow-lg shadow-indigo-100 relative">
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold rounded-full shadow">
-                        Phổ biến nhất
-                      </span>
+                      <span className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold rounded-full shadow">Phổ biến nhất</span>
                     </div>
                     <div className="flex items-center gap-2 mb-3 mt-2">
-                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center">
-                        <FiStar size={16} className="text-indigo-600" />
-                      </div>
-                      <div>
-                        <p className="font-black text-gray-900 text-sm">Gói Kiểm tra</p>
-                        <p className="text-xs text-gray-500">Nhiều người chọn nhất</p>
-                      </div>
+                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center"><FiStar size={16} className="text-indigo-600" /></div>
+                      <div><p className="font-black text-gray-900 text-sm">Gói Kiểm tra</p><p className="text-xs text-gray-500">Nhiều người chọn nhất</p></div>
                     </div>
-                    <div className="mb-4">
-                      <span className="text-2xl font-black text-gray-900">249K</span>
-                      <span className="text-sm text-gray-500 ml-1">/ 6 tháng</span>
-                    </div>
+                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">249K</span><span className="text-sm text-gray-500 ml-1">/ 6 tháng</span></div>
                     <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả gói Xem
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Làm bài thi thử
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tài liệu độc quyền
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Chữa bài tự luận AI
-                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả tính năng xem</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Làm bài thi</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tài liệu độc quyền</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Chấm bài tự luận AI</li>
                     </ul>
-                    <button
-                      onClick={() => window.location.href = '/vip'}
-                      className="w-full py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all"
-                    >
-                      Chọn gói này
-                    </button>
+                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all">Chọn gói</button>
                   </div>
 
-                  {/* VIP Full */}
                   <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
-                        <FaCrown size={15} className="text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm">Gói Làm bài</p>
-                        <p className="text-xs text-gray-500">Toàn diện nhất</p>
-                      </div>
+                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center"><FaCrown size={15} className="text-amber-600" /></div>
+                      <div><p className="font-bold text-gray-900 text-sm">Gói Làm bài</p><p className="text-xs text-gray-500">Toàn diện nhất</p></div>
                     </div>
-                    <div className="mb-4">
-                      <span className="text-2xl font-black text-gray-900">699K</span>
-                      <span className="text-sm text-gray-500 ml-1">/ năm</span>
-                    </div>
+                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">699K</span><span className="text-sm text-gray-500 ml-1">/ năm</span></div>
                     <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Mọi thứ trong gói Kiểm tra
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Cập nhật đề thi mới nhất
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Bảo lưu khoá học
-                      </li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600">
-                        <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Cố vấn trực tiếp 1-1
-                      </li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả trong gói Kiểm tra</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Đề thi mới nhất</li>
+                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tư vấn 1-1</li>
                     </ul>
-                    <button
-                      onClick={() => window.location.href = '/vip'}
-                      className="w-full py-2 text-sm font-semibold rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors"
-                    >
-                      Chọn gói này
-                    </button>
+                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-semibold rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors">Chọn gói</button>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── Tab: Cài đặt ─────────────────────────────────── */}
+          {/* ── Tab: Settings ──────────────────────────── */}
           {activeTab === 'settings' && (
             <div className="p-6 space-y-6">
-
-              {/* ── Đổi mật khẩu ── */}
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
-                    <FiLock size={13} className="text-gray-500" />
-                  </div>
+                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiLock size={13} className="text-gray-500" /></div>
                   <h3 className="text-sm font-semibold text-gray-800">Đổi mật khẩu</h3>
                 </div>
-
                 <form onSubmit={handleChangePassword} className="space-y-3">
                   {pwError && (
                     <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">
@@ -682,82 +544,50 @@ export default function ProfilePage() {
                   )}
                   <PwField label="Mật khẩu hiện tại" value={pwForm.current} onChange={v => setPwForm(p => ({ ...p, current: v }))} placeholder="••••••••" />
                   <div className="grid grid-cols-2 gap-3">
-                    <PwField label="Mật khẩu mới" value={pwForm.next} onChange={v => setPwForm(p => ({ ...p, next: v }))} placeholder="Tối thiểu 8 ký tự" />
-                    <PwField label="Xác nhận mật khẩu" value={pwForm.confirm} onChange={v => setPwForm(p => ({ ...p, confirm: v }))} placeholder="Nhập lại mật khẩu" />
+                    <PwField label="Mật khẩu mới" value={pwForm.next} onChange={v => setPwForm(p => ({ ...p, next: v }))} placeholder="Ít nhất 8 ký tự" />
+                    <PwField label="Xác nhận mật khẩu mới" value={pwForm.confirm} onChange={v => setPwForm(p => ({ ...p, confirm: v }))} placeholder="••••••••" />
                   </div>
-                  <p className="text-xs text-gray-400">Mật khẩu cần tối thiểu 8 ký tự, bao gồm chữ cái và số.</p>
-                  <button
-                    type="submit"
-                    disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-40"
-                  >
+                  <p className="text-xs text-gray-400">Mật khẩu phải có ít nhất 8 ký tự</p>
+                  <button type="submit" disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-40">
                     <FiSave size={13} />{pwSaving ? 'Đang lưu...' : 'Đổi mật khẩu'}
                   </button>
                 </form>
               </section>
 
               <div className="border-t border-gray-100" />
-
-              {/* ── Thông báo ── */}
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
-                    <FiBell size={13} className="text-gray-500" />
-                  </div>
+                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiBell size={13} className="text-gray-500" /></div>
                   <h3 className="text-sm font-semibold text-gray-800">Thông báo</h3>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">Thông báo qua email</p>
-                      <p className="text-xs text-gray-400">Nhận email về kết quả thi và cập nhật</p>
-                    </div>
-                    <Toggle on={notifEmail} onToggle={() => setNotifEmail(p => !p)} />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <div><p className="text-sm text-gray-700">Thông báo qua email</p><p className="text-xs text-gray-400">Nhận thông báo qua email</p></div>
+                  <Toggle on={notifEmail} onToggle={() => setNotifEmail(p => !p)} />
                 </div>
               </section>
 
               <div className="border-t border-gray-100" />
-
-              {/* ── Quyền riêng tư ── */}
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
-                    <FiShield size={13} className="text-gray-500" />
-                  </div>
+                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiShield size={13} className="text-gray-500" /></div>
                   <h3 className="text-sm font-semibold text-gray-800">Quyền riêng tư</h3>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">Hồ sơ công khai</p>
-                      <p className="text-xs text-gray-400">Cho phép người khác xem trang cá nhân của bạn</p>
-                    </div>
-                    <Toggle on={publicProfile} onToggle={() => setPublicProfile(p => !p)} />
-                  </div>
+                <div className="flex items-center justify-between">
+                  <div><p className="text-sm text-gray-700">Hồ sơ công khai</p><p className="text-xs text-gray-400">Cho phép người khác xem hồ sơ</p></div>
+                  <Toggle on={publicProfile} onToggle={() => setPublicProfile(p => !p)} />
                 </div>
               </section>
 
               <div className="border-t border-gray-100" />
-
-              {/* ── Nguy hiểm ── */}
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
-                    <FiAlertTriangle size={13} className="text-red-400" />
-                  </div>
+                  <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center"><FiAlertTriangle size={13} className="text-red-400" /></div>
                   <h3 className="text-sm font-semibold text-gray-800">Tài khoản</h3>
                 </div>
                 <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      if (confirm('Đăng xuất khỏi tất cả thiết bị?')) {
-                        logout?.();
-                        window.location.href = '/login';
-                      }
-                    }}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors"
-                  >
+                  <button onClick={() => { if (confirm('Đăng xuất khỏi tất cả thiết bị?')) { logout?.(); window.location.href = '/login'; } }}
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors">
                     <FiLogOut size={14} />Đăng xuất khỏi tất cả thiết bị
                   </button>
                 </div>

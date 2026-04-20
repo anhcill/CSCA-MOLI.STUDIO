@@ -4,8 +4,6 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// ─── Inner component dùng useSearchParams ─────────────────────────────────────
-// Next.js 14 yêu cầu bọc Suspense khi dùng useSearchParams()
 function VerifyEmailContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -18,7 +16,7 @@ function VerifyEmailContent() {
 
         if (!token || !id) {
             setStatus('error');
-            setMessage('Liên kết xác nhận không hợp lệ.');
+            setMessage('Liên kết không hợp lệ.');
             return;
         }
 
@@ -29,20 +27,19 @@ function VerifyEmailContent() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token, userId: id }),
                 });
-
                 const data = await res.json();
 
                 if (data.success) {
                     setStatus('success');
-                    setMessage(data.message);
-                    setTimeout(() => router.push('/dang-nhap'), 3000);
+                    setMessage(data.message || 'Xác minh email thành công!');
+                    setTimeout(() => router.push('/login'), 3000);
                 } else {
                     setStatus('error');
-                    setMessage(data.message || 'Xác nhận thất bại.');
+                    setMessage(data.message || 'Xác minh email thất bại. Liên kết có thể đã hết hạn.');
                 }
             } catch {
                 setStatus('error');
-                setMessage('Lỗi kết nối, vui lòng thử lại.');
+                setMessage('Lỗi kết nối. Vui lòng kiểm tra mạng.');
             }
         };
 
@@ -62,7 +59,7 @@ function VerifyEmailContent() {
                 {status === 'success' && (
                     <>
                         <div className="text-6xl mb-4">✅</div>
-                        <h1 className="text-2xl font-black text-gray-900 mb-2">Xác nhận thành công!</h1>
+                        <h1 className="text-2xl font-black text-gray-900 mb-2">Xác minh email thành công!</h1>
                         <p className="text-gray-500 mb-6">{message}</p>
                         <p className="text-sm text-gray-400">Đang chuyển đến trang đăng nhập...</p>
                     </>
@@ -71,12 +68,9 @@ function VerifyEmailContent() {
                 {status === 'error' && (
                     <>
                         <div className="text-6xl mb-4">❌</div>
-                        <h1 className="text-2xl font-black text-gray-900 mb-2">Xác nhận thất bại</h1>
+                        <h1 className="text-2xl font-black text-gray-900 mb-2">Xác minh email thất bại</h1>
                         <p className="text-gray-500 mb-6">{message}</p>
-                        <Link
-                            href="/dang-nhap"
-                            className="inline-block px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition"
-                        >
+                        <Link href="/login" className="inline-block px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition">
                             Về trang đăng nhập
                         </Link>
                     </>
@@ -86,7 +80,6 @@ function VerifyEmailContent() {
     );
 }
 
-// ─── Page export với Suspense boundary ────────────────────────────────────────
 export default function VerifyEmailPage() {
     return (
         <Suspense fallback={

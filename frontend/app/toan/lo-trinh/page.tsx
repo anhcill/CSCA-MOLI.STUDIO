@@ -20,9 +20,9 @@ export default function ToanLoTrinhPage() {
                         <SubjectNavigation
                             subject="Toán"
                             subjectCode="MATH"
+                            subjectSlug="toan"
                             colorScheme={{
                                 from: 'from-purple-500',
-                                via: 'via-pink-500',
                                 to: 'to-blue-500'
                             }}
                         />
@@ -31,7 +31,7 @@ export default function ToanLoTrinhPage() {
                     {/* Main Content */}
                     <div className="lg:col-span-9 space-y-8">
                         {/* Page Header */}
-                        <div className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+                        <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                                     <span className="text-3xl">🤖</span>

@@ -16,14 +16,6 @@ interface VocabItem {
   example_vn: string;
 }
 
-const SUBJECT_LABELS: Record<string, string> = {
-  'toan': 'Toán học',
-  'vat-ly': 'Vật Lý',
-  'hoa-hoc': 'Hóa Học',
-  'tieng-trung-xh': 'Tiếng Trung Xã Hội',
-  'tieng-trung-tn': 'Tiếng Trung Tự Nhiên',
-};
-
 function PrintContent() {
   const searchParams = useSearchParams();
   const subject = searchParams.get('subject') || '';
@@ -48,12 +40,20 @@ function PrintContent() {
     }
   }, [loading, words]);
 
+  const SUBJECT_LABELS: Record<string, string> = {
+    'toan': 'Toán',
+    'vat-ly': 'Vật Lý',
+    'hoa-hoc': 'Hóa Học',
+    'tieng-trung-xh': 'Tiếng Trung XH',
+    'tieng-trung-tn': 'Tiếng Trung TN',
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-3" />
-          <p className="text-gray-500">Đang chuẩn bị PDF...</p>
+          <p className="text-gray-500">Đang chuẩn bị...</p>
         </div>
       </div>
     );
@@ -66,12 +66,11 @@ function PrintContent() {
     return acc;
   }, {} as Record<string, VocabItem[]>);
 
-  const subjectLabel = SUBJECT_LABELS[subject] || subject || 'Tất cả môn';
+  const subjectLabel = SUBJECT_LABELS[subject] || 'Tất cả môn';
   const title = topic ? `Từ Vựng: ${topic}` : `Từ Vựng ${subjectLabel}`;
 
   return (
     <>
-      {/* Print-only styles */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -80,44 +79,31 @@ function PrintContent() {
           tr { page-break-inside: avoid; }
           h2 { page-break-before: auto; }
         }
-        @page {
-          size: A4;
-          margin: 15mm 12mm;
-        }
+        @page { size: A4; margin: 15mm 12mm; }
         body { font-family: 'Arial', sans-serif; }
       `}</style>
 
-      {/* Screen controls - hidden when printing */}
       <div className="no-print bg-blue-600 text-white px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">Xem trước PDF — {words.length} từ vựng</span>
+        <span className="font-semibold">Xem trước — {words.length} từ</span>
         <div className="flex gap-3">
-          <button
-            onClick={() => window.history.back()}
-            className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition"
-          >
+          <button onClick={() => window.history.back()} className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition">
             ← Quay lại
           </button>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-1.5 bg-white rounded-lg text-blue-700 font-bold text-sm hover:bg-blue-50 transition"
-          >
-            🖨️ In / Lưu PDF
+          <button onClick={() => window.print()} className="px-4 py-1.5 bg-white rounded-lg text-blue-700 font-bold text-sm hover:bg-blue-50 transition">
+            🖨️ In
           </button>
         </div>
       </div>
 
-      {/* Document content */}
       <div className="max-w-4xl mx-auto p-8">
-        {/* Header */}
         <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
           <h1 className="text-2xl font-black text-gray-900">{title}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {subjectLabel} · {words.length} từ vựng · CSCA — Ôn thi học bổng Trung Quốc
+            {subjectLabel} · {words.length} từ · CSCA — Ôn thi học bổng Trung Quốc
           </p>
         </div>
 
         {topic ? (
-          /* Single topic — 4-column table */
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-cyan-600">
@@ -141,7 +127,6 @@ function PrintContent() {
             </tbody>
           </table>
         ) : (
-          /* All topics — grouped tables */
           Object.entries(grouped).map(([topicName, topicWords]) => (
             <div key={topicName} className="mb-8">
               <h2 className="text-base font-bold text-gray-800 bg-gray-100 px-3 py-2 rounded mb-2 border-l-4 border-blue-500">
@@ -153,7 +138,7 @@ function PrintContent() {
                     <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center w-8">#</th>
                     <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Tiếng Trung</th>
                     <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Pinyin</th>
-                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">English</th>
+                    <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Tiếng Anh</th>
                     <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center">Tiếng Việt</th>
                   </tr>
                 </thead>
@@ -174,14 +159,14 @@ function PrintContent() {
         )}
 
         <div className="mt-6 text-center text-xs text-gray-400 border-t pt-3 no-print">
-          CSCA · csca.vn · Tài liệu nội bộ — Không phân phối
+          Tài liệu nội bộ — CSCA
         </div>
       </div>
     </>
   );
 }
 
-export default function VocabularyPrintPage() {
+export default function vocabularyPrintPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen">

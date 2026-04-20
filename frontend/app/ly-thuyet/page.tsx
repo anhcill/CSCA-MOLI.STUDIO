@@ -51,7 +51,7 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
           </a>
           <a href={material.file_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
-            <FiExternalLink size={13} /> Mở tab mới
+            <FiExternalLink size={13} /> Xem
           </a>
           <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors ml-1">
             <FiX size={18} />
@@ -90,7 +90,7 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
           </button>
           <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
-            <FiDownload size={11} /> Tải
+            <FiDownload size={11} /> Tải về
           </a>
         </div>
       </div>
@@ -159,12 +159,11 @@ export default function LyThuyetPage() {
               <span className="text-3xl">📖</span>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Lý Thuyết</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Tài liệu lý thuyết theo từng môn học · {allMaterials.length} tài liệu</p>
+                <p className="text-sm text-gray-500 mt-0.5">Tài liệu lý thuyết chuẩn CSCA · {allMaterials.length} tài liệu</p>
               </div>
             </div>
           </div>
 
-          {/* Subject tabs */}
           <div className="flex items-center gap-2 flex-wrap mb-5">
             {SUBJECTS.map(s => (
               <button key={s.value} onClick={() => setActiveSubject(s.value)}
@@ -178,10 +177,9 @@ export default function LyThuyetPage() {
             ))}
           </div>
 
-          {/* Search */}
           <div className="relative mb-7">
             <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input type="text" placeholder="Tìm kiếm tài liệu..." value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" placeholder="Tìm tài liệu..." value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" />
           </div>
 
@@ -192,7 +190,7 @@ export default function LyThuyetPage() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">📄</div>
-              <p className="text-gray-500">{search ? 'Không tìm thấy tài liệu phù hợp' : 'Chưa có tài liệu nào cho mục này'}</p>
+              <p className="text-gray-500">{search ? 'Không tìm thấy tài liệu nào' : 'Chưa có tài liệu nào'}</p>
             </div>
           ) : (
             Array.from(grouped.entries()).map(([topic, items]) => (

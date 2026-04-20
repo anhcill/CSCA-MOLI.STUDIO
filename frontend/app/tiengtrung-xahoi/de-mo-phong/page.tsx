@@ -5,7 +5,7 @@ import { FiBookOpen } from 'react-icons/fi';
 
 export default function TiengTrungXaHoiDeMoPhongPage() {
     const subjectCode = 'CHINESE';
-    const colorScheme = { from: 'from-rose-500', via: 'via-pink-600', to: 'to-purple-600' };
+    const colorScheme = { from: 'from-rose-500', to: 'to-purple-600' };
 
     return (
         <div className="min-h-screen bg-slate-50 relative overflow-hidden">
@@ -14,7 +14,7 @@ export default function TiengTrungXaHoiDeMoPhongPage() {
             <Header />
 
             <main className="container mx-auto px-4 md:px-6 py-6 md:py-8 max-w-[1400px] relative z-10">
-                <div className={`w-full rounded-[2rem] bg-gradient-to-r ${colorScheme.from} ${colorScheme.via} ${colorScheme.to} p-8 lg:p-12 shadow-xl shadow-rose-900/10 relative overflow-hidden text-white flex flex-col md:flex-row items-center justify-between gap-8 mb-8`}>
+                <div className={`w-full rounded-[2rem] bg-gradient-to-r ${colorScheme.from} ${colorScheme.to} p-8 lg:p-12 shadow-xl shadow-rose-900/10 relative overflow-hidden text-white flex flex-col md:flex-row items-center justify-between gap-8 mb-8`}>
                     <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
                     <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-white/20 rounded-full blur-3xl mix-blend-overlay pointer-events-none" />
                     <div className="absolute -top-32 -right-32 w-96 h-96 bg-white/20 rounded-full blur-3xl mix-blend-overlay pointer-events-none" />
@@ -50,7 +50,7 @@ export default function TiengTrungXaHoiDeMoPhongPage() {
                         </div>
 
                         {/* Exam List */}
-                        <ExamList subjectCode={subjectCode} />
+                        <ExamList subjectCode={subjectCode} subjectSlug="tieng-trung-xh" />
                     </div>
 
                     {/* Sidebar */}

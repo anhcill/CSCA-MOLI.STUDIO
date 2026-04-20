@@ -50,7 +50,7 @@ export default function ToanDeMoPhongPage() {
                         </div>
 
                         {/* Exam List */}
-                        <ExamList subjectCode={subjectCode} />
+                        <ExamList subjectCode={subjectCode} subjectSlug="toan" />
                     </div>
 
                     {/* Sidebar */}

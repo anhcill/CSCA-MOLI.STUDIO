@@ -49,7 +49,7 @@ const nextConfig = {
 
   // Experimental features for better performance
   experimental: {
-    optimizeCss: true, // Minify + tree-shake CSS in production builds
+    optimizeCss: false, // Disabled to reduce build memory usage
   },
 
   // HTTP Cache-Control headers

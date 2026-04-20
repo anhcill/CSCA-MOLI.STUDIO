@@ -22,7 +22,6 @@ export default function LoginForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user types
     if (errors[name as keyof typeof errors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -30,35 +29,29 @@ export default function LoginForm() {
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
-
     if (!formData.email) {
       newErrors.email = 'Email là bắt buộc';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email không hợp lệ';
     }
-
     if (!formData.password) {
       newErrors.password = 'Mật khẩu là bắt buộc';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!validateForm()) return;
-
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
 
     try {
       const response = await login(formData);
-
       if (response.success) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
@@ -71,16 +64,12 @@ export default function LoginForm() {
             setAuth(effectiveUser, token, refreshToken);
           }
         } catch {
-          // Keep fallback user from /auth/login when /auth/me fails.
+          // Keep fallback
         }
-
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      console.error('Login error:', error);
-      setErrors({
-        general: error.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.',
-      });
+      setErrors({ general: error.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -89,14 +78,12 @@ export default function LoginForm() {
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) return;
-
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
 
     try {
       const response = await googleAuth(credentialResponse.credential);
-
       if (response.success) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
@@ -109,16 +96,12 @@ export default function LoginForm() {
             setAuth(effectiveUser, token, refreshToken);
           }
         } catch {
-          // Keep fallback user from /auth/google when /auth/me fails.
+          // Keep fallback
         }
-
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      console.error('Google login error:', error);
-      setErrors({
-        general: error.response?.data?.message || 'Đăng nhập Google thất bại',
-      });
+      setErrors({ general: error.response?.data?.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -126,33 +109,20 @@ export default function LoginForm() {
   };
 
   const handleGoogleError = () => {
-    setErrors({
-      general: 'Đăng nhập Google thất bại. Vui lòng thử lại.',
-    });
+    setErrors({ general: 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
   };
 
   return (
     <div className="w-full max-w-md">
-      {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Chào mừng trở lại!</h1>
         <p className="text-gray-600">Đăng nhập để tiếp tục học tập</p>
       </div>
 
-      {/* Social Login Buttons */}
       <div className="mb-6">
-        <GoogleLogin
-          onSuccess={handleGoogleSuccess}
-          onError={handleGoogleError}
-          useOneTap
-          theme="outline"
-          size="large"
-          text="signin_with"
-          width="100%"
-        />
+        <GoogleLogin onSuccess={handleGoogleSuccess} onError={handleGoogleError} useOneTap theme="outline" size="large" text="signin_with" width="100%" />
       </div>
 
-      {/* Divider */}
       <div className="relative mb-6">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-300"></div>
@@ -162,70 +132,39 @@ export default function LoginForm() {
         </div>
       </div>
 
-      {/* Login Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* General Error */}
         {errors.general && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
             {errors.general}
           </div>
         )}
 
-        {/* Email Field */}
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-            Email
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            autoComplete="email"
-            value={formData.email}
-            onChange={handleChange}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-            placeholder="example@email.com"
-          />
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+          <input type="email" id="email" name="email" autoComplete="email" value={formData.email} onChange={handleChange}
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+            placeholder="example@email.com" />
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
         </div>
 
-        {/* Password Field */}
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-            Mật khẩu
-          </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            autoComplete="current-password"
-            value={formData.password}
-            onChange={handleChange}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.password ? 'border-red-500' : 'border-gray-300'
-              }`}
-            placeholder="••••••••"
-          />
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Mật khẩu</label>
+          <input type="password" id="password" name="password" autoComplete="current-password" value={formData.password} onChange={handleChange}
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.password ? 'border-red-500' : 'border-gray-300'}`}
+            placeholder="••••••••" />
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
-        {/* Remember & Forgot Password */}
         <div className="flex items-center justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
             <span className="ml-2 text-sm text-gray-600">Ghi nhớ đăng nhập</span>
           </label>
-          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">
-            Quên mật khẩu?
-          </Link>
+          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">Quên mật khẩu?</Link>
         </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <button type="submit" disabled={isSubmitting}
+          className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           {isSubmitting ? (
             <span className="flex items-center justify-center gap-2">
               <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -234,18 +173,12 @@ export default function LoginForm() {
               </svg>
               Đang đăng nhập...
             </span>
-          ) : (
-            'Đăng nhập'
-          )}
+          ) : 'Đăng nhập'}
         </button>
       </form>
 
-      {/* Register Link */}
       <p className="mt-6 text-center text-sm text-gray-600">
-        Chưa có tài khoản?{' '}
-        <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">
-          Đăng ký ngay
-        </Link>
+        Chưa có tài khoản? <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">Đăng ký ngay</Link>
       </p>
     </div>
   );
