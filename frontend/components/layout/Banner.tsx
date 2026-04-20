@@ -149,9 +149,9 @@ export default function Banner() {
               </div>
 
               {/* Title */}
-              <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4 md:mb-5 leading-tight tracking-tight">
+              <p className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4 md:mb-5 leading-tight tracking-tight">
                 {slides[current].title}
-              </h1>
+              </p>
 
               {/* Subtitle */}
               <p className="text-base sm:text-lg md:text-xl text-white/80 mb-6 md:mb-8 leading-relaxed font-light">

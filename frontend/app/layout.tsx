@@ -19,12 +19,12 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://csca.edu.vn'),
   title: {
-    default: 'CSCA - Ôn thi học bổng Trung Quốc',
-    template: '%s | CSCA',
+    default: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc (CIS) & Bài Thi CSCA',
+    template: '%s | CSCA - Nền Tảng Luyện Thi',
   },
-  description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi, AI phân tích lộ trình và 10,000+ học viên.',
-  keywords: ['học bổng Trung Quốc', 'CSCA', 'ôn thi', 'toán', 'vật lý', 'hóa học', 'tiếng Trung', 'đề thi'],
-  authors: [{ name: 'CSCA' }],
+  description: 'Nền tảng giáo dục trực tuyến CSCA cung cấp 500+ đề thi thử chuẩn hoá, lộ trình ôn thi cá nhân hoá bằng AI cho du học sinh chinh phục học bổng Đại học Trung Quốc an toàn.',
+  keywords: ['ôn thi csca', 'thi csca', 'du học trung quốc', 'học bổng cis', 'du học sinh', 'tài liệu csca', 'đề thi csca', 'đề thi toán lý hóa'],
+  authors: [{ name: 'CSCA Education' }],
   creator: 'CSCA',
   openGraph: {
     type: 'website',
