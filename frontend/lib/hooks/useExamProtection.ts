@@ -11,6 +11,8 @@ interface UseExamProtectionOptions {
 /**
  * Anti-cheat protection for exam pages.
  * Detects: tab switching, window blur, right-click, text selection, print, screenshot.
+ * Mobile: detects visibility changes (triggered by screenshot on many devices),
+ *         resize events (split-screen), and touch callout attempts.
  */
 export function useExamProtection({
   onViolation,
@@ -19,6 +21,7 @@ export function useExamProtection({
 }: UseExamProtectionOptions = {}) {
   const violations = useRef(0);
   const warningRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSize = useRef({ w: 0, h: 0 });
 
   const handleViolation = useCallback(
     (type: string) => {
@@ -31,6 +34,9 @@ export function useExamProtection({
   useEffect(() => {
     if (!enabled) return;
 
+    // Record initial size for resize detection
+    lastSize.current = { w: window.innerWidth, h: window.innerHeight };
+
     // 1. Disable right-click context menu
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
@@ -39,9 +45,20 @@ export function useExamProtection({
     document.addEventListener('contextmenu', handleContextMenu);
 
     // 2. Detect tab/window switch (visibilitychange)
+    //    On mobile, screenshots often trigger this event briefly.
+    //    We INSTANTLY blur the page content so the screenshot captures blur.
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        // Instantly blur ALL content before screenshot completes
+        document.body.style.filter = 'blur(30px)';
+        document.body.style.transition = 'filter 0ms';
         handleViolation('tab_switch');
+      } else {
+        // Restore after a brief delay (user is back)
+        setTimeout(() => {
+          document.body.style.filter = 'none';
+          document.body.style.transition = 'filter 300ms';
+        }, 500);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -52,8 +69,9 @@ export function useExamProtection({
     };
     window.addEventListener('blur', handleBlur);
 
-    // 4. Block keyboard print shortcut
+    // 4. Block keyboard shortcuts: print, save, screenshot
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Block Ctrl/Cmd + P (print), S (save), C (copy in some contexts)
       if (
         (e.ctrlKey || e.metaKey) &&
         (e.key === 'p' || e.key === 'PrintScreen' || e.key === 's')
@@ -64,7 +82,21 @@ export function useExamProtection({
       // Block PrintScreen key
       if (e.key === 'PrintScreen') {
         e.preventDefault();
+        // Try to clear clipboard on desktop
+        try {
+          navigator.clipboard.writeText('').catch(() => {});
+        } catch {}
         handleViolation('screenshot_key');
+      }
+      // Block F12 dev tools
+      if (e.key === 'F12') {
+        e.preventDefault();
+        handleViolation('devtools');
+      }
+      // Block Ctrl+Shift+I (dev tools)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
+        e.preventDefault();
+        handleViolation('devtools');
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -76,12 +108,46 @@ export function useExamProtection({
     };
     window.addEventListener('beforeprint', handleBeforePrint);
 
+    // 6. Mobile: Detect sudden resize (split screen / screen recording tools)
+    const handleResize = () => {
+      const wDiff = Math.abs(window.innerWidth - lastSize.current.w);
+      const hDiff = Math.abs(window.innerHeight - lastSize.current.h);
+      // Only trigger if significant resize (not keyboard opening)
+      if (wDiff > 100) {
+        handleViolation('resize_suspicious');
+      }
+      lastSize.current = { w: window.innerWidth, h: window.innerHeight };
+    };
+    window.addEventListener('resize', handleResize);
+
+    // 7. Mobile: Block long-press (which can trigger screenshot on some devices)
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 2) {
+        // 3+ finger gestures are often screenshot gestures
+        handleViolation('multi_touch');
+      }
+    };
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+
+    // 8. Prevent copy via clipboard events
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      handleViolation('copy_attempt');
+    };
+    document.addEventListener('copy', handleCopy);
+
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('copy', handleCopy);
+      // Clean up body blur just in case
+      document.body.style.filter = '';
+      document.body.style.transition = '';
       if (warningRef.current) clearTimeout(warningRef.current);
     };
   }, [enabled, handleViolation]);

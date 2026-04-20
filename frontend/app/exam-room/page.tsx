@@ -1,32 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Header from '@/components/layout/Header';
 import Link from 'next/link';
 import { 
   FiMonitor, FiUsers, FiClock, FiCalendar, 
   FiFileText, FiAward, FiSearch, FiFilter,
-  FiPlayCircle, FiChevronRight, FiSettings
+  FiPlayCircle, FiChevronRight, FiSettings,
+  FiTrendingUp, FiArrowRight
 } from 'react-icons/fi';
 import axiosInstance from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
+
+interface LeaderboardEntry {
+  rank: number;
+  id: number;
+  full_name: string;
+  avatar_url: string | null;
+  total_attempts: number;
+  avg_score: number;
+  best_score: number;
+}
 
 export default function ExamRoomPage() {
   const { user } = useAuthStore();
   const isExamAdmin = hasPermission(user, 'exams.manage');
   const [mounted, setMounted] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [lobbyData, setLobbyData] = useState<{ live: any[]; upcoming: any[]; public: any[] }>({ live: [], upcoming: [], public: [] });
   const [now, setNow] = useState(Date.now());
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+
+  const publicExamsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
     
-    // Update time every minute
     const interval = setInterval(() => setNow(Date.now()), 60000);
     
-    // Fetch data
     const fetchLobby = async () => {
       try {
         const res = await axiosInstance.get('/exams/lobby');
@@ -37,7 +50,20 @@ export default function ExamRoomPage() {
         console.error("Failed to fetch exam lobby:", err);
       }
     };
+
+    const fetchLeaderboard = async () => {
+      try {
+        const res = await axiosInstance.get('/leaderboard?limit=5');
+        if (res.data?.success) {
+          setLeaderboard(res.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch leaderboard:", err);
+      }
+    };
+
     fetchLobby();
+    fetchLeaderboard();
     
     return () => clearInterval(interval);
   }, []);
@@ -59,9 +85,18 @@ export default function ExamRoomPage() {
   };
 
   const colors = ['bg-rose-500', 'bg-indigo-600', 'bg-emerald-500', 'bg-orange-500'];
+  const MEDAL = ['🥇', '🥈', '🥉'];
 
+  const scrollToPublicExams = () => {
+    publicExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
-  // We will conditionally render skeletons for the lists below when not mounted to prevent React hydration errors
+  // Filter public exams by both subject filter and search query
+  const filteredPublicExams = lobbyData.public.filter(e => {
+    const matchSubject = activeFilter === 'all' || e.subject_name?.toLowerCase().includes(activeFilter.toLowerCase());
+    const matchSearch = !searchQuery.trim() || e.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchSubject && matchSearch;
+  });
 
   return (
     <div className="min-h-screen bg-[#f8fafc] relative flex flex-col">
@@ -93,12 +128,18 @@ export default function ExamRoomPage() {
              </p>
              
              <div className="flex flex-wrap gap-4">
-               <button className="px-8 py-3.5 bg-white text-rose-600 font-bold rounded-2xl shadow-xl hover:bg-rose-50 hover:scale-105 transition-all duration-300">
+               <button 
+                 onClick={scrollToPublicExams}
+                 className="px-8 py-3.5 bg-white text-rose-600 font-bold rounded-2xl shadow-xl hover:bg-rose-50 hover:scale-105 transition-all duration-300"
+               >
                  Tìm kỳ thi ngay
                </button>
-               <button className="px-8 py-3.5 bg-rose-700/50 backdrop-blur-md border border-rose-400/50 text-white font-bold rounded-2xl shadow-lg hover:bg-rose-700 transition-all duration-300">
-                 Xem lịch thi đua
-               </button>
+               <Link 
+                 href="/bang-xep-hang"
+                 className="px-8 py-3.5 bg-rose-700/50 backdrop-blur-md border border-rose-400/50 text-white font-bold rounded-2xl shadow-lg hover:bg-rose-700 transition-all duration-300 flex items-center gap-2"
+               >
+                 <FiAward /> Xem bảng xếp hạng
+               </Link>
              </div>
           </div>
 
@@ -227,9 +268,12 @@ export default function ExamRoomPage() {
                       </div>
                     </div>
                     
-                    <button className="w-full py-3 bg-white border-2 border-gray-200 text-gray-800 font-bold rounded-xl hover:border-gray-900 transition-colors">
+                    <Link 
+                      href={`/exam/${exam.id}`}
+                      className="w-full py-3 bg-white border-2 border-gray-200 text-gray-800 font-bold rounded-xl hover:border-gray-900 transition-colors text-center block"
+                    >
                       Chi tiết
-                    </button>
+                    </Link>
                   </>
                 )}
               </div>
@@ -237,8 +281,69 @@ export default function ExamRoomPage() {
           </div>
         </section>
 
+        {/* ── MINI LEADERBOARD ────────────────────────────────────── */}
+        {leaderboard.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-yellow-100 text-yellow-600">
+                  <FiAward className="text-xl" />
+                </div>
+                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Bảng Xếp Hạng</h2>
+              </div>
+              <Link href="/bang-xep-hang" className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:text-violet-800 transition-colors">
+                Xem đầy đủ <FiArrowRight />
+              </Link>
+            </div>
+
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+              {/* Top 3 highlight */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+                {leaderboard.slice(0, 3).map((entry, idx) => (
+                  <div key={entry.id} className={`flex items-center gap-4 p-5 sm:p-6 ${idx === 0 ? 'bg-gradient-to-br from-yellow-50 to-orange-50' : ''}`}>
+                    <span className="text-2xl">{MEDAL[idx]}</span>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden">
+                      {entry.avatar_url 
+                        ? <img src={entry.avatar_url} alt={entry.full_name} className="w-full h-full object-cover" />
+                        : entry.full_name?.charAt(0)?.toUpperCase() || '?'
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900 truncate text-sm">{entry.full_name}</p>
+                      <p className="text-xs text-gray-500">{entry.total_attempts} lần thi</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-lg font-black ${idx === 0 ? 'text-yellow-600' : 'text-gray-700'}`}>{entry.avg_score}</p>
+                      <p className="text-xs text-gray-400">ĐTB</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rest */}
+              {leaderboard.length > 3 && (
+                <div className="border-t border-gray-100 divide-y divide-gray-50">
+                  {leaderboard.slice(3).map((entry) => (
+                    <div key={entry.id} className="flex items-center gap-4 px-6 py-3">
+                      <span className="text-sm font-black text-gray-400 w-6 text-center">#{entry.rank}</span>
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden">
+                        {entry.avatar_url 
+                          ? <img src={entry.avatar_url} alt={entry.full_name} className="w-full h-full object-cover" />
+                          : entry.full_name?.charAt(0)?.toUpperCase() || '?'
+                        }
+                      </div>
+                      <p className="flex-1 min-w-0 font-medium text-gray-800 truncate text-sm">{entry.full_name}</p>
+                      <p className="text-sm font-bold text-gray-600">{entry.avg_score} ĐTB</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* ── PUBLIC EXAM ARCHIVE ────────────────────────────────────── */}
-        <section>
+        <section ref={publicExamsRef}>
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-4">
              <div className="flex items-center gap-3">
                <div className="p-2.5 rounded-xl bg-indigo-100 text-indigo-600">
@@ -268,11 +373,22 @@ export default function ExamRoomPage() {
              <div className="p-4 border-b border-gray-100 flex items-center gap-4">
                 <div className="relative flex-1 max-w-md">
                    <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                   <input type="text" placeholder="Tìm kiếm tên đề thi..." className="w-full pl-11 pr-4 py-3 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                   <input 
+                     type="text" 
+                     placeholder="Tìm kiếm tên đề thi..." 
+                     value={searchQuery}
+                     onChange={(e) => setSearchQuery(e.target.value)}
+                     className="w-full pl-11 pr-4 py-3 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
+                   />
                 </div>
-                <button className="p-3 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors">
-                  <FiFilter />
-                </button>
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="p-3 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors text-sm font-medium"
+                  >
+                    Xóa
+                  </button>
+                )}
              </div>
              
              {/* Dynamic Table */}
@@ -297,7 +413,8 @@ export default function ExamRoomPage() {
                            </div>
                         </td>
                      </tr>
-                   ) : lobbyData.public.filter(e => activeFilter === 'all' || e.subject_name?.toLowerCase().includes(activeFilter.toLowerCase())).map(exam => (
+                   ) : filteredPublicExams.length > 0 ? (
+                     filteredPublicExams.map(exam => (
                       <tr key={exam.id} className="hover:bg-indigo-50/30 transition-colors group">
                         <td className="py-4 px-6 font-bold text-gray-900">{exam.title}</td>
                         <td className="py-4 px-6">
@@ -306,23 +423,19 @@ export default function ExamRoomPage() {
                         <td className="py-4 px-6 text-sm text-gray-600 font-medium">{exam.duration || 0} phút</td>
                         <td className="py-4 px-6 text-sm text-gray-600 font-medium">{exam.question_count || exam.total_questions || 0}</td>
                         <td className="py-4 px-6 text-right">
-                          <Link href={`/exam/${exam.id}`} className="px-5 py-2 inline-block bg-white border border-gray-200 text-gray-800 text-sm font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:border-indigo-600 hover:text-indigo-600">
+                          <Link href={`/exam/${exam.id}`} className="px-5 py-2 inline-block bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors sm:bg-white sm:border sm:border-gray-200 sm:text-gray-800 sm:hover:border-indigo-600 sm:hover:text-indigo-600 sm:opacity-0 sm:group-hover:opacity-100">
                             Làm bài
                           </Link>
                         </td>
                       </tr>
-                   ))}
-                   {lobbyData.public.length === 0 && (
-                      <tr>
-                        <td className="py-8 text-center text-gray-500" colSpan={5}>Chưa có đề thi tự do nào</td>
-                      </tr>
-                   )}
-                   {/* Dummy empty rows for layout padding */}
-                   {[1, 2, 3].map(i => (
-                     <tr key={`empty-${i}`}>
-                        <td className="py-8 border-t border-dashed border-gray-100" colSpan={5}></td>
+                     ))
+                   ) : (
+                     <tr>
+                       <td className="py-8 text-center text-gray-500" colSpan={5}>
+                         {searchQuery ? `Không tìm thấy đề thi cho "${searchQuery}"` : 'Chưa có đề thi tự do nào'}
+                       </td>
                      </tr>
-                   ))}
+                   )}
                  </tbody>
                </table>
              </div>

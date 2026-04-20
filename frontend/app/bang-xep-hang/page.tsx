@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import Link from 'next/link';
+import Header from '@/components/layout/Header';
 import { FiAward, FiTrendingUp, FiTarget, FiRefreshCw } from 'react-icons/fi';
 
 interface LeaderboardEntry {
@@ -64,7 +65,9 @@ export default function LeaderboardPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
-            {/* Header */}
+            <Header />
+
+            {/* Page Header */}
             <div className="bg-white border-b border-gray-100 shadow-sm">
                 <div className="max-w-3xl mx-auto px-6 py-6 text-center">
                     <h1 className="text-3xl font-black text-gray-900 flex items-center justify-center gap-3">
@@ -117,7 +120,7 @@ export default function LeaderboardPage() {
                         <FiTrendingUp size={48} className="mx-auto mb-3 opacity-40" />
                         <p className="text-lg font-medium">Chưa có dữ liệu</p>
                         <p className="text-sm mt-1">Hãy thi thử để lên bảng xếp hạng!</p>
-                        <Link href="/thi-thu" className="mt-4 inline-block px-6 py-2 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 transition-colors">
+                        <Link href="/exam-room" className="mt-4 inline-block px-6 py-2 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 transition-colors">
                             Thi ngay
                         </Link>
                     </div>
@@ -179,7 +182,7 @@ export default function LeaderboardPage() {
                         <FiTarget size={32} className="mx-auto text-violet-400 mb-3" />
                         <p className="text-gray-600 font-medium">Bạn chưa có trên bảng xếp hạng</p>
                         <p className="text-sm text-gray-400 mt-1">Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
-                        <Link href="/thi-thu" className="mt-4 inline-block px-6 py-2.5 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 transition-colors">
+                        <Link href="/exam-room" className="mt-4 inline-block px-6 py-2.5 bg-violet-600 text-white rounded-full text-sm font-semibold hover:bg-violet-700 transition-colors">
                             Thi ngay
                         </Link>
                     </div>
@@ -187,7 +190,7 @@ export default function LeaderboardPage() {
 
                 {!isAuthenticated && !loading && entries.length > 0 && (
                     <div className="mt-6 text-center text-sm text-gray-500">
-                        <Link href="/auth" className="text-violet-600 hover:underline font-medium">Đăng nhập</Link>{' '}
+                        <Link href="/login" className="text-violet-600 hover:underline font-medium">Đăng nhập</Link>{' '}
                         để xem thứ hạng của bạn
                     </div>
                 )}

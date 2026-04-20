@@ -5,7 +5,7 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
 import { adminApi } from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity } from 'react-icons/fi';
+import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward } from 'react-icons/fi';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -62,9 +62,11 @@ export default function AdminDashboard() {
         canManageUsers && { label: 'Quản lý Users', href: '/admin/users', desc: 'Phân quyền, khóa/mở tài khoản', color: 'blue' },
         canManageExams && { label: 'Tạo đề thi', href: '/admin/exams/create', desc: 'Tạo đề mới với shuffle + video', color: 'emerald' },
         canManageExams && { label: 'Kho đề thi', href: '/admin/exams', desc: 'Xem, sửa, xóa đề thi', color: 'purple' },
-        canManageContent && { label: 'Tài liệu', href: '/admin/materials', desc: 'Upload và quản lý tài liệu', color: 'pink' },
+        canManageExams && { label: 'Phòng thi', href: '/exam-room', desc: 'Xem phòng thi đang hoạt động', color: 'pink' },
+        canManageContent && { label: 'Tài liệu', href: '/admin/materials', desc: 'Upload và quản lý tài liệu', color: 'cyan' },
         canManageContent && { label: 'Từ vựng', href: '/admin/vocabulary', desc: 'Quản lý từ vựng HSK', color: 'cyan' },
         canManageForum && { label: 'Forum', href: '/admin/posts', desc: 'Kiểm duyệt bài viết', color: 'orange' },
+        { label: 'Bảng xếp hạng', href: '/bang-xep-hang', desc: 'Xem top học viên', color: 'violet' },
     ].filter(Boolean) as { label: string; href: string; desc: string; color: string }[];
 
     const colorMap: Record<string, string> = {
@@ -81,12 +83,12 @@ export default function AdminDashboard() {
                 {statCards.map(card => {
                     const Icon = card.icon;
                     return (
-                        <div key={card.title} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+                        <div key={card.title} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5 shadow-sm">
                             <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${colorMap[card.tone]} text-white mb-3`}>
                                 <Icon size={18} />
                             </div>
-                            <p className="text-sm text-gray-500 font-medium">{card.title}</p>
-                            <p className="text-3xl font-black text-gray-900 mt-1">
+                            <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{card.title}</p>
+                            <p className="text-3xl font-black text-gray-900 dark:text-white mt-1">
                                 {loading ? '...' : card.value.toLocaleString()}
                             </p>
                         </div>
@@ -96,18 +98,18 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Quick links */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                    <h3 className="text-base font-bold text-gray-900 mb-4">Thao tác nhanh</h3>
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm p-5">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white mb-4">Thao tác nhanh</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {quickLinks.map(link => (
                             <Link key={link.href} href={link.href}
-                                className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-violet-300 hover:bg-violet-50/50 transition-all group">
+                                className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all group">
                                 <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colorMap[link.color]} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
                                     <FiActivity size={16} />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{link.label}</p>
-                                    <p className="text-xs text-gray-500">{link.desc}</p>
+                                    <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-violet-700 dark:group-hover:text-violet-400">{link.label}</p>
+                                    <p className="text-xs text-gray-500 dark:text-slate-400">{link.desc}</p>
                                 </div>
                             </Link>
                         ))}
@@ -115,11 +117,11 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Recent activity */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-                    <h3 className="text-base font-bold text-gray-900 mb-4">Hoạt động gần đây</h3>
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm p-5">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white mb-4">Hoạt động gần đây</h3>
                     {loading ? (
                         <div className="space-y-3">{[...Array(4)].map((_, i) => (
-                            <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+                            <div key={i} className="h-12 bg-gray-100 dark:bg-slate-800 rounded-xl animate-pulse" />
                         ))}</div>
                     ) : stats.recentActivities.length === 0 ? (
                         <div className="text-center py-10 text-gray-400">
@@ -129,19 +131,19 @@ export default function AdminDashboard() {
                     ) : (
                         <div className="space-y-2">
                             {stats.recentActivities.slice(0, 8).map(a => (
-                                <div key={a.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                                <div key={a.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                                        <div className="w-8 h-8 bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
                                             {a.user_name?.charAt(0)?.toUpperCase() || '?'}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-sm font-medium text-gray-800 truncate">{a.user_name}</p>
-                                            <p className="text-xs text-gray-400 truncate">{a.exam_title}</p>
+                                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.user_name}</p>
+                                            <p className="text-xs text-gray-400 dark:text-slate-500 truncate">{a.exam_title}</p>
                                         </div>
                                     </div>
                                     <div className="text-right shrink-0 ml-3">
-                                        <p className="text-sm font-bold text-gray-900">{a.total_score ?? 0}đ</p>
-                                        <p className="text-xs text-gray-400">{new Date(a.created_at).toLocaleDateString('vi-VN')}</p>
+                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{a.total_score ?? 0}đ</p>
+                                        <p className="text-xs text-gray-400 dark:text-slate-500">{new Date(a.created_at).toLocaleDateString('vi-VN')}</p>
                                     </div>
                                 </div>
                             ))}

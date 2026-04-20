@@ -11,6 +11,7 @@ import {
   FiX, FiChevronLeft, FiChevronRight, FiLogOut
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
+import ThemeToggle from './ThemeToggle';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -47,13 +48,6 @@ const NAV_SECTIONS = [
         label: 'Đề thi',
         icon: FiFileText,
         href: '/admin/exams',
-        permission: 'exams.manage',
-        roles: [],
-      },
-      {
-        label: 'Phòng thi',
-        icon: FiMonitor,
-        href: '/exam-room',
         permission: 'exams.manage',
         roles: [],
       },
@@ -162,7 +156,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
     .filter(section => section.items.length > 0);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
 
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className={`
@@ -245,7 +239,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
       {/* ── Main Content ─────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-6 py-4 flex items-center gap-4">
+        <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center gap-4">
           <button onClick={() => setSidebarOpen(true)}
             className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-600">
             <FiActivity size={18} />
@@ -257,9 +251,11 @@ export default function AdminLayout({ children, title, description }: AdminLayou
           </div>
 
           <Link href="/"
-            className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-violet-600 transition-colors">
+            className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
             ← Về trang chủ
           </Link>
+
+          <ThemeToggle />
 
           <div className="w-9 h-9 bg-gradient-to-br from-violet-600 to-fuchsia-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
             {userInitial}

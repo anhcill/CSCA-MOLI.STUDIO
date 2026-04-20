@@ -3,14 +3,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import examApi, { Exam, Question } from '@/lib/api/exams';
-import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid } from 'react-icons/fi';
+import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
+import { useAuthStore } from '@/lib/store/authStore';
 
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuthStore();
 
   // useMemo để tránh tính lại mỗi lần render
   const examId = useMemo(() => {
@@ -32,6 +34,7 @@ export default function ExamPage() {
   const [violations, setViolations] = useState(0);
   const [showViolation, setShowViolation] = useState(false);
   const [lastViolation, setLastViolation] = useState('');
+  const [isScreenCaptured, setIsScreenCaptured] = useState(false);
 
   const { maxViolations } = useExamProtection({
     enabled: !!attemptId && !submitting,
@@ -42,8 +45,19 @@ export default function ExamPage() {
         if (next > 0) setShowViolation(true);
         return next;
       });
+      // Show capture shield briefly on visibility-related violations
+      if (type === 'tab_switch' || type === 'window_blur') {
+        setIsScreenCaptured(true);
+      }
     },
   });
+
+  // Auto-dismiss capture shield after 3 seconds
+  useEffect(() => {
+    if (!isScreenCaptured) return;
+    const timer = setTimeout(() => setIsScreenCaptured(false), 3000);
+    return () => clearTimeout(timer);
+  }, [isScreenCaptured]);
 
   const handleViolationClose = useCallback(() => {
     setShowViolation(false);
@@ -213,13 +227,50 @@ export default function ExamPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200"
+      className="min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200 exam-protected"
       style={{
         WebkitUserSelect: 'none',
         userSelect: 'none',
         WebkitTouchCallout: 'none',
       }}
     >
+      {/* Screen Capture Shield - covers content when screenshot detected */}
+      {isScreenCaptured && (
+        <div className="exam-capture-shield" onClick={() => setIsScreenCaptured(false)}>
+          <div className="exam-capture-shield-content">
+            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+              <FiShield size={32} className="text-red-400" />
+            </div>
+            <h3>Phát hiện hành vi chụp màn hình</h3>
+            <p>Nội dung đề thi đã bị ẩn. Nhấn để tiếp tục làm bài.</p>
+            <button
+              onClick={() => setIsScreenCaptured(false)}
+              className="px-6 py-2.5 bg-white text-gray-900 font-bold rounded-xl hover:bg-gray-100 transition-colors"
+            >
+              Tiếp tục làm bài
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Watermark overlay - user identity stamped across exam */}
+      <div className="fixed inset-0 pointer-events-none z-[45] overflow-hidden" aria-hidden="true" style={{ opacity: 0.04 }}>
+        <div className="absolute inset-0" style={{ transform: 'rotate(-35deg)', transformOrigin: 'center center' }}>
+          {Array.from({ length: 12 }).map((_, row) => (
+            <div key={row} className="flex whitespace-nowrap" style={{ marginTop: row === 0 ? '-10%' : '80px' }}>
+              {Array.from({ length: 8 }).map((_, col) => (
+                <span
+                  key={col}
+                  className="text-gray-900 font-bold text-lg mx-16 select-none"
+                  style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                >
+                  {user?.full_name || 'CSCA'} • ID:{user?.id || '?'}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
       
       {/* FOCUS TOP BAR */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-gray-200 z-50 flex items-center justify-between px-4 sm:px-8 shadow-sm">
@@ -273,7 +324,10 @@ export default function ExamPage() {
 
 
       {/* MAIN EXAM ARENA */}
-      <div className="max-w-[1500px] mx-auto pt-24 pb-16 px-4 md:px-8 flex flex-col lg:flex-row gap-6 lg:gap-10">
+      <div 
+        className="max-w-[1500px] mx-auto pt-24 pb-16 px-4 md:px-8 flex flex-col lg:flex-row gap-6 lg:gap-10 transition-[filter] duration-200"
+        style={{ filter: isScreenCaptured ? 'blur(30px)' : 'none' }}
+      >
         
         {/* Left Area: The Question Board */}
         <div className="lg:flex-1 lg:max-w-4xl max-w-full">

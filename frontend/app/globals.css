@@ -118,3 +118,84 @@ html {
 .dark ::-webkit-scrollbar-track {
   background: rgba(30, 30, 30, 0.3);
 }
+
+/* ======================================================
+   EXAM ANTI-SCREENSHOT / ANTI-COPY PROTECTION
+   ====================================================== */
+
+/* Prevent text selection in exam mode */
+.exam-protected {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+}
+
+/* When printing, hide everything and show warning */
+@media print {
+  .exam-protected,
+  .exam-protected * {
+    visibility: hidden !important;
+    display: none !important;
+  }
+
+  body::after {
+    content: "⚠️ In nội dung đề thi không được phép! Hành vi này đã bị ghi nhận.";
+    visibility: visible !important;
+    display: block !important;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    color: #dc2626;
+    font-weight: bold;
+    text-align: center;
+    padding: 40px;
+    z-index: 999999;
+  }
+}
+
+/* Screenshot protection overlay - blur content when captured */
+.exam-capture-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  pointer-events: all;
+}
+
+.exam-capture-shield-content {
+  text-align: center;
+  color: white;
+  padding: 2rem;
+  max-width: 400px;
+}
+
+.exam-capture-shield-content h3 {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin-bottom: 0.75rem;
+}
+
+.exam-capture-shield-content p {
+  font-size: 0.875rem;
+  opacity: 0.7;
+  margin-bottom: 1.5rem;
+}
+
+/* Hide scrollbar for filter tabs */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
