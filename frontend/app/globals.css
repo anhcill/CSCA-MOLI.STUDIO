@@ -16,8 +16,8 @@
 
 body {
   font-family:
-    "Plus Jakarta Sans",
-    "Inter",
+    var(--font-jakarta),
+    var(--font-inter),
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;

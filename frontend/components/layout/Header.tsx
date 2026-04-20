@@ -3,15 +3,16 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  FiUser, FiChevronDown, FiLogIn, FiUserPlus, FiLogOut, 
-  FiSearch, FiMenu, FiX, FiBookOpen, FiMap, FiMonitor, 
+import {
+  FiUser, FiChevronDown, FiLogIn, FiUserPlus, FiLogOut,
+  FiSearch, FiMenu, FiX, FiBookOpen, FiMap, FiMonitor,
   FiMessageSquare, FiFileText, FiGift, FiAward, FiShield
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import SearchBar from './SearchBar';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 
 const COURSES = [
   { id: 'toan',          name: 'Toán',           href: '/mon/toan' },
@@ -67,7 +68,7 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   return (
-    <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur-md transition-all duration-300 ${scrolled ? 'shadow-lg border-b border-gray-100/50 py-1' : 'shadow-sm border-b border-gray-100 py-3'}`}>
+    <header className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'shadow-lg py-1' : 'shadow-sm py-3'} bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between gap-4">
 
@@ -154,6 +155,8 @@ export default function Header() {
             <button className="md:hidden p-1.5 sm:p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Tim kiem">
               <FiSearch size={20} />
             </button>
+
+            <ThemeToggle />
 
             {mounted && (!user || !user.is_vip) && (
               <Link href="/vip" className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-sm font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group">
@@ -247,7 +250,7 @@ export default function Header() {
       </div>
 
       {/* ── MOBILE MENU ── */}
-      <div className={`xl:hidden absolute top-full left-0 w-full bg-white border-t border-gray-100 shadow-2xl transition-all duration-300 origin-top overflow-hidden ${mobileOpen ? 'max-h-[80vh] opacity-100 visible overflow-y-auto' : 'max-h-0 opacity-0 invisible'}`}>
+      <div className={`xl:hidden absolute top-full left-0 w-full border-t shadow-2xl transition-all duration-300 origin-top overflow-hidden dark:border-gray-800 ${mobileOpen ? 'max-h-[80vh] opacity-100 visible overflow-y-auto bg-white dark:bg-gray-900' : 'max-h-0 opacity-0 invisible'}`}>
         <div className="p-4 space-y-2">
            <div className="mb-4 md:hidden">
               <SearchBar />
@@ -268,19 +271,19 @@ export default function Header() {
            )}
 
            <nav className="space-y-1">
-             <Link href={MAIN_NAV[0].href} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 font-bold hover:bg-gray-50">
+             <Link href={MAIN_NAV[0].href} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
                Trang chủ
              </Link>
              
              {/* Mobile Course Menu */}
              <div className="rounded-2xl border border-gray-100 overflow-hidden">
-                <button onClick={() => setMobileCourseOpen(!mobileCourseOpen)} className="flex items-center justify-between w-full p-4 text-gray-800 font-bold hover:bg-gray-50 bg-gray-50/50">
+                <button onClick={() => setMobileCourseOpen(!mobileCourseOpen)} className="flex items-center justify-between w-full p-4 text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
                    <div className="flex items-center gap-3"><FiBookOpen/> Môn học / Khóa học</div>
                    <FiChevronDown className={`transition-transform duration-300 ${mobileCourseOpen ? 'rotate-180': ''}`} />
                 </button>
                 <div className={`transition-all duration-300 bg-white ${mobileCourseOpen ? 'max-h-[400px] opacity-100 visible py-2' : 'max-h-0 opacity-0 invisible'}`}>
                    {COURSES.map(course => (
-                     <Link key={course.id} href={course.href} className="block px-10 py-3 text-sm font-semibold text-gray-600 hover:text-violet-700 hover:bg-violet-50">
+                     <Link key={course.id} href={course.href} className="block px-10 py-3 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20">
                        • {course.name}
                      </Link>
                    ))}
@@ -291,19 +294,19 @@ export default function Header() {
              {MAIN_NAV.slice(1).map(item => {
                const Icon = item.icon;
                return (
-                 <Link key={item.id} href={item.href} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 font-bold hover:bg-gray-50">
-                   {Icon && <Icon className="text-gray-400" />} {item.name}
+                 <Link key={item.id} href={item.href} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
+                   {Icon && <Icon className="text-gray-400 dark:text-gray-500" />} {item.name}
                  </Link>
                )
              })}
            </nav>
 
            {(!mounted || !isAuthenticated) && (
-            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-100 mt-4">
-              <Link href="/login" className="text-center py-3 rounded-2xl border-2 border-gray-100 text-gray-700 font-bold">
+            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-100 dark:border-gray-800 mt-4">
+              <Link href="/login" className="text-center py-3 rounded-2xl border-2 border-gray-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
                 Đăng nhập
               </Link>
-              <Link href="/register" className="text-center py-3 rounded-2xl bg-gray-900 text-white font-bold">
+              <Link href="/register" className="text-center py-3 rounded-2xl bg-gray-900 dark:bg-gray-700 text-white font-bold hover:bg-gray-800 dark:hover:bg-gray-600">
                 Đăng ký
               </Link>
             </div>

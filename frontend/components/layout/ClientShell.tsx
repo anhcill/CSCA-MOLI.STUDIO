@@ -1,87 +1,14 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const prevPathname = useRef(pathname);
 
-  // ── Mounted guard (avoid SSR hydration mismatch) ─────────────────────────
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  // ── Navigation state: wait for pathname to settle before showing content ──
-  const [ready, setReady] = useState(false);
-  const readyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (!mounted) return;
-    // On every pathname change, hide footer briefly, then show after settle
-    if (prevPathname.current !== pathname) {
-      prevPathname.current = pathname;
-    }
-    if (readyTimer.current) clearTimeout(readyTimer.current);
-    // 300ms settle window — if pathname doesn't change again, show footer
-    readyTimer.current = setTimeout(() => setReady(true), 300);
-    return () => {
-      if (readyTimer.current) clearTimeout(readyTimer.current);
-    };
-  }, [pathname, mounted]);
-
-  // ── Navigation progress bar ──────────────────────────────────────────────
-  const [progress, setProgress] = useState(0);
-  const [barVisible, setBarVisible] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const startProgress = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setProgress(0);
-    setBarVisible(true);
-    let val = 0;
-    timerRef.current = setInterval(() => {
-      val += Math.random() * 12 * (1 - val / 100);
-      if (val > 90) val = 90;
-      setProgress(val);
-    }, 120);
-  };
-
-  const finishProgress = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setProgress(100);
-    setTimeout(() => { setBarVisible(false); setProgress(0); }, 300);
-  };
-
-  // ── Click listener — start progress when moving to another route ─────────
-  useEffect(() => {
-    const onLinkClick = (e: MouseEvent) => {
-      const a = (e.target as HTMLElement).closest('a');
-      if (!a) return;
-      const href = a.getAttribute('href') ?? '';
-      if (
-        href.startsWith('/') &&
-        !href.startsWith('//') &&
-        href.split('?')[0] !== pathname
-      ) {
-        startProgress();
-      }
-    };
-    document.addEventListener('click', onLinkClick, true);
-    return () => document.removeEventListener('click', onLinkClick, true);
-  }, [pathname]);
-
-  // ── Pathname change — finish progress once route is settled ──────────────
-  useEffect(() => {
-    if (prevPathname.current !== pathname) {
-      prevPathname.current = pathname;
-      finishProgress();
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [pathname]);
-
-  // ── Route-based footer suppression ──────────────────────────────────────
+  // Suppress footer on admin/auth/exam routes
   const isAdmin = pathname?.startsWith('/admin');
   const isAuth =
     pathname?.startsWith('/login') ||
@@ -92,37 +19,16 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const noFooter = isAdmin || isAuth || isExam;
   const showFloatingContacts = !isAdmin && !isExam;
 
-  // Only show footer when: mounted + route settled + not suppressed
-  const showFooter = mounted && ready && !noFooter;
-
   return (
     <>
-      {/* Progress bar */}
-      {mounted && barVisible && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            height: '3px',
-            width: `${progress}%`,
-            background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-            transition: progress === 100 ? 'width 0.15s ease-out' : 'width 0.12s ease',
-            zIndex: 9999,
-            borderRadius: '0 2px 2px 0',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-
-      {mounted && showFloatingContacts && <FloatingContactButtons />}
+      {showFloatingContacts && <FloatingContactButtons />}
 
       <div className="min-h-screen flex flex-col">
         <div className="flex-1">
           {children}
         </div>
 
-        {showFooter && (
+        {!noFooter && (
           <div id="footer-shell" className="mt-auto">
             <Footer />
           </div>
