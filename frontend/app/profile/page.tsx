@@ -16,6 +16,18 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
+function derivePackageUI(pkg: any) {
+  const isPremium = pkg.name.toLowerCase().includes('premium');
+  return {
+    tier: isPremium ? 'premium' : 'vip',
+    color: isPremium ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
+    iconColor: isPremium ? 'text-amber-600' : 'text-indigo-600',
+    iconBg: isPremium ? 'bg-amber-50' : 'bg-indigo-50',
+    border: isPremium ? 'border-amber-200' : 'border-indigo-200',
+    btnHover: isPremium ? 'hover:bg-amber-50' : 'hover:bg-indigo-50',
+  };
+}
+
 const Sk = ({ className }: { className: string }) => (
   <div className={`animate-pulse bg-gray-100 rounded-xl ${className}`} />
 );
@@ -107,6 +119,9 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
+  const [packages, setPackages] = useState<any[]>([]);
+  const [pkgsLoading, setPkgsLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     full_name: authUser?.full_name || '',
     bio: authUser?.bio || '',
@@ -133,6 +148,16 @@ export default function ProfilePage() {
     setLocalUser(authUser);
     setAvatarPreview(authUser?.avatar || '');
   }, [authUser]);
+
+  useEffect(() => {
+    if (activeTab === 'vip' && packages.length === 0) {
+      setPkgsLoading(true);
+      axios.get('/vip/packages')
+        .then(res => setPackages(res.data.data || []))
+        .catch(() => {})
+        .finally(() => setPkgsLoading(false));
+    }
+  }, [activeTab]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -477,53 +502,60 @@ export default function ProfilePage() {
                 <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <FiZap className="text-indigo-500" size={18} /> Các gói PRO
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center"><FiEye size={16} className="text-blue-600" /></div>
-                      <div><p className="font-bold text-gray-900 text-sm">Gói Xem</p><p className="text-xs text-gray-500">Dành cho người mới</p></div>
-                    </div>
-                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">99K</span><span className="text-sm text-gray-500 ml-1">/ tháng</span></div>
-                    <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem tài liệu</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Xem đề thi & kết quả</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-400"><FiLock size={13} className="shrink-0" /> Làm bài thi</li>
-                    </ul>
-                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors">Chọn gói</button>
+                {pkgsLoading ? (
+                  <div className="flex justify-center py-6"><div className="w-8 h-8 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"/></div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {packages.map(pkg => {
+                      const ui = derivePackageUI(pkg);
+                      // Vô hiệu hóa nếu người dùng đang dùng gói cùng tier, hoặc nếu current tier = premium mà gói này là vip
+                      const isCurrentTier = localUser?.is_vip && localUser?.subscription_tier === ui.tier;
+                      const isLowerTier = localUser?.is_vip && localUser?.subscription_tier === 'premium' && ui.tier === 'vip';
+                      const disabled = isCurrentTier || isLowerTier;
+                      
+                      return (
+                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden`}>
+                          {isCurrentTier && (
+                             <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                               Đang dùng
+                             </div>
+                          )}
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className={`w-9 h-9 rounded-lg ${ui.iconBg} flex items-center justify-center`}>
+                              <FaCrown size={15} className={ui.iconColor} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{pkg.name}</p>
+                              <p className="text-xs text-gray-500">{pkg.duration_days} ngày</p>
+                            </div>
+                          </div>
+                          <div className="mb-4">
+                            <span className="text-2xl font-black text-gray-900">{pkg.price.toLocaleString('vi-VN')}</span>
+                            <span className="text-sm text-gray-500 ml-1">đ</span>
+                          </div>
+                          <ul className="space-y-2 mb-4">
+                            {(pkg.features || []).slice(0, 4).map((f: string, i: number) => (
+                              <li key={i} className="flex items-center gap-2 text-xs text-gray-600 min-h-[20px]">
+                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> 
+                                <span className="leading-tight">{f}</span>
+                              </li>
+                            ))}
+                            {(pkg.features || []).length > 4 && (
+                               <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
+                            )}
+                          </ul>
+                          <button 
+                            disabled={disabled}
+                            onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`} 
+                            className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-transparent shadow-inner' : `bg-white ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}`}
+                          >
+                            {isCurrentTier ? 'Gói hiện tại' : isLowerTier ? 'Không khả dụng' : 'Đăng ký ngay'}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  <div className="bg-white rounded-xl border-2 border-indigo-400 p-5 shadow-lg shadow-indigo-100 relative">
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold rounded-full shadow">Phổ biến nhất</span>
-                    </div>
-                    <div className="flex items-center gap-2 mb-3 mt-2">
-                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center"><FiStar size={16} className="text-indigo-600" /></div>
-                      <div><p className="font-black text-gray-900 text-sm">Gói Kiểm tra</p><p className="text-xs text-gray-500">Nhiều người chọn nhất</p></div>
-                    </div>
-                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">249K</span><span className="text-sm text-gray-500 ml-1">/ 6 tháng</span></div>
-                    <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả tính năng xem</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Làm bài thi</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tài liệu độc quyền</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Chấm bài tự luận AI</li>
-                    </ul>
-                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-bold rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover:shadow-lg transition-all">Chọn gói</button>
-                  </div>
-
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center"><FaCrown size={15} className="text-amber-600" /></div>
-                      <div><p className="font-bold text-gray-900 text-sm">Gói Làm bài</p><p className="text-xs text-gray-500">Toàn diện nhất</p></div>
-                    </div>
-                    <div className="mb-4"><span className="text-2xl font-black text-gray-900">699K</span><span className="text-sm text-gray-500 ml-1">/ năm</span></div>
-                    <ul className="space-y-2 mb-4">
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tất cả trong gói Kiểm tra</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Đề thi mới nhất</li>
-                      <li className="flex items-center gap-2 text-xs text-gray-600"><FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> Tư vấn 1-1</li>
-                    </ul>
-                    <button onClick={() => window.location.href = '/vip'} className="w-full py-2 text-sm font-semibold rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors">Chọn gói</button>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
