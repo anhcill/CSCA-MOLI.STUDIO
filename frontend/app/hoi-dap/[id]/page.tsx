@@ -61,7 +61,7 @@ export default function StudentQADetailPage() {
                 content: currentContent,
                 image_url: fakeImageUrl,
                 created_at: new Date().toISOString(),
-                sender_avatar: user?.avatar_url || 'https://ui-avatars.com/api/?name=H'
+                sender_avatar: (user as any)?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent((user as any)?.full_name || 'H')}`
             };
             setTicket({ ...ticket, replies: [...(ticket.replies || []), tempReply] });
         }
