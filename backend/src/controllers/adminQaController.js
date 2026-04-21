@@ -57,6 +57,21 @@ const adminQaController = {
        console.error("Change status:", error);
        res.status(500).json({ success: false, message: "Lỗi thay đổi trạng thái." });
     }
+  },
+
+  // Xóa ticket (và toàn bộ replies)
+  async deleteTicket(req, res) {
+    try {
+      const { id } = req.params;
+      const deleted = await Ticket.deleteTicket(id);
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: "Ticket không tồn tại." });
+      }
+      res.json({ success: true, message: "Đã xóa ticket thành công." });
+    } catch (error) {
+      console.error("Delete ticket:", error);
+      res.status(500).json({ success: false, message: "Lỗi xóa ticket." });
+    }
   }
 };
 

@@ -130,6 +130,15 @@ const Ticket = {
     const params = statusFilter !== 'all' ? [statusFilter] : [];
     const result = await pool.query(query, params);
     return result.rows;
+  },
+
+  async deleteTicket(ticketId) {
+    // support_replies will be auto-deleted via ON DELETE CASCADE
+    const result = await pool.query(
+      `DELETE FROM support_tickets WHERE id = $1 RETURNING id`,
+      [ticketId]
+    );
+    return result.rows[0];
   }
 };
 
