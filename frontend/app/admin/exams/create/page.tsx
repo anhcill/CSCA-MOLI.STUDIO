@@ -34,6 +34,7 @@ export default function CreateExamPage() {
         solution_video_url: '',
         solution_description: '',
         vip_tier: 'basic',
+        is_simulated: false,
     });
 
     const parseDecimal = (raw: string) => {
@@ -339,6 +340,26 @@ export default function CreateExamPage() {
                                 </div>
                             </label>
                             <p className="text-xs text-gray-400 mt-1 ml-14">Mỗi lần làm bài, thứ tự câu hỏi và đáp án sẽ được xáo trộn ngẫu nhiên</p>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <div className="relative">
+                                    <input
+                                        type="checkbox"
+                                        checked={examData.is_simulated}
+                                        onChange={(e) => setExamData({ ...examData, is_simulated: e.target.checked })}
+                                        disabled={!!currentExamId}
+                                        className="sr-only"
+                                    />
+                                    <div className={`w-11 h-6 rounded-full transition-colors ${examData.is_simulated ? 'bg-gradient-to-r from-pink-500 to-rose-600' : 'bg-gray-300'}`} />
+                                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${examData.is_simulated ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-gray-700">Đánh dấu là 🎯 Đề Mô Phỏng</span>
+                                </div>
+                            </label>
+                            <p className="text-xs text-gray-400 mt-1 ml-14">Sử dụng cho hệ thống hiển thị trong giao diện lộ trình ôn luyện.</p>
                         </div>
 
                         {/* VIP Tier */}

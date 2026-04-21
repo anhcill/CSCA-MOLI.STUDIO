@@ -20,7 +20,7 @@ const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier } = req.body;
+      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -31,8 +31,8 @@ const AdminExamController = {
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10, $11)
+        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated)
+         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           examCode,
@@ -46,6 +46,7 @@ const AdminExamController = {
           solution_description || null,
           shuffle_mode === true,
           vip_tier || 'basic',
+          is_simulated === true,
         ],
       );
 
@@ -67,7 +68,7 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -87,6 +88,7 @@ const AdminExamController = {
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
       if (vip_tier !== undefined) { updates.push(`vip_tier = $${idx++}`); params.push(vip_tier); }
+      if (is_simulated !== undefined) { updates.push(`is_simulated = $${idx++}`); params.push(is_simulated === true); }
       updates.push(`updated_at = NOW()`);
       params.push(examId);
 
@@ -422,13 +424,15 @@ const AdminExamController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
-      const type = req.query.type; // 'phong-thi' | 'tu-do' | undefined (all)
+      const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | undefined (all)
 
       let whereClause = '';
       if (type === 'phong-thi') {
         whereClause = 'WHERE e.start_time IS NOT NULL';
       } else if (type === 'tu-do') {
-        whereClause = 'WHERE e.start_time IS NULL';
+        whereClause = 'WHERE e.start_time IS NULL AND e.is_simulated = false';
+      } else if (type === 'mo-phong') {
+        whereClause = 'WHERE e.start_time IS NULL AND e.is_simulated = true';
       }
 
       // Get total count
@@ -450,6 +454,7 @@ const AdminExamController = {
           e.total_questions as questions_count,
                     e.status,
                     e.is_premium,
+                    e.is_simulated,
                     e.start_time,
                     e.end_time,
                     e.created_at,
@@ -623,15 +628,17 @@ const AdminExamController = {
   // GET /api/admin/exams/counts - Get exam counts by type
   async getCounts(req, res) {
     try {
-      const [total, phongThi, tuDo] = await Promise.all([
+      const [total, phongThi, tuDo, moPhong] = await Promise.all([
         pool.query('SELECT COUNT(*)::int as count FROM exams'),
         pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NOT NULL'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL AND is_simulated = false'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL AND is_simulated = true'),
       ]);
       res.json({
         all: parseInt(total.rows[0].count),
         phongThi: parseInt(phongThi.rows[0].count),
         tuDo: parseInt(tuDo.rows[0].count),
+        moPhong: parseInt(moPhong.rows[0].count),
       });
     } catch (error) {
       console.error("Get exam counts error:", error);

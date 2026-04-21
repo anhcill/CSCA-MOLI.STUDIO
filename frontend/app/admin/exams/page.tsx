@@ -22,6 +22,7 @@ interface Exam {
     attempts_count: number;
     created_at: string;
     is_premium?: boolean;
+    is_simulated?: boolean;
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
@@ -40,6 +41,7 @@ interface ExamCounts {
     all: number;
     phongThi: number;
     tuDo: number;
+    moPhong: number;
 }
 
 interface ExamStats {
@@ -75,7 +77,7 @@ interface SubjectStat {
     avgPercentage: number;
 }
 
-type ExamFilter = 'all' | 'phong-thi' | 'tu-do';
+type ExamFilter = 'all' | 'phong-thi' | 'tu-do' | 'mo-phong';
 
 export default function ExamsPage() {
     const router = useRouter();
@@ -90,7 +92,7 @@ export default function ExamsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<ExamFilter>('all');
-    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0 });
+    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
     const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
@@ -276,10 +278,11 @@ export default function ExamsPage() {
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {([
                         { value: 'all', label: 'Tất cả', emoji: '📋', count: examCounts.all },
                         { value: 'phong-thi', label: 'Phòng thi', emoji: '🏢', count: examCounts.phongThi },
+                        { value: 'mo-phong', label: 'Đề mô phỏng', emoji: '🎯', count: examCounts.moPhong },
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
                     ] as { value: ExamFilter; label: string; emoji: string; count: number }[]).map(tab => (
                         <button
@@ -389,6 +392,10 @@ export default function ExamsPage() {
                                             {exam.start_time ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg">
                                                     🏢 {new Date(exam.start_time).toLocaleDateString('vi-VN')}
+                                                </span>
+                                            ) : exam.is_simulated ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-lg">
+                                                    🎯 Mô phỏng
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 text-xs text-gray-400 font-medium">

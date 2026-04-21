@@ -8,6 +8,7 @@ export interface ExamCreateData {
     description?: string;
     allow_download?: boolean;
     is_premium?: boolean;
+    is_simulated?: boolean;
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
@@ -69,7 +70,7 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do') => {
+    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong') => {
         const response = await axios.get('/admin/exams', {
             params: { page, limit, ...(type ? { type } : {}) }
         });

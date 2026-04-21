@@ -39,6 +39,7 @@ interface Exam {
     description?: string;
     allow_download: boolean;
     is_premium?: boolean;
+    is_simulated?: boolean;
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
@@ -144,6 +145,17 @@ export default function AdminExamDetailPage() {
             setExam({ ...exam, shuffle_mode: newVal });
         } catch {
             alert('Lỗi cập nhật shuffle');
+        }
+    };
+
+    const handleToggleSimulated = async () => {
+        if (!exam) return;
+        try {
+            const newVal = !exam.is_simulated;
+            await examAdminApi.updateExam(Number(id), { is_simulated: newVal });
+            setExam({ ...exam, is_simulated: newVal });
+        } catch {
+            alert('Lỗi cập nhật đề mô phỏng');
         }
     };
 
@@ -340,6 +352,24 @@ export default function AdminExamDetailPage() {
                         >
                             <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
                                 exam.shuffle_mode ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
+                    </div>
+
+                    {/* Simulated toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">🎯 Đề mô phỏng</p>
+                            <p className="text-xs text-gray-400">Được phân loại vào kho đề thi mô phỏng</p>
+                        </div>
+                        <button
+                            onClick={handleToggleSimulated}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.is_simulated ? 'bg-gradient-to-r from-pink-500 to-rose-600' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.is_simulated ? 'translate-x-7' : 'translate-x-1'
                             }`} />
                         </button>
                     </div>
