@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
 import { FiBook, FiDownload, FiExternalLink, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
@@ -119,11 +120,23 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 }
 
 export default function LyThuyetPage() {
+  const searchParams = useSearchParams() as unknown as URLSearchParams;
+  const initialSubject = searchParams.get('subject') || '';
   const [allMaterials, setAllMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeSubject, setActiveSubject] = useState('');
+  const [activeSubject, setActiveSubject] = useState(initialSubject);
   const [viewing, setViewing] = useState<Material | null>(null);
+
+  const handleSubjectChange = (subject: string) => {
+    setActiveSubject(subject);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (subject) url.searchParams.set('subject', subject);
+      else url.searchParams.delete('subject');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   useEffect(() => {
     axios.get('/materials?category=ly-thuyet')
@@ -166,7 +179,7 @@ export default function LyThuyetPage() {
 
           <div className="flex items-center gap-2 flex-wrap mb-5">
             {SUBJECTS.map(s => (
-              <button key={s.value} onClick={() => setActiveSubject(s.value)}
+              <button key={s.value} onClick={() => handleSubjectChange(s.value)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                   activeSubject === s.value
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'

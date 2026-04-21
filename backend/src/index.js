@@ -173,6 +173,7 @@ app.use("/api/stats", require("./routes/stats")); // Public stats (C8)
 app.use("/api/leaderboard", require("./routes/leaderboard")); // Leaderboard
 app.use("/api/settings", require("./routes/settings")); // Site settings (exam date)
 app.use("/api/ai", require("./routes/ai")); // AI Analysis
+app.use("/api/insights", require("./routes/insights")); // Learning Insights
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages

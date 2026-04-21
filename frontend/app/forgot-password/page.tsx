@@ -3,13 +3,16 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import axios from '@/lib/utils/axios';
-import { FiMail, FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
+import { FiMail, FiArrowLeft, FiCheckCircle, FiFileText, FiShield } from 'react-icons/fi';
+import TermsModal from '@/components/auth/TermsModal';
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [showTermsModal, setShowTermsModal] = useState(false);
+    const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -113,11 +116,35 @@ export default function ForgotPasswordPage() {
                                     <FiArrowLeft size={13} />
                                     Quay lại đăng nhập
                                 </Link>
+
+                                {/* Terms and Privacy Links */}
+                                <div className="mt-4 pt-4 border-t border-gray-100">
+                                    <p className="text-xs text-gray-400 leading-relaxed">
+                                        Bằng việc sử dụng dịch vụ, bạn đồng ý với{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setTermsModalType('terms'); setShowTermsModal(true); }}
+                                            className="text-indigo-600 hover:text-indigo-500 hover:underline"
+                                        >
+                                            Điều khoản sử dụng
+                                        </button>
+                                        {' '}và{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setTermsModalType('privacy'); setShowTermsModal(true); }}
+                                            className="text-indigo-600 hover:text-indigo-500 hover:underline"
+                                        >
+                                            Chính sách bảo mật
+                                        </button>
+                                    </p>
+                                </div>
                             </div>
                         </>
                     )}
                 </div>
             </div>
+
+            <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} type={termsModalType} />
         </div>
     );
 }

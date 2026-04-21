@@ -3,10 +3,10 @@ import Link from 'next/link';
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl flex items-center justify-between gap-12">
-        {/* Left Side - Branding */}
-        <div className="hidden lg:flex flex-col flex-1 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4 sm:p-6 md:p-8">
+      <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
+        {/* Left Side - Branding - Hidden on mobile */}
+        <div className="hidden xl:flex flex-col flex-1 space-y-6 max-w-lg">
           {/* Logo */}
           <Link href="/" className="inline-flex items-center gap-3 group">
             <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_10px_22px_rgba(14,116,244,0.35)] group-hover:scale-110 transition-transform">
@@ -18,11 +18,11 @@ export default function LoginPage() {
 
           {/* Heading */}
           <div className="space-y-4">
-            <h1 className="text-5xl font-bold text-gray-900 leading-tight">
+            <h1 className="text-4xl xl:text-5xl font-bold text-gray-900 leading-tight">
               Chinh phục<br />
               <span className="text-indigo-600">Kỳ thi CSCA</span>
             </h1>
-            <p className="text-xl text-gray-600 leading-relaxed">
+            <p className="text-lg xl:text-xl text-gray-600 leading-relaxed">
               Nền tảng luyện thi đầu vào học bổng Trung Quốc với đầy đủ tài liệu, đề thi và thống kê chi tiết.
             </p>
           </div>
@@ -84,8 +84,8 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="flex-1 max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
             <LoginForm />
           </div>
         </div>

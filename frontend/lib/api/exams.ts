@@ -22,6 +22,10 @@ export interface Exam {
   solution_description?: string;
   shuffle_mode?: boolean;
   vip_tier?: string; // 'basic' | 'vip_thong_minh' | 'vip_pro'
+  // New: Stats
+  pass_rate?: number;
+  overall_difficulty?: string;
+  user_last_score?: number;
 }
 
 export interface Question {

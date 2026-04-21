@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch, FiClock, FiAward, FiLock } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
@@ -124,12 +125,24 @@ function ExamCard({ exam, onPlay, isAdmin }: { exam: Exam; onPlay: (e: Exam) => 
 export default function GiaiDeChiTietPage() {
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
+  const searchParams = useSearchParams() as unknown as URLSearchParams;
+  const initialSubject = searchParams.get('subject') || '';
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<{ id: number; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubject, setActiveSubject] = useState('');
+  const [activeSubject, setActiveSubject] = useState(initialSubject);
   const [search, setSearch] = useState('');
   const [playing, setPlaying] = useState<Exam | null>(null);
+
+  const handleSubjectChange = (subject: string) => {
+    setActiveSubject(subject);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (subject) url.searchParams.set('subject', subject);
+      else url.searchParams.delete('subject');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -212,7 +225,7 @@ export default function GiaiDeChiTietPage() {
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
             {/* Subject tabs */}
             <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => setActiveSubject('')}
+              <button onClick={() => handleSubjectChange('')}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                   activeSubject === ''
                     ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
@@ -221,7 +234,7 @@ export default function GiaiDeChiTietPage() {
                 Tất cả
               </button>
               {subjects.map(s => (
-                <button key={s.code} onClick={() => setActiveSubject(s.code)}
+                <button key={s.code} onClick={() => handleSubjectChange(s.code)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                     activeSubject === s.code
                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm'

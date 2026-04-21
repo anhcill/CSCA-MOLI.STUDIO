@@ -14,7 +14,7 @@ interface ContactItem {
 
 const CONTACT_ITEMS: ContactItem[] = [
   {
-    label: 'Zalo 0812352005',
+    label: 'Zalo',
     href: 'https://zalo.me/0812352005',
     bgStyle: { background: 'linear-gradient(135deg, #0068FF, #004FC4)' },
     content: (
@@ -46,7 +46,7 @@ const CONTACT_ITEMS: ContactItem[] = [
     content: <SiTiktok size={18} color="white" />,
   },
   {
-    label: 'Gọi 0812352005',
+    label: 'Gọi ngay',
     href: 'tel:0812352005',
     bgClass: 'bg-gradient-to-br from-emerald-500 to-green-600',
     content: <FiPhone size={18} color="white" />,

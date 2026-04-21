@@ -3,10 +3,10 @@ import Link from 'next/link';
 
 export default function RegisterPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl flex items-center justify-between gap-12">
-        {/* Left Side - Branding */}
-        <div className="hidden lg:flex flex-col flex-1 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center p-4 sm:p-6 md:p-8">
+      <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
+        {/* Left Side - Branding - Hidden on mobile */}
+        <div className="hidden xl:flex flex-col flex-1 space-y-6 max-w-lg">
           {/* Logo */}
           <Link href="/" className="inline-flex items-center gap-3 group">
             <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_10px_22px_rgba(14,116,244,0.35)] group-hover:scale-110 transition-transform">
@@ -18,11 +18,11 @@ export default function RegisterPage() {
 
           {/* Heading */}
           <div className="space-y-4">
-            <h1 className="text-5xl font-bold text-gray-900 leading-tight">
+            <h1 className="text-4xl xl:text-5xl font-bold text-gray-900 leading-tight">
               Bắt đầu hành trình<br />
               <span className="text-indigo-600">học tập ngay!</span>
             </h1>
-            <p className="text-xl text-gray-600 leading-relaxed">
+            <p className="text-lg xl:text-xl text-gray-600 leading-relaxed">
               Tham gia cùng hàng nghìn học viên đang luyện tập cho kỳ thi CSCA.
             </p>
           </div>
@@ -30,7 +30,7 @@ export default function RegisterPage() {
           {/* Benefits */}
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900">Bạn sẽ nhận được:</h3>
-            
+
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                 <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
@@ -94,8 +94,8 @@ export default function RegisterPage() {
         </div>
 
         {/* Right Side - Register Form */}
-        <div className="flex-1 max-w-md">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
             <RegisterForm />
           </div>
         </div>

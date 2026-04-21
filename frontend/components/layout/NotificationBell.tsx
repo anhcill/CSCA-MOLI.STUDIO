@@ -184,33 +184,33 @@ export default function NotificationBell() {
               </div>
             )}
             {!loading && notifications.map(n => (
-              <button
-                key={n.id}
-                onClick={() => handleClickNotification(n)}
-                className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-violet-50/60' : ''}`}
-              >
-                {/* Avatar */}
-                <img
-                  src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=36`}
-                  alt={n.actor_name}
-                  className="w-9 h-9 rounded-full object-cover flex-shrink-0 mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-700 leading-snug">
-                    <span className="font-semibold text-gray-900">{n.actor_name}</span>
-                    {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
-                  </p>
-                  {n.post_preview && (
-                    <p className="text-xs text-gray-400 truncate mt-0.5">
-                      "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"
+                <button
+                  key={n.id}
+                  onClick={() => handleClickNotification(n)}
+                  className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${!n.is_read ? 'bg-violet-50/60' : ''}`}
+                >
+                  {/* Avatar */}
+                  <img
+                    src={n.actor_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(n.actor_name || 'U')}&size=36`}
+                    alt={n.actor_name}
+                    className="w-9 h-9 rounded-full object-cover flex-shrink-0 mt-0.5"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-700 leading-snug">
+                      <span className="font-semibold text-gray-900">{n.actor_name}</span>
+                      {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
                     </p>
+                    {n.post_preview && (
+                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                        "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"
+                      </p>
+                    )}
+                    <p className="text-[11px] text-violet-500 mt-1">{timeAgo(n.created_at)}</p>
+                  </div>
+                  {!n.is_read && (
+                    <span className="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0 mt-2" />
                   )}
-                  <p className="text-[11px] text-violet-500 mt-1">{timeAgo(n.created_at)}</p>
-                </div>
-                {!n.is_read && (
-                  <span className="w-2 h-2 bg-violet-500 rounded-full flex-shrink-0 mt-2" />
-                )}
-              </button>
+                </button>
             ))}
           </div>
         </div>

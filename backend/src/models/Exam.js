@@ -68,7 +68,7 @@ const Exam = {
 
   // Lấy tất cả đề thi theo môn học
   async getBySubject(subjectCode, userId = null, subjectSlug = null) {
-    let query, result;
+    let query, params;
 
     if (subjectSlug) {
       // Filter by slug (URL-friendly slug like 'toan', 'vat-ly')
@@ -88,16 +88,45 @@ const Exam = {
             (SELECT MAX(total_score) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
             0
-          ) as user_best_score
+          ) as user_best_score,
+          COALESCE(
+            ROUND(
+              COUNT(DISTINCT CASE WHEN
+                ea.status = 'completed' AND
+                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              THEN ea.id END)::DECIMAL /
+              NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
+            ), 0
+          )::DECIMAL as pass_rate,
+          COALESCE(
+            (
+              SELECT q.difficulty
+              FROM exam_attempts ea2
+              JOIN questions q ON ea2.exam_id = q.exam_id
+              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL
+              GROUP BY q.difficulty
+              ORDER BY COUNT(*) DESC
+              LIMIT 1
+            ), e.difficulty_level
+          ) as overall_difficulty,
+          COALESCE(
+            (
+              SELECT total_score FROM exam_attempts
+              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'
+              ORDER BY submit_time DESC
+              LIMIT 1
+            ), 0
+          ) as user_last_score
         FROM exams e
         INNER JOIN subjects s ON e.subject_id = s.id
         LEFT JOIN users u ON e.created_by = u.id
         LEFT JOIN questions q ON e.id = q.exam_id
+        LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
         WHERE s.slug = $1 AND e.status = 'published'
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
-      result = await pool.query(query, [subjectSlug, userId]);
+      params = [subjectSlug, userId];
     } else {
       // Filter by subject code (MATH, PHYSICS, etc.)
       query = `
@@ -116,18 +145,48 @@ const Exam = {
             (SELECT MAX(total_score) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
             0
-          ) as user_best_score
+          ) as user_best_score,
+          COALESCE(
+            ROUND(
+              COUNT(DISTINCT CASE WHEN
+                ea.status = 'completed' AND
+                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              THEN ea.id END)::DECIMAL /
+              NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
+            ), 0
+          )::DECIMAL as pass_rate,
+          COALESCE(
+            (
+              SELECT q.difficulty
+              FROM exam_attempts ea2
+              JOIN questions q ON ea2.exam_id = q.exam_id
+              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL
+              GROUP BY q.difficulty
+              ORDER BY COUNT(*) DESC
+              LIMIT 1
+            ), e.difficulty_level
+          ) as overall_difficulty,
+          COALESCE(
+            (
+              SELECT total_score FROM exam_attempts
+              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'
+              ORDER BY submit_time DESC
+              LIMIT 1
+            ), 0
+          ) as user_last_score
         FROM exams e
         INNER JOIN subjects s ON e.subject_id = s.id
         LEFT JOIN users u ON e.created_by = u.id
         LEFT JOIN questions q ON e.id = q.exam_id
+        LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
         WHERE s.code = $1 AND e.status = 'published'
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
-      result = await pool.query(query, [subjectCode, userId]);
+      params = [subjectCode, userId];
     }
 
+    const result = await pool.query(query, params);
     return result.rows;
   },
 

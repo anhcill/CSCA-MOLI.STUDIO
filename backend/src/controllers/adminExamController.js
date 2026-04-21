@@ -407,10 +407,18 @@ const AdminExamController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
+      const type = req.query.type; // 'phong-thi' | 'tu-do' | undefined (all)
+
+      let whereClause = '';
+      if (type === 'phong-thi') {
+        whereClause = 'WHERE e.start_time IS NOT NULL';
+      } else if (type === 'tu-do') {
+        whereClause = 'WHERE e.start_time IS NULL';
+      }
 
       // Get total count
       const countResult = await pool.query(
-        "SELECT COUNT(*) as total FROM exams",
+        `SELECT COUNT(*) as total FROM exams e ${whereClause}`,
       );
       const totalExams = parseInt(countResult.rows[0].total);
       const totalPages = Math.ceil(totalExams / limit);
@@ -427,6 +435,8 @@ const AdminExamController = {
           e.total_questions as questions_count,
                     e.status,
                     e.is_premium,
+                    e.start_time,
+                    e.end_time,
                     e.created_at,
                     s.name as subject_name,
                     s.code as subject_code,
@@ -434,6 +444,7 @@ const AdminExamController = {
                 FROM exams e
                 LEFT JOIN subjects s ON e.subject_id = s.id
                 LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+                ${whereClause}
                 GROUP BY e.id, s.name, s.code
                 ORDER BY e.created_at DESC
                 LIMIT $1 OFFSET $2`,
@@ -452,6 +463,164 @@ const AdminExamController = {
     } catch (error) {
       console.error("Get all exams error:", error);
       res.status(500).json({ message: "Failed to get exams" });
+    }
+  },
+
+  // GET /api/admin/exams/stats - Tổng hợp thống kê tất cả đề thi
+  async getStats(req, res) {
+    try {
+      // Stats tổng quan
+      const overviewQuery = `
+        SELECT
+          COUNT(DISTINCT e.id)::INTEGER as total_exams,
+          COUNT(DISTINCT CASE WHEN e.status = 'published' THEN e.id END)::INTEGER as published_exams,
+          COUNT(DISTINCT CASE WHEN e.start_time IS NOT NULL THEN e.id END)::INTEGER as phong_thi_count,
+          COUNT(DISTINCT CASE WHEN e.start_time IS NULL THEN e.id END)::INTEGER as tu_do_count,
+          COUNT(DISTINCT ea.id)::INTEGER as total_attempts,
+          COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END)::INTEGER as completed_attempts,
+          COALESCE(
+            ROUND(
+              COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END)::DECIMAL /
+              NULLIF(COUNT(DISTINCT ea.id), 0) * 100, 1
+            ), 0
+          )::DECIMAL as completion_rate,
+          COALESCE(
+            AVG(CASE WHEN ea.status = 'completed'
+              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            END), 0
+          )::DECIMAL as avg_score_percentage,
+          COALESCE(
+            AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score END), 0
+          )::DECIMAL as avg_score_points
+        FROM exams e
+        LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+      `;
+      const overviewResult = await pool.query(overviewQuery);
+      const overview = overviewResult.rows[0];
+
+      // Top 5 đề thi có nhiều lượt thi nhất
+      const topExamsQuery = `
+        SELECT
+          e.id,
+          e.title,
+          s.name as subject_name,
+          e.difficulty_level,
+          COUNT(DISTINCT ea.id)::INTEGER as attempts,
+          COALESCE(
+            ROUND(
+              COUNT(DISTINCT CASE WHEN
+                ea.status = 'completed' AND
+                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              THEN ea.id END)::DECIMAL /
+              NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
+            ), 0
+          )::DECIMAL as pass_rate,
+          COALESCE(
+            AVG(CASE WHEN ea.status = 'completed'
+              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            END), 0
+          )::DECIMAL as avg_percentage,
+          COALESCE(
+            AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score END), 0
+          )::DECIMAL as avg_score_points
+        FROM exams e
+        LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+        LEFT JOIN subjects s ON e.subject_id = s.id
+        GROUP BY e.id, e.title, s.name, e.difficulty_level
+        HAVING COUNT(DISTINCT ea.id) > 0
+        ORDER BY attempts DESC
+        LIMIT 5
+      `;
+      const topExamsResult = await pool.query(topExamsQuery);
+
+      // Stats theo môn
+      const subjectStatsQuery = `
+        SELECT
+          s.id as subject_id,
+          s.name as subject_name,
+          s.code as subject_code,
+          COUNT(DISTINCT e.id)::INTEGER as exam_count,
+          COUNT(DISTINCT ea.id)::INTEGER as total_attempts,
+          COALESCE(
+            ROUND(
+              COUNT(DISTINCT CASE WHEN
+                ea.status = 'completed' AND
+                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              THEN ea.id END)::DECIMAL /
+              NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
+            ), 0
+          )::DECIMAL as pass_rate,
+          COALESCE(
+            AVG(CASE WHEN ea.status = 'completed'
+              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            END), 0
+          )::DECIMAL as avg_percentage
+        FROM subjects s
+        LEFT JOIN exams e ON e.subject_id = s.id AND e.status = 'published'
+        LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+        GROUP BY s.id, s.name, s.code
+        HAVING COUNT(DISTINCT ea.id) > 0
+        ORDER BY total_attempts DESC
+      `;
+      const subjectStatsResult = await pool.query(subjectStatsQuery);
+
+      res.json({
+        success: true,
+        data: {
+          overview: {
+            totalExams: parseInt(overview.total_exams) || 0,
+            publishedExams: parseInt(overview.published_exams) || 0,
+            phongThiCount: parseInt(overview.phong_thi_count) || 0,
+            tuDoCount: parseInt(overview.tu_do_count) || 0,
+            totalAttempts: parseInt(overview.total_attempts) || 0,
+            completedAttempts: parseInt(overview.completed_attempts) || 0,
+            completionRate: parseFloat(overview.completion_rate) || 0,
+            avgScorePercentage: parseFloat(overview.avg_score_percentage) || 0,
+            avgScorePoints: parseFloat(overview.avg_score_points) || 0,
+          },
+          topExams: topExamsResult.rows.map((r) => ({
+            id: r.id,
+            title: r.title,
+            subjectName: r.subject_name,
+            difficultyLevel: r.difficulty_level,
+            attempts: parseInt(r.attempts) || 0,
+            passRate: parseFloat(r.pass_rate) || 0,
+            avgPercentage: parseFloat(r.avg_percentage) || 0,
+            avgScorePoints: parseFloat(r.avg_score_points) || 0,
+          })),
+          subjectStats: subjectStatsResult.rows.map((r) => ({
+            subjectId: r.subject_id,
+            subjectName: r.subject_name,
+            subjectCode: r.subject_code,
+            examCount: parseInt(r.exam_count) || 0,
+            totalAttempts: parseInt(r.total_attempts) || 0,
+            passRate: parseFloat(r.pass_rate) || 0,
+            avgPercentage: parseFloat(r.avg_percentage) || 0,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Get exam stats error:", error);
+      res.status(500).json({ message: "Failed to get exam stats" });
+    }
+  },
+
+  // GET /api/admin/exams/counts - Get exam counts by type
+  async getCounts(req, res) {
+    try {
+      const [total, phongThi, tuDo] = await Promise.all([
+        pool.query('SELECT COUNT(*)::int as count FROM exams'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NOT NULL'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL'),
+      ]);
+      res.json({
+        all: parseInt(total.rows[0].count),
+        phongThi: parseInt(phongThi.rows[0].count),
+        tuDo: parseInt(tuDo.rows[0].count),
+      });
+    } catch (error) {
+      console.error("Get exam counts error:", error);
+      res.status(500).json({ message: "Failed to get counts" });
     }
   },
 

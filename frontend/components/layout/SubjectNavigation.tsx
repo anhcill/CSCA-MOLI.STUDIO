@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   BsJournalBookmark,
   BsLightbulb,
@@ -21,7 +21,7 @@ interface MenuItem {
 interface SubjectNavigationProps {
   subject: string;
   subjectCode: string;
-  subjectSlug?: string; // URL slug: 'toan', 'vat-ly', 'hoa-hoc', 'tieng-trung-xh', 'tieng-trung-tn'
+  subjectSlug?: string;
   colorScheme: {
     from: string;
     via?: string;
@@ -31,12 +31,11 @@ interface SubjectNavigationProps {
   emoji?: string;
 }
 
-const getDefaultMenuItems = (subjectCode: string, subjectSlug?: string): MenuItem[] => {
-  const base = `/tu-vung${subjectSlug ? `?subject=${subjectSlug}` : ''}`;
+const getDefaultMenuItems = (subjectSlug?: string): MenuItem[] => {
   return [
     { icon: BsJournalBookmark, label: 'Cấu trúc đề', href: '/cau-truc-de' },
     { icon: BsLightbulb, label: 'Lý Thuyết', href: '/ly-thuyet' },
-    { icon: BsStars, label: 'Từ vựng', href: base },
+    { icon: BsStars, label: 'Từ vựng', href: '/tu-vung' },
     { icon: BsGraphUp, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet' },
   ];
 };
@@ -50,15 +49,26 @@ export default function SubjectNavigation({
   emoji = '📚'
 }: SubjectNavigationProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'menu' | 'history' | 'stats'>('menu');
-  const items = menuItems || getDefaultMenuItems(subjectCode, subjectSlug);
+  const items = menuItems || getDefaultMenuItems(subjectSlug);
 
-  // Cấu trúc đề & Lý thuyết dùng subject query param
+  // Build full href with subject param
   const buildSubjectHref = (href: string) => {
     if (!subjectSlug) return href;
-    if (href === '/cau-truc-de') return `/cau-truc-de?subject=${subjectSlug}`;
-    if (href === '/ly-thuyet') return `/ly-thuyet?subject=${subjectSlug}`;
-    return href;
+    // Preserve any existing query params and add subject
+    const base = `${href}?subject=${subjectSlug}`;
+    return base;
+  };
+
+  const isActiveHref = (href: string) => {
+    const fullHref = buildSubjectHref(href);
+    // Remove leading slash for comparison
+    const full = fullHref.slice(1);
+    const current = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '');
+    const currentWithoutSlash = current.startsWith('/') ? current.slice(1) : current;
+    // Exact match or match without query (so /cau-truc-de matches /cau-truc-de?subject=toan)
+    return currentWithoutSlash === full || currentWithoutSlash.startsWith(full + '&');
   };
 
   return (
@@ -94,7 +104,7 @@ export default function SubjectNavigation({
               {items.map((item, index) => {
                 const Icon = item.icon;
                 const href = buildSubjectHref(item.href);
-                const isActive = pathname === href;
+                const isActive = isActiveHref(item.href);
                 return (
                   <Link
                     key={index}
@@ -102,7 +112,7 @@ export default function SubjectNavigation({
                     className={`group flex items-center gap-4 p-3.5 rounded-2xl transition-all duration-300 ${
                         isActive
                       ? `bg-gradient-to-r ${colorScheme.from} ${colorScheme.via || ''} ${colorScheme.to} text-white shadow-md hover:shadow-lg`
-                        : 'text-gray-600 hover:bg-gray-50 border border-transparent hover:border-gray-100'
+                      : 'text-gray-600 hover:bg-gray-50 border border-transparent hover:border-gray-100'
                       }`}
                   >
                     <div className={`${isActive ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-gray-200'} w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0`}>

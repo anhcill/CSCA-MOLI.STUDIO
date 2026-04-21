@@ -69,9 +69,9 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20) => {
+    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do') => {
         const response = await axios.get('/admin/exams', {
-            params: { page, limit }
+            params: { page, limit, ...(type ? { type } : {}) }
         });
         return response.data;
     },
@@ -79,6 +79,18 @@ export const examAdminApi = {
     // Delete exam
     deleteExam: async (examId: number) => {
         const response = await axios.delete(`/admin/exams/${examId}`);
+        return response.data;
+    },
+
+    // Get exam counts by type
+    getCounts: async () => {
+        const response = await axios.get('/admin/exams/counts');
+        return response.data;
+    },
+
+    // Get overall exam statistics
+    getStats: async () => {
+        const response = await axios.get('/admin/exams/stats');
         return response.data;
     },
 

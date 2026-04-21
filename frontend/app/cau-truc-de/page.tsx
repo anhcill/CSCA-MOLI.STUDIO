@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
 import { FiFileText, FiExternalLink, FiDownload, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
@@ -155,12 +156,28 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 
 // ── Main Page ─────────────────────────────────────────────────────────
 export default function CauTrucDePage() {
+  const searchParams = useSearchParams() as unknown as URLSearchParams;
+  const initialSubject = searchParams.get('subject') ?? '';
   const [allMaterials, setAllMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [activeSubject, setActiveSubject] = useState('');
+  const [activeSubject, setActiveSubject] = useState(initialSubject);
   const [viewing, setViewing] = useState<Material | null>(null);
+
+  // Sync activeSubject to URL when it changes
+  const handleSubjectChange = (subject: string) => {
+    setActiveSubject(subject);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (subject) {
+        url.searchParams.set('subject', subject);
+      } else {
+        url.searchParams.delete('subject');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   const loadMaterials = useCallback(async () => {
     setLoading(true);
@@ -216,7 +233,7 @@ export default function CauTrucDePage() {
           {/* Subject tabs */}
           <div className="flex items-center gap-2 flex-wrap mb-5">
             {SUBJECTS.map(s => (
-              <button key={s.value} onClick={() => setActiveSubject(s.value)}
+              <button key={s.value} onClick={() => handleSubjectChange(s.value)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                   activeSubject === s.value
                     ? 'bg-purple-600 text-white border-purple-600 shadow-sm'

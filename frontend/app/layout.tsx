@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import Providers from "@/components/layout/Providers";
 import ClientShell from "@/components/layout/ClientShell";
@@ -51,6 +52,12 @@ export const metadata: Metadata = {
     follow: true,
     googleBot: { index: true, follow: true, 'max-image-preview': 'large' },
   },
+  other: {
+    'X-Frame-Options': 'SAMEORIGIN',
+    'X-Content-Type-Options': 'nosniff',
+    'X-XSS-Protection': '1; mode=block',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  },
 };
 
 export default function RootLayout({
@@ -60,9 +67,11 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} ${plusJakarta.variable}`}>
       <body suppressHydrationWarning>
         <Providers>
-          <ClientShell>
-            {children}
-          </ClientShell>
+          <Suspense fallback={<div className="min-h-screen" />}>
+            <ClientShell>
+              {children}
+            </ClientShell>
+          </Suspense>
         </Providers>
       </body>
     </html>

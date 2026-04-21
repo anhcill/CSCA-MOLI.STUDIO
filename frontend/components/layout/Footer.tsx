@@ -24,12 +24,12 @@ export default function Footer() {
   const POLICIES = [
     { name: 'Chính sách bảo mật', href: '/chinh-sach-bao-mat' },
     { name: 'Điều khoản sử dụng', href: '/dieu-khoan-su-dung' },
-    { name: 'Câu hỏi thường gặp', href: '/chinh-sach-cookie' },
+    { name: 'Câu hỏi thường gặp', href: '/cau-hoi-thuong-gap' },
     { name: 'Liên hệ', href: '/lien-he' },
   ];
 
   const SOCIALS = [
-    { icon: FiFacebook,  label: 'Facebook',  href: 'https://facebook.com', color: 'hover:text-blue-400' },
+    { icon: FiFacebook,  label: 'Facebook',  href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr', color: 'hover:text-blue-400' },
     { icon: FiYoutube,   label: 'YouTube',    href: 'https://youtube.com',  color: 'hover:text-red-400' },
     { icon: FiInstagram, label: 'Instagram',   href: 'https://instagram.com', color: 'hover:text-pink-400' },
   ];
@@ -96,9 +96,9 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="tel:+84000000000" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors">
+                <a href="tel:+840812352005" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors">
                   <FiPhone size={15} className="text-purple-500 shrink-0 mt-0.5" />
-                  0900 000 000
+                  0812 352 005
                 </a>
               </li>
               <li className="flex items-start gap-2.5 text-sm text-gray-500">

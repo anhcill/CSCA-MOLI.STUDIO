@@ -10,6 +10,10 @@ const AdminExamController = require("../controllers/adminExamController");
 router.use(authenticate);
 router.use(authorizePermission("exams.manage"));
 
+// Counts (place before /:examId to avoid route conflict)
+router.get("/counts", AdminExamController.getCounts);
+router.get("/stats", AdminExamController.getStats);
+
 // Exam CRUD
 router.get("/", AdminExamController.getAllExams);
 router.post("/", AdminExamController.createExam);
