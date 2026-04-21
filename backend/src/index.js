@@ -166,6 +166,7 @@ app.use("/api/admin/images", require("./routes/imageRoutes"));
 app.use("/api/admin/forum", require("./routes/adminForumRoutes"));
 app.use("/api/admin/roadmap", require("./routes/adminRoadmapRoutes"));
 app.use("/api/admin/vip", require("./routes/adminVipRoutes"));
+app.use("/api/admin/qa", require("./routes/adminQaRoutes")); // Admin QA
 app.use("/api/materials", require("./routes/materials"));
 app.use("/api/vocabulary", require("./routes/vocabulary"));
 app.use("/api/search", require("./routes/search")); // Global search
@@ -177,6 +178,7 @@ app.use("/api/insights", require("./routes/insights")); // Learning Insights
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
+app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
 
 // ====================================
 // ERROR HANDLING

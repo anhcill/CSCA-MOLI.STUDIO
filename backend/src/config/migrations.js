@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const Ticket = require("../models/Ticket");
 
 /**
  * Run database optimizations - Add indexes for better performance
@@ -7,6 +8,9 @@ const pool = require("../config/database");
 async function runOptimizations() {
   const start = Date.now();
   try {
+    // Ticket tables
+    await Ticket.initTables();
+
     // Forum tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS posts (
