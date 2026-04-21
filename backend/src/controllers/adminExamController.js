@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const { cache } = require("../config/cache");
 
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -48,6 +49,10 @@ const AdminExamController = {
         ],
       );
 
+      // Clear caches when exam is created
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+
       res.status(201).json({
         message: "Exam created",
         exam: result.rows[0],
@@ -92,6 +97,12 @@ const AdminExamController = {
 
       if (result.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
+      }
+
+      // Clear exam list caches when exam data changes (especially on publish/unpublish)
+      if (status !== undefined) {
+        cache.delByPrefix("exams:");
+        cache.del("exams:lobby");
       }
 
       res.json({ message: "Exam updated", exam: result.rows[0] });
@@ -240,6 +251,10 @@ const AdminExamController = {
         );
 
         await client.query("COMMIT");
+
+        // Clear exam caches so user-facing exam detail reflects new questions
+        cache.delByPrefix("exams:");
+        cache.del("exams:lobby");
 
         res.status(201).json({ message: "Question added", questionId });
       } catch (error) {

@@ -51,9 +51,17 @@ export default function CreateExamPage() {
     // Restore currentExamId from sessionStorage after mount (client-side only)
     useEffect(() => {
         setMounted(true);
-        const saved = sessionStorage.getItem('currentExamId');
-        if (saved) {
-            setCurrentExamId(parseInt(saved));
+        // Priority: 1) URL query param (from exam detail page), 2) sessionStorage
+        const params = new URLSearchParams(window.location.search);
+        const urlExamId = params.get('examId');
+        if (urlExamId) {
+            setCurrentExamId(parseInt(urlExamId));
+            sessionStorage.setItem('currentExamId', urlExamId);
+        } else {
+            const saved = sessionStorage.getItem('currentExamId');
+            if (saved) {
+                setCurrentExamId(parseInt(saved));
+            }
         }
     }, []);
 
