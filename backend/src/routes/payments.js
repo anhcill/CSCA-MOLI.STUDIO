@@ -183,7 +183,9 @@ router.post('/create', authenticate, async (req, res) => {
 
     const pkg = pkgRes.rows[0];
     const tier = pkg.name.toLowerCase().includes('premium') ? 'premium' : 'vip';
-    const orderId = `CSCA_${payment_method.toUpperCase()}_${userId}_${Date.now()}`;
+    // Chuyển orderId thành dạng chỉ gồm chữ và số để tránh lỗi app ngân hàng xóa dấu gạch dưới. 
+    // Ví dụ: CSCA5T1776774955106
+    const orderId = `CSCA${userId}T${Date.now()}`;
 
     // Lưu transaction pending
     const transaction = await Transaction.create({
