@@ -195,7 +195,22 @@ router.post('/create', authenticate, async (req, res) => {
       transaction_code: orderId,
     });
 
-    let result;
+    // Nếu payment_method là bank_transfer → trả về thông tin QR
+    if (payment_method === 'bank_transfer') {
+      return res.json({
+        success: true,
+        payment_method: 'bank_transfer',
+        orderId,
+        bank: {
+          bankCode: process.env.BANK_CODE || 'MSB',
+          accountNumber: process.env.BANK_ACCOUNT_NUMBER || '80003018784',
+          accountName: process.env.BANK_ACCOUNT_NAME || 'LE DUC ANH',
+          amount: pkg.price,
+          content: orderId, // Nội dung chuyển khoản
+          qrUrl: `https://img.vietqr.io/image/${process.env.BANK_CODE || 'MSB'}-${process.env.BANK_ACCOUNT_NUMBER || '80003018784'}-compact2.png?amount=${pkg.price}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(process.env.BANK_ACCOUNT_NAME || 'LE DUC ANH')}`,
+        },
+      });
+    }
 
     if (payment_method === 'vnpay') {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
@@ -462,4 +477,134 @@ router.post('/verify-return', authenticate, async (req, res) => {
   }
 });
 
+
+/**
+ * @route POST /api/payments/sepay-webhook
+ * @desc Nhận webhook từ SePay khi có giao dịch chuyển khoản vào
+ * @access Public (xác thực qua apikey header)
+ */
+router.post('/sepay-webhook', async (req, res) => {
+  try {
+    // Xác thực API key từ SePay
+    const apiKey = req.headers['authorization'];
+    const expectedKey = `Apikey ${process.env.SEPAY_API_KEY || ''}`;
+
+    if (process.env.SEPAY_API_KEY && apiKey !== expectedKey) {
+      console.warn('[SePay] Webhook: Invalid API key');
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { transferAmount, content, transferType, accountNumber } = req.body;
+
+    console.log('[SePay] Webhook received:', JSON.stringify(req.body));
+
+    // Chỉ xử lý giao dịch TIỀN VÀO
+    if (transferType !== 'in') {
+      return res.json({ success: true, message: 'Ignored - not incoming transfer' });
+    }
+
+    // Tìm order ID trong nội dung chuyển khoản (format: CSCA_BANK_TRANSFER_{userId}_{timestamp})
+    const contentStr = (content || '').toUpperCase();
+    // Tìm transaction khớp với nội dung
+    const txRes = await require('../config/database').query(
+      `SELECT * FROM transactions
+       WHERE UPPER(transaction_code) = $1
+         AND status = 'pending'
+         AND payment_method = 'bank_transfer'
+       LIMIT 1`,
+      [contentStr]
+    );
+
+    // Nếu không khớp chính xác, thử tìm bằng LIKE (SePay có thể thêm text)
+    let transaction = txRes.rows[0];
+    if (!transaction) {
+      const likeRes = await require('../config/database').query(
+        `SELECT * FROM transactions
+         WHERE $1 ILIKE '%' || transaction_code || '%'
+           AND status = 'pending'
+           AND payment_method = 'bank_transfer'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [content || '']
+      );
+      transaction = likeRes.rows[0];
+    }
+
+    if (!transaction) {
+      console.warn('[SePay] Webhook: No matching transaction for content:', content);
+      return res.json({ success: true, message: 'No matching transaction' });
+    }
+
+    // Kiểm tra số tiền (cho phép sai lệch ±1000đ để tránh phí ngân hàng)
+    const expectedAmount = transaction.amount;
+    const receivedAmount = parseInt(transferAmount) || 0;
+    if (Math.abs(receivedAmount - expectedAmount) > 1000) {
+      console.warn(`[SePay] Amount mismatch: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
+      // Vẫn xử lý nhưng log cảnh báo
+    }
+
+    // Tránh xử lý 2 lần
+    if (transaction.status === 'completed') {
+      return res.json({ success: true, message: 'Already completed' });
+    }
+
+    // Cấp VIP cho user
+    const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+    await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
+    const updatedUser = await User.findById(transaction.user_id);
+
+    await Transaction.updateComplete(transaction.id, {
+      status: 'completed',
+      payment_channel: 'bank_transfer',
+      trans_id: req.body.referenceCode || req.body.id?.toString() || `SEPAY_${Date.now()}`,
+      raw_response: req.body,
+      paid_at: new Date(),
+      vip_expires_at: updatedUser?.vip_expires_at || null,
+    });
+
+    console.log(`[SePay] ✅ VIP granted: user=${transaction.user_id}, pkg=${transaction.package_name}, tier=${tier}`);
+    return res.json({ success: true });
+
+  } catch (err) {
+    console.error('[SePay] Webhook error:', err);
+    // Luôn trả 200 để SePay không retry vô hạn
+    return res.status(200).json({ success: false, message: 'Internal error' });
+  }
+});
+
+/**
+ * @route GET /api/payments/check-status
+ * @desc Kiểm tra trạng thái giao dịch (dùng cho polling từ frontend)
+ * @access Private
+ */
+router.get('/check-status', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.query;
+    if (!orderId) return res.status(400).json({ success: false });
+
+    const transaction = await Transaction.findByTransactionCode(orderId);
+    if (!transaction) return res.json({ success: false, status: 'not_found' });
+    if (transaction.user_id !== req.user.id) return res.json({ success: false, status: 'unauthorized' });
+
+    if (transaction.status === 'completed') {
+      const freshUser = await User.findById(req.user.id);
+      return res.json({
+        success: true,
+        status: 'completed',
+        data: {
+          package_name: transaction.package_name,
+          vip_expires_at: freshUser?.vip_expires_at || null,
+          subscription_tier: freshUser?.subscription_tier || 'vip',
+        },
+      });
+    }
+
+    return res.json({ success: true, status: transaction.status });
+  } catch (err) {
+    console.error('Check status error:', err);
+    res.status(500).json({ success: false });
+  }
+});
+
 module.exports = router;
+
