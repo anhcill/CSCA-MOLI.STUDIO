@@ -142,9 +142,9 @@ export default function LoginForm() {
         <p className="text-gray-600">Đăng nhập để tiếp tục học tập</p>
       </div>
 
-      {/* Google Login - Custom button for better mobile responsiveness */}
-      <div className="mb-6">
-        <div className="w-full">
+      {/* Google Login - Centered button */}
+      <div className="mb-6 flex justify-center">
+        <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={handleGoogleError}
@@ -152,7 +152,7 @@ export default function LoginForm() {
             theme="outline"
             size="large"
             text="signin_with"
-            width="100%"
+            shape="rectangular"
           />
         </div>
       </div>
