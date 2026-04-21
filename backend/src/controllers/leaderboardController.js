@@ -24,7 +24,7 @@ async function getLeaderboard(req, res) {
         COUNT(a.id)::int                   AS total_attempts,
         ROUND(AVG(a.total_score)::numeric, 1) AS avg_score,
         MAX(a.total_score)                 AS best_score,
-        MAX(a.submitted_at)                AS last_attempt_at
+        MAX(a.submit_time)                AS last_attempt_at
       FROM users u
       JOIN exam_attempts a ON a.user_id = u.id
       WHERE a.status = 'completed'
