@@ -1,11 +1,18 @@
+export const dynamic = 'force-dynamic';
+
 import Header from '@/components/layout/Header';
 import SubjectNavigation from '@/components/layout/SubjectNavigation';
 import ExamList from '@/components/toan/ExamList';
-import { FiBookOpen } from 'react-icons/fi';
+import { FiBookOpen, FiPlus } from 'react-icons/fi';
+import Link from 'next/link';
+import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
 
 export default function VatLyDeMoPhongPage() {
     const subjectCode = 'PHYSICS';
     const colorScheme = { from: 'from-amber-500', to: 'to-red-600' };
+    const { user } = useAuthStore();
+    const isAdmin = hasPermission(user, 'exams.manage');
 
     return (
         <div className="min-h-screen bg-slate-50 relative overflow-hidden">
@@ -47,6 +54,15 @@ export default function VatLyDeMoPhongPage() {
                                     <p className="text-sm text-gray-500 font-medium">Bạn có thể thi đi thi lại nhiều lần</p>
                                 </div>
                             </div>
+
+                            {isAdmin && (
+                                <Link
+                                    href="/admin/exams/create"
+                                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-red-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all"
+                                >
+                                    <FiPlus size={16} /> Đăng đề
+                                </Link>
+                            )}
                         </div>
 
                         {/* Exam List */}
