@@ -72,6 +72,11 @@ export const qaApi = {
         return res.data;
     },
 
+    adminDeleteTicket: async (id: number) => {
+        const res = await api.delete(`/admin/qa/tickets/${id}`);
+        return res.data;
+    },
+
     // --- UPLOAD ---
     uploadImage: async (file: File) => {
         const formData = new FormData();

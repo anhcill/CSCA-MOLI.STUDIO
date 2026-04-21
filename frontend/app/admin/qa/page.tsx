@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import { qaApi, Ticket } from '@/lib/api/qaApi';
-import { FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle, FiInbox } from 'react-icons/fi';
+import { FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle, FiInbox, FiTrash2 } from 'react-icons/fi';
 import AdminLayout from '@/components/layout/AdminLayout';
 
 export default function AdminQADashboard() {
@@ -86,6 +86,20 @@ export default function AdminQADashboard() {
         }
     };
 
+    const handleDeleteTicket = async () => {
+        if (!selectedTicket) return;
+        if (!confirm("Bạn có chắc chắn muốn xóa vĩnh viễn cuộc hội thoại này? Dữ liệu không thể khôi phục.")) return;
+        
+        try {
+            await qaApi.adminDeleteTicket(selectedTicket.id);
+            alert("Đã xóa ticket thành công!");
+            setSelectedTicket(null);
+            loadTickets();
+        } catch (error) {
+            alert("Lỗi xóa ticket");
+        }
+    };
+
     return (
         <AdminLayout title="Hỏi-Đáp VIP" description="Quản lý hỗ trợ học viên 1:1">
             <div className="flex h-[calc(100vh-120px)] bg-gray-50 dark:bg-slate-900 rounded-xl overflow-hidden border dark:border-slate-800">
@@ -149,8 +163,11 @@ export default function AdminQADashboard() {
                                     <p className="text-xs text-gray-500">{selectedTicket.author_email} • Hỏi lúc {new Date(selectedTicket.created_at).toLocaleString('vi-VN')}</p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={()=>handleChangeStatus('pending')} className="text-xs font-bold px-3 py-1.5 border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded">Mark Unread</button>
-                                    <button onClick={()=>handleChangeStatus('closed')} className="text-xs font-bold px-3 py-1.5 border border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100 rounded">Đóng Ticket</button>
+                                    <button onClick={()=>handleChangeStatus('pending')} className="text-xs font-bold px-3 py-1.5 border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded transition" title="Đánh dấu chưa xử lý">Mark Unread</button>
+                                    <button onClick={()=>handleChangeStatus('closed')} className="text-xs font-bold px-3 py-1.5 border border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition" title="Đóng Ticket">Đóng Ticket</button>
+                                    <button onClick={handleDeleteTicket} className="text-xs font-bold px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 rounded inline-flex items-center gap-1 transition" title="Xóa vĩnh viễn">
+                                        <FiTrash2 /> Xóa
+                                    </button>
                                 </div>
                             </div>
 
