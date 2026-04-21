@@ -47,29 +47,63 @@ export default function AdminQADashboard() {
         }
     };
 
+    const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        // Cuộn xuống cuối mỗi khi selectedTicket.replies thay đổi
+        if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [selectedTicket?.replies]);
+
     const handleReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTicket) return;
         if (!content.trim() && !image) return alert("Vui lòng nhập phản hồi");
 
+        // --- OPTIMISTIC UI UPDATE ---
+        const fakeId = Date.now();
+        const fakeImageUrl = image ? URL.createObjectURL(image) : null;
+        const currentContent = content;
+        const currentImage = image;
+        
+        const tempReply = {
+            id: fakeId,
+            ticket_id: selectedTicket.id,
+            sender_id: 0,
+            is_admin_reply: true,
+            content: currentContent,
+            image_url: fakeImageUrl,
+            created_at: new Date().toISOString()
+        };
+        
+        setSelectedTicket({ 
+            ...selectedTicket, 
+            replies: [...(selectedTicket.replies || []), tempReply] 
+        });
+
+        setContent('');
+        setImage(null);
         setIsSubmitting(true);
+
         try {
             let imageUrl = '';
-            if (image) {
-                const uploadRes = await qaApi.uploadImage(image);
+            if (currentImage) {
+                const uploadRes = await qaApi.uploadImage(currentImage);
                 imageUrl = uploadRes.data?.url || uploadRes.url;
             }
 
             await qaApi.adminReplyTicket(selectedTicket.id, {
-                content,
+                content: currentContent,
                 imageUrl
             });
 
-            setContent('');
-            setImage(null);
             await loadTickets();
         } catch (error) {
             alert("Lỗi gửi phản hồi");
+            // Rollback UI
+            const detail = await qaApi.adminGetTicketDetail(selectedTicket.id);
+            setSelectedTicket(detail);
         } finally {
             setIsSubmitting(false);
         }
@@ -195,6 +229,7 @@ export default function AdminQADashboard() {
                                         </div>
                                     </div>
                                 ))}
+                                <div ref={chatEndRef} />
                             </div>
 
                             {/* Input Chat */}

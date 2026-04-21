@@ -34,28 +34,58 @@ export default function StudentQADetailPage() {
         }
     };
 
+    const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [ticket?.replies]);
+
     const handleReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!content.trim() && !image) return alert("Vui lòng nhập nội dung nhắn tin");
 
+        // --- OPTIMISTIC UI UPDATE ---
+        const fakeId = Date.now();
+        const fakeImageUrl = image ? URL.createObjectURL(image) : null;
+        const currentContent = content;
+        const currentImage = image;
+
+        if (ticket) {
+            const tempReply = {
+                id: fakeId,
+                ticket_id: ticketId,
+                sender_id: user?.id || 0,
+                is_admin_reply: false,
+                content: currentContent,
+                image_url: fakeImageUrl,
+                created_at: new Date().toISOString(),
+                sender_avatar: user?.avatar_url || 'https://ui-avatars.com/api/?name=H'
+            };
+            setTicket({ ...ticket, replies: [...(ticket.replies || []), tempReply] });
+        }
+
+        setContent('');
+        setImage(null);
         setIsSubmitting(true);
+
         try {
             let imageUrl = '';
-            if (image) {
-                const uploadRes = await qaApi.uploadImage(image);
+            if (currentImage) {
+                const uploadRes = await qaApi.uploadImage(currentImage);
                 imageUrl = uploadRes.data?.url || uploadRes.url;
             }
 
             await qaApi.replyToTicket(ticketId, {
-                content,
+                content: currentContent,
                 imageUrl
             });
 
-            setContent('');
-            setImage(null);
             loadDetail(); // Reload chat
         } catch (error) {
              alert("Lỗi khi gửi tin nhắn.");
+             loadDetail(); // rollback
         } finally {
              setIsSubmitting(false);
         }
@@ -131,6 +161,7 @@ export default function StudentQADetailPage() {
                                 </div>
                             ))
                         )}
+                        <div ref={chatEndRef} />
                     </div>
 
                     {/* Khung chat */}
