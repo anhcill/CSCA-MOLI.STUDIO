@@ -3,10 +3,8 @@ export const dynamic = 'force-dynamic';
 import Header from '@/components/layout/Header';
 import SubjectNavigation from '@/components/layout/SubjectNavigation';
 import ExamList from '@/components/toan/ExamList';
-import { FiBookOpen, FiPlus } from 'react-icons/fi';
-import Link from 'next/link';
-import { useAuthStore } from '@/lib/store/authStore';
-import { hasPermission } from '@/lib/utils/permissions';
+import { FiBookOpen } from 'react-icons/fi';
+import AdminExamButton from '@/components/common/AdminExamButton';
 
 const SUBJECT_CONFIG: Record<string, {
     code: string;
@@ -55,8 +53,6 @@ const SUBJECT_CONFIG: Record<string, {
 export default function DeMoPhongPage({ params }: { params: { subject: string } }) {
     const subjectSlug = params.subject;
     const subjectInfo = SUBJECT_CONFIG[subjectSlug];
-    const { user } = useAuthStore();
-    const isAdmin = hasPermission(user, 'exams.manage');
 
     if (!subjectInfo) {
         return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Không tìm thấy môn học</div>;
@@ -109,14 +105,7 @@ export default function DeMoPhongPage({ params }: { params: { subject: string } 
                                 </div>
                             </div>
 
-                            {isAdmin && (
-                                <Link
-                                    href="/admin/exams/create"
-                                    className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.to} text-white rounded-xl font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all`}
-                                >
-                                    <FiPlus size={16} /> Đăng đề
-                                </Link>
-                            )}
+                            <AdminExamButton href="/admin/exams/create" gradientClass={subjectInfo.colorScheme.from} shadowClass="" hoverClass="hover:-translate-y-0.5" />
                         </div>
 
                         <ExamList subjectCode={subjectInfo.code} subjectSlug={subjectInfo.subjectSlug} />
