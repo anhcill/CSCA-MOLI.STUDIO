@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
-import { FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch, FiClock, FiAward, FiLock } from 'react-icons/fi';
+import { FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch, FiClock, FiAward, FiLock, FiMessageSquare } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
 import { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
