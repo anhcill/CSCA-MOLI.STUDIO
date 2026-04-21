@@ -1,9 +1,4 @@
-import axios from 'axios';
-
-const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
-    withCredentials: true
-});
+import api from '@/lib/utils/axios';
 
 export interface Ticket {
     id: number;
@@ -81,7 +76,6 @@ export const qaApi = {
     uploadImage: async (file: File) => {
         const formData = new FormData();
         formData.append('image', file);
-        // Using the general upload endpoint which requires user authentication but not admin
         const res = await api.post('/upload/question-image', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
