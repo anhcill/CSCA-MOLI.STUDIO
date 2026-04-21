@@ -1419,17 +1419,11 @@ async function analyzeWeekdayPattern(userId) {
 
     // Aggregate by weekday (CN, T2, T3, T4, T5, T6, T7)
     const weekdayOrder = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const weekdayLabels: Record<string, string> = {
+    const weekdayLabels = {
       Sun: 'CN', Mon: 'T2', Tue: 'T3', Wed: 'T4', Thu: 'T5', Fri: 'T6', Sat: 'T7',
     };
 
-    const weekdayStats: Record<string, {
-      days: number;
-      attempts: number;
-      totalScore: number;
-      totalDuration: number;
-      dates: string[];
-    }> = {};
+    const weekdayStats = {};
 
     for (const w of weekdayOrder) {
       weekdayStats[w] = { days: 0, attempts: 0, totalScore: 0, totalDuration: 0, dates: [] };
