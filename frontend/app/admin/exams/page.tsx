@@ -367,9 +367,9 @@ export default function ExamsPage() {
                                                         : 'bg-gray-100 text-gray-800'
                                                     }`}
                                             >
-                                                <option value="draft">Draft</option>
-                                                <option value="published">Published</option>
-                                                <option value="archived">Archived</option>
+                                                <option value="draft">🔒 Đang ẩn (Nháp)</option>
+                                                <option value="published">👁️ Đang hiển thị</option>
+                                                <option value="archived">📦 Lưu trữ</option>
                                             </select>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">

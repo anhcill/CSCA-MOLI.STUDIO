@@ -218,9 +218,9 @@ export default function AdminExamDetailPage() {
                                 onChange={e => handleStatusChange(e.target.value as any)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold border cursor-pointer outline-none ${statusColor}`}
                             >
-                                <option value="draft">Draft</option>
-                                <option value="published">Published</option>
-                                <option value="archived">Archived</option>
+                                <option value="draft">🔒 Đang ẩn (Nháp)</option>
+                                <option value="published">👁️ Đang hiển thị</option>
+                                <option value="archived">📦 Lưu trữ</option>
                             </select>
                             <button
                                 onClick={handleDeleteExam}
