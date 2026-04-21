@@ -7,7 +7,7 @@ import {
   FiUser, FiChevronDown, FiLogIn, FiUserPlus, FiLogOut,
   FiSearch, FiMenu, FiX, FiBookOpen, FiMap, FiMonitor,
   FiMessageSquare, FiFileText, FiGift, FiAward, FiShield,
-  FiMoon, FiSun, FiSettings
+  FiMoon, FiSun, FiSettings, FiHelpCircle
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -30,6 +30,7 @@ const MAIN_NAV = [
   { id: 'exam', name: 'Phòng thi', href: '/exam-room', icon: FiMonitor },
   { id: 'docs', name: 'Tài liệu', href: '/tailieu', icon: FiFileText },
   { id: 'forum', name: 'Diễn đàn', href: '/forum', icon: FiMessageSquare },
+  { id: 'qa', name: 'Hỏi đáp VIP', href: '/hoi-dap', icon: FiHelpCircle },
 ];
 
 export default function Header() {

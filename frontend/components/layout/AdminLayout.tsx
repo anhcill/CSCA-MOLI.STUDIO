@@ -8,7 +8,7 @@ import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut
+  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -87,6 +87,13 @@ const NAV_SECTIONS = [
         icon: FiMessageSquare,
         href: '/admin/posts',
         permission: 'forum.manage',
+        roles: [],
+      },
+      {
+        label: 'Hỏi-Đáp VIP',
+        icon: FiHelpCircle,
+        href: '/admin/qa',
+        permission: 'admin.dashboard.view',
         roles: [],
       },
       {

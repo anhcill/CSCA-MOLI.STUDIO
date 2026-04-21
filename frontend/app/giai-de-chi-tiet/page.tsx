@@ -44,6 +44,12 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
             title={title}
           />
         </div>
+        <div className="p-4 bg-gray-900 border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <span className="text-gray-400 text-sm">Bạn chưa hiểu đoạn nào trong video? Hãy nhắn tin cho Cố vấn nhé.</span>
+            <Link href="/hoi-dap" className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-orange-500/30 transition-all hover:-translate-y-0.5">
+               <FiMessageSquare /> Hỏi Cố Vấn VIP
+            </Link>
+        </div>
       </div>
     </div>
   );
@@ -213,6 +219,11 @@ export default function GiaiDeChiTietPage() {
                     </span>
                   )}
                 </p>
+                <div className="mt-5">
+                    <Link href="/hoi-dap" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">
+                        <FiMessageSquare /> Nhắn tin Hỏi Đáp 1-1 với Cố Vấn
+                    </Link>
+                </div>
               </div>
             </div>
           </div>
