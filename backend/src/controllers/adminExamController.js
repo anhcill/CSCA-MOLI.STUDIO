@@ -157,7 +157,6 @@ const AdminExamController = {
     }
   },
 
-  // Add question to exam
   async addQuestion(req, res) {
     try {
       const { examId } = req.params;
@@ -170,18 +169,21 @@ const AdminExamController = {
         explanationCn,
         answers,
         correctAnswer,
+        passageText,
+        passageImageUrl,
+        questionGroupType,
       } = req.body;
 
       const normalizedQuestion = normalizeBilingualText(
         questionText,
         questionTextCn,
       );
-      if (!normalizedQuestion || !answers || answers.length !== 4) {
+      if (!normalizedQuestion || !answers || answers.length < 2 || answers.length > 8) {
         return res
           .status(400)
           .json({
             message:
-              "Question text (English or Chinese) and 4 answers required",
+              "Question text (English or Chinese) and 2-8 answers required",
           });
       }
 
@@ -211,8 +213,8 @@ const AdminExamController = {
 
         // Insert question
         const questionResult = await client.query(
-          `INSERT INTO questions (exam_id, question_number, question_text, question_text_cn, points, explanation, explanation_cn, image_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO questions (exam_id, question_number, question_text, question_text_cn, points, explanation, explanation_cn, image_url, passage_text, passage_image_url, question_group_type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
             examId,
@@ -223,14 +225,17 @@ const AdminExamController = {
             explanation,
             explanationCn,
             imageUrl,
+            passageText || null,
+            passageImageUrl || null,
+            questionGroupType || 'standard',
           ],
         );
 
         const questionId = questionResult.rows[0].id;
 
         // Insert answers
-        const answerKeys = ["A", "B", "C", "D"];
-        for (let i = 0; i < 4; i++) {
+        const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+        for (let i = 0; i < answers.length; i++) {
           const answer = answers[i];
           await client.query(
             `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
@@ -284,6 +289,9 @@ const AdminExamController = {
         explanationCn,
         answers,
         correctAnswer,
+        passageText,
+        passageImageUrl,
+        questionGroupType,
       } = req.body;
 
       const hasQuestionTextPayload =
@@ -314,8 +322,11 @@ const AdminExamController = {
                image_url = $3,
                points = COALESCE($4, points),
                explanation = $5,
-               explanation_cn = $6
-           WHERE id = $7`,
+               explanation_cn = $6,
+               passage_text = $7,
+               passage_image_url = $8,
+               question_group_type = $9
+           WHERE id = $10`,
           [
             normalizedQuestion?.en,
             normalizedQuestion?.cn,
@@ -323,12 +334,15 @@ const AdminExamController = {
             parsedPoints,
             explanation,
             explanationCn,
+            passageText || null,
+            passageImageUrl || null,
+            questionGroupType || 'standard',
             questionId,
           ],
         );
 
         // Update answers
-        if (answers && answers.length === 4) {
+        if (answers && answers.length >= 2 && answers.length <= 8) {
           const normalizedAnswers = answers.map((answer = {}) =>
             normalizeBilingualText(answer.text, answer.textCn),
           );
@@ -342,20 +356,22 @@ const AdminExamController = {
               });
           }
 
-          const answerKeys = ["A", "B", "C", "D"];
-          for (let i = 0; i < 4; i++) {
+          // Delete existing answers and re-insert them to support dynamic length (e.g. 4 -> 6 options)
+          await client.query("DELETE FROM answers WHERE question_id = $1", [questionId]);
+          
+          const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+          for (let i = 0; i < answers.length; i++) {
             const answer = answers[i];
             await client.query(
-              `UPDATE answers 
-               SET answer_text = $1, answer_text_cn = $2, is_correct = $3, image_url = $4
-               WHERE question_id = $5 AND answer_key = $6`,
+              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
               [
+                questionId,
+                answerKeys[i],
                 normalizedAnswers[i].en,
                 normalizedAnswers[i].cn,
                 answerKeys[i] === correctAnswer,
                 answer?.imageUrl,
-                questionId,
-                answerKeys[i],
               ],
             );
           }

@@ -219,8 +219,28 @@ export default function ExamPage() {
     );
   }
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const currentQuestionAnswer = selectedAnswers[currentQuestion.id];
+  const processedQuestions = useMemo(() => {
+    let currentGroup: any = null;
+    return questions.map((q: any) => {
+       if (q.question_group_type === 'reading_passage_start' || q.question_group_type === 'fill_in_the_blank_pool_start') {
+          currentGroup = {
+             text: q.passage_text || '',
+             image: q.passage_image_url || '',
+             type: q.question_group_type
+          };
+       } else if (q.question_group_type === 'standard' || !q.question_group_type) {
+          currentGroup = null;
+       }
+
+       if (currentGroup) {
+           return { ...q, groupContext: currentGroup };
+       }
+       return q;
+    });
+  }, [questions]);
+
+  const currentQuestion = processedQuestions[currentQuestionIndex] as any;
+  const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
   const answeredCount = Object.keys(selectedAnswers).length;
   const progressPercent = (answeredCount / questions.length) * 100;
   const isTimeCritical = timeLeft < 300; // less than 5 min
@@ -340,9 +360,26 @@ export default function ExamPage() {
                 </span>
              </div>
 
+             {/* Group Context / Passage */}
+             {currentQuestion.groupContext && currentQuestion.groupContext.text && (
+                <div className="mb-8 bg-amber-50/50 p-6 rounded-2xl border border-amber-200/60 shadow-sm relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-400 to-orange-400" />
+                   <h3 className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                       <FiGrid size={14} /> 
+                       {currentQuestion.groupContext.type === 'reading_passage_start' ? 'Đoạn văn đọc hiểu dùng chung' : 'Nội dung dùng chung'}
+                   </h3>
+                   <div className="text-[17px] text-slate-800 leading-loose font-serif whitespace-pre-wrap">
+                      {currentQuestion.groupContext.text}
+                   </div>
+                   {currentQuestion.groupContext.image && (
+                      <img src={currentQuestion.groupContext.image} alt="Passage" className="mt-5 max-w-full rounded-xl border border-amber-100 shadow-sm" />
+                   )}
+                </div>
+             )}
+
              {/* Question Text */}
              <div className="text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.8] tracking-tight mb-8">
-                {currentQuestion.question_text.split('\n').map((line, idx) => (
+                {currentQuestion.question_text?.split('\n').map((line: string, idx: number) => (
                   <span key={idx}>
                     {line}
                     <br />
@@ -370,7 +407,7 @@ export default function ExamPage() {
 
              {/* Options Grid */}
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mt-6">
-                {currentQuestion.answers?.map((answer, index) => {
+                {currentQuestion.answers?.map((answer: any, index: number) => {
                   const isSelected = currentQuestionAnswer === answer.id;
                   const labelLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
                   // fallback to manual label if answer_key is missing or unformatted

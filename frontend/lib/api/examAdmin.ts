@@ -24,6 +24,9 @@ export interface QuestionData {
     explanationCn?: string;
     answers: AnswerData[];
     correctAnswer: string;
+    passageText?: string;
+    passageImageUrl?: string;
+    questionGroupType?: string;
 }
 
 export interface AnswerData {

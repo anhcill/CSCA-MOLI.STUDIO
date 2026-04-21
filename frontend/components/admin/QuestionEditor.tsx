@@ -8,6 +8,9 @@ export interface QuestionFormData {
     questionText: string;
     questionTextCn: string;
     imageUrl: string;
+    passageText?: string;
+    passageImageUrl?: string;
+    questionGroupType?: string;
     points: number;
     explanation: string;
     explanationCn: string;
@@ -31,10 +34,13 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
         questionText: initialData?.questionText || '',
         questionTextCn: initialData?.questionTextCn || '',
         imageUrl: initialData?.imageUrl || '',
+        passageText: initialData?.passageText || '',
+        passageImageUrl: initialData?.passageImageUrl || '',
+        questionGroupType: initialData?.questionGroupType || 'standard',
         points: initialData?.points || 1,
         explanation: initialData?.explanation || '',
         explanationCn: initialData?.explanationCn || '',
-        answers: initialData?.answers || [
+        answers: initialData?.answers && initialData.answers.length >= 2 ? initialData.answers : [
             { text: '', textCn: '', imageUrl: '' },
             { text: '', textCn: '', imageUrl: '' },
             { text: '', textCn: '', imageUrl: '' },
@@ -61,7 +67,32 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
         onSave(formData);
     };
 
-    const answerKeys = ['A', 'B', 'C', 'D'];
+    const answerKeys = formData.answers.map((_, index) => String.fromCharCode(65 + index));
+
+    const addOption = () => {
+        if (formData.answers.length >= 8) return;
+        setFormData({
+            ...formData,
+            answers: [...formData.answers, { text: '', textCn: '', imageUrl: '' }]
+        });
+    };
+
+    const removeOption = (index: number) => {
+        if (formData.answers.length <= 2) return;
+        const newAnswers = formData.answers.filter((_, i) => i !== index);
+        let newCorrect = formData.correctAnswer;
+        const removedKey = String.fromCharCode(65 + index);
+        if (newCorrect === removedKey) {
+            newCorrect = 'A';
+        } else if (newCorrect > removedKey) {
+            newCorrect = String.fromCharCode(newCorrect.charCodeAt(0) - 1);
+        }
+        setFormData({
+            ...formData,
+            answers: newAnswers,
+            correctAnswer: newCorrect
+        });
+    };
 
     return (
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 space-y-6">
@@ -86,6 +117,40 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         </button>
                     )}
                 </div>
+            </div>
+
+            {/* Group Passage Details (Optional) */}
+            <div className="space-y-4 bg-purple-50 p-4 rounded-lg border border-purple-100">
+                <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-purple-900">Passage / Group Text (Optional)</h4>
+                    <select
+                        value={formData.questionGroupType}
+                        onChange={(e) => setFormData({ ...formData, questionGroupType: e.target.value })}
+                        className="px-3 py-1 border border-purple-200 rounded-md text-sm bg-white text-purple-900"
+                    >
+                        <option value="standard">None (Standard Question)</option>
+                        <option value="reading_passage_start">Start of Reading Comprehension Passage</option>
+                        <option value="fill_in_the_blank_pool_start">Start of Shared Options (Fill-in-the-blank)</option>
+                        <option value="in_group">Belongs to previous group & shares passage</option>
+                    </select>
+                </div>
+                {(formData.questionGroupType === 'reading_passage_start' || formData.questionGroupType === 'fill_in_the_blank_pool_start') && (
+                    <>
+                        <p className="text-xs text-purple-700">Add passage text here if this question serves as the start of a group (Đoạn văn đọc hiểu hoặc điền từ).</p>
+                        <textarea
+                            value={formData.passageText}
+                            onChange={(e) => setFormData({ ...formData, passageText: e.target.value })}
+                            rows={3}
+                            className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                            placeholder="Enter passage text (Đoạn văn chung)..."
+                        />
+                        <ImageUpload
+                            label="Passage Image (Optional)"
+                            currentImage={formData.passageImageUrl || ''}
+                            onImageUploaded={(url) => setFormData({ ...formData, passageImageUrl: url })}
+                        />
+                    </>
+                )}
             </div>
 
             {/* Question Text */}
@@ -143,11 +208,30 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
 
             {/* Answer Options */}
             <div className="space-y-4">
-                <h4 className="font-semibold text-gray-900">Answer Options</h4>
+                <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-gray-900">Answer Options ({formData.answers.length})</h4>
+                    {formData.answers.length < 8 && (
+                        <button
+                            onClick={addOption}
+                            className="text-sm px-3 py-1.5 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100"
+                        >
+                            + Add Option
+                        </button>
+                    )}
+                </div>
 
                 {answerKeys.map((key, index) => (
-                    <div key={key} className="border border-gray-200 rounded-lg p-4 space-y-3">
-                        <div className="flex items-center space-x-3">
+                    <div key={key} className="border border-gray-200 rounded-lg p-4 space-y-3 relative">
+                        {formData.answers.length > 2 && (
+                            <button
+                                onClick={() => removeOption(index)}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-red-500"
+                                title="Remove Option"
+                            >
+                                <FiTrash2 />
+                            </button>
+                        )}
+                        <div className="flex items-center space-x-3 pr-8">
                             <input
                                 type="radio"
                                 name="correctAnswer"
