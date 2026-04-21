@@ -159,29 +159,38 @@ function createVNPayUrl(userId, durationDays, amount, ipnUrl) {
 
 /**
  * @route POST /api/payments/create
- * @desc Tạo thanh toán MoMo hoặc VNPay
+ * @desc Tạo thanh toán MoMo hoặc VNPay — đọc giá từ DB vip_packages
  * @access Private
  */
 router.post('/create', authenticate, async (req, res) => {
   try {
-    const { duration_days, payment_method = 'momo', tier = 'vip' } = req.body;
+    const { package_id, payment_method = 'momo' } = req.body;
     const userId = req.user.id;
 
-    // Determine package key
-    const pkgKey = DURATION_PACKAGES[duration_days]?.[tier];
-    if (!pkgKey || !PACKAGES[pkgKey]) {
-      return res.status(400).json({ success: false, message: 'Gói không hợp lệ.' });
+    if (!package_id) {
+      return res.status(400).json({ success: false, message: 'Thiếu package_id.' });
     }
 
-    const pkg = PACKAGES[pkgKey];
+    // Lấy gói từ DB thay vì dùng fake PACKAGES
+    const pkgRes = await require('../config/database').query(
+      `SELECT id, name, duration_days, price, is_active FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+      [package_id]
+    );
 
-    // Lưu transaction pending trước
+    if (!pkgRes.rows[0]) {
+      return res.status(400).json({ success: false, message: 'Gói không tồn tại hoặc đã bị tắt.' });
+    }
+
+    const pkg = pkgRes.rows[0];
+    const tier = pkg.name.toLowerCase().includes('premium') ? 'premium' : 'vip';
     const orderId = `CSCA_${payment_method.toUpperCase()}_${userId}_${Date.now()}`;
+
+    // Lưu transaction pending
     const transaction = await Transaction.create({
       user_id: userId,
-      amount: pkg.amount,
+      amount: pkg.price,
       payment_method,
-      package_duration: duration_days,
+      package_duration: pkg.duration_days,
       package_name: pkg.name,
       transaction_code: orderId,
     });
@@ -190,13 +199,12 @@ router.post('/create', authenticate, async (req, res) => {
 
     if (payment_method === 'vnpay') {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-      result = createVNPayUrl(userId, duration_days, pkg.amount, clientIp);
+      result = createVNPayUrl(userId, pkg.duration_days, pkg.price, clientIp);
     } else {
       try {
-        result = await createMoMoPayment(userId, duration_days, pkg.amount);
+        result = await createMoMoPayment(userId, pkg.duration_days, pkg.price, pkg.name, tier);
       } catch (momoErr) {
         console.error('MoMo API error:', momoErr.message);
-        // Fallback: trả mock URL nếu MoMo không available
         result = {
           orderId,
           payUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success?orderId=${orderId}&resultCode=0&simulated=true`,
@@ -214,6 +222,7 @@ router.post('/create', authenticate, async (req, res) => {
     res.status(500).json({ success: false, message: 'Lỗi tạo thanh toán.' });
   }
 });
+
 
 /**
  * @route POST /api/payments/momo-webhook

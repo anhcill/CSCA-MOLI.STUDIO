@@ -19,12 +19,14 @@ export interface User {
   full_name: string;
   display_name?: string;
   avatar: string;
+  avatar_url?: string;
   role: string;
   roles?: string[];
   permissions?: string[];
   bio?: string;
   target_score?: number;
   is_vip?: boolean;
+  subscription_tier?: 'vip' | 'premium' | null;
   vip_expires_at?: string;
   created_at?: string;
   is_verified?: boolean;

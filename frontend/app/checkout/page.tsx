@@ -10,89 +10,25 @@ import {
 } from 'react-icons/fa';
 import { FiArrowLeft, FiCheck, FiLoader } from 'react-icons/fi';
 
-// Plan definitions — matches /vip page exactly
-const PACKAGES = [
-  {
-    id: 'vip_3m',
-    tier: 'vip',
-    name: 'VIP 3 Tháng',
-    duration_days: 90,
-    price: 99000,
-    priceDisplay: '99K',
-    period: '/3 tháng',
-    color: 'from-indigo-500 to-purple-600',
-    badge: null,
-    features: [
-      'Mở khoá toàn bộ đề thi',
-      'Xem lời giải chi tiết mọi câu',
-      'Xem tài liệu PDF chất lượng cao',
-      'Làm bài thi thử không giới hạn',
-      'Theo dõi tiến độ học tập',
-      'Giới hạn 2 thiết bị',
-    ],
-    popular: false,
-  },
-  {
-    id: 'vip_1y',
-    tier: 'vip',
-    name: 'VIP 1 Năm',
-    duration_days: 365,
-    price: 249000,
-    priceDisplay: '249K',
-    period: '/năm',
-    color: 'from-indigo-600 to-purple-700',
-    badge: 'Phổ biến',
-    saving: 'Tiết kiệm 45%',
-    features: [
-      'Tất cả tính năng VIP 3 Tháng',
-      'Cập nhật đề thi mới nhất 2026',
-      'Bảo lưu khoá học trọn đời',
-      'Giới hạn 2 thiết bị',
-    ],
-    popular: true,
-  },
-  {
-    id: 'pre_3m',
-    tier: 'premium',
-    name: 'Premium 3 Tháng',
-    duration_days: 90,
-    price: 249000,
-    priceDisplay: '249K',
-    period: '/3 tháng',
-    color: 'from-amber-500 to-orange-600',
-    badge: null,
-    features: [
-      'Tất cả tính năng VIP',
-      'Video giải đề chính thức',
-      'Đặt câu hỏi cho team cố vấn',
-      'Được giải đề riêng từ cố vấn',
-      'Mở khoá toàn bộ đề & tài liệu',
-      'Giới hạn 3 thiết bị',
-    ],
-    popular: false,
-  },
-  {
-    id: 'pre_1y',
-    tier: 'premium',
-    name: 'Premium 1 Năm',
-    duration_days: 365,
-    price: 699000,
-    priceDisplay: '699K',
-    period: '/năm',
-    color: 'from-amber-600 to-red-600',
-    badge: 'Best Value',
-    saving: 'Tiết kiệm 42%',
-    features: [
-      'Tất cả tính năng Premium 3 Tháng',
-      'Cập nhật video giải đề liên tục',
-      'Hỗ trợ ưu tiên từ cố vấn',
-      'Ưu tiên trả lời trong 24h',
-      'Bảo lưu khoá học trọn đời',
-      'Giới hạn 3 thiết bị',
-    ],
-    popular: false,
-  },
-];
+interface DbPackage {
+  id: number;
+  name: string;
+  duration_days: number;
+  price: number;
+  description: string;
+  features: string[];
+}
+
+function derivePackageUI(pkg: DbPackage) {
+  const isPremium = pkg.name.toLowerCase().includes('premium');
+  return {
+    tier: isPremium ? 'premium' : 'vip',
+    color: isPremium ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
+    popular: pkg.duration_days >= 300 && !isPremium,
+    priceDisplay: Math.round(pkg.price / 1000) + 'K',
+    period: pkg.duration_days >= 300 ? '/năm' : '/kỳ',
+  };
+}
 
 const PAYMENT_METHODS = [
   {
@@ -142,83 +78,7 @@ const FEATURES_BANNER = [
   { icon: <FaGift size={20} />, text: 'Hoàn tiền trong 7 ngày' },
 ];
 
-function PackageCard({ pkg, selected, onSelect }: { pkg: typeof PACKAGES[0]; selected: boolean; onSelect: () => void }) {
-  return (
-    <button
-      onClick={onSelect}
-      className={`group relative w-full text-left rounded-2xl border-2 transition-all duration-300 overflow-hidden
-        ${selected
-          ? `border-transparent shadow-xl scale-[1.02] ring-4 ring-indigo-200`
-          : `border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white`
-        }`}
-    >
-      {pkg.popular && (
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50" />
-      )}
 
-      <div className={`relative p-5 pb-4 ${pkg.popular ? `bg-gradient-to-r ${pkg.color} text-white` : 'bg-gray-50'}`}>
-        {pkg.badge && (
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2">
-            <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-lg ${pkg.popular ? 'bg-white text-indigo-700' : 'bg-gradient-to-r from-amber-400 to-orange-500 text-white'}`}>
-              {pkg.badge}
-            </span>
-          </div>
-        )}
-
-        <div className="flex items-start justify-between pt-2">
-          <div>
-            <h3 className={`font-black text-xl ${pkg.popular ? 'text-white' : 'text-gray-900'}`}>
-              {pkg.name}
-            </h3>
-            <p className={`text-xs mt-0.5 ${pkg.popular ? 'text-white/70' : 'text-gray-500'}`}>
-              {pkg.duration_days === 90 ? '3 tháng sử dụng' : '1 năm sử dụng'}
-            </p>
-          </div>
-          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-            selected ? 'bg-white border-white' : `border-transparent ${pkg.popular ? 'border-white/30' : ''}`
-          }`}>
-            {selected && (
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 6l3 3 5-5" stroke={pkg.popular ? pkg.color.split(' ')[1] : '#4F46E5'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-baseline gap-1">
-          <span className={`text-4xl font-black ${selected ? 'text-white' : 'text-gray-900'}`}>
-            {pkg.priceDisplay}
-          </span>
-          <span className={`text-sm ${pkg.popular ? 'text-white/70' : 'text-gray-500'}`}>đ{` `}{pkg.period}</span>
-        </div>
-        {pkg.saving && (
-          <div className={`mt-1 text-xs font-bold px-2 py-0.5 rounded-md w-max ${pkg.popular ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
-            {pkg.saving}
-          </div>
-        )}
-      </div>
-
-      <div className="relative p-5 bg-white">
-        <ul className="space-y-2.5">
-          {pkg.features.map((f, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                pkg.popular ? 'bg-indigo-100' : 'bg-gray-100'
-              }`}>
-                <FiCheck size={11} className={pkg.popular ? 'text-indigo-600' : 'text-gray-500'} />
-              </div>
-              <span className={`text-sm ${pkg.popular ? 'text-gray-700' : 'text-gray-600'}`}>{f}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {!selected && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 group-hover:h-1.5 transition-all" />
-      )}
-    </button>
-  );
-}
 
 function PaymentMethodCard({
   method, selected, onSelect
@@ -266,13 +126,14 @@ function CheckoutContent() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
 
-  const [selectedPkg, setSelectedPkg] = useState<typeof PACKAGES[0] | null>(null);
+  const [allPackages, setAllPackages] = useState<DbPackage[]>([]);
+  const [selectedPkg, setSelectedPkg] = useState<DbPackage | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<string>('momo');
   const [loading, setLoading] = useState(false);
+  const [pkgLoading, setPkgLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const urlPlan = searchParams?.get('plan');
-  const urlDuration = searchParams?.get('duration');
+  const urlPackageId = searchParams?.get('package_id');
   const urlMethod = searchParams?.get('method');
 
   useEffect(() => {
@@ -280,16 +141,22 @@ function CheckoutContent() {
       router.push('/login?redirect=/checkout');
       return;
     }
-    // Match by plan ID first, then fallback to duration
-    if (urlPlan) {
-      const found = PACKAGES.find(p => p.id === urlPlan);
-      if (found) setSelectedPkg(found);
-    } else if (urlDuration) {
-      const found = PACKAGES.find(p => p.duration_days === parseInt(urlDuration));
-      if (found) setSelectedPkg(found);
-    }
+    // Fetch packages from DB
+    axios.get('/vip/packages')
+      .then(res => {
+        const pkgs: DbPackage[] = res.data.data || [];
+        setAllPackages(pkgs);
+        if (urlPackageId) {
+          const found = pkgs.find(p => p.id === parseInt(urlPackageId));
+          if (found) setSelectedPkg(found);
+        } else if (pkgs.length > 0) {
+          setSelectedPkg(pkgs[0]);
+        }
+      })
+      .catch(() => setAllPackages([]))
+      .finally(() => setPkgLoading(false));
     if (urlMethod) setSelectedMethod(urlMethod);
-  }, [isAuthenticated, urlPlan, urlDuration, urlMethod, router]);
+  }, [isAuthenticated, urlPackageId, urlMethod, router]);
 
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói VIP.'); return; }
@@ -297,9 +164,8 @@ function CheckoutContent() {
     setError('');
     try {
       const res = await axios.post('/payments/create', {
-        duration_days: selectedPkg.duration_days,
+        package_id: selectedPkg.id,
         payment_method: selectedMethod,
-        tier: selectedPkg.tier,
       });
       if (res.data.success && res.data.payUrl) {
         window.location.href = res.data.payUrl;
@@ -369,20 +235,64 @@ function CheckoutContent() {
           <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">1</div>
           <h2 className="text-lg font-black text-gray-900">Chọn gói phù hợp với bạn</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {PACKAGES.map(pkg => (
-            <PackageCard
-              key={pkg.id}
-              pkg={pkg}
-              selected={selectedPkg?.id === pkg.id}
-              onSelect={() => setSelectedPkg(pkg)}
-            />
-          ))}
-        </div>
-        {!selectedPkg && (
-          <p className="text-center text-sm text-gray-400 mt-3">
-            Nhấn vào gói bạn muốn để chọn
-          </p>
+        {pkgLoading ? (
+          <div className="flex justify-center py-12">
+            <FiLoader size={32} className="animate-spin text-indigo-600" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {allPackages.map(pkg => {
+              const ui = derivePackageUI(pkg);
+              return (
+                <button
+                  key={pkg.id}
+                  onClick={() => setSelectedPkg(pkg)}
+                  className={`group relative w-full text-left rounded-2xl border-2 transition-all duration-300 overflow-hidden
+                    ${selectedPkg?.id === pkg.id
+                      ? 'border-transparent shadow-xl scale-[1.02] ring-4 ring-indigo-200'
+                      : 'border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white'
+                    }`}
+                >
+                  <div className={`p-5 pb-4 bg-gradient-to-r ${ui.color} text-white`}>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-black text-xl text-white">{pkg.name}</h3>
+                        <p className="text-xs mt-0.5 text-white/70">{pkg.duration_days} ngày sử dụng</p>
+                      </div>
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                        selectedPkg?.id === pkg.id ? 'bg-white border-white' : 'border-white/30'
+                      }`}>
+                        {selectedPkg?.id === pkg.id && (
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="#4F46E5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-baseline gap-1">
+                      <span className="text-4xl font-black">{pkg.price.toLocaleString('vi-VN')}</span>
+                      <span className="text-sm text-white/70">đ</span>
+                    </div>
+                  </div>
+                  <div className="relative p-5 bg-white">
+                    <ul className="space-y-2.5">
+                      {(pkg.features || []).slice(0, 4).map((f, i) => (
+                        <li key={i} className="flex items-start gap-2.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gray-100">
+                            <FiCheck size={11} className="text-indigo-600" />
+                          </div>
+                          <span className="text-sm text-gray-600">{f}</span>
+                        </li>
+                      ))}
+                      {(pkg.features || []).length > 4 && (
+                        <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
+                      )}
+                    </ul>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -413,15 +323,15 @@ function CheckoutContent() {
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${selectedPkg.color} flex items-center justify-center`}>
+              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color} flex items-center justify-center`}>
                 <FaCrown size={20} className="text-white" />
               </div>
               <div>
                 <p className="font-bold text-base">{selectedPkg.name}</p>
-                <p className="text-xs text-gray-400">{selectedPkg.duration_days === 90 ? '3 tháng sử dụng' : '1 năm sử dụng'}</p>
+                <p className="text-xs text-gray-400">{selectedPkg.duration_days} ngày sử dụng</p>
               </div>
             </div>
-            <span className="text-2xl font-black">{selectedPkg.priceDisplay}<span className="text-sm text-gray-400">đ</span></span>
+            <span className="text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
           </div>
           <div className="border-t border-white/10" />
           <div className="space-y-2 text-sm">
@@ -442,11 +352,8 @@ function CheckoutContent() {
               <span className="text-gray-400 text-sm ml-0.5">đ</span>
             </div>
           </div>
-          {selectedPkg.saving && (
-            <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-2 text-center">
-              <span className="text-emerald-400 text-sm font-bold">{selectedPkg.saving}</span>
-            </div>
-          )}
+
+
         </div>
       )}
 
@@ -474,7 +381,7 @@ function CheckoutContent() {
           {loading ? (
             <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo thanh toán...</>
           ) : selectedPkg ? (
-            <>Thanh toán {selectedPkg.priceDisplay}đ<FaArrowRight size={18} /></>
+            <>{selectedPkg.price.toLocaleString('vi-VN')}đ — Thanh toán ngay<FaArrowRight size={18} /></>
           ) : (
             'Chọn gói VIP để tiếp tục'
           )}

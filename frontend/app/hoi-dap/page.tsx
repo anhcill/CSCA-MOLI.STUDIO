@@ -15,16 +15,16 @@ export default function StudentQAPage() {
     const [image, setImage] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // Check VIP right from the start
-    const isVip = user?.is_vip || user?.role === 'super_admin';
+    // Hỏi đáp cố vấn chỉ dành cho gói PREMIUM
+    const isPremium = user?.subscription_tier === 'premium' || user?.role === 'super_admin';
 
     useEffect(() => {
-        if (user && isVip) {
+        if (user && isPremium) {
             loadTickets();
         } else {
             setIsLoading(false);
         }
-    }, [user, isVip]);
+    }, [user, isPremium]);
 
     const loadTickets = async () => {
         try {
@@ -91,28 +91,33 @@ export default function StudentQAPage() {
         );
     }
 
-    // NOT VIP → UPSELL
-    if (!isVip) {
+    // KHÔNG CÓ PREMIUM → UPSELL
+    if (!isPremium) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
                 <Header />
                 <div className="max-w-4xl mx-auto my-12 p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl text-center border-t-4 border-amber-500">
                     <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-500 text-4xl">👑</div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Tính năng Cố vấn Học tập 1:1</h1>
-                    <p className="text-gray-600 dark:text-gray-300 text-lg mb-8">
+                    <p className="text-gray-600 dark:text-gray-300 text-lg mb-2">
                         Hỏi bài thỏa thích bằng Text hoặc Hình ảnh.<br/>
-                        Đội ngũ chuyên gia CSCA sẽ giải đáp 1-1 cho mọi câu hỏi của bạn. <br/>
-                        Đây là đặc quyền <strong>chỉ dành riêng cho Tài khoản Premium (VIP)</strong>.
+                        Đội ngũ chuyên gia CSCA sẽ giải đáp 1-1 cho mọi câu hỏi của bạn.
                     </p>
+                    {user?.is_vip && user?.subscription_tier !== 'premium' && (
+                        <p className="text-amber-600 font-semibold mb-4 text-sm bg-amber-50 rounded-xl px-4 py-2">
+                            ⚠️ Tài khoản VIP của bạn chưa hỗ trợ tính năng này. Nâng cấp lên <strong>Premium</strong> để mở khóa nhắn tin với Cố vấn!
+                        </p>
+                    )}
+                    <p className="text-gray-500 text-sm mb-8">Đây là đặc quyền <strong>chỉ dành riêng cho Tài khoản Premium</strong>.</p>
                     <Link href="/vip" className="inline-block px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-full shadow-lg hover:shadow-orange-500/30 transition-all hover:scale-105">
-                        🚀 Nâng cấp VIP ngay bây giờ
+                        🚀 Nâng cấp Premium ngay bây giờ
                     </Link>
                 </div>
             </div>
         );
     }
 
-    // VIP → FULL QA INTERFACE
+    // PREMIUM → FULL QA INTERFACE
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
             <Header />

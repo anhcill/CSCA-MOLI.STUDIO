@@ -15,7 +15,7 @@ class User {
   static async findById(id) {
     try {
       const result = await db.query(
-        "SELECT id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, vip_expires_at, created_at, updated_at FROM users WHERE id = $1",
+        "SELECT id, username, email, full_name, full_name as display_name, avatar, avatar_url, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, subscription_tier, vip_expires_at, created_at, updated_at FROM users WHERE id = $1",
         [id]
       );
       return result.rows[0] || null;
@@ -33,8 +33,8 @@ class User {
     try {
       // Include password for auth comparison — callers must NOT forward this to clients
       const result = await db.query(
-        `SELECT id, username, email, password, full_name, avatar, role, bio,
-                is_active, is_verified, google_id, oauth_provider, is_vip, vip_expires_at
+        `SELECT id, username, email, password, full_name, avatar, avatar_url, role, bio,
+                is_active, is_verified, google_id, oauth_provider, is_vip, subscription_tier, vip_expires_at
          FROM users WHERE email = $1`,
         [email]
       );
@@ -70,7 +70,7 @@ class User {
   static async findByGoogleId(googleId) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id, is_vip, vip_expires_at
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id, is_vip, subscription_tier, vip_expires_at
          FROM users WHERE google_id = $1`,
         [googleId]
       );
@@ -105,7 +105,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, avatar, is_active)
          VALUES ($1, $2, $3, $4, $5, 'google', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
         [
           username,
           email,
@@ -148,7 +148,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, password, full_name, role, avatar)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
         [
           username,
           email,
@@ -188,7 +188,7 @@ class User {
          SET google_id = $1, oauth_provider = 'google', email_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
         [googleId, avatarUrl, userId]
       );
       return result.rows[0];
@@ -241,7 +241,7 @@ class User {
         UPDATE users 
         SET ${fields.join(", ")}
         WHERE id = $${paramCount}
-        RETURNING id, username, email, full_name, full_name as display_name, avatar, role, bio, phone, study_goal, target_score, is_vip, vip_expires_at, created_at, updated_at
+        RETURNING id, username, email, full_name, full_name as display_name, avatar, avatar_url, role, bio, phone, study_goal, target_score, is_vip, subscription_tier, vip_expires_at, created_at, updated_at
       `;
 
       const result = await db.query(query, values);
@@ -330,7 +330,7 @@ class User {
   static async findAll(limit = 10, offset = 0) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, role, bio, target_score, is_vip, vip_expires_at, created_at
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, bio, target_score, is_vip, subscription_tier, vip_expires_at, created_at
          FROM users
          ORDER BY created_at DESC
          LIMIT $1 OFFSET $2`,
