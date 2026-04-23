@@ -192,8 +192,8 @@ const AdminCouponController = {
         valid_from: { sql: `valid_from = $${idx++}`, val: valid_from ? new Date(valid_from) : null },
         valid_until: { sql: `valid_until = $${idx++}`, val: valid_until ? new Date(valid_until) : null },
         is_active: { sql: `is_active = $${idx++}`, val: is_active },
-        applicable_packages: { sql: `applicable_packages = $${idx++}`, val: applicable_packages },
-        applicable_tiers: { sql: `applicable_tiers = $${idx++}`, val: applicable_tiers },
+        applicable_packages: { sql: `applicable_packages = $${idx++}::integer[]`, val: applicable_packages },
+        applicable_tiers: { sql: `applicable_tiers = $${idx++}::text[]`, val: applicable_tiers },
       };
 
       for (const [, v] of Object.entries(map)) {
