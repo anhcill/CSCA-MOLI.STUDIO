@@ -181,23 +181,31 @@ const AdminCouponController = {
       const values = [];
       let idx = 1;
 
+      // Normalize array fields before use
+      const normalizedPackages = Array.isArray(applicable_packages)
+        ? (applicable_packages.length > 0 ? applicable_packages.map(Number) : null)
+        : null;
+      const normalizedTiers = Array.isArray(applicable_tiers)
+        ? (applicable_tiers.length > 0 ? applicable_tiers.map(String) : ['all'])
+        : ['all'];
+
       const map = {
         code: { sql: `code = $${idx++}`, val: code ? code.trim().toUpperCase() : undefined },
         description: { sql: `description = $${idx++}`, val: description },
         discount_type: { sql: `discount_type = $${idx++}`, val: discount_type },
-        discount_value: { sql: `discount_value = $${idx++}::integer`, val: discount_value },
-        min_order_amount: { sql: `min_order_amount = $${idx++}::integer`, val: min_order_amount },
-        max_uses: { sql: `max_uses = $${idx++}::integer`, val: max_uses },
-        user_limit: { sql: `user_limit = $${idx++}::integer`, val: user_limit },
+        discount_value: { sql: `discount_value = $${idx++}`, val: discount_value != null ? Number(discount_value) : null },
+        min_order_amount: { sql: `min_order_amount = $${idx++}`, val: min_order_amount != null ? Number(min_order_amount) : null },
+        max_uses: { sql: `max_uses = $${idx++}`, val: max_uses != null ? Number(max_uses) : null },
+        user_limit: { sql: `user_limit = $${idx++}`, val: user_limit != null ? Number(user_limit) : null },
         valid_from: { sql: `valid_from = $${idx++}`, val: valid_from ? new Date(valid_from) : null },
         valid_until: { sql: `valid_until = $${idx++}`, val: valid_until ? new Date(valid_until) : null },
-        is_active: { sql: `is_active = $${idx++}::boolean`, val: is_active },
-        applicable_packages: { sql: `applicable_packages = $${idx++}::integer[]`, val: applicable_packages },
-        applicable_tiers: { sql: `applicable_tiers = $${idx++}::text[]`, val: applicable_tiers },
+        is_active: { sql: `is_active = $${idx++}`, val: typeof is_active === 'boolean' ? is_active : undefined },
+        applicable_packages: { sql: `applicable_packages = $${idx++}`, val: normalizedPackages },
+        applicable_tiers: { sql: `applicable_tiers = $${idx++}`, val: normalizedTiers },
       };
 
       for (const [, v] of Object.entries(map)) {
-        if (v.val !== undefined) {
+        if (v.val != null) {
           fields.push(v.sql);
           values.push(v.val);
         }
