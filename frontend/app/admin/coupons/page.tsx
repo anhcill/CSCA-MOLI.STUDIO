@@ -12,7 +12,7 @@ import {
   FiChevronRight, FiX, FiCheck, FiAlertCircle, FiClock, FiTag
 } from 'react-icons/fi';
 
-type Tab = 'list' | 'create';
+type Tab = 'list' | 'form';
 type Filter = 'all' | 'active' | 'expired';
 
 interface CouponStats {
@@ -169,6 +169,7 @@ export default function AdminCouponsPage() {
       };
       await axios.post('/admin/coupons', payload);
       setTab('list');
+      setEditingCoupon(null);
       setForm({
         code: '', description: '',
         discount_type: 'percentage', discount_value: '',
@@ -209,7 +210,15 @@ export default function AdminCouponsPage() {
         applicable_tiers: form.applicable_tiers,
       };
       await axios.put(`/admin/coupons/${editingCoupon.id}`, payload);
+      setTab('list');
       setEditingCoupon(null);
+      setForm({
+        code: '', description: '',
+        discount_type: 'percentage', discount_value: '',
+        min_order_amount: '', max_uses: '', user_limit: '1',
+        valid_from: '', valid_until: '',
+        applicable_tiers: ['all'],
+      });
       loadStats();
       loadCoupons(pagination.page);
       alert('Cập nhật thành công!');
@@ -222,6 +231,7 @@ export default function AdminCouponsPage() {
 
   const openEdit = (c: Coupon) => {
     setEditingCoupon(c);
+    setTab('form');
     setForm({
       code: c.code,
       description: c.description || '',
@@ -316,7 +326,13 @@ export default function AdminCouponsPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setTab('list'); setEditingCoupon(null); }}
+              onClick={() => { setTab('list'); setEditingCoupon(null); setForm({
+                code: '', description: '',
+                discount_type: 'percentage', discount_value: '',
+                min_order_amount: '', max_uses: '', user_limit: '1',
+                valid_from: '', valid_until: '',
+                applicable_tiers: ['all'],
+              }); }}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
                 tab === 'list' ? 'bg-violet-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
@@ -324,9 +340,15 @@ export default function AdminCouponsPage() {
               Danh sách
             </button>
             <button
-              onClick={() => { setTab('create'); setEditingCoupon(null); }}
+              onClick={() => { setTab('form'); setEditingCoupon(null); setForm({
+                code: '', description: '',
+                discount_type: 'percentage', discount_value: '',
+                min_order_amount: '', max_uses: '', user_limit: '1',
+                valid_from: '', valid_until: '',
+                applicable_tiers: ['all'],
+              }); }}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-                tab === 'create' ? 'bg-violet-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                tab === 'form' && !editingCoupon ? 'bg-violet-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
               <FiPlus size={14} className="inline mr-1" /> Tạo mã mới
@@ -506,8 +528,8 @@ export default function AdminCouponsPage() {
           </div>
         )}
 
-        {/* ── Create / Edit Tab ──────────────────────────────────── */}
-        {tab === 'create' && (
+        {/* ── Create / Edit Form ─────────────────────────────────── */}
+        {(tab === 'form' || editingCoupon) && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
               <FiPlus size={18} className="text-violet-600" />
