@@ -11,6 +11,44 @@ async function runOptimizations() {
     // Ticket tables
     await Ticket.initTables();
 
+    // ── Coupon tables ──────────────────────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS coupons (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        description TEXT,
+        discount_type VARCHAR(20) NOT NULL, -- 'percentage' | 'fixed'
+        discount_value INTEGER NOT NULL,
+        min_order_amount INTEGER DEFAULT 0,
+        max_uses INTEGER,
+        user_limit INTEGER DEFAULT 1,
+        valid_from TIMESTAMP,
+        valid_until TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        applicable_packages INTEGER[],
+        applicable_tiers TEXT[] DEFAULT ARRAY['all'],
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        used_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS coupon_usages (
+        id SERIAL PRIMARY KEY,
+        coupon_id INTEGER NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+        discount_amount INTEGER NOT NULL DEFAULT 0,
+        final_amount INTEGER NOT NULL DEFAULT 0,
+        original_amount INTEGER NOT NULL DEFAULT 0,
+        used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupon_usages_coupon ON coupon_usages(coupon_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupon_usages_user ON coupon_usages(user_id)`);
+
     // Forum tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS posts (
