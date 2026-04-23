@@ -246,6 +246,20 @@ router.post('/create', authenticate, async (req, res) => {
 
     const pkg = pkgRes.rows[0];
 
+    // Kiểm tra user đã mua gói này rồi → chỉ cấm mua lại gói giống hệt
+    const existingPurchase = await require('../config/database').query(
+      `SELECT id, status FROM transactions
+       WHERE user_id = $1 AND package_id = $2 AND status = 'completed'
+       LIMIT 1`,
+      [userId, pkgId]
+    );
+    if (existingPurchase.rows[0]) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bạn đã đăng ký gói này rồi. Vui lòng chọn gói khác hoặc gia hạn khi hết hạn.',
+      });
+    }
+
     // Sanitize: đảm bảo giá là số dương
     if (typeof pkg.price !== 'number' || pkg.price <= 0) {
       return res.status(400).json({ success: false, message: 'Giá gói không hợp lệ.' });
@@ -311,6 +325,7 @@ router.post('/create', authenticate, async (req, res) => {
       user_id: userId,
       amount: finalAmount,
       payment_method,
+      package_id: pkg.id,
       package_duration: pkg.duration_days,
       package_name: pkg.name,
       transaction_code: orderId,

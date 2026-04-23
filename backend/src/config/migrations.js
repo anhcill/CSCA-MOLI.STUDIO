@@ -475,6 +475,7 @@ async function runOptimizations() {
         user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         amount          BIGINT NOT NULL,
         payment_method  VARCHAR(30) DEFAULT 'momo',
+        package_id      INTEGER REFERENCES vip_packages(id),
         package_duration INTEGER NOT NULL,
         package_name    VARCHAR(100),
         transaction_code VARCHAR(255) UNIQUE,
@@ -491,6 +492,7 @@ async function runOptimizations() {
     // Thêm cột mới nếu bảng đã tồn tại (cho môi trường dev đang chạy)
     await pool.query(`
       ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS package_id INTEGER REFERENCES vip_packages(id),
       ADD COLUMN IF NOT EXISTS package_name VARCHAR(100),
       ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(50),
       ADD COLUMN IF NOT EXISTS trans_id VARCHAR(100),

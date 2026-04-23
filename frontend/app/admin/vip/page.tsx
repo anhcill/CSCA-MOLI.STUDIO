@@ -118,7 +118,8 @@ export default function AdminVipPage() {
   // ── Grant modal ───────────────────────────────────────
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [grantUserId, setGrantUserId] = useState('');
-  const [grantDays, setGrantDays] = useState('30');
+  const [grantPackageId, setGrantPackageId] = useState('');
+  const [grantCustomDays, setGrantCustomDays] = useState('');
   const [grantReason, setGrantReason] = useState('');
   const [grantLoading, setGrantLoading] = useState(false);
 
@@ -216,16 +217,23 @@ export default function AdminVipPage() {
   };
 
   const handleGrantVip = async () => {
-    if (!grantUserId || !grantDays) return alert('Vui lòng nhập đầy đủ thông tin');
+    if (!grantUserId) return alert('Vui lòng nhập User ID');
+    if (!grantPackageId && !grantCustomDays) return alert('Vui lòng chọn gói VIP hoặc nhập số ngày tùy chỉnh');
     setGrantLoading(true);
     try {
-      await axios.post(`/admin/vip/users/${grantUserId}/grant`, {
-        durationDays: parseInt(grantDays),
+      const payload: any = {
         reason: grantReason,
-      });
+      };
+      if (grantPackageId) {
+        payload.packageId = parseInt(grantPackageId);
+      } else {
+        payload.durationDays = parseInt(grantCustomDays);
+      }
+      await axios.post(`/admin/vip/users/${grantUserId}/grant`, payload);
       setShowGrantModal(false);
       setGrantUserId('');
-      setGrantDays('30');
+      setGrantPackageId('');
+      setGrantCustomDays('');
       setGrantReason('');
       loadStats();
       loadUsers();
@@ -733,13 +741,28 @@ export default function AdminVipPage() {
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Thời hạn (Ngày) *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Chọn gói VIP</label>
+                <select
+                  value={grantPackageId}
+                  onChange={e => { setGrantPackageId(e.target.value); setGrantCustomDays(''); }}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white">
+                  <option value="">— Chọn từ danh sách gói —</option>
+                  {packages.map(pkg => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.name} — {pkg.duration_days} ngày — {pkg.price.toLocaleString('vi-VN')}đ
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-center text-xs text-gray-400 font-medium">hoặc nhập số ngày tùy chỉnh</div>
+              <div>
                 <input
                   type="number"
-                  value={grantDays}
-                  onChange={e => setGrantDays(e.target.value)}
-                  placeholder="30"
-                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                  value={grantCustomDays}
+                  onChange={e => { setGrantCustomDays(e.target.value); setGrantPackageId(''); }}
+                  placeholder="VD: 7"
+                  disabled={!!grantPackageId}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none disabled:bg-gray-50 disabled:text-gray-400" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Lý do</label>

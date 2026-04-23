@@ -9,14 +9,14 @@ class Transaction {
    * Create a new transaction
    */
   static async create(data) {
-    const { user_id, amount, payment_method, package_duration, package_name, transaction_code, coupon_code } = data;
+    const { user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, coupon_code } = data;
     const rawResponse = coupon_code ? JSON.stringify({ couponCode: coupon_code }) : null;
     try {
       const result = await db.query(
-        `INSERT INTO transactions (user_id, amount, payment_method, package_duration, package_name, transaction_code, status, raw_response)
-         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+        `INSERT INTO transactions (user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, status, raw_response)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
          RETURNING *`,
-        [user_id, amount, payment_method, package_duration, package_name, transaction_code, rawResponse]
+        [user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, rawResponse]
       );
       return result.rows[0];
     } catch (error) {

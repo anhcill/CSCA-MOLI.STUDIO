@@ -67,43 +67,60 @@ const AdminVipController = {
 
   /**
    * POST /api/admin/vip/users/:userId/grant
-   * Cấp VIP thủ công cho user
+   * Cấp VIP thủ công cho user — chọn gói từ danh sách packages
    */
   async grantVip(req, res) {
     try {
       const { userId } = req.params;
-      const { durationDays, reason } = req.body;
+      const { durationDays, reason, packageId } = req.body;
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
-      if (!durationDays || durationDays < 1) {
-        return res.status(400).json({ success: false, message: 'durationDays phải >= 1' });
+      let pkgId = null, pkgName = null, pkgDays = null;
+
+      if (packageId) {
+        // Lấy thông tin gói từ DB
+        const pkgRes = await db.query(
+          `SELECT id, name, duration_days FROM vip_packages WHERE id = $1`,
+          [packageId]
+        );
+        if (!pkgRes.rows[0]) {
+          return res.status(400).json({ success: false, message: 'Gói VIP không tồn tại.' });
+        }
+        pkgId = pkgRes.rows[0].id;
+        pkgName = pkgRes.rows[0].name;
+        pkgDays = pkgRes.rows[0].duration_days;
+      } else if (durationDays && durationDays >= 1) {
+        pkgDays = parseInt(durationDays);
+        pkgName = [30, 180, 365].find(d => d === pkgDays)
+          ? (pkgDays === 30 ? 'Gói Xem' : pkgDays === 180 ? 'Gói Kiểm tra' : 'Gói Làm bài')
+          : `Gói ${pkgDays} ngày`;
+      } else {
+        return res.status(400).json({ success: false, message: 'Cần cung cấp packageId hoặc durationDays.' });
       }
 
       // Cập nhật VIP
       const result = await db.query(
         `UPDATE users
          SET is_vip = TRUE,
-             subscription_tier = 'vip',
+             subscription_tier = $3,
              vip_expires_at = GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + INTERVAL '1 day' * $1,
              updated_at = NOW()
          WHERE id = $2
          RETURNING id, email, full_name, is_vip, subscription_tier, vip_expires_at`,
-        [durationDays, userId]
+        [pkgDays, userId, pkgName.toLowerCase().includes('premium') ? 'premium' : 'vip']
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 
       // Ghi transaction thủ công
-      const pkgDays = [30, 180, 365].find(d => d === parseInt(durationDays)) || parseInt(durationDays);
-      const pkgName = pkgDays === 30 ? 'Gói Xem' : pkgDays === 180 ? 'Gói Kiểm tra' : pkgDays === 365 ? 'Gói Làm bài' : `Gói ${pkgDays} ngày`;
       await db.query(
-        `INSERT INTO transactions (user_id, amount, payment_method, package_duration, package_name, transaction_code, status)
-         VALUES ($1, 0, 'manual', $2, $3, $4, 'completed')`,
-        [userId, durationDays, pkgName, `MANUAL_${adminId}_${Date.now()}`]
+        `INSERT INTO transactions (user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, status)
+         VALUES ($1, 0, 'manual', $2, $3, $4, $5, 'completed')`,
+        [userId, pkgId, pkgDays, pkgName, `MANUAL_${adminId}_${Date.now()}`]
       );
 
-      console.info(`[VIP] ${adminName} granted ${durationDays}d VIP to user#${userId}. Reason: ${reason || 'N/A'}`);
-      res.json({ success: true, message: `Đã cấp ${durationDays} ngày VIP`, data: result.rows[0] });
+      console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId}. Reason: ${reason || 'N/A'}`);
+      res.json({ success: true, message: `Đã cấp "${pkgName}" (${pkgDays} ngày) cho user`, data: result.rows[0] });
     } catch (err) {
       console.error('Admin grantVip error:', err);
       res.status(500).json({ success: false, message: 'Lỗi cấp VIP' });
