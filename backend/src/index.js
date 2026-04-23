@@ -178,6 +178,8 @@ app.use("/api/insights", require("./routes/insights")); // Learning Insights
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
+app.use("/api/coupons", require("./routes/couponRoutes")); // Coupons (validate & apply)
+app.use("/api/admin/coupons", require("./routes/adminCouponRoutes")); // Admin Coupon Management
 app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
 
 // ====================================

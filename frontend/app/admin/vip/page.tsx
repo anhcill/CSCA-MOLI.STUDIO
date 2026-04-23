@@ -35,6 +35,7 @@ interface VipUser {
   full_name: string;
   avatar_url: string | null;
   is_vip: boolean;
+  subscription_tier?: string;
   vip_expires_at: string | null;
   total_paid: number | null;
   total_transactions: number;
@@ -491,12 +492,13 @@ export default function AdminVipPage() {
                                 <div className="text-gray-400 text-xs">{u.email}</div>
                               </td>
                               <td className="p-3">
-                                {u.is_vip ? (
+                                {(u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium') ? (
                                   isExpired ? (
                                     <span className="px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold">Hết hạn</span>
                                   ) : (
                                     <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-bold flex items-center gap-1 w-max">
-                                      <FaCrown size={10} /> Active
+                                      <FaCrown size={10} />
+                                      {u.subscription_tier === 'premium' ? 'Premium' : u.subscription_tier === 'vip_pro' ? 'VIP Pro' : 'VIP'}
                                     </span>
                                   )
                                 ) : (
@@ -506,7 +508,7 @@ export default function AdminVipPage() {
                               <td className="p-3 text-gray-600">{fmtDate(u.vip_expires_at)}</td>
                               <td className="p-3 font-bold text-emerald-600">{fmtCurrency(u.total_paid)}</td>
                               <td className="p-3 text-right">
-                                {u.is_vip && !isExpired && (
+                                {(u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium') && !isExpired && (
                                   <button
                                     onClick={() => handleRevokeVip(u.id)}
                                     className="px-3 py-1 text-red-500 hover:bg-red-50 hover:text-red-700 text-xs font-bold rounded-lg border border-red-200 transition-colors">

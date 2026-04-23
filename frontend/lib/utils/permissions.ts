@@ -3,8 +3,9 @@ import { User } from '@/lib/api/auth';
 export function isVipActive(user: User | null | undefined): boolean {
   if (!user) return false;
   const isVip = user.is_vip === true;
+  const hasTier = user.subscription_tier === 'vip' || user.subscription_tier === 'premium';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
-  return isVip && notExpired;
+  return (isVip || hasTier) && notExpired;
 }
 
 export function getVipDisplay(user: User | null | undefined): { isVip: boolean; expiresAt: string | null; daysLeft: number | null } {

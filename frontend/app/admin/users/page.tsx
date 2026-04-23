@@ -264,7 +264,7 @@ export default function AdminUsersPage() {
         <div className="flex items-center gap-4 text-sm text-gray-500">
           <span>Tổng: <strong className="text-gray-900">{pagination.totalUsers}</strong></span>
           <span>Đang hoạt động: <strong className="text-green-600">{users.filter(u => u.is_active !== false).length}</strong></span>
-          <span>VIP: <strong className="text-amber-600">{users.filter(u => u.is_vip).length}</strong></span>
+          <span>VIP: <strong className="text-amber-600">{users.filter(u => u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium').length}</strong></span>
         </div>
       </div>
 
@@ -320,9 +320,9 @@ export default function AdminUsersPage() {
                     )}
                   </td>
                   <td className="px-5 py-4">
-                    {u.is_vip ? (
+                    {(u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium') ? (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold">
-                        {u.subscription_tier === 'vip_pro' ? 'VIP Pro' : u.subscription_tier === 'vip_thong_minh' ? 'VIP TM' : 'VIP'}
+                        {u.subscription_tier === 'vip_pro' ? 'VIP Pro' : u.subscription_tier === 'vip_thong_minh' ? 'VIP TM' : u.subscription_tier === 'premium' ? 'Premium' : 'VIP'}
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>

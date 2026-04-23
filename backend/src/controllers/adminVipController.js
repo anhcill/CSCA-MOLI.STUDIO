@@ -16,12 +16,15 @@ const AdminVipController = {
       let whereClause = '';
       const params = [];
 
+      const vipCondition = "(u.is_vip = TRUE OR u.subscription_tier IN ('vip', 'premium'))";
+      const activeCondition = `(${vipCondition} AND (u.vip_expires_at IS NULL OR u.vip_expires_at > NOW()))`;
+
       if (filter === 'active') {
-        whereClause = "WHERE u.is_vip = TRUE AND (u.vip_expires_at IS NULL OR u.vip_expires_at > NOW())";
+        whereClause = `WHERE ${activeCondition}`;
       } else if (filter === 'expired') {
-        whereClause = "WHERE u.is_vip = TRUE AND u.vip_expires_at <= NOW()";
+        whereClause = `WHERE ${vipCondition} AND u.vip_expires_at <= NOW()`;
       } else {
-        whereClause = "WHERE (u.is_vip = TRUE OR EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = u.id AND t.status = 'completed'))";
+        whereClause = `WHERE (${vipCondition} OR EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = u.id AND t.status = 'completed'))`;
       }
 
       if (search) {
@@ -35,7 +38,7 @@ const AdminVipController = {
       const [countRes, dataRes] = await Promise.all([
         db.query(`SELECT COUNT(*)::int AS total FROM users u ${whereClause}`, countParams),
         db.query(
-          `SELECT u.id, u.email, u.full_name, u.avatar_url, u.role, u.is_vip, u.vip_expires_at, u.created_at,
+          `SELECT u.id, u.email, u.full_name, u.avatar_url, u.role, u.is_vip, COALESCE(u.subscription_tier, 'basic') as subscription_tier, u.vip_expires_at, u.created_at,
                   (SELECT SUM(amount) FROM transactions WHERE user_id = u.id AND status = 'completed') AS total_paid,
                   (SELECT COUNT(*)::int FROM transactions WHERE user_id = u.id) AS total_transactions
            FROM users u
@@ -81,10 +84,11 @@ const AdminVipController = {
       const result = await db.query(
         `UPDATE users
          SET is_vip = TRUE,
+             subscription_tier = 'vip',
              vip_expires_at = GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + INTERVAL '1 day' * $1,
              updated_at = NOW()
          WHERE id = $2
-         RETURNING id, email, full_name, is_vip, vip_expires_at`,
+         RETURNING id, email, full_name, is_vip, subscription_tier, vip_expires_at`,
         [durationDays, userId]
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
@@ -117,7 +121,7 @@ const AdminVipController = {
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
       const result = await db.query(
-        `UPDATE users SET is_vip = FALSE, vip_expires_at = NULL, updated_at = NOW()
+        `UPDATE users SET is_vip = FALSE, subscription_tier = NULL, vip_expires_at = NULL, updated_at = NOW()
          WHERE id = $1 RETURNING id, email, full_name`,
         [userId]
       );
@@ -185,8 +189,8 @@ const AdminVipController = {
     try {
       const [users, revenue, pending] = await Promise.all([
         db.query(`SELECT
-          SUM(CASE WHEN is_vip = TRUE AND (vip_expires_at IS NULL OR vip_expires_at > NOW()) THEN 1 ELSE 0 END)::int AS active_vip,
-          SUM(CASE WHEN is_vip = TRUE AND vip_expires_at <= NOW() THEN 1 ELSE 0 END)::int AS expired_vip
+          SUM(CASE WHEN (is_vip = TRUE OR subscription_tier IN ('vip', 'premium')) AND (vip_expires_at IS NULL OR vip_expires_at > NOW()) THEN 1 ELSE 0 END)::int AS active_vip,
+          SUM(CASE WHEN (is_vip = TRUE OR subscription_tier IN ('vip', 'premium')) AND vip_expires_at <= NOW() THEN 1 ELSE 0 END)::int AS expired_vip
          FROM users`),
         db.query(`SELECT
           SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END)::bigint AS total_revenue,

@@ -220,6 +220,7 @@ const optionalAuth = (req, res, next) => {
           role: decoded.role || "student",
           is_vip: decoded.is_vip === true,
           vip_expires_at: decoded.vip_expires_at || null,
+          subscription_tier: decoded.subscription_tier || 'basic',
         };
       }
     } catch {
@@ -238,7 +239,7 @@ const optionalAuth = (req, res, next) => {
  */
 const checkVipAccess = (user) => {
   if (!user) return false;
-  const isVip = user.is_vip === true;
+  const isVip = user.is_vip === true || user.subscription_tier === 'vip' || user.subscription_tier === 'premium';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
   return isVip && notExpired;
 };

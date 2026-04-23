@@ -9,6 +9,7 @@ import {
   FiPlayCircle, FiChevronRight, FiSettings,
   FiTrendingUp, FiArrowRight
 } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 import axiosInstance from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -188,11 +189,16 @@ export default function ExamRoomPage() {
                 ) : null}
                 
                 <div className="flex justify-between items-start mb-6">
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <span className="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg uppercase tracking-wider">{exam.subject_name || exam.code || 'Môn học'}</span>
                     <span className="px-3 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-lg uppercase tracking-wider flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span> Live
                     </span>
+                    {exam.is_premium && (
+                      <span className="inline-flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-800 text-[10px] font-black rounded-md shadow-sm">
+                        <FaCrown size={8} /> VIP
+                      </span>
+                    )}
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${colors[idx % colors.length]} text-white`}>HOT</span>
                 </div>
@@ -245,7 +251,14 @@ export default function ExamRoomPage() {
             {lobbyData.upcoming.length === 0 && <p className="text-gray-500 col-span-full">Chưa có kỳ thi nào sắp mở.</p>}
             {lobbyData.upcoming.map(exam => (
               <div key={exam.id} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-lg transition-all flex flex-col h-full">
-                <span className="inline-block px-3 py-1 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-lg uppercase tracking-wider mb-4 w-fit">{exam.subject_name || exam.code || 'Môn học'}</span>
+                <span className="inline-flex items-center gap-2 mb-4 w-fit">
+                  <span className="px-3 py-1 bg-orange-50 text-orange-600 border border-orange-200 text-xs font-bold rounded-lg uppercase tracking-wider">{exam.subject_name || exam.code || 'Môn học'}</span>
+                  {exam.is_premium && (
+                    <span className="inline-flex items-center gap-0.5 px-2 py-1 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-800 text-[10px] font-black rounded-md shadow-sm">
+                      <FaCrown size={8} /> VIP
+                    </span>
+                  )}
+                </span>
                 
                 {!mounted ? (
                    <div className="flex-1 animate-pulse">
@@ -416,7 +429,16 @@ export default function ExamRoomPage() {
                    ) : filteredPublicExams.length > 0 ? (
                      filteredPublicExams.map(exam => (
                       <tr key={exam.id} className="hover:bg-indigo-50/30 transition-colors group">
-                        <td className="py-4 px-6 font-bold text-gray-900">{exam.title}</td>
+                        <td className="py-4 px-6 font-bold text-gray-900">
+                          <span className="inline-flex items-center gap-1.5">
+                            {exam.title}
+                            {exam.is_premium && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-800 text-[10px] font-black rounded-md shadow-sm">
+                                <FaCrown size={8} /> VIP
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="py-4 px-6">
                           <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg">{exam.subject_name || exam.code || 'Môn học'}</span>
                         </td>

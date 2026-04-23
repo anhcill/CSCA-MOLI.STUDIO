@@ -23,6 +23,7 @@ interface Exam {
     created_at: string;
     is_premium?: boolean;
     is_simulated?: boolean;
+    vip_tier?: string;
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
@@ -373,7 +374,7 @@ export default function ExamsPage() {
                                             </select>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-1.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
                                                 {exam.shuffle_mode && (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">
                                                         <FiShuffle size={10} /> Shuffle
@@ -381,7 +382,8 @@ export default function ExamsPage() {
                                                 )}
                                                 {exam.is_premium ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
-                                                        <FaCrown /> PRO
+                                                        <FaCrown size={10} />
+                                                        {exam.vip_tier === 'vip_pro' ? 'PRO' : exam.vip_tier === 'vip_thong_minh' ? 'VIP' : 'VIP'}
                                                     </span>
                                                 ) : (
                                                     <span className="text-xs text-gray-400 font-medium">Free</span>

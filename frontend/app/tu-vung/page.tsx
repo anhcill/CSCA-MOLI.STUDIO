@@ -4,7 +4,9 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { FiBook, FiSearch, FiChevronRight, FiChevronLeft, FiX } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 import axios from '@/lib/utils/axios';
+import { useAuthStore } from '@/lib/store/authStore';
 
 interface VocabItem {
   id: number;
@@ -16,6 +18,8 @@ interface VocabItem {
   topic: string;
   example_cn: string;
   example_vn: string;
+  is_premium?: boolean;
+  vip_tier?: string;
 }
 
 const SUBJECT_META: Record<string, { label: string; icon: string; color: string }> = {
@@ -39,16 +43,6 @@ function VocabularyContent() {
 
   useEffect(() => { loadTopics(); }, [selectedSubject]);
 
-  const loadTopics = async () => {
-    try {
-      setLoading(true);
-      const params: any = {};
-      if (selectedSubject) params.subject = selectedSubject;
-      const res = await axios.get('/vocabulary/topics', { params });
-      setTopics(res.data.data || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
 
   useEffect(() => {
     if (selectedTopic || searchQuery) loadWords();
@@ -63,6 +57,18 @@ function VocabularyContent() {
       if (searchQuery) params.search = searchQuery;
       const res = await axios.get('/vocabulary', { params });
       setWords(res.data.data || []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  // Load topics with VIP awareness
+  const loadTopics = async () => {
+    try {
+      setLoading(true);
+      const params: any = {};
+      if (selectedSubject) params.subject = selectedSubject;
+      const res = await axios.get('/vocabulary/topics', { params });
+      setTopics(res.data.data || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -155,10 +161,15 @@ function VocabularyContent() {
                       {/* Mobile: stacked cards */}
                       <div className="hidden sm:grid sm:grid-cols-4 group-hover:bg-cyan-50/30 transition-colors rounded-xl">
                         {/* Chinese */}
-                        <div className="px-5 py-4 flex items-center">
+                        <div className="px-5 py-4 flex items-center gap-2">
                           <span className="text-2xl font-black text-gray-900 group-hover:text-cyan-700 transition-colors">
                             {word.word_cn}
                           </span>
+                          {word.is_premium && (
+                            <span className="inline-flex items-center justify-center w-5 h-5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm shrink-0" title="Nội dung VIP">
+                              <FaCrown size={10} className="text-white" />
+                            </span>
+                          )}
                         </div>
                         {/* Pinyin */}
                         <div className="px-5 py-4 flex items-center border-l border-gray-100">

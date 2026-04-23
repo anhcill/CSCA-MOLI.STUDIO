@@ -231,6 +231,10 @@ function CheckoutContent() {
 
   const urlPackageId = searchParams?.get('package_id');
   const urlMethod = searchParams?.get('method');
+  const urlCoupon = searchParams?.get('coupon');
+
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
+  const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -261,8 +265,13 @@ function CheckoutContent() {
       const res = await axios.post('/payments/create', {
         package_id: selectedPkg.id,
         payment_method: selectedMethod,
+        coupon_code: appliedCouponCode,
+        idempotency_key: `${selectedPkg.id}_${selectedMethod}_${Date.now()}`,
       });
       if (res.data.success) {
+        if (res.data.appliedCoupon) {
+          setAppliedCouponInfo(res.data.appliedCoupon);
+        }
         if (res.data.payment_method === 'bank_transfer') {
           setQrData({ orderId: res.data.orderId, bank: res.data.bank });
           setStep('qr');
@@ -420,8 +429,8 @@ function CheckoutContent() {
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm bg-white">
                 {method.icon}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className={`font-black text-lg ${selectedMethod === method.id ? method.color : 'text-gray-800'}`}>{method.name}</p>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${method.badgeColor}`}>{method.badge}</span>
                 </div>
@@ -437,23 +446,47 @@ function CheckoutContent() {
 
       {/* Order summary */}
       {selectedPkg && (
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white space-y-4 shadow-2xl">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 sm:p-6 text-white space-y-4 shadow-2xl">
           <div className="flex items-center gap-2">
             <FaLock size={14} className="text-amber-400" />
             <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Xác nhận đơn hàng</h3>
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color} flex items-center justify-center`}>
-                <FaCrown size={20} className="text-white" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color} flex items-center justify-center shrink-0`}>
+                <FaCrown size={16} className="text-white sm:w-5 sm:h-5" />
               </div>
-              <div>
-                <p className="font-bold text-base">{selectedPkg.name}</p>
+              <div className="min-w-0">
+                <p className="font-bold text-sm sm:text-base">{selectedPkg.name}</p>
                 <p className="text-xs text-gray-400">{selectedPkg.duration_days} ngày sử dụng</p>
               </div>
             </div>
-            <span className="text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
+            <div className="text-right shrink-0">
+              {appliedCouponInfo ? (
+                <div className="space-y-1">
+                  <span className="text-sm font-black line-through text-gray-500 block">
+                    {selectedPkg.price.toLocaleString('vi-VN')}đ
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-emerald-400 block">
+                    {appliedCouponInfo.final_amount.toLocaleString('vi-VN')}đ
+                  </span>
+                  <span className="inline-block px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-bold">
+                    -{appliedCouponInfo.discount_amount.toLocaleString('vi-VN')}đ
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xl sm:text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
+              )}
+            </div>
           </div>
+          {appliedCouponCode && appliedCouponInfo && (
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-mono font-bold">
+                {appliedCouponCode}
+              </span>
+              <span className="text-xs text-gray-400">đã được áp dụng</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -473,7 +506,12 @@ function CheckoutContent() {
           {loading ? (
             <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
           ) : selectedPkg ? (
-            <>{selectedPkg.price.toLocaleString('vi-VN')}đ — Tiến hành thanh toán <FaArrowRight size={18} /></>
+            <>
+              <span>{appliedCouponInfo ? `${appliedCouponInfo.final_amount.toLocaleString('vi-VN')}đ` : `${selectedPkg.price.toLocaleString('vi-VN')}đ`}</span>
+              <span className="opacity-60">—</span>
+              <span>Tiến hành thanh toán</span>
+              <FaArrowRight size={18} />
+            </>
           ) : (
             'Chọn gói để tiếp tục'
           )}

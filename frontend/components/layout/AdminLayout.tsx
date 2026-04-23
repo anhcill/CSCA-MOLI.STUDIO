@@ -8,7 +8,7 @@ import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle
+  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -41,6 +41,13 @@ const NAV_SECTIONS = [
         label: 'VIP & Doanh thu',
         icon: FaCrown,
         href: '/admin/vip',
+        permission: 'users.manage',
+        roles: [],
+      },
+      {
+        label: 'Mã giảm giá',
+        icon: FiGift,
+        href: '/admin/coupons',
         permission: 'users.manage',
         roles: [],
       },

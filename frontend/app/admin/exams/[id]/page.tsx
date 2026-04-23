@@ -159,6 +159,17 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const handleTogglePremium = async () => {
+        if (!exam) return;
+        try {
+            const newVal = !exam.is_premium;
+            await examAdminApi.updateExam(Number(id), { is_premium: newVal });
+            setExam({ ...exam, is_premium: newVal });
+        } catch {
+            alert('Lỗi cập nhật trạng thái VIP');
+        }
+    };
+
     const handleSetVipTier = async (tier: string) => {
         if (!exam) return;
         try {
@@ -309,6 +320,26 @@ export default function AdminExamDetailPage() {
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Premium toggle */}
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">
+                                <FaCrown size={14} className="text-amber-500" /> Nội dung Premium (VIP)
+                            </p>
+                            <p className="text-xs text-gray-400">Chỉ thành viên VIP mới được truy cập đề thi này</p>
+                        </div>
+                        <button
+                            onClick={handleTogglePremium}
+                            className={`relative w-12 h-6 rounded-full transition-colors ${
+                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
+                            }`}
+                        >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
+                            }`} />
+                        </button>
                     </div>
 
                     {/* Video URL */}

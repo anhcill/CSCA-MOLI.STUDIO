@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import { FiPlus, FiTrash2, FiEdit2, FiSearch, FiX, FiCheck, FiUpload, FiChevronLeft } from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 import Link from 'next/link';
 
 interface VocabItem {
@@ -19,6 +20,8 @@ interface VocabItem {
   example_cn: string;
   example_vn: string;
   is_active: boolean;
+  is_premium?: boolean;
+  vip_tier?: string;
 }
 
 const SUBJECTS = [
@@ -29,9 +32,16 @@ const SUBJECTS = [
   { value: 'tieng-trung-tn', label: '🔬 Tiếng Trung TN' },
 ];
 
+const VIP_TIERS = [
+  { value: 'basic', label: 'Miễn phí', color: 'gray' },
+  { value: 'vip', label: 'VIP', color: 'blue' },
+  { value: 'premium', label: 'Premium', color: 'amber' },
+];
+
 const EMPTY_FORM = {
   word_cn: '', pinyin: '', word_vn: '', word_en: '',
   subject: 'tieng-trung-tn', topic: '', example_cn: '', example_vn: '',
+  is_premium: false, vip_tier: 'basic',
 };
 
 export default function AdminVocabularyPage() {
@@ -46,6 +56,7 @@ export default function AdminVocabularyPage() {
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
   const [filterTopic, setFilterTopic] = useState('');
+  const [filterVip, setFilterVip] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -74,7 +85,7 @@ export default function AdminVocabularyPage() {
   useEffect(() => {
     setOffset(0);
     loadData();
-  }, [filterSubject, filterTopic, searchQuery]);
+  }, [filterSubject, filterTopic, searchQuery, filterVip]);
 
   const loadData = useCallback(async () => {
     try {
@@ -83,6 +94,9 @@ export default function AdminVocabularyPage() {
       if (filterSubject) params.subject = filterSubject;
       if (filterTopic) params.topic = filterTopic;
       if (searchQuery) params.search = searchQuery;
+      if (filterVip === 'vip') params.is_premium = 'true';
+      if (filterVip === 'premium') params.vip_tier = 'premium';
+      if (filterVip === 'free') params.is_premium = 'false';
 
       const [vocabRes, topicsRes] = await Promise.all([
         axios.get('/vocabulary', { params }),
@@ -98,7 +112,7 @@ export default function AdminVocabularyPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterSubject, filterTopic, searchQuery, offset]);
+  }, [filterSubject, filterTopic, searchQuery, filterVip, offset]);
 
   useEffect(() => {
     if (isAuthenticated && hasPermission(user, 'content.manage')) loadData();
@@ -117,6 +131,8 @@ export default function AdminVocabularyPage() {
       word_vn: item.word_vn, word_en: item.word_en || '',
       subject: item.subject, topic: item.topic,
       example_cn: item.example_cn || '', example_vn: item.example_vn || '',
+      is_premium: item.is_premium || false,
+      vip_tier: item.vip_tier || 'basic',
     });
     setShowModal(true);
   };
@@ -128,10 +144,22 @@ export default function AdminVocabularyPage() {
     }
     try {
       setSaving(true);
+      const payload = {
+        word_cn: formData.word_cn,
+        pinyin: formData.pinyin,
+        word_vn: formData.word_vn,
+        word_en: formData.word_en || null,
+        subject: formData.subject,
+        topic: formData.topic,
+        example_cn: formData.example_cn || null,
+        example_vn: formData.example_vn || null,
+        is_premium: formData.is_premium,
+        vip_tier: formData.vip_tier,
+      };
       if (editingId) {
-        await axios.put(`/vocabulary/${editingId}`, formData);
+        await axios.put(`/vocabulary/${editingId}`, payload);
       } else {
-        await axios.post('/vocabulary', formData);
+        await axios.post('/vocabulary', payload);
       }
       setShowModal(false);
       loadData();
@@ -249,14 +277,24 @@ export default function AdminVocabularyPage() {
             <option value="">Tất cả chủ đề</option>
             {topics.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          {(filterSubject || filterTopic || searchQuery) && (
+          {(filterSubject || filterTopic || searchQuery || filterVip) && (
             <button
-              onClick={() => { setFilterSubject(''); setFilterTopic(''); setSearchQuery(''); }}
+              onClick={() => { setFilterSubject(''); setFilterTopic(''); setSearchQuery(''); setFilterVip(''); }}
               className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
             >
               <FiX size={14} /> Xóa filter
             </button>
           )}
+          <select
+            value={filterVip}
+            onChange={e => { setFilterVip(e.target.value); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none"
+          >
+            <option value="">Tất cả</option>
+            <option value="free">Miễn phí</option>
+            <option value="vip">VIP</option>
+            <option value="premium">Premium</option>
+          </select>
         </div>
 
         {/* Table */}
@@ -279,6 +317,7 @@ export default function AdminVocabularyPage() {
                     <th className="text-left px-4 py-3 text-gray-600 font-semibold hidden md:table-cell">Tiếng Anh</th>
                     <th className="text-left px-4 py-3 text-gray-600 font-semibold hidden lg:table-cell">Môn</th>
                     <th className="text-left px-4 py-3 text-gray-600 font-semibold hidden lg:table-cell">Chủ đề</th>
+                    <th className="text-center px-4 py-3 text-gray-600 font-semibold">VIP</th>
                     <th className="text-center px-4 py-3 text-gray-600 font-semibold">Thao tác</th>
                   </tr>
                 </thead>
@@ -296,6 +335,16 @@ export default function AdminVocabularyPage() {
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell">
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{item.topic}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {item.is_premium ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 rounded-lg text-xs font-bold">
+                            <FaCrown size={10} />
+                            {VIP_TIERS.find(t => t.value === (item.vip_tier || 'basic'))?.label || 'VIP'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">Free</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
@@ -419,6 +468,35 @@ export default function AdminVocabularyPage() {
                   </datalist>
                 </div>
               </div>
+              {/* VIP Tier */}
+              <div className="pt-2 border-t border-gray-100">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <span className="flex items-center gap-1.5">
+                    <FaCrown size={13} className="text-amber-500" /> Cấp bậc VIP
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {VIP_TIERS.map(tier => (
+                    <button
+                      key={tier.value}
+                      type="button"
+                      onClick={() => setFormData(f => ({ ...f, is_premium: tier.value !== 'basic', vip_tier: tier.value }))}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${
+                        (formData.is_premium && tier.value !== 'basic') || (!formData.is_premium && tier.value === 'basic')
+                          ? tier.color === 'amber'
+                            ? 'border-amber-400 bg-amber-50 text-amber-700'
+                            : tier.color === 'blue'
+                              ? 'border-blue-400 bg-blue-50 text-blue-700'
+                              : 'border-gray-400 bg-gray-100 text-gray-700'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}>
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Basic = miễn phí cho tất cả, VIP/Premium = chỉ thành viên VIP mới xem được</p>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Ví dụ tiếng Trung</label>
                 <input

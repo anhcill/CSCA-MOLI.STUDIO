@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
+import { isVipActive } from '@/lib/utils/permissions';
 import SearchBar from './SearchBar';
 import NotificationBell from './NotificationBell';
 import ThemeToggle from './ThemeToggle';
@@ -168,7 +169,7 @@ export default function Header() {
               <ThemeToggle />
             </div>
 
-            {mounted && (!user || !user.is_vip) && (
+            {mounted && (!user || !isVipActive(user)) && (
               <Link href="/vip" className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-sm font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group">
                 <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12"></div>
                 <FaCrown className="drop-shadow-sm text-yellow-200 animate-pulse" size={16} /> <span className="tracking-wide">Nâng cấp PRO</span>
@@ -205,7 +206,7 @@ export default function Header() {
                      <span className="text-sm font-bold text-gray-800 max-w-[100px] truncate">
                        {user.full_name}
                      </span>
-                     {user.is_vip && (
+                     {isVipActive(user) && (
                        <span className="text-[10px] font-bold text-orange-500 tracking-wider">PRO MEMBER</span>
                      )}
                   </div>
@@ -231,7 +232,7 @@ export default function Header() {
                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600"><FiShield size={16} /></div> Trang Quản trị
                        </Link>
                     )}
-                    {!user.is_vip && (
+                    {!isVipActive(user) && (
                        <Link href="/vip" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-orange-600 hover:bg-orange-50 transition-colors">
                          <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><FaCrown size={16} /></div> Nâng cấp VIP
                        </Link>
@@ -272,8 +273,8 @@ export default function Header() {
               <SearchBar />
            </div>
 
-           {/* Mobile VIP Banner */}
-           {mounted && (!user || !user.is_vip) && (
+          {/* Mobile VIP Banner */}
+          {mounted && (!user || !isVipActive(user)) && (
               <Link href="/vip" onClick={() => setMobileOpen(false)} className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-md mb-4 bg-opacity-90">
                 <div className="flex items-center gap-3">
                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm"><FaCrown size={20} className="text-yellow-200" /></div>
@@ -299,7 +300,7 @@ export default function Header() {
                  <p className="font-bold text-gray-900 dark:text-white truncate">{user.full_name}</p>
                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                </div>
-               {user.is_vip && (
+               {isVipActive(user) && (
                  <span className="text-[10px] font-bold text-orange-500 bg-orange-100 px-2 py-1 rounded-full">PRO</span>
                )}
              </div>

@@ -470,6 +470,7 @@ const AdminExamController = {
           e.total_questions as questions_count,
                     e.status,
                     e.is_premium,
+                    e.vip_tier,
                     e.is_simulated,
                     e.start_time,
                     e.end_time,
