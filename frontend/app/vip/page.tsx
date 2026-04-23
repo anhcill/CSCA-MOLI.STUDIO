@@ -273,31 +273,42 @@ export default function VipPricingPage() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="text-left px-6 py-3 font-bold text-gray-700">Tính năng</th>
-                  <th className="text-center px-4 py-3 font-bold text-indigo-600">VIP</th>
-                  <th className="text-center px-4 py-3 font-bold text-amber-600">Premium</th>
+                  <th className="text-center px-4 py-3 font-bold text-indigo-600">
+                    {packages.find(p => !p.name.toLowerCase().includes('premium') && p.is_active)?.name || 'VIP'}
+                  </th>
+                  <th className="text-center px-4 py-3 font-bold text-amber-600">
+                    {packages.find(p => p.name.toLowerCase().includes('premium') && p.is_active)?.name || 'Premium'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {[
-                  ['Mở khoá toàn bộ đề thi', true, true],
-                  ['Xem lời giải chi tiết', true, true],
-                  ['Xem tài liệu PDF', true, true],
-                  ['Làm bài thi không giới hạn', true, true],
-                  ['Video giải đề chính thức', false, true],
-                  ['Đặt câu hỏi cho team cố vấn', false, true],
-                  ['Được giải đề riêng từ cố vấn', false, true],
-                  ['Hỗ trợ ưu tiên', false, true],
-                ].map(([feat, vipVal, preVal], i) => (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                    <td className="px-6 py-3 font-medium text-gray-700">{feat as string}</td>
-                    <td className="text-center px-4 py-3">
-                      {vipVal ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                    </td>
-                    <td className="text-center px-4 py-3">
-                      {preVal ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const allFeatures = Array.from(new Set(packages.flatMap(p => p.features || [])));
+                  if (allFeatures.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-6 text-center text-gray-400 text-sm">Không có dữ liệu tính năng</td>
+                      </tr>
+                    );
+                  }
+                  return allFeatures.map((feat, i) => {
+                    const vipPackages = packages.filter(p => !p.name.toLowerCase().includes('premium') && p.is_active);
+                    const prePackages = packages.filter(p => p.name.toLowerCase().includes('premium') && p.is_active);
+                    const vipHas = vipPackages.some(p => (p.features || []).includes(feat));
+                    const preHas = prePackages.some(p => (p.features || []).includes(feat));
+                    return (
+                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-6 py-3 font-medium text-gray-700">{feat}</td>
+                        <td className="text-center px-4 py-3">
+                          {vipHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                        <td className="text-center px-4 py-3">
+                          {preHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
             </div>
