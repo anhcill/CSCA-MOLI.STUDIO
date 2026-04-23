@@ -197,7 +197,21 @@ const register = async (req, res) => {
     // Send non-blocking (don't fail registration if email fails)
     emailService
       .sendVerificationEmail(email, user.full_name || username, verifyUrl)
-      .catch(() => {});
+      .catch((err) => {
+        console.error(`❌ Error sending verification email (connection timeout?): ${err.message}`);
+      });
+
+    // Register session (auto-evicts oldest if at device limit — no blocking)
+    const jti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+      expiresAt,
+    });
 
     // Log hành vi đăng ký
     UserActivity.log(user.id, 'register', {
@@ -250,17 +264,22 @@ const login = async (req, res) => {
     if (!email || !password) {
       return res
         .status(400)
-        .json({ success: false, message: "Vui lòng nhập email và mật khẩu" });
+        .json({ success: false, message: "Vui lòng nhập email/tên đăng nhập và mật khẩu" });
     }
 
-    if (!validateEmail(email)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email không hợp lệ" });
+    // Accept email or username as identifier
+    const identifier = email.trim();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+    if (isEmail) {
+      if (!validateEmail(identifier)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Email không hợp lệ" });
+      }
     }
 
     // Rate limit check
-    const { blocked, remainingMin } = checkRateLimit(email);
+    const { blocked, remainingMin } = checkRateLimit(identifier);
     if (blocked) {
       return res.status(429).json({
         success: false,
@@ -268,14 +287,16 @@ const login = async (req, res) => {
       });
     }
 
-    const user = await User.findByEmail(email);
+    const user = isEmail
+      ? await User.findByEmail(identifier)
+      : await User.findByUsername(identifier);
 
     if (!user || !user.password) {
       // Don't reveal whether email exists
-      recordFailedAttempt(email);
+      recordFailedAttempt(identifier);
       return res
         .status(401)
-        .json({ success: false, message: "Email hoặc mật khẩu không đúng" });
+        .json({ success: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
     if (!user.is_active) {
@@ -286,14 +307,14 @@ const login = async (req, res) => {
 
     const isPasswordValid = await User.comparePassword(password, user.password);
     if (!isPasswordValid) {
-      recordFailedAttempt(email);
+      recordFailedAttempt(identifier);
       return res
         .status(401)
-        .json({ success: false, message: "Email hoặc mật khẩu không đúng" });
+        .json({ success: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
     // Success - clear attempts
-    clearAttempts(email);
+    clearAttempts(identifier);
 
     // Register session (auto-evicts oldest if at device limit — no blocking)
     const jti = crypto.randomBytes(16).toString("hex");

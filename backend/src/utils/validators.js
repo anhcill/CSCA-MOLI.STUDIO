@@ -60,11 +60,10 @@ const validateRegister = [
 const validateLogin = [
   body("email")
     .trim()
-    .isEmail()
-    .withMessage("Please provide a valid email address")
-    .normalizeEmail(),
+    .notEmpty()
+    .withMessage("Email hoặc tên đăng nhập không được để trống"),
 
-  body("password").notEmpty().withMessage("Password is required"),
+  body("password").notEmpty().withMessage("Mật khẩu không được để trống"),
 
   handleValidationErrors,
 ];
