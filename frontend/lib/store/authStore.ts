@@ -3,23 +3,6 @@ import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
 import { clearTokenCache } from '../utils/axios';
 
-const getSessionStorage = () => {
-  if (typeof window === 'undefined') return null;
-  return window.sessionStorage;
-};
-
-const safeSessionSet = (key: string, value: string) => {
-  const storage = getSessionStorage();
-  if (!storage) return;
-  storage.setItem(key, value);
-};
-
-const safeSessionRemove = (key: string) => {
-  const storage = getSessionStorage();
-  if (!storage) return;
-  storage.removeItem(key);
-};
-
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -43,7 +26,6 @@ function syncVipFromToken(user: User | null, token: string | null): User | null 
       ? payload.vip_expires_at
       : undefined;
 
-  // Only update if different from stored
   if (user.is_vip !== isVip || user.vip_expires_at !== vipExpiresAt) {
     return { ...user, is_vip: isVip, vip_expires_at: vipExpiresAt };
   }
@@ -67,13 +49,8 @@ interface AuthState {
   syncVipFromToken: () => void;
 }
 
-type PersistedAuthState = Pick<
-  AuthState,
-  'user' | 'token' | 'refreshToken' | 'isAuthenticated'
->;
-
 export const useAuthStore = create<AuthState>()(
-  persist<AuthState, [], [], PersistedAuthState>(
+  persist<AuthState, [], [], Pick<AuthState, 'user' | 'token' | 'refreshToken' | 'isAuthenticated'>>(
     (set, get) => ({
       user: null,
       token: null,
@@ -81,21 +58,11 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
 
-      setUser: (user) =>
-        set((state) => {
-          safeSessionSet('user', JSON.stringify(user));
-          return { ...state, user, isAuthenticated: true };
-        }),
+      setUser: (user) => set({ user, isAuthenticated: true }),
 
-      setTokens: (token, refreshToken) =>
-        set({ token, refreshToken }),
+      setTokens: (token, refreshToken) => set({ token, refreshToken }),
 
       login: (user, token, refreshToken) => {
-        // Save to sessionStorage (per-tab isolation)
-        safeSessionSet('token', token);
-        safeSessionSet('refreshToken', refreshToken);
-        safeSessionSet('user', JSON.stringify(user));
-
         set({
           user,
           token,
@@ -106,14 +73,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear sessionStorage
-        safeSessionRemove('token');
-        safeSessionRemove('refreshToken');
-        safeSessionRemove('user');
-
-        // Clear axios token cache
         clearTokenCache();
-
         set({
           user: null,
           token: null,
@@ -126,49 +86,22 @@ export const useAuthStore = create<AuthState>()(
       updateUser: (userData) =>
         set((state) => {
           const nextUser = state.user ? { ...state.user, ...userData } : null;
-          if (nextUser) {
-            safeSessionSet('user', JSON.stringify(nextUser));
-          }
-          return {
-            ...state,
-            user: nextUser,
-          };
+          return { ...state, user: nextUser };
         }),
 
-      setLoading: (loading) =>
-        set({ isLoading: loading }),
+      setLoading: (loading) => set({ isLoading: loading }),
 
-      // Re-check live VIP status from JWT (call after payment success, token refresh, etc.)
       syncVipFromToken: () => {
         const { user, token } = get();
         const updated = syncVipFromToken(user, token);
         if (updated && updated !== user) {
-          safeSessionSet('user', JSON.stringify(updated));
           set({ user: updated });
         }
       },
     }),
     {
       name: 'auth-storage',
-      storage: {
-        getItem: (name) => {
-          const storage = getSessionStorage();
-          if (!storage) return null;
-          const str = storage.getItem(name);
-          return str ? JSON.parse(str) : null;
-        },
-        setItem: (name, value) => {
-          const storage = getSessionStorage();
-          if (!storage) return;
-          storage.setItem(name, JSON.stringify(value));
-        },
-        removeItem: (name) => {
-          const storage = getSessionStorage();
-          if (!storage) return;
-          storage.removeItem(name);
-        },
-      },
-      skipHydration: true,
+      skipHydration: false,
       partialize: (state) => ({
         user: state.user,
         token: state.token,
