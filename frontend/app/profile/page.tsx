@@ -211,7 +211,7 @@ export default function ProfilePage() {
     setSessionsError('');
     axios.get('/auth/sessions')
       .then(res => {
-        const data = res.data;
+        const data = res.data?.data || {};
         setSessions(data?.sessions || []);
         setSessionMaxDevices(data?.maxDevices || 1);
         setSessionCurrentJti(data?.currentJti || '');

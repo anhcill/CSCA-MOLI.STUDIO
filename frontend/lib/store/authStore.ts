@@ -60,9 +60,19 @@ export const useAuthStore = create<AuthState>()(
 
       setUser: (user) => set({ user, isAuthenticated: true }),
 
-      setTokens: (token, refreshToken) => set({ token, refreshToken }),
+      setTokens: (token, refreshToken) => {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('token', token);
+          sessionStorage.setItem('refreshToken', refreshToken);
+        }
+        set({ token, refreshToken });
+      },
 
       login: (user, token, refreshToken) => {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('token', token);
+          sessionStorage.setItem('refreshToken', refreshToken);
+        }
         set({
           user,
           token,
@@ -74,6 +84,10 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         clearTokenCache();
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('refreshToken');
+        }
         set({
           user: null,
           token: null,
@@ -108,6 +122,15 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => {
+        return (state) => {
+          // Sync token to sessionStorage after hydration so axios interceptor picks it up
+          if (state?.token && state?.refreshToken && typeof window !== 'undefined') {
+            sessionStorage.setItem('token', state.token);
+            sessionStorage.setItem('refreshToken', state.refreshToken);
+          }
+        };
+      },
     }
   )
 );
