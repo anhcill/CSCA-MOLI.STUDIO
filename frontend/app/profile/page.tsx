@@ -12,7 +12,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap,
+  FiStar, FiZap, FiMonitor,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -114,13 +114,19 @@ export default function ProfilePage() {
   const [localUser, setLocalUser] = useState(authUser);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings' | 'devices'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   const [packages, setPackages] = useState<any[]>([]);
   const [pkgsLoading, setPkgsLoading] = useState(false);
+
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState('');
+  const [sessionMaxDevices, setSessionMaxDevices] = useState(1);
+  const [sessionCurrentJti, setSessionCurrentJti] = useState('');
 
   const [formData, setFormData] = useState({
     full_name: authUser?.full_name || '',
@@ -156,6 +162,22 @@ export default function ProfilePage() {
         .then(res => setPackages(res.data.data || []))
         .catch(() => {})
         .finally(() => setPkgsLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'devices' && sessions.length === 0) {
+      setSessionsLoading(true);
+      setSessionsError('');
+      axios.get('/auth/sessions')
+        .then(res => {
+          const data = res.data.data;
+          setSessions(data?.sessions || []);
+          setSessionMaxDevices(data?.maxDevices || 1);
+          setSessionCurrentJti(data?.currentJti || '');
+        })
+        .catch(() => setSessionsError('Không thể tải danh sách thiết bị'))
+        .finally(() => setSessionsLoading(false));
     }
   }, [activeTab]);
 
@@ -334,6 +356,7 @@ export default function ProfilePage() {
               { key: 'info', label: 'Thông tin', icon: FiUser },
               { key: 'stats', label: 'Thống kê', icon: FiAward },
               { key: 'vip', label: 'VIP', icon: FaCrown },
+              { key: 'devices', label: 'Thiết bị', icon: FiMonitor },
               { key: 'settings', label: 'Cài đặt', icon: FiShield },
             ] as const).map(tab => {
               const I = tab.icon;
@@ -508,16 +531,28 @@ export default function ProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {packages.map(pkg => {
                       const ui = derivePackageUI(pkg);
-                      // Vô hiệu hóa nếu người dùng đang dùng gói cùng tier, hoặc nếu current tier = premium mà gói này là vip
-                      const isCurrentTier = localUser?.is_vip && localUser?.subscription_tier === ui.tier;
-                      const isLowerTier = localUser?.is_vip && localUser?.subscription_tier === 'premium' && ui.tier === 'vip';
-                      const disabled = isCurrentTier || isLowerTier;
-                      
+                      const userTier = localUser?.subscription_tier;
+                      const isVipUser = !!localUser?.is_vip;
+
+                      // Đang dùng gói cùng tier (subscription_tier đã load)
+                      const sameTier = isVipUser && userTier === ui.tier;
+                      // Premium hạ cấp sang VIP → không cho
+                      const downgradeBlocked = isVipUser && userTier === 'premium' && ui.tier === 'vip';
+                      // User VIP nhưng subscription_tier chưa load → tạm thời block để tránh duplicate purchase
+                      const tierUnknown = isVipUser && !userTier;
+
+                      const disabled = sameTier || downgradeBlocked || tierUnknown;
+
                       return (
-                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden`}>
-                          {isCurrentTier && (
+                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden ${disabled ? 'opacity-70' : ''}`}>
+                          {sameTier && (
                              <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                               Đang dùng
+                               ✓ Đang dùng
+                             </div>
+                          )}
+                          {downgradeBlocked && (
+                             <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                               ↓ Hạ cấp
                              </div>
                           )}
                           <div className="flex items-center gap-2 mb-3">
@@ -536,7 +571,7 @@ export default function ProfilePage() {
                           <ul className="space-y-2 mb-4">
                             {(pkg.features || []).slice(0, 4).map((f: string, i: number) => (
                               <li key={i} className="flex items-center gap-2 text-xs text-gray-600 min-h-[20px]">
-                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> 
+                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" />
                                 <span className="leading-tight">{f}</span>
                               </li>
                             ))}
@@ -544,19 +579,140 @@ export default function ProfilePage() {
                                <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
                             )}
                           </ul>
-                          <button 
-                            disabled={disabled}
-                            onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`} 
-                            className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-transparent shadow-inner' : `bg-white ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}`}
-                          >
-                            {isCurrentTier ? 'Gói hiện tại' : isLowerTier ? 'Không khả dụng' : 'Đăng ký ngay'}
-                          </button>
+                          {sameTier ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-green-200 bg-green-50 text-green-700">
+                              ✓ Đang sử dụng gói này
+                            </div>
+                          ) : downgradeBlocked ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                              Bạn đang dùng Premium — không thể hạ cấp
+                            </div>
+                          ) : tierUnknown ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-500">
+                              Đang tải trạng thái...
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`}
+                              className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}
+                            >
+                              {isVipUser && ui.tier === 'premium' ? 'Nâng cấp lên Premium' : isVipUser ? 'Gia hạn' : 'Đăng ký ngay'}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── Tab: Thiết bị ─────────────────────────────── */}
+          {activeTab === 'devices' && (
+            <div className="p-6 space-y-5">
+              {sessionsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-100 rounded animate-pulse w-1/3" />
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-1/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : sessionsError ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+                    <FiAlertTriangle size={20} className="text-red-400" />
+                  </div>
+                  <p className="text-sm text-gray-500">{sessionsError}</p>
+                  <button onClick={() => { setSessions([]); setActiveTab('devices'); }}
+                    className="mt-3 text-sm text-gray-600 hover:text-gray-900 underline">Thử lại</button>
+                </div>
+              ) : sessions.length <= 1 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                    <FiMonitor size={20} className="text-gray-400" />
+                  </div>
+                  <p className="text-sm text-gray-500">Chỉ có một thiết bị được đăng nhập</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <FiMonitor size={14} className="text-gray-400" />
+                      <span>{sessions.length}/{sessions.length} thiết bị đang dùng</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sessions.map(session => {
+                      const isCurrent = session.jti === sessionCurrentJti;
+                      const deviceParts = session.device_info?.split(' on ') || [];
+                      const browser = deviceParts[0] || 'Trình duyệt';
+                      const os = deviceParts[1] || 'Hệ điều hành';
+
+                      const lastActive = session.last_active
+                        ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : '—';
+
+                      return (
+                        <div key={session.id || session.jti} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-gray-200 transition-colors">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                            <FiMonitor size={18} className="text-gray-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-800 truncate">{browser} trên {os}</p>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full shrink-0">Hiện tại</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-gray-400">{session.ip_address || '—'}</span>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-gray-400">Hoạt động: {lastActive}</span>
+                            </div>
+                          </div>
+                          {!isCurrent && (
+                            <button onClick={async () => {
+                              if (!confirm('Đăng xuất thiết bị này?')) return;
+                              try {
+                                await axios.delete(`/auth/sessions/${session.jti}`);
+                                setSessions(prev => prev.filter(s => s.jti !== session.jti));
+                                showToast('Đăng xuất thiết bị thành công');
+                              } catch {
+                                showToast('Không thể đăng xuất thiết bị', 'error');
+                              }
+                            }}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                              Đăng xuất
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button onClick={async () => {
+                    if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
+                    try {
+                      await axios.delete('/auth/sessions');
+                      const current = sessions.find(s => s.jti === (window as any).__currentJti);
+                      setSessions(current ? [current] : []);
+                      showToast('Đã đăng xuất khỏi các thiết bị khác');
+                    } catch {
+                      showToast('Không thể đăng xuất các thiết bị khác', 'error');
+                    }
+                  }}
+                    className="w-full py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                    Đăng xuất tất cả thiết bị khác
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -624,6 +780,123 @@ export default function ProfilePage() {
                   </button>
                 </div>
               </section>
+            </div>
+          )}
+
+          {/* ── Tab: Thiết bị ─────────────────────────── */}
+          {activeTab === 'devices' && (
+            <div className="p-6 space-y-5">
+              {sessionsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map(i => (
+                    <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2 pt-1">
+                        <div className="h-4 bg-gray-100 rounded animate-pulse w-48" />
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-32" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : sessionsError ? (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 px-4 py-3 rounded-xl">
+                  <FiAlertTriangle size={14} />{sessionsError}
+                </div>
+              ) : sessions.length <= 1 ? (
+                <div className="text-center py-10">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
+                    <FiMonitor size={24} className="text-gray-300" />
+                  </div>
+                  <p className="text-sm text-gray-500">Chỉ có một thiết bị được đăng nhập</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-gray-50 rounded-2xl border border-gray-100 px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FiMonitor size={14} className="text-gray-400" />
+                      <span className="text-sm text-gray-600">
+                        {sessions.length}/{sessionMaxDevices} thiết bị đang dùng
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {sessions.map(session => {
+                      const isCurrent = session.jti === sessionCurrentJti;
+                      const deviceParts = (session.device_info || '').split(' on ');
+                      const browser = deviceParts[0] || 'Trình duyệt không xác định';
+                      const os = deviceParts[1] || 'Hệ điều hành không xác định';
+
+                      const lastActiveDate = session.last_active ? new Date(session.last_active) : null;
+                      let relativeTime = '';
+                      if (lastActiveDate) {
+                        const diffMs = Date.now() - lastActiveDate.getTime();
+                        const diffMins = Math.floor(diffMs / 60000);
+                        const diffHours = Math.floor(diffMins / 60);
+                        const diffDays = Math.floor(diffHours / 24);
+                        if (diffMins < 1) relativeTime = 'Vừa xong';
+                        else if (diffMins < 60) relativeTime = `${diffMins} phút trước`;
+                        else if (diffHours < 24) relativeTime = `${diffHours} giờ trước`;
+                        else if (diffDays === 1) relativeTime = 'Hôm qua';
+                        else relativeTime = `${diffDays} ngày trước`;
+                      }
+
+                      return (
+                        <div key={session.id || session.jti} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                            <FiMonitor size={18} className="text-indigo-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-gray-800">{browser}</p>
+                              <span className="text-xs text-gray-400">{os}</span>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-md">Hiện tại</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
+                              <span>IP: {session.ip_address || '—'}</span>
+                              <span>•</span>
+                              <span>{relativeTime || '—'}</span>
+                            </div>
+                          </div>
+                          {!isCurrent && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Đăng xuất thiết bị "${browser} trên ${os}"?`)) return;
+                                try {
+                                  await axios.delete(`/auth/sessions/${session.jti}`);
+                                  setSessions(prev => prev.filter(s => s.jti !== session.jti));
+                                  showToast('Đăng xuất thiết bị thành công');
+                                } catch {
+                                  showToast('Không thể đăng xuất thiết bị', 'error');
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors shrink-0"
+                            >
+                              Đăng xuất
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Đăng xuất tất cả thiết bị khác?')) return;
+                      try {
+                        await axios.delete('/auth/sessions');
+                        setSessions(prev => prev.filter(s => s.jti !== sessionCurrentJti));
+                        showToast('Đã đăng xuất các thiết bị khác');
+                      } catch {
+                        showToast('Không thể đăng xuất các thiết bị khác', 'error');
+                      }
+                    }}
+                    className="w-full py-2.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl border border-red-100 transition-colors"
+                  >
+                    Đăng xuất tất cả thiết bị khác
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

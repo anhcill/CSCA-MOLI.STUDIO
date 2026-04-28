@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const emailService = require('../services/emailService');
 
 const AdminVipController = {
   /**
@@ -111,6 +112,22 @@ const AdminVipController = {
         [pkgDays, userId, pkgName.toLowerCase().includes('premium') ? 'premium' : 'vip']
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
+
+      const grantedUser = result.rows[0];
+
+      // Gửi email kích hoạt VIP
+      const userInfo = await db.query(
+        `SELECT full_name, username FROM users WHERE id = $1`,
+        [userId]
+      );
+      const name = grantedUser.full_name || userInfo.rows[0]?.username || 'bạn';
+      emailService.sendVipActivatedEmail({
+        email: grantedUser.email,
+        name,
+        packageName: pkgName,
+        durationDays: pkgDays,
+        expiresAt: grantedUser.vip_expires_at,
+      }).catch(err => console.error('Admin grant VIP email error:', err.message));
 
       // Ghi transaction thủ công
       await db.query(

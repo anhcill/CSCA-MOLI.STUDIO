@@ -249,8 +249,8 @@ export default function AdminCouponsPage() {
   const handleToggleActive = async (c: Coupon) => {
     try {
       await axios.put(`/admin/coupons/${c.id}`, { is_active: !c.is_active });
-      loadStats();
       loadCoupons(pagination.page);
+      loadStats().catch(() => {});
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi cập nhật trạng thái');
     }
@@ -260,8 +260,8 @@ export default function AdminCouponsPage() {
     if (!confirm(`Xóa mã "${c.code}"?`)) return;
     try {
       await axios.delete(`/admin/coupons/${c.id}`);
-      loadStats();
       loadCoupons(pagination.page);
+      loadStats().catch(() => {});
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi xóa');
     }

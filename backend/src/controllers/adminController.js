@@ -29,45 +29,77 @@ const AdminController = {
     // Get dashboard statistics
     async getDashboardStats(req, res) {
         try {
-            // Get total users
-            const usersResult = await pool.query('SELECT COUNT(*) as count FROM users');
+            const { from, to } = req.query;
+
+            // Build date filter clause
+            let dateFilter = '';
+            const params = [];
+            if (from) {
+                params.push(from);
+                dateFilter += ` AND created_at >= $${params.length}`;
+            }
+            if (to) {
+                params.push(to + 'T23:59:59.999Z');
+                dateFilter += ` AND created_at <= $${params.length}`;
+            }
+
+            // Get users
+            const usersResult = await pool.query(
+                `SELECT COUNT(*) as count FROM users${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`
+            );
             const totalUsers = parseInt(usersResult.rows[0].count);
 
-            // Get total exams
-            const examsResult = await pool.query('SELECT COUNT(*) as count FROM exams');
+            // Get exams
+            const examsResult = await pool.query(
+                `SELECT COUNT(*) as count FROM exams${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`
+            );
             const totalExams = parseInt(examsResult.rows[0].count);
 
-            // Get total exam attempts
-            const attemptsResult = await pool.query('SELECT COUNT(*) as count FROM exam_attempts');
+            // Get exam attempts
+            const attemptsResult = await pool.query(
+                `SELECT COUNT(*) as count FROM exam_attempts WHERE 1=1${dateFilter}`
+            );
             const totalAttempts = parseInt(attemptsResult.rows[0].count);
 
-            // Get total forum posts
-            const postsResult = await pool.query('SELECT COUNT(*) as count FROM posts');
+            // Get forum posts
+            const postsResult = await pool.query(
+                `SELECT COUNT(*) as count FROM posts WHERE 1=1${dateFilter}`
+            );
             const totalPosts = parseInt(postsResult.rows[0].count);
 
-            // Get recent activities (last 10 exam attempts)
-            const recentActivitiesQuery = `
-        SELECT 
-          ea.id,
-          ea.created_at,
-          u.full_name as user_name,
-          e.title as exam_title,
-          ea.total_score,
-          ea.status
-        FROM exam_attempts ea
-        JOIN users u ON ea.user_id = u.id
-        JOIN exams e ON ea.exam_id = e.id
-        ORDER BY ea.created_at DESC
-        LIMIT 10
-      `;
-            const activitiesResult = await pool.query(recentActivitiesQuery);
+            // Get recent activities (last 10)
+            const activitiesResult = await pool.query(`
+                SELECT
+                  ea.id,
+                  ea.created_at,
+                  u.full_name as user_name,
+                  e.title as exam_title,
+                  ea.total_score,
+                  ea.status
+                FROM exam_attempts ea
+                JOIN users u ON ea.user_id = u.id
+                JOIN exams e ON ea.exam_id = e.id
+                ORDER BY ea.created_at DESC
+                LIMIT 10
+            `);
+
+            // Revenue from completed transactions in date range
+            let revenue = 0;
+            if (dateFilter) {
+                const revenueResult = await pool.query(
+                    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = 'completed'${dateFilter}`
+                );
+                revenue = parseInt(revenueResult.rows[0].total);
+            }
 
             res.json({
                 totalUsers,
                 totalExams,
                 totalAttempts,
                 totalPosts,
-                recentActivities: activitiesResult.rows
+                revenue,
+                recentActivities: activitiesResult.rows,
+                dateRange: { from: from || null, to: to || null },
             });
         } catch (error) {
             console.error('Error getting dashboard stats:', error);

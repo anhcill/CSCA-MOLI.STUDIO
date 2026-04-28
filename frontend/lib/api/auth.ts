@@ -36,7 +36,9 @@ export interface User {
 export interface AuthResponse {
   success: boolean;
   message: string;
-  data: {
+  requiresOtp?: boolean;
+  userId?: number;
+  data?: {
     user: User;
     token: string;
     refreshToken: string;
@@ -88,5 +90,41 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
  */
 export const googleAuth = async (credential: string): Promise<AuthResponse> => {
   const response = await axios.post('/auth/google', { credential });
+  return response.data;
+};
+
+// ─── OTP Authentication ─────────────────────────────────────────────────────────
+
+export interface OtpVerifyResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    user: User;
+    token: string;
+    refreshToken: string;
+  };
+}
+
+/**
+ * Verify OTP sent during login
+ */
+export const verifyOtp = async (userId: number, otp: string): Promise<OtpVerifyResponse> => {
+  const response = await axios.post('/auth/otp/verify', { userId, otp, reason: 'login' });
+  return response.data;
+};
+
+/**
+ * Resend OTP code
+ */
+export const resendOtp = async (userId: number): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post('/auth/otp/resend', { userId, reason: 'login' });
+  return response.data;
+};
+
+/**
+ * Verify OTP for password change
+ */
+export const verifyOtpForPasswordReset = async (userId: number, otp: string): Promise<OtpVerifyResponse> => {
+  const response = await axios.post('/auth/otp/verify', { userId, otp, reason: 'password_change' });
   return response.data;
 };

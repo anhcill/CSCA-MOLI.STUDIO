@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
+const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
@@ -457,6 +458,29 @@ router.post('/momo-webhook', async (req, res) => {
           vip_expires_at: vipExpires,
         });
 
+        // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
+        const paymentUser = await User.findById(transaction.user_id);
+        if (paymentUser) {
+          Promise.all([
+            emailService.sendPaymentConfirmation({
+              email: paymentUser.email,
+              name: paymentUser.full_name || paymentUser.username,
+              packageName: transaction.package_name,
+              amount: transaction.amount,
+              durationDays: transaction.package_duration,
+              transactionCode: orderId,
+              method: 'momo',
+            }),
+            emailService.sendVipActivatedEmail({
+              email: paymentUser.email,
+              name: paymentUser.full_name || paymentUser.username,
+              packageName: transaction.package_name,
+              durationDays: transaction.package_duration,
+              expiresAt: vipExpires,
+            }),
+          ]).catch(err => console.error('Payment email error:', err.message));
+        }
+
         console.log(`[MoMo Webhook] SUCCESS: orderId=${orderId}, user=${transaction.user_id}`);
       }
     } else {
@@ -527,6 +551,30 @@ router.post('/vnpay-webhook', async (req, res) => {
           paid_at: new Date(),
           vip_expires_at: vipExpires,
         });
+
+        // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
+        const vnpUser = await User.findById(transaction.user_id);
+        if (vnpUser) {
+          Promise.all([
+            emailService.sendPaymentConfirmation({
+              email: vnpUser.email,
+              name: vnpUser.full_name || vnpUser.username,
+              packageName: transaction.package_name,
+              amount: transaction.amount,
+              durationDays: transaction.package_duration,
+              transactionCode: vnp_TxnRef,
+              method: 'vnpay',
+            }),
+            emailService.sendVipActivatedEmail({
+              email: vnpUser.email,
+              name: vnpUser.full_name || vnpUser.username,
+              packageName: transaction.package_name,
+              durationDays: transaction.package_duration,
+              expiresAt: vipExpires,
+            }),
+          ]).catch(err => console.error('VNPay email error:', err.message));
+        }
+
         console.log(`[VNPay Webhook] SUCCESS: orderId=${vnp_TxnRef}`);
       }
     } else {
@@ -615,6 +663,29 @@ router.post('/verify-return', authenticate, async (req, res) => {
         paid_at: new Date(),
         vip_expires_at: vipExpires,
       });
+
+      // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
+      const vrUser = await User.findById(req.user.id);
+      if (vrUser) {
+        Promise.all([
+          emailService.sendPaymentConfirmation({
+            email: vrUser.email,
+            name: vrUser.full_name || vrUser.username,
+            packageName: transaction.package_name,
+            amount: transaction.amount,
+            durationDays: transaction.package_duration,
+            transactionCode: orderId,
+            method: transaction.payment_method || 'unknown',
+          }),
+          emailService.sendVipActivatedEmail({
+            email: vrUser.email,
+            name: vrUser.full_name || vrUser.username,
+            packageName: transaction.package_name,
+            durationDays: transaction.package_duration,
+            expiresAt: vipExpires,
+          }),
+        ]).catch(err => console.error('Verify-return email error:', err.message));
+      }
 
       return res.json({
         success: true,
@@ -726,6 +797,26 @@ router.post('/sepay-webhook', async (req, res) => {
       paid_at: new Date(),
       vip_expires_at: updatedUser?.vip_expires_at || null,
     });
+
+    // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
+    Promise.all([
+      emailService.sendPaymentConfirmation({
+        email: updatedUser.email,
+        name: updatedUser.full_name || updatedUser.username,
+        packageName: transaction.package_name,
+        amount: transaction.amount,
+        durationDays: transaction.package_duration,
+        transactionCode: transaction.transaction_code,
+        method: 'bank_transfer',
+      }),
+      emailService.sendVipActivatedEmail({
+        email: updatedUser.email,
+        name: updatedUser.full_name || updatedUser.username,
+        packageName: transaction.package_name,
+        durationDays: transaction.package_duration,
+        expiresAt: updatedUser?.vip_expires_at || null,
+      }),
+    ]).catch(err => console.error('SePay email error:', err.message));
 
     console.log(`[SePay] ✅ VIP granted: user=${transaction.user_id}, pkg=${transaction.package_name}, tier=${tier}`);
     return res.json({ success: true });

@@ -235,6 +235,29 @@ function CheckoutContent() {
 
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
+  const [couponMismatchError, setCouponMismatchError] = useState('');
+
+  // Re-validate coupon whenever package or coupon code changes
+  useEffect(() => {
+    if (!appliedCouponCode || !selectedPkg) return;
+    axios.get(`/coupons/validate?code=${encodeURIComponent(appliedCouponCode)}&package_id=${selectedPkg.id}`)
+      .then(res => {
+        if (res.data.success) {
+          setAppliedCouponInfo({
+            discount_amount: res.data.data.discount_amount,
+            final_amount: res.data.data.final_amount,
+          });
+          setCouponMismatchError('');
+        } else {
+          setAppliedCouponInfo(null);
+          setCouponMismatchError(res.data.message || 'Mã không áp dụng cho gói này');
+        }
+      })
+      .catch((err: any) => {
+        setAppliedCouponInfo(null);
+        setCouponMismatchError(err.response?.data?.message || 'Mã không hợp lệ');
+      });
+  }, [appliedCouponCode, selectedPkg]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -259,6 +282,7 @@ function CheckoutContent() {
 
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
+    if (couponMismatchError) { setError(couponMismatchError); return; }
     setLoading(true);
     setError('');
     try {
@@ -487,6 +511,12 @@ function CheckoutContent() {
               <span className="text-xs text-gray-400">đã được áp dụng</span>
             </div>
           )}
+        </div>
+      )}
+
+      {couponMismatchError && (
+        <div className="flex items-center gap-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-5 py-4">
+          ⚠️ {couponMismatchError} — Vui lòng chọn lại gói hoặc gỡ mã giảm giá.
         </div>
       )}
 

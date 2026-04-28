@@ -5,7 +5,7 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
 import { adminApi } from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward } from 'react-icons/fi';
+import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward, FiCalendar } from 'react-icons/fi';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -13,6 +13,8 @@ interface DashboardStats {
     totalExams: number;
     totalAttempts: number;
     totalPosts: number;
+    revenue: number;
+    dateRange: { from: string | null; to: string | null };
     recentActivities: {
         id: number;
         created_at: string;
@@ -23,26 +25,70 @@ interface DashboardStats {
     }[];
 }
 
+type DatePreset = 'all' | 'today' | 'week' | 'month' | '3months' | 'custom';
+
 export default function AdminDashboard() {
     const { user, isAuthenticated } = useAuthStore();
     const [stats, setStats] = useState<DashboardStats>({
-        totalUsers: 0, totalExams: 0, totalAttempts: 0, totalPosts: 0, recentActivities: []
+        totalUsers: 0, totalExams: 0, totalAttempts: 0, totalPosts: 0,
+        revenue: 0, dateRange: { from: null, to: null }, recentActivities: []
     });
     const [loading, setLoading] = useState(true);
+    const [datePreset, setDatePreset] = useState<DatePreset>('all');
+    const [customFrom, setCustomFrom] = useState('');
+    const [customTo, setCustomTo] = useState('');
 
     useEffect(() => {
-        loadStats();
+        loadStats({});
     }, []);
 
-    const loadStats = async () => {
+    const getDateRange = (preset: DatePreset): { from?: string; to?: string } => {
+        const now = new Date();
+        if (preset === 'today') {
+            return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0] };
+        }
+        if (preset === 'week') {
+            const d = new Date(now); d.setDate(d.getDate() - 7);
+            return { from: d.toISOString().split('T')[0] };
+        }
+        if (preset === 'month') {
+            const d = new Date(now); d.setMonth(d.getMonth() - 1);
+            return { from: d.toISOString().split('T')[0] };
+        }
+        if (preset === '3months') {
+            const d = new Date(now); d.setMonth(d.getMonth() - 3);
+            return { from: d.toISOString().split('T')[0] };
+        }
+        if (preset === 'custom') {
+            return { from: customFrom || undefined, to: customTo || undefined };
+        }
+        return {};
+    };
+
+    const loadStats = async (overrideRange?: { from?: string; to?: string }) => {
         try {
             setLoading(true);
-            const data = await adminApi.getDashboardStats();
+            const range = Object.keys(overrideRange || {}).length > 0
+                ? overrideRange!
+                : getDateRange(datePreset);
+            const params = new URLSearchParams();
+            if (range.from) params.set('from', range.from);
+            if (range.to) params.set('to', range.to);
+            const query = params.toString() ? `?${params.toString()}` : '';
+            const data = await adminApi.getDashboardStats(query);
             setStats(data);
         } catch {
-            setStats({ totalUsers: 0, totalExams: 0, totalAttempts: 0, totalPosts: 0, recentActivities: [] });
+            setStats({ totalUsers: 0, totalExams: 0, totalAttempts: 0, totalPosts: 0,
+                revenue: 0, dateRange: { from: null, to: null }, recentActivities: [] });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDatePreset = (preset: DatePreset) => {
+        setDatePreset(preset);
+        if (preset !== 'custom') {
+            loadStats(getDateRange(preset));
         }
     };
 
@@ -55,7 +101,7 @@ export default function AdminDashboard() {
         { title: 'Tổng Users', value: stats.totalUsers, icon: FiUsers, tone: 'blue' },
         { title: 'Tổng Đề Thi', value: stats.totalExams, icon: FiFileText, tone: 'emerald' },
         { title: 'Lượt Thi', value: stats.totalAttempts, icon: FiTrendingUp, tone: 'violet' },
-        { title: 'Bài Viết Forum', value: stats.totalPosts, icon: FiMessageSquare, tone: 'orange' },
+        { title: 'Doanh Thu', value: stats.revenue, icon: FiAward, tone: 'orange', prefix: '' },
     ];
 
     const quickLinks = [
@@ -78,10 +124,50 @@ export default function AdminDashboard() {
 
     return (
         <AdminLayout title="Tổng quan" description="Bảng điều khiển hệ thống CSCA">
+            {/* Date filter */}
+            <div className="flex flex-wrap items-center gap-2 mb-6">
+                <FiCalendar size={14} className="text-gray-400" />
+                <span className="text-sm font-medium text-gray-500 mr-1">Lọc:</span>
+                {([
+                    { key: 'all', label: 'Tất cả' },
+                    { key: 'today', label: 'Hôm nay' },
+                    { key: 'week', label: '7 ngày' },
+                    { key: 'month', label: '30 ngày' },
+                    { key: '3months', label: '3 tháng' },
+                    { key: 'custom', label: 'Tùy chỉnh' },
+                ] as { key: DatePreset; label: string }[]).map(p => (
+                    <button
+                        key={p.key}
+                        onClick={() => handleDatePreset(p.key)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            datePreset === p.key
+                                ? 'bg-violet-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                    >
+                        {p.label}
+                    </button>
+                ))}
+                {datePreset === 'custom' && (
+                    <div className="flex items-center gap-2 ml-2">
+                        <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-violet-500" />
+                        <span className="text-xs text-gray-400">—</span>
+                        <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                            className="px-2 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-violet-500" />
+                        <button onClick={() => loadStats(getDateRange('custom'))}
+                            className="px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700">
+                            Áp dụng
+                        </button>
+                    </div>
+                )}
+            </div>
+
             {/* Stats */}
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
                 {statCards.map(card => {
                     const Icon = card.icon;
+                    const isRevenue = card.title === 'Doanh Thu';
                     return (
                         <div key={card.title} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5 shadow-sm">
                             <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${colorMap[card.tone]} text-white mb-3`}>
@@ -89,7 +175,9 @@ export default function AdminDashboard() {
                             </div>
                             <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{card.title}</p>
                             <p className="text-3xl font-black text-gray-900 dark:text-white mt-1">
-                                {loading ? '...' : card.value.toLocaleString()}
+                                {loading ? '...' : isRevenue
+                                    ? `${card.value.toLocaleString('vi-VN')}đ`
+                                    : card.value.toLocaleString()}
                             </p>
                         </div>
                     );

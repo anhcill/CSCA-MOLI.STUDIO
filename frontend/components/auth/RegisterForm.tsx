@@ -76,7 +76,7 @@ export default function RegisterForm() {
         password: formData.password,
         full_name: formData.full_name || formData.username,
       });
-      if (response.success) {
+      if (response.success && response.data) {
         const { user: registerUser, token, refreshToken } = response.data;
         setAuth(registerUser, token, refreshToken);
         let effectiveUser = registerUser;
@@ -105,7 +105,7 @@ export default function RegisterForm() {
 
     try {
       const response = await googleAuth(credentialResponse.credential);
-      if (response.success) {
+      if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
         let effectiveUser = loginUser;
