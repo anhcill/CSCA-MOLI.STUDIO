@@ -86,8 +86,12 @@ const AdminController = {
             // Revenue from completed transactions in date range
             let revenue = 0;
             if (dateFilter) {
+                const revenueParams = [];
+                if (from) revenueParams.push(from);
+                if (to) revenueParams.push(to + 'T23:59:59.999Z');
                 const revenueResult = await pool.query(
-                    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = 'completed'${dateFilter}`
+                    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = 'completed'${dateFilter}`,
+                    revenueParams
                 );
                 revenue = parseInt(revenueResult.rows[0].total);
             }
