@@ -45,25 +45,29 @@ const AdminController = {
 
             // Get users
             const usersResult = await pool.query(
-                `SELECT COUNT(*) as count FROM users${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`
+                `SELECT COUNT(*) as count FROM users${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`,
+                params
             );
             const totalUsers = parseInt(usersResult.rows[0].count);
 
             // Get exams
             const examsResult = await pool.query(
-                `SELECT COUNT(*) as count FROM exams${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`
+                `SELECT COUNT(*) as count FROM exams${dateFilter ? ` WHERE ${dateFilter.replace(/AND /, '')}` : ''}`,
+                params
             );
             const totalExams = parseInt(examsResult.rows[0].count);
 
             // Get exam attempts
             const attemptsResult = await pool.query(
-                `SELECT COUNT(*) as count FROM exam_attempts WHERE 1=1${dateFilter}`
+                `SELECT COUNT(*) as count FROM exam_attempts WHERE 1=1${dateFilter}`,
+                params
             );
             const totalAttempts = parseInt(attemptsResult.rows[0].count);
 
             // Get forum posts
             const postsResult = await pool.query(
-                `SELECT COUNT(*) as count FROM posts WHERE 1=1${dateFilter}`
+                `SELECT COUNT(*) as count FROM posts WHERE 1=1${dateFilter}`,
+                params
             );
             const totalPosts = parseInt(postsResult.rows[0].count);
 
