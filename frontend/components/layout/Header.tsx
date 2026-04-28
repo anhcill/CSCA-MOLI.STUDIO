@@ -101,11 +101,12 @@ export default function Header() {
               </Link>
 
             {/* Khóa Học Dropdown */}
-            <div className="relative" ref={courseMenuRef}
-                 onMouseEnter={() => setShowCourseMenu(true)}
-                 onMouseLeave={() => setShowCourseMenu(false)}>
-              <button 
-                onClick={() => setShowCourseMenu(!showCourseMenu)}
+            <div
+              className="relative"
+              ref={courseMenuRef}
+            >
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCourseMenu(v => !v); }}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   pathname.includes('/mon/') || pathname.includes('tiengtrung')
                   ? 'text-violet-700 bg-violet-50'
@@ -115,18 +116,22 @@ export default function Header() {
                 <FiBookOpen className="text-lg" /> Khóa học
                 <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
               </button>
-              
+
               {/* Mega Menu popup */}
-              <div className={`absolute top-full left-0 pt-3 transition-all duration-200 origin-top-left ${showCourseMenu ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
-                <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden">
-                  <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
-                  {COURSES.map(course => (
-                    <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
-                      {course.name}
-                    </Link>
-                  ))}
+              {showCourseMenu && (
+                <div className="absolute top-full left-0 pt-3 z-50"
+                  onMouseLeave={() => setShowCourseMenu(false)}>
+                  <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}>
+                    <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
+                    {COURSES.map(course => (
+                      <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
+                        {course.name}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Other static links */}
@@ -177,7 +182,7 @@ export default function Header() {
             {mounted && isAuthenticated && user ? (
               <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  onClick={(e) => { e.stopPropagation(); setShowUserMenu(v => !v); }}
                   className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-2xl hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200"
                 >
                   <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-gradient-to-br from-violet-500 to-indigo-400 flex items-center justify-center ring-2 ring-white shadow-sm flex-shrink-0">
@@ -198,7 +203,8 @@ export default function Header() {
                 </button>
 
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                    onClick={(e) => e.stopPropagation()}>
                     <div className="px-5 py-3 border-b border-gray-100 mb-2 flex items-center gap-3">
                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
                           {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : <FiUser className="text-gray-400"/>}
