@@ -194,7 +194,7 @@ export default function Header() {
                        <span className="text-[10px] font-bold text-orange-500 tracking-wider">PRO</span>
                      )}
                   </span>
-                  <FiChevronDown size={14} className="hidden md:block text-gray-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}" />
+                  <FiChevronDown size={14} className={`hidden md:block text-gray-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showUserMenu && (
