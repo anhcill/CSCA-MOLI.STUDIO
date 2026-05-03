@@ -182,6 +182,26 @@ export default function ExamPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const processedQuestions = useMemo(() => {
+    let currentGroup: any = null;
+    return questions.map((q: any) => {
+       if (q.question_group_type === 'reading_passage_start' || q.question_group_type === 'fill_in_the_blank_pool_start') {
+          currentGroup = {
+             text: q.passage_text || '',
+             image: q.passage_image_url || '',
+             type: q.question_group_type
+          };
+       } else if (q.question_group_type === 'standard' || !q.question_group_type) {
+          currentGroup = null;
+       }
+
+       if (currentGroup) {
+           return { ...q, groupContext: currentGroup };
+       }
+       return q;
+    });
+  }, [questions]);
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-slate-50 flex items-center justify-center z-[100]">
@@ -223,26 +243,6 @@ export default function ExamPage() {
       </div>
     );
   }
-
-  const processedQuestions = useMemo(() => {
-    let currentGroup: any = null;
-    return questions.map((q: any) => {
-       if (q.question_group_type === 'reading_passage_start' || q.question_group_type === 'fill_in_the_blank_pool_start') {
-          currentGroup = {
-             text: q.passage_text || '',
-             image: q.passage_image_url || '',
-             type: q.question_group_type
-          };
-       } else if (q.question_group_type === 'standard' || !q.question_group_type) {
-          currentGroup = null;
-       }
-
-       if (currentGroup) {
-           return { ...q, groupContext: currentGroup };
-       }
-       return q;
-    });
-  }, [questions]);
 
   const currentQuestion = processedQuestions[currentQuestionIndex] as any;
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
