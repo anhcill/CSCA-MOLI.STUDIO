@@ -38,7 +38,7 @@ export default function AdminPostsPage() {
 
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-        if (!_token && (!isAuthenticated || !hasPermission(user, 'forum.manage'))) {
+        if (!_token) { router.push('/'); return; } if (isAuthenticated && !hasPermission(user, 'forum.manage')) {
             router.push('/');
             return;
         }

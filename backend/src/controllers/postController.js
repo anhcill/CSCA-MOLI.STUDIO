@@ -2,6 +2,7 @@ const Post = require("../models/Post");
 const logger = require("../config/logger");
 const { hasAnyPermission } = require("../services/rbacService");
 const db = require("../config/database");
+const UserActivity = require("../models/UserActivity");
 
 /**
  * C4 — Strip HTML tags to prevent XSS stored in DB.
@@ -105,6 +106,7 @@ exports.createAnnouncement = async (req, res) => {
     const fullPost = await Post.getById(post.id, userId);
 
     logger.info("Announcement created", { postId: post.id, userId });
+    UserActivity.log(userId, 'admin.create_announcement', { postId: post.id, ip: req.ip, userAgent: req.headers['user-agent'] });
 
     return res.status(201).json({
       success: true,
@@ -228,6 +230,7 @@ exports.deletePost = async (req, res) => {
         [postId],
       );
       deletedPost = result.rows[0];
+      UserActivity.log(req.user.id, 'admin.delete_post', { postId, ip: req.ip, userAgent: req.headers['user-agent'] });
     } else {
       deletedPost = await Post.delete(postId, userId);
     }

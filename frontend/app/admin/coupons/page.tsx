@@ -91,7 +91,7 @@ export default function AdminCouponsPage() {
   // ── Permissions check ──────────────────────────────────────────────
   useEffect(() => {
     const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-    if (!token && (!isAuthenticated || !hasPermission(user, 'users.manage'))) {
+    if (!token) { router.push('/'); return; } if (isAuthenticated && !hasPermission(user, 'users.manage')) {
       router.push('/');
     }
   }, [isAuthenticated, user, router]);

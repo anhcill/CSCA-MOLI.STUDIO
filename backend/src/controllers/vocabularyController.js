@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const UserActivity = require("../models/UserActivity");
 
 // GET /api/vocabulary?subject=toan&topic=&search=&limit=20&offset=0&is_premium=true&vip_tier=premium
 exports.getVocabulary = async (req, res) => {
@@ -103,6 +104,7 @@ exports.createVocabulary = async (req, res) => {
       ],
     );
 
+    UserActivity.log(req.user.id, 'admin.create_vocabulary', { vocabularyId: result.rows[0].id, word_cn, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.status(201).json({ success: true, data: result.rows[0], message: "Thêm từ vựng thành công" });
   } catch (error) {
     console.error("Create vocabulary error:", error);
@@ -147,6 +149,7 @@ exports.updateVocabulary = async (req, res) => {
     if (result.rows.length === 0)
       return res.status(404).json({ success: false, message: "Không tìm thấy từ vựng" });
 
+    UserActivity.log(req.user.id, 'admin.update_vocabulary', { vocabularyId: id, updates: req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, data: result.rows[0], message: "Cập nhật thành công" });
   } catch (error) {
     console.error("Update vocabulary error:", error);
@@ -162,6 +165,7 @@ exports.deleteVocabulary = async (req, res) => {
       "UPDATE vocabulary_items SET is_active = FALSE WHERE id = $1",
       [id],
     );
+    UserActivity.log(req.user.id, 'admin.delete_vocabulary', { vocabularyId: id, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, message: "Đã xóa từ vựng" });
   } catch (error) {
     console.error("Delete vocabulary error:", error);
@@ -205,6 +209,7 @@ exports.bulkCreate = async (req, res) => {
         inserted++;
       }
       await client.query("COMMIT");
+      UserActivity.log(req.user.id, 'admin.bulk_create_vocabulary', { count: inserted, ip: req.ip, userAgent: req.headers['user-agent'] });
       res.json({ success: true, message: `Đã import ${inserted} từ` });
     } catch (e) {
       await client.query("ROLLBACK");

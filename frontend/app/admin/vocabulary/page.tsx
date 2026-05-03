@@ -75,8 +75,12 @@ export default function AdminVocabularyPage() {
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-        if (!_token && (!isAuthenticated || !hasPermission(user, 'content.manage'))) {
+    if (!_token) {
       router.push('/');
+      return;
+    }
+    if (isAuthenticated && !hasPermission(user, 'content.manage')) {
+      router.push('/admin');
       return;
     }
     loadData();

@@ -122,8 +122,12 @@ export default function ExamsPage() {
 
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-        if (!_token && (!isAuthenticated || !hasPermission(user, 'exams.manage'))) {
+        if (!_token) {
             router.push('/');
+            return;
+        }
+        if (isAuthenticated && !hasPermission(user, 'exams.manage')) {
+            router.push('/admin');
             return;
         }
 

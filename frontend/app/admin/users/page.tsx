@@ -144,8 +144,12 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-    if (!_token && (!isAuthenticated || !hasPermission(user, 'users.manage'))) {
+    if (!_token) {
       router.push('/');
+      return;
+    }
+    if (isAuthenticated && !hasPermission(user, 'users.manage')) {
+      router.push('/admin');
       return;
     }
     loadUsers(1);

@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const UserActivity = require('../models/UserActivity');
 
 const AdminCouponController = {
   /**
@@ -141,6 +142,7 @@ const AdminCouponController = {
         ]
       );
 
+      UserActivity.log(req.user.id, 'admin.create_coupon', { couponId: result.rows[0].id, code, ip: req.ip, userAgent: req.headers['user-agent'] });
       res.status(201).json({ success: true, message: 'Đã tạo mã giảm giá', data: result.rows[0] });
     } catch (err) {
       console.error('AdminCouponController.create error:', err);
@@ -227,6 +229,7 @@ const AdminCouponController = {
         return res.status(404).json({ success: false, message: 'Coupon không tồn tại' });
       }
 
+      UserActivity.log(req.user.id, 'admin.update_coupon', { couponId: id, updates: req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
       res.json({ success: true, message: 'Đã cập nhật mã giảm giá', data: result.rows[0] });
     } catch (err) {
       console.error('AdminCouponController.update error:', err);
@@ -248,6 +251,7 @@ const AdminCouponController = {
       if (!result.rows[0]) {
         return res.status(404).json({ success: false, message: 'Coupon không tồn tại' });
       }
+      UserActivity.log(req.user.id, 'admin.delete_coupon', { couponId: id, code: result.rows[0].code, ip: req.ip, userAgent: req.headers['user-agent'] });
       res.json({ success: true, message: `Đã xóa mã "${result.rows[0].code}"` });
     } catch (err) {
       console.error('AdminCouponController.delete error:', err);

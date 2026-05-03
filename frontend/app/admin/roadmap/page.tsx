@@ -43,7 +43,7 @@ export default function AdminRoadmapPage() {
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-        if (!_token && (!isAuthenticated || !hasPermission(user, 'roadmap.manage'))) {
+        if (!_token) { router.push('/'); return; } if (isAuthenticated && !hasPermission(user, 'roadmap.manage')) {
       router.push('/');
       return;
     }

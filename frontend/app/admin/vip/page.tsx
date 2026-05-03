@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
 import { adminApi } from '@/lib/api/admin';
@@ -82,6 +83,20 @@ export default function AdminVipPage() {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<Tab>('users');
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+    if (!_token) {
+      router.push('/');
+      return;
+    }
+    if (isAuthenticated && !hasPermission(user, 'users.manage')) {
+      router.push('/admin');
+      return;
+    }
+  }, [isAuthenticated, user, router]);
 
   // ── Stats ──────────────────────────────────────────────
   const [stats, setStats] = useState<VipStats>({

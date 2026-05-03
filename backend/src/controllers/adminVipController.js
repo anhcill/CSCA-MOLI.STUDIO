@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const emailService = require('../services/emailService');
+const UserActivity = require('../models/UserActivity');
 
 const AdminVipController = {
   /**
@@ -136,6 +137,7 @@ const AdminVipController = {
         [userId, pkgId, pkgDays, pkgName, `MANUAL_${adminId}_${Date.now()}`]
       );
 
+      UserActivity.log(req.user.id, 'admin.grant_vip', { userId, packageId: pkgId, durationDays: pkgDays, reason, ip: req.ip, userAgent: req.headers['user-agent'] });
       console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId}. Reason: ${reason || 'N/A'}`);
       res.json({ success: true, message: `Đã cấp "${pkgName}" (${pkgDays} ngày) cho user`, data: result.rows[0] });
     } catch (err) {
@@ -161,6 +163,7 @@ const AdminVipController = {
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 
+      UserActivity.log(req.user.id, 'admin.revoke_vip', { userId, ip: req.ip, userAgent: req.headers['user-agent'] });
       console.info(`[VIP] ${adminName} revoked VIP from user#${userId}`);
       res.json({ success: true, message: 'Đã thu hồi VIP', data: result.rows[0] });
     } catch (err) {

@@ -1,5 +1,6 @@
 const db = require("../config/database");
 const { checkVipAccess } = require("../middleware/authMiddleware");
+const UserActivity = require("../models/UserActivity");
 
 // GET /api/materials?category=cau-truc-de&subject=toan&topic=...&limit=20&offset=0
 exports.getMaterials = async (req, res) => {
@@ -78,6 +79,8 @@ exports.createMaterial = async (req, res) => {
       ],
     );
 
+    UserActivity.log(req.user.id, 'admin.create_material', { materialId: result.rows[0].id, title, ip: req.ip, userAgent: req.headers['user-agent'] });
+
     res.status(201).json({
       success: true,
       data: result.rows[0],
@@ -124,6 +127,8 @@ exports.updateMaterial = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy tài liệu" });
+        
+    UserActivity.log(req.user.id, 'admin.update_material', { materialId: id, updates: req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error("Update material error:", error);
@@ -138,6 +143,7 @@ exports.deleteMaterial = async (req, res) => {
     await db.query("UPDATE materials SET is_active = FALSE WHERE id = $1", [
       id,
     ]);
+    UserActivity.log(req.user.id, 'admin.delete_material', { materialId: id, ip: req.ip, userAgent: req.headers['user-agent'] });
     res.json({ success: true, message: "Đã xóa tài liệu" });
   } catch (error) {
     console.error("Delete material error:", error);

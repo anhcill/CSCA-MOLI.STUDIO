@@ -1,5 +1,6 @@
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
+const UserActivity = require("../models/UserActivity");
 
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -53,6 +54,9 @@ const AdminExamController = {
       // Clear caches when exam is created
       cache.delByPrefix("exams:");
       cache.del("exams:lobby");
+
+      UserActivity.log(req.user.id, 'admin.create_exam', { examId: result.rows[0].id, title, ip: req.ip, userAgent: req.headers['user-agent'] });
+
 
       res.status(201).json({
         message: "Exam created",
@@ -108,6 +112,9 @@ const AdminExamController = {
         cache.del("exams:lobby");
       }
 
+      UserActivity.log(req.user.id, 'admin.update_exam', { examId, updates: req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
+
+
       res.json({ message: "Exam updated", exam: result.rows[0] });
     } catch (error) {
       console.error("Update exam error:", error);
@@ -145,6 +152,8 @@ const AdminExamController = {
           return res.status(404).json({ message: "Exam not found" });
         }
         await client.query("COMMIT");
+        UserActivity.log(req.user.id, 'admin.delete_exam', { examId, ip: req.ip, userAgent: req.headers['user-agent'] });
+
         res.json({ message: "Exam deleted successfully" });
       } catch (e) {
         await client.query("ROLLBACK");
@@ -264,6 +273,9 @@ const AdminExamController = {
         cache.delByPrefix("exams:");
         cache.del("exams:lobby");
 
+      UserActivity.log(req.user.id, 'admin.create_exam', { examId: result.rows[0].id, title, ip: req.ip, userAgent: req.headers['user-agent'] });
+
+
         res.status(201).json({ message: "Question added", questionId });
       } catch (error) {
         await client.query("ROLLBACK");
@@ -380,6 +392,9 @@ const AdminExamController = {
 
         await client.query("COMMIT");
 
+        UserActivity.log(req.user.id, 'admin.update_question', { questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
+
+
         res.json({ message: "Question updated" });
       } catch (error) {
         await client.query("ROLLBACK");
@@ -421,6 +436,9 @@ const AdminExamController = {
         );
 
         await client.query("COMMIT");
+
+        UserActivity.log(req.user.id, 'admin.delete_question', { examId, questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
+
 
         res.json({ message: "Question deleted" });
       } catch (error) {
@@ -884,3 +902,4 @@ const AdminExamController = {
 };
 
 module.exports = AdminExamController;
+
