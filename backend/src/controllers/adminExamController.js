@@ -273,7 +273,7 @@ const AdminExamController = {
         cache.delByPrefix("exams:");
         cache.del("exams:lobby");
 
-      UserActivity.log(req.user.id, 'admin.create_exam', { examId: result.rows[0].id, title, ip: req.ip, userAgent: req.headers['user-agent'] });
+        UserActivity.log(req.user.id, 'admin.add_question', { examId, questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
 
 
         res.status(201).json({ message: "Question added", questionId });
