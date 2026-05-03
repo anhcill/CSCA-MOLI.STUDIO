@@ -71,7 +71,7 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   return (
-    <header className={`relative overflow-visible sticky top-0 z-[60] transition-all duration-300 ${scrolled ? 'shadow-lg py-1' : 'shadow-sm py-3'} bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
+    <header className={`relative overflow-visible sticky top-0 z-[60] transition-all duration-300 ${scrolled ? 'shadow-lg' : 'shadow-sm'} py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
       <div className="container mx-auto px-4 md:px-6 overflow-visible">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
 
@@ -167,7 +167,9 @@ export default function Header() {
             </div>
 
             {/* VIP Upgrade Banner */}
-            {mounted && (!user || !isVipActive(user)) && (
+            {!mounted ? (
+              <div className="hidden xl:block w-[88px] h-[28px] bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"></div>
+            ) : (!user || !isVipActive(user)) && (
               <Link href="/vip" className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-xs font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300">
                 <FaCrown className="text-yellow-200" size={12} /> <span>Nâng cấp</span>
               </Link>
@@ -244,7 +246,12 @@ export default function Header() {
                   Đăng ký
                 </Link>
               </div>
-            ) : null}
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-[84px] h-[32px] sm:w-[94px] sm:h-[36px] bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"></div>
+                <div className="w-[74px] h-[32px] sm:w-[82px] sm:h-[36px] bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse"></div>
+              </div>
+            )}
 
             {/* Mobile Hamburger */}
             <button onClick={() => setMobileOpen(!mobileOpen)} className="xl:hidden p-2 text-gray-800 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Menu">
