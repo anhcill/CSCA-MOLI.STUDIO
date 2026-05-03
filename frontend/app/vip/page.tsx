@@ -356,19 +356,30 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
     }
   };
 
+  const isSelected = selectedPkg?.id === pkg.id;
+  const isUnselected = selectedPkg && !isSelected;
+
   return (
     <div 
       onClick={() => onSelectPkg && onSelectPkg(pkg)}
-      className={`relative bg-white rounded-2xl shadow-lg border-2 ${selectedPkg?.id === pkg.id ? 'border-violet-500 shadow-violet-200 ring-4 ring-violet-500/20 scale-[1.02]' : colors.border} overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer`}
+      className={`relative bg-white rounded-2xl shadow-lg border-2 overflow-hidden transition-all duration-300 cursor-pointer
+        ${isSelected ? 'border-violet-600 shadow-violet-300 ring-4 ring-violet-600/30 scale-105 z-10' : colors.border}
+        ${isUnselected ? 'opacity-50 grayscale-[40%] scale-95 hover:opacity-80 hover:scale-[0.98]' : 'hover:shadow-xl'}
+      `}
     >
+      {isSelected && (
+        <div className="absolute top-0 right-0 bg-violet-600 text-white px-4 py-1.5 rounded-bl-xl text-xs font-black shadow-md flex items-center gap-1 z-20 animate-in slide-in-from-top-2">
+          <FiCheck size={14} /> ĐÃ CHỌN
+        </div>
+      )}
       {/* Header */}
-      <div className={`bg-gradient-to-r ${colors.gradient} p-6 text-white`}>
+      <div className={`bg-gradient-to-r ${colors.gradient} p-6 text-white pt-8`}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-xl font-black">{pkg.name}</h3>
             <p className="text-white/70 text-sm mt-1">{pkg.duration_days} ngày sử dụng</p>
           </div>
-          {isPremium && (
+          {isPremium && !isSelected && (
             <div className="bg-white/20 rounded-xl p-2 text-center">
               <FaVideo size={20} className="mx-auto text-white" />
               <span className="text-[9px] font-bold text-white/80 block mt-0.5">Cố vấn</span>

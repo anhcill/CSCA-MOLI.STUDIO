@@ -5,7 +5,7 @@ import {
   FiHeart, FiMessageCircle, FiShare2, FiMoreHorizontal,
   FiEdit2, FiTrash2, FiSend, FiLoader, FiChevronDown,
   FiFeather, FiZap, FiTrendingUp, FiUsers, FiBookOpen,
-  FiStar, FiTarget, FiHash
+  FiStar, FiTarget, FiHash, FiX
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import * as postsApi from '@/lib/api/posts';
