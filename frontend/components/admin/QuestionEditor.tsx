@@ -141,7 +141,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                             value={formData.passageText}
                             onChange={(e) => setFormData({ ...formData, passageText: e.target.value })}
                             rows={3}
-                            className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                            className="w-full px-4 py-2 bg-white text-gray-900 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                             placeholder="Nhập nội dung đoạn văn..."
                         />
                         <ImageUpload
@@ -161,7 +161,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         value={formData.questionText}
                         onChange={(e) => setFormData({ ...formData, questionText: e.target.value })}
                         rows={3}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Nhập nội dung câu hỏi bằng Tiếng Anh..."
                     />
                 </div>
@@ -172,7 +172,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         value={formData.questionTextCn}
                         onChange={(e) => setFormData({ ...formData, questionTextCn: e.target.value })}
                         rows={3}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="输入中文问题..."
                     />
                 </div>
@@ -201,7 +201,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         min="0.1"
                         max="99.99"
                         step="0.1"
-                        className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-32 px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>
             </div>
@@ -254,7 +254,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                                     newAnswers[index].text = e.target.value;
                                     setFormData({ ...formData, answers: newAnswers });
                                 }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Nhập nội dung đáp án (Tiếng Anh)..."
                             />
                         </div>
@@ -268,7 +268,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                                     newAnswers[index].textCn = e.target.value;
                                     setFormData({ ...formData, answers: newAnswers });
                                 }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="答案文本 (中文)..."
                             />
                         </div>
@@ -296,7 +296,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         value={formData.explanation}
                         onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
                         rows={2}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Giải thích đáp án đúng bằng Tiếng Anh..."
                     />
                 </div>
@@ -307,7 +307,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         value={formData.explanationCn}
                         onChange={(e) => setFormData({ ...formData, explanationCn: e.target.value })}
                         rows={2}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="解释正确答案..."
                     />
                 </div>

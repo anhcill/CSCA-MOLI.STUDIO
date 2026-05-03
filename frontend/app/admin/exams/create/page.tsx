@@ -261,7 +261,7 @@ export default function CreateExamPage() {
                                 type="text"
                                 value={examData.title}
                                 onChange={(e) => { setExamData({ ...examData, title: e.target.value }); setExamMetadataDirty(true); }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Nhập tên đề thi..."
                             />
                         </div>
@@ -271,7 +271,7 @@ export default function CreateExamPage() {
                             <select
                                 value={examData.subjectId}
                                 onChange={(e) => { setExamData({ ...examData, subjectId: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
                                 <option value={0}>Chọn môn học...</option>
                                 {Array.isArray(subjects) && subjects.map(subject => (
@@ -286,7 +286,7 @@ export default function CreateExamPage() {
                                 type="number"
                                 value={examData.duration}
                                 onChange={(e) => { setExamData({ ...examData, duration: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
@@ -298,7 +298,7 @@ export default function CreateExamPage() {
                                 onChange={(e) => { setExamData({ ...examData, totalPoints: parseDecimal(e.target.value) }); setExamMetadataDirty(true); }}
                                 min="0"
                                 step="0.1"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
@@ -308,7 +308,7 @@ export default function CreateExamPage() {
                                 value={examData.description}
                                 onChange={(e) => { setExamData({ ...examData, description: e.target.value }); setExamMetadataDirty(true); }}
                                 rows={3}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Nhập mô tả đề thi..."
                             />
                         </div>
@@ -319,7 +319,7 @@ export default function CreateExamPage() {
                                 type="url"
                                 value={examData.solution_video_url || ''}
                                 onChange={(e) => setExamData({ ...examData, solution_video_url: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="https://www.youtube.com/watch?v=..."
                             />
                             <p className="text-xs text-gray-400 mt-1">Dán link YouTube để hiển thị video giải đề chi tiết</p>
@@ -331,7 +331,7 @@ export default function CreateExamPage() {
                                 value={examData.solution_description || ''}
                                 onChange={(e) => setExamData({ ...examData, solution_description: e.target.value })}
                                 rows={2}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Mô tả ngắn về nội dung video..."
                             />
                         </div>
@@ -412,7 +412,7 @@ export default function CreateExamPage() {
                                             type="datetime-local"
                                             value={examData.start_time}
                                             onChange={e => setExamData(prev => ({ ...prev, start_time: e.target.value }))}
-                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full bg-white text-gray-900 border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                         />
                                     </div>
                                     <div>
@@ -421,7 +421,7 @@ export default function CreateExamPage() {
                                             type="datetime-local"
                                             value={examData.end_time}
                                             onChange={e => setExamData(prev => ({ ...prev, end_time: e.target.value }))}
-                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full bg-white text-gray-900 border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                         />
                                     </div>
                                 </div>
