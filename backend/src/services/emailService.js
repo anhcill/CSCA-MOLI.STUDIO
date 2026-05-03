@@ -277,6 +277,36 @@ class EmailService {
       html: this._wrapper({ title: 'Thông báo bảo mật', emoji: '🔐', content }),
     });
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 8. Mail thông báo Cố vấn đã trả lời câu hỏi
+  // ─────────────────────────────────────────────────────────────────────────────
+  async sendQaReplyEmail({ email, name, ticketId, preview, advisorName }) {
+    const ticketUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hoi-dap/${ticketId}`;
+    const previewText = preview ? `"${preview.substring(0, 120)}${preview.length > 120 ? '...' : ''}"` : 'Cố vấn đã gửi tin nhắn mới cho bạn.';
+
+    const content = `
+      <div style="background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
+        <div style="font-size:48px;margin-bottom:12px">💬</div>
+        <h2 style="margin:0 0 8px;font-size:20px;color:#fff">Cố vấn vừa phản hồi câu hỏi của bạn!</h2>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">CSCA Platform — Hỏi Đáp 1-1 với Cố Vấn</p>
+      </div>
+      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
+      <p style="margin:0 0 24px">Cố vấn <strong>${advisorName || 'CSCA'}</strong> đã trả lời câu hỏi của bạn. Đây là nội dung phản hồi:</p>
+      <div style="background:#f0f4ff;border-left:4px solid #6366f1;border-radius:0 12px 12px 0;padding:16px 20px;margin:0 0 24px;font-size:14px;color:#1e1b4b;font-style:italic">
+        ${previewText}
+      </div>
+      <div style="text-align:center;margin:0 0 24px">
+        <a href="${ticketUrl}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Xem và phản hồi ngay →</a>
+      </div>
+      <p style="margin:0;font-size:13px;color:#999">💡 Nếu bạn chưa hiểu phần nào, hãy nhắn thêm cho cố vấn — chúng tôi luôn sẵn sàng hỗ trợ bạn!</p>`;
+
+    await this._send({
+      to: email,
+      subject: `💬 Cố vấn CSCA đã trả lời câu hỏi của bạn!`,
+      html: this._wrapper({ title: 'Cố vấn đã phản hồi', emoji: '💬', content }),
+    });
+  }
 }
 
 module.exports = new EmailService();

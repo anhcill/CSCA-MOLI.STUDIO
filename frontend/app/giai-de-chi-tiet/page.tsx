@@ -3,13 +3,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
-import { FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch, FiClock, FiAward, FiLock, FiMessageSquare } from 'react-icons/fi';
+import {
+  FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch,
+  FiClock, FiAward, FiLock, FiMessageSquare, FiStar, FiZap
+} from 'react-icons/fi';
+import { FaCrown } from 'react-icons/fa';
 import axios from '@/lib/utils/axios';
 import { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import Link from 'next/link';
 
+// ── Video Modal ────────────────────────────────────────────────────────────────
 function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: string; onClose: () => void }) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -22,12 +27,14 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-gray-900 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700">
-          <div className="flex items-center gap-2 min-w-0">
-            <FiVideo className="text-purple-400 shrink-0" size={16} />
+      <div className="bg-gray-950 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl border border-gray-800">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-1.5 bg-purple-600/20 rounded-lg">
+              <FiVideo className="text-purple-400 shrink-0" size={15} />
+            </div>
             <span className="text-sm font-semibold text-white truncate">{title}</span>
           </div>
           <button onClick={onClose}
@@ -44,101 +51,211 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
             title={title}
           />
         </div>
-        <div className="p-4 bg-gray-900 border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <span className="text-gray-400 text-sm">Bạn chưa hiểu đoạn nào trong video? Hãy nhắn tin cho Cố vấn nhé.</span>
-            <Link href="/hoi-dap" className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-orange-500/30 transition-all hover:-translate-y-0.5">
-               <FiMessageSquare /> Hỏi Cố Vấn VIP
-            </Link>
+        <div className="p-4 bg-gray-950 border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-3">
+          <span className="text-gray-400 text-sm">Bạn chưa hiểu đoạn nào? Hãy hỏi cố vấn ngay nhé.</span>
+          <Link href="/hoi-dap"
+            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-orange-500/30 transition-all hover:-translate-y-0.5">
+            <FiMessageSquare /> Hỏi Cố Vấn VIP
+          </Link>
         </div>
       </div>
     </div>
   );
 }
 
-function ExamCard({ exam, onPlay, isAdmin }: { exam: Exam; onPlay: (e: Exam) => void; isAdmin: boolean }) {
-  const isVipLocked = exam.is_premium;
+// ── Upsell Modal ───────────────────────────────────────────────────────────────
+function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () => void }) {
+  const isVip = tier === 'vip';
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`relative bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden`}>
+        <div className={`p-8 text-center ${isVip ? 'bg-gradient-to-br from-indigo-600 to-purple-700' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
+          <div className="text-5xl mb-3">{isVip ? '🔒' : '👑'}</div>
+          <h2 className="text-xl font-black text-white mb-1">
+            {isVip ? 'Cần tài khoản VIP' : 'Cần tài khoản Premium'}
+          </h2>
+          <p className="text-white/80 text-sm">
+            {isVip ? 'Video giải đề này dành riêng cho thành viên VIP trở lên.' : 'Video Premium độc quyền — chỉ dành cho tài khoản Premium.'}
+          </p>
+        </div>
+        <div className="p-6">
+          <div className="space-y-2.5 mb-6">
+            {(isVip ? [
+              'Xem toàn bộ video giải đề VIP',
+              'Truy cập đề thi cao cấp không giới hạn',
+              'Phân tích AI chi tiết từng câu',
+            ] : [
+              'Video giải đề Premium độc quyền',
+              'Hỏi đáp 1-1 với cố vấn chuyên gia',
+              'Ưu tiên trả lời trong 2 giờ',
+            ]).map((f, i) => (
+              <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${isVip ? 'bg-indigo-500' : 'bg-amber-500'}`}>✓</div>
+                {f}
+              </div>
+            ))}
+          </div>
+          <Link href="/vip"
+            className={`block text-center py-3.5 font-bold rounded-xl text-white text-sm transition-all hover:-translate-y-0.5 shadow-lg ${isVip ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-indigo-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30'}`}>
+            {isVip ? '🚀 Nâng cấp VIP ngay' : '👑 Nâng cấp Premium ngay'}
+          </Link>
+          <button onClick={onClose} className="w-full mt-3 py-2.5 text-gray-500 text-sm hover:text-gray-700 font-medium">Để sau</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Exam Card ──────────────────────────────────────────────────────────────────
+type TierLevel = 'basic' | 'vip' | 'premium';
+
+function getTierLevel(user: any): TierLevel {
+  if (!user) return 'basic';
+  if (user.role === 'super_admin' || user.role === 'admin' || hasPermission(user, 'exams.manage')) return 'premium';
+  if (user.subscription_tier === 'premium') return 'premium';
+  if (user.subscription_tier === 'vip' || user.is_vip) return 'vip';
+  return 'basic';
+}
+
+function canWatchVideo(userTier: TierLevel, examVipTier: string | null | undefined): boolean {
+  const tier = userTier as string;
+  if (tier === 'premium') return true;
+  if (!examVipTier || examVipTier === 'basic') {
+    return tier === 'vip' || tier === 'premium';
+  }
+  if (examVipTier === 'vip') return tier === 'vip' || tier === 'premium';
+  if (examVipTier === 'premium') return tier === 'premium';
+  return false;
+}
+
+function ExamCard({
+  exam, onPlay, isAdmin, userTier, onLocked
+}: {
+  exam: Exam & { vip_tier?: string };
+  onPlay: (e: Exam) => void;
+  isAdmin: boolean;
+  userTier: TierLevel;
+  onLocked: (tier: 'vip' | 'premium') => void;
+}) {
+  const hasVideo = !!exam.solution_video_url;
+  const allowed = isAdmin || canWatchVideo(userTier, exam.vip_tier);
+  const neededTier = (exam.vip_tier === 'premium' ? 'premium' : 'vip') as 'vip' | 'premium';
+
+  const tierBadge = exam.vip_tier === 'premium'
+    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-lg"><FaCrown size={8} /> Premium</span>
+    : exam.vip_tier === 'vip' || exam.is_premium
+      ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-bold rounded-lg"><FiStar size={8} /> VIP</span>
+      : null;
 
   return (
-    <div className="group bg-white rounded-2xl border border-gray-200 p-5 hover:border-purple-300 hover:shadow-lg transition-all duration-300">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="px-2.5 py-0.5 bg-purple-50 text-purple-600 text-xs font-bold rounded-lg">
-            {exam.subject_name || exam.subject_code || 'Môn học'}
-          </span>
-          {exam.shuffle_mode && (
-            <span className="flex items-center gap-1 px-2.5 py-0.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg">
-              <FiShuffle size={10} /> Xáo trộn
-            </span>
-          )}
-          {isVipLocked && (
-            <span className="flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-600 text-xs font-bold rounded-lg">
-              <FiLock size={10} /> VIP
-            </span>
-          )}
+    <div className={`group relative bg-white rounded-2xl border transition-all duration-300 ${
+      !allowed && hasVideo
+        ? 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+        : 'border-gray-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-100'
+    }`}>
+      {/* Locked overlay */}
+      {!allowed && hasVideo && (
+        <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-all duration-200">
+          <div className={`p-3 rounded-full text-white shadow-lg ${neededTier === 'premium' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
+            <FiLock size={20} />
+          </div>
+          <button
+            onClick={() => onLocked(neededTier)}
+            className={`px-5 py-2.5 text-white text-sm font-bold rounded-xl shadow-md transition-transform hover:scale-105 ${neededTier === 'premium' ? 'bg-gradient-to-r from-amber-500 to-orange-600' : 'bg-gradient-to-r from-indigo-500 to-purple-600'}`}>
+            {neededTier === 'premium' ? 'Nâng cấp Premium' : 'Nâng cấp VIP'}
+          </button>
         </div>
-        <span className="text-xs text-gray-400 font-medium shrink-0">{exam.code}</span>
-      </div>
-
-      {/* Title */}
-      <h3 className="font-bold text-gray-900 text-base leading-snug mb-2 group-hover:text-purple-700 transition-colors line-clamp-2">
-        {exam.title}
-      </h3>
-
-      {exam.description && (
-        <p className="text-sm text-gray-500 mb-3 line-clamp-2">{exam.description}</p>
       )}
 
-      {/* Meta row */}
-      <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1.5">
-          <FiClock size={12} /> {exam.duration} phút
-        </span>
-        <span className="flex items-center gap-1.5">
-          <FiAward size={12} /> {exam.total_questions || exam.question_count || 0} câu
-        </span>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-        {exam.solution_video_url ? (
-          <button
-            onClick={() => onPlay(exam)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl hover:bg-purple-700 transition-colors">
-            <FiPlay size={14} /> Xem Video
-          </button>
-        ) : (
-          <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">
-            <FiVideo size={14} /> Chưa có video
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="px-2.5 py-0.5 bg-purple-50 text-purple-700 text-xs font-bold rounded-lg">
+              {exam.subject_name || exam.subject_code || 'Môn học'}
+            </span>
+            {exam.shuffle_mode && (
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-lg">
+                <FiShuffle size={9} /> Xáo trộn
+              </span>
+            )}
+            {tierBadge}
           </div>
+          <span className="text-xs text-gray-400 font-medium shrink-0">{exam.code}</span>
+        </div>
+
+        {/* Title */}
+        <h3 className="font-bold text-gray-900 text-base leading-snug mb-2 group-hover:text-purple-700 transition-colors line-clamp-2">
+          {exam.title}
+        </h3>
+
+        {exam.description && (
+          <p className="text-sm text-gray-500 mb-3 line-clamp-2">{exam.description}</p>
         )}
-        {isAdmin ? (
-          <Link href={`/admin/exams/${exam.id}/edit`}
-            className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
-            Sửa
-          </Link>
-        ) : (
-          <Link href={`/exam/${exam.id}`}
-            className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
-            Làm bài <FiChevronRight size={14} />
-          </Link>
-        )}
+
+        {/* Meta */}
+        <div className="flex items-center gap-4 mb-4 text-xs text-gray-400">
+          <span className="flex items-center gap-1.5"><FiClock size={11} /> {exam.duration} phút</span>
+          <span className="flex items-center gap-1.5"><FiAward size={11} /> {exam.total_questions || exam.question_count || 0} câu</span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+          {hasVideo ? (
+            allowed ? (
+              <button
+                onClick={() => onPlay(exam)}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-bold rounded-xl hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm shadow-purple-500/20">
+                <FiPlay size={14} /> Xem Video
+              </button>
+            ) : (
+              <button
+                onClick={() => onLocked(neededTier)}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-xl transition-all ${
+                  neededTier === 'premium'
+                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200 hover:border-amber-300'
+                    : 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300'
+                }`}>
+                <FiLock size={13} /> {neededTier === 'premium' ? 'Premium' : 'VIP'}
+              </button>
+            )
+          ) : (
+            <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-50 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed border border-dashed border-gray-200">
+              <FiVideo size={13} /> Chưa có video
+            </div>
+          )}
+          {isAdmin ? (
+            <Link href={`/admin/exams/${exam.id}/edit`}
+              className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
+              Sửa
+            </Link>
+          ) : (
+            <Link href={`/exam/${exam.id}`}
+              className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
+              Làm bài <FiChevronRight size={14} />
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function GiaiDeChiTietPage() {
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
+  const userTier = getTierLevel(user);
   const searchParams = useSearchParams() as unknown as URLSearchParams;
   const initialSubject = searchParams.get('subject') || '';
-  const [exams, setExams] = useState<Exam[]>([]);
+  const [exams, setExams] = useState<(Exam & { vip_tier?: string })[]>([]);
   const [subjects, setSubjects] = useState<{ id: number; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSubject, setActiveSubject] = useState(initialSubject);
   const [search, setSearch] = useState('');
   const [playing, setPlaying] = useState<Exam | null>(null);
+  const [upsellTier, setUpsellTier] = useState<'vip' | 'premium' | null>(null);
 
   const handleSubjectChange = (subject: string) => {
     setActiveSubject(subject);
@@ -177,9 +294,7 @@ export default function GiaiDeChiTietPage() {
 
   const filtered = useMemo(() => {
     return exams.filter(e => {
-      // Filter by subject_code (slug) — exact match
-      const matchSubject = !activeSubject ||
-        (e.subject_code || '') === activeSubject;
+      const matchSubject = !activeSubject || (e.subject_code || '') === activeSubject;
       const q = search.toLowerCase();
       const matchSearch = !q ||
         (e.title || '').toLowerCase().includes(q) ||
@@ -189,16 +304,16 @@ export default function GiaiDeChiTietPage() {
   }, [exams, activeSubject, search]);
 
   const videosOnly = useMemo(() => filtered.filter(e => e.solution_video_url), [filtered]);
+  const lockedCount = useMemo(() => videosOnly.filter(e => !isAdmin && !canWatchVideo(userTier, (e as any).vip_tier)).length, [videosOnly, userTier, isAdmin]);
 
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20">
         <Header />
 
-        {/* ── HERO ──────────────────────────────────────────────── */}
-        <div className="bg-gradient-to-r from-purple-700 via-indigo-700 to-violet-700 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10"
-            style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/cubes.png")' }} />
+        {/* ── Hero ──────────────────────────────────────────────────── */}
+        <div className="relative bg-gradient-to-r from-purple-700 via-indigo-700 to-violet-700 overflow-hidden">
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/cubes.png")' }} />
           <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500 rounded-full blur-[120px] opacity-30" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500 rounded-full blur-[100px] opacity-20" />
 
@@ -207,12 +322,12 @@ export default function GiaiDeChiTietPage() {
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/20 shadow-xl">
                 <FiVideo className="text-white text-2xl sm:text-3xl" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight mb-2">
                   Giải Đề Chi Tiết
                 </h1>
                 <p className="text-purple-100 text-sm sm:text-base max-w-xl">
-                  Xem video hướng dẫn giải chi tiết từng đề thi. Hướng dẫn từng bước, phương pháp giải nhanh và mẹo làm bài thi HSK.
+                  Xem video hướng dẫn giải chi tiết từng đề thi. Hướng dẫn từng bước, phương pháp giải nhanh.
                   {videosOnly.length > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold text-white align-middle">
                       {videosOnly.length} video
@@ -220,21 +335,40 @@ export default function GiaiDeChiTietPage() {
                   )}
                 </p>
                 <div className="mt-5">
-                    <Link href="/hoi-dap" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">
-                        <FiMessageSquare /> Nhắn tin Hỏi Đáp 1-1 với Cố Vấn
-                    </Link>
+                  <Link href="/hoi-dap"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">
+                    <FiMessageSquare /> Nhắn tin Hỏi Đáp 1-1 với Cố Vấn
+                  </Link>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── MAIN CONTENT ─────────────────────────────────────── */}
+        {/* ── Tier Banner (if not vip) ──────────────────────────────── */}
+        {userTier === 'basic' && lockedCount > 0 && (
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
+            <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl">
+              <div className="p-2.5 bg-indigo-100 rounded-xl shrink-0">
+                <FiZap className="text-indigo-600" size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-900 text-sm">Có {lockedCount} video giải đề cần nâng cấp để xem</p>
+                <p className="text-gray-500 text-xs mt-0.5">Nâng cấp VIP để mở khóa toàn bộ video hướng dẫn giải đề</p>
+              </div>
+              <Link href="/vip"
+                className="shrink-0 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm">
+                Nâng cấp
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* ── Main Content ────────────────────────────────────────────── */}
         <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
 
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
-            {/* Subject tabs */}
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => handleSubjectChange('')}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
@@ -256,30 +390,31 @@ export default function GiaiDeChiTietPage() {
               ))}
             </div>
 
-            {/* Search */}
             <div className="relative sm:ml-auto sm:w-64">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
               <input type="text" placeholder="Tìm kiếm đề..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm
-                  focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
+                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
             </div>
           </div>
 
-          {/* Stats bar */}
+          {/* Stats */}
           <div className="flex items-center gap-4 mb-6 text-xs text-gray-500">
             <span className="font-medium">Tổng cộng: <strong className="text-gray-700">{filtered.length} đề</strong></span>
             {videosOnly.length > 0 && (
               <span className="font-medium">Có video: <strong className="text-purple-600">{videosOnly.length} đề</strong></span>
             )}
+            {lockedCount > 0 && (
+              <span className="font-medium">Đã khóa: <strong className="text-amber-600">{lockedCount} video</strong></span>
+            )}
           </div>
 
-          {/* Exam grid */}
+          {/* Grid */}
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-48 bg-white rounded-2xl border border-gray-100 animate-pulse" />
+                <div key={i} className="h-52 bg-white rounded-2xl border border-gray-100 animate-pulse" />
               ))}
             </div>
           ) : filtered.length === 0 ? (
@@ -294,20 +429,27 @@ export default function GiaiDeChiTietPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filtered.map(exam => (
-                <ExamCard key={exam.id} exam={exam} onPlay={setPlaying} isAdmin={isAdmin} />
+                <ExamCard
+                  key={exam.id}
+                  exam={exam as any}
+                  onPlay={setPlaying}
+                  isAdmin={isAdmin}
+                  userTier={userTier}
+                  onLocked={(tier) => setUpsellTier(tier)}
+                />
               ))}
             </div>
           )}
         </main>
       </div>
 
+      {/* Video modal */}
       {playing && playing.solution_video_url && (
-        <VideoModal
-          videoUrl={playing.solution_video_url}
-          title={playing.title}
-          onClose={() => setPlaying(null)}
-        />
+        <VideoModal videoUrl={playing.solution_video_url} title={playing.title} onClose={() => setPlaying(null)} />
       )}
+
+      {/* Upsell modal */}
+      {upsellTier && <UpsellModal tier={upsellTier} onClose={() => setUpsellTier(null)} />}
     </>
   );
 }
