@@ -49,6 +49,7 @@ const Exam = {
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.status = 'published'
         AND e.start_time IS NULL
+        AND (e.is_simulated IS NULL OR e.is_simulated = false)
       ORDER BY e.publish_date DESC
       LIMIT 20
     `;

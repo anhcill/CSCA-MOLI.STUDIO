@@ -214,8 +214,8 @@ export default function CreateExamPage() {
         try {
             setLoading(true);
 
-            // Publish exam
-            await examAdminApi.updateExam(currentExamId, { status: 'published' } as any);
+            // Publish exam with current metadata to save any unsaved changes
+            await examAdminApi.updateExam(currentExamId, { ...examData, status: 'published' } as any);
 
             // Set schedule if start_time is provided
             if (examData.start_time) {
