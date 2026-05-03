@@ -168,6 +168,7 @@ export default function AdminVipPage() {
 
   useEffect(() => {
     loadStats();
+    loadPackages(); // Load packages initially for the Grant VIP modal
   }, []);
 
   useEffect(() => {

@@ -656,6 +656,8 @@ async function runOptimizations() {
         ('Gói Kiểm tra', 180, 499000, 'Truy cập đầy đủ trong 6 tháng - tiết kiệm 56%', ARRAY['Truy cập đề thi premium', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
         ('Gói Làm bài', 365, 799000, 'Gói năm - truy cập toàn diện trong 12 tháng', ARRAY['Tất cả tính năng VIP', 'Thống kê học tập', 'Lộ trình cá nhân hóa', 'Hỗ trợ ưu tiên'], 3)
       `);
+    }
+
     // VIP features comparison table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vip_features_comparison (
