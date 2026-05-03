@@ -13,6 +13,11 @@ export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // useMemo để tránh tính lại mỗi lần render
   const examId = useMemo(() => {
@@ -274,23 +279,25 @@ export default function ExamPage() {
       )}
 
       {/* Watermark overlay - user identity stamped across exam */}
-      <div className="fixed inset-0 pointer-events-none z-[45] overflow-hidden" aria-hidden="true" style={{ opacity: 0.04 }}>
-        <div className="absolute inset-0" style={{ transform: 'rotate(-35deg)', transformOrigin: 'center center' }}>
-          {Array.from({ length: 12 }).map((_, row) => (
-            <div key={row} className="flex whitespace-nowrap" style={{ marginTop: row === 0 ? '-10%' : '80px' }}>
-              {Array.from({ length: 8 }).map((_, col) => (
-                <span
-                  key={col}
-                  className="text-gray-900 font-bold text-lg mx-16 select-none"
-                  style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-                >
-                  {user?.full_name || 'CSCA'} • ID:{user?.id || '?'}
-                </span>
-              ))}
-            </div>
-          ))}
+      {mounted && (
+        <div className="fixed inset-0 pointer-events-none z-[45] overflow-hidden" aria-hidden="true" style={{ opacity: 0.04 }}>
+          <div className="absolute inset-0" style={{ transform: 'rotate(-35deg)', transformOrigin: 'center center' }}>
+            {Array.from({ length: 12 }).map((_, row) => (
+              <div key={row} className="flex whitespace-nowrap" style={{ marginTop: row === 0 ? '-10%' : '80px' }}>
+                {Array.from({ length: 8 }).map((_, col) => (
+                  <span
+                    key={col}
+                    className="text-gray-900 font-bold text-lg mx-16 select-none"
+                    style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                  >
+                    {user?.full_name || 'CSCA'} • ID:{user?.id || '?'}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       
       {/* FOCUS TOP BAR */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-gray-200 z-50 flex items-center justify-between px-4 sm:px-8 shadow-sm">
@@ -379,7 +386,7 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.8] tracking-tight mb-8">
-                {currentQuestion.question_text?.split('\n').map((line: string, idx: number) => (
+                {(currentQuestion.question_text || '').split('\n').map((line: string, idx: number) => (
                   <span key={idx}>
                     {line}
                     <br />
