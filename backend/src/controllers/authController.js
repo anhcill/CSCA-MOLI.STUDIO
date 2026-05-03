@@ -425,7 +425,7 @@ const login = async (req, res) => {
   }
 };
 
-// ─── Get current user ─────────────────────────────────────────────────────────
+  // ─── Get current user ─────────────────────────────────────────────────────────
 const getCurrentUser = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -436,6 +436,9 @@ const getCurrentUser = async (req, res) => {
     }
     // Chỉ trả về các field an toàn, không bao giờ trả password hay reset token
     const authz = await resolveAuthorizationContext(user);
+    
+    // Tạo token mới để đồng bộ các thuộc tính như is_vip, subscription_tier
+    const token = generateToken(buildTokenPayload({ ...user, jti: req.user.jti }));
 
     return res.json({
       success: true,
@@ -462,6 +465,7 @@ const getCurrentUser = async (req, res) => {
           permissions: authz.permissions,
           created_at: user.created_at,
         },
+        token, // Gửi về frontend token mới
       },
     });
   } catch (error) {

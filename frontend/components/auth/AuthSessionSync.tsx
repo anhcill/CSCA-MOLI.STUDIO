@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 
 export default function AuthSessionSync() {
-  const { isAuthenticated, setUser, logout } = useAuthStore();
+  const { isAuthenticated, setUser, logout, setTokens, token, refreshToken } = useAuthStore();
   const syncedRef = useRef(false);
 
   useEffect(() => {
@@ -20,6 +20,10 @@ export default function AuthSessionSync() {
       .then((response) => {
         if (response?.success && response?.data?.user) {
           setUser(response.data.user);
+          // Cập nhật token mới nếu backend gửi kèm (ví dụ: để đồng bộ trạng thái VIP)
+          if (response.data.token) {
+             setTokens(response.data.token, refreshToken || '');
+          }
         }
       })
       .catch((error: any) => {
