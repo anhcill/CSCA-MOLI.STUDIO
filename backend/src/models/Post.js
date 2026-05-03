@@ -118,30 +118,66 @@ class Post {
   }
 
   // Get comments for post
-  static async getComments(postId) {
+  static async getComments(postId, currentUserId = null) {
     const query = `
       SELECT 
         pc.*,
         u.full_name as author_name,
-        u.avatar as author_avatar
+        u.avatar as author_avatar,
+        ru.full_name as reply_to_user_name,
+        COUNT(DISTINCT cl.id) as like_count,
+        ${currentUserId ? `EXISTS(SELECT 1 FROM comment_likes WHERE comment_id = pc.id AND user_id = $2) as is_liked` : 'false as is_liked'}
       FROM post_comments pc
       INNER JOIN users u ON pc.user_id = u.id
+      LEFT JOIN users ru ON pc.reply_to_user_id = ru.id
+      LEFT JOIN comment_likes cl ON pc.id = cl.comment_id
       WHERE pc.post_id = $1
+      GROUP BY pc.id, u.id, ru.id
       ORDER BY pc.created_at ASC
     `;
-    const result = await pool.query(query, [postId]);
+    const params = currentUserId ? [postId, currentUserId] : [postId];
+    const result = await pool.query(query, params);
     return result.rows;
   }
 
   // Add comment
-  static async addComment(postId, userId, content) {
+  static async addComment(postId, userId, content, parentId = null, replyToUserId = null) {
     const query = `
-      INSERT INTO post_comments (post_id, user_id, content)
-      VALUES ($1, $2, $3)
+      INSERT INTO post_comments (post_id, user_id, content, parent_id, reply_to_user_id)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const result = await pool.query(query, [postId, userId, content]);
+    const result = await pool.query(query, [postId, userId, content, parentId, replyToUserId]);
     return result.rows[0];
+  }
+
+  // Like comment
+  static async likeComment(commentId, userId) {
+    try {
+      const query = `
+          WITH inserted AS (
+              INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2)
+              ON CONFLICT (comment_id, user_id) DO NOTHING
+          )
+          SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = $1
+      `;
+      const result = await pool.query(query, [commentId, userId]);
+      return parseInt(result.rows[0].like_count);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Unlike comment
+  static async unlikeComment(commentId, userId) {
+    const query = `
+        WITH deleted AS (
+            DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2
+        )
+        SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = $1
+    `;
+    const result = await pool.query(query, [commentId, userId]);
+    return parseInt(result.rows[0].like_count);
   }
 
   // Get comment count

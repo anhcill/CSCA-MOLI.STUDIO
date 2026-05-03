@@ -366,7 +366,8 @@ exports.unlikePost = async (req, res) => {
 exports.getComments = async (req, res) => {
   try {
     const postId = req.params.id;
-    const comments = await Post.getComments(postId);
+    const userId = req.user?.id || null;
+    const comments = await Post.getComments(postId, userId);
 
     res.json({
       success: true,
@@ -387,7 +388,7 @@ exports.addComment = async (req, res) => {
   try {
     const postId = req.params.id;
     const userId = req.user.id;
-    const { content } = req.body;
+    const { content, parent_id, reply_to_user_id } = req.body;
 
     const cleanContent = stripTags(content);
     if (!cleanContent || cleanContent.length === 0) {
@@ -397,7 +398,7 @@ exports.addComment = async (req, res) => {
       });
     }
 
-    const comment = await Post.addComment(postId, userId, cleanContent);
+    const comment = await Post.addComment(postId, userId, cleanContent, parent_id || null, reply_to_user_id || null);
     const commentCount = await Post.getCommentCount(postId);
 
     // Notify post owner (non-blocking)
@@ -428,6 +429,52 @@ exports.addComment = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Lỗi khi thêm bình luận",
+      error: error.message,
+    });
+  }
+};
+
+// Like comment
+exports.likeComment = async (req, res) => {
+  try {
+    const commentId = req.params.commentId;
+    const userId = req.user.id;
+
+    const likeCount = await Post.likeComment(commentId, userId);
+
+    res.json({
+      success: true,
+      message: "Đã thích bình luận",
+      data: { like_count: likeCount },
+    });
+  } catch (error) {
+    logger.error("Like comment error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi thích bình luận",
+      error: error.message,
+    });
+  }
+};
+
+// Unlike comment
+exports.unlikeComment = async (req, res) => {
+  try {
+    const commentId = req.params.commentId;
+    const userId = req.user.id;
+
+    const likeCount = await Post.unlikeComment(commentId, userId);
+
+    res.json({
+      success: true,
+      message: "Đã bỏ thích bình luận",
+      data: { like_count: likeCount },
+    });
+  } catch (error) {
+    logger.error("Unlike comment error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi bỏ thích bình luận",
       error: error.message,
     });
   }

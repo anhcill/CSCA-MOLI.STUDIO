@@ -57,8 +57,12 @@ router.post("/:id/like", authenticate, postController.likePost);
 router.delete("/:id/like", authenticate, postController.unlikePost);
 
 // Comments - get doesn't require auth, add requires auth (must be before /:id routes)
-router.get("/:id/comments", postController.getComments);
+router.get("/:id/comments", optionalAuth, postController.getComments);
 router.post("/:id/comments", authenticate, postController.addComment);
+
+// Comment Likes
+router.post("/comments/:commentId/like", authenticate, postController.likeComment);
+router.delete("/comments/:commentId/like", authenticate, postController.unlikeComment);
 
 // Update post - requires auth (must be before DELETE /:id)
 router.put("/:id", authenticate, postController.updatePost);

@@ -124,6 +124,7 @@ export default function ForumPage() {
   const [comments, setComments] = useState<Record<number, postsApi.Comment[]>>({});
   const [commentText, setCommentText] = useState<Record<number, string>>({});
   const [commentLoading, setCommentLoading] = useState<Set<number>>(new Set());
+  const [replyingTo, setReplyingTo] = useState<{ postId: number, commentId: number, userId: number, userName: string } | null>(null);
 
   const [menuPost, setMenuPost] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -197,11 +198,50 @@ export default function ForumPage() {
     const text = commentText[postId]?.trim();
     if (!text || !isAuthenticated) return;
     try {
-      const c = await postsApi.addComment(postId, { content: text });
+      const isReply = replyingTo?.postId === postId;
+      const data: postsApi.CreateCommentData = { content: text };
+      if (isReply) {
+         data.parent_id = replyingTo.commentId;
+         data.reply_to_user_id = replyingTo.userId;
+      }
+      const c = await postsApi.addComment(postId, data);
       setComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), c] }));
       setCommentText(prev => ({ ...prev, [postId]: '' }));
+      if (isReply) setReplyingTo(null);
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, comment_count: p.comment_count + 1 } : p));
     } catch { alert('Lỗi khi thêm bình luận'); }
+  };
+
+  const handleLikeComment = async (postId: number, comment: postsApi.Comment) => {
+    if (!isAuthenticated) return;
+    
+    // Optimistic UI update
+    setComments(prev => ({
+      ...prev,
+      [postId]: (prev[postId] || []).map(c => 
+        c.id === comment.id 
+          ? { ...c, is_liked: !c.is_liked, like_count: Number(c.like_count || 0) + (c.is_liked ? -1 : 1) } 
+          : c
+      )
+    }));
+
+    try {
+      if (comment.is_liked) {
+        await postsApi.unlikeComment(comment.id);
+      } else {
+        await postsApi.likeComment(comment.id);
+      }
+    } catch {
+      // Revert on error
+      setComments(prev => ({
+        ...prev,
+        [postId]: (prev[postId] || []).map(c => 
+          c.id === comment.id 
+            ? { ...c, is_liked: comment.is_liked, like_count: comment.like_count } 
+            : c
+        )
+      }));
+    }
   };
 
   const handleEdit = (post: Post) => { setEditingId(post.id); setEditContent(post.content); setMenuPost(null); };
@@ -502,12 +542,18 @@ export default function ForumPage() {
                             <div className="flex gap-4 items-start mb-6">
                               <Avatar src={user?.avatar} name={user?.full_name} size={36} />
                               <div className="flex-1 relative group">
+                                {replyingTo?.postId === post.id && (
+                                  <div className="absolute -top-6 left-2 flex items-center gap-2 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1 rounded-t-lg">
+                                    <span>Đang phản hồi {replyingTo.userName}</span>
+                                    <button onClick={() => setReplyingTo(null)} className="hover:text-red-500 ml-1"><FiX size={14} /></button>
+                                  </div>
+                                )}
                                 <textarea
                                   value={commentText[post.id] || ''}
                                   onChange={e => setCommentText(prev => ({ ...prev, [post.id]: e.target.value }))}
-                                  placeholder="Nhập ý kiến của bạn..."
+                                  placeholder={replyingTo?.postId === post.id ? `Phản hồi ${replyingTo.userName}...` : "Nhập ý kiến của bạn..."}
                                   rows={1}
-                                  className="w-full bg-white rounded-2xl border border-gray-200 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 outline-none placeholder-gray-400 shadow-sm resize-none"
+                                  className={`w-full bg-white rounded-2xl border ${replyingTo?.postId === post.id ? 'border-violet-300 rounded-tl-none' : 'border-gray-200'} focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 outline-none placeholder-gray-400 shadow-sm resize-none`}
                                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(post.id); } }}
                                 />
                                 <button
@@ -529,18 +575,61 @@ export default function ForumPage() {
                             </div>
                           ) : (
                             <div className="space-y-4">
-                              {(comments[post.id] || []).map(c => (
-                                <div key={c.id} className="flex gap-4 items-start">
-                                  <Avatar src={c.author_avatar} name={c.author_name} size={36} />
-                                  <div className="flex-1">
-                                    <div className="inline-block bg-white border border-gray-100 shadow-sm rounded-2xl rounded-tl-sm px-5 py-3">
-                                      <p className="text-[13px] font-black text-gray-900 mb-1">{c.author_name}</p>
-                                      <p className="text-[14px] text-gray-700 leading-snug font-medium">{c.content}</p>
+                              {(() => {
+                                const postComments = comments[post.id] || [];
+                                const parents = postComments.filter(c => !c.parent_id);
+                                const childrenMap = new Map<number, postsApi.Comment[]>();
+                                postComments.forEach(c => {
+                                  if (c.parent_id) {
+                                    const arr = childrenMap.get(c.parent_id) || [];
+                                    arr.push(c);
+                                    childrenMap.set(c.parent_id, arr);
+                                  }
+                                });
+
+                                const renderComment = (c: postsApi.Comment, isReply = false) => (
+                                  <div key={c.id} className={`flex gap-3 items-start ${isReply ? 'mt-3' : ''}`}>
+                                    <Avatar src={c.author_avatar} name={c.author_name} size={isReply ? 28 : 36} />
+                                    <div className="flex-1">
+                                      <div className={`inline-block bg-white border border-gray-100 shadow-sm rounded-2xl px-4 py-2 ${isReply ? 'rounded-tl-sm' : 'rounded-tl-sm'}`}>
+                                        <p className="text-[13px] font-black text-gray-900 mb-0.5">{c.author_name}</p>
+                                        <p className="text-[14px] text-gray-700 leading-snug font-medium">
+                                          {c.reply_to_user_name && (
+                                            <span className="font-bold text-violet-600 mr-1.5">@{c.reply_to_user_name}</span>
+                                          )}
+                                          {c.content}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-3 ml-2 mt-1.5 text-[11px] font-bold">
+                                        <span className="text-gray-400">{timeAgo(c.created_at)}</span>
+                                        <button 
+                                          onClick={() => handleLikeComment(post.id, c)}
+                                          className={`transition-colors ${c.is_liked ? 'text-rose-500' : 'text-gray-500 hover:text-gray-900'}`}
+                                        >
+                                          Thích {Number(c.like_count) > 0 && `(${c.like_count})`}
+                                        </button>
+                                        <button 
+                                          onClick={() => setReplyingTo({ postId: post.id, commentId: isReply ? c.parent_id! : c.id, userId: c.user_id, userName: c.author_name })}
+                                          className="text-gray-500 hover:text-gray-900 transition-colors"
+                                        >
+                                          Phản hồi
+                                        </button>
+                                      </div>
                                     </div>
-                                    <p className="text-[11px] font-bold text-gray-400 ml-2 mt-1.5">{timeAgo(c.created_at)}</p>
                                   </div>
-                                </div>
-                              ))}
+                                );
+
+                                return parents.map(p => (
+                                  <div key={p.id}>
+                                    {renderComment(p, false)}
+                                    {childrenMap.has(p.id) && (
+                                      <div className="ml-10 border-l-2 border-gray-100 pl-4">
+                                        {childrenMap.get(p.id)!.map(child => renderComment(child, true))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ));
+                              })()}
                               {comments[post.id]?.length === 0 && (
                                 <div className="text-center py-6">
                                   <span className="text-3xl grayscale opacity-50 block mb-2">🎈</span>

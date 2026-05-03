@@ -23,6 +23,10 @@ export interface Comment {
     created_at: string;
     author_name: string;
     author_avatar?: string;
+    parent_id?: number;
+    reply_to_user_name?: string;
+    like_count: number;
+    is_liked: boolean;
 }
 
 export interface CreatePostData {
@@ -32,6 +36,8 @@ export interface CreatePostData {
 
 export interface CreateCommentData {
     content: string;
+    parent_id?: number;
+    reply_to_user_id?: number;
 }
 
 // Get all posts (feed)
@@ -79,4 +85,16 @@ export const getComments = async (postId: number): Promise<Comment[]> => {
 export const addComment = async (postId: number, data: CreateCommentData): Promise<Comment> => {
     const response = await axiosInstance.post(`/posts/${postId}/comments`, data);
     return response.data.data.comment;
+};
+
+// Like comment
+export const likeComment = async (commentId: number): Promise<{ like_count: number }> => {
+    const response = await axiosInstance.post(`/posts/comments/${commentId}/like`);
+    return response.data.data;
+};
+
+// Unlike comment
+export const unlikeComment = async (commentId: number): Promise<{ like_count: number }> => {
+    const response = await axiosInstance.delete(`/posts/comments/${commentId}/like`);
+    return response.data.data;
 };
