@@ -99,6 +99,37 @@ async function runMigrations() {
       console.log('⏭️ VIP packages already seeded');
     }
 
+    // 6. VIP features comparison table
+    await run(`
+      CREATE TABLE IF NOT EXISTS vip_features_comparison (
+        id SERIAL PRIMARY KEY,
+        feature_name VARCHAR(255) NOT NULL,
+        vip_has BOOLEAN DEFAULT FALSE,
+        premium_has BOOLEAN DEFAULT FALSE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `, 'vip_features_comparison table');
+
+    const featCount = await pool.query('SELECT COUNT(*)::int FROM vip_features_comparison');
+    if (featCount.rows[0].count === 0) {
+      await pool.query(`
+        INSERT INTO vip_features_comparison (feature_name, vip_has, premium_has, sort_order) VALUES
+        ('Truy cập đề thi premium', TRUE, TRUE, 1),
+        ('Giải đề chi tiết', TRUE, TRUE, 2),
+        ('Hỗ trợ 24/7', TRUE, TRUE, 3),
+        ('Thống kê học tập', TRUE, TRUE, 4),
+        ('Lộ trình cá nhân hóa', TRUE, TRUE, 5),
+        ('Video giải đề độc quyền', FALSE, TRUE, 6),
+        ('Phân tích kết quả bằng AI', FALSE, TRUE, 7),
+        ('Tư vấn trực tiếp 1-1', FALSE, TRUE, 8)
+      `);
+      console.log('✅ Seeded VIP features comparison');
+    } else {
+      console.log('⏭️ VIP features comparison already seeded');
+    }
+
     // Summary
     console.log('\n=== SUMMARY ===');
     const passed = results.filter(r => r.ok).length;

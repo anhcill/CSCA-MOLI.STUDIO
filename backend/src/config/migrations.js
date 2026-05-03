@@ -656,6 +656,33 @@ async function runOptimizations() {
         ('Gói Kiểm tra', 180, 499000, 'Truy cập đầy đủ trong 6 tháng - tiết kiệm 56%', ARRAY['Truy cập đề thi premium', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
         ('Gói Làm bài', 365, 799000, 'Gói năm - truy cập toàn diện trong 12 tháng', ARRAY['Tất cả tính năng VIP', 'Thống kê học tập', 'Lộ trình cá nhân hóa', 'Hỗ trợ ưu tiên'], 3)
       `);
+    // VIP features comparison table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vip_features_comparison (
+        id SERIAL PRIMARY KEY,
+        feature_name VARCHAR(255) NOT NULL,
+        vip_has BOOLEAN DEFAULT FALSE,
+        premium_has BOOLEAN DEFAULT FALSE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default VIP features comparison if none exist
+    const featureCount = await pool.query('SELECT COUNT(*)::int FROM vip_features_comparison');
+    if (featureCount.rows[0].count === 0) {
+      await pool.query(`
+        INSERT INTO vip_features_comparison (feature_name, vip_has, premium_has, sort_order) VALUES
+        ('Truy cập đề thi premium', TRUE, TRUE, 1),
+        ('Giải đề chi tiết', TRUE, TRUE, 2),
+        ('Hỗ trợ 24/7', TRUE, TRUE, 3),
+        ('Thống kê học tập', TRUE, TRUE, 4),
+        ('Lộ trình cá nhân hóa', TRUE, TRUE, 5),
+        ('Video giải đề độc quyền', FALSE, TRUE, 6),
+        ('Phân tích kết quả bằng AI', FALSE, TRUE, 7),
+        ('Tư vấn trực tiếp 1-1', FALSE, TRUE, 8)
+      `);
     }
 
     console.log(

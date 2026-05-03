@@ -128,6 +128,112 @@ const VipPackageController = {
       res.status(500).json({ success: false, message: 'Lỗi xóa gói VIP' });
     }
   },
+
+  // ─── SO SÁNH TÍNH NĂNG ───────────────────────────────────────────────────
+
+  /**
+   * GET /api/vip/comparison
+   * Lấy danh sách tính năng so sánh (public)
+   */
+  async getComparisonFeatures(req, res) {
+    try {
+      const result = await db.query(
+        `SELECT id, feature_name, vip_has, premium_has, sort_order 
+         FROM vip_features_comparison 
+         ORDER BY sort_order ASC, id ASC`
+      );
+      res.json({ success: true, data: result.rows });
+    } catch (err) {
+      console.error('getComparisonFeatures error:', err);
+      res.status(500).json({ success: false, message: 'Lỗi lấy danh sách so sánh tính năng' });
+    }
+  },
+
+  /**
+   * POST /api/vip/comparison
+   * Thêm tính năng so sánh mới (admin)
+   */
+  async createComparisonFeature(req, res) {
+    try {
+      const { feature_name, vip_has, premium_has, sort_order } = req.body;
+      if (!feature_name) {
+        return res.status(400).json({ success: false, message: 'Thiếu tên tính năng' });
+      }
+
+      const result = await db.query(
+        `INSERT INTO vip_features_comparison (feature_name, vip_has, premium_has, sort_order)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [feature_name, vip_has || false, premium_has || false, sort_order || 0]
+      );
+      res.json({ success: true, message: 'Đã thêm tính năng', data: result.rows[0] });
+    } catch (err) {
+      console.error('createComparisonFeature error:', err);
+      res.status(500).json({ success: false, message: 'Lỗi thêm tính năng so sánh' });
+    }
+  },
+
+  /**
+   * PUT /api/vip/comparison/:id
+   * Sửa tính năng so sánh (admin)
+   */
+  async updateComparisonFeature(req, res) {
+    try {
+      const { id } = req.params;
+      const { feature_name, vip_has, premium_has, sort_order } = req.body;
+
+      const fields = [];
+      const values = [];
+      let idx = 1;
+
+      if (feature_name !== undefined) { fields.push(`feature_name = $${idx++}`); values.push(feature_name); }
+      if (vip_has !== undefined) { fields.push(`vip_has = $${idx++}`); values.push(vip_has); }
+      if (premium_has !== undefined) { fields.push(`premium_has = $${idx++}`); values.push(premium_has); }
+      if (sort_order !== undefined) { fields.push(`sort_order = $${idx++}`); values.push(sort_order); }
+
+      if (fields.length === 0) {
+        return res.status(400).json({ success: false, message: 'Không có trường nào được cập nhật' });
+      }
+
+      fields.push(`updated_at = NOW()`);
+      values.push(id);
+
+      const result = await db.query(
+        `UPDATE vip_features_comparison SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+        values
+      );
+
+      if (!result.rows[0]) {
+        return res.status(404).json({ success: false, message: 'Tính năng không tồn tại' });
+      }
+
+      res.json({ success: true, message: 'Đã cập nhật tính năng', data: result.rows[0] });
+    } catch (err) {
+      console.error('updateComparisonFeature error:', err);
+      res.status(500).json({ success: false, message: 'Lỗi cập nhật tính năng so sánh' });
+    }
+  },
+
+  /**
+   * DELETE /api/vip/comparison/:id
+   * Xóa tính năng so sánh (admin)
+   */
+  async deleteComparisonFeature(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await db.query(
+        `DELETE FROM vip_features_comparison WHERE id = $1 RETURNING id`,
+        [id]
+      );
+      if (!result.rows[0]) {
+        return res.status(404).json({ success: false, message: 'Tính năng không tồn tại' });
+      }
+      res.json({ success: true, message: 'Đã xóa tính năng' });
+    } catch (err) {
+      console.error('deleteComparisonFeature error:', err);
+      res.status(500).json({ success: false, message: 'Lỗi xóa tính năng so sánh' });
+    }
+  },
 };
 
 module.exports = VipPackageController;

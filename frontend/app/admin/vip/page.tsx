@@ -14,7 +14,7 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
-type Tab = 'users' | 'transactions' | 'packages';
+type Tab = 'users' | 'transactions' | 'packages' | 'comparison';
 type Filter = 'all' | 'active' | 'expired';
 type TxStatus = '' | 'completed' | 'pending' | 'failed';
 type PkgStatus = 'active' | 'inactive';
@@ -76,6 +76,14 @@ interface Pagination {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+interface FeatureComparison {
+  id: number;
+  feature_name: string;
+  vip_has: boolean;
+  premium_has: boolean;
+  sort_order: number;
 }
 
 export default function AdminVipPage() {
@@ -148,6 +156,13 @@ export default function AdminVipPage() {
   const [createForm, setCreateForm] = useState({ name: '', duration_days: '', price: '', description: '', features: '' });
   const [createSaving, setCreateSaving] = useState(false);
 
+  // ── Comparison tab ──────────────────────────────────────
+  const [features, setFeatures] = useState<FeatureComparison[]>([]);
+  const [featuresLoading, setFeaturesLoading] = useState(false);
+  const [showFeatModal, setShowFeatModal] = useState(false);
+  const [featForm, setFeatForm] = useState<Partial<FeatureComparison>>({ feature_name: '', vip_has: false, premium_has: false, sort_order: 0 });
+  const [featSaving, setFeatSaving] = useState(false);
+
   // ── Loading ────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
 
@@ -159,6 +174,7 @@ export default function AdminVipPage() {
     if (activeTab === 'users') loadUsers();
     else if (activeTab === 'transactions') loadTransactions();
     else if (activeTab === 'packages') loadPackages();
+    else if (activeTab === 'comparison') loadFeatures();
   }, [activeTab, usersPage, usersFilter, usersSearch, txPage, txStatus, txSearch, pkgsPage]);
 
   const loadStats = async () => {
@@ -210,13 +226,26 @@ export default function AdminVipPage() {
   const loadPackages = async (page = pkgsPage) => {
     setLoading(true);
     try {
-      const res = await axios.get('/vip/packages');
+      const res = await axios.get('/vip/packages/all');
       setPackages(res.data.data || []);
     } catch (err) {
       console.error('Lỗi load packages', err);
       setPackages([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFeatures = async () => {
+    setFeaturesLoading(true);
+    try {
+      const res = await axios.get('/vip/comparison');
+      setFeatures(res.data.data || []);
+    } catch (err) {
+      console.error('Lỗi load comparison features', err);
+      setFeatures([]);
+    } finally {
+      setFeaturesLoading(false);
     }
   };
 
@@ -335,6 +364,44 @@ export default function AdminVipPage() {
     }
   };
 
+  const handleDeletePkg = async (id: number) => {
+    if (!confirm('Xóa gói VIP này?')) return;
+    try {
+      await axios.delete(`/vip/packages/${id}`);
+      loadPackages();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi xóa gói VIP');
+    }
+  };
+
+  const handleSaveFeat = async () => {
+    if (!featForm.feature_name) return alert('Vui lòng nhập tên tính năng');
+    setFeatSaving(true);
+    try {
+      if (featForm.id) {
+        await axios.put(`/vip/comparison/${featForm.id}`, featForm);
+      } else {
+        await axios.post('/vip/comparison', featForm);
+      }
+      setShowFeatModal(false);
+      loadFeatures();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi lưu tính năng');
+    } finally {
+      setFeatSaving(false);
+    }
+  };
+
+  const handleDeleteFeat = async (id: number) => {
+    if (!confirm('Chắc chắn xóa tính năng này?')) return;
+    try {
+      await axios.delete(`/vip/comparison/${id}`);
+      loadFeatures();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi xóa tính năng');
+    }
+  };
+
   const renderPageNav = (
     currentPage: number,
     totalPages: number,
@@ -369,6 +436,7 @@ export default function AdminVipPage() {
     { id: 'users', label: 'Danh sách VIP' },
     { id: 'transactions', label: 'Lịch sử giao dịch' },
     { id: 'packages', label: 'Quản lý gói VIP' },
+    { id: 'comparison', label: 'So sánh tính năng' }
   ];
 
   return (
@@ -729,11 +797,78 @@ export default function AdminVipPage() {
                 </div>
               </div>
             )}
+
+            {/* ── Tab: Comparison ──────────────────────────────── */}
+            {activeTab === 'comparison' && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">Bảng So sánh tính năng</h3>
+                  <button
+                    onClick={() => {
+                      setFeatForm({ feature_name: '', vip_has: false, premium_has: false, sort_order: (features.length + 1) * 10 });
+                      setShowFeatModal(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors shadow-sm text-sm">
+                    <FiPlus /> Thêm tính năng
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto border rounded-xl bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="p-4 font-semibold text-gray-600 w-16 text-center">STT</th>
+                        <th className="p-4 font-semibold text-gray-600">Tên tính năng</th>
+                        <th className="p-4 font-semibold text-gray-600 text-center">VIP</th>
+                        <th className="p-4 font-semibold text-gray-600 text-center">Premium</th>
+                        <th className="p-4 font-semibold text-gray-600 text-right">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {featuresLoading ? (
+                        [...Array(3)].map((_, i) => (
+                          <tr key={i}>
+                            <td colSpan={5} className="p-4"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td>
+                          </tr>
+                        ))
+                      ) : features.length === 0 ? (
+                        <tr><td colSpan={5} className="p-8 text-center text-gray-400">Chưa có tính năng nào</td></tr>
+                      ) : (
+                        features.map((feat) => (
+                          <tr key={feat.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-4 text-center font-mono text-gray-400">{feat.sort_order}</td>
+                            <td className="p-4 font-medium text-gray-800">{feat.feature_name}</td>
+                            <td className="p-4 text-center">
+                              {feat.vip_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="p-4 text-center">
+                              {feat.premium_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => { setFeatForm(feat); setShowFeatModal(true); }}
+                                className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg transition-colors inline-block" title="Sửa">
+                                <FiEdit2 size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFeat(feat.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors inline-block ml-1" title="Xóa">
+                                <FiTrash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── Grant VIP Modal ──────────────────────────────────── */}
+      {/* ── Modals ────────────────────────────────────────────── */}
       {showGrantModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
@@ -907,6 +1042,48 @@ export default function AdminVipPage() {
               <button onClick={handleCreatePkg} disabled={createSaving}
                 className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors text-sm disabled:opacity-60">
                 {createSaving ? 'Đang tạo...' : 'Tạo gói VIP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Feature Comparison Modal ───────────────────────── */}
+      {showFeatModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="text-lg font-bold text-gray-900">{featForm.id ? 'Sửa tính năng' : 'Thêm tính năng'}</h2>
+              <button onClick={() => setShowFeatModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tên tính năng *</label>
+                <input type="text" value={featForm.feature_name || ''} onChange={e => setFeatForm(f => ({ ...f, feature_name: e.target.value }))}
+                  placeholder="Hỗ trợ 24/7"
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-xl hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" checked={featForm.vip_has || false} onChange={e => setFeatForm(f => ({ ...f, vip_has: e.target.checked }))} className="w-4 h-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-gray-700">Có ở VIP</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-xl hover:bg-gray-50 transition-colors">
+                  <input type="checkbox" checked={featForm.premium_has || false} onChange={e => setFeatForm(f => ({ ...f, premium_has: e.target.checked }))} className="w-4 h-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-gray-700">Có ở Premium</span>
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Thứ tự hiển thị</label>
+                <input type="number" value={featForm.sort_order || 0} onChange={e => setFeatForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 border-t bg-gray-50 rounded-b-2xl">
+              <button onClick={() => setShowFeatModal(false)}
+                className="flex-1 px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-200 rounded-xl transition-colors text-sm">Hủy</button>
+              <button onClick={handleSaveFeat} disabled={featSaving}
+                className="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl transition-colors text-sm disabled:opacity-60">
+                {featSaving ? 'Đang lưu...' : 'Lưu lại'}
               </button>
             </div>
           </div>

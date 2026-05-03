@@ -12,4 +12,10 @@ router.post('/packages', authenticate, authorizePermission('users.manage'), VipP
 router.put('/packages/:id', authenticate, authorizePermission('users.manage'), VipPackageController.updatePackage);
 router.delete('/packages/:id', authenticate, authorizePermission('users.manage'), VipPackageController.deletePackage);
 
+// Comparison Features
+router.get('/comparison', VipPackageController.getComparisonFeatures);
+router.post('/comparison', authenticate, authorizePermission('users.manage'), VipPackageController.createComparisonFeature);
+router.put('/comparison/:id', authenticate, authorizePermission('users.manage'), VipPackageController.updateComparisonFeature);
+router.delete('/comparison/:id', authenticate, authorizePermission('users.manage'), VipPackageController.deleteComparisonFeature);
+
 module.exports = router;

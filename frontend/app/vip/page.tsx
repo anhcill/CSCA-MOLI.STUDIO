@@ -60,6 +60,7 @@ export default function VipPricingPage() {
   const [couponError, setCouponError] = useState('');
   const [couponResult, setCouponResult] = useState<CouponResult | null>(null);
   const [appliedDiscount, setAppliedDiscount] = useState<Discount | null>(null);
+  const [comparisonFeatures, setComparisonFeatures] = useState<any[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -68,6 +69,10 @@ export default function VipPricingPage() {
       .then(res => setPackages(res.data.data || []))
       .catch(() => setPackages([]))
       .finally(() => setLoading(false));
+
+    axios.get('/vip/comparison')
+      .then(res => setComparisonFeatures(res.data.data || []))
+      .catch(() => setComparisonFeatures([]));
   }, []);
 
   const handleCheckout = (pkg: VipPackage) => {
@@ -288,6 +293,21 @@ export default function VipPricingPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(() => {
+                  if (comparisonFeatures.length > 0) {
+                    return comparisonFeatures.map((feat) => (
+                      <tr key={feat.id} className={feat.sort_order % 20 === 0 ? 'bg-gray-50/50' : 'bg-white'}>
+                        <td className="px-6 py-3 font-medium text-gray-700">{feat.feature_name}</td>
+                        <td className="text-center px-4 py-3">
+                          {feat.vip_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                        <td className="text-center px-4 py-3">
+                          {feat.premium_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                      </tr>
+                    ));
+                  }
+
+                  // Fallback to dynamic generation if no features defined
                   const allFeatures = Array.from(new Set(packages.flatMap(p => p.features || [])));
                   if (allFeatures.length === 0) {
                     return (
