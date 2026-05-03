@@ -519,6 +519,315 @@ const AdminController = {
         }
     },
 
+    // Lấy danh sách tất cả admin (chỉ super_admin)
+    async getAdmins(req, res) {
+        try {
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 20;
+            const offset = (page - 1) * limit;
+            const { search, role } = req.query;
+
+            const conditions = [`u.role = 'admin'`];
+            const params = [];
+            let idx = 1;
+
+            if (search) {
+                conditions.push(`(u.full_name ILIKE $${idx} OR u.email ILIKE $${idx})`);
+                params.push(`%${search}%`);
+                idx++;
+            }
+            if (role && ADMIN_ROLE_CODES.includes(role)) {
+                conditions.push(`$${idx} = ANY(ARRAY_AGG(DISTINCT r2.code))`);
+                params.push(role);
+                idx++;
+            }
+
+            const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+            const adminsQuery = `
+                SELECT
+                    u.id,
+                    u.email,
+                    u.full_name,
+                    u.role,
+                    u.is_active,
+                    u.created_at,
+                    COALESCE(
+                        ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN r2.code = ANY($${idx}::text[]) THEN r2.code END), NULL),
+                        '{}'::text[]
+                    ) AS admin_roles,
+                    COALESCE(
+                        ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.code), NULL),
+                        '{}'::text[]
+                    ) AS permissions,
+                    MAX(ua.created_at) AS last_active_at,
+                    COUNT(DISTINCT ua.id) AS total_actions
+                FROM users u
+                LEFT JOIN user_roles ur ON ur.user_id = u.id
+                LEFT JOIN roles r2 ON r2.id = ur.role_id
+                LEFT JOIN role_permissions rp ON rp.role_id = r2.id
+                LEFT JOIN permissions p ON p.id = rp.permission_id
+                LEFT JOIN user_activities ua ON ua.user_id = u.id AND ua.created_at >= NOW() - INTERVAL '30 days'
+                ${whereClause}
+                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
+                ORDER BY u.created_at DESC
+                LIMIT $${idx + 1} OFFSET $${idx + 2}
+            `;
+
+            params.push(ADMIN_ROLE_CODES, limit, offset);
+
+            const countQuery = `SELECT COUNT(DISTINCT u.id) as count FROM users u ${whereClause}`;
+            const countParams = params.slice(0, -3); // exclude ADMIN_ROLE_CODES, limit, offset
+
+            const [adminsResult, countResult] = await Promise.all([
+                pool.query(adminsQuery, params),
+                pool.query(countQuery, countParams)
+            ]);
+
+            const totalAdmins = parseInt(countResult.rows[0].count);
+            const admins = adminsResult.rows.map(admin => ({
+                ...admin,
+                admin_roles: Array.isArray(admin.admin_roles) ? admin.admin_roles.filter(c => ADMIN_ROLE_CODES.includes(c)) : [],
+                permissions: Array.isArray(admin.permissions) ? admin.permissions : [],
+                primary_admin_role: getPrimaryAdminRole(
+                    Array.isArray(admin.admin_roles) ? admin.admin_roles.filter(c => ADMIN_ROLE_CODES.includes(c)) : []
+                ),
+                total_actions: parseInt(admin.total_actions || 0),
+            }));
+
+            res.json({
+                admins,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalAdmins / limit),
+                    totalAdmins,
+                    limit
+                }
+            });
+        } catch (error) {
+            console.error('Error getting admins:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    // Thống kê hoạt động admin (chỉ super_admin)
+    async getAdminStats(req, res) {
+        try {
+            // Tổng số admin
+            const totalAdminsResult = await pool.query(`SELECT COUNT(*) as count FROM users WHERE role = 'admin'`);
+
+            // Admin hoạt động trong 24h gần nhất
+            const activeAdminsResult = await pool.query(`
+                SELECT COUNT(DISTINCT ua.user_id) as count
+                FROM user_activities ua
+                JOIN users u ON u.id = ua.user_id
+                WHERE u.role = 'admin' AND ua.created_at >= NOW() - INTERVAL '24 hours'
+            `);
+
+            // Tổng thao tác admin trong 30 ngày
+            const totalActionsResult = await pool.query(`
+                SELECT COUNT(*) as count
+                FROM user_activities ua
+                JOIN users u ON u.id = ua.user_id
+                WHERE u.role = 'admin' AND ua.created_at >= NOW() - INTERVAL '30 days'
+            `);
+
+            // Top 5 admin hoạt động nhiều nhất (30 ngày)
+            const topAdminsResult = await pool.query(`
+                SELECT
+                    u.id,
+                    u.full_name,
+                    u.email,
+                    COUNT(ua.id) as action_count,
+                    MAX(ua.created_at) as last_active_at,
+                    COALESCE(
+                        ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN r.code = ANY($1::text[]) THEN r.code END), NULL),
+                        '{}'::text[]
+                    ) AS admin_roles
+                FROM users u
+                LEFT JOIN user_activities ua ON ua.user_id = u.id AND ua.created_at >= NOW() - INTERVAL '30 days'
+                LEFT JOIN user_roles ur ON ur.user_id = u.id
+                LEFT JOIN roles r ON r.id = ur.role_id
+                WHERE u.role = 'admin'
+                GROUP BY u.id, u.full_name, u.email
+                ORDER BY action_count DESC
+                LIMIT 5
+            `, [ADMIN_ROLE_CODES]);
+
+            // Phân bố vai trò
+            const roleDistributionResult = await pool.query(`
+                SELECT
+                    r.code,
+                    r.name,
+                    COUNT(DISTINCT ur.user_id) as count
+                FROM roles r
+                LEFT JOIN user_roles ur ON ur.role_id = r.id
+                LEFT JOIN users u ON u.id = ur.user_id AND u.role = 'admin'
+                WHERE r.code = ANY($1::text[])
+                GROUP BY r.id, r.code, r.name
+                ORDER BY count DESC
+            `, [ADMIN_ROLE_CODES]);
+
+            // Thống kê action theo ngày (7 ngày gần nhất)
+            const activityByDayResult = await pool.query(`
+                SELECT
+                    DATE(ua.created_at) as date,
+                    COUNT(*) as count
+                FROM user_activities ua
+                JOIN users u ON u.id = ua.user_id
+                WHERE u.role = 'admin' AND ua.created_at >= NOW() - INTERVAL '7 days'
+                GROUP BY DATE(ua.created_at)
+                ORDER BY date ASC
+            `);
+
+            res.json({
+                overview: {
+                    totalAdmins: parseInt(totalAdminsResult.rows[0].count),
+                    activeAdminsToday: parseInt(activeAdminsResult.rows[0].count),
+                    totalActionsThisMonth: parseInt(totalActionsResult.rows[0].count),
+                },
+                topAdmins: topAdminsResult.rows.map(row => ({
+                    ...row,
+                    action_count: parseInt(row.action_count),
+                    admin_roles: Array.isArray(row.admin_roles) ? row.admin_roles : [],
+                })),
+                roleDistribution: roleDistributionResult.rows.map(row => ({
+                    ...row,
+                    count: parseInt(row.count),
+                })),
+                activityByDay: activityByDayResult.rows.map(row => ({
+                    date: row.date,
+                    count: parseInt(row.count),
+                })),
+            });
+        } catch (error) {
+            console.error('Error getting admin stats:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    // Lấy audit log thao tác của admin (chỉ super_admin)
+    async getAdminActivities(req, res) {
+        try {
+            const { adminId } = req.params;
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 50;
+            const offset = (page - 1) * limit;
+
+            const result = await UserActivity.getAll(limit, offset, { userId: Number(adminId) });
+
+            res.json({
+                activities: result.activities,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(result.total / limit),
+                    totalActivities: result.total,
+                    limit,
+                },
+            });
+        } catch (error) {
+            console.error('Error getting admin activities:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    // Lấy toàn bộ audit log admin (không filter theo adminId)
+    async getAllAdminActivities(req, res) {
+        try {
+            const parsedPage = Number.parseInt(req.query.page, 10);
+            const parsedLimit = Number.parseInt(req.query.limit, 10);
+            const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+            const limit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 30;
+            const offset = (page - 1) * limit;
+            const { action, startDate, endDate } = req.query;
+
+            const conditions = [`u.role = 'admin'`];
+            const params = [];
+            let idx = 1;
+
+            if (action) {
+                conditions.push(`ua.action = $${idx++}`);
+                params.push(action);
+            }
+            if (startDate) {
+                conditions.push(`ua.created_at >= $${idx++}`);
+                params.push(startDate);
+            }
+            if (endDate) {
+                conditions.push(`ua.created_at <= $${idx++}`);
+                params.push(endDate);
+            }
+            const adminIdFilter = req.query.adminId ? Number.parseInt(req.query.adminId, 10) : null;
+            if (adminIdFilter) {
+                conditions.push(`ua.user_id = $${idx++}`);
+                params.push(adminIdFilter);
+            }
+
+            const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+            const query = `
+                SELECT
+                    ua.id,
+                    ua.user_id,
+                    ua.action,
+                    ua.metadata,
+                    ua.ip_address,
+                    ua.created_at,
+                    u.full_name AS user_name,
+                    u.email AS user_email,
+                    COALESCE(
+                        ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN r.code = ANY($${idx}::text[]) THEN r.code END), NULL),
+                        '{}'::text[]
+                    ) AS admin_roles
+                FROM user_activities ua
+                JOIN users u ON u.id = ua.user_id
+                LEFT JOIN user_roles ur ON ur.user_id = u.id
+                LEFT JOIN roles r ON r.id = ur.role_id
+                ${whereClause}
+                GROUP BY ua.id, ua.user_id, ua.action, ua.metadata, ua.ip_address, ua.created_at, u.full_name, u.email
+                ORDER BY ua.created_at DESC
+                LIMIT $${idx + 1} OFFSET $${idx + 2}
+            `;
+            params.push(ADMIN_ROLE_CODES, limit, offset);
+
+            const countQuery = `
+                SELECT COUNT(DISTINCT ua.id) as count
+                FROM user_activities ua
+                JOIN users u ON u.id = ua.user_id
+                ${whereClause}
+            `;
+            const countParams = params.slice(0, -3);
+
+            const [rowsResult, countResult] = await Promise.all([
+                pool.query(query, params),
+                pool.query(countQuery, countParams)
+            ]);
+
+            const total = parseInt(countResult.rows[0].count);
+
+            res.json({
+                activities: rowsResult.rows.map(row => ({
+                    ...row,
+                    metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+                    admin_roles: Array.isArray(row.admin_roles) ? row.admin_roles : [],
+                })),
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(total / limit),
+                    totalActivities: total,
+                    limit,
+                },
+            });
+        } catch (error) {
+            console.error('Error getting all admin activities:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    },
+
     // Lấy log hành vi của một user
     async getUserActivities(req, res) {
         try {

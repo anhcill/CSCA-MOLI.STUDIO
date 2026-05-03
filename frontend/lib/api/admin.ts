@@ -9,6 +9,41 @@ export interface AdminRoleOption {
     color?: string;
 }
 
+export interface AdminUser {
+    id: number;
+    email: string;
+    full_name: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+    admin_roles: string[];
+    permissions: string[];
+    primary_admin_role: string | null;
+    last_active_at: string | null;
+    total_actions: number;
+}
+
+export interface AdminActivity {
+    id: number;
+    user_id: number;
+    action: string;
+    metadata: Record<string, unknown>;
+    ip_address: string | null;
+    created_at: string;
+    user_name: string;
+    user_email: string;
+    admin_roles: string[];
+}
+
+export interface AdminActivityFilters {
+    adminId?: number;
+    action?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+}
+
 export const adminApi = {
     // Get dashboard statistics
     async getDashboardStats() {
@@ -66,3 +101,31 @@ export const adminApi = {
         return response.data;
     }
 };
+
+// ── Super Admin Control API ───────────────────────────────────────────────────
+export const adminControlApi = {
+    // Lấy danh sách tất cả admin
+    async getAdmins(params?: { page?: number; limit?: number; search?: string; role?: string }) {
+        const response = await axios.get('/admin/admins', { params });
+        return response.data as { admins: AdminUser[]; pagination: { currentPage: number; totalPages: number; totalAdmins: number; limit: number } };
+    },
+
+    // Lấy thống kê admin
+    async getAdminStats() {
+        const response = await axios.get('/admin/admins/stats');
+        return response.data;
+    },
+
+    // Lấy toàn bộ audit log admin (có thể filter)
+    async getAllAdminActivities(filters?: AdminActivityFilters) {
+        const response = await axios.get('/admin/admins/activities', { params: filters });
+        return response.data as { activities: AdminActivity[]; pagination: { currentPage: number; totalPages: number; totalActivities: number; limit: number } };
+    },
+
+    // Lấy audit log của một admin cụ thể
+    async getAdminActivities(adminId: number, page = 1, limit = 30) {
+        const response = await axios.get(`/admin/admins/${adminId}/activities`, { params: { page, limit } });
+        return response.data as { activities: AdminActivity[]; pagination: { currentPage: number; totalPages: number; totalActivities: number; limit: number } };
+    },
+};
+

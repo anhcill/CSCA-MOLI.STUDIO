@@ -116,6 +116,13 @@ const NAV_SECTIONS = [
     label: 'Hệ thống',
     items: [
       {
+        label: 'Kiểm soát Admin',
+        icon: FiShield,
+        href: '/admin/admins',
+        permission: 'admin.super',
+        roles: [],
+      },
+      {
         label: 'Cấu hình',
         icon: FiSettings,
         href: '/admin/settings',

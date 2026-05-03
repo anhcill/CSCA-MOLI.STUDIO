@@ -50,6 +50,7 @@ export default function AdminDashboard() {
     const canManageExams = hasPermission(user, 'exams.manage');
     const canManageContent = hasPermission(user, 'content.manage');
     const canManageForum = hasPermission(user, 'forum.manage');
+    const isSuperAdmin = hasPermission(user, 'admin.super');
 
     const statCards = [
         { title: 'Tổng Users', value: stats.totalUsers, icon: FiUsers, tone: 'blue' },
@@ -59,6 +60,7 @@ export default function AdminDashboard() {
     ];
 
     const quickLinks = [
+        isSuperAdmin && { label: 'Kiểm soát Admin', href: '/admin/admins', desc: 'Giám sát, cấp quyền admin hệ thống', color: 'pink' },
         canManageUsers && { label: 'Quản lý Users', href: '/admin/users', desc: 'Phân quyền, khóa/mở tài khoản', color: 'blue' },
         canManageExams && { label: 'Tạo đề thi', href: '/admin/exams/create', desc: 'Tạo đề mới với shuffle + video', color: 'emerald' },
         canManageExams && { label: 'Kho đề thi', href: '/admin/exams', desc: 'Xem, sửa, xóa đề thi', color: 'purple' },

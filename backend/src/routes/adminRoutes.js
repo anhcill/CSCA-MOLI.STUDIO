@@ -42,4 +42,28 @@ router.patch(
 	adminController.updateUserProfile,
 );
 
+// ── Super Admin Control: Quản lý Admin khác ─────────────────────────────────
+// Chỉ super_admin mới có quyền truy cập (permission: admin.super)
+router.get(
+	"/admins",
+	authorizePermission("admin.super"),
+	adminController.getAdmins,
+);
+router.get(
+	"/admins/stats",
+	authorizePermission("admin.super"),
+	adminController.getAdminStats,
+);
+router.get(
+	"/admins/activities",
+	authorizePermission("admin.super"),
+	adminController.getAllAdminActivities,
+);
+router.get(
+	"/admins/:adminId/activities",
+	authorizePermission("admin.super"),
+	adminController.getAdminActivities,
+);
+
 module.exports = router;
+
