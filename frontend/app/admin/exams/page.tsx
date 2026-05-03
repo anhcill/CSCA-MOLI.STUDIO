@@ -377,7 +377,7 @@ export default function ExamsPage() {
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 {exam.shuffle_mode && (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">
-                                                        <FiShuffle size={10} /> Shuffle
+                                                        <FiShuffle size={10} /> Xáo trộn
                                                     </span>
                                                 )}
                                                 {exam.is_premium ? (
@@ -386,15 +386,22 @@ export default function ExamsPage() {
                                                         {exam.vip_tier === 'vip_pro' ? 'PRO' : exam.vip_tier === 'vip_thong_minh' ? 'VIP' : 'VIP'}
                                                     </span>
                                                 ) : (
-                                                    <span className="text-xs text-gray-400 font-medium">Free</span>
+                                                    <span className="text-xs text-gray-400 font-medium">Miễn phí</span>
                                                 )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {exam.start_time ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg">
-                                                    🏢 {new Date(exam.start_time).toLocaleDateString('vi-VN')}
-                                                </span>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg">
+                                                        🏢 {new Date(exam.start_time).toLocaleDateString('vi-VN')}
+                                                    </span>
+                                                    {exam.is_simulated && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-lg">
+                                                            🎯 Mô phỏng
+                                                        </span>
+                                                    )}
+                                                </div>
                                             ) : exam.is_simulated ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-lg">
                                                     🎯 Mô phỏng

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CredentialResponse, GoogleLogin, googleLogout } from '@react-oauth/google';
-import { login, googleAuth, getCurrentUser } from '@/lib/api/auth';
+import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
@@ -24,6 +24,27 @@ export default function LoginForm() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+
+  // ── OTP Step ────────────────────────────────────────────────────────────────
+  const [otpStep, setOtpStep] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [otpResending, setOtpResending] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCountdown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCountdown]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -63,21 +84,38 @@ export default function LoginForm() {
     try {
       const response = await login(formData);
       if (response.success) {
-        const { user: loginUser, token, refreshToken } = response.data;
-        setAuth(loginUser, token, refreshToken);
-        setLoginAttempts(0);
-
-        let effectiveUser = loginUser;
-        try {
-          const me = await getCurrentUser();
-          if (me?.success && me?.data?.user) {
-            effectiveUser = me.data.user;
-            setAuth(effectiveUser, token, refreshToken);
-          }
-        } catch {
-          // Keep fallback
+        // ── OTP Flow ──────────────────────────────────────────────────────
+        if (response.requiresOtp && response.userId) {
+          setPendingUserId(response.userId);
+          setOtpStep(true);
+          setOtpCountdown(60);
+          setOtpValues(['', '', '', '', '', '']);
+          setOtpError('');
+          setIsSubmitting(false);
+          setLoading(false);
+          // Focus first OTP input after render
+          setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+          return;
         }
-        router.push(getDefaultAdminRoute(effectiveUser));
+
+        // ── Direct login (no OTP) ─────────────────────────────────────────
+        if (response.data) {
+          const { user: loginUser, token, refreshToken } = response.data;
+          setAuth(loginUser, token, refreshToken);
+          setLoginAttempts(0);
+
+          let effectiveUser = loginUser;
+          try {
+            const me = await getCurrentUser();
+            if (me?.success && me?.data?.user) {
+              effectiveUser = me.data.user;
+              setAuth(effectiveUser, token, refreshToken);
+            }
+          } catch {
+            // Keep fallback
+          }
+          router.push(getDefaultAdminRoute(effectiveUser));
+        }
       }
     } catch (error: any) {
       const newAttempts = loginAttempts + 1;
@@ -107,7 +145,7 @@ export default function LoginForm() {
 
     try {
       const response = await googleAuth(credentialResponse.credential);
-      if (response.success) {
+      if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
 
@@ -133,6 +171,99 @@ export default function LoginForm() {
 
   const handleGoogleError = () => {
     setErrors({ general: 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
+  };
+
+  // ── OTP Handlers ──────────────────────────────────────────────────────────────
+  const handleOtpChange = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    const newOtp = [...otpValues];
+    newOtp[index] = digit;
+    setOtpValues(newOtp);
+    setOtpError('');
+
+    if (digit && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+
+    const fullOtp = newOtp.join('');
+    if (fullOtp.length === 6) {
+      handleOtpVerify(fullOtp);
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      const newOtp = pasted.split('');
+      setOtpValues(newOtp);
+      setOtpError('');
+      handleOtpVerify(pasted);
+    }
+  };
+
+  const handleOtpVerify = async (otp: string) => {
+    if (!pendingUserId) return;
+    setIsSubmitting(true);
+    setOtpError('');
+
+    try {
+      const response = await verifyOtp(pendingUserId, otp);
+      if (response.success && response.data) {
+        const { user, token, refreshToken } = response.data;
+        setAuth(user, token, refreshToken);
+        setLoginAttempts(0);
+
+        let effectiveUser = user;
+        try {
+          const me = await getCurrentUser();
+          if (me?.success && me?.data?.user) {
+            effectiveUser = me.data.user;
+            setAuth(effectiveUser, token, refreshToken);
+          }
+        } catch { /* keep fallback */ }
+        router.push(getDefaultAdminRoute(effectiveUser));
+      } else {
+        setOtpError(response.message || 'Mã OTP không đúng. Vui lòng thử lại.');
+        setOtpValues(['', '', '', '', '', '']);
+        otpInputRefs.current[0]?.focus();
+      }
+    } catch (error: any) {
+      setOtpError(error.response?.data?.message || 'Mã OTP không đúng. Vui lòng thử lại.');
+      setOtpValues(['', '', '', '', '', '']);
+      otpInputRefs.current[0]?.focus();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingUserId || otpResending) return;
+    setOtpResending(true);
+    try {
+      await resendOtp(pendingUserId);
+      setOtpCountdown(60);
+      setOtpValues(['', '', '', '', '', '']);
+      setOtpError('');
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
+    } catch (error: any) {
+      setOtpError(error.response?.data?.message || 'Không thể gửi lại mã. Vui lòng thử lại.');
+    } finally {
+      setOtpResending(false);
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setOtpStep(false);
+    setPendingUserId(null);
+    setOtpValues(['', '', '', '', '', '']);
+    setOtpError('');
   };
 
   return (
@@ -176,7 +307,75 @@ export default function LoginForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {/* ── OTP Step ─────────────────────────────────────────────────────── */}
+      {otpStep ? (
+        <div className="space-y-6">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">
+              <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Nhập mã xác thực</h2>
+            <p className="text-sm text-gray-500 mt-1">Mã OTP đã được gửi đến email của bạn.</p>
+          </div>
+
+          {/* OTP Input */}
+          <div className="flex justify-center gap-2" onPaste={handleOtpPaste}>
+            {otpValues.map((digit, i) => (
+              <input
+                key={i}
+                ref={el => { otpInputRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={e => handleOtpChange(i, e.target.value)}
+                onKeyDown={e => handleOtpKeyDown(i, e)}
+                disabled={isSubmitting}
+                className={`w-12 h-12 text-center text-2xl font-bold border rounded-xl transition-all outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${digit ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'} ${isSubmitting ? 'opacity-50' : ''}`}
+              />
+            ))}
+          </div>
+
+          {otpError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">
+              {otpError}
+            </div>
+          )}
+
+          {isSubmitting && (
+            <div className="flex justify-center">
+              <svg className="animate-spin h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          )}
+
+          <div className="text-center space-y-2">
+            <p className="text-sm text-gray-500">
+              Không nhận được mã?{' '}
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={otpCountdown > 0 || otpResending}
+                className={`font-semibold ${otpCountdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-500'}`}
+              >
+                {otpCountdown > 0 ? `Gửi lại sau ${otpCountdown}s` : otpResending ? 'Đang gửi...' : 'Gửi lại mã'}
+              </button>
+            </p>
+            <button
+              type="button"
+              onClick={handleBackToLogin}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              ← Quay lại đăng nhập
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-5">
         {errors.general && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
             {errors.general}
@@ -239,6 +438,7 @@ export default function LoginForm() {
           ) : 'Đăng nhập'}
         </button>
       </form>
+      )}
 
       {/* Terms and Privacy Links */}
       <div className="mt-6 pt-5 border-t border-gray-100 space-y-2">

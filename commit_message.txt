@@ -1,0 +1,25 @@
+feat: device management, OTP login, dashboard filters, exam metadata editing
+
+Backend:
+- Add OTP login flow: verifyOtp + resendOtp endpoints
+- Add device sessions management: list, delete individual, delete all
+- Add vip_reminder_logs and user_otps tables (migrations 012, 013)
+- Add email reminders for VIP expiration (3,2,1 days before)
+- Add cleanup script for stale pending transactions (24h)
+- Add date filter to admin dashboard stats (from/to query params)
+- Add revenue stat to dashboard stats endpoint
+
+Frontend:
+- Profile: add "Thiết bị" tab with session list and logout per device
+- Admin dashboard: add date preset filters + custom range + revenue card
+- Exam create: translate all English labels to Vietnamese
+- QuestionEditor: translate all English labels to Vietnamese
+- Exam list: translate "Free" -> "Miễn phí", "Shuffle" -> "Xáo trộn"
+- Fix LoginForm: OTP login form with countdown, paste support
+- Fix TypeScript errors: response.data guards, clipboardData property
+
+Bug fixes:
+- Fix duplicate verifyOtp identifier in authController
+- Fix session filter logic in profile devices tab
+- Fix session maxDevices/currentJti state not loading
+- Fix template literal missing closing brace in LoginForm

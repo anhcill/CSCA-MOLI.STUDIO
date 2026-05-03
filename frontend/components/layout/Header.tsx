@@ -71,8 +71,8 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   return (
-    <header className={`sticky top-0 z-50 transition-all duration-300 ${scrolled ? 'shadow-lg py-1' : 'shadow-sm py-3'} bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
-      <div className="container mx-auto px-4 md:px-6">
+    <header className={`relative overflow-visible sticky top-0 z-[60] transition-all duration-300 ${scrolled ? 'shadow-lg py-1' : 'shadow-sm py-3'} bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
+      <div className="container mx-auto px-4 md:px-6 overflow-visible">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
 
           {/* ── LOGO ── */}
@@ -101,11 +101,12 @@ export default function Header() {
               </Link>
 
             {/* Khóa Học Dropdown */}
-            <div className="relative" ref={courseMenuRef}
-                 onMouseEnter={() => setShowCourseMenu(true)}
-                 onMouseLeave={() => setShowCourseMenu(false)}>
-              <button 
-                onClick={() => setShowCourseMenu(!showCourseMenu)}
+            <div
+              className="relative"
+              ref={courseMenuRef}
+            >
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCourseMenu(v => !v); }}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   pathname.includes('/mon/') || pathname.includes('tiengtrung')
                   ? 'text-violet-700 bg-violet-50'
@@ -115,18 +116,22 @@ export default function Header() {
                 <FiBookOpen className="text-lg" /> Khóa học
                 <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
               </button>
-              
+
               {/* Mega Menu popup */}
-              <div className={`absolute top-full left-0 pt-3 transition-all duration-200 origin-top-left ${showCourseMenu ? 'opacity-100 scale-100 visible' : 'opacity-0 scale-95 invisible'}`}>
-                <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden">
-                  <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
-                  {COURSES.map(course => (
-                    <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
-                      {course.name}
-                    </Link>
-                  ))}
+              {showCourseMenu && (
+                <div className="absolute top-full left-0 pt-3 z-50"
+                  onMouseLeave={() => setShowCourseMenu(false)}>
+                  <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}>
+                    <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
+                    {COURSES.map(course => (
+                      <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
+                        {course.name}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Other static links */}
@@ -149,51 +154,36 @@ export default function Header() {
           </nav>
 
           {/* ── RIGHT ACTIONS ── */}
-          <div className="flex items-center justify-end gap-1 sm:gap-2 md:gap-3 flex-shrink min-w-0">
-            {/* Search Bar - Hidden on small, visible on lg+ */}
-            <div className="hidden lg:block w-48 xl:w-60 flex-shrink-0">
+          <div className="flex items-center justify-end gap-1 sm:gap-2 flex-shrink-0">
+
+            {/* Search Bar - Hidden on mobile/tablet, visible on lg+ */}
+            <div className="hidden lg:block w-48 xl:w-56">
               <SearchBar />
             </div>
 
-            {/* Search icon for tablet (md only, hidden on mobile to avoid overlap) */}
-            <button 
-              onClick={() => setMobileOpen(true)}
-              className="hidden md:block lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-xl transition-colors" 
-              aria-label="Tìm kiếm"
-            >
-              <FiSearch size={20} />
-            </button>
-
-            {/* Theme toggle - hidden on mobile, shown on sm+ */}
+            {/* Theme toggle */}
             <div className="hidden sm:block">
               <ThemeToggle />
             </div>
 
+            {/* VIP Upgrade Banner */}
             {mounted && (!user || !isVipActive(user)) && (
-              <Link href="/vip" className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-sm font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12"></div>
-                <FaCrown className="drop-shadow-sm text-yellow-200 animate-pulse" size={16} /> <span className="tracking-wide">Nâng cấp PRO</span>
+              <Link href="/vip" className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-xs font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300">
+                <FaCrown className="text-yellow-200" size={12} /> <span>Nâng cấp</span>
               </Link>
             )}
 
-            {/* Quests Mock UI - hidden on mobile */}
-            {mounted && isAuthenticated && (
-               <button className="hidden md:flex relative p-2.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all duration-200" title="Nhiệm vụ hàng ngày">
-                  <FiGift size={20} />
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
-               </button>
-            )}
-
-            {/* Notification Bell - hidden on very small screens */}
+            {/* Notification Bell */}
             <div className="hidden sm:block">
               <NotificationBell />
             </div>
 
+            {/* User Avatar / Profile Dropdown */}
             {mounted && isAuthenticated && user ? (
               <div className="relative" ref={userMenuRef}>
                 <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 pr-2 sm:pr-3 py-1.5 rounded-2xl hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200"
+                  onClick={(e) => { e.stopPropagation(); setShowUserMenu(v => !v); }}
+                  className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-2xl hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200"
                 >
                   <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden bg-gradient-to-br from-violet-500 to-indigo-400 flex items-center justify-center ring-2 ring-white shadow-sm flex-shrink-0">
                     {user.avatar
@@ -201,20 +191,20 @@ export default function Header() {
                       : <FiUser size={14} className="text-white" />
                     }
                   </div>
-                  {/* Hide name on mobile to save space */}
-                  <div className="hidden md:flex flex-col items-start leading-tight">
+                  <span className="hidden md:flex flex-col items-start leading-tight">
                      <span className="text-sm font-bold text-gray-800 max-w-[100px] truncate">
                        {user.full_name}
                      </span>
                      {isVipActive(user) && (
-                       <span className="text-[10px] font-bold text-orange-500 tracking-wider">PRO MEMBER</span>
+                       <span className="text-[10px] font-bold text-orange-500 tracking-wider">PRO</span>
                      )}
-                  </div>
-                  <FiChevronDown size={16} className={`hidden md:block text-gray-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
+                  </span>
+                  <FiChevronDown size={14} className={`hidden md:block text-gray-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-3 w-60 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-200">
+                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                    onClick={(e) => e.stopPropagation()}>
                     <div className="px-5 py-3 border-b border-gray-100 mb-2 flex items-center gap-3">
                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
                           {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : <FiUser className="text-gray-400"/>}
@@ -246,19 +236,18 @@ export default function Header() {
                 )}
               </div>
             ) : mounted ? (
-              /* Login/Register buttons - hidden on mobile, shown from sm+ */
-              <div className="hidden sm:flex items-center gap-2 ml-1">
-                <Link href="/login" className="px-4 py-2 rounded-xl text-gray-700 font-bold hover:bg-gray-100 transition-colors text-sm">
+              <div className="flex items-center gap-2">
+                <Link href="/login" className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-gray-700 font-bold hover:bg-gray-100 transition-colors text-sm">
                   Đăng nhập
                 </Link>
-                <Link href="/register" className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-bold shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 text-sm">
+                <Link href="/register" className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-bold shadow-md hover:shadow-lg transition-all text-sm">
                   Đăng ký
                 </Link>
               </div>
             ) : null}
 
             {/* Mobile Hamburger */}
-            <button onClick={() => setMobileOpen(!mobileOpen)} className="xl:hidden p-2 text-gray-800 hover:bg-gray-100 rounded-xl transition-colors shrink-0" aria-label="Menu">
+            <button onClick={() => setMobileOpen(!mobileOpen)} className="xl:hidden p-2 text-gray-800 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Menu">
               {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
             </button>
           </div>

@@ -18,6 +18,10 @@ router.post("/reset-password", authController.resetPassword);
 
 router.post("/verify-email", authController.verifyEmail);
 
+// OTP routes
+router.post("/otp/verify", authController.verifyOtp);
+router.post("/otp/resend", authController.resendOtp);
+
 // Device session management
 router.get("/sessions", authenticate, async (req, res) => {
   try {

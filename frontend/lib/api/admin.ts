@@ -46,8 +46,9 @@ export interface AdminActivityFilters {
 
 export const adminApi = {
     // Get dashboard statistics
-    async getDashboardStats() {
-        const response = await axios.get('/admin/stats');
+    async getDashboardStats(query = '') {
+        const url = `/admin/stats${query ? query : ''}`;
+        const response = await axios.get(url);
         return response.data;
     },
 

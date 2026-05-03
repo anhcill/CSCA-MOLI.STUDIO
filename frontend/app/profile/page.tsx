@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { updateProfile, updateAvatar, getUserStats, changePassword, UserStats } from '@/lib/api/users';
 import axios from '@/lib/utils/axios';
 import { canAccessAdminPanel } from '@/lib/utils/permissions';
+import { getCurrentUser } from '@/lib/api/auth';
 import Header from '@/components/layout/Header';
 import { AIInsights } from '@/components/ai/AIInsights';
 import {
@@ -12,7 +13,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap,
+  FiStar, FiZap, FiMonitor,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -111,16 +112,24 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
 export default function ProfilePage() {
   const { user: authUser, updateUser, logout } = useAuthStore();
 
-  const [localUser, setLocalUser] = useState(authUser);
+  const [mounted, setMounted] = useState(false);
+  const [profileUser, setProfileUser] = useState(authUser);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings' | 'devices'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   const [packages, setPackages] = useState<any[]>([]);
   const [pkgsLoading, setPkgsLoading] = useState(false);
+
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState('');
+  const [sessionsFetched, setSessionsFetched] = useState(false);
+  const [sessionMaxDevices, setSessionMaxDevices] = useState(1);
+  const [sessionCurrentJti, setSessionCurrentJti] = useState('');
 
   const [formData, setFormData] = useState({
     full_name: authUser?.full_name || '',
@@ -136,6 +145,41 @@ export default function ProfilePage() {
   const [notifEmail, setNotifEmail] = useState(true);
   const [publicProfile, setPublicProfile] = useState(true);
 
+  // Hydration guard
+  useEffect(() => { setMounted(true); }, []);
+
+  // Keep profileUser in sync with authUser
+  useEffect(() => {
+    if (authUser) setProfileUser(authUser);
+  }, [authUser]);
+
+  // Keep formData and avatarPreview in sync when authUser changes
+  useEffect(() => {
+    if (authUser) {
+      setFormData({
+        full_name: authUser.full_name || '',
+        bio: authUser.bio || '',
+        target_score: authUser.target_score?.toString() || '',
+      });
+      setAvatarPreview(authUser.avatar || '');
+    }
+  }, [authUser]);
+
+  // Fetch fresh user data on mount
+  useEffect(() => {
+    if (!mounted) return;
+    getCurrentUser()
+      .then(res => {
+        if (res?.success && res?.data?.user) {
+          const fresh = res.data.user;
+          setProfileUser(fresh);
+          updateUser(fresh);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
+  }, [mounted]);
+
   useEffect(() => {
     if (!authUser?.id) return;
     getUserStats(authUser.id)
@@ -143,11 +187,6 @@ export default function ProfilePage() {
       .catch(() => { })
       .finally(() => setStatsLoading(false));
   }, [authUser?.id]);
-
-  useEffect(() => {
-    setLocalUser(authUser);
-    setAvatarPreview(authUser?.avatar || '');
-  }, [authUser]);
 
   useEffect(() => {
     if (activeTab === 'vip' && packages.length === 0) {
@@ -159,6 +198,29 @@ export default function ProfilePage() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'devices') {
+      setSessionsFetched(false);
+      setSessions([]);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!mounted || activeTab !== 'devices' || sessionsFetched) return;
+    setSessionsLoading(true);
+    setSessionsError('');
+    axios.get('/auth/sessions')
+      .then(res => {
+        const data = res.data?.data || {};
+        setSessions(data?.sessions || []);
+        setSessionMaxDevices(data?.maxDevices || 1);
+        setSessionCurrentJti(data?.currentJti || '');
+        setSessionsFetched(true);
+      })
+      .catch(() => setSessionsError('Không thể tải danh sách thiết bị'))
+      .finally(() => setSessionsLoading(false));
+  }, [activeTab, mounted, sessionsFetched]);
+
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -166,12 +228,12 @@ export default function ProfilePage() {
 
   const initEdit = () => {
     setFormData({
-      full_name: localUser?.full_name || '',
-      bio: localUser?.bio || '',
-      target_score: localUser?.target_score?.toString() || '',
+      full_name: profileUser?.full_name || '',
+      bio: profileUser?.bio || '',
+      target_score: profileUser?.target_score?.toString() || '',
     });
     setAvatarFile(null);
-    setAvatarPreview(localUser?.avatar || '');
+    setAvatarPreview(profileUser?.avatar || '');
     setIsEditing(true);
   };
 
@@ -189,7 +251,7 @@ export default function ProfilePage() {
   };
 
   const handleSaveInfo = useCallback(async () => {
-    if (!localUser?.id) return;
+    if (!profileUser?.id) return;
     setSaving(true);
     try {
       const upd: Record<string, any> = {};
@@ -197,7 +259,7 @@ export default function ProfilePage() {
       if (formData.bio !== undefined) upd.bio = formData.bio;
       if (formData.target_score) upd.target_score = Number(formData.target_score);
 
-      const res = await updateProfile(localUser.id, upd);
+      const res = await updateProfile(profileUser.id, upd);
       let updated = res.data.user;
 
       if (avatarFile) {
@@ -207,12 +269,12 @@ export default function ProfilePage() {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         const avatarUrl = uploadRes.data.data.url;
-        const avatarRes = await updateAvatar(localUser.id, avatarUrl);
+        const avatarRes = await updateAvatar(profileUser.id, avatarUrl);
         updated = avatarRes.data.user;
       }
 
       updateUser(updated);
-      setLocalUser(updated);
+      setProfileUser(updated);
       setIsEditing(false);
       setAvatarFile(null);
       showToast('Cập nhật thành công!');
@@ -221,17 +283,17 @@ export default function ProfilePage() {
     } finally {
       setSaving(false);
     }
-  }, [localUser, formData, avatarFile, updateUser]);
+  }, [profileUser, formData, avatarFile, updateUser]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwError('');
-    if (!localUser?.id) return;
+    if (!profileUser?.id) return;
     if (pwForm.next !== pwForm.confirm) { setPwError('Mật khẩu không khớp'); return; }
     if (pwForm.next.length < 8) { setPwError('Mật khẩu phải có ít nhất 8 ký tự'); return; }
     setPwSaving(true);
     try {
-      await changePassword(localUser.id, pwForm.current, pwForm.next);
+      await changePassword(profileUser.id, pwForm.current, pwForm.next);
       setPwForm({ current: '', next: '', confirm: '' });
       showToast('Đổi mật khẩu thành công!');
     } catch (err: any) {
@@ -241,13 +303,13 @@ export default function ProfilePage() {
     }
   };
 
-  const displayName = localUser?.full_name || (localUser as any)?.display_name || localUser?.username || 'U';
+  const displayName = profileUser?.full_name || (profileUser as any)?.display_name || profileUser?.username || 'U';
   const avatarLetter = displayName.charAt(0).toUpperCase();
-  const joinDate = localUser?.created_at
-    ? new Date(localUser.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })
+  const joinDate = profileUser?.created_at
+    ? new Date(profileUser.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })
     : '';
 
-  if (!localUser) {
+  if (!profileUser) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -258,8 +320,8 @@ export default function ProfilePage() {
     );
   }
 
-  const vipDaysLeft = localUser?.is_vip && localUser?.vip_expires_at
-    ? Math.max(0, Math.ceil((new Date(localUser.vip_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+  const vipDaysLeft = profileUser?.is_vip && profileUser?.vip_expires_at
+    ? Math.max(0, Math.ceil((new Date(profileUser.vip_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null;
 
   return (
@@ -286,7 +348,7 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
-                  {localUser?.is_vip && (
+                  {profileUser?.is_vip && (
                     <span className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
                       <FaCrown size={10} /> PRO
                       {vipDaysLeft !== null && vipDaysLeft > 0 && (
@@ -295,16 +357,16 @@ export default function ProfilePage() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-400">@{localUser.username}</p>
+                <p className="text-sm text-gray-400">@{profileUser.username}</p>
                 <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
-                  <FiMail size={11} /><span>{localUser.email}</span>
+                  <FiMail size={11} /><span>{profileUser.email}</span>
                 </div>
                 {joinDate && (
                   <div className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-400">
                     <FiCalendar size={11} /><span>Tham gia {joinDate}</span>
                   </div>
                 )}
-                {localUser.bio && <p className="mt-2 text-sm text-gray-600 max-w-sm">{localUser.bio}</p>}
+                {profileUser.bio && <p className="mt-2 text-sm text-gray-600 max-w-sm">{profileUser.bio}</p>}
               </div>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
@@ -314,13 +376,13 @@ export default function ProfilePage() {
               >
                 {isEditing ? <><FiX size={14} />Hủy</> : <><FiEdit2 size={14} />Chỉnh sửa</>}
               </button>
-              {localUser.target_score && (
+              {profileUser.target_score && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600">
                   <FiTarget size={12} className="text-gray-400" />
-                  Mục tiêu: <span className="font-semibold text-gray-800">{localUser.target_score} điểm</span>
+                  Mục tiêu: <span className="font-semibold text-gray-800">{profileUser.target_score} điểm</span>
                 </div>
               )}
-              {canAccessAdminPanel(localUser) && (
+              {canAccessAdminPanel(profileUser) && (
                 <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-medium">Admin</span>
               )}
             </div>
@@ -334,6 +396,7 @@ export default function ProfilePage() {
               { key: 'info', label: 'Thông tin', icon: FiUser },
               { key: 'stats', label: 'Thống kê', icon: FiAward },
               { key: 'vip', label: 'VIP', icon: FaCrown },
+              { key: 'devices', label: 'Thiết bị', icon: FiMonitor },
               { key: 'settings', label: 'Cài đặt', icon: FiShield },
             ] as const).map(tab => {
               const I = tab.icon;
@@ -405,14 +468,14 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-0">
-                  <InfoRow icon={FiUser} label="Họ và tên" value={localUser.full_name || '—'} />
-                  <InfoRow icon={FiMail} label="Email" value={localUser.email} />
-                  <InfoRow icon={FiUser} label="Tên đăng nhập" value={`@${localUser.username}`} />
-                  <InfoRow icon={FiBook} label="Giới thiệu" value={localUser.bio || 'Chưa có giới thiệu'} />
-                  <InfoRow icon={FiTarget} label="Điểm mục tiêu" value={localUser.target_score ? `${localUser.target_score} điểm` : 'Chưa đặt'} />
+                  <InfoRow icon={FiUser} label="Họ và tên" value={profileUser.full_name || '—'} />
+                  <InfoRow icon={FiMail} label="Email" value={profileUser.email} />
+                  <InfoRow icon={FiUser} label="Tên đăng nhập" value={`@${profileUser.username}`} />
+                  <InfoRow icon={FiBook} label="Giới thiệu" value={profileUser.bio || 'Chưa có giới thiệu'} />
+                  <InfoRow icon={FiTarget} label="Điểm mục tiêu" value={profileUser.target_score ? `${profileUser.target_score} điểm` : 'Chưa đặt'} />
                   <InfoRow icon={FiCalendar} label="Tham gia" value={joinDate} />
-                  {localUser.is_vip && localUser.vip_expires_at && (
-                    <InfoRow icon={FaCrown} label="Hạn VIP" value={new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })} />
+                  {profileUser.is_vip && profileUser.vip_expires_at && (
+                    <InfoRow icon={FaCrown} label="Hạn VIP" value={new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })} />
                   )}
                 </div>
               )}
@@ -434,23 +497,23 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
-              {!statsLoading && stats && localUser.target_score && (
+              {!statsLoading && stats && profileUser.target_score && (
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-600">Tiến độ đến mục tiêu</span>
-                    <span className="text-sm font-semibold text-gray-800">{stats.avg_score}/{localUser.target_score}</span>
+                    <span className="text-sm font-semibold text-gray-800">{stats.avg_score}/{profileUser.target_score}</span>
                   </div>
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div className="h-full bg-gray-900 rounded-full transition-all duration-700"
-                      style={{ width: `${Math.min((stats.avg_score / localUser.target_score) * 100, 100)}%` }} />
+                      style={{ width: `${Math.min((stats.avg_score / profileUser.target_score) * 100, 100)}%` }} />
                   </div>
                   <p className="text-xs text-gray-400 mt-1.5">
-                    {Math.round((stats.avg_score / localUser.target_score) * 100)}% đạt mục tiêu
+                    {Math.round((stats.avg_score / profileUser.target_score) * 100)}% đạt mục tiêu
                   </p>
                 </div>
               )}
               <div className="border-t border-gray-100 pt-6">
-                <AIInsights userId={localUser.id} />
+                <AIInsights userId={profileUser.id} />
               </div>
             </div>
           )}
@@ -458,13 +521,13 @@ export default function ProfilePage() {
           {/* ── Tab: VIP ─────────────────────────────────── */}
           {activeTab === 'vip' && (
             <div className="p-6 space-y-6">
-              <div className={`rounded-2xl border p-6 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>
+              <div className={`rounded-2xl border p-6 ${profileUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>
                 <div className="flex items-start gap-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${localUser?.is_vip ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${profileUser?.is_vip ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
                     <FaCrown className="text-white" size={24} />
                   </div>
                   <div className="flex-1">
-                    {localUser?.is_vip ? (
+                    {profileUser?.is_vip ? (
                       <>
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="text-lg font-black text-amber-900">Bạn đang là thành viên PRO</h3>
@@ -474,7 +537,7 @@ export default function ProfilePage() {
                         </div>
                         <p className="text-sm text-amber-700">
                           Hạn VIP: <span className="font-bold">
-                            {localUser.vip_expires_at ? new Date(localUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                            {profileUser.vip_expires_at ? new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
                           </span>
                           {vipDaysLeft !== null && (
                             <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
@@ -508,16 +571,28 @@ export default function ProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {packages.map(pkg => {
                       const ui = derivePackageUI(pkg);
-                      // Vô hiệu hóa nếu người dùng đang dùng gói cùng tier, hoặc nếu current tier = premium mà gói này là vip
-                      const isCurrentTier = localUser?.is_vip && localUser?.subscription_tier === ui.tier;
-                      const isLowerTier = localUser?.is_vip && localUser?.subscription_tier === 'premium' && ui.tier === 'vip';
-                      const disabled = isCurrentTier || isLowerTier;
-                      
+                      const userTier = profileUser?.subscription_tier;
+                      const isVipUser = !!profileUser?.is_vip;
+
+                      // Đang dùng gói cùng tier (subscription_tier đã load)
+                      const sameTier = isVipUser && userTier === ui.tier;
+                      // Premium hạ cấp sang VIP → không cho
+                      const downgradeBlocked = isVipUser && userTier === 'premium' && ui.tier === 'vip';
+                      // User VIP nhưng subscription_tier chưa load → tạm thời block để tránh duplicate purchase
+                      const tierUnknown = isVipUser && !userTier;
+
+                      const disabled = sameTier || downgradeBlocked || tierUnknown;
+
                       return (
-                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden`}>
-                          {isCurrentTier && (
+                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden ${disabled ? 'opacity-70' : ''}`}>
+                          {sameTier && (
                              <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                               Đang dùng
+                               ✓ Đang dùng
+                             </div>
+                          )}
+                          {downgradeBlocked && (
+                             <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
+                               ↓ Hạ cấp
                              </div>
                           )}
                           <div className="flex items-center gap-2 mb-3">
@@ -536,7 +611,7 @@ export default function ProfilePage() {
                           <ul className="space-y-2 mb-4">
                             {(pkg.features || []).slice(0, 4).map((f: string, i: number) => (
                               <li key={i} className="flex items-center gap-2 text-xs text-gray-600 min-h-[20px]">
-                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" /> 
+                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" />
                                 <span className="leading-tight">{f}</span>
                               </li>
                             ))}
@@ -544,19 +619,140 @@ export default function ProfilePage() {
                                <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
                             )}
                           </ul>
-                          <button 
-                            disabled={disabled}
-                            onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`} 
-                            className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-transparent shadow-inner' : `bg-white ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}`}
-                          >
-                            {isCurrentTier ? 'Gói hiện tại' : isLowerTier ? 'Không khả dụng' : 'Đăng ký ngay'}
-                          </button>
+                          {sameTier ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-green-200 bg-green-50 text-green-700">
+                              ✓ Đang sử dụng gói này
+                            </div>
+                          ) : downgradeBlocked ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                              Bạn đang dùng Premium — không thể hạ cấp
+                            </div>
+                          ) : tierUnknown ? (
+                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-500">
+                              Đang tải trạng thái...
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`}
+                              className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}
+                            >
+                              {isVipUser && ui.tier === 'premium' ? 'Nâng cấp lên Premium' : isVipUser ? 'Gia hạn' : 'Đăng ký ngay'}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── Tab: Thiết bị ─────────────────────────────── */}
+          {activeTab === 'devices' && (
+            <div className="p-6 space-y-5">
+              {sessionsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-100 rounded animate-pulse w-1/3" />
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-1/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : sessionsError ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+                    <FiAlertTriangle size={20} className="text-red-400" />
+                  </div>
+                  <p className="text-sm text-gray-500">{sessionsError}</p>
+                  <button onClick={() => { setSessions([]); setSessionsFetched(false); }}
+                    className="mt-3 text-sm text-gray-600 hover:text-gray-900 underline">Thử lại</button>
+                </div>
+              ) : sessions.length <= 1 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                    <FiMonitor size={20} className="text-gray-400" />
+                  </div>
+                  <p className="text-sm text-gray-500">Chỉ có một thiết bị được đăng nhập</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <FiMonitor size={14} className="text-gray-400" />
+                      <span>{sessions.length}/{sessions.length} thiết bị đang dùng</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sessions.map(session => {
+                      const isCurrent = session.jti === sessionCurrentJti;
+                      const deviceParts = session.device_info?.split(' on ') || [];
+                      const browser = deviceParts[0] || 'Trình duyệt';
+                      const os = deviceParts[1] || 'Hệ điều hành';
+
+                      const lastActive = session.last_active
+                        ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : '—';
+
+                      return (
+                        <div key={session.id || session.jti} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-gray-200 transition-colors">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                            <FiMonitor size={18} className="text-gray-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-800 truncate">{browser} trên {os}</p>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full shrink-0">Hiện tại</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-xs text-gray-400">{session.ip_address || '—'}</span>
+                              <span className="text-xs text-gray-400">•</span>
+                              <span className="text-xs text-gray-400">Hoạt động: {lastActive}</span>
+                            </div>
+                          </div>
+                          {!isCurrent && (
+                            <button onClick={async () => {
+                              if (!confirm('Đăng xuất thiết bị này?')) return;
+                              try {
+                                await axios.delete(`/auth/sessions/${session.jti}`);
+                                setSessions(prev => prev.filter(s => s.jti !== session.jti));
+                                showToast('Đăng xuất thiết bị thành công');
+                              } catch {
+                                showToast('Không thể đăng xuất thiết bị', 'error');
+                              }
+                            }}
+                              className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                              Đăng xuất
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button onClick={async () => {
+                    if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
+                    try {
+                      await axios.delete('/auth/sessions');
+                      const current = sessions.find(s => s.jti === (window as any).__currentJti);
+                      setSessions(current ? [current] : []);
+                      showToast('Đã đăng xuất khỏi các thiết bị khác');
+                    } catch {
+                      showToast('Không thể đăng xuất các thiết bị khác', 'error');
+                    }
+                  }}
+                    className="w-full py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                    Đăng xuất tất cả thiết bị khác
+                  </button>
+                </>
+              )}
             </div>
           )}
 

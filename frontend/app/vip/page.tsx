@@ -82,15 +82,20 @@ export default function VipPricingPage() {
     router.push(`/checkout?${params.toString()}`);
   };
 
-  const handleApplyCoupon = async (pkg: VipPackage) => {
+  const handleApplyCoupon = async (pkg?: VipPackage) => {
+    const targetPkg = pkg || selectedPkg;
     if (!couponInput.trim()) {
       setCouponError('Vui lòng nhập mã giảm giá');
+      return;
+    }
+    if (!targetPkg) {
+      setCouponError('Vui lòng chọn một gói trước');
       return;
     }
     setCouponLoading(true);
     setCouponError('');
     try {
-      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(couponInput.trim())}&package_id=${pkg.id}`);
+      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(couponInput.trim())}&package_id=${targetPkg.id}`);
       if (res.data.success) {
         const data = res.data.data;
         const d: Discount = {
@@ -98,7 +103,7 @@ export default function VipPricingPage() {
           discount_amount: data.discount_amount,
           original_amount: data.original_amount,
           final_amount: data.final_amount,
-          package_id: pkg.id,
+          package_id: targetPkg.id,
         };
         setAppliedDiscount(d);
         setCouponResult(data);
@@ -186,11 +191,11 @@ export default function VipPricingPage() {
                       type="text"
                       value={couponInput}
                       onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError(''); }}
-                      onKeyDown={e => e.key === 'Enter' && packages[0] && handleApplyCoupon(packages[0])}
+                      onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
                       placeholder="Nhập mã giảm giá (VD: SUMMER25)"
                       className="flex-1 px-4 py-2.5 border border-violet-200 rounded-xl text-sm font-mono uppercase tracking-wider focus:ring-2 focus:ring-violet-500 outline-none bg-white" />
                     <button
-                      onClick={() => packages[0] && handleApplyCoupon(packages[0])}
+                      onClick={() => handleApplyCoupon()}
                       disabled={couponLoading || !couponInput.trim()}
                       className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors">
                       {couponLoading ? <FiLoader size={15} className="animate-spin" /> : 'Áp dụng'}
@@ -445,7 +450,9 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
               : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
         >
-          {isVip ? 'Gia hạn ngay' : 'Nâng cấp ngay'}
+          {!isVip ? 'Nâng cấp ngay'
+            : isPremium ? 'Nâng cấp lên Premium'
+            : 'Gia hạn ngay'}
         </button>
       </div>
     </div>

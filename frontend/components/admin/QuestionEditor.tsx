@@ -52,7 +52,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
     const handleSave = () => {
         // Validation
         if (!formData.questionText.trim() && !formData.questionTextCn.trim()) {
-            alert('Please enter question text in English or Chinese');
+            alert('Vui lòng nhập nội dung câu hỏi (Tiếng Anh hoặc Tiếng Trung)');
             return;
         }
 
@@ -60,7 +60,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
             (a) => a.text.trim() || a.textCn.trim()
         );
         if (!hasAllAnswers) {
-            alert('Each answer must have English or Chinese text');
+            alert('Mỗi đáp án phải có nội dung (Tiếng Anh hoặc Tiếng Trung)');
             return;
         }
 
@@ -156,18 +156,18 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
             {/* Question Text */}
             <div className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Question Text (English)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung câu hỏi (Tiếng Anh)</label>
                     <textarea
                         value={formData.questionText}
                         onChange={(e) => setFormData({ ...formData, questionText: e.target.value })}
                         rows={3}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Enter question text in English..."
+                        placeholder="Nhập nội dung câu hỏi bằng Tiếng Anh..."
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Question Text (Chinese)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nội dung câu hỏi (Tiếng Trung)</label>
                     <textarea
                         value={formData.questionTextCn}
                         onChange={(e) => setFormData({ ...formData, questionTextCn: e.target.value })}
@@ -179,14 +179,14 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
 
                 {/* Question Image */}
                 <ImageUpload
-                    label="Question Image (Optional)"
+                    label="Hình ảnh câu hỏi (Tùy chọn)"
                     currentImage={formData.imageUrl}
                     onImageUploaded={(url) => setFormData({ ...formData, imageUrl: url })}
                 />
 
                 {/* Points */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Points</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Điểm số</label>
                     <input
                         type="number"
                         value={formData.points}
@@ -215,7 +215,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                             onClick={addOption}
                             className="text-sm px-3 py-1.5 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 font-bold"
                         >
-                            + Thêm Tùy Chọn Option
+                            + Thêm Lựa Chọn
                         </button>
                     )}
                 </div>
@@ -239,9 +239,9 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                                 onChange={() => setFormData({ ...formData, correctAnswer: key })}
                                 className="w-5 h-5 text-blue-600"
                             />
-                            <span className="font-semibold text-gray-900">Option {key}</span>
+                            <span className="font-semibold text-gray-900">Phương án {key}</span>
                             {formData.correctAnswer === key && (
-                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Correct Answer</span>
+                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Đáp án đúng</span>
                             )}
                         </div>
 
@@ -255,7 +255,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                                     setFormData({ ...formData, answers: newAnswers });
                                 }}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Answer text (English)..."
+                                placeholder="Nhập nội dung đáp án (Tiếng Anh)..."
                             />
                         </div>
 
@@ -274,7 +274,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                         </div>
 
                         <ImageUpload
-                            label={`Option ${key} Image (Optional)`}
+                            label={`Hình ảnh phương án ${key} (Tùy chọn)`}
                             currentImage={formData.answers[index].imageUrl}
                             onImageUploaded={(url) => {
                                 const newAnswers = [...formData.answers];
@@ -288,21 +288,21 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
 
             {/* Explanation */}
             <div className="space-y-4">
-                <h4 className="font-semibold text-gray-900">Explanation (Optional)</h4>
+                <h4 className="font-semibold text-gray-900">Giải thích đáp án (Tùy chọn)</h4>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Explanation (English)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Giải thích (Tiếng Anh)</label>
                     <textarea
                         value={formData.explanation}
                         onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
                         rows={2}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Explain the correct answer..."
+                        placeholder="Giải thích đáp án đúng bằng Tiếng Anh..."
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Explanation (Chinese)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Giải thích (Tiếng Trung)</label>
                     <textarea
                         value={formData.explanationCn}
                         onChange={(e) => setFormData({ ...formData, explanationCn: e.target.value })}

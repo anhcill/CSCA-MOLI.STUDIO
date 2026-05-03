@@ -68,7 +68,7 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      const { title, duration, totalPoints, description, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -84,6 +84,7 @@ const AdminExamController = {
       if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description); }
       if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
       if (is_premium !== undefined) { updates.push(`is_premium = $${idx++}`); params.push(is_premium === true); }
+      if (allow_download !== undefined) { updates.push(`allow_download = $${idx++}`); params.push(allow_download === true); }
       if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url); }
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }

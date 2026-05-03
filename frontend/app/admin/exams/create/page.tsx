@@ -35,6 +35,8 @@ export default function CreateExamPage() {
         solution_description: '',
         vip_tier: 'basic',
         is_simulated: false,
+        start_time: '',
+        end_time: '',
     });
 
     const parseDecimal = (raw: string) => {
@@ -47,6 +49,9 @@ export default function CreateExamPage() {
     // Questions with unique IDs
     const [questions, setQuestions] = useState<(QuestionFormData & { _id: string })[]>([]);
     const [currentExamId, setCurrentExamId] = useState<number | null>(null);
+    const [examMetadataDirty, setExamMetadataDirty] = useState(false);
+    const [savingMetadata, setSavingMetadata] = useState(false);
+    const [metadataSaved, setMetadataSaved] = useState(false);
     const [mounted, setMounted] = useState(false);
 
     // Restore currentExamId from sessionStorage after mount (client-side only)
@@ -109,7 +114,7 @@ export default function CreateExamPage() {
 
     const createExam = async () => {
         if (!examData.title || !examData.subjectId) {
-            alert('Please enter exam title and select subject');
+            alert('Vui lòng nhập tên đề thi và chọn môn học');
             return;
         }
 
@@ -117,12 +122,28 @@ export default function CreateExamPage() {
             setLoading(true);
             const response = await examAdminApi.createExam(examData);
             setCurrentExamId(response.exam.id);
-            alert('Exam created! Now add questions.');
+            alert('Đề thi đã được tạo! Giờ hãy thêm câu hỏi.');
         } catch (error) {
             console.error('Error creating exam:', error);
-            alert('Failed to create exam');
+            alert('Tạo đề thi thất bại');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const saveMetadata = async () => {
+        if (!currentExamId) return;
+        try {
+            setSavingMetadata(true);
+            await examAdminApi.updateExam(currentExamId, examData);
+            setExamMetadataDirty(false);
+            setMetadataSaved(true);
+            setTimeout(() => setMetadataSaved(false), 2000);
+        } catch (error) {
+            console.error('Error saving metadata:', error);
+            alert('Lưu metadata thất bại');
+        } finally {
+            setSavingMetadata(false);
         }
     };
 
@@ -147,14 +168,14 @@ export default function CreateExamPage() {
 
     const saveQuestion = async (index: number, data: QuestionFormData) => {
         if (!currentExamId) {
-            alert('Please create exam first');
+            alert('Vui lòng tạo đề thi trước');
             return;
         }
 
         try {
             setLoading(true);
             await examAdminApi.addQuestion(currentExamId, data);
-            alert(`Question ${index + 1} saved!`);
+            alert(`Câu hỏi ${index + 1} đã được lưu!`);
 
             // Update local state
             const newQuestions = [...questions];
@@ -162,14 +183,14 @@ export default function CreateExamPage() {
             setQuestions(newQuestions);
         } catch (error) {
             console.error('Error saving question:', error);
-            alert('Failed to save question');
+            alert('Lưu câu hỏi thất bại');
         } finally {
             setLoading(false);
         }
     };
 
     const deleteQuestion = (index: number) => {
-        if (confirm('Delete this question?')) {
+        if (confirm('Xóa câu hỏi này?')) {
             const newQuestions = questions.filter((_, i) => i !== index);
             setQuestions(newQuestions);
         }
@@ -177,23 +198,39 @@ export default function CreateExamPage() {
 
     const publishExam = async () => {
         if (!currentExamId) {
-            alert('Please create exam and add questions first');
+            alert('Vui lòng tạo đề thi và thêm câu hỏi trước');
             return;
         }
 
         if (questions.length === 0) {
-            alert('Please add at least one question');
+            alert('Vui lòng thêm ít nhất một câu hỏi');
             return;
         }
 
         try {
             setLoading(true);
+
+            // Publish exam
             await examAdminApi.updateExam(currentExamId, { status: 'published' } as any);
-            alert('Exam published successfully!');
+
+            // Set schedule if start_time is provided
+            if (examData.start_time) {
+                try {
+                    await examAdminApi.setSchedule(currentExamId, {
+                        start_time: examData.start_time,
+                        end_time: examData.end_time || null,
+                    });
+                } catch (scheduleErr) {
+                    console.warn('Could not set schedule:', scheduleErr);
+                }
+            }
+
+            alert('Xuất bản đề thi thành công!');
+            sessionStorage.removeItem('currentExamId');
             router.push('/admin/exams');
         } catch (error) {
             console.error('Error publishing exam:', error);
-            alert('Failed to publish exam');
+            alert('Xuất bản đề thi thất bại');
         } finally {
             setLoading(false);
         }
@@ -204,36 +241,39 @@ export default function CreateExamPage() {
             <div className="max-w-5xl mx-auto px-6">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">Create New Exam</h1>
-                    <p className="text-gray-600 mt-2">Fill in exam details and add questions</p>
+                    <h1 className="text-3xl font-bold text-gray-900">Tạo Đề Thi Mới</h1>
+                    <p className="text-gray-600 mt-2">Nhập thông tin đề thi và thêm câu hỏi</p>
                 </div>
 
                 {/* Exam Metadata Form */}
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 mb-8">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Exam Information</h2>
+                    {currentExamId && (
+                        <div className="mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                            ✏️ Đã tạo đề — Metadata có thể chỉnh sửa
+                        </div>
+                    )}
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Thông Tin Đề Thi</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Exam Title *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tên đề thi *</label>
                             <input
                                 type="text"
                                 value={examData.title}
-                                onChange={(e) => setExamData({ ...examData, title: e.target.value })}
+                                onChange={(e) => { setExamData({ ...examData, title: e.target.value }); setExamMetadataDirty(true); }}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Enter exam title..."
-                                disabled={!!currentExamId}
+                                placeholder="Nhập tên đề thi..."
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Subject *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Môn học *</label>
                             <select
                                 value={examData.subjectId}
-                                onChange={(e) => setExamData({ ...examData, subjectId: parseInt(e.target.value) })}
+                                onChange={(e) => { setExamData({ ...examData, subjectId: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                disabled={!!currentExamId}
                             >
-                                <option value={0}>Select subject...</option>
+                                <option value={0}>Chọn môn học...</option>
                                 {Array.isArray(subjects) && subjects.map(subject => (
                                     <option key={subject.id} value={subject.id}>{subject.name}</option>
                                 ))}
@@ -241,38 +281,35 @@ export default function CreateExamPage() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Thời gian (phút)</label>
                             <input
                                 type="number"
                                 value={examData.duration}
-                                onChange={(e) => setExamData({ ...examData, duration: parseInt(e.target.value) })}
+                                onChange={(e) => { setExamData({ ...examData, duration: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                disabled={!!currentExamId}
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Total Points</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tổng điểm</label>
                             <input
                                 type="number"
                                 value={examData.totalPoints}
-                                onChange={(e) => setExamData({ ...examData, totalPoints: parseDecimal(e.target.value) })}
+                                onChange={(e) => { setExamData({ ...examData, totalPoints: parseDecimal(e.target.value) }); setExamMetadataDirty(true); }}
                                 min="0"
                                 step="0.1"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                disabled={!!currentExamId}
                             />
                         </div>
 
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
                             <textarea
                                 value={examData.description}
-                                onChange={(e) => setExamData({ ...examData, description: e.target.value })}
+                                onChange={(e) => { setExamData({ ...examData, description: e.target.value }); setExamMetadataDirty(true); }}
                                 rows={3}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Enter exam description..."
-                                disabled={!!currentExamId}
+                                placeholder="Nhập mô tả đề thi..."
                             />
                         </div>
 
@@ -305,8 +342,7 @@ export default function CreateExamPage() {
                                     <input
                                         type="checkbox"
                                         checked={examData.is_premium}
-                                        onChange={(e) => setExamData({ ...examData, is_premium: e.target.checked })}
-                                        disabled={!!currentExamId}
+                                        onChange={(e) => { setExamData({ ...examData, is_premium: e.target.checked }); setExamMetadataDirty(true); }}
                                         className="sr-only"
                                     />
                                     <div className={`w-11 h-6 rounded-full transition-colors ${examData.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'}`} />
@@ -348,8 +384,7 @@ export default function CreateExamPage() {
                                     <input
                                         type="checkbox"
                                         checked={examData.is_simulated}
-                                        onChange={(e) => setExamData({ ...examData, is_simulated: e.target.checked })}
-                                        disabled={!!currentExamId}
+                                        onChange={(e) => { setExamData({ ...examData, is_simulated: e.target.checked }); setExamMetadataDirty(true); }}
                                         className="sr-only"
                                     />
                                     <div className={`w-11 h-6 rounded-full transition-colors ${examData.is_simulated ? 'bg-gradient-to-r from-pink-500 to-rose-600' : 'bg-gray-300'}`} />
@@ -360,6 +395,37 @@ export default function CreateExamPage() {
                                 </div>
                             </label>
                             <p className="text-xs text-gray-400 mt-1 ml-14">Sử dụng cho hệ thống hiển thị trong giao diện lộ trình ôn luyện.</p>
+                        </div>
+
+                        {/* ── Phòng thi: Schedule ─────────────────────────────────── */}
+                        <div className="md:col-span-2">
+                            <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-base">🏢</span>
+                                    <h3 className="text-sm font-bold text-indigo-800">Đặt lịch Phòng thi</h3>
+                                </div>
+                                <p className="text-xs text-indigo-600 mb-3">Nếu có lịch thi, đề sẽ được xếp vào tab "Phòng thi". Để trống = đề Tự do / Mô phỏng.</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-semibold text-indigo-700 mb-1 block">Mở cổng thi lúc</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={examData.start_time}
+                                            onChange={e => setExamData(prev => ({ ...prev, start_time: e.target.value }))}
+                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-semibold text-indigo-700 mb-1 block">Đóng cổng thi lúc</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={examData.end_time}
+                                            onChange={e => setExamData(prev => ({ ...prev, end_time: e.target.value }))}
+                                            className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* VIP Tier */}
@@ -406,8 +472,24 @@ export default function CreateExamPage() {
                             disabled={loading}
                             className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
-                            {loading ? 'Creating...' : 'Create Exam'}
+                            {loading ? 'Đang tạo...' : 'Tạo Đề Thi'}
                         </button>
+                    )}
+
+                    {currentExamId && examMetadataDirty && (
+                        <button
+                            onClick={saveMetadata}
+                            disabled={savingMetadata}
+                            className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {savingMetadata ? 'Đang lưu...' : '💾 Lưu metadata'}
+                        </button>
+                    )}
+
+                    {currentExamId && metadataSaved && !examMetadataDirty && (
+                        <span className="mt-4 ml-4 inline-flex items-center gap-1 text-green-600 font-medium text-sm">
+                            ✅ Đã lưu
+                        </span>
                     )}
                 </div>
 
@@ -415,14 +497,14 @@ export default function CreateExamPage() {
                 {currentExamId && (
                     <>
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900">Questions ({questions.length})</h2>
+                            <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({questions.length})</h2>
                             <div className="flex items-center space-x-3">
                                 <button
                                     onClick={addQuestion}
                                     className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                                 >
                                     <FiPlus />
-                                    <span>Add Question</span>
+                                    <span>Thêm Câu Hỏi</span>
                                 </button>
                                 <button
                                     onClick={publishExam}
@@ -430,7 +512,7 @@ export default function CreateExamPage() {
                                     className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     <FiEye />
-                                    <span>Publish Exam</span>
+                                    <span>Xuất Bản</span>
                                 </button>
                             </div>
                         </div>

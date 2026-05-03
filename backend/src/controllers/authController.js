@@ -66,6 +66,73 @@ function validatePassword(password) {
   return null; // valid
 }
 
+// ─── OTP helpers ──────────────────────────────────────────────────────────────
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 phút
+const OTP_LENGTH = 6;
+
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 chữ số
+}
+
+async function storeOtp(userId, email, reason) {
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  // Lưu hash OTP (không lưu OTP plain)
+  const otpHash = await bcrypt.hash(otp, 10);
+
+  await db.query(
+    `INSERT INTO user_otps (user_id, email, otp_hash, reason, expires_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     ON CONFLICT (user_id, reason)
+     DO UPDATE SET otp_hash = $3, expires_at = $5, created_at = NOW(), is_used = FALSE`,
+    [userId, email, otpHash, reason, expiresAt]
+  );
+  return otp; // Trả plain OTP để gửi email
+}
+
+async function verifyOtp(userId, otp, reason) {
+  const result = await db.query(
+    `SELECT otp_hash, expires_at, is_used FROM user_otps
+     WHERE user_id = $1 AND reason = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, reason]
+  );
+  if (!result.rows[0]) return { valid: false, reason: 'no_otp' };
+
+  const { otp_hash, expires_at, is_used } = result.rows[0];
+  if (is_used) return { valid: false, reason: 'already_used' };
+  if (new Date(expires_at) < new Date()) return { valid: false, reason: 'expired' };
+
+  const match = await bcrypt.compare(otp, otp_hash);
+  if (!match) return { valid: false, reason: 'invalid' };
+
+  // Đánh dấu OTP đã dùng
+  await db.query(
+    `UPDATE user_otps SET is_used = TRUE WHERE user_id = $1 AND reason = $2`,
+    [userId, reason]
+  );
+  return { valid: true };
+}
+
+// ─── Parse user agent ────────────────────────────────────────────────────────
+function parseUserAgent(ua) {
+  if (!ua) return 'Thiết bị không xác định';
+  if (/mobile/i.test(ua)) return 'Điện thoại di động';
+  if (/tablet|ipad/i.test(ua)) return 'Máy tính bảng';
+  if (/bot|crawler|spider/i.test(ua)) return 'Trình duyệt tự động';
+  return 'Máy tính';
+}
+
+// ─── Get client IP ───────────────────────────────────────────────────────────
+function getClientIp(req) {
+  return (
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.headers['x-real-ip'] ||
+    req.connection?.remoteAddress ||
+    '127.0.0.1'
+  );
+}
+
 // ─── Token generation ─────────────────────────────────────────────────────────
 const generateToken = (payload) => {
   const jti = crypto.randomBytes(16).toString("hex"); // unique token ID
@@ -194,12 +261,13 @@ const register = async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     const verifyUrl = `${frontendUrl}/verify-email?token=${rawVerifyToken}&id=${user.id}`;
-    // Send non-blocking (don't fail registration if email fails)
-    emailService
-      .sendVerificationEmail(email, user.full_name || username, verifyUrl)
-      .catch((err) => {
-        console.error(`❌ Error sending verification email (connection timeout?): ${err.message}`);
-      });
+    // Send welcome + verification email (non-blocking)
+    Promise.all([
+      emailService.sendWelcomeEmail(email, user.full_name || username),
+      emailService.sendVerificationEmail(email, user.full_name || username, verifyUrl),
+    ]).catch((err) => {
+      console.error(`❌ Error sending welcome/verification email: ${err.message}`);
+    });
 
     // Register session (auto-evicts oldest if at device limit — no blocking)
     const jti = crypto.randomBytes(16).toString("hex");
@@ -316,54 +384,35 @@ const login = async (req, res) => {
     // Success - clear attempts
     clearAttempts(identifier);
 
-    // Register session (auto-evicts oldest if at device limit — no blocking)
-    const jti = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
+    // ── OTP: gửi mã khi đăng nhập ────────────────────────────────────────
+    const otp = await storeOtp(user.id, user.email, 'login');
+    const clientIp = getClientIp(req);
+    const device = parseUserAgent(req.get('User-Agent'));
 
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti,
-      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      expiresAt,
-    });
+    Promise.all([
+      emailService.sendOtpEmail({
+        email: user.email,
+        name: user.full_name || user.username,
+        otp,
+        reason: 'login',
+      }),
+      emailService.sendSecurityAlert({
+        email: user.email,
+        name: user.full_name || user.username,
+        event: 'login',
+        ip: clientIp,
+        location: null,
+        device,
+        time: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
+      }),
+    ]).catch(err => console.error('Login email error:', err.message));
 
-    // Log hành vi đăng nhập
-    UserActivity.log(user.id, 'login', {
-      ip: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-    });
-
-    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
-
-    const authz = await resolveAuthorizationContext(user);
-
+    // Gửi OTP + security alert thành công → yêu cầu xác thực OTP
     return res.json({
       success: true,
-      message: "Đăng nhập thành công",
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          full_name: user.full_name,
-          avatar: user.avatar,
-          avatar_url: user.avatar_url,
-          role: user.role,
-          bio: user.bio,
-          target_score: user.target_score,
-          is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || null,
-          vip_expires_at: user.vip_expires_at || null,
-          roles: authz.roles,
-          permissions: authz.permissions,
-          created_at: user.created_at,
-        },
-        token,
-        refreshToken,
-      },
+      requiresOtp: true,
+      userId: user.id,
+      message: 'Đã gửi mã OTP đến email của bạn. Vui lòng nhập mã để đăng nhập.',
     });
   } catch (error) {
     console.error("Login error:", error.message);
@@ -759,6 +808,101 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// ─── Verify OTP ────────────────────────────────────────────────────────────────
+const verifyOtpController = async (req, res) => {
+  try {
+    const { userId, otp, reason = 'login' } = req.body;
+
+    if (!userId || !otp) {
+      return res.status(400).json({ success: false, message: 'Thiếu userId hoặc OTP.' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
+    }
+
+    const result = await verifyOtp(userId, otp, reason);
+    if (!result.valid) {
+      const msgs = {
+        no_otp: 'Không tìm thấy mã OTP. Vui lòng yêu cầu mã mới.',
+        expired: 'Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.',
+        already_used: 'Mã OTP đã được sử dụng. Vui lòng yêu cầu mã mới.',
+        invalid: 'Mã OTP không đúng. Vui lòng thử lại.',
+      };
+      return res.status(400).json({ success: false, message: msgs[result.reason] || 'OTP không hợp lệ.' });
+    }
+
+    // Xác thực thành công — tạo token
+    const jti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
+      ipAddress: getClientIp(req),
+      userAgent: req.get('User-Agent'),
+      expiresAt,
+    });
+
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
+    const refreshToken = generateRefreshToken({ id: user.id });
+    const authz = await resolveAuthorizationContext(user);
+
+    return res.json({
+      success: true,
+      message: 'Xác thực OTP thành công',
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          full_name: user.full_name,
+          avatar: user.avatar,
+          avatar_url: user.avatar_url,
+          role: user.role,
+          bio: user.bio,
+          is_vip: isVipActive(user),
+          subscription_tier: user.subscription_tier || null,
+          vip_expires_at: user.vip_expires_at || null,
+          roles: authz.roles,
+          permissions: authz.permissions,
+          created_at: user.created_at,
+        },
+        token,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi xác thực OTP.' });
+  }
+};
+
+// ─── Resend OTP ───────────────────────────────────────────────────────────────
+const resendOtp = async (req, res) => {
+  try {
+    const { userId, reason = 'login' } = req.body;
+    if (!userId) return res.status(400).json({ success: false, message: 'Thiếu userId.' });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
+
+    const otp = await storeOtp(userId, user.email, reason);
+    await emailService.sendOtpEmail({
+      email: user.email,
+      name: user.full_name || user.username,
+      otp,
+      reason,
+    });
+
+    return res.json({ success: true, message: 'Đã gửi lại mã OTP.' });
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi gửi lại OTP.' });
+  }
+};
+
 // ─── Verify Email ─────────────────────────────────────────────────────────────
 const verifyEmail = async (req, res) => {
   try {
@@ -823,4 +967,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  verifyOtp: verifyOtpController,
+  resendOtp,
 };

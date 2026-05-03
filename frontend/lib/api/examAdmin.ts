@@ -13,6 +13,8 @@ export interface ExamCreateData {
     solution_description?: string;
     shuffle_mode?: boolean;
     vip_tier?: string; // 'basic' | 'vip_thong_minh' | 'vip_pro'
+    start_time?: string;
+    end_time?: string;
 }
 
 export interface QuestionData {
@@ -101,6 +103,12 @@ export const examAdminApi = {
     // Update exam status
     updateExamStatus: async (examId: number, status: 'draft' | 'published' | 'archived') => {
         const response = await axios.put(`/admin/exams/${examId}`, { status });
+        return response.data;
+    },
+
+    // Set exam schedule (start/end time for phong-thi)
+    setSchedule: async (examId: number, data: { start_time: string; end_time?: string | null }) => {
+        const response = await axios.put(`/admin/exams/${examId}/schedule`, data);
         return response.data;
     }
 };
