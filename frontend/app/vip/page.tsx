@@ -357,7 +357,10 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
   };
 
   return (
-    <div className={`relative bg-white rounded-2xl shadow-lg border-2 ${colors.border} overflow-hidden transition-all duration-300 hover:shadow-xl active:scale-[0.99] sm:hover:-translate-y-1`}>
+    <div 
+      onClick={() => onSelectPkg && onSelectPkg(pkg)}
+      className={`relative bg-white rounded-2xl shadow-lg border-2 ${selectedPkg?.id === pkg.id ? 'border-violet-500 shadow-violet-200 ring-4 ring-violet-500/20 scale-[1.02]' : colors.border} overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer`}
+    >
       {/* Header */}
       <div className={`bg-gradient-to-r ${colors.gradient} p-6 text-white`}>
         <div className="flex items-center justify-between">
@@ -417,7 +420,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
                 <FiCheck size={12} />
                 Mã {discount.code} — Giảm {discount.discount_amount.toLocaleString('vi-VN')}đ
               </div>
-              <button onClick={() => onApplyCoupon && onApplyCoupon(pkg)}
+              <button onClick={(e) => { e.stopPropagation(); onApplyCoupon && onApplyCoupon(pkg); }}
                 className="text-red-500 hover:text-red-700 font-semibold">✕</button>
             </div>
           ) : (
@@ -425,12 +428,13 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
               <input
                 type="text"
                 value={localCoupon}
+                onClick={(e) => e.stopPropagation()}
                 onChange={e => { setLocalCoupon(e.target.value.toUpperCase()); setLocalCouponError(''); }}
                 onKeyDown={e => e.key === 'Enter' && handleLocalApply()}
                 placeholder="Mã giảm giá"
                 className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-mono uppercase tracking-wider focus:ring-1 focus:ring-violet-500 outline-none" />
               <button
-                onClick={handleLocalApply}
+                onClick={(e) => { e.stopPropagation(); handleLocalApply(); }}
                 disabled={localCouponLoading || !localCoupon.trim()}
                 className="px-3 py-1.5 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold rounded-lg disabled:opacity-40 transition-colors">
                 {localCouponLoading ? '...' : 'OK'}
@@ -443,7 +447,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
         </div>
 
         <button
-          onClick={() => onCheckout(pkg)}
+          onClick={(e) => { e.stopPropagation(); onCheckout(pkg); }}
           className={`w-full py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
             ${isPremium
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
