@@ -123,6 +123,7 @@ export default function ProfilePage() {
 
   const [packages, setPackages] = useState<any[]>([]);
   const [pkgsLoading, setPkgsLoading] = useState(false);
+  const [purchasedPkgIds, setPurchasedPkgIds] = useState<Set<number>>(new Set());
 
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -191,10 +192,21 @@ export default function ProfilePage() {
   useEffect(() => {
     if (activeTab === 'vip' && packages.length === 0) {
       setPkgsLoading(true);
-      axios.get('/vip/packages')
-        .then(res => setPackages(res.data.data || []))
-        .catch(() => {})
-        .finally(() => setPkgsLoading(false));
+      Promise.all([
+        axios.get('/vip/packages'),
+        axios.get('/payments/history').catch(() => ({ data: { data: [] } }))
+      ]).then(([pkgRes, histRes]) => {
+        setPackages(pkgRes.data.data || []);
+        const hist = histRes.data.data || [];
+        const purchased = new Set<number>();
+        hist.forEach((tx: any) => {
+          if (tx.status === 'completed' && tx.package_id) {
+            purchased.add(tx.package_id);
+          }
+        });
+        setPurchasedPkgIds(purchased);
+      }).catch(() => {})
+      .finally(() => setPkgsLoading(false));
     }
   }, [activeTab]);
 
@@ -574,20 +586,17 @@ export default function ProfilePage() {
                       const userTier = profileUser?.subscription_tier;
                       const isVipUser = !!profileUser?.is_vip;
 
-                      // Đang dùng gói cùng tier (subscription_tier đã load)
-                      const sameTier = isVipUser && userTier === ui.tier;
+                      const alreadyPurchased = purchasedPkgIds.has(pkg.id);
                       // Premium hạ cấp sang VIP → không cho
                       const downgradeBlocked = isVipUser && userTier === 'premium' && ui.tier === 'vip';
-                      // User VIP nhưng subscription_tier chưa load → tạm thời block để tránh duplicate purchase
-                      const tierUnknown = isVipUser && !userTier;
 
-                      const disabled = sameTier || downgradeBlocked || tierUnknown;
+                      const disabled = alreadyPurchased || downgradeBlocked;
 
                       return (
                         <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden ${disabled ? 'opacity-70' : ''}`}>
-                          {sameTier && (
+                          {alreadyPurchased && (
                              <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                               ✓ Đang dùng
+                               ✓ Đã mua
                              </div>
                           )}
                           {downgradeBlocked && (
@@ -619,24 +628,20 @@ export default function ProfilePage() {
                                <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
                             )}
                           </ul>
-                          {sameTier ? (
+                          {alreadyPurchased ? (
                             <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-green-200 bg-green-50 text-green-700">
-                              ✓ Đang sử dụng gói này
+                              ✓ Đã đăng ký gói này
                             </div>
                           ) : downgradeBlocked ? (
                             <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
                               Bạn đang dùng Premium — không thể hạ cấp
-                            </div>
-                          ) : tierUnknown ? (
-                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-500">
-                              Đang tải trạng thái...
                             </div>
                           ) : (
                             <button
                               onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`}
                               className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}
                             >
-                              {isVipUser && ui.tier === 'premium' ? 'Nâng cấp lên Premium' : isVipUser ? 'Gia hạn' : 'Đăng ký ngay'}
+                              {isVipUser && ui.tier === 'premium' ? 'Nâng cấp lên Premium' : isVipUser ? 'Đăng ký thêm' : 'Đăng ký ngay'}
                             </button>
                           )}
                         </div>
