@@ -38,8 +38,8 @@ export default function StudentQAPage() {
   const [image, setImage] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Hỏi đáp cố vấn chỉ dành cho gói PREMIUM
-  const isPremium = user?.subscription_tier === 'premium' || user?.role === 'super_admin';
+  // Hỏi đáp cố vấn dành cho gói PREMIUM và VIP (đã đồng bộ với backend)
+  const isPremium = user?.subscription_tier === 'premium' || user?.subscription_tier === 'vip' || user?.is_vip || user?.role === 'super_admin';
   const isVip = user?.is_vip || user?.subscription_tier === 'vip';
 
   useEffect(() => {

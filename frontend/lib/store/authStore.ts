@@ -25,9 +25,10 @@ function syncVipFromToken(user: User | null, token: string | null): User | null 
     typeof payload.vip_expires_at === 'string' && payload.vip_expires_at.length > 0
       ? payload.vip_expires_at
       : undefined;
+  const subscription_tier = typeof payload.subscription_tier === 'string' ? payload.subscription_tier : user.subscription_tier;
 
-  if (user.is_vip !== isVip || user.vip_expires_at !== vipExpiresAt) {
-    return { ...user, is_vip: isVip, vip_expires_at: vipExpiresAt };
+  if (user.is_vip !== isVip || user.vip_expires_at !== vipExpiresAt || user.subscription_tier !== subscription_tier) {
+    return { ...user, is_vip: isVip, vip_expires_at: vipExpiresAt, subscription_tier: subscription_tier as any };
   }
   return user;
 }
