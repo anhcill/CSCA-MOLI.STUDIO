@@ -8,17 +8,17 @@ import {
 } from 'react-icons/fi';
 
 const ROLE_OPTIONS = [
-  { code: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-700 border-red-200' },
-  { code: 'user_admin', label: 'User Admin', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { code: 'exam_admin', label: 'Exam Admin', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { code: 'content_admin', label: 'Content Admin', color: 'bg-green-100 text-green-700 border-green-200' },
-  { code: 'forum_admin', label: 'Forum Admin', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { code: 'roadmap_admin', label: 'Roadmap Admin', color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { code: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-700 border-red-200', desc: 'Toàn quyền truy cập hệ thống' },
+  { code: 'user_admin', label: 'User Admin', color: 'bg-blue-100 text-blue-700 border-blue-200', desc: 'Quản lý người dùng, phản hồi, VIP' },
+  { code: 'exam_admin', label: 'Exam Admin', color: 'bg-purple-100 text-purple-700 border-purple-200', desc: 'Quản lý kho đề thi, số liệu thi' },
+  { code: 'content_admin', label: 'Content Admin', color: 'bg-green-100 text-green-700 border-green-200', desc: 'Sửa nội dung học, từ vựng' },
+  { code: 'forum_admin', label: 'Forum Admin', color: 'bg-orange-100 text-orange-700 border-orange-200', desc: 'Kiểm duyệt bài viết diễn đàn' },
+  { code: 'roadmap_admin', label: 'Roadmap Admin', color: 'bg-cyan-100 text-cyan-700 border-cyan-200', desc: 'Quản lý các trạng thái lộ trình' },
 ];
 
 const getRoleBadge = (code: string) => {
   const opt = ROLE_OPTIONS.find(r => r.code === code);
-  return opt || { code, label: code, color: 'bg-gray-100 text-gray-600 border-gray-200' };
+  return opt || { code, label: code, color: 'bg-gray-100 text-gray-600 border-gray-200', desc: '' };
 };
 
 interface Props {
@@ -244,10 +244,13 @@ export default function AdminListTab({ onViewLog }: Props) {
             </div>
             <div className="px-6 py-5 space-y-3">
               {ROLE_OPTIONS.map(opt => (
-                <label key={opt.code} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-violet-50 transition-colors has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50">
+                <label key={opt.code} className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-violet-50 transition-colors has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50">
                   <input type="checkbox" checked={selectedRoles.includes(opt.code)} onChange={() => toggleRole(opt.code)}
-                    className="w-4 h-4 rounded accent-violet-600" />
-                  <span className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${opt.color}`}>{opt.label}</span>
+                    className="w-4 h-4 mt-0.5 rounded accent-violet-600" />
+                  <div className="flex-1">
+                    <span className={`inline-block px-2 py-0.5 mb-1 rounded-md text-xs font-semibold border ${opt.color}`}>{opt.label}</span>
+                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                  </div>
                 </label>
               ))}
             </div>
@@ -268,7 +271,7 @@ export default function AdminListTab({ onViewLog }: Props) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div>
-                <h2 className="font-bold text-gray-900 flex items-center gap-2"><FiShield size={16} /> Chi tiết quyền hạn</h2>
+                <h2 className="font-bold text-gray-900 flex items-center gap-2"><FiShield size={16} /> Chi tiết quyền hạn & Truy cập</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{permissionsModal.full_name}</p>
               </div>
               <button onClick={() => setPermissionsModal(null)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500"><FiX size={18} /></button>
@@ -285,19 +288,62 @@ export default function AdminListTab({ onViewLog }: Props) {
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                  Quyền hạn ({(permissionsModal.permissions || []).length})
+                  Trang được phép truy cập
                 </p>
-                <div className="space-y-1.5">
-                  {(permissionsModal.permissions || []).length === 0 ? (
-                    <p className="text-sm text-gray-400">Chưa có quyền nào</p>
-                  ) : (permissionsModal.permissions || []).map(perm => (
-                    <div key={perm} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
-                      <div className="w-1.5 h-1.5 bg-violet-500 rounded-full shrink-0" />
-                      <span className="text-sm text-gray-700 font-mono">{perm}</span>
-                    </div>
+                <div className="space-y-2">
+                  {(() => {
+                    const perms = permissionsModal.permissions || [];
+                    if (perms.length === 0) return <p className="text-sm text-gray-400">Chưa được phân công quyền truy cập nào</p>;
+                    
+                    const isSuperAdmin = perms.includes('*') || perms.includes('system.manage');
+                    
+                    const accessMap: Record<string, { label: string, desc: string }> = {
+                      'users.manage': { label: 'Người dùng & VIP', desc: 'Quản lý tài khoản, nâng cấp VIP' },
+                      'exams.manage': { label: 'Đề thi & Câu hỏi', desc: 'Quản lý đề, câu hỏi, điểm thi' },
+                      'content.manage': { label: 'Từ vựng & Tài liệu', desc: 'Sửa đổi từ vựng, ngữ pháp, tài liệu' },
+                      'forum.manage': { label: 'Diễn đàn & Hỏi đáp', desc: 'Kiểm duyệt bài viết, bình luận, QA' },
+                      'roadmap.manage': { label: 'Lộ trình học', desc: 'Quản lý các mốc lộ trình, bài học' },
+                      'admin.dashboard.view': { label: 'Trang chủ Admin', desc: 'Xem thống kê trên Dashboard' }
+                    };
+
+                    const allowedPages = isSuperAdmin 
+                      ? [{ label: 'Toàn quyền hệ thống', desc: 'Truy cập và sửa đổi tất cả các trang' }]
+                      : perms.map(p => accessMap[p]).filter(Boolean); // Filter known access mapping
+
+                    // Deduplicate
+                    const uniquePages = Array.from(new Set(allowedPages.map(p => p.label)))
+                      .map(label => allowedPages.find(p => p.label === label)!);
+
+                    if (uniquePages.length === 0) {
+                      return <p className="text-sm text-gray-400">Chỉ có quyền hệ thống hạn chế chưa map giao diện.</p>;
+                    }
+
+                    return uniquePages.map((page, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <div className="mt-1 w-2 h-2 bg-violet-500 rounded-full shrink-0" />
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">{page.label}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{page.desc}</p>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+              
+              <div className="mt-6 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  Danh sách quyền (System Codes)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(permissionsModal.permissions || []).map(perm => (
+                    <span key={perm} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-[11px] font-mono">
+                      {perm}
+                    </span>
                   ))}
                 </div>
               </div>
+            </div>
             </div>
           </div>
         </div>
