@@ -344,7 +344,6 @@ export default function AdminListTab({ onViewLog }: Props) {
                 </div>
               </div>
             </div>
-            </div>
           </div>
         </div>
       )}
