@@ -384,6 +384,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
             {showExplanationModal && (
                 <ExplanationModal
                     question={showExplanationModal}
+                    attemptId={result.id}
                     onClose={() => setShowExplanationModal(null)}
                 />
             )}
@@ -392,7 +393,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 }
 
 // ─── AI Explanation Modal ──────────────────────────────────────────────────────
-function ExplanationModal({ question, onClose }: { question: QuestionResult; onClose: () => void }) {
+function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
     const [explanation, setExplanation] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -402,8 +403,15 @@ function ExplanationModal({ question, onClose }: { question: QuestionResult; onC
 
     const loadExplanation = async () => {
         try {
-            const res = await fetch(`/api/ai/exam-result/${question.question_number}`, {
+            // Gọi AI hỏi giải thích tự động cho câu này
+            const res = await fetch('/api/ai/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
+                body: JSON.stringify({
+                    question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng? Hãy giải thích chi tiết kiến thức liên quan và mẹo ghi nhớ.`,
+                    attemptId,
+                }),
             });
             const data = await res.json();
             setExplanation(data);
@@ -417,43 +425,72 @@ function ExplanationModal({ question, onClose }: { question: QuestionResult; onC
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
             <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-                <div className="p-6 border-b border-gray-100">
-                    <h3 className="font-bold text-lg text-gray-900">Phân tích câu {question.question_number || question.sub_question_number}</h3>
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-bold text-lg text-gray-900">
+                        Phân tích câu {question.question_number || question.sub_question_number}
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <span className="text-gray-400 text-xl">×</span>
+                    </button>
                 </div>
                 <div className="p-6">
-                    {loading ? (
-                        <div className="flex items-center gap-3 text-gray-500">
-                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-200 border-t-purple-600" />
-                            AI đang phân tích...
+                    {/* Câu hỏi */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
+                        <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
+                        <p className="text-sm text-gray-800">{question.question_text || question.question_text_cn}</p>
+                    </div>
+
+                    {/* Đáp án */}
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <p className="text-xs font-bold text-red-600 mb-1">✗ Đáp án của bạn</p>
+                            <p className="text-red-800 font-semibold text-sm">
+                                {question.selected_answer_key || '?'}. {question.selected_answer_text || ''}
+                            </p>
                         </div>
-                    ) : explanation ? (
-                        <div className="space-y-3 text-sm text-gray-700">
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                <p className="font-semibold text-red-800 mb-1">Đáp án đúng:</p>
-                                <p>{question.correct_answer_key}. {question.correct_answer_text}</p>
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                            <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
+                            <p className="text-green-800 font-semibold text-sm">
+                                {question.correct_answer_key || '?'}. {question.correct_answer_text || ''}
+                            </p>
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <div className="flex flex-col items-center gap-3 py-8">
+                            <div className="animate-spin rounded-full h-10 w-10 border-3 border-purple-200 border-t-purple-600" />
+                            <p className="text-gray-500 text-sm">AI đang phân tích câu này...</p>
+                        </div>
+                    ) : explanation?.success ? (
+                        <div className="space-y-3">
+                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                                <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
+                                    🤖 AI phân tích
+                                </p>
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                    {explanation.answer}
+                                </p>
                             </div>
-                            {question.selected_answer_key && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                                    <p className="font-semibold text-amber-800 mb-1">Bạn chọn:</p>
-                                    <p>{question.selected_answer_key}. {question.selected_answer_text}</p>
-                                </div>
-                            )}
                             {(question.explanation || question.explanation_cn) && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                    <p className="font-semibold text-blue-800 mb-1">💡 Giải thích:</p>
-                                    <p>{question.explanation || question.explanation_cn}</p>
+                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                    <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
+                                    <p className="text-sm text-blue-800">{question.explanation || question.explanation_cn}</p>
                                 </div>
                             )}
-                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500">
-                                Sử dụng tab "🤖 Hỏi AI" để hỏi chi tiết hơn về câu này.
-                            </div>
                         </div>
                     ) : (
-                        <p className="text-gray-500">Không có dữ liệu phân tích.</p>
+                        <div className="text-center py-6 text-gray-500">
+                            <p className="text-sm mb-2">
+                                {explanation?.message || 'Không thể phân tích câu này'}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                                Thử vào tab "🤖 Hỏi AI" để hỏi chi tiết hơn
+                            </p>
+                        </div>
                     )}
                 </div>
-                <div className="p-4 border-t border-gray-100 flex justify-end">
-                    <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm">
+                <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
                         Đóng
                     </button>
                 </div>
