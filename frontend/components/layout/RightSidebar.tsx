@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { FiFileText, FiBook, FiTarget, FiTrendingUp, FiLayers, FiCalendar, FiUser, FiSettings, FiVideo } from 'react-icons/fi';
 
 export default function RightSidebar() {
@@ -20,7 +21,7 @@ export default function RightSidebar() {
       <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-5 sticky top-20">
         <nav className="space-y-1">
           {menuItems.map((item, index) => (
-            <a
+            <Link
               key={index}
               href={item.href}
               className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-all hover:bg-gray-50 group`}
@@ -29,7 +30,7 @@ export default function RightSidebar() {
               <span className="text-base font-medium text-gray-700 group-hover:text-gray-900">
                 {item.label}
               </span>
-            </a>
+            </Link>
           ))}
         </nav>
       </div>
