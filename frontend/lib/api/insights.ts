@@ -481,7 +481,9 @@ export interface HistoryStatsData {
   improvement: ImprovementStats;
 }
 
-export async function getHistoryStats(): Promise<HistoryStatsData> {
-  const res = await axios.get(`${BASE}/history-stats`);
+export async function getHistoryStats(subject?: string): Promise<HistoryStatsData> {
+  const res = await axios.get(`${BASE}/history-stats`, {
+    params: subject ? { subject } : undefined,
+  });
   return res.data.data;
 }

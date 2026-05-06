@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -46,8 +47,7 @@ function formatDuration(seconds: number): string {
 
 function formatPercent(value: number): string {
   if (!value || isNaN(value)) return '—';
-  if (value > 999) return `${(value / 100).toFixed(1)}k%`;
-  return `${Math.min(value, 999).toFixed(0)}%`;
+  return `${value.toFixed(1)}%`;
 }
 
 function formatDate(dateStr: string): string {
@@ -98,20 +98,22 @@ function StatCard({ icon: Icon, label, value, sub, color, iconBg }: {
 
 export default function ThongKePage() {
   const { isAuthenticated } = useAuthStore();
+  const searchParams = useSearchParams();
   const [stats, setStats] = useState<HistoryStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const subjectParam = searchParams.get('subject');
 
   useEffect(() => {
     if (isAuthenticated) loadStats();
     else setLoading(false);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, subjectParam]);
 
   const loadStats = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getHistoryStats();
+      const data = await getHistoryStats(subjectParam || undefined);
       setStats(data);
     } catch (e: any) {
       console.error(e);
@@ -161,7 +163,7 @@ export default function ThongKePage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2 text-blue-100 text-sm">
-                        <Link href="/lich-su" className="flex items-center gap-1 hover:text-white transition-colors">
+                        <Link href={subjectParam ? `/lich-su?subject=${subjectParam}` : '/lich-su'} className="flex items-center gap-1 hover:text-white transition-colors">
                           <FiArrowLeft size={14} /> Lịch sử thi
                         </Link>
                         <span className="text-blue-200">/</span>
@@ -597,17 +599,15 @@ export default function ThongKePage() {
                       {[
                         {
                           label: 'TB thời gian/bài',
-                          value: stats.timeStats.avgDurationSeconds > 86400
-                            ? `${Math.round(stats.timeStats.avgDurationSeconds / 3600)}h`
-                            : formatTime(stats.timeStats.avgDurationSeconds),
+                          value: formatDuration(stats.timeStats.avgDurationSeconds),
                           color: 'text-gray-800',
                         },
                         {
                           label: 'TB thời gian/câu',
-                          value: stats.timeStats.avgSecondsPerQuestion > 3600
+                          value: stats.timeStats.avgSecondsPerQuestion > 120
                             ? `${Math.round(stats.timeStats.avgSecondsPerQuestion / 60)} phút`
                             : `${Math.round(stats.timeStats.avgSecondsPerQuestion)}s`,
-                          color: 'text-gray-800',
+                          color: stats.timeStats.avgSecondsPerQuestion > 120 ? 'text-amber-600' : 'text-gray-800',
                         },
                         {
                           label: 'Thời gian sử dụng',

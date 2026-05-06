@@ -48,9 +48,10 @@ interface AIAnalysis {
 
 interface AIInsightsProps {
   userId?: number;
+  subjectCode?: string; // filter by subject
 }
 
-export function AIInsights({ userId: userIdProp }: AIInsightsProps = {}) {
+export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps = {}) {
   const { user } = useAuthStore();
   const userId = userIdProp || user?.id;
   const [loading, setLoading] = useState(true);

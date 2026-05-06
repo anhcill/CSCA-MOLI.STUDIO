@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
 import examApi from '@/lib/api/exams';
@@ -75,10 +76,11 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
 
 export default function LichSuPage() {
   const { isAuthenticated } = useAuthStore();
+  const searchParams = useSearchParams();
+  const subjectParam = searchParams.get('subject');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [filtered, setFiltered] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subjectFilter, setSubjectFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const PER_PAGE = 10;
 
@@ -88,12 +90,9 @@ export default function LichSuPage() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const f = subjectFilter === 'ALL'
-      ? history
-      : history.filter(h => h.subject_code === subjectFilter);
-    setFiltered(f);
+    setFiltered(history);
     setPage(1);
-  }, [subjectFilter, history]);
+  }, [history, subjectParam]);
 
   const loadHistory = async () => {
     try {
@@ -107,6 +106,10 @@ export default function LichSuPage() {
     }
   };
 
+  const displayFiltered = subjectParam
+    ? filtered.filter(h => h.subject_code === subjectParam)
+    : filtered;
+
   const avgScore = history.length
     ? (history.reduce((s, h) => s + (Number(h.total_score) || 0), 0) / history.length).toFixed(1)
     : '0';
@@ -115,8 +118,8 @@ export default function LichSuPage() {
     : '0';
   const passCount = history.filter(h => h.total_score >= 5).length;
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const totalPages = Math.ceil(displayFiltered.length / PER_PAGE);
+  const paged = displayFiltered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const subjects = ['ALL', ...Array.from(new Set(history.map(h => h.subject_code).filter(Boolean)))];
 
   if (!isAuthenticated && !loading) {
@@ -168,7 +171,7 @@ export default function LichSuPage() {
                 Tải lại
               </button>
               <Link
-                href="/lich-su/thong-ke"
+                href={subjectParam ? `/lich-su/thong-ke?subject=${subjectParam}` : '/lich-su/thong-ke'}
                 className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
               >
                 <FiBarChart2 size={14} />
@@ -179,21 +182,27 @@ export default function LichSuPage() {
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard icon={FiBarChart2} label="Tổng bài" value={history.length} color="bg-indigo-500" />
-            <StatCard icon={FiTrendingUp} label="Điểm TB" value={`${avgScore}/10`} color="bg-blue-500" />
-            <StatCard icon={FiAward} label="Điểm cao nhất" value={`${bestScore}/10`} color="bg-green-500" />
-            <StatCard icon={FiCheckCircle} label="Lần đạt (≥5)" value={passCount} color="bg-emerald-500" />
+            <StatCard icon={FiBarChart2} label="Tổng bài" value={displayFiltered.length} color="bg-indigo-500" />
+            <StatCard icon={FiTrendingUp} label="Điểm TB" value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + (Number(h.total_score) || 0), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
+            <StatCard icon={FiAward} label="Điểm cao nhất" value={`${displayFiltered.length ? Math.max(...displayFiltered.map(h => h.total_score || 0)).toFixed(1) : '0'}/10`} color="bg-green-500" />
+            <StatCard icon={FiCheckCircle} label="Lần đạt (≥5)" value={displayFiltered.filter(h => h.total_score >= 5).length} color="bg-emerald-500" />
           </div>
 
           {/* Filter tabs */}
           <div className="flex gap-2 flex-wrap">
             {subjects.map(s => {
               const meta = SUBJECT_META[s];
+              const isActive = s === 'ALL' ? !subjectParam : s === subjectParam;
               return (
                 <button
                   key={s}
-                  onClick={() => setSubjectFilter(s)}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${subjectFilter === s
+                  onClick={() => {
+                    const url = new URL(window.location.href);
+                    if (s === 'ALL') url.searchParams.delete('subject');
+                    else url.searchParams.set('subject', s);
+                    window.location.href = url.toString();
+                  }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all border ${isActive
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
                     }`}
@@ -202,6 +211,13 @@ export default function LichSuPage() {
                 </button>
               );
             })}
+            {subjectParam && (
+              <Link
+                href={`/lich-su/thong-ke?subject=${subjectParam}`}
+                className="ml-auto px-4 py-2 rounded-xl text-sm font-semibold transition-all border bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100">
+                📊 Thống kê chi tiết
+              </Link>
+            )}
           </div>
 
           {/* Table */}

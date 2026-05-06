@@ -228,7 +228,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                 ))}
                                             </Pie>
                                             <Tooltip
-                                                formatter={(value: number, name: string) => [`${value} câu`, name]}
+                                                formatter={(value: any, name: any) => [`${value} câu`, name]}
                                                 contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
                                             />
                                         </PieChart>

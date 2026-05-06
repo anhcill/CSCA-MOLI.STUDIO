@@ -125,7 +125,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
               <YAxis domain={[0, 10]} tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
               <Tooltip
-                formatter={(value: number, name: string) => [
+                formatter={(value: any, name: any) => [
                   name === 'diem' ? `${value}/10 điểm` : `${value} câu đúng`,
                   name === 'diem' ? 'Điểm' : 'Đúng'
                 ]}

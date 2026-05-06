@@ -234,7 +234,7 @@ export default function VipPricingPage() {
                   <FaCrown className="text-indigo-500" size={18} />
                   Gói VIP — Mở khoá toàn bộ đề thi
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto items-stretch">
                   {vipPkgs.map(pkg => {
                     const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                     return (
@@ -259,7 +259,7 @@ export default function VipPricingPage() {
                   <FaStar className="text-amber-500" size={18} />
                   Gói Pre — Đề thi + Video giải đề + Team cố vấn
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto items-stretch">
                   {premiumPkgs.map(pkg => {
                     const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                     return (
@@ -389,9 +389,9 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
   const isUnselected = selectedPkg && !isSelected;
 
   return (
-    <div 
+    <div
       onClick={() => onSelectPkg && onSelectPkg(pkg)}
-      className={`relative bg-white rounded-2xl shadow-lg border-2 overflow-hidden transition-all duration-300 cursor-pointer
+      className={`relative flex flex-col bg-white rounded-2xl shadow-lg border-2 overflow-hidden transition-all duration-300 cursor-pointer
         ${isSelected ? 'border-violet-600 shadow-violet-300 ring-4 ring-violet-600/30 scale-105 z-10' : colors.border}
         ${isUnselected ? 'opacity-50 grayscale-[40%] scale-95 hover:opacity-80 hover:scale-[0.98]' : 'hover:shadow-xl'}
       `}
@@ -442,8 +442,8 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
       </div>
 
       {/* Features */}
-      <div className="p-6">
-        <ul className="space-y-3 mb-4">
+      <div className="p-6 flex flex-col flex-1">
+        <ul className="space-y-3 mb-4 flex-1">
           {(pkg.features || []).map((feat, i) => (
             <li key={i} className="flex items-start gap-2.5">
               <FaCheckCircle size={16} className={`${colors.icon} mt-0.5 shrink-0`} />
@@ -488,7 +488,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
 
         <button
           onClick={(e) => { e.stopPropagation(); onCheckout(pkg); }}
-          className={`w-full py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
+          className={`w-full mt-auto py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
             ${isPre
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
               : 'bg-indigo-600 hover:bg-indigo-700'

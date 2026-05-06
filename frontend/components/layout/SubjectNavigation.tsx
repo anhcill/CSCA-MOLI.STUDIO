@@ -87,7 +87,7 @@ export default function SubjectNavigation({
         </button>
 
         <Link
-          href="/lich-su"
+          href={subjectSlug ? `/lich-su?subject=${subjectSlug}` : '/lich-su'}
           className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-center text-gray-500 hover:text-gray-800 hover:bg-gray-50/50"
         >
           Lịch sử thi
@@ -137,7 +137,7 @@ export default function SubjectNavigation({
 
           {activeTab === 'stats' && (
             <div className="max-h-[600px] overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <AIInsights />
+              <AIInsights subjectCode={subjectCode} />
             </div>
           )}
         </div>
