@@ -123,6 +123,35 @@ async function analyzeExamResult(req, res) {
       questions,
     };
 
+    // Lấy lần thi trước để so sánh
+    let previousAttempt = null;
+    try {
+      const prevResult = await db.query(
+        `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+                ea.submit_time, e.title as exam_title, e.total_questions
+         FROM exam_attempts ea
+         JOIN exams e ON ea.exam_id = e.id
+         WHERE ea.user_id = $1 AND ea.id != $2 AND ea.status = 'completed'
+         ORDER BY ea.submit_time DESC LIMIT 1`,
+        [userId, attemptId],
+      );
+      if (prevResult.rows[0]) {
+        const p = prevResult.rows[0];
+        const prevPct = p.total_questions > 0
+          ? Math.round((p.total_correct / p.total_questions) * 100)
+          : parseFloat(p.total_score) || 0;
+        const currPct = Math.round((attempt.total_correct / attempt.total_questions) * 100);
+        previousAttempt = {
+          examTitle: p.exam_title,
+          date: p.submit_time,
+          score: prevPct,
+          correct: p.total_correct,
+          total: p.total_questions,
+          delta: currPct - prevPct,
+        };
+      }
+    } catch { /* no previous attempt */ }
+
     // Gọi AI
     if (aiService.isRateLimited()) {
       const retryAfter = aiService.getRateLimitRemaining();
@@ -147,6 +176,7 @@ async function analyzeExamResult(req, res) {
         duration,
         submittedAt: attempt.submit_time,
       },
+      previousAttempt,
       aiAnalysis,
     });
   } catch (error) {

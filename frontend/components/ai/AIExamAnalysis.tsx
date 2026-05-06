@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FiZap, FiRefreshCw, FiTrendingUp, FiTrendingDown, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import { FiZap, FiRefreshCw, FiTrendingUp, FiTrendingDown, FiAlertCircle, FiCheckCircle, FiTarget, FiTrendingUp as FiArrowUp } from 'react-icons/fi';
 
 // Strip markdown symbols from AI text
 function cleanMarkdown(text: string): string {
@@ -20,9 +20,17 @@ interface AIExamAnalysisProps {
     aiAnalysis: any;
     aiLoading: boolean;
     onRefresh: () => void;
+    previousAttempt?: {
+        examTitle: string;
+        date: string;
+        score: number;
+        correct: number;
+        total: number;
+        delta: number;
+    } | null;
 }
 
-export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRefresh }: AIExamAnalysisProps) {
+export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRefresh, previousAttempt }: AIExamAnalysisProps) {
     const [expanded, setExpanded] = useState(true);
 
     const analysis = aiAnalysis?.aiAnalysis;
@@ -84,6 +92,47 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
             {expanded && (
                 <div className="px-5 pb-5 space-y-4">
+
+                    {/* So sánh với lần trước */}
+                    {previousAttempt && (
+                        <div className={`rounded-xl p-4 border flex items-center gap-4 ${
+                            previousAttempt.delta > 0 ? 'bg-emerald-50 border-emerald-200' :
+                            previousAttempt.delta < 0 ? 'bg-red-50 border-red-200' :
+                            'bg-gray-50 border-gray-200'
+                        }`}>
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                                previousAttempt.delta > 0 ? 'bg-emerald-500' :
+                                previousAttempt.delta < 0 ? 'bg-red-500' :
+                                'bg-gray-400'
+                            }`}>
+                                {previousAttempt.delta > 0 ? (
+                                    <FiArrowUp className="text-white" size={20} />
+                                ) : previousAttempt.delta < 0 ? (
+                                    <FiTrendingDown className="text-white" size={20} />
+                                ) : (
+                                    <span className="text-white text-lg">=</span>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">So với lần trước</p>
+                                <p className="font-bold text-gray-900">
+                                    {previousAttempt.examTitle}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                    Lần trước: <strong>{previousAttempt.score}%</strong>
+                                    <span className="mx-2">→</span>
+                                    Lần này: <strong>{previousAttempt.score + previousAttempt.delta}%</strong>
+                                </p>
+                            </div>
+                            <div className={`text-2xl font-black shrink-0 ${
+                                previousAttempt.delta > 0 ? 'text-emerald-600' :
+                                previousAttempt.delta < 0 ? 'text-red-600' :
+                                'text-gray-500'
+                            }`}>
+                                {previousAttempt.delta > 0 ? '+' : ''}{previousAttempt.delta}%
+                            </div>
+                        </div>
+                    )}
 
                     {/* Grade + Summary */}
                     {analysis.grade && (
@@ -188,6 +237,16 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                     </span>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Kế hoạch học */}
+                    {analysis.studyPlan && (
+                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-4">
+                            <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                <FiTarget size={12} /> Kế hoạch học cho bạn
+                            </h4>
+                            <p className="text-sm text-indigo-900 leading-relaxed font-medium">{cleanMarkdown(analysis.studyPlan)}</p>
                         </div>
                     )}
 

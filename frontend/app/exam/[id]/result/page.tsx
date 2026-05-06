@@ -9,6 +9,7 @@ import examApi from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
+import { PremiumGate } from '@/components/common/PremiumGate';
 
 interface AnswerOption {
   key: string;
@@ -62,6 +63,7 @@ function ExamResultContent() {
   const [showExplanationModal, setShowExplanationModal] = useState<QuestionResult | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [previousAttempt, setPreviousAttempt] = useState<any>(null);
 
   useEffect(() => {
     if (attemptId) {
@@ -95,6 +97,7 @@ function ExamResultContent() {
       const data = await res.json();
       if (data.success) {
         setAiAnalysis(data);
+        setPreviousAttempt(data.previousAttempt || null);
       }
     } catch (error) {
       console.error('AI analysis error:', error);
@@ -334,13 +337,16 @@ function ExamResultContent() {
               </div>
             </div>
 
-            {/* AI Analysis */}
-            <AIExamAnalysis
-              attemptId={result.id}
-              aiAnalysis={aiAnalysis}
-              aiLoading={aiLoading}
-              onRefresh={() => loadAIAnalysis(result.id)}
-            />
+            {/* AI Analysis — chỉ VIP/Pre */}
+            <PremiumGate type="ai">
+              <AIExamAnalysis
+                attemptId={result.id}
+                aiAnalysis={aiAnalysis}
+                aiLoading={aiLoading}
+                onRefresh={() => loadAIAnalysis(result.id)}
+                previousAttempt={previousAttempt}
+              />
+            </PremiumGate>
           </div>
         )}
 

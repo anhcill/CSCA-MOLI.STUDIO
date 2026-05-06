@@ -42,12 +42,17 @@ function deriveColor(pkg: VipPackage) {
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   if (isPre) {
     return pkg.duration_days >= 300
-      ? { gradient: 'from-amber-600 to-red-600', border: 'border-amber-300', tag: 'bg-amber-600 text-white', icon: 'text-amber-500' }
-      : { gradient: 'from-amber-500 to-orange-600', border: 'border-amber-200', tag: 'bg-amber-100 text-amber-700', icon: 'text-amber-500' };
+      ? { gradient: 'from-amber-600 to-red-600', border: 'border-amber-300', tag: 'bg-amber-600 text-white', icon: 'text-amber-500', headerBg: 'bg-gradient-to-r from-amber-600 to-red-600' }
+      : { gradient: 'from-amber-500 to-orange-600', border: 'border-amber-200', tag: 'bg-amber-100 text-amber-700', icon: 'text-amber-500', headerBg: 'bg-gradient-to-r from-amber-500 to-orange-600' };
+  }
+  if (pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name)) {
+    return pkg.duration_days >= 300
+      ? { gradient: 'from-gray-500 to-slate-600', border: 'border-gray-300', tag: 'bg-gray-500 text-white', icon: 'text-gray-500', headerBg: 'bg-gradient-to-r from-gray-500 to-slate-600' }
+      : { gradient: 'from-gray-400 to-slate-500', border: 'border-gray-200', tag: 'bg-gray-100 text-gray-700', icon: 'text-gray-400', headerBg: 'bg-gradient-to-r from-gray-400 to-slate-500' };
   }
   return pkg.duration_days >= 300
-    ? { gradient: 'from-indigo-600 to-purple-700', border: 'border-indigo-300', tag: 'bg-indigo-600 text-white', icon: 'text-indigo-500' }
-    : { gradient: 'from-indigo-500 to-purple-600', border: 'border-indigo-200', tag: 'bg-indigo-100 text-indigo-700', icon: 'text-indigo-500' };
+    ? { gradient: 'from-indigo-600 to-purple-700', border: 'border-indigo-300', tag: 'bg-indigo-600 text-white', icon: 'text-indigo-500', headerBg: 'bg-gradient-to-r from-indigo-600 to-purple-700' }
+    : { gradient: 'from-indigo-500 to-purple-600', border: 'border-indigo-200', tag: 'bg-indigo-100 text-indigo-700', icon: 'text-indigo-500', headerBg: 'bg-gradient-to-r from-indigo-500 to-purple-600' };
 }
 
 export default function VipPricingPage() {
@@ -233,6 +238,14 @@ export default function VipPricingPage() {
                 {/* Section header */}
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-gray-300 rounded-md flex items-center justify-center">
+                      <span className="text-white text-[8px] font-black">F</span>
+                    </div>
+                    <span className="text-lg font-black text-gray-900">Gói Free</span>
+                    <span className="text-xs text-gray-400 font-medium">— Miễn phí dùng thử</span>
+                  </div>
+                  <div className="w-px h-5 bg-gray-200" />
+                  <div className="flex items-center gap-2">
                     <FaCrown className="text-indigo-500" size={18} />
                     <span className="text-lg font-black text-gray-900">Gói VIP</span>
                     <span className="text-xs text-gray-400 font-medium">— Mở khoá đề thi</span>
@@ -245,10 +258,10 @@ export default function VipPricingPage() {
                   </div>
                 </div>
 
-                {/* Combined grid: Free + VIP + Pre all on same row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+                {/* Combined grid: Free + VIP + Pre all equal width */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
                   {/* Free — left */}
-                  <div>
+                  <div className="flex flex-col">
                     {freePkgs.map(pkg => (
                       <PlanCard
                         key={pkg.id} pkg={pkg} isVip={!!isVip}
@@ -261,7 +274,7 @@ export default function VipPricingPage() {
                     ))}
                   </div>
                   {/* VIP — middle */}
-                  <div>
+                  <div className="flex flex-col">
                     {vipPkgs.map(pkg => {
                       const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                       return (
@@ -277,7 +290,7 @@ export default function VipPricingPage() {
                     })}
                   </div>
                   {/* Premium — right */}
-                  <div>
+                  <div className="flex flex-col">
                     {premiumPkgs.map(pkg => {
                       const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                       return (
@@ -510,10 +523,13 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
           className={`w-full mt-auto py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
             ${isPre
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
+              : pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name)
+              ? 'bg-gradient-to-r from-gray-400 to-slate-500 hover:from-gray-500 hover:to-slate-600'
               : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
         >
-          {!isVip ? 'Nâng cấp ngay'
+          {pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name) ? 'Miễn phí'
+            : !isVip ? 'Nâng cấp ngay'
             : isPre ? 'Nâng cấp lên Pre'
             : 'Gia hạn ngay'}
         </button>

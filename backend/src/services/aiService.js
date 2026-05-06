@@ -203,6 +203,7 @@ async function analyzeExamResult(attemptData) {
   };
 
   // Xây dựng prompt cho DeepSeek R1
+  const prevAttempt = attemptData.previousAttempt;
   const questionsText = questions.slice(0, 80).map(q => {
     const status = q.is_correct ? '✓ ĐÚNG' : '✗ SAI';
     const userAnswer = q.selected_answer_key
@@ -229,6 +230,12 @@ THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
 - Số câu đúng: ${correctCount}/${totalQuestions} (${percentage}%)
 - Thời gian: ${attemptData.duration || 'N/A'} phút
+${attemptData.previousAttempt ? `
+SO SÁNH VỚI LẦN TRƯỚC:
+- Lần trước: ${attemptData.previousAttempt.examTitle} — ${attemptData.previousAttempt.score}%
+- Lần này: ${percentage}%
+- Chênh lệch: ${attemptData.previousAttempt.delta >= 0 ? '+' : ''}${attemptData.previousAttempt.delta}%
+` : '(Không có lần thi trước để so sánh)'}
 
 CHI TIẾT TỪNG CÂU:
 ${questionsText}
@@ -243,7 +250,8 @@ YÊU CẦU — trả về JSON, mỗi trường text tối đa 2-3 câu:
   "weaknesses": ["Điểm yếu 1", "Điểm yếu 2"],
   "analysis": "Phân tích ngắn gọn 2-3 câu",
   "overallAdvice": "Lời khuyên 1-2 câu",
-  "priorityTopics": ["Chủ đề 1", "Chủ đề 2"]
+  "priorityTopics": ["Chủ đề 1", "Chủ đề 2"],
+  "studyPlan": "Kế hoạch học ngắn gọn 2-3 câu, gồm: ôn gì, làm gì, bao lâu"
 }`;
 
   try {

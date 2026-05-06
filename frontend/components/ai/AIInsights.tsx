@@ -4,9 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { PremiumGate } from '@/components/common/PremiumGate';
+import { canUseAI } from '@/lib/utils/permissions';
 import {
   FiAlertCircle, FiCheckCircle, FiTrendingUp, FiTrendingDown,
-  FiBook, FiRefreshCw, FiClock, FiAward, FiTarget
+  FiBook, FiRefreshCw, FiClock, FiAward, FiTarget, FiStar
 } from 'react-icons/fi';
 
 interface Weakness {
@@ -55,12 +56,14 @@ interface AIInsightsProps {
 export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps = {}) {
   const { user } = useAuthStore();
   const userId = userIdProp || user?.id;
+  const hasAI = user ? canUseAI(user) : false;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [hasEnoughData, setHasEnoughData] = useState(true);
   const [message, setMessage] = useState('');
+  const [isPremiumRequired, setIsPremiumRequired] = useState(false);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [rateLimitMsg, setRateLimitMsg] = useState('');
@@ -92,7 +95,8 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
 
       // Check if user needs premium access
       if (d.code === 'PREMIUM_REQUIRED') {
-        setError('PREMIUM_REQUIRED');
+        setIsPremiumRequired(true);
+        setHasEnoughData(true);
         setLoading(false);
         return;
       }
@@ -166,7 +170,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
     );
   }
 
-  if (error) {
+  if (error && error !== 'PREMIUM_REQUIRED') {
     return (
       <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
         <FiAlertCircle className="mx-auto mb-3 text-red-500" size={32} />
@@ -200,6 +204,69 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
         >
           {countdown > 0 ? `Tự động thử lại sau ${countdown}s` : 'Thử lại ngay'}
         </button>
+      </div>
+    );
+  }
+
+  // Premium required — show limited UI for free users
+  if (isPremiumRequired) {
+    return (
+      <div className="space-y-6">
+        {/* Banner upgrade */}
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <span className="text-3xl">✨</span>
+          </div>
+          <h3 className="text-lg font-bold text-amber-900 mb-2">Nâng cấp VIP hoặc Premium</h3>
+          <p className="text-amber-700 text-sm mb-4 max-w-sm mx-auto">
+            Để nhận phân tích AI chi tiết về điểm mạnh, điểm yếu và lộ trình học tập cá nhân hoá riêng cho bạn.
+          </p>
+          <a href="/vip" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm">
+            Xem các gói nâng cấp
+          </a>
+        </div>
+
+        {/* Roadmap template cho free user */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <FiClock className="text-blue-500" />
+              Lộ Trình Học Tập
+            </h3>
+            <span className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-semibold flex items-center gap-1">
+              <FiStar size={10} /> Nâng cấp VIP/Pre để cá nhân hoá
+            </span>
+          </div>
+          <div className="space-y-4">
+            {[
+              { days: '1–3', title: 'Ôn từ vựng cơ bản', tasks: ['Học 20 từ mới mỗi ngày', 'Làm bài tập trắc nghiệm 10 câu', 'Xem lại từ đã học'] },
+              { days: '4–7', title: 'Luyện ngữ pháp', tasks: ['Học cấu trúc câu thường gặp', 'Làm 1 đề mô phỏng', 'Ghi chú lỗi sai'] },
+              { days: '8–15', title: 'Luyện đề + tốc độ', tasks: ['Làm 1 đề mỗi ngày', 'Rút kinh nghiệm từng đề', 'Ôn lại phần yếu'] },
+            ].map((phase, i) => (
+              <div key={i} className="border-l-4 border-gray-300 pl-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold">
+                    Ngày {phase.days}
+                  </span>
+                  <h4 className="font-bold text-gray-700">{phase.title}</h4>
+                </div>
+                <ul className="space-y-1">
+                  {phase.tasks.map((task, j) => (
+                    <li key={j} className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-gray-400 mt-0.5">▸</span>
+                      <span>{task}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
+              ✨ Nâng cấp VIP/Pre để có lộ trình AI cá nhân hoá
+            </a>
+          </div>
+        </div>
       </div>
     );
   }
@@ -365,13 +432,18 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
         </div>
       )}
 
-      {/* Roadmap */}
+      {/* Roadmap — VIP/Pre: AI roadmap | Free: template roadmap */}
       {analysis.roadmap.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <FiClock className="text-blue-500" />
-            Lộ Trình 15 Ngày
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <FiClock className="text-blue-500" />
+              Lộ Trình Học Tập
+            </h3>
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">
+              {hasAI ? '✨ AI cá nhân hoá' : '📋 Gợi ý chung'}
+            </span>
+          </div>
           <div className="space-y-4">
             {analysis.roadmap.map((phase, i) => (
               <div key={i} className="border-l-4 border-blue-400 pl-4 py-3">
@@ -392,6 +464,50 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
                 </ul>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Free user: hiện roadmap template */}
+      {!hasAI && !analysis.roadmap.length && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <FiClock className="text-blue-500" />
+              Lộ Trình Học Tập
+            </h3>
+            <span className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-semibold flex items-center gap-1">
+              <FiStar size={10} /> Nâng cấp VIP/Pre để cá nhân hoá
+            </span>
+          </div>
+          <div className="space-y-4">
+            {[
+              { days: '1–3', title: 'Ôn từ vựng cơ bản', tasks: ['Học 20 từ mới mỗi ngày', 'Làm bài tập trắc nghiệm 10 câu', 'Xem lại từ đã học'] },
+              { days: '4–7', title: 'Luyện ngữ pháp', tasks: ['Học cấu trúc câu thường gặp', 'Làm 1 đề mô phỏng', 'Ghi chú lỗi sai'] },
+              { days: '8–15', title: 'Luyện đề + tốc độ', tasks: ['Làm 1 đề mỗi ngày', 'Rút kinh nghiệm từng đề', 'Ôn lại phần yếu'] },
+            ].map((phase, i) => (
+              <div key={i} className="border-l-4 border-gray-300 pl-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold">
+                    Ngày {phase.days}
+                  </span>
+                  <h4 className="font-bold text-gray-700">{phase.title}</h4>
+                </div>
+                <ul className="space-y-1">
+                  {phase.tasks.map((task, j) => (
+                    <li key={j} className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-gray-400 mt-0.5">▸</span>
+                      <span>{task}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
+              ✨ Nâng cấp VIP/Pre để có lộ trình AI cá nhân hoá
+            </a>
           </div>
         </div>
       )}
