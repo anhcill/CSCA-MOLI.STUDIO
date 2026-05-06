@@ -13,7 +13,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap, FiMonitor,
+  FiStar, FiZap, FiMonitor, FiRefreshCw,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
