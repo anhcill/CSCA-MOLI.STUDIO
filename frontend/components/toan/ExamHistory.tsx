@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiCheckCircle, FiXCircle, FiClock } from 'react-icons/fi';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 import examApi from '@/lib/api/exams';
 
 interface ExamHistoryProps {
@@ -47,6 +48,13 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
     if (score >= 5) return 'Trung bình';
     return 'Yếu';
   };
+
+  // Chart data: last 10 attempts
+  const chartData = [...history].reverse().map((item, i) => ({
+    name: `Lần ${history.length - i}`,
+    diem: Number(item.total_score) || 0,
+    dung: item.total_correct,
+  }));
 
   return (
     <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
@@ -106,6 +114,29 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
           </div>
         </div>
       </div>
+
+      {/* Score Chart */}
+      {history.length > 1 && (
+        <div className="mb-6 bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-100 rounded-xl p-4">
+          <p className="text-xs font-bold text-purple-700 mb-3 uppercase tracking-wide">Xu hướng điểm số</p>
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <YAxis domain={[0, 10]} tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <Tooltip
+                formatter={(value: number, name: string) => [
+                  name === 'diem' ? `${value}/10 điểm` : `${value} câu đúng`,
+                  name === 'diem' ? 'Điểm' : 'Đúng'
+                ]}
+                contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                labelStyle={{ fontSize: 11 }}
+              />
+              <Line type="monotone" dataKey="diem" stroke="#7c3aed" strokeWidth={2.5} dot={{ fill: '#7c3aed', r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Detailed History List */}
       <div className="space-y-3">

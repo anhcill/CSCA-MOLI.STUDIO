@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import examApi from '@/lib/api/exams';
-import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMinus, FiTrendingUp, FiTrendingDown, FiZap, FiChevronDown, FiMessageCircle, FiBarChart2 } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMinus, FiTrendingUp, FiTrendingDown, FiZap, FiChevronDown, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu } from 'react-icons/fi';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
@@ -131,7 +132,14 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const score = Number(result.total_score) || 0;
 
     const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
-    const gradeLabel = accuracy >= 85 ? '🎉 Xuất sắc!' : accuracy >= 60 ? '✅ Đạt yêu cầu' : accuracy >= 40 ? '⚠️ Cần cố gắng' : '❌ Chưa đạt';
+    const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
+
+    // Pie chart data
+    const pieData = [
+        { name: 'Đúng', value: totalCorrect, color: '#22c55e' },
+        { name: 'Sai', value: totalIncorrect, color: '#ef4444' },
+        { name: 'Bỏ qua', value: totalUnanswered, color: '#9ca3af' },
+    ].filter(d => d.value > 0);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
@@ -183,70 +191,112 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 {activeTab === 'result' && (
                     <div className="space-y-5">
 
-                        {/* Score Card */}
-                        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-                            <div className="flex items-start justify-between mb-6">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{result.exam_title}</h1>
-                                    {result.title_cn && (
-                                        <p className="text-gray-400 text-sm mb-1">{result.title_cn}</p>
-                                    )}
-                                    <div className="flex items-center gap-2 text-gray-500 text-sm">
-                                        <span>{result.subject_name}</span>
-                                        <span>·</span>
-                                        <FiClock size={13} />
-                                        <span>{new Date(result.submit_time).toLocaleString('vi-VN')}</span>
-                                    </div>
-                                </div>
-                                <div className="text-right">
+                        {/* Top Section: Score + Pie + Guidance */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                            {/* Left: Score Card */}
+                            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                                <div className="text-center mb-4">
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{result.exam_title}</p>
                                     <p className={`text-5xl font-black text-${gradeColor}-600`}>
                                         {score.toFixed(1)}
                                     </p>
                                     <p className="text-gray-400 text-sm">/ 10 điểm</p>
                                 </div>
-                            </div>
-
-                            {/* Stats Grid */}
-                            <div className="grid grid-cols-3 gap-4 mb-5">
-                                <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm text-gray-600 mb-1">Đúng</p>
-                                            <p className="text-2xl font-bold text-green-600">{totalCorrect}</p>
-                                        </div>
-                                        <FiCheckCircle className="text-green-500" size={28} />
-                                    </div>
-                                </div>
-                                <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm text-gray-600 mb-1">Sai</p>
-                                            <p className="text-2xl font-bold text-red-600">{totalIncorrect}</p>
-                                        </div>
-                                        <FiXCircle className="text-red-500" size={28} />
-                                    </div>
-                                </div>
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm text-gray-600 mb-1">Bỏ qua</p>
-                                            <p className="text-2xl font-bold text-gray-600">{totalUnanswered}</p>
-                                        </div>
-                                        <FiMinus className="text-gray-400" size={28} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Accuracy Bar */}
-                            <div className="mb-1">
-                                <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                                    <span className="font-medium">Độ chính xác</span>
-                                    <span className="font-bold text-lg">{accuracy}% {gradeLabel}</span>
-                                </div>
-                                <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
-                                    <div className={`h-full bg-gradient-to-r from-${gradeColor}-400 to-${gradeColor}-600 transition-all duration-700 rounded-full`}
+                                <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden mb-3">
+                                    <div className={`h-full bg-gradient-to-r from-${gradeColor}-400 to-${gradeColor}-600 rounded-full transition-all duration-700`}
                                         style={{ width: `${accuracy}%` }} />
                                 </div>
+                                <p className="text-center text-sm font-semibold text-gray-600">
+                                    {accuracy}% {gradeLabel}
+                                </p>
+                                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
+                                    <FiClock size={12} />
+                                    <span>{new Date(result.submit_time).toLocaleString('vi-VN')}</span>
+                                </div>
+                            </div>
+
+                            {/* Middle: Pie Chart */}
+                            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex flex-col items-center justify-center">
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Phân bố đáp án</p>
+                                <div className="relative" style={{ width: '160px', height: '160px' }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
+                                                {pieData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip
+                                                formatter={(value: number, name: string) => [`${value} câu`, name]}
+                                                contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12 }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                        <p className="text-2xl font-black text-gray-800">{total}</p>
+                                        <p className="text-xs text-gray-400">câu</p>
+                                    </div>
+                                </div>
+                                {/* Legend */}
+                                <div className="mt-3 flex flex-wrap justify-center gap-3">
+                                    {pieData.map((d) => (
+                                        <div key={d.name} className="flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                                            <span className="text-xs text-gray-600">{d.name}: {d.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Right: Guidance Cards */}
+                            <div className="space-y-3">
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide px-1">Bạn muốn làm gì tiếp?</p>
+
+                                <button
+                                    onClick={() => setActiveTab('review')}
+                                    className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 text-left hover:bg-blue-100 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+                                            <FiBookOpen className="text-white" size={16} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-gray-900 text-sm group-hover:text-blue-800">Xem lại bài</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">Kiểm tra đáp án, đọc giải thích từng câu</p>
+                                        </div>
+                                        <span className="text-blue-400 text-sm">→</span>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('chat')}
+                                    className="w-full bg-purple-50 border border-purple-200 rounded-xl p-4 text-left hover:bg-purple-100 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-9 h-9 bg-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                                            <FiCpu className="text-white" size={16} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-gray-900 text-sm group-hover:text-purple-800">Hỏi AI</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">Nhờ AI giải thích, hỏi mẹo làm bài</p>
+                                        </div>
+                                        <span className="text-purple-400 text-sm">→</span>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => router.push('/')}
+                                    className="w-full bg-green-50 border border-green-200 rounded-xl p-4 text-left hover:bg-green-100 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-9 h-9 bg-green-600 rounded-lg flex items-center justify-center shrink-0">
+                                            <FiCheckCircle className="text-white" size={16} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-gray-900 text-sm group-hover:text-green-800">Làm bài mới</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">Tiếp tục luyện tập với đề khác</p>
+                                        </div>
+                                        <span className="text-green-400 text-sm">→</span>
+                                    </div>
+                                </button>
                             </div>
                         </div>
 
