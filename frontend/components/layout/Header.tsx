@@ -157,7 +157,7 @@ export default function Header() {
           <div className="flex items-center justify-end gap-1 sm:gap-2 flex-shrink-0">
 
             {/* Search Bar - Hidden on mobile/tablet, visible on lg+ */}
-            <div className="hidden lg:block w-40 xl:w-52">
+            <div className="hidden lg:block w-36 xl:w-48">
               <SearchBar />
             </div>
 

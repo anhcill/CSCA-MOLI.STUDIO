@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import Link from 'next/link';
@@ -123,6 +123,98 @@ export default function ThongKePage() {
     }
   };
 
+  // Compute per-subject stats when subject param is set
+  const displayStats: HistoryStatsData | null = useMemo(() => {
+    if (!stats || !subjectParam) return stats;
+
+    // Filter attempts by subject
+    const subjectAttempts = stats.recentAttempts.filter(a => a.subjectCode === subjectParam);
+    const subjectSubject = stats.subjects.find(s => s.subjectCode === subjectParam);
+    const subjectScoreDist = stats.scoreDistribution;
+
+    // Recompute overview for this subject only
+    const totalAttempts = subjectAttempts.length;
+    if (totalAttempts === 0) return stats;
+
+    const scores = subjectAttempts.map(a => a.score);
+    const totalCorrect = subjectAttempts.reduce((s, a) => s + a.totalCorrect, 0);
+    const totalIncorrect = subjectAttempts.reduce((s, a) => s + a.totalIncorrect, 0);
+    const totalUnanswered = subjectAttempts.reduce((s, a) => s + a.totalUnanswered, 0);
+    const durations = subjectAttempts.map(a => a.durationSeconds);
+    const totalDuration = durations.reduce((s, d) => s + d, 0);
+    const uniqueDates = [...new Set(subjectAttempts.map(a => a.submitTime.split('T')[0]))];
+    const uniqueExams = [...new Set(subjectAttempts.map(a => a.examId))];
+
+    const passCount = subjectAttempts.filter(a => a.percentage >= 60).length;
+    const failCount = totalAttempts - passCount;
+
+    // Rebuild distribution from subject attempts
+    const distBuckets = [
+      { label: '0-2', min: 0, max: 2, count: 0 },
+      { label: '2-4', min: 2, max: 4, count: 0 },
+      { label: '4-6', min: 4, max: 6, count: 0 },
+      { label: '6-8', min: 6, max: 8, count: 0 },
+      { label: '8-10', min: 8, max: 10.01, count: 0 },
+    ];
+    subjectAttempts.forEach(a => {
+      const bucket = distBuckets.find(b => a.score >= b.min && a.score < b.max);
+      if (bucket) bucket.count++;
+    });
+
+    const scoreDistribution = distBuckets.map(b => ({
+      range: b.label,
+      count: b.count,
+      percentage: totalAttempts > 0 ? (b.count / totalAttempts) * 100 : 0,
+    }));
+
+    // First half vs second half for improvement
+    const mid = Math.floor(totalAttempts / 2);
+    const firstHalf = subjectAttempts.slice(0, mid);
+    const secondHalf = subjectAttempts.slice(mid);
+    const firstHalfAvg = firstHalf.length > 0
+      ? firstHalf.reduce((s, a) => s + a.score, 0) / firstHalf.length
+      : 0;
+    const secondHalfAvg = secondHalf.length > 0
+      ? secondHalf.reduce((s, a) => s + a.score, 0) / secondHalf.length
+      : 0;
+
+    return {
+      ...stats,
+      overview: {
+        totalAttempts,
+        uniqueExams: uniqueExams.length,
+        activeDays: uniqueDates.length,
+        avgScore: scores.reduce((s, v) => s + v, 0) / totalAttempts,
+        maxScore: Math.max(...scores),
+        minScore: Math.min(...scores),
+        avgPercentage: subjectAttempts.reduce((s, a) => s + a.percentage, 0) / totalAttempts,
+        totalCorrect,
+        totalIncorrect,
+        totalUnanswered,
+        avgDurationSeconds: totalDuration / totalAttempts,
+        totalDurationSeconds: totalDuration,
+      },
+      subjects: subjectSubject ? [subjectSubject] : [],
+      scoreDistribution,
+      passFail: {
+        passCount,
+        failCount,
+        totalCount: totalAttempts,
+        passRate: (passCount / totalAttempts) * 100,
+        excellentRate: (subjectAttempts.filter(a => a.percentage >= 80).length / totalAttempts) * 100,
+      },
+      recentAttempts: subjectAttempts,
+      improvement: {
+        firstHalfAvg,
+        secondHalfAvg,
+        improvement: secondHalfAvg - firstHalfAvg,
+        trend: secondHalfAvg > firstHalfAvg + 0.3 ? 'improving'
+          : secondHalfAvg < firstHalfAvg - 0.3 ? 'declining'
+          : 'stable',
+      },
+    };
+  }, [stats, subjectParam]);
+
   if (!isAuthenticated && !loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
@@ -171,8 +263,8 @@ export default function ThongKePage() {
                       </div>
                       <h1 className="text-2xl font-black tracking-tight mt-0.5">Thống Kê Chi Tiết</h1>
                       <p className="text-blue-100 text-sm mt-1">
-                        {stats
-                          ? `${stats.overview.totalAttempts} lần thi · ${stats.overview.activeDays} ngày hoạt động · Điểm TB ${stats.overview.avgScore.toFixed(1)}/10`
+                        {displayStats
+                          ? `${displayStats.overview.totalAttempts} lần thi · ${displayStats.overview.activeDays} ngày hoạt động · Điểm TB ${displayStats.overview.avgScore.toFixed(1)}/10`
                           : 'Đang tải dữ liệu...'}
                       </p>
                     </div>
@@ -204,7 +296,7 @@ export default function ThongKePage() {
             )}
 
             {/* Empty State */}
-            {!loading && !stats && (
+            {!loading && !displayStats && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
                 <div className="text-5xl mb-3">📊</div>
                 <h3 className="text-lg font-bold text-gray-800 mb-1">Chưa có dữ liệu thống kê</h3>
@@ -227,39 +319,39 @@ export default function ThongKePage() {
               </div>
             )}
 
-            {stats && !loading && stats.overview.totalAttempts > 0 && (
+            {displayStats && !loading && displayStats.overview.totalAttempts > 0 && (
               <>
                 {/* ─── ROW 1: Overview Stats ─── */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard
                     icon={FiBarChart2}
                     label="Tổng lần thi"
-                    value={stats.overview.totalAttempts}
-                    sub={`${stats.overview.uniqueExams} đề riêng biệt`}
+                    value={displayStats.overview.totalAttempts}
+                    sub={`${displayStats.overview.uniqueExams} đề riêng biệt`}
                     color="text-indigo-500"
                     iconBg="bg-indigo-100"
                   />
                   <StatCard
                     icon={FiTarget}
                     label="Điểm trung bình"
-                    value={`${stats.overview.avgScore.toFixed(1)}/10`}
-                    sub={`Cao: ${stats.overview.maxScore.toFixed(1)} · Thấp: ${stats.overview.minScore.toFixed(1)}`}
+                    value={`${displayStats.overview.avgScore.toFixed(1)}/10`}
+                    sub={`Cao: ${displayStats.overview.maxScore.toFixed(1)} · Thấp: ${displayStats.overview.minScore.toFixed(1)}`}
                     color="text-emerald-500"
                     iconBg="bg-emerald-100"
                   />
                   <StatCard
                     icon={FiActivity}
                     label="Ngày hoạt động"
-                    value={stats.overview.activeDays}
-                    sub={`${stats.overview.totalCorrect + stats.overview.totalIncorrect} câu đã làm`}
+                    value={displayStats.overview.activeDays}
+                    sub={`${displayStats.overview.totalCorrect + displayStats.overview.totalIncorrect} câu đã làm`}
                     color="text-amber-500"
                     iconBg="bg-amber-100"
                   />
                   <StatCard
                     icon={FiClock}
                     label="Tổng thời gian"
-                    value={formatDuration(stats.overview.totalDurationSeconds)}
-                    sub={`TB ${formatTime(stats.overview.avgDurationSeconds)}/bài`}
+                    value={formatDuration(displayStats.overview.totalDurationSeconds)}
+                    sub={`TB ${formatTime(displayStats.overview.avgDurationSeconds)}/bài`}
                     color="text-blue-500"
                     iconBg="bg-blue-100"
                   />
@@ -278,11 +370,11 @@ export default function ThongKePage() {
                         <p className="text-xs text-gray-400 mt-0.5">Số lần thi theo từng khoảng điểm</p>
                       </div>
                       <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg font-medium">
-                        {stats.scoreDistribution.reduce((s, d) => s + d.count, 0)} lần thi
+                        {displayStats.scoreDistribution.reduce((s, d) => s + d.count, 0)} lần thi
                       </span>
                     </div>
                     <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={stats.scoreDistribution.map(d => ({
+                      <BarChart data={displayStats.scoreDistribution.map(d => ({
                         name: d.range,
                         Số_lần: d.count,
                         'Tỷ lệ (%)': parseFloat(d.percentage.toFixed(1)),
@@ -295,7 +387,7 @@ export default function ThongKePage() {
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="flex flex-wrap gap-3 mt-2 pt-3 border-t border-gray-100">
-                      {stats.scoreDistribution.map((d, i) => (
+                      {displayStats.scoreDistribution.map((d, i) => (
                         <div key={d.range} className="flex items-center gap-1.5 text-xs">
                           <span className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
                           <span className="text-gray-500">{d.range}:</span>
@@ -317,8 +409,8 @@ export default function ThongKePage() {
                         <PieChart>
                           <Pie
                             data={[
-                              { name: 'Đỗ', value: stats.passFail.passCount },
-                              { name: 'Chưa đỗ', value: stats.passFail.failCount },
+                              { name: 'Đỗ', value: displayStats.passFail.passCount },
+                              { name: 'Chưa đỗ', value: displayStats.passFail.failCount },
                             ]}
                             cx="50%"
                             cy="50%"
@@ -340,20 +432,20 @@ export default function ThongKePage() {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
                           <div>
-                            <p className="text-sm font-bold text-gray-800">{stats.passFail.passCount} lần đỗ</p>
+                            <p className="text-sm font-bold text-gray-800">{displayStats.passFail.passCount} lần đỗ</p>
                             <p className="text-xs text-gray-400">≥60%</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-red-400 shrink-0" />
                           <div>
-                            <p className="text-sm font-bold text-gray-800">{stats.passFail.failCount} lần chưa đỗ</p>
+                            <p className="text-sm font-bold text-gray-800">{displayStats.passFail.failCount} lần chưa đỗ</p>
                             <p className="text-xs text-gray-400">&lt;60%</p>
                           </div>
                         </div>
                         <div className="pt-2 border-t border-gray-100">
                           <p className="text-xs text-gray-500">
-                            Tổng: <b className="text-gray-700">{stats.passFail.totalCount} lần thi</b>
+                            Tổng: <b className="text-gray-700">{displayStats.passFail.totalCount} lần thi</b>
                           </p>
                         </div>
                       </div>
@@ -361,11 +453,11 @@ export default function ThongKePage() {
                     <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
                       <div className="text-center p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                         <p className="text-xs text-emerald-600 font-medium">Tỷ lệ đỗ</p>
-                        <p className="text-xl font-black text-emerald-700">{stats.passFail.passRate.toFixed(1)}%</p>
+                        <p className="text-xl font-black text-emerald-700">{displayStats.passFail.passRate.toFixed(1)}%</p>
                       </div>
                       <div className="text-center p-3 bg-amber-50 rounded-xl border border-amber-100">
                         <p className="text-xs text-amber-600 font-medium">Xuất sắc (≥80%)</p>
-                        <p className="text-xl font-black text-amber-700">{stats.passFail.excellentRate.toFixed(1)}%</p>
+                        <p className="text-xl font-black text-amber-700">{displayStats.passFail.excellentRate.toFixed(1)}%</p>
                       </div>
                     </div>
                   </div>
@@ -382,23 +474,23 @@ export default function ThongKePage() {
                         </h2>
                         <p className="text-xs text-gray-400 mt-0.5">Điểm TB qua 6 tháng gần nhất</p>
                       </div>
-                      {stats.improvement && (
+                      {displayStats.improvement && (
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 ${
-                          stats.improvement.trend === 'improving' ? 'bg-emerald-50 text-emerald-700' :
-                          stats.improvement.trend === 'declining' ? 'bg-red-50 text-red-700' :
+                          displayStats.improvement.trend === 'improving' ? 'bg-emerald-50 text-emerald-700' :
+                          displayStats.improvement.trend === 'declining' ? 'bg-red-50 text-red-700' :
                           'bg-gray-100 text-gray-600'
                         }`}>
-                          {stats.improvement.trend === 'improving' ? <FiTrendingUp size={12} /> :
-                           stats.improvement.trend === 'declining' ? <FiTrendingDown size={12} /> :
+                          {displayStats.improvement.trend === 'improving' ? <FiTrendingUp size={12} /> :
+                           displayStats.improvement.trend === 'declining' ? <FiTrendingDown size={12} /> :
                            <FiMinus size={12} />}
-                          {stats.improvement.trend === 'improving' ? 'Tiến bộ' :
-                           stats.improvement.trend === 'declining' ? 'Cần cải thiện' : 'Ổn định'}
+                          {displayStats.improvement.trend === 'improving' ? 'Tiến bộ' :
+                           displayStats.improvement.trend === 'declining' ? 'Cần cải thiện' : 'Ổn định'}
                         </span>
                       )}
                     </div>
-                    {stats.monthlyTrend.length > 1 ? (
+                    {displayStats.monthlyTrend.length > 1 ? (
                       <ResponsiveContainer width="100%" height={220}>
-                        <AreaChart data={stats.monthlyTrend.map(m => ({
+                        <AreaChart data={displayStats.monthlyTrend.map(m => ({
                           tháng: m.monthLabel,
                           'Điểm TB': parseFloat(m.avgScore.toFixed(1)),
                           'Điểm cao nhất': parseFloat(m.maxScore.toFixed(1)),
@@ -430,33 +522,33 @@ export default function ThongKePage() {
                       <FiAward size={18} className="text-amber-500" />
                       Tiến bộ của bạn
                     </h2>
-                    {stats.improvement ? (
+                    {displayStats.improvement ? (
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <div className="p-3 bg-gray-50 rounded-xl text-center border border-gray-100">
                             <p className="text-xs text-gray-500 mb-1">Nửa đầu</p>
-                            <p className="text-lg font-black text-gray-700">{stats.improvement.firstHalfAvg.toFixed(1)}</p>
+                            <p className="text-lg font-black text-gray-700">{displayStats.improvement.firstHalfAvg.toFixed(1)}</p>
                           </div>
                           <div className="p-3 bg-indigo-50 rounded-xl text-center border border-indigo-100">
                             <p className="text-xs text-indigo-500 mb-1">Nửa sau</p>
-                            <p className="text-lg font-black text-indigo-700">{stats.improvement.secondHalfAvg.toFixed(1)}</p>
+                            <p className="text-lg font-black text-indigo-700">{displayStats.improvement.secondHalfAvg.toFixed(1)}</p>
                           </div>
                         </div>
                         <div className={`p-4 rounded-xl text-center border-2 ${
-                          stats.improvement.improvement > 0 ? 'bg-emerald-50 border-emerald-200' :
-                          stats.improvement.improvement < 0 ? 'bg-red-50 border-red-200' :
+                          displayStats.improvement.improvement > 0 ? 'bg-emerald-50 border-emerald-200' :
+                          displayStats.improvement.improvement < 0 ? 'bg-red-50 border-red-200' :
                           'bg-gray-50 border-gray-200'
                         }`}>
                           <p className={`text-3xl font-black ${
-                            stats.improvement.improvement > 0 ? 'text-emerald-600' :
-                            stats.improvement.improvement < 0 ? 'text-red-500' : 'text-gray-600'
+                            displayStats.improvement.improvement > 0 ? 'text-emerald-600' :
+                            displayStats.improvement.improvement < 0 ? 'text-red-500' : 'text-gray-600'
                           }`}>
-                            {stats.improvement.improvement > 0 ? '+' : ''}{stats.improvement.improvement.toFixed(1)}
+                            {displayStats.improvement.improvement > 0 ? '+' : ''}{displayStats.improvement.improvement.toFixed(1)}
                           </p>
                           <p className="text-xs font-medium mt-1 text-gray-600">
-                            {stats.improvement.improvement > 0
+                            {displayStats.improvement.improvement > 0
                               ? 'Điểm của bạn đang cải thiện!'
-                              : stats.improvement.improvement < 0
+                              : displayStats.improvement.improvement < 0
                               ? 'Điểm giảm so với trước đây'
                               : 'Điểm của bạn khá ổn định'}
                           </p>
@@ -481,10 +573,10 @@ export default function ThongKePage() {
                         <p className="text-xs text-gray-400 mt-0.5">So sánh điểm TB giữa các môn</p>
                       </div>
                     </div>
-                    {stats.subjects.length > 0 ? (
+                    {displayStats.subjects.length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart
-                          data={stats.subjects.map(s => ({
+                          data={displayStats.subjects.map(s => ({
                             name: s.subjectName,
                             'Điểm TB': parseFloat(s.avgScore.toFixed(1)),
                             'Điểm cao nhất': parseFloat(s.maxScore.toFixed(1)),
@@ -506,9 +598,9 @@ export default function ThongKePage() {
                       </div>
                     )}
                     {/* Subject Cards */}
-                    {stats.subjects.length > 0 && (
+                    {displayStats.subjects.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
-                        {stats.subjects.map(s => {
+                        {displayStats.subjects.map(s => {
                           const scoreColor = s.avgScore >= 8 ? 'text-emerald-600' : s.avgScore >= 6 ? 'text-amber-600' : 'text-red-500';
                           const scoreBg = s.avgScore >= 8 ? 'bg-emerald-50 border-emerald-100' : s.avgScore >= 6 ? 'bg-amber-50 border-amber-100' : 'bg-red-50 border-red-100';
                           return (
@@ -540,10 +632,10 @@ export default function ThongKePage() {
                         <p className="text-xs text-gray-400 mt-0.5">Hiệu suất với từng mức độ khó</p>
                       </div>
                     </div>
-                    {stats.difficulties.length > 0 ? (
+                    {displayStats.difficulties.length > 0 ? (
                       <ResponsiveContainer width="100%" height={200}>
                         <BarChart
-                          data={stats.difficulties.map(d => ({
+                          data={displayStats.difficulties.map(d => ({
                             name: d.difficulty === 'easy' ? 'Dễ' : d.difficulty === 'medium' ? 'TB' : 'Khó',
                             'Tỷ lệ đỗ (%)': parseFloat(d.passRate.toFixed(1)),
                             'Điểm TB (%)': parseFloat(d.avgPercentage.toFixed(1)),
@@ -563,9 +655,9 @@ export default function ThongKePage() {
                         Chưa có dữ liệu theo độ khó
                       </div>
                     )}
-                    {stats.difficulties.length > 0 && (
+                    {displayStats.difficulties.length > 0 && (
                       <div className="space-y-2.5 mt-3 pt-3 border-t border-gray-100">
-                        {stats.difficulties.map(d => {
+                        {displayStats.difficulties.map(d => {
                           const color = d.difficulty === 'easy' ? '#22c55e' : d.difficulty === 'medium' ? '#f59e0b' : '#ef4444';
                           const label = d.difficulty === 'easy' ? 'Dễ' : d.difficulty === 'medium' ? 'Trung bình' : 'Khó';
                           return (
@@ -599,29 +691,29 @@ export default function ThongKePage() {
                       {[
                         {
                           label: 'TB thời gian/bài',
-                          value: formatDuration(stats.timeStats.avgDurationSeconds),
+                          value: formatDuration(displayStats.timeStats.avgDurationSeconds),
                           color: 'text-gray-800',
                         },
                         {
                           label: 'TB thời gian/câu',
-                          value: stats.timeStats.avgSecondsPerQuestion > 120
-                            ? `${Math.round(stats.timeStats.avgSecondsPerQuestion / 60)} phút`
-                            : `${Math.round(stats.timeStats.avgSecondsPerQuestion)}s`,
-                          color: stats.timeStats.avgSecondsPerQuestion > 120 ? 'text-amber-600' : 'text-gray-800',
+                          value: displayStats.timeStats.avgSecondsPerQuestion > 120
+                            ? `${Math.round(displayStats.timeStats.avgSecondsPerQuestion / 60)} phút`
+                            : `${Math.round(displayStats.timeStats.avgSecondsPerQuestion)}s`,
+                          color: displayStats.timeStats.avgSecondsPerQuestion > 120 ? 'text-amber-600' : 'text-gray-800',
                         },
                         {
                           label: 'Thời gian sử dụng',
-                          value: formatPercent(stats.timeStats.avgTimeUsedPercent),
-                          color: stats.timeStats.avgTimeUsedPercent > 100 ? 'text-red-500' : 'text-gray-800',
+                          value: formatPercent(displayStats.timeStats.avgTimeUsedPercent),
+                          color: displayStats.timeStats.avgTimeUsedPercent > 100 ? 'text-red-500' : 'text-gray-800',
                         },
                         {
                           label: 'Câu đúng (TB thời gian)',
-                          value: formatTime(stats.timeStats.correctAvgSeconds),
+                          value: formatTime(displayStats.timeStats.correctAvgSeconds),
                           color: 'text-emerald-600',
                         },
                         {
                           label: 'Câu sai (TB thời gian)',
-                          value: formatTime(stats.timeStats.incorrectAvgSeconds),
+                          value: formatTime(displayStats.timeStats.incorrectAvgSeconds),
                           color: 'text-red-500',
                         },
                       ].map((item, i) => (
@@ -632,15 +724,15 @@ export default function ThongKePage() {
                       ))}
                     </div>
                     {/* Time comparison insight */}
-                    {stats.timeStats.correctAvgSeconds > 0 && stats.timeStats.incorrectAvgSeconds > 0 && (
+                    {displayStats.timeStats.correctAvgSeconds > 0 && displayStats.timeStats.incorrectAvgSeconds > 0 && (
                       <div className={`mt-4 p-3 rounded-xl text-sm ${
-                        stats.timeStats.incorrectAvgSeconds > stats.timeStats.correctAvgSeconds * 1.3
+                        displayStats.timeStats.incorrectAvgSeconds > displayStats.timeStats.correctAvgSeconds * 1.3
                           ? 'bg-amber-50 border border-amber-200 text-amber-800'
                           : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
                       }`}>
                         <p className="font-medium">
-                          {stats.timeStats.incorrectAvgSeconds > stats.timeStats.correctAvgSeconds * 1.3
-                            ? `⚡ Câu sai mất nhiều thời gian hơn ${((stats.timeStats.incorrectAvgSeconds / stats.timeStats.correctAvgSeconds - 1) * 100).toFixed(0)}% — Hãy cố gắng không suy nghĩ quá lâu ở những câu khó!`
+                          {displayStats.timeStats.incorrectAvgSeconds > displayStats.timeStats.correctAvgSeconds * 1.3
+                            ? `⚡ Câu sai mất nhiều thời gian hơn ${((displayStats.timeStats.incorrectAvgSeconds / displayStats.timeStats.correctAvgSeconds - 1) * 100).toFixed(0)}% — Hãy cố gắng không suy nghĩ quá lâu ở những câu khó!`
                             : `✅ Thời gian phân bổ khá hợp lý giữa câu đúng và câu sai.`}
                         </p>
                       </div>
@@ -672,7 +764,7 @@ export default function ThongKePage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                          {stats.recentAttempts.slice(0, 10).map((a) => {
+                          {displayStats.recentAttempts.slice(0, 10).map((a) => {
                             const isPass = a.percentage >= 60;
                             return (
                               <tr key={a.id} className="hover:bg-indigo-50/40 transition-colors">
@@ -726,10 +818,10 @@ export default function ThongKePage() {
                   </h2>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6 relative">
                     {[
-                      { label: 'Lần thi', value: stats.overview.totalAttempts, icon: '📝' },
-                      { label: 'Điểm TB', value: `${stats.overview.avgScore.toFixed(1)}/10`, icon: '🎯' },
-                      { label: 'Câu đúng', value: stats.overview.totalCorrect.toLocaleString(), icon: '✅' },
-                      { label: 'Tổng thời gian', value: formatDuration(stats.overview.totalDurationSeconds), icon: '⏱️' },
+                      { label: 'Lần thi', value: displayStats.overview.totalAttempts, icon: '📝' },
+                      { label: 'Điểm TB', value: `${displayStats.overview.avgScore.toFixed(1)}/10`, icon: '🎯' },
+                      { label: 'Câu đúng', value: displayStats.overview.totalCorrect.toLocaleString(), icon: '✅' },
+                      { label: 'Tổng thời gian', value: formatDuration(displayStats.overview.totalDurationSeconds), icon: '⏱️' },
                     ].map((item, i) => (
                       <div key={i} className="text-center p-3 bg-white/10 rounded-xl backdrop-blur-sm">
                         <p className="text-3xl mb-1">{item.icon}</p>

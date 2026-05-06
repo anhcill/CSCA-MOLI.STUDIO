@@ -227,40 +227,27 @@ export default function VipPricingPage() {
               </div>
             </div>
 
-            {/* VIP Plans */}
-            {vipPkgs.length > 0 && (
+            {/* VIP + Premium Plans — all side by side in one row */}
+            {(vipPkgs.length > 0 || premiumPkgs.length > 0) && (
               <div className="mb-10">
-                <h2 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
-                  <FaCrown className="text-indigo-500" size={18} />
-                  Gói VIP — Mở khoá toàn bộ đề thi
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto items-stretch">
-                  {vipPkgs.map(pkg => {
-                    const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
-                    return (
-                      <PlanCard
-                        key={pkg.id} pkg={pkg} isVip={!!isVip}
-                        onCheckout={handleCheckout}
-                        discount={discount}
-                        onApplyCoupon={handleApplyCoupon}
-                        selectedPkg={selectedPkg}
-                        onSelectPkg={setSelectedPkg}
-                      />
-                    );
-                  })}
+                {/* Section header */}
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <FaCrown className="text-indigo-500" size={18} />
+                    <span className="text-lg font-black text-gray-900">Gói VIP</span>
+                    <span className="text-xs text-gray-400 font-medium">— Mở khoá đề thi</span>
+                  </div>
+                  <div className="w-px h-5 bg-gray-200" />
+                  <div className="flex items-center gap-2">
+                    <FaStar className="text-amber-500" size={18} />
+                    <span className="text-lg font-black text-gray-900">Gói Pre</span>
+                    <span className="text-xs text-gray-400 font-medium">— Đề thi + Video + Team cố vấn</span>
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Premium Plans */}
-            {premiumPkgs.length > 0 && (
-              <div>
-                <h2 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
-                  <FaStar className="text-amber-500" size={18} />
-                  Gói Pre — Đề thi + Video giải đề + Team cố vấn
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto items-stretch">
-                  {premiumPkgs.map(pkg => {
+                {/* Combined grid: all packages in 1 row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
+                  {[...vipPkgs, ...premiumPkgs].map(pkg => {
                     const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                     return (
                       <PlanCard
@@ -397,53 +384,53 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
       `}
     >
       {isSelected && (
-        <div className="absolute top-0 right-0 bg-violet-600 text-white px-4 py-1.5 rounded-bl-xl text-xs font-black shadow-md flex items-center gap-1 z-20 animate-in slide-in-from-top-2">
-          <FiCheck size={14} /> ĐÃ CHỌN
+        <div className="absolute top-0 right-0 bg-violet-600 text-white px-3 py-1 rounded-bl-xl text-[10px] font-black shadow-md flex items-center gap-1 z-20 animate-in slide-in-from-top-2">
+          <FiCheck size={10} /> ĐÃ CHỌN
         </div>
       )}
       {/* Header */}
-      <div className={`bg-gradient-to-r ${colors.gradient} p-6 text-white pt-8`}>
+      <div className={`bg-gradient-to-r ${colors.gradient} p-4 text-white pt-6`}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xl font-black">{pkg.name}</h3>
-            <p className="text-white/70 text-sm mt-1">{pkg.duration_days} ngày sử dụng</p>
+            <h3 className="text-lg font-black">{pkg.name}</h3>
+            <p className="text-white/70 text-xs mt-0.5">{pkg.duration_days} ngày</p>
           </div>
           {isPre && !isSelected && (
-            <div className="bg-white/20 rounded-xl p-2 text-center">
-              <FaVideo size={20} className="mx-auto text-white" />
-              <span className="text-[9px] font-bold text-white/80 block mt-0.5">Cố vấn</span>
+            <div className="bg-white/20 rounded-xl p-1.5 text-center">
+              <FaVideo size={16} className="mx-auto text-white" />
+              <span className="text-[8px] font-bold text-white/80 block mt-0.5">Cố vấn</span>
             </div>
           )}
         </div>
-        <div className="mt-4 flex items-baseline gap-1">
+        <div className="mt-3 flex items-baseline gap-1">
           {discount ? (
             <>
-              <span className="text-2xl font-black line-through text-white/50">
+              <span className="text-lg font-black line-through text-white/50">
                 {pkg.price.toLocaleString('vi-VN')}
               </span>
-              <span className="text-4xl font-black">
+              <span className="text-3xl font-black">
                 {discount.final_amount.toLocaleString('vi-VN')}
               </span>
-              <span className="text-white/70 text-sm">đ</span>
-              <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-lg text-xs font-bold text-white">
+              <span className="text-white/70 text-xs">đ</span>
+              <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded-lg text-[10px] font-bold text-white">
                 -{discount.discount_amount.toLocaleString('vi-VN')}đ
               </span>
             </>
           ) : (
             <>
-              <span className="text-4xl font-black">{pkg.price.toLocaleString('vi-VN')}</span>
-              <span className="text-white/70 text-sm">đ</span>
+              <span className="text-3xl font-black">{pkg.price.toLocaleString('vi-VN')}</span>
+              <span className="text-white/70 text-xs">đ</span>
             </>
           )}
         </div>
         {pkg.description && (
-          <p className="text-white/70 text-xs mt-2">{pkg.description}</p>
+          <p className="text-white/70 text-[10px] mt-1.5 line-clamp-2">{pkg.description}</p>
         )}
       </div>
 
       {/* Features */}
-      <div className="p-6 flex flex-col flex-1">
-        <ul className="space-y-3 mb-4 flex-1">
+      <div className="p-4 flex flex-col flex-1">
+        <ul className="space-y-2 mb-3 flex-1">
           {(pkg.features || []).map((feat, i) => (
             <li key={i} className="flex items-start gap-2.5">
               <FaCheckCircle size={16} className={`${colors.icon} mt-0.5 shrink-0`} />

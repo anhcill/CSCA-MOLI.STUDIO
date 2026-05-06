@@ -199,7 +199,7 @@ export default function SearchBar() {
   return (
     <div ref={containerRef} className="relative">
       {/* Input */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${open ? 'border-purple-400 ring-2 ring-purple-100 bg-white' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} w-56 lg:w-72`}>
+      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${open ? 'border-purple-400 ring-2 ring-purple-100 bg-white' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} w-full`}>
         {loading
           ? <div className="w-4 h-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin shrink-0" />
           : <FiSearch size={15} className="text-gray-400 shrink-0" />
@@ -208,7 +208,7 @@ export default function SearchBar() {
           ref={inputRef}
           type="text"
           value={query}
-          placeholder="Tìm kiếm..."
+          placeholder="Tìm nhanh..."
           onChange={e => { setQuery(e.target.value); setActiveIdx(-1); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
