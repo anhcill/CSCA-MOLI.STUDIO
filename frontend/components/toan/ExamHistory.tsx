@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { FiCheckCircle, FiXCircle, FiClock } from 'react-icons/fi';
-import Link from 'next/link';
 import examApi from '@/lib/api/exams';
 
 interface ExamHistoryProps {
@@ -10,6 +10,7 @@ interface ExamHistoryProps {
 }
 
 export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
+  const router = useRouter();
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -119,7 +120,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
         ) : history.map((item, index) => (
           <button
             key={index}
-            onClick={() => window.location.href = `/exam/result/${item.id}`}
+            onClick={() => router.push(`/exam/result/${item.id}`)}
             className="w-full border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left"
           >
             <div className="flex items-start justify-between mb-3">
