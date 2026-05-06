@@ -8,7 +8,7 @@ const VipPackageController = {
   async getPackages(req, res) {
     try {
       const result = await db.query(
-        `SELECT id, name, duration_days, price, description, features, is_active, sort_order, created_at
+        `SELECT id, name, tier, duration_days, price, description, features, is_active, sort_order, created_at
          FROM vip_packages
          WHERE is_active = TRUE
          ORDER BY sort_order ASC, price ASC`
@@ -27,7 +27,7 @@ const VipPackageController = {
   async getAllPackages(req, res) {
     try {
       const result = await db.query(
-        `SELECT id, name, duration_days, price, description, features, is_active, sort_order, created_at
+        `SELECT id, name, tier, duration_days, price, description, features, is_active, sort_order, created_at
          FROM vip_packages
          ORDER BY sort_order ASC, price ASC`
       );
@@ -44,17 +44,17 @@ const VipPackageController = {
    */
   async createPackage(req, res) {
     try {
-      const { name, duration_days, price, description, features, sort_order } = req.body;
+      const { name, tier, duration_days, price, description, features, sort_order } = req.body;
 
-      if (!name || !duration_days || price === undefined) {
+      if (!name || !tier || !duration_days || price === undefined) {
         return res.status(400).json({ success: false, message: 'Thiếu trường bắt buộc' });
       }
 
       const result = await db.query(
-        `INSERT INTO vip_packages (name, duration_days, price, description, features, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO vip_packages (name, tier, duration_days, price, description, features, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [name, duration_days, price, description || '', features || [], sort_order || 0]
+        [name, tier, duration_days, price, description || '', features || [], sort_order || 0]
       );
 
       res.json({ success: true, message: 'Đã tạo gói VIP', data: result.rows[0] });
@@ -71,13 +71,14 @@ const VipPackageController = {
   async updatePackage(req, res) {
     try {
       const { id } = req.params;
-      const { name, duration_days, price, description, features, is_active, sort_order } = req.body;
+      const { name, tier, duration_days, price, description, features, is_active, sort_order } = req.body;
 
       const fields = [];
       const values = [];
       let idx = 1;
 
       if (name !== undefined) { fields.push(`name = $${idx++}`); values.push(name); }
+      if (tier !== undefined) { fields.push(`tier = $${idx++}`); values.push(tier); }
       if (duration_days !== undefined) { fields.push(`duration_days = $${idx++}`); values.push(duration_days); }
       if (price !== undefined) { fields.push(`price = $${idx++}`); values.push(price); }
       if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }

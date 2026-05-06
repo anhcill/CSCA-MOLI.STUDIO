@@ -62,6 +62,7 @@ interface Transaction {
 interface VipPackage {
   id: number;
   name: string;
+  tier: string;
   duration_days: number;
   price: number;
   description: string;
@@ -148,12 +149,12 @@ export default function AdminVipPage() {
 
   // ── Package edit modal ─────────────────────────────────
   const [editingPkg, setEditingPkg] = useState<VipPackage | null>(null);
-  const [pkgForm, setPkgForm] = useState({ name: '', duration_days: '', price: '', description: '', features: '' });
+  const [pkgForm, setPkgForm] = useState({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
   const [pkgSaving, setPkgSaving] = useState(false);
 
   // ── Create package modal ────────────────────────────────
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', duration_days: '', price: '', description: '', features: '' });
+  const [createForm, setCreateForm] = useState({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
   const [createSaving, setCreateSaving] = useState(false);
 
   // ── Comparison tab ──────────────────────────────────────
@@ -313,6 +314,7 @@ export default function AdminVipPage() {
     setEditingPkg(pkg);
     setPkgForm({
       name: pkg.name,
+      tier: pkg.tier || 'vip',
       duration_days: String(pkg.duration_days),
       price: String(pkg.price),
       description: pkg.description || '',
@@ -327,6 +329,7 @@ export default function AdminVipPage() {
       const features = pkgForm.features.split('\n').map(f => f.trim()).filter(Boolean);
       await axios.put(`/vip/packages/${editingPkg!.id}`, {
         name: pkgForm.name,
+        tier: pkgForm.tier,
         duration_days: parseInt(pkgForm.duration_days),
         price: parseInt(pkgForm.price),
         description: pkgForm.description,
@@ -349,13 +352,14 @@ export default function AdminVipPage() {
       const features = createForm.features.split('\n').map(f => f.trim()).filter(Boolean);
       await axios.post('/vip/packages', {
         name: createForm.name,
+        tier: createForm.tier,
         duration_days: parseInt(createForm.duration_days),
         price: parseInt(createForm.price),
         description: createForm.description,
         features,
       });
       setShowCreateModal(false);
-      setCreateForm({ name: '', duration_days: '', price: '', description: '', features: '' });
+      setCreateForm({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
       loadPackages();
       alert('Đã tạo gói VIP!');
     } catch (err: any) {
@@ -748,6 +752,12 @@ export default function AdminVipPage() {
                           <div className="flex items-center gap-2">
                             <FaCrown className={pkg.is_active ? 'text-yellow-500' : 'text-gray-400'} size={18} />
                             <h4 className="font-bold text-gray-900">{pkg.name}</h4>
+                            {pkg.tier === 'premium' && (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Pre</span>
+                            )}
+                            {pkg.tier === 'vip' && (
+                              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">VIP</span>
+                            )}
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${pkg.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
                             {pkg.is_active ? 'Active' : 'Inactive'}
@@ -956,6 +966,14 @@ export default function AdminVipPage() {
                 <input type="text" value={pkgForm.name} onChange={e => setPkgForm(f => ({ ...f, name: e.target.value }))}
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại gói *</label>
+                <select value={pkgForm.tier} onChange={e => setPkgForm(f => ({ ...f, tier: e.target.value }))}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white">
+                  <option value="vip">VIP — Đề thi + AI</option>
+                  <option value="premium">Pre — Video + Cố vấn</option>
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Số ngày *</label>
@@ -1006,8 +1024,16 @@ export default function AdminVipPage() {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Tên gói *</label>
                 <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Gói Xem"
+                  placeholder="Gói VIP 30 ngày"
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại gói *</label>
+                <select value={createForm.tier} onChange={e => setCreateForm(f => ({ ...f, tier: e.target.value }))}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white">
+                  <option value="vip">VIP — Đề thi + AI</option>
+                  <option value="premium">Pre — Video + Cố vấn</option>
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
