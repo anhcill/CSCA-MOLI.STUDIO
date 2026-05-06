@@ -38,12 +38,10 @@ const validateRegister = [
     .normalizeEmail(),
 
   body("password")
-    .isLength({ min: 6 })
-    .withMessage("Password must be at least 6 characters long")
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage(
-      "Password must contain at least one uppercase letter, one lowercase letter, and one number"
-    ),
+    .isLength({ min: 8 })
+    .withMessage("Mật khẩu phải có ít nhất 8 ký tự")
+    .matches(/^(?=.*[a-zA-Z])(?=.*[0-9])/)
+    .withMessage("Mật khẩu phải chứa ít nhất 1 chữ cái và 1 chữ số"),
 
   body("full_name")
     .optional()
