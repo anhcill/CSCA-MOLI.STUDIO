@@ -1,479 +1,785 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const fs = require("fs");
-const path = require("path");
+/**
+ * AI Service — Tất cả 7 features AI cho hệ thống thi CSCA
+ *
+ * Model: DeepSeek R1 qua Beeknoee
+ * Muốn đổi model? Sửa src/config/aiConfig.js
+ */
 
-if (!process.env.GEMINI_API_KEY) {
-  console.warn(
-    "⚠️  GEMINI_API_KEY không được cấu hình trong .env — AI features sẽ không hoạt động",
-  );
-}
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const aiConfig = require('../config/aiConfig');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const hasGeminiConfig = Boolean(process.env.GEMINI_API_KEY);
-
-// Server-level rate limit state — persist sang file để survive nodemon restart
-const RATE_LIMIT_FILE = path.join(__dirname, "../../.ai_ratelimit");
-const RATE_LIMIT_BACKOFF_MS = 90_000; // 90 giây sau khi bị 429
-
+// ─── Rate limiting (global, file-based) ─────────────────────────────────────────
+const RATE_LIMIT_FILE = path.join(__dirname, '../../.ai_ratelimit');
 let rateLimitedUntil = 0;
+let lastRequestTime = 0;
 
-// Khôi phục state từ file khi module load (survive server restart)
 try {
-  const saved = JSON.parse(fs.readFileSync(RATE_LIMIT_FILE, "utf8"));
+  const saved = JSON.parse(fs.readFileSync(RATE_LIMIT_FILE, 'utf8'));
   if (saved.until > Date.now()) {
     rateLimitedUntil = saved.until;
-    console.log(
-      `📋 Khôi phục AI rate limit state — còn ${Math.ceil((saved.until - Date.now()) / 1000)}s`,
-    );
+    console.log(`📋 AI rate limit còn ${Math.ceil((saved.until - Date.now()) / 1000)}s`);
   }
-} catch {
-  /* không có file — bình thường */
+} catch { /* first run */ }
+
+function isRateLimited() { return Date.now() < rateLimitedUntil; }
+function setRateLimit(ms) {
+  rateLimitedUntil = Date.now() + ms;
+  try { fs.writeFileSync(RATE_LIMIT_FILE, JSON.stringify({ until: rateLimitedUntil })); } catch {}
+}
+function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUntil - Date.now()) / 1000)); }
+
+// ─── Round-robin API key pool ────────────────────────────────────────────────
+const BEE = aiConfig.beeknoee;
+let currentKeyIndex = 0;
+
+function getNextKey() {
+  const keys = BEE.apiKeys.filter(Boolean);
+  if (keys.length === 0) return null;
+  const key = keys[currentKeyIndex % keys.length];
+  currentKeyIndex++;
+  console.log(`🔑 Dùng API key #${(currentKeyIndex % keys.length) + 1}/${keys.length}`);
+  return key;
 }
 
-/**
- * Kiểm tra xem hiện tại có đang trong thời gian backoff không
- */
-function isRateLimited() {
-  return Date.now() < rateLimitedUntil;
+async function waitBetweenRequests() {
+  const delay = BEE.delayBetweenRequests || 2000;
+  const elapsed = Date.now() - lastRequestTime;
+  if (elapsed < delay) {
+    const wait = delay - elapsed;
+    console.log(`⏳ Đợi ${wait}ms trước request tiếp theo...`);
+    await new Promise(r => setTimeout(r, wait));
+  }
+  lastRequestTime = Date.now();
 }
 
-function setRateLimited(backoffMs) {
-  rateLimitedUntil = Date.now() + backoffMs;
-  try {
-    fs.writeFileSync(
-      RATE_LIMIT_FILE,
-      JSON.stringify({ until: rateLimitedUntil }),
-    );
-  } catch {}
+// Global mutex: chỉ 1 request AI tại 1 thời điểm
+let inFlight = null;
+
+async function withMutex(fn) {
+  if (inFlight) { await inFlight.catch(() => {}); }
+  inFlight = fn();
+  return inFlight;
 }
 
-/** Trả về số giây còn lại của backoff (0 nếu không bị rate limit) */
-function getRateLimitRemaining() {
-  return Math.max(0, Math.ceil((rateLimitedUntil - Date.now()) / 1000));
-}
-
-// ── Global Gemini mutex ───────────────────────────────────────────────────────
-// Chỉ cho phép 1 call Gemini tại bất kỳ thời điểm nào (bất kể user).
-// Nếu đang có call in-flight, request mới sẽ đợi rồi re-check isRateLimited().
-let geminiMutexPromise = null;
-
-/**
- * Gọi Gemini — fail fast nếu đang trong backoff hoặc bị 429
- */
-async function callGemini(model, prompt) {
-  // Nếu đang trong backoff window — throw ngay, không gọi API
+// ─── AI Core: Gọi Beeknoee (DeepSeek R1) ───────────────────────────────────────
+async function callBeeknoee(prompt, options = {}) {
   if (isRateLimited()) {
-    const remainSec = Math.ceil((rateLimitedUntil - Date.now()) / 1000);
-    console.warn(`⏳ Gemini đang trong backoff, còn ${remainSec}s — bỏ qua`);
-    const e = new Error("RATE_LIMITED");
-    e.isRateLimit = true;
+    const e = new Error('RATE_LIMITED');
+    e.retryAfter = getRateLimitRemaining();
     throw e;
   }
 
-  // Nếu đang có 1 call khác chạy — đợi nó xong rồi re-check
-  if (geminiMutexPromise) {
-    await geminiMutexPromise.catch(() => {});
-    // Sau khi call kia xong, kiểm tra lại (có thể đã set rateLimitedUntil)
-    if (isRateLimited()) {
-      const remainSec = Math.ceil((rateLimitedUntil - Date.now()) / 1000);
-      console.warn(`⏳ Gemini backoff sau mutex, còn ${remainSec}s — bỏ qua`);
-      const e = new Error("RATE_LIMITED");
-      e.isRateLimit = true;
-      throw e;
-    }
+  await waitBetweenRequests();
+
+  const { maxTokens = BEE.maxTokens, temperature = BEE.temperature } = options;
+  const apiKey = getNextKey();
+
+  if (!apiKey) {
+    throw new Error('Không có API key nào được cấu hình');
   }
 
-  // Đăng ký mutex ĐỒNG BỘ trước khi await bất kỳ điều gì
+  const payload = {
+    model: BEE.model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: maxTokens,
+    temperature,
+  };
+
   let resolveMutex;
-  geminiMutexPromise = new Promise((r) => {
-    resolveMutex = r;
-  });
+  const mutexPromise = new Promise(r => { resolveMutex = r; });
+  inFlight = mutexPromise;
 
   try {
-    const result = await model.generateContent(prompt);
-    return result.response;
+    const response = await axios.post(
+      `${BEE.baseUrl}/chat/completions`,
+      payload,
+      {
+        timeout: BEE.timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    // OpenAI-compatible response: choices[0].message.content
+    const text = response.data?.choices?.[0]?.message?.content || '';
+    return typeof text === 'string' ? text.trim() : JSON.stringify(text);
   } catch (err) {
-    const is429 =
-      err.status === 429 || (err.message && err.message.includes("429"));
-    if (is429) {
-      const retryMatch =
-        err.message && err.message.match(/"retryDelay":"(\d+)s"/);
-      const backoffMs = retryMatch
-        ? (parseInt(retryMatch[1]) + 5) * 1000
-        : RATE_LIMIT_BACKOFF_MS;
-      setRateLimited(backoffMs);
-      console.warn(
-        `⚠️  Gemini 429 — backoff ${Math.ceil(backoffMs / 1000)}s (mọi request sẽ trả cache ngay)`,
-      );
-      const e = new Error("RATE_LIMITED");
-      e.isRateLimit = true;
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      const e = new Error('AI_TIMEOUT');
+      throw e;
+    }
+    if (err.response?.status === 429) {
+      // Key bị rate limit → chuyển sang key khác ngay
+      console.warn(`⚠️ Key #${(currentKeyIndex % BEE.apiKeys.length)} bị rate limit, thử key khác...`);
+      currentKeyIndex++;
+      setRateLimit(aiConfig.general.globalBackoffMs);
+      const e = new Error('RATE_LIMITED');
+      e.retryAfter = getRateLimitRemaining();
       throw e;
     }
     throw err;
   } finally {
     resolveMutex();
-    // Xóa mutex sau 100ms để tránh các request mới bị đợi vô ích
-    setTimeout(() => {
-      if (geminiMutexPromise) geminiMutexPromise = null;
-    }, 100);
+    setTimeout(() => { inFlight = null; }, 200);
   }
 }
 
-// Alias cũ để không cần sửa các chỗ gọi
-const callGeminiWithRetry = callGemini;
-
-function buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats) {
-  const normalized = Object.entries(subjectStats)
-    .map(([subject, stats]) => {
-      const avg = stats.count > 0 ? (stats.total / stats.count) : 0;
-      return {
-        subject,
-        percentage: Math.max(0, Math.min(100, Math.round(avg))),
-        count: stats.count,
-      };
-    })
-    .sort((a, b) => a.percentage - b.percentage);
-
-  const weaknesses = normalized
-    .filter((item) => item.percentage < 75)
-    .slice(0, 3)
-    .map((item) => ({
-      subject: item.subject,
-      percentage: item.percentage,
-      advice:
-        item.percentage < 55
-          ? "Nên học lại ly thuyet nen tang va lam bo de muc do co ban moi ngay."
-          : "Tap trung luyen de co giai thich dap an va ghi lai loi sai thuong gap.",
-    }));
-
-  const strengths = normalized
-    .filter((item) => item.percentage >= 80)
-    .slice(-2)
-    .reverse()
-    .map((item) => ({
-      subject: item.subject,
-      percentage: item.percentage,
-      praise: "Ban dang duy tri ket qua tot, hay tiep tuc giu nhip luyen de deu dan.",
-    }));
-
-  const suggestions = [];
-  if (weaknesses.length > 0) {
-    suggestions.push(
-      `Uu tien 60 phut moi ngay cho mon ${weaknesses[0].subject} trong 7 ngay toi.`,
-    );
+// ─── Parse JSON từ AI response ────────────────────────────────────────────────
+function parseAIMaybeJSON(text) {
+  try { return JSON.parse(text); } catch {}
+  // Thử tìm JSON block trong markdown
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) {
+    try { return JSON.parse(match[1].trim()); } catch {}
   }
-  suggestions.push("Sau moi de, tong hop 5 cau sai vao so tay va on lai vao hom sau.");
-  suggestions.push(
-    "Lam it nhat 1 de tong hop moi 2 ngay de theo doi tien bo va dieu chinh lo trinh.",
-  );
+  return null;
+}
+
+// ─── Fallback rule-based analysis ─────────────────────────────────────────────
+function ruleBasedExamAnalysis(attemptData) {
+  const { totalScore, totalQuestions, correctCount, subjectName, questions } = attemptData;
+  const percentage = Math.round((correctCount / totalQuestions) * 100);
+
+  const isPassing = percentage >= 60;
+  const isExcellent = percentage >= 85;
 
   return {
-    hasEnoughData: true,
-    totalExams: examAttempts.length,
-    subjectStats: normalized.map((item) => ({
-      subject: item.subject,
-      average: item.percentage.toFixed(1),
-      count: item.count,
-    })),
-    weaknesses,
-    strengths,
-    suggestions,
+    score: percentage,
+    grade: isExcellent ? 'Tuyệt vời!' : isPassing ? 'Đạt yêu cầu' : 'Cần cố gắng',
+    gradeColor: isExcellent ? 'emerald' : isPassing ? 'blue' : 'red',
+    analysis: isExcellent
+      ? `Bạn làm rất tốt! Kiến thức vững chắc.`
+      : isPassing
+      ? `Kết quả đạt yêu cầu. Cần ôn luyện thêm để cải thiện.`
+      : `Bạn cần học kỹ hơn. Hãy ôn lại lý thuyết và làm nhiều bài tập hơn.`,
+    overallAdvice: isExcellent
+      ? 'Tiếp tục duy trì và thử thách bản thân với các đề khó hơn.'
+      : isPassing
+      ? 'Hãy tập trung vào những phần bạn sai và ôn lại kiến thức cơ bản.'
+      : 'Học lại từ đầu, chia nhỏ từng chủ đề và luyện tập đều đặn.',
   };
 }
 
-function buildRuleBasedRoadmap(weaknesses) {
-  const weakestSubject =
-    weaknesses?.weaknesses?.[0]?.subject || "mon can cai thien";
-
-  return {
-    roadmap: [
-      {
-        phase: 1,
-        days: "1-3",
-        title: "Cung co nen tang",
-        description: `On lai ly thuyet cot loi cua ${weakestSubject}.`,
-        tasks: [
-          "On lai cong thuc/chu de trong 45-60 phut moi ngay",
-          "Lam 20 cau co ban va cham lai tung cau sai",
-          "Ghi chu cac loi sai lap lai",
-        ],
-      },
-      {
-        phase: 2,
-        days: "4-6",
-        title: "Luyen theo dang bai",
-        description: "Chia nho theo tung dang cau hoi de tang do chinh xac.",
-        tasks: [
-          "Moi ngay chon 2 dang bai de luyen sau",
-          "Dat muc tieu do chinh xac toi thieu 70%",
-          "Danh dau nhung cau mat nhieu thoi gian",
-        ],
-      },
-      {
-        phase: 3,
-        days: "7-9",
-        title: "Tang toc do",
-        description: "Luyen de co gioi han thoi gian de toi uu toc do lam bai.",
-        tasks: [
-          "Lam de mini 30-40 phut",
-          "Review dap an trong 20 phut ngay sau khi nop bai",
-          "Toi uu thu tu lam cau de tranh mat diem de",
-        ],
-      },
-      {
-        phase: 4,
-        days: "10-12",
-        title: "De tong hop",
-        description: "Mo rong sang de tong hop gan voi de thi that.",
-        tasks: [
-          "Moi 2 ngay lam 1 de tong hop",
-          "So sanh diem voi lan truoc de do tien bo",
-          "Tap trung sua nhom cau sai cao nhat",
-        ],
-      },
-      {
-        phase: 5,
-        days: "13-15",
-        title: "Chot chien luoc",
-        description: "On tap co trong tam va chot chien luoc phong thi.",
-        tasks: [
-          "On lai so tay loi sai trong toan bo 2 tuan",
-          "Lam 1 de tong duyet cuoi cung",
-          "Chuan bi ke hoach phan bo thoi gian khi thi",
-        ],
-      },
-    ],
-  };
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 1: Phân tích kết quả bài thi
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * Phân tích điểm yếu từ lịch sử làm bài
- * @param {Array} examAttempts - Mảng các lần thi
- * @returns {Promise<Object>} - Phân tích điểm yếu
+ * Phân tích kết quả 1 bài thi cụ thể
+ * @param {Object} attemptData - { totalScore, totalQuestions, correctCount, subjectName, duration, questions }
  */
-async function analyzeWeaknesses(examAttempts) {
-  if (!examAttempts || examAttempts.length === 0) {
-    return {
-      hasEnoughData: false,
-      message: "Bạn cần làm ít nhất 3 đề thi để AI phân tích",
-    };
+async function analyzeExamResult(attemptData) {
+  const { questions = [] } = attemptData;
+  const { correctCount, totalQuestions } = attemptData;
+  const percentage = Math.round((correctCount / totalQuestions) * 100);
+
+  // Nếu không có câu hỏi chi tiết → rule-based
+  if (!questions.length || questions.length < 3) {
+    return ruleBasedExamAnalysis(attemptData);
   }
 
-  if (examAttempts.length < 3) {
-    return {
-      hasEnoughData: false,
-      message: `Bạn đã làm ${examAttempts.length} đề. Cần thêm ${3 - examAttempts.length} đề nữa để AI phân tích chính xác.`,
-    };
-  }
+  // Phân loại câu sai theo loại
+  const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
+  const easyCorrect = questions.filter(q => q.difficulty === 'easy' && q.is_correct).length;
+  const mediumCorrect = questions.filter(q => q.difficulty === 'medium' && q.is_correct).length;
+  const hardCorrect = questions.filter(q => q.difficulty === 'hard' && q.is_correct).length;
+  const easyTotal = questions.filter(q => q.difficulty === 'easy').length || 1;
+  const mediumTotal = questions.filter(q => q.difficulty === 'medium').length || 1;
+  const hardTotal = questions.filter(q => q.difficulty === 'hard').length || 1;
 
-  // Tính điểm trung bình theo môn
-  const subjectStats = {};
-  examAttempts.forEach((attempt) => {
-    const subject = attempt.subject || "Tổng hợp";
-    if (!subjectStats[subject]) {
-      subjectStats[subject] = { total: 0, count: 0, scores: [] };
-    }
-    // score là điểm trên thang 100, hoặc tính từ total_correct/total_questions
-    const percentage =
-      attempt.total_questions > 0
-        ? (attempt.total_correct / attempt.total_questions) * 100
-        : parseFloat(attempt.score) || 0;
-    subjectStats[subject].total += percentage;
-    subjectStats[subject].count += 1;
-    subjectStats[subject].scores.push(percentage);
-  });
+  const difficultyBreakdown = {
+    easy:   { correct: easyCorrect,   total: easyTotal,   rate: Math.round(easyCorrect / easyTotal * 100) },
+    medium: { correct: mediumCorrect, total: mediumTotal, rate: Math.round(mediumCorrect / mediumTotal * 100) },
+    hard:   { correct: hardCorrect,   total: hardTotal,   rate: Math.round(hardCorrect / hardTotal * 100) },
+  };
 
-  // Tạo prompt cho GPT
-  const subjectSummary = Object.entries(subjectStats)
-    .map(([subject, stats]) => {
-      const avg = (stats.total / stats.count).toFixed(1);
-      return `- ${subject}: ${avg}% (${stats.count} lần thi)`;
-    })
-    .join("\n");
+  // Xây dựng prompt cho DeepSeek R1
+  const questionsText = questions.slice(0, 80).map(q => {
+    const status = q.is_correct ? '✓ ĐÚNG' : '✗ SAI';
+    const userAnswer = q.selected_answer_key
+      ? `${q.selected_answer_key}. ${q.selected_answer_text || ''}`
+      : 'CHƯA TRẢ LỜI';
+    const correctKey = q.correct_answer_key || '?';
+    const optionsText = (q.options || [])
+      .slice(0, 8)
+      .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
+      .join(' | ');
+    return `Câu ${q.question_number}: [${status}]
+  Đề bài: ${q.question_text || q.question_text_cn || ''}
+  Lựa chọn: ${optionsText}
+  Bạn chọn: ${userAnswer}
+  Đáp án đúng: ${correctKey}. ${q.correct_answer_text || ''}
+  Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}`.substring(0, 600);
+  }).join('\n\n');
 
-  const prompt = `Bạn là chuyên gia tư vấn học tập cho kỳ thi CSCA (China Scholarship Council Assessment). 
-Phân tích kết quả học tập của học viên dưới đây và đưa ra lời khuyên cụ thể.
+  const prompt = `Bạn là chuyên gia giáo dục cho kỳ thi HSK/CSCA.
+Hãy phân tích kết quả bài thi sau và đưa ra phản hồi bằng TIẾNG VIỆT.
 
-KẾT QUẢ HỌC TẬP:
-Tổng số đề thi đã làm: ${examAttempts.length}
-Điểm trung bình theo môn:
-${subjectSummary}
+📊 THÔNG TIN BÀI THI:
+- Môn: ${attemptData.subjectName || 'Tiếng Trung'}
+- Số câu đúng: ${correctCount}/${totalQuestions} (${percentage}%)
+- Thời gian làm: ${attemptData.duration || 'N/A'} phút
 
-YÊU CẦU:
-1. Phân tích 2-3 điểm yếu nhất (môn/chủ đề dưới 70%)
-2. Khen ngợi 1-2 điểm mạnh (môn/chủ đề trên 80%)
-3. Đưa ra 3 gợi ý học tập cụ thể, ngắn gọn
-4. Trả lời BẰNG TIẾNG VIỆT, ngắn gọn, thân thiện
+📋 CHI TIẾT TỪNG CÂU:
+${questionsText}
 
-Trả về JSON format:
+YÊU CẦU — trả về JSON:
 {
-  "weaknesses": [
-    {"subject": "Tên môn", "percentage": 45, "advice": "Gợi ý ngắn gọn"}
-  ],
-  "strengths": [
-    {"subject": "Tên môn", "percentage": 90, "praise": "Lời khen"}
-  ],
-  "suggestions": [
-    "Gợi ý 1 - ngắn gọn, cụ thể",
-    "Gợi ý 2 - ngắn gọn, cụ thể",
-    "Gợi ý 3 - ngắn gọn, cụ thể"
+  "score": ${percentage},
+  "grade": "Mô tả ngắn (VD: Xuất sắc / Khá / Cần cố gắng)",
+  "gradeColor": "emerald|blue|amber|red" (màu hiển thị),
+  "summary": "Tổng kết 2-3 câu về kết quả bài thi này",
+  "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
+  "weaknesses": ["Điểm yếu 1", "Điểm yếu 2"],
+  "analysis": "Phân tích chi tiết 3-5 câu về lý do sai và cách cải thiện",
+  "overallAdvice": "Lời khuyên tổng quát 2-3 câu cho việc ôn luyện tiếp theo",
+  "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2"]
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const ai = parseAIMaybeJSON(raw) || ruleBasedExamAnalysis(attemptData);
+
+    return {
+      score: percentage,
+      difficultyBreakdown,
+      wrongCount: wrongQuestions.length,
+      ...ai,
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    console.error('AI exam analysis failed, using rule-based:', err.message);
+    return ruleBasedExamAnalysis(attemptData);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 2: Giải thích câu sai
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Giải thích chi tiết các câu sai cho 1 bài thi
+ * @param {Array} questions - Mảng câu hỏi đã làm
+ */
+async function explainWrongAnswers(questions) {
+  const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
+  if (!wrongQuestions.length) return { explanations: [], message: 'Bạn không có câu sai!' };
+
+  const questionsText = wrongQuestions.map((q, i) => {
+    const optionsText = (q.options || [])
+      .slice(0, 8)
+      .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
+      .join(' | ');
+    return `[Câu ${i + 1}]
+Đề bài: ${q.question_text || q.question_text_cn || ''}
+Lựa chọn: ${optionsText}
+Bạn chọn: ${q.selected_answer_key || '?'}. ${q.selected_answer_text || ''}
+Đúng: ${q.correct_answer_key || '?'}. ${q.correct_answer_text || ''}
+Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}
+Loại câu: ${q.question_type || 'single_choice'}`;
+  }).join('\n\n');
+
+  const prompt = `Bạn là giáo viên tiếng Trung chuyên nghiệp.
+Với mỗi câu sai dưới đây, hãy giải thích bằng TIẾNG VIỆT rõ ràng.
+
+CÁC CÂU SAI:
+${questionsText}
+
+YÊU CẦU — trả về JSON array:
+{
+  "explanations": [
+    {
+      "questionNumber": 1,
+      "yourAnswer": "Bạn chọn: ..." ,
+      "correctAnswer": "Đáp án đúng: ...",
+      "whyWrong": "Giải thích ngắn tại sao đáp án bạn chọn sai",
+      "knowledgeNote": "Ghi chú kiến thức: giải thích khái niệm/ngữ pháp/nghĩa liên quan",
+      "tip": "Mẹo nhớ/cách tránh sai lần sau",
+      "vocabulary": [{"word": "từ mới", "pinyin": "pīnyīn", "meaning": "nghĩa tiếng Việt"}]
+    }
   ]
 }`;
 
-  if (!hasGeminiConfig) {
-    return buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats);
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 4000 });
+    const ai = parseAIMaybeJSON(raw);
+    if (ai && ai.explanations) return ai;
+    return { explanations: wrongQuestions.map((q, i) => ({
+      questionNumber: q.question_number || i + 1,
+      yourAnswer: `${q.selected_answer_key}. ${q.selected_answer_text || ''}`,
+      correctAnswer: `${q.correct_answer_key}. ${q.correct_answer_text || ''}`,
+      whyWrong: 'Hãy ôn lại phần này và làm lại bài.',
+      knowledgeNote: q.explanation || q.explanation_cn || '',
+      tip: 'Đọc kỹ đề bài và học thuộc từ vựng liên quan.',
+      vocabulary: [],
+    }))};
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      explanations: wrongQuestions.map((q, i) => ({
+        questionNumber: q.question_number || i + 1,
+        yourAnswer: `${q.selected_answer_key}. ${q.selected_answer_text || ''}`,
+        correctAnswer: `${q.correct_answer_key}. ${q.correct_answer_text || ''}`,
+        whyWrong: 'Hãy ôn lại phần này.',
+        knowledgeNote: q.explanation || '',
+        tip: 'Học thuộc từ vựng và ngữ pháp liên quan.',
+        vocabulary: [],
+      })),
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 3: Phân tích theo chủ đề (Topic Analysis)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Phân tích điểm mạnh/yếu theo môn/chủ đề qua nhiều bài thi
+ * @param {Array} examAttempts - Lịch sử làm bài
+ */
+async function analyzeTopics(examAttempts) {
+  if (!examAttempts || examAttempts.length === 0) {
+    return { hasEnoughData: false, message: 'Cần ít nhất 1 bài thi để phân tích.' };
   }
 
-  try {
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
-      generationConfig: {
-        temperature: 0.7,
-        responseMimeType: "application/json",
-      },
-    });
+  // Tính stats theo subject
+  const subjectStats = {};
+  examAttempts.forEach(attempt => {
+    const subject = attempt.subject_name || attempt.subject || 'Tổng hợp';
+    const percentage = attempt.total_questions > 0
+      ? (attempt.total_correct / attempt.total_questions) * 100
+      : parseFloat(attempt.total_score) || 0;
+    if (!subjectStats[subject]) subjectStats[subject] = { scores: [], count: 0 };
+    subjectStats[subject].scores.push(percentage);
+    subjectStats[subject].count += 1;
+    subjectStats[subject].total = subjectStats[subject].scores.reduce((a, b) => a + b, 0);
+  });
 
-    const response = await callGeminiWithRetry(model, prompt);
-    const aiResponse = JSON.parse(response.text());
+  const subjects = Object.entries(subjectStats).map(([name, stats]) => ({
+    name,
+    average: Math.round(stats.total / stats.count),
+    count: stats.count,
+    trend: stats.count > 1
+      ? Math.round(stats.scores[stats.count - 1] - stats.scores[0])
+      : 0,
+    history: stats.scores,
+  }));
+
+  // Phân loại mạnh/yếu
+  const strengths = subjects.filter(s => s.average >= 75).sort((a, b) => b.average - a.average);
+  const weaknesses = subjects.filter(s => s.average < 75).sort((a, b) => a.average - b.average);
+
+  const prompt = `Phân tích kết quả học tập qua ${examAttempts.length} bài thi và đưa ra lời khuyên bằng TIẾNG VIỆT.
+
+KẾT QUẢ THEO MÔN:
+${subjects.map(s => `- ${s.name}: ${s.average}% (${s.count} lần thi)`).join('\n')}
+
+TRẢ VỀ JSON:
+{
+  "topicStats": [...],  // mảng các môn đã phân tích
+  "strengths": [{"name": "Tên môn", "average": 87, "advice": "Lời khuyên ngắn"}],
+  "weaknesses": [{"name": "Tên môn", "average": 45, "advice": "Lời khuyên ngắn"}],
+  "topRecommendations": ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const ai = parseAIMaybeJSON(raw);
+    if (!ai) throw new Error('Parse failed');
 
     return {
       hasEnoughData: true,
-      totalExams: examAttempts.length,
-      subjectStats: Object.entries(subjectStats).map(([subject, stats]) => ({
-        subject,
-        average: (stats.total / stats.count).toFixed(1),
-        count: stats.count,
+      totalAttempts: examAttempts.length,
+      subjects,
+      strengths: ai.strengths || strengths.map(s => ({
+        name: s.name, average: s.average,
+        advice: 'Bạn làm tốt phần này! Tiếp tục duy trì.',
       })),
-      ...aiResponse,
+      weaknesses: ai.weaknesses || weaknesses.map(s => ({
+        name: s.name, average: s.average,
+        advice: 'Cần ôn luyện thêm phần này.',
+      })),
+      topRecommendations: ai.topRecommendations || [],
     };
-  } catch (error) {
-    if (error.isRateLimit) {
-      throw error;
-    }
-    console.error("Gemini API Error (fallback mode):", error.message);
-    return buildRuleBasedWeaknessAnalysis(examAttempts, subjectStats);
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      hasEnoughData: true,
+      totalAttempts: examAttempts.length,
+      subjects,
+      strengths: strengths.map(s => ({
+        name: s.name, average: s.average,
+        advice: 'Bạn làm tốt phần này!',
+      })),
+      weaknesses: weaknesses.map(s => ({
+        name: s.name, average: s.average,
+        advice: 'Cần ôn luyện thêm.',
+      })),
+      topRecommendations: ['Học đều các chủ đề', 'Làm nhiều bài tập', 'Ôn lại từ vựng thường xuyên'],
+    };
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 4: Gợi ý luyện tập (Practice Recommendations)
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * Tạo lộ trình học 15 ngày
- * @param {Object} weaknesses - Điểm yếu từ analyzeWeaknesses
- * @returns {Promise<Object>} - Lộ trình học
+ * Gợi ý bài học và dạng bài cần luyện dựa trên điểm yếu
  */
-async function generateRoadmap(weaknesses) {
-  if (
-    !weaknesses ||
-    !weaknesses.weaknesses ||
-    weaknesses.weaknesses.length === 0
-  ) {
+async function getPracticeRecommendations(weaknesses, availableExams = []) {
+  const weakSubjects = (weaknesses || []).map(w => w.name || w.subject || '').filter(Boolean);
+
+  if (!weakSubjects.length) {
     return {
-      roadmap: [],
-      message: "Bạn đang học rất tốt! Tiếp tục duy trì.",
+      recommendations: [{
+        type: 'maintenance',
+        title: 'Tiếp tục duy trì',
+        description: 'Bạn đang học rất tốt! Hãy tiếp tục ôn luyện đều đặn.',
+        priority: 'high',
+        suggestedExams: availableExams.slice(0, 3),
+      }],
     };
   }
 
-  const weaknessesText = weaknesses.weaknesses
-    .map((w) => `- ${w.subject} (${w.percentage}%): ${w.advice}`)
-    .join("\n");
+  const prompt = `Dựa vào các điểm yếu sau, hãy gợi ý bài học bằng TIẾNG VIỆT:
 
-  const prompt = `Tạo lộ trình học 15 ngày để cải thiện điểm yếu sau:
+ĐIỂM YẾU: ${weakSubjects.join(', ')}
 
-ĐIỂM YẾU:
-${weaknessesText}
-
-YÊU CẦU:
-- Chia thành 5 giai đoạn (mỗi giai đoạn 3 ngày)
-- Mỗi giai đoạn có: tiêu đề ngắn, mô tả, 2-3 checklist
-- Bắt đầu từ dễ → khó
-- Cụ thể, dễ làm theo
-- TIẾNG VIỆT
-
-Trả về JSON:
+TRẢ VỀ JSON:
 {
-  "roadmap": [
+  "recommendations": [
     {
-      "phase": 1,
-      "days": "1-3",
-      "title": "Tiêu đề ngắn",
-      "description": "Mô tả 1 câu",
-      "tasks": ["Task 1", "Task 2", "Task 3"]
+      "type": "vocabulary|grammar|reading|listening|grammar",
+      "title": "Tiêu đề gợi ý (ngắn, hấp dẫn)",
+      "description": "Mô tả 1-2 câu tại sao cần học phần này",
+      "priority": "high|medium|low",
+      "estimatedTime": "30-60 phút",
+      "actionSteps": ["Bước 1", "Bước 2", "Bước 3"]
     }
-  ]
+  ],
+  "studyPlan": "Lịch học tổng quát 1 tuần"
 }`;
 
-  if (!hasGeminiConfig) {
-    return buildRuleBasedRoadmap(weaknesses);
-  }
-
   try {
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
-      generationConfig: {
-        temperature: 0.8,
-        responseMimeType: "application/json",
-      },
-    });
+    const raw = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: 3000 });
+    const ai = parseAIMaybeJSON(raw);
+    if (!ai) throw new Error('Parse failed');
 
-    const response = await callGeminiWithRetry(model, prompt);
-    const aiResponse = JSON.parse(response.text());
-
-    return aiResponse;
-  } catch (error) {
-    if (error.isRateLimit) {
-      throw error;
-    }
-    console.error("Gemini API Error (fallback roadmap):", error.message);
-    return buildRuleBasedRoadmap(weaknesses);
+    return {
+      recommendations: ai.recommendations || [],
+      studyPlan: ai.studyPlan || '',
+      basedOnWeaknesses: weakSubjects,
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      recommendations: weakSubjects.slice(0, 3).map((w, i) => ({
+        type: 'grammar',
+        title: `Ôn luyện: ${w}`,
+        description: `Cần cải thiện phần ${w}`,
+        priority: i === 0 ? 'high' : 'medium',
+        estimatedTime: '30-60 phút',
+        actionSteps: ['Đọc lý thuyết', 'Làm 10 câu bài tập', 'Review lại đáp án'],
+      })),
+      studyPlan: 'Học đều đặn 30 phút mỗi ngày',
+      basedOnWeaknesses: weakSubjects,
+    };
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 5: Chatbot hỏi đáp AI
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * Gợi ý tài liệu phù hợp
- * @param {Object} weaknesses - Điểm yếu
- * @param {Array} allMaterials - Danh sách tài liệu
- * @returns {Promise<Array>} - Tài liệu gợi ý
+ * Chatbot trả lời câu hỏi của user về bài thi/kiến thức
+ * @param {string} question - Câu hỏi của user
+ * @param {Object} context  - Ngữ cảnh (attemptData, questions, etc.)
  */
-async function recommendMaterials(weaknesses, allMaterials) {
-  if (
-    !weaknesses ||
-    !weaknesses.weaknesses ||
-    weaknesses.weaknesses.length === 0
-  ) {
-    return [];
+async function askAI(question, context = {}) {
+  const { examTitle, subjectName, questions = [], userScore } = context;
+
+  const contextText = [
+    examTitle && `Đề thi: ${examTitle}`,
+    subjectName && `Môn: ${subjectName}`,
+    userScore !== undefined && `Điểm của bạn: ${userScore}%`,
+    questions.length > 0 && `Số câu: ${questions.length}`,
+  ].filter(Boolean).join('\n');
+
+  const recentWrong = questions
+    .filter(q => !q.is_correct)
+    .slice(0, 5)
+    .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
+    .join('\n');
+
+  const prompt = `Bạn là trợ lý học tập tiếng Trung thân thiện, trả lời BẰNG TIẾNG VIỆT.
+Ngữ cảnh bài thi:
+${contextText}
+Các câu sai gần đây:
+${recentWrong || '(không có)'}
+
+Câu hỏi của học viên: ${question}
+
+Trả lời ngắn gọn, dễ hiểu, có ví dụ minh họa nếu cần. Nếu câu hỏi về từ vựng, hãy kèm theo pinyin và nghĩa.`;
+
+  try {
+    const response = await callBeeknoee(prompt, { temperature: 0.6, maxTokens: 1500 });
+    return {
+      answer: response,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      answer: 'Xin lỗi, hiện tại AI đang bận. Bạn hãy thử lại sau nhé!',
+      timestamp: new Date().toISOString(),
+      error: true,
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 6: Phân tích tiến bộ (Progress Analysis)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * So sánh kết quả giữa các lần thi, nhận xét tiến bộ/thụt lùi
+ * @param {Array} examAttempts - Lịch sử thi (đã sort theo thời gian)
+ */
+async function analyzeProgress(examAttempts) {
+  if (!examAttempts || examAttempts.length < 2) {
+    return {
+      hasEnoughData: false,
+      message: 'Cần ít nhất 2 bài thi để so sánh tiến bộ.',
+    };
   }
 
-  if (!allMaterials || allMaterials.length === 0) {
-    return [];
+  const sorted = [...examAttempts]
+    .filter(a => a.total_questions > 0)
+    .sort((a, b) => new Date(a.submit_time) - new Date(b.submit_time));
+
+  if (sorted.length < 2) {
+    return { hasEnoughData: false, message: 'Cần ít nhất 2 bài thi đã nộp.' };
   }
 
-  const weakSubjects = weaknesses.weaknesses.map((w) =>
-    w.subject.toLowerCase(),
+  // Tính score % từng lần
+  const history = sorted.map(a => ({
+    examId: a.exam_id,
+    examTitle: a.exam_title || a.title || 'Đề thi',
+    date: a.submit_time,
+    score: a.total_questions > 0
+      ? Math.round((a.total_correct / a.total_questions) * 100)
+      : parseFloat(a.total_score) || 0,
+    correct: a.total_correct,
+    total: a.total_questions,
+  }));
+
+  const first = history[0].score;
+  const last = history[history.length - 1].score;
+  const delta = last - first;
+  const avg = Math.round(history.reduce((s, h) => s + h.score, 0) / history.length);
+
+  const prompt = `So sánh tiến bộ học tập qua ${history.length} bài thi.
+
+LỊCH SỬ ĐIỂM (theo thứ tự thời gian):
+${history.map((h, i) => `${i + 1}. ${h.examTitle} (${new Date(h.date).toLocaleDateString('vi-VN')}): ${h.score}% (${h.correct}/${h.total})`).join('\n')}
+
+PHÂN TÍCH:
+- Điểm lần đầu: ${first}%
+- Điểm lần gần nhất: ${last}%
+- Chênh lệch: ${delta > 0 ? '+' : ''}${delta}%
+- Điểm trung bình: ${avg}%
+
+TRẢ VỀ JSON:
+{
+  "hasEnoughData": true,
+  "totalAttempts": ${history.length},
+  "history": [...],
+  "delta": ${delta},
+  "trend": "improving|declining|stable",
+  "summary": "Tổng kết 2-3 câu về xu hướng",
+  "improvementNotes": ["Ghi chú 1", "Ghi chú 2"],
+  "warningNotes": ["Cảnh báo 1"] (nếu có)
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const ai = parseAIMaybeJSON(raw);
+    if (!ai) throw new Error('Parse failed');
+
+    return {
+      ...ai,
+      history: history.map(h => ({
+        ...h,
+        date: new Date(h.date).toLocaleDateString('vi-VN'),
+      })),
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      hasEnoughData: true,
+      totalAttempts: history.length,
+      history: history.map(h => ({
+        ...h,
+        date: new Date(h.date).toLocaleDateString('vi-VN'),
+      })),
+      delta,
+      trend: delta > 5 ? 'improving' : delta < -5 ? 'declining' : 'stable',
+      summary: delta > 0
+        ? `Bạn đã tiến bộ ${delta}% so với lần thi đầu tiên. Hãy tiếp tục!`
+        : delta < 0
+        ? `Điểm giảm ${Math.abs(delta)}%. Đừng nản, hãy ôn lại và thử lại!`
+        : 'Điểm ổn định. Hãy cố gắng cải thiện thêm!',
+      improvementNotes: ['Tiếp tục ôn luyện đều đặn'],
+      warningNotes: delta < 0 ? ['Cần xem lại phần kiến thức yếu'] : [],
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 7: Gợi ý đề thi tiếp theo
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Gợi ý đề thi phù hợp với trình độ hiện tại
+ * @param {Object} context - { userLevel, weaknesses, strongSubjects, allExams }
+ */
+async function recommendNextExam(context = {}) {
+  const { userScore, subjectName, allExams = [] } = context;
+
+  if (!allExams.length) {
+    return { recommendations: [], message: 'Không có đề thi nào để gợi ý.' };
+  }
+
+  // Lọc đề phù hợp
+  const level = userScore >= 80 ? 'hard' : userScore >= 60 ? 'medium' : 'easy';
+  const recommendations = allExams
+    .filter(e => e.status === 'published' || e.is_published)
+    .filter(e => !subjectName || e.subject_name === subjectName)
+    .slice(0, 5)
+    .map(e => ({
+      id: e.id,
+      title: e.title,
+      titleCn: e.title_cn,
+      subjectName: e.subject_name,
+      difficultyLevel: e.difficulty_level || 'medium',
+      totalQuestions: e.total_questions,
+      duration: e.duration,
+      isRecommended: e.difficulty_level === level,
+    }));
+
+  const prompt = `Gợi ý đề thi tiếp theo phù hợp với trình độ của học viên.
+
+TRÌNH ĐỘ HIỆN TẠI:
+- Mức độ khuyến nghị: ${level}
+- Điểm lần trước: ${userScore || 'N/A'}%
+- Môn: ${subjectName || 'Tổng hợp'}
+
+CÁC ĐỀ CÓ SẴN:
+${recommendations.map(e => `- "${e.title}" (${e.difficultyLevel}, ${e.totalQuestions} câu)`).join('\n')}
+
+TRẢ VỀ JSON:
+{
+  "recommendedExam": { "id": ..., "title": "...", "reason": "Tại sao gợi ý đề này" },
+  "alternativeExams": [...],
+  "studyAdvice": "Lời khuyên trước khi làm đề tiếp theo"
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 2000 });
+    const ai = parseAIMaybeJSON(raw);
+
+    if (!ai) throw new Error('Parse failed');
+
+    // Merge AI recommendation với data thực
+    const rec = recommendations.find(e => e.id === ai.recommendedExam?.id) || recommendations[0];
+
+    return {
+      recommendedExam: rec ? { ...rec, reason: ai.recommendedExam?.reason || '' } : null,
+      alternativeExams: ai.alternativeExams || recommendations.slice(1, 4),
+      studyAdvice: ai.studyAdvice || '',
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      recommendedExam: recommendations.find(e => e.difficultyLevel === level) || recommendations[0],
+      alternativeExams: recommendations.slice(1, 4),
+      studyAdvice: 'Hãy ôn lại những phần yếu trước khi làm đề mới.',
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 8: Phân tích toàn diện (tổng hợp tất cả)
+// ─────────────────────────────────────────────────────────────────────────────
+async function generateFullAnalysis(examAttempts, allExams = []) {
+  const [topicResult, progressResult] = await Promise.allSettled([
+    analyzeTopics(examAttempts),
+    analyzeProgress(examAttempts),
+  ]);
+
+  const topics = topicResult.status === 'fulfilled' ? topicResult.value : null;
+  const progress = progressResult.status === 'fulfilled' ? progressResult.value : null;
+
+  const latestAttempt = examAttempts?.[examAttempts.length - 1];
+  const recs = await getPracticeRecommendations(
+    topics?.weaknesses || [],
+    allExams,
   );
 
-  // Simple rule-based recommendation (không cần call API)
-  const recommended = allMaterials
-    .filter((material) => {
-      const title = material.title.toLowerCase();
-      const subject = (material.subject || "").toLowerCase();
-      const category = (material.category || "").toLowerCase();
+  return {
+    topics,
+    progress,
+    recommendations: recs,
+    nextExam: await recommendNextExam({
+      userScore: latestAttempt?.total_questions > 0
+        ? Math.round((latestAttempt.total_correct / latestAttempt.total_questions) * 100)
+        : parseFloat(latestAttempt?.total_score) || 60,
+      subjectName: latestAttempt?.subject_name,
+      allExams,
+    }),
+    generatedAt: new Date().toISOString(),
+  };
+}
 
-      return weakSubjects.some((ws) => {
-        return (
-          title.includes(ws) ||
-          subject.includes(ws) ||
-          category.includes("ly-thuyet")
-        );
-      });
-    })
-    .slice(0, 5); // Top 5
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy exports (giữ tương thích với code cũ)
+// ─────────────────────────────────────────────────────────────────────────────
+async function analyzeWeaknesses(examAttempts) {
+  const result = await analyzeTopics(examAttempts);
+  return result;
+}
 
-  return recommended;
+async function generateRoadmap(weaknesses) {
+  const recs = await getPracticeRecommendations(weaknesses);
+  const roadmap = recs.recommendations.slice(0, 5).map((r, i) => ({
+    phase: i + 1,
+    days: `${i * 3 + 1}-${i * 3 + 3}`,
+    title: r.title,
+    description: r.description,
+    tasks: r.actionSteps || [],
+  }));
+  return { roadmap };
+}
+
+async function recommendMaterials(weaknesses, allMaterials) {
+  return allMaterials.slice(0, 5);
 }
 
 module.exports = {
+  // Core functions
+  callBeeknoee,
+  isRateLimited,
+  getRateLimitRemaining,
+  // Features
+  analyzeExamResult,
+  explainWrongAnswers,
+  analyzeTopics,
+  getPracticeRecommendations,
+  askAI,
+  analyzeProgress,
+  recommendNextExam,
+  generateFullAnalysis,
+  // Legacy
   analyzeWeaknesses,
   generateRoadmap,
   recommendMaterials,
-  isRateLimited,
-  getRateLimitRemaining,
 };

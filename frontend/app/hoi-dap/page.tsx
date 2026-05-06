@@ -162,7 +162,7 @@ export default function StudentQAPage() {
           <div className="text-center">
             <Link href="/vip"
               className="inline-flex items-center gap-3 px-10 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black rounded-2xl shadow-xl hover:shadow-orange-500/40 transition-all hover:scale-105 text-lg">
-              <FiZap /> Nâng cấp Premium ngay
+                    <FiZap /> Nâng cấp Pre ngay
             </Link>
             <p className="text-gray-400 text-xs mt-4">Kích hoạt ngay lập tức sau thanh toán</p>
           </div>

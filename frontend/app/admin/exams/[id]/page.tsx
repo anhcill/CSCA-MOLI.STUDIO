@@ -296,14 +296,14 @@ export default function AdminExamDetailPage() {
                         <div className="grid grid-cols-3 gap-2">
                             {[
                                 { value: 'basic', label: 'Miễn phí', desc: 'Mọi người', color: 'gray' },
-                                { value: 'vip_thong_minh', label: 'VIP Thông minh', desc: 'Thông minh', color: 'blue' },
-                                { value: 'vip_pro', label: 'VIP Pro', desc: 'PRO', color: 'purple' },
+                                { value: 'vip', label: 'VIP', desc: 'Gói VIP', color: 'blue' },
+                                { value: 'premium', label: 'Pre', desc: 'Gói Pre', color: 'amber' },
                             ].map(tier => (
                                 <button key={tier.value}
                                     onClick={() => handleSetVipTier(tier.value)}
                                     className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
                                         exam.vip_tier === tier.value
-                                            ? tier.color === 'purple' ? 'border-purple-500 bg-purple-50' :
+                                            ? tier.color === 'amber' ? 'border-amber-500 bg-amber-50' :
                                               tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
                                               'border-gray-500 bg-gray-100'
                                             : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -313,7 +313,7 @@ export default function AdminExamDetailPage() {
                                     </p>
                                     {exam.vip_tier === tier.value && (
                                         <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
-                                            tier.color === 'purple' ? 'bg-purple-500' :
+                                            tier.color === 'amber' ? 'bg-amber-500' :
                                             tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
                                         }`}>
                                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>

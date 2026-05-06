@@ -636,6 +636,7 @@ async function runOptimizations() {
       CREATE TABLE IF NOT EXISTS vip_packages (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
+        tier VARCHAR(20) NOT NULL DEFAULT 'vip',
         duration_days INTEGER NOT NULL,
         price INTEGER NOT NULL DEFAULT 0,
         description TEXT,
@@ -647,14 +648,24 @@ async function runOptimizations() {
       )
     `);
 
+    // Add tier column if missing
+    await pool.query(`
+      ALTER TABLE vip_packages
+      ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'vip'
+    `);
+
     // Seed default VIP packages if none exist
+    // Tier 1: Miễn phí (basic) - gói free có sẵn, không cần seed
+    // Tier 2: VIP - truy cập đề + giải đề
+    // Tier 3: Pre - tất cả + AI + video + cố vấn
     const pkgCount = await pool.query('SELECT COUNT(*)::int FROM vip_packages');
     if (pkgCount.rows[0].count === 0) {
       await pool.query(`
-        INSERT INTO vip_packages (name, duration_days, price, description, features, sort_order) VALUES
-        ('Gói Xem', 30, 199000, 'Truy cập nội dung lý thuyết và tài liệu VIP trong 30 ngày', ARRAY['Truy cập tài liệu VIP', 'Xem giải đề chi tiết', 'Hỗ trợ ưu tiên'], 1),
-        ('Gói Kiểm tra', 180, 499000, 'Truy cập đầy đủ trong 6 tháng - tiết kiệm 56%', ARRAY['Truy cập đề thi premium', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
-        ('Gói Làm bài', 365, 799000, 'Gói năm - truy cập toàn diện trong 12 tháng', ARRAY['Tất cả tính năng VIP', 'Thống kê học tập', 'Lộ trình cá nhân hóa', 'Hỗ trợ ưu tiên'], 3)
+        INSERT INTO vip_packages (name, tier, duration_days, price, description, features, sort_order) VALUES
+        ('Gói VIP 30 ngày', 'vip', 30, 199000, 'Truy cập đề thi VIP + giải đề chi tiết', ARRAY['Truy cập đề thi VIP', 'Giải đề chi tiết', 'Hỗ trợ ưu tiên'], 1),
+        ('Gói VIP 180 ngày', 'vip', 180, 499000, 'Tiết kiệm 56% - truy cập đầy đủ trong 6 tháng', ARRAY['Truy cập đề thi VIP', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
+        ('Gói Pre 90 ngày', 'premium', 90, 249000, 'Tất cả tính năng VIP + AI phân tích + Video giải đề độc quyền', ARRAY['Tất cả tính năng VIP', 'Phân tích kết quả bằng AI', 'Video giải đề độc quyền', 'Hỗ trợ cố vấn 1-1'], 3),
+        ('Gói Pre 365 ngày', 'premium', 365, 699000, 'Gói năm - tiết kiệm nhất, truy cập toàn bộ tính năng Pre', ARRAY['Tất cả tính năng VIP', 'Phân tích kết quả bằng AI', 'Video giải đề độc quyền', 'Tư vấn trực tiếp 1-1', 'Lộ trình cá nhân hóa'], 4)
       `);
     }
 
@@ -663,6 +674,7 @@ async function runOptimizations() {
       CREATE TABLE IF NOT EXISTS vip_features_comparison (
         id SERIAL PRIMARY KEY,
         feature_name VARCHAR(255) NOT NULL,
+        basic_has BOOLEAN DEFAULT FALSE,
         vip_has BOOLEAN DEFAULT FALSE,
         premium_has BOOLEAN DEFAULT FALSE,
         sort_order INTEGER DEFAULT 0,
@@ -671,19 +683,27 @@ async function runOptimizations() {
       )
     `);
 
+    // Add basic_has column if missing (for existing tables)
+    await pool.query(`
+      ALTER TABLE vip_features_comparison
+      ADD COLUMN IF NOT EXISTS basic_has BOOLEAN DEFAULT FALSE
+    `);
+
     // Seed default VIP features comparison if none exist
-    const featureCount = await pool.query('SELECT COUNT(*)::int FROM vip_features_comparison');
-    if (featureCount.rows[0].count === 0) {
+    const featureCount2 = await pool.query('SELECT COUNT(*)::int FROM vip_features_comparison');
+    if (featureCount2.rows[0].count === 0) {
       await pool.query(`
-        INSERT INTO vip_features_comparison (feature_name, vip_has, premium_has, sort_order) VALUES
-        ('Truy cập đề thi premium', TRUE, TRUE, 1),
-        ('Giải đề chi tiết', TRUE, TRUE, 2),
-        ('Hỗ trợ 24/7', TRUE, TRUE, 3),
-        ('Thống kê học tập', TRUE, TRUE, 4),
-        ('Lộ trình cá nhân hóa', TRUE, TRUE, 5),
-        ('Video giải đề độc quyền', FALSE, TRUE, 6),
-        ('Phân tích kết quả bằng AI', FALSE, TRUE, 7),
-        ('Tư vấn trực tiếp 1-1', FALSE, TRUE, 8)
+        INSERT INTO vip_features_comparison (feature_name, basic_has, vip_has, premium_has, sort_order) VALUES
+        ('Đề thi miễn phí', TRUE, TRUE, TRUE, 1),
+        ('Giải đề chi tiết', FALSE, TRUE, TRUE, 2),
+        ('Đề thi VIP', FALSE, TRUE, TRUE, 3),
+        ('Đề thi Pre', FALSE, FALSE, TRUE, 4),
+        ('Phân tích kết quả bằng AI', FALSE, FALSE, TRUE, 5),
+        ('Video giải đề độc quyền', FALSE, FALSE, TRUE, 6),
+        ('Tư vấn trực tiếp 1-1', FALSE, FALSE, TRUE, 7),
+        ('Hỗ trợ ưu tiên', FALSE, TRUE, TRUE, 8),
+        ('Thống kê học tập nâng cao', FALSE, TRUE, TRUE, 9),
+        ('Lộ trình cá nhân hóa', FALSE, FALSE, TRUE, 10)
       `);
     }
 

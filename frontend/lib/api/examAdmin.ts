@@ -2,6 +2,7 @@ import axios from '../utils/axios';
 
 export interface ExamCreateData {
     title: string;
+    titleCn?: string;          // P0: hỗ trợ title tiếng Trung
     subjectId: number;
     duration?: number;
     totalPoints?: number;
@@ -12,24 +13,47 @@ export interface ExamCreateData {
     solution_video_url?: string;
     solution_description?: string;
     shuffle_mode?: boolean;
-    vip_tier?: string; // 'basic' | 'vip_thong_minh' | 'vip_pro'
+    vip_tier?: string; // 'basic' | 'vip' | 'premium'
     start_time?: string;
     end_time?: string;
+    difficulty_level?: string; // P1: 'easy' | 'medium' | 'hard'
 }
 
 export interface QuestionData {
+    questionType?: QuestionType;  // 'single_choice' | 'fill_blank_pool' | 'fill_blank_item' | 'reading_passage' | 'reading_item' | 'true_false'
     questionText: string;
     questionTextCn?: string;
     imageUrl?: string;
     points?: number;
     explanation?: string;
     explanationCn?: string;
-    answers: AnswerData[];
-    correctAnswer: string;
-    passageText?: string;
+    answers?: AnswerData[];       // Cho single_choice, reading_item
+    correctAnswer?: string;        // 'A','B','C','D' - cho single_choice
+    passageText?: string;         // Đoạn văn đọc hiểu / điền từ
     passageImageUrl?: string;
-    questionGroupType?: string;
+    passageGroupType?: string;
+    difficulty?: string;
+    // Trường mới cho đề tiếng Trung
+    linkedOptions?: LinkedOption[];   // Pool A-F cho fill_blank_pool
+    correctAnswerKey?: string;        // 'A','B','C'... cho fill_blank_item
+    subQuestionNumber?: number;       // Số câu con (34, 35, 36...)
 }
+
+// LinkedOption cho fill_blank_pool (A-F)
+export interface LinkedOption {
+    key: string;      // 'A', 'B', 'C', 'D', 'E', 'F'
+    text: string;    // Tiếng Anh
+    textCn: string;  // Tiếng Trung
+}
+
+// Question type enum
+export type QuestionType =
+    | 'single_choice'      // Trắc nghiệm A-B-C-D
+    | 'fill_blank_pool'   // Điền từ đầu nhóm (có pool A-F)
+    | 'fill_blank_item'   // Điền từ con trong nhóm
+    | 'reading_passage'    // Đọc hiểu đầu đoạn
+    | 'reading_item'       // Câu con đọc hiểu
+    | 'true_false';        // Đúng/Sai
 
 export interface AnswerData {
     text: string;
@@ -109,6 +133,12 @@ export const examAdminApi = {
     // Set exam schedule (start/end time for phong-thi)
     setSchedule: async (examId: number, data: { start_time: string; end_time?: string | null }) => {
         const response = await axios.put(`/admin/exams/${examId}/schedule`, data);
+        return response.data;
+    },
+
+    // P2: Reorder questions
+    reorderQuestions: async (examId: number, orderedIds: number[]) => {
+        const response = await axios.put(`/admin/exams/${examId}/questions/reorder`, { orderedIds });
         return response.data;
     }
 };

@@ -78,12 +78,11 @@ const AdminVipController = {
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
-      let pkgId = null, pkgName = null, pkgDays = null;
+      let pkgId = null, pkgName = null, pkgDays = null, pkgTier = 'vip';
 
       if (packageId) {
-        // Lấy thông tin gói từ DB
         const pkgRes = await db.query(
-          `SELECT id, name, duration_days FROM vip_packages WHERE id = $1`,
+          `SELECT id, name, duration_days, COALESCE(tier, 'vip') as tier FROM vip_packages WHERE id = $1`,
           [packageId]
         );
         if (!pkgRes.rows[0]) {
@@ -92,16 +91,16 @@ const AdminVipController = {
         pkgId = pkgRes.rows[0].id;
         pkgName = pkgRes.rows[0].name;
         pkgDays = pkgRes.rows[0].duration_days;
+        pkgTier = pkgRes.rows[0].tier || 'vip';
       } else if (durationDays && durationDays >= 1) {
         pkgDays = parseInt(durationDays);
-        pkgName = [30, 180, 365].find(d => d === pkgDays)
-          ? (pkgDays === 30 ? 'Gói Xem' : pkgDays === 180 ? 'Gói Kiểm tra' : 'Gói Làm bài')
-          : `Gói ${pkgDays} ngày`;
+        pkgName = `Gói ${pkgDays} ngày`;
+        pkgTier = 'vip';
       } else {
         return res.status(400).json({ success: false, message: 'Cần cung cấp packageId hoặc durationDays.' });
       }
 
-      // Cập nhật VIP
+      // Cập nhật VIP với tier chính xác
       const result = await db.query(
         `UPDATE users
          SET is_vip = TRUE,
@@ -110,7 +109,7 @@ const AdminVipController = {
              updated_at = NOW()
          WHERE id = $2
          RETURNING id, email, full_name, is_vip, subscription_tier, vip_expires_at`,
-        [pkgDays, userId, pkgName.toLowerCase().includes('premium') ? 'premium' : 'vip']
+        [pkgDays, userId, pkgTier]
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 

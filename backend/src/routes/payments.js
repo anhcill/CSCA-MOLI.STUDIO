@@ -237,7 +237,7 @@ router.post('/create', authenticate, async (req, res) => {
 
     // Lấy gói từ DB
     const pkgRes = await require('../config/database').query(
-      `SELECT id, name, duration_days, price, is_active FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+      `SELECT id, name, tier, duration_days, price, is_active FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
       [pkgId]
     );
 
@@ -266,7 +266,7 @@ router.post('/create', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Giá gói không hợp lệ.' });
     }
 
-    const tier = pkg.name.toLowerCase().includes('premium') ? 'premium' : 'vip';
+    const tier = pkg.tier || 'vip';
     const orderId = `CSCA${userId}T${Date.now()}`;
 
     let finalAmount = Number(pkg.price);
@@ -538,7 +538,9 @@ router.post('/vnpay-webhook', async (req, res) => {
         // Increment coupon usage CHỉ khi thành công
         await incrementCouponUsage(transaction);
 
-        const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+        const tier = transaction.package_id
+          ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+          : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
         await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
         const updatedUser = await User.findById(transaction.user_id);
         const vipExpires = updatedUser?.vip_expires_at || null;
@@ -648,7 +650,9 @@ router.post('/verify-return', authenticate, async (req, res) => {
     }
 
     if (transaction.status === 'pending' && resultCode === '0') {
-      const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+      const tier = transaction.package_id
+        ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+        : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
 
       // ── Increment coupon usage CHỉ khi thành công ──────────────────────
       await incrementCouponUsage(transaction);
@@ -785,7 +789,9 @@ router.post('/sepay-webhook', async (req, res) => {
     // Increment coupon usage CHỉ khi thành công
     await incrementCouponUsage(transaction);
 
-    const tier = transaction.package_name?.toLowerCase().includes('premium') ? 'premium' : 'vip';
+    const tier = transaction.package_id
+      ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+      : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
     await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
     const updatedUser = await User.findById(transaction.user_id);
 

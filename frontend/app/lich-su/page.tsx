@@ -10,6 +10,7 @@ import Link from 'next/link';
 import {
   FiCalendar, FiCheckCircle, FiXCircle, FiClock,
   FiTrendingUp, FiAward, FiBarChart2, FiRefreshCw,
+  FiArrowRight,
 } from 'react-icons/fi';
 
 interface HistoryItem {
@@ -188,6 +189,13 @@ export default function LichSuPage() {
                   <FiRefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                   Tải lại
                 </button>
+                <Link
+                  href="/lich-su/thong-ke"
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <FiBarChart2 size={14} />
+                  Thống kê chi tiết
+                </Link>
               </div>
             </div>
 
@@ -198,6 +206,27 @@ export default function LichSuPage() {
               <StatCard icon={FiAward} label="Điểm cao nhất" value={`${bestScore}/10`} color="bg-green-500" />
               <StatCard icon={FiCheckCircle} label="Lần đạt (≥5)" value={passCount} color="bg-emerald-500" />
             </div>
+
+            {/* Quick Stats CTA */}
+            {history.length > 0 && (
+              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border border-indigo-100 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                    <FiBarChart2 className="text-indigo-500" size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-indigo-800">Xem thống kê chi tiết</p>
+                    <p className="text-xs text-indigo-500">Biểu đồ điểm, phân tích theo môn, xu hướng...</p>
+                  </div>
+                </div>
+                <Link
+                  href="/lich-su/thong-ke"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm"
+                >
+                  Xem ngay <FiArrowRight size={14} />
+                </Link>
+              </div>
+            )}
 
             {/* Filter tabs */}
             <div className="flex gap-2 flex-wrap">

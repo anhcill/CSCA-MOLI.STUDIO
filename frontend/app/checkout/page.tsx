@@ -10,6 +10,7 @@ import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
 interface DbPackage {
   id: number;
   name: string;
+  tier?: string;
   duration_days: number;
   price: number;
   description: string;
@@ -17,10 +18,10 @@ interface DbPackage {
 }
 
 function derivePackageUI(pkg: DbPackage) {
-  const isPremium = pkg.name.toLowerCase().includes('premium');
+  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   return {
-    tier: isPremium ? 'premium' : 'vip',
-    color: isPremium ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
+    tier: isPre ? 'premium' : 'vip',
+    color: isPre ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
   };
 }
 

@@ -4,6 +4,7 @@
  */
 
 const insightService = require("../services/insightService");
+const historyStatsService = require("../services/historyStatsService");
 
 // ─── GET /api/insights/overview ──────────────────────────────────────────────
 
@@ -316,6 +317,22 @@ async function getWeekdayAnalysis(req, res) {
   }
 }
 
+// ─── GET /api/insights/history-stats ──────────────────────────────────────────
+
+async function getHistoryStats(req, res) {
+  try {
+    const userId = req.user.id;
+    const data = await historyStatsService.getHistoryStats(userId);
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("History Stats Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy thống kê lịch sử",
+    });
+  }
+}
+
 // ─── GET /api/insights/hardest-exams ───────────────────────────────────────────
 
 async function getHardestExams(req, res) {
@@ -343,4 +360,5 @@ module.exports = {
   getExamTypeAnalysis,
   getWeekdayAnalysis,
   getHardestExams,
+  getHistoryStats,
 };

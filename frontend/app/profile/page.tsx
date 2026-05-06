@@ -18,14 +18,14 @@ import {
 import { FaCrown } from 'react-icons/fa';
 
 function derivePackageUI(pkg: any) {
-  const isPremium = pkg.name.toLowerCase().includes('premium');
+  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   return {
-    tier: isPremium ? 'premium' : 'vip',
-    color: isPremium ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
-    iconColor: isPremium ? 'text-amber-600' : 'text-indigo-600',
-    iconBg: isPremium ? 'bg-amber-50' : 'bg-indigo-50',
-    border: isPremium ? 'border-amber-200' : 'border-indigo-200',
-    btnHover: isPremium ? 'hover:bg-amber-50' : 'hover:bg-indigo-50',
+    tier: isPre ? 'premium' : 'vip',
+    color: isPre ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
+    iconColor: isPre ? 'text-amber-600' : 'text-indigo-600',
+    iconBg: isPre ? 'bg-amber-50' : 'bg-indigo-50',
+    border: isPre ? 'border-amber-200' : 'border-indigo-200',
+    btnHover: isPre ? 'hover:bg-amber-50' : 'hover:bg-indigo-50',
   };
 }
 

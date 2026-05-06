@@ -2,9 +2,23 @@ const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
 
+// ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
+function sanitize(str) {
+  if (typeof str !== "string") return str;
+  return str.replace(/<[^>]*>/g, "").trim();
+}
+
+// ─── P1: Validate question points ──────────────────────────────────────────────
+const MAX_POINTS_PER_QUESTION = 100;
+const MAX_QUESTIONS_PER_EXAM = 200;
+
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
 }
 
 function normalizeBilingualText(en, cn) {
@@ -17,46 +31,88 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
+// ─── Question types cho đề tiếng Trung ────────────────────────────────────────────
+const QUESTION_TYPES = {
+  SINGLE_CHOICE:     'single_choice',       // Trắc nghiệm A-B-C-D (câu 1-10, 26-33, 49-70)
+  FILL_BLANK_POOL:   'fill_blank_pool',      // Điền từ đầu nhóm, có pool A-F (câu 11-25)
+  FILL_BLANK_ITEM:   'fill_blank_item',     // Điền từ con trong nhóm, dùng linked_options cha
+  READING_PASSAGE:    'reading_passage',      // Đọc hiểu đầu đoạn (câu 34, 71...)
+  READING_ITEM:       'reading_item',         // Câu con trong đoạn đọc hiểu (35, 36, 72...)
+  TRUE_FALSE:        'true_false',           // Đúng/Sai
+};
+
+// ─── Helper: lấy passage_group_id của câu cha gần nhất ───────────────────────
+async function getLatestPassageGroupId(client, examId) {
+  const r = await client.query(
+    `SELECT id FROM questions
+     WHERE exam_id = $1 AND passage_group_id IS NOT NULL
+     ORDER BY id DESC LIMIT 1`,
+    [examId],
+  );
+  return r.rows[0]?.id ?? null;
+}
+
+// ─── Helper: normalize linked_options (pool A-F) ─────────────────────────────────
+function normalizeLinkedOptions(rawOptions) {
+  if (!Array.isArray(rawOptions) || rawOptions.length < 2) return null;
+  return rawOptions.map((opt, i) => ({
+    key:   opt.key || String.fromCharCode(65 + i),
+    text:  (opt.text || '').trim(),
+    textCn:(opt.textCn || opt.text || '').trim(),
+  }));
+}
+
 const AdminExamController = {
   // Create new exam
   async createExam(req, res) {
     try {
-      const { title, subjectId, duration, totalPoints, description, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      // P0: destructure titleCn
+      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
       }
 
+      // P1: validate subjectId exists
+      const subjectCheck = await pool.query("SELECT id FROM subjects WHERE id = $1", [subjectId]);
+      if (subjectCheck.rows.length === 0) {
+        return res.status(400).json({ message: "Subject not found" });
+      }
+
       const parsedTotalPoints = parsePositiveNumber(totalPoints, 100);
 
+      // P1: sanitize all text inputs to prevent XSS
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
+      const safeTitle = sanitize(title);
+      const safeTitleCn = titleCn ? sanitize(titleCn) : null;
+      const safeDescription = description ? sanitize(description) : "";
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, subject_id, duration, total_points, total_questions, description, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated)
-         VALUES ($1, $2, $3, $4, $5, 0, $6, 'draft', NOW(), $7, $8, $9, $10, $11, $12)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14)
          RETURNING *`,
         [
           examCode,
-          title,
+          safeTitle,
+          safeTitleCn,
           subjectId,
           duration || 90,
           parsedTotalPoints,
-          description || "",
+          safeDescription,
+          difficulty_level || 'medium',
           is_premium === true,
-          solution_video_url || null,
-          solution_description || null,
+          solution_video_url ? sanitize(solution_video_url) : null,
+          solution_description ? sanitize(solution_description) : null,
           shuffle_mode === true,
           vip_tier || 'basic',
           is_simulated === true,
         ],
       );
 
-      // Clear caches when exam is created
       cache.delByPrefix("exams:");
       cache.del("exams:lobby");
 
       UserActivity.log(req.user.id, 'admin.create_exam', { examId: result.rows[0].id, title, ip: req.ip, userAgent: req.headers['user-agent'] });
-
 
       res.status(201).json({
         message: "Exam created",
@@ -72,25 +128,28 @@ const AdminExamController = {
   async updateExam(req, res) {
     try {
       const { examId } = req.params;
-      const { title, duration, totalPoints, description, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      // P0: destructure titleCn, descriptionCn
+      const { title, titleCn, duration, totalPoints, description, difficulty_level, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
           : parsePositiveNumber(totalPoints, 100);
 
-      // Build dynamic update to handle shuffle_mode boolean properly
       const updates = [];
       const params = [];
       let idx = 1;
-      if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(title); }
+      // P1: sanitize all text fields + P0: handle titleCn/descriptionCn
+      if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(sanitize(title)); }
+      if (titleCn !== undefined) { updates.push(`title_cn = $${idx++}`); params.push(titleCn ? sanitize(titleCn) : null); }
       if (duration !== undefined) { updates.push(`duration = $${idx++}`); params.push(duration); }
       if (parsedTotalPoints !== undefined) { updates.push(`total_points = $${idx++}`); params.push(parsedTotalPoints); }
-      if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description); }
+      if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description ? sanitize(description) : null); }
+      if (difficulty_level !== undefined) { updates.push(`difficulty_level = $${idx++}`); params.push(difficulty_level); }
       if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
       if (is_premium !== undefined) { updates.push(`is_premium = $${idx++}`); params.push(is_premium === true); }
       if (allow_download !== undefined) { updates.push(`allow_download = $${idx++}`); params.push(allow_download === true); }
-      if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url); }
-      if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description); }
+      if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url ? sanitize(solution_video_url) : null); }
+      if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description ? sanitize(solution_description) : null); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
       if (vip_tier !== undefined) { updates.push(`vip_tier = $${idx++}`); params.push(vip_tier); }
       if (is_simulated !== undefined) { updates.push(`is_simulated = $${idx++}`); params.push(is_simulated === true); }
@@ -167,101 +226,167 @@ const AdminExamController = {
     }
   },
 
+  // ─── ADD QUESTION (hỗ trợ 6 loại câu hỏi) ──────────────────────────────
   async addQuestion(req, res) {
     try {
       const { examId } = req.params;
       const {
-        questionText,
-        questionTextCn,
+        questionType,        // Loại câu hỏi: single_choice | fill_blank_pool | fill_blank_item | reading_passage | reading_item
+        questionText,       // Nội dung câu hỏi (tiếng Anh, optional)
+        questionTextCn,     // Nội dung câu hỏi (tiếng Trung)
         imageUrl,
         points,
         explanation,
         explanationCn,
-        answers,
-        correctAnswer,
-        passageText,
+        answers,           // Mảng [{text, textCn, isCorrect}] — cho single_choice / reading_item
+        correctAnswer,     // Key đúng: 'A','B','C','D' — cho single_choice / reading_item
+        passageText,       // Đoạn văn đọc hiểu / điền từ
         passageImageUrl,
-        questionGroupType,
+        passageGroupType,  // legacy alias cho questionType
+        difficulty,
+        linkedOptions,      // Pool A-F cho fill_blank_pool
+        correctAnswerKey,   // 'A'/'B'... cho fill_blank_item
+        subQuestionNumber,  // Số câu con trong đoạn (34, 35, 36...)
       } = req.body;
 
-      const normalizedQuestion = normalizeBilingualText(
-        questionText,
-        questionTextCn,
-      );
-      if (!normalizedQuestion || !answers || answers.length < 2 || answers.length > 8) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Question text (English or Chinese) and 2-8 answers required",
-          });
+      // Resolve question type (hỗ trợ cả tên cũ)
+      const qType = questionType || passageGroupType || QUESTION_TYPES.SINGLE_CHOICE;
+
+      // Validation cơ bản
+      if (qType !== QUESTION_TYPES.FILL_BLANK_ITEM) {
+        // Câu điền từ con KHÔNG bắt buộc có questionText
+        const normQ = normalizeBilingualText(questionText, questionTextCn);
+        if (!normQ) {
+          return res.status(400).json({ message: "Câu hỏi phải có nội dung (Tiếng Anh hoặc Tiếng Trung)" });
+        }
       }
-
-      const normalizedAnswers = answers.map((answer = {}) =>
-        normalizeBilingualText(answer.text, answer.textCn),
-      );
-
-      if (normalizedAnswers.some((answer) => !answer)) {
-        return res
-          .status(400)
-          .json({ message: "Each answer must have English or Chinese text" });
-      }
-
-      const parsedPoints = parsePositiveNumber(points, 1);
 
       const client = await pool.connect();
-
       try {
         await client.query("BEGIN");
 
-        // Get next question number
+        // ── Kiểm tra max questions ──
         const countResult = await client.query(
-          "SELECT COUNT(*) as count FROM questions WHERE exam_id = $1",
+          "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1",
           [examId],
         );
-        const questionNumber = parseInt(countResult.rows[0].count) + 1;
+        if (countResult.rows[0].count >= MAX_QUESTIONS_PER_EXAM) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ message: `Đề thi đã đạt giới hạn ${MAX_QUESTIONS_PER_EXAM} câu` });
+        }
 
-        // Insert question
+        const questionNumber = countResult.rows[0].count + 1;
+
+        // ── Xác định passage_group_id và sub_question_number ──
+        let passageGroupId = null;
+        let subQn = null;
+
+        if (qType === QUESTION_TYPES.READING_ITEM || qType === QUESTION_TYPES.FILL_BLANK_ITEM) {
+          // Câu con: lấy group của câu cha gần nhất
+          passageGroupId = await getLatestPassageGroupId(client, examId);
+          if (!passageGroupId) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ message: "Không tìm thấy nhóm câu cha. Vui lòng thêm câu bắt đầu nhóm trước." });
+          }
+        }
+
+        if (qType === QUESTION_TYPES.READING_ITEM || qType === QUESTION_TYPES.READING_PASSAGE) {
+          // Đọc hiểu: số câu con
+          subQn = subQuestionNumber || questionNumber;
+        }
+
+        // ── Normalize linked_options cho fill_blank_pool ──
+        let linkedOpts = null;
+        if (qType === QUESTION_TYPES.FILL_BLANK_POOL) {
+          linkedOpts = normalizeLinkedOptions(linkedOptions || []);
+          if (!linkedOpts || linkedOpts.length < 2) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ message: "Điền từ cần ít nhất 2 lựa chọn A-F" });
+          }
+        }
+
+        // ── Validate answers: single_choice / reading_item ──
+        if ((qType === QUESTION_TYPES.SINGLE_CHOICE || qType === QUESTION_TYPES.READING_ITEM) && qType !== QUESTION_TYPES.FILL_BLANK_ITEM) {
+          const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+          if (normAnswers.some(a => !a) || normAnswers.length < 2 || normAnswers.length > 8) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ message: "Cần từ 2 đến 8 đáp án" });
+          }
+        }
+
+        // ── Validate correct answer: fill_blank_item ──
+        if (qType === QUESTION_TYPES.FILL_BLANK_ITEM && !correctAnswerKey) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ message: "Câu điền từ cần chỉ định đáp án đúng (correctAnswerKey)" });
+        }
+
+        // ── INSERT câu hỏi ──
+        const normQ = normalizeBilingualText(questionText, questionTextCn);
+        const parsedPoints = clamp(parsePositiveNumber(points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+
         const questionResult = await client.query(
-          `INSERT INTO questions (exam_id, question_number, question_text, question_text_cn, points, explanation, explanation_cn, image_url, passage_text, passage_image_url, question_group_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `INSERT INTO questions (
+             exam_id, question_number, question_type,
+             question_text, question_text_cn,
+             points, explanation, explanation_cn,
+             image_url,
+             passage_text, passage_image_url,
+             question_group_type, difficulty,
+             linked_options, sub_question_number, passage_group_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
            RETURNING id`,
           [
             examId,
             questionNumber,
-            normalizedQuestion.en,
-            normalizedQuestion.cn,
+            qType,
+            sanitize(normQ?.en || ''),
+            sanitize(normQ?.cn || ''),
             parsedPoints,
-            explanation,
-            explanationCn,
-            imageUrl,
-            passageText || null,
-            passageImageUrl || null,
-            questionGroupType || 'standard',
+            explanation ? sanitize(explanation) : null,
+            explanationCn ? sanitize(explanationCn) : null,
+            imageUrl ? sanitize(imageUrl) : null,
+            passageText ? sanitize(passageText) : null,
+            passageImageUrl ? sanitize(passageImageUrl) : null,
+            qType,   // dùng question_type làm question_group_type luôn
+            difficulty || null,
+            linkedOpts ? JSON.stringify(linkedOpts) : null,
+            subQn,
+            passageGroupId,
           ],
         );
 
         const questionId = questionResult.rows[0].id;
 
-        // Insert answers
-        const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
-        for (let i = 0; i < answers.length; i++) {
-          const answer = answers[i];
+        // ── UPDATE passage_group_id cho câu đầu đoạn ──
+        if (qType === QUESTION_TYPES.READING_PASSAGE || qType === QUESTION_TYPES.FILL_BLANK_POOL) {
           await client.query(
-            `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              questionId,
-              answerKeys[i],
-              normalizedAnswers[i].en,
-              normalizedAnswers[i].cn,
-              answerKeys[i] === correctAnswer,
-              answer?.imageUrl,
-            ],
+            "UPDATE questions SET passage_group_id = id WHERE id = $1",
+            [questionId],
           );
         }
 
-        // Update exam total_questions
+        // ── INSERT answers: single_choice / reading_item ──
+        if (qType === QUESTION_TYPES.SINGLE_CHOICE || qType === QUESTION_TYPES.READING_ITEM) {
+          const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+          const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+          for (let i = 0; i < normAnswers.length; i++) {
+            const key = answerKeys[i];
+            await client.query(
+              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                questionId,
+                key,
+                sanitize(normAnswers[i].en),
+                sanitize(normAnswers[i].cn),
+                key === (correctAnswer || 'A'),
+                answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
+              ],
+            );
+          }
+        }
+
+        // ── UPDATE exam total_questions ──
         await client.query(
           "UPDATE exams SET total_questions = total_questions + 1, updated_at = NOW() WHERE id = $1",
           [examId],
@@ -269,14 +394,21 @@ const AdminExamController = {
 
         await client.query("COMMIT");
 
-        // Clear exam caches so user-facing exam detail reflects new questions
         cache.delByPrefix("exams:");
         cache.del("exams:lobby");
 
-        UserActivity.log(req.user.id, 'admin.add_question', { examId, questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
+        UserActivity.log(req.user.id, 'admin.add_question', {
+          examId, questionId, questionType: qType,
+          ip: req.ip, userAgent: req.headers['user-agent']
+        });
 
-
-        res.status(201).json({ message: "Question added", questionId });
+        res.status(201).json({
+          message: "Question added",
+          questionId,
+          questionType: qType,
+          questionNumber,
+          passageGroupId: qType === QUESTION_TYPES.READING_PASSAGE || qType === QUESTION_TYPES.FILL_BLANK_POOL ? questionId : passageGroupId,
+        });
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -289,11 +421,12 @@ const AdminExamController = {
     }
   },
 
-  // Update question
+  // Update question (hỗ trợ đủ 6 loại câu hỏi)
   async updateQuestion(req, res) {
     try {
       const { questionId } = req.params;
       const {
+        questionType,
         questionText,
         questionTextCn,
         imageUrl,
@@ -305,96 +438,133 @@ const AdminExamController = {
         passageText,
         passageImageUrl,
         questionGroupType,
+        difficulty,
+        linkedOptions,
+        correctAnswerKey,
+        subQuestionNumber,
       } = req.body;
 
-      const hasQuestionTextPayload =
-        questionText !== undefined || questionTextCn !== undefined;
-      const normalizedQuestion = hasQuestionTextPayload
-        ? normalizeBilingualText(questionText, questionTextCn)
-        : null;
+      const hasQuestionTextPayload = questionText !== undefined || questionTextCn !== undefined;
+      const normalizedQuestion = hasQuestionTextPayload ? normalizeBilingualText(questionText, questionTextCn) : null;
 
       if (hasQuestionTextPayload && !normalizedQuestion) {
-        return res
-          .status(400)
-          .json({ message: "Question text cannot be empty in both languages" });
+        return res.status(400).json({ message: "Câu hỏi không thể trống ở cả hai ngôn ngữ" });
       }
 
-      const parsedPoints =
-        points === undefined ? undefined : parsePositiveNumber(points, 1);
+      const parsedPoints = points !== undefined
+        ? clamp(parsePositiveNumber(points, 1), 0.1, MAX_POINTS_PER_QUESTION)
+        : undefined;
+
+      // Normalize linked_options
+      let linkedOpts = undefined;
+      if (linkedOptions !== undefined) {
+        if (linkedOptions === null || linkedOptions === '') {
+          linkedOpts = null;
+        } else {
+          linkedOpts = normalizeLinkedOptions(linkedOptions);
+        }
+      }
+
+      const qType = questionType || questionGroupType;
 
       const client = await pool.connect();
-
       try {
         await client.query("BEGIN");
 
-        // Update question
-        await client.query(
-          `UPDATE questions 
-           SET question_text = COALESCE($1, question_text),
-               question_text_cn = COALESCE($2, question_text_cn),
-               image_url = $3,
-               points = COALESCE($4, points),
-               explanation = $5,
-               explanation_cn = $6,
-               passage_text = $7,
-               passage_image_url = $8,
-               question_group_type = $9
-           WHERE id = $10`,
-          [
-            normalizedQuestion?.en,
-            normalizedQuestion?.cn,
-            imageUrl,
-            parsedPoints,
-            explanation,
-            explanationCn,
-            passageText || null,
-            passageImageUrl || null,
-            questionGroupType || 'standard',
-            questionId,
-          ],
-        );
+        // Update question (sanitized) — chỉ update fields được gửi lên
+        const fields = [];
+        const vals = [];
+        let idx = 1;
 
-        // Update answers
-        if (answers && answers.length >= 2 && answers.length <= 8) {
-          const normalizedAnswers = answers.map((answer = {}) =>
-            normalizeBilingualText(answer.text, answer.textCn),
+        if (normalizedQuestion) {
+          fields.push(`question_text = $${idx++}`);
+          vals.push(sanitize(normalizedQuestion.en));
+          fields.push(`question_text_cn = $${idx++}`);
+          vals.push(sanitize(normalizedQuestion.cn));
+        }
+        if (imageUrl !== undefined) {
+          fields.push(`image_url = $${idx++}`);
+          vals.push(imageUrl ? sanitize(imageUrl) : null);
+        }
+        if (parsedPoints !== undefined) {
+          fields.push(`points = $${idx++}`);
+          vals.push(parsedPoints);
+        }
+        if (explanation !== undefined) {
+          fields.push(`explanation = $${idx++}`);
+          vals.push(explanation ? sanitize(explanation) : null);
+        }
+        if (explanationCn !== undefined) {
+          fields.push(`explanation_cn = $${idx++}`);
+          vals.push(explanationCn ? sanitize(explanationCn) : null);
+        }
+        if (passageText !== undefined) {
+          fields.push(`passage_text = $${idx++}`);
+          vals.push(passageText ? sanitize(passageText) : null);
+        }
+        if (passageImageUrl !== undefined) {
+          fields.push(`passage_image_url = $${idx++}`);
+          vals.push(passageImageUrl ? sanitize(passageImageUrl) : null);
+        }
+        if (qType !== undefined) {
+          fields.push(`question_type = $${idx++}`);
+          vals.push(qType);
+          fields.push(`question_group_type = $${idx++}`);
+          vals.push(qType);
+        }
+        if (difficulty !== undefined) {
+          fields.push(`difficulty = $${idx++}`);
+          vals.push(difficulty || null);
+        }
+        if (linkedOpts !== undefined) {
+          fields.push(`linked_options = $${idx++}`);
+          vals.push(linkedOpts ? JSON.stringify(linkedOpts) : null);
+        }
+        if (subQuestionNumber !== undefined) {
+          fields.push(`sub_question_number = $${idx++}`);
+          vals.push(subQuestionNumber || null);
+        }
+
+        if (fields.length > 0) {
+          vals.push(questionId);
+          await client.query(
+            `UPDATE questions SET ${fields.join(', ')} WHERE id = $${idx}`,
+            vals,
           );
+        }
 
-          if (normalizedAnswers.some((answer) => !answer)) {
-            await client.query("ROLLBACK");
-            return res
-              .status(400)
-              .json({
-                message: "Each answer must have English or Chinese text",
-              });
-          }
-
-          // Delete existing answers and re-insert them to support dynamic length (e.g. 4 -> 6 options)
-          await client.query("DELETE FROM answers WHERE question_id = $1", [questionId]);
-          
-          const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
-          for (let i = 0; i < answers.length; i++) {
-            const answer = answers[i];
-            await client.query(
-              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-              [
-                questionId,
-                answerKeys[i],
-                normalizedAnswers[i].en,
-                normalizedAnswers[i].cn,
-                answerKeys[i] === correctAnswer,
-                answer?.imageUrl,
-              ],
-            );
+        // Update answers — chỉ cho single_choice / reading_item
+        if (answers && answers.length >= 2 && answers.length <= 8) {
+          if (qType === 'fill_blank_pool' || qType === 'fill_blank_item') {
+            // Điền từ: không dùng bảng answers
+          } else {
+            const normalizedAnswers = answers.map(a => normalizeBilingualText(a.text, a.textCn));
+            if (normalizedAnswers.some(a => !a)) {
+              await client.query("ROLLBACK");
+              return res.status(400).json({ message: "Mỗi đáp án phải có nội dung" });
+            }
+            await client.query("DELETE FROM answers WHERE question_id = $1", [questionId]);
+            const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+            for (let i = 0; i < answers.length; i++) {
+              const key = answerKeys[i];
+              await client.query(
+                `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                  questionId,
+                  key,
+                  sanitize(normalizedAnswers[i].en),
+                  sanitize(normalizedAnswers[i].cn),
+                  key === (correctAnswer || 'A'),
+                  answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
+                ],
+              );
+            }
           }
         }
 
         await client.query("COMMIT");
-
         UserActivity.log(req.user.id, 'admin.update_question', { questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
-
-
         res.json({ message: "Question updated" });
       } catch (error) {
         await client.query("ROLLBACK");
@@ -450,6 +620,62 @@ const AdminExamController = {
     } catch (error) {
       console.error("Delete question error:", error);
       res.status(500).json({ message: "Failed to delete question" });
+    }
+  },
+
+  // ── P2: Question reordering ─────────────────────────────────────────────────
+  // PUT /api/admin/exams/:examId/questions/reorder
+  // Body: { orderedIds: [id1, id2, id3, ...] }
+  async reorderQuestions(req, res) {
+    try {
+      const { examId } = req.params;
+      const { orderedIds } = req.body;
+
+      if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+        return res.status(400).json({ message: "orderedIds phải là mảng không rỗng" });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        // Verify all questions belong to this exam
+        const verifyResult = await client.query(
+          `SELECT id FROM questions WHERE exam_id = $1 AND id = ANY($2::int[])`,
+          [examId, orderedIds],
+        );
+        if (verifyResult.rows.length !== orderedIds.length) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ message: "Một số câu hỏi không thuộc đề thi này" });
+        }
+
+        // Update question_number for each question
+        for (let i = 0; i < orderedIds.length; i++) {
+          await client.query(
+            "UPDATE questions SET question_number = $1 WHERE id = $2",
+            [i + 1, orderedIds[i]],
+          );
+        }
+
+        await client.query("COMMIT");
+
+        UserActivity.log(req.user.id, 'admin.reorder_questions', {
+          examId,
+          orderedIds,
+          ip: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+
+        res.json({ message: "Sắp xếp lại thứ tự câu hỏi thành công" });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error("Reorder questions error:", error);
+      res.status(500).json({ message: "Failed to reorder questions" });
     }
   },
 
@@ -687,38 +913,78 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
 
-      const examResult = await pool.query("SELECT * FROM exams WHERE id = $1", [
-        examId,
-      ]);
-
+      const examResult = await pool.query("SELECT * FROM exams WHERE id = $1", [examId]);
       if (examResult.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
       }
 
+      // Lấy câu hỏi + đáp án + linked_options (từ cha cho fill_blank_item)
       const questionsResult = await pool.query(
-        `SELECT 
-          q.*,
-          json_agg(
-            json_build_object(
-              'id', a.id,
-              'answer_key', a.answer_key,
-              'answer_text', a.answer_text,
-              'answer_text_cn', a.answer_text_cn,
-              'image_url', a.image_url,
-              'is_correct', a.is_correct
-            ) ORDER BY a.answer_key
-          ) as answers
-        FROM questions q
-        LEFT JOIN answers a ON q.id = a.question_id
-        WHERE q.exam_id = $1
-        GROUP BY q.id
-        ORDER BY q.question_number`,
+        `SELECT
+           q.id,
+           q.exam_id,
+           q.question_number,
+           q.question_type,
+           q.question_text,
+           q.question_text_cn,
+           q.image_url,
+           q.points,
+           q.explanation,
+           q.explanation_cn,
+           q.passage_text,
+           q.passage_image_url,
+           q.question_group_type,
+           q.difficulty,
+           q.linked_options,
+           q.sub_question_number,
+           q.passage_group_id,
+           -- Lấy linked_options từ câu cha (fill_blank_item → fill_blank_pool)
+           COALESCE(
+             q.linked_options,
+             (SELECT linked_options FROM questions parent
+              WHERE parent.id = q.passage_group_id
+                AND parent.question_type = 'fill_blank_pool')
+           ) as effective_linked_options,
+           -- Lấy passage_text từ câu cha (cho reading_item / fill_blank_item)
+           COALESCE(
+             q.passage_text,
+             (SELECT passage_text FROM questions parent
+              WHERE parent.id = q.passage_group_id
+                AND parent.passage_text IS NOT NULL
+              ORDER BY parent.id LIMIT 1)
+           ) as effective_passage_text,
+           json_agg(
+             json_build_object(
+               'id', a.id,
+               'answer_key', a.answer_key,
+               'answer_text', a.answer_text,
+               'answer_text_cn', a.answer_text_cn,
+               'image_url', a.image_url,
+               'is_correct', a.is_correct
+             ) ORDER BY a.answer_key
+           ) FILTER (WHERE a.id IS NOT NULL) as answers
+         FROM questions q
+         LEFT JOIN answers a ON q.id = a.question_id
+         WHERE q.exam_id = $1
+         GROUP BY q.id
+         ORDER BY q.question_number, q.id`,
         [examId],
       );
 
+      // Parse linked_options từ JSONB string
+      const questions = questionsResult.rows.map(q => ({
+        ...q,
+        linked_options: q.linked_options
+          ? (typeof q.linked_options === 'string' ? JSON.parse(q.linked_options) : q.linked_options)
+          : null,
+        effective_linked_options: q.effective_linked_options
+          ? (typeof q.effective_linked_options === 'string' ? JSON.parse(q.effective_linked_options) : q.effective_linked_options)
+          : null,
+      }));
+
       res.json({
         exam: examResult.rows[0],
-        questions: questionsResult.rows,
+        questions,
       });
     } catch (error) {
       console.error("Get exam error:", error);
@@ -751,15 +1017,18 @@ const AdminExamController = {
   async setSchedule(req, res) {
     try {
       const { examId } = req.params;
-      const { startTime, endTime, maxParticipants, reason } = req.body;
+      // P0 fix: accept BOTH startTime (old) and start_time (frontend camelCase standard)
+      const { startTime, endTime, start_time, end_time, maxParticipants, reason } = req.body;
       const adminId = req.user.id;
       const adminName = req.user.full_name || req.user.username || `User#${adminId}`;
 
-      if (!startTime || !endTime) {
-        return res.status(400).json({ message: 'startTime và endTime là bắt buộc' });
+      const sTime = startTime || start_time;
+      const eTime = endTime || end_time;
+      if (!sTime || !eTime) {
+        return res.status(400).json({ message: 'start_time và end_time là bắt buộc' });
       }
-      const start = new Date(startTime);
-      const end = new Date(endTime);
+      const start = new Date(sTime);
+      const end = new Date(eTime);
       if (isNaN(start) || isNaN(end) || end <= start) {
         return res.status(400).json({ message: 'Thời gian không hợp lệ: end_time phải sau start_time' });
       }

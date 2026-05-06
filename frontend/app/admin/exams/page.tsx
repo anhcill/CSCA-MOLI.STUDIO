@@ -384,10 +384,14 @@ export default function ExamsPage() {
                                                         <FiShuffle size={10} /> Xáo trộn
                                                     </span>
                                                 )}
-                                                {exam.is_premium ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
+                                                {exam.vip_tier !== 'basic' ? (
+                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md shadow-sm ${
+                                                        exam.vip_tier === 'premium'
+                                                            ? 'bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900'
+                                                            : 'bg-gradient-to-r from-indigo-200 to-purple-400 text-indigo-900'
+                                                    }`}>
                                                         <FaCrown size={10} />
-                                                        {exam.vip_tier === 'vip_pro' ? 'PRO' : exam.vip_tier === 'vip_thong_minh' ? 'VIP' : 'VIP'}
+                                                        {exam.vip_tier === 'premium' ? 'Pre' : 'VIP'}
                                                     </span>
                                                 ) : (
                                                     <span className="text-xs text-gray-400 font-medium">Miễn phí</span>

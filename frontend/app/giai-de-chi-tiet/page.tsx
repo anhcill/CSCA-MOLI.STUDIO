@@ -73,10 +73,10 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
         <div className={`p-8 text-center ${isVip ? 'bg-gradient-to-br from-indigo-600 to-purple-700' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
           <div className="text-5xl mb-3">{isVip ? '🔒' : '👑'}</div>
           <h2 className="text-xl font-black text-white mb-1">
-            {isVip ? 'Cần tài khoản VIP' : 'Cần tài khoản Premium'}
+            {isVip ? 'Cần tài khoản VIP' : 'Cần tài khoản Pre'}
           </h2>
           <p className="text-white/80 text-sm">
-            {isVip ? 'Video giải đề này dành riêng cho thành viên VIP trở lên.' : 'Video Premium độc quyền — chỉ dành cho tài khoản Premium.'}
+            {isVip ? 'Video giải đề này dành riêng cho thành viên VIP trở lên.' : 'Video Pre độc quyền — chỉ dành cho tài khoản Pre.'}
           </p>
         </div>
         <div className="p-6">
@@ -86,7 +86,7 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
               'Truy cập đề thi cao cấp không giới hạn',
               'Phân tích AI chi tiết từng câu',
             ] : [
-              'Video giải đề Premium độc quyền',
+              'Video giải đề Pre độc quyền',
               'Hỏi đáp 1-1 với cố vấn chuyên gia',
               'Ưu tiên trả lời trong 2 giờ',
             ]).map((f, i) => (
@@ -98,7 +98,7 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
           </div>
           <Link href="/vip"
             className={`block text-center py-3.5 font-bold rounded-xl text-white text-sm transition-all hover:-translate-y-0.5 shadow-lg ${isVip ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-indigo-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30'}`}>
-            {isVip ? '🚀 Nâng cấp VIP ngay' : '👑 Nâng cấp Premium ngay'}
+            {isVip ? '🚀 Nâng cấp VIP ngay' : '👑 Nâng cấp Pre ngay'}
           </Link>
           <button onClick={onClose} className="w-full mt-3 py-2.5 text-gray-500 text-sm hover:text-gray-700 font-medium">Để sau</button>
         </div>
@@ -143,7 +143,7 @@ function ExamCard({
   const neededTier = (exam.vip_tier === 'premium' ? 'premium' : 'vip') as 'vip' | 'premium';
 
   const tierBadge = exam.vip_tier === 'premium'
-    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-lg"><FaCrown size={8} /> Premium</span>
+    ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-lg"><FaCrown size={8} /> Pre</span>
     : exam.vip_tier === 'vip' || exam.is_premium
       ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-bold rounded-lg"><FiStar size={8} /> VIP</span>
       : null;
@@ -163,7 +163,7 @@ function ExamCard({
           <button
             onClick={() => onLocked(neededTier)}
             className={`px-5 py-2.5 text-white text-sm font-bold rounded-xl shadow-md transition-transform hover:scale-105 ${neededTier === 'premium' ? 'bg-gradient-to-r from-amber-500 to-orange-600' : 'bg-gradient-to-r from-indigo-500 to-purple-600'}`}>
-            {neededTier === 'premium' ? 'Nâng cấp Premium' : 'Nâng cấp VIP'}
+            {neededTier === 'premium' ? 'Nâng cấp Pre' : 'Nâng cấp VIP'}
           </button>
         </div>
       )}
@@ -217,7 +217,7 @@ function ExamCard({
                     ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border border-amber-200 hover:border-amber-300'
                     : 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300'
                 }`}>
-                <FiLock size={13} /> {neededTier === 'premium' ? 'Premium' : 'VIP'}
+                <FiLock size={13} /> {neededTier === 'premium' ? 'Pre' : 'VIP'}
               </button>
             )
           ) : (

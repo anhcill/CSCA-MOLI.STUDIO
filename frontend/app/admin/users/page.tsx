@@ -326,7 +326,7 @@ export default function AdminUsersPage() {
                   <td className="px-5 py-4">
                     {(u.is_vip || u.subscription_tier === 'vip' || u.subscription_tier === 'premium') ? (
                       <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold">
-                        {u.subscription_tier === 'vip_pro' ? 'VIP Pro' : u.subscription_tier === 'vip_thong_minh' ? 'VIP TM' : u.subscription_tier === 'premium' ? 'Premium' : 'VIP'}
+                        {u.subscription_tier === 'premium' ? 'Pre' : u.subscription_tier === 'vip' ? 'VIP' : 'VIP'}
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>

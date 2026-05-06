@@ -83,6 +83,12 @@ router.get("/weekday", insightsController.getWeekdayAnalysis);
 router.get("/hardest-exams", insightsController.getHardestExams);
 
 /**
+ * GET /api/insights/history-stats
+ * Thống kê chi tiết cho trang lịch sử thi
+ */
+router.get("/history-stats", insightsController.getHistoryStats);
+
+/**
  * PUT /api/insights/read/:id
  * Đánh dấu insight đã đọc
  */

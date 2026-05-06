@@ -1,402 +1,592 @@
-const db = require("../config/database");
-const aiService = require("../services/aiService");
-const { cache, TTL } = require("../config/cache");
+const db = require('../config/database');
+const aiService = require('../services/aiService');
+const { cache, TTL } = require('../config/cache');
 
-// Per-user cooldown: userId → timestamp khi được phép call AI tiếp
+// ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
-const REFRESH_COOLDOWN_MS = 30 * 60 * 1000; // 30 phút giữa các lần refresh
+const REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
 
-// In-flight deduplication: nếu đang có request chờ Gemini cho userId X,
-// các request tiếp theo sẽ dùng chung promise thay vì gọi thêm vào Gemini
-const inFlightRequests = new Map(); // userId → Promise<fullAnalysis>
+// ─── In-flight deduplication ────────────────────────────────────────────────────
+const inFlightRequests = new Map();
 
+// ─── Shared helpers ───────────────────────────────────────────────────────────────
+async function getStaleCache(userId, insightType = 'full_analysis') {
+  const r = await db.query(
+    `SELECT data, created_at FROM ai_insights
+     WHERE user_id = $1 AND insight_type = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, insightType],
+  );
+  return r.rows[0] || null;
+}
+
+async function handleRateLimit(res, userId, retryAfter, message) {
+  const stale = await getStaleCache(userId);
+  if (stale) {
+    const age = Math.floor((Date.now() - new Date(stale.created_at)) / 60000);
+    return res.json({
+      success: true, cached: true, cacheSource: 'stale',
+      cacheAge: age, rateLimited: true, retryAfter,
+      message, data: stale.data,
+    });
+  }
+  return res.json({ success: false, rateLimited: true, retryAfter, message });
+}
+
+// ─── FEATURE 1: Phân tích kết quả bài thi ───────────────────────────────────────
 /**
- * GET /api/ai/analyze - Phân tích toàn diện cho user
- * Cache hierarchy: in-memory (30 min) → DB (24h) → call AI API
+ * POST /api/ai/exam-result
+ * Phân tích kết quả 1 bài thi cụ thể (hiển thị ngay sau khi nộp bài)
  */
+async function analyzeExamResult(req, res) {
+  try {
+    const userId = req.user.id;
+    const { attemptId } = req.params;
+
+    if (!attemptId) {
+      return res.status(400).json({ success: false, message: 'Thiếu attemptId' });
+    }
+
+    // Lấy chi tiết bài thi
+    const attemptResult = await db.query(
+      `SELECT
+         ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+         ea.started_at, ea.submitted_at,
+         e.id as exam_id, e.title as exam_title, e.title_cn,
+         e.subject_id, e.total_questions, e.duration,
+         s.name as subject_name, s.name_cn
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE ea.id = $1 AND ea.user_id = $2`,
+      [attemptId, userId],
+    );
+
+    if (!attemptResult.rows[0]) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài thi' });
+    }
+
+    const attempt = attemptResult.rows[0];
+    const duration = attempt.submitted_at && attempt.started_at
+      ? Math.round((new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 60000)
+      : null;
+
+    // Lấy câu hỏi chi tiết
+    let questions = [];
+    try {
+      const questionsResult = await db.query(
+        `SELECT
+           q.id, q.question_number, q.question_text, q.question_text_cn,
+           q.question_type, q.difficulty,
+           q.points, q.explanation, q.explanation_cn,
+           ua.selected_answer_key, ua.answer_text as selected_answer_text,
+           q.correct_answer as correct_answer_key,
+           a.answer_text as correct_answer_text,
+           CASE WHEN ua.selected_answer_key = q.correct_answer THEN true ELSE false END as is_correct
+         FROM user_answers ua
+         JOIN questions q ON ua.question_id = q.id
+         LEFT JOIN answers a ON a.question_id = q.id
+           AND a.answer_key = q.correct_answer
+         WHERE ua.attempt_id = $1
+         ORDER BY q.question_number`,
+        [attemptId],
+      );
+      questions = questionsResult.rows.map(q => ({
+        question_number: q.question_number,
+        question_text: q.question_text,
+        question_text_cn: q.question_text_cn,
+        question_type: q.question_type,
+        difficulty: q.difficulty,
+        points: q.points,
+        selected_answer_key: q.selected_answer_key,
+        selected_answer_text: q.selected_answer_text,
+        correct_answer_key: q.correct_answer_key,
+        correct_answer_text: q.correct_answer_text,
+        is_correct: q.is_correct,
+        options: [],
+      }));
+    } catch {
+      // Fallback: dùng dữ liệu attempt thuần
+    }
+
+    const attemptData = {
+      attemptId: attempt.id,
+      examTitle: attempt.exam_title,
+      subjectName: attempt.subject_name,
+      totalScore: parseFloat(attempt.total_score) || 0,
+      totalQuestions: attempt.total_questions,
+      correctCount: attempt.total_correct,
+      duration,
+      questions,
+    };
+
+    // Gọi AI
+    if (aiService.isRateLimited()) {
+      const retryAfter = aiService.getRateLimitRemaining();
+      return res.json({
+        success: true, rateLimited: true, retryAfter,
+        data: { ...attemptData, aiAnalysis: { score: Math.round((attempt.total_correct / attempt.total_questions) * 100) } },
+        message: 'AI đang bận, hiển thị kết quả cơ bản.',
+      });
+    }
+
+    const aiAnalysis = await aiService.analyzeExamResult(attemptData);
+
+    res.json({
+      success: true,
+      attempt: {
+        id: attempt.id,
+        examTitle: attempt.exam_title,
+        subjectName: attempt.subject_name,
+        totalScore: attempt.total_score,
+        totalQuestions: attempt.total_questions,
+        correctCount: attempt.total_correct,
+        duration,
+        submittedAt: attempt.submitted_at,
+      },
+      aiAnalysis,
+    });
+  } catch (error) {
+    console.error('analyzeExamResult error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi phân tích bài thi' });
+  }
+}
+
+// ─── FEATURE 2: Giải thích câu sai ─────────────────────────────────────────────
+/**
+ * GET /api/ai/exam/:attemptId/explanations
+ * Giải thích chi tiết từng câu sai
+ */
+async function explainWrongAnswers(req, res) {
+  try {
+    const userId = req.user.id;
+    const { attemptId } = req.params;
+
+    const attemptResult = await db.query(
+      `SELECT ea.id, e.title as exam_title, e.subject_id
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       WHERE ea.id = $1 AND ea.user_id = $2`,
+      [attemptId, userId],
+    );
+    if (!attemptResult.rows[0]) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài thi' });
+    }
+
+    // Lấy tất cả câu hỏi + đáp án + câu trả lời user
+    const questionsResult = await db.query(
+      `SELECT
+         q.question_number,
+         q.question_text, q.question_text_cn,
+         q.question_type, q.difficulty,
+         q.explanation, q.explanation_cn,
+         q.correct_answer as correct_answer_key,
+         q.points,
+         ua.selected_answer_key,
+         ua.answer_text as selected_answer_text,
+         CASE WHEN ua.selected_answer_key = q.correct_answer THEN true ELSE false END as is_correct
+       FROM user_answers ua
+       JOIN questions q ON ua.question_id = q.id
+       WHERE ua.attempt_id = $1
+       ORDER BY q.question_number`,
+      [attemptId],
+    );
+
+    // Lấy answers cho mỗi câu
+    const questions = await Promise.all(questionsResult.rows.map(async (q) => {
+      const answersResult = await db.query(
+        `SELECT answer_key, answer_text, answer_text_cn
+         FROM answers WHERE question_id = (
+           SELECT id FROM questions WHERE question_number = $1 AND exam_id = $2
+         )
+         ORDER BY answer_key`,
+        [q.question_number, attemptResult.rows[0].id],
+      ).catch(() => ({ rows: [] }));
+
+      return {
+        ...q,
+        options: answersResult.rows.map(a => ({
+          key: a.answer_key,
+          text: a.answer_text,
+          text_cn: a.answer_text_cn,
+          is_correct: a.answer_key === q.correct_answer_key,
+        })),
+      };
+    }));
+
+    const wrongCount = questions.filter(q => !q.is_correct && q.selected_answer_key).length;
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        data: { explanations: [], wrongCount },
+        message: 'AI đang bận, hiển thị kết quả cơ bản.',
+      });
+    }
+
+    const explanations = await aiService.explainWrongAnswers(questions);
+
+    res.json({
+      success: true,
+      wrongCount,
+      questions,
+      explanations,
+    });
+  } catch (error) {
+    console.error('explainWrongAnswers error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi giải thích câu sai' });
+  }
+}
+
+// ─── FEATURE 3: Phân tích theo chủ đề ───────────────────────────────────────────
+/**
+ * POST /api/ai/topics
+ * Phân tích điểm mạnh/yếu theo môn từ nhiều bài thi
+ */
+async function analyzeTopics(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const attempts = await db.query(
+      `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              ea.submit_time, e.title as exam_title, e.total_questions,
+              s.name as subject_name, s.name_cn
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE ea.user_id = $1 AND ea.status = 'completed'
+       ORDER BY ea.submit_time DESC
+       LIMIT 50`,
+      [userId],
+    );
+
+    if (attempts.rows.length === 0) {
+      return res.json({ success: true, hasEnoughData: false, message: 'Chưa có bài thi nào.' });
+    }
+
+    if (aiService.isRateLimited()) {
+      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
+    }
+
+    const result = await aiService.analyzeTopics(attempts.rows);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('analyzeTopics error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi phân tích chủ đề' });
+  }
+}
+
+// ─── FEATURE 4: Gợi ý luyện tập ──────────────────────────────────────────────────
+/**
+ * POST /api/ai/practice
+ * Gợi ý bài học và dạng bài cần luyện
+ */
+async function getPracticeRecommendations(req, res) {
+  try {
+    const userId = req.user.id;
+    const { weaknesses, examId } = req.body;
+
+    // Lấy danh sách đề thi để gợi ý
+    const exams = await db.query(
+      `SELECT e.id, e.title, e.title_cn, e.difficulty_level, e.total_questions,
+              e.duration, s.name as subject_name, e.status
+       FROM exams e
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE e.status = 'published'
+       ORDER BY e.created_at DESC
+       LIMIT 30`,
+    );
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        data: { recommendations: [], studyPlan: '' },
+      });
+    }
+
+    const result = await aiService.getPracticeRecommendations(
+      weaknesses || [],
+      exams.rows,
+    );
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('getPracticeRecommendations error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi gợi ý luyện tập' });
+  }
+}
+
+// ─── FEATURE 5: Chatbot hỏi đáp ────────────────────────────────────────────────
+/**
+ * POST /api/ai/ask
+ * Chatbot AI trả lời câu hỏi của user về bài thi
+ */
+async function askAI(req, res) {
+  try {
+    const userId = req.user.id;
+    const { question, attemptId, conversationHistory } = req.body;
+
+    if (!question || question.trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
+    }
+
+    // Lấy context từ bài thi nếu có attemptId
+    let context = {};
+    if (attemptId) {
+      const attemptResult = await db.query(
+        `SELECT e.title as exam_title, s.name as subject_name,
+                ea.total_score, ea.total_correct, ea.total_incorrect
+         FROM exam_attempts ea
+         JOIN exams e ON ea.exam_id = e.id
+         LEFT JOIN subjects s ON e.subject_id = s.id
+         WHERE ea.id = $1 AND ea.user_id = $2`,
+        [attemptId, userId],
+      );
+      if (attemptResult.rows[0]) {
+        const a = attemptResult.rows[0];
+        context.examTitle = a.exam_title;
+        context.subjectName = a.subject_name;
+        context.userScore = a.total_questions > 0
+          ? Math.round((a.total_correct / a.total_questions) * 100)
+          : parseFloat(a.total_score) || 0;
+      }
+    }
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: false, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        answer: 'Xin lỗi, AI đang bận lúc này. Bạn hãy thử lại sau nhé! 🤖',
+      });
+    }
+
+    const result = await aiService.askAI(question, context);
+
+    res.json({
+      success: true,
+      answer: result.answer,
+      timestamp: result.timestamp,
+      error: result.error || false,
+    });
+  } catch (error) {
+    console.error('askAI error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi chatbot AI' });
+  }
+}
+
+// ─── FEATURE 6: Phân tích tiến bộ ───────────────────────────────────────────────
+/**
+ * GET /api/ai/progress
+ * So sánh kết quả giữa các lần thi
+ */
+async function analyzeProgress(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const attempts = await db.query(
+      `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              ea.submit_time, e.title as exam_title, e.total_questions
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       WHERE ea.user_id = $1 AND ea.status = 'completed'
+       ORDER BY ea.submit_time ASC
+       LIMIT 20`,
+      [userId],
+    );
+
+    if (attempts.rows.length < 2) {
+      return res.json({
+        success: true,
+        hasEnoughData: false,
+        message: 'Cần ít nhất 2 bài thi để so sánh tiến bộ.',
+        history: attempts.rows.map(a => ({
+          examTitle: a.exam_title,
+          date: a.submit_time,
+          score: a.total_questions > 0
+            ? Math.round((a.total_correct / a.total_questions) * 100)
+            : parseFloat(a.total_score) || 0,
+        })),
+      });
+    }
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        data: { history: [] },
+        message: 'AI đang bận.',
+      });
+    }
+
+    const result = await aiService.analyzeProgress(attempts.rows);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('analyzeProgress error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi phân tích tiến bộ' });
+  }
+}
+
+// ─── FEATURE 7: Gợi ý đề tiếp theo ─────────────────────────────────────────────
+/**
+ * GET /api/ai/next-exam
+ * Gợi ý đề thi phù hợp với trình độ
+ */
+async function recommendNextExam(req, res) {
+  try {
+    const userId = req.user.id;
+
+    // Lấy điểm mới nhất
+    const latestAttempt = await db.query(
+      `SELECT ea.total_correct, ea.total_score, ea.total_incorrect, e.total_questions,
+              e.subject_id, s.name as subject_name
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE ea.user_id = $1 AND ea.status = 'completed'
+       ORDER BY ea.submit_time DESC LIMIT 1`,
+      [userId],
+    );
+
+    const last = latestAttempt.rows[0];
+    const userScore = last?.total_questions > 0
+      ? Math.round((last.total_correct / last.total_questions) * 100)
+      : parseFloat(last?.total_score) || 60;
+
+    // Lấy danh sách đề thi
+    const exams = await db.query(
+      `SELECT e.id, e.title, e.title_cn, e.difficulty_level, e.total_questions,
+              e.duration, e.status, e.is_published, s.name as subject_name
+       FROM exams e
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE e.status = 'published'
+       ORDER BY e.created_at DESC
+       LIMIT 50`,
+    );
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        data: { recommendedExam: null, studyAdvice: 'Hãy thử lại sau.' },
+      });
+    }
+
+    const result = await aiService.recommendNextExam({
+      userScore,
+      subjectName: last?.subject_name,
+      allExams: exams.rows,
+    });
+
+    res.json({ success: true, userScore, ...result });
+  } catch (error) {
+    console.error('recommendNextExam error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi gợi ý đề tiếp theo' });
+  }
+}
+
+// ─── FULL ANALYSIS (legacy endpoint - vẫn giữ) ─────────────────────────────────
 async function analyzeUserPerformance(req, res) {
   try {
     const userId = req.user.id;
     const memKey = `ai:full_analysis:${userId}`;
 
-    // Tier 0: Nếu đang trong backoff window (vừa bị 429) — trả stale cache ngay
     if (aiService.isRateLimited()) {
-      const retryAfter = aiService.getRateLimitRemaining();
-      const staleImmediate = await db.query(
-        `SELECT data, created_at FROM ai_insights
-         WHERE user_id = $1 AND insight_type = 'full_analysis'
-         ORDER BY created_at DESC LIMIT 1`,
-        [userId],
-      );
-      if (staleImmediate.rows.length > 0) {
-        const age = Math.floor(
-          (Date.now() - new Date(staleImmediate.rows[0].created_at)) / 60000,
-        );
-        return res.json({
-          success: true,
-          cached: true,
-          cacheSource: "stale",
-          cacheAge: age,
-          rateLimited: true,
-          retryAfter,
-          message:
-            "Hệ thống AI đang tạm thời bận, đang hiển thị kết quả phân tích gần nhất.",
-          data: staleImmediate.rows[0].data,
-        });
-      }
-      return res.json({
-        success: false,
-        rateLimited: true,
-        retryAfter,
-        message: "Hệ thống AI đang quá tải, vui lòng thử lại sau vài phút.",
-      });
+      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(),
+        'Hệ thống AI đang tạm thời bận.');
     }
 
-    // Tier 1: In-memory cache (30 phút) — không tốn DB round-trip
     const memCached = cache.get(memKey);
     if (memCached) {
-      return res.json({
-        success: true,
-        cached: true,
-        cacheSource: "memory",
-        cacheAge: memCached.cacheAge,
-        data: memCached.data,
-      });
+      return res.json({ success: true, cached: true, cacheSource: 'memory', cacheAge: memCached.cacheAge, data: memCached.data });
     }
 
-    // Tier 2: DB cache (24 giờ) — persist qua server restart
     const cached = await db.query(
-      `SELECT data, created_at 
-       FROM ai_insights 
-       WHERE user_id = $1 AND insight_type = 'full_analysis'
-       AND created_at > NOW() - INTERVAL '24 hours'
-       ORDER BY created_at DESC 
-       LIMIT 1`,
+      `SELECT data, created_at FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis'
+       AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1`,
       [userId],
     );
-
     if (cached.rows.length > 0) {
-      const cacheAge = Math.floor(
-        (Date.now() - new Date(cached.rows[0].created_at)) / 1000 / 60,
-      );
-      // Warm in-memory cache từ DB để tránh DB query tiếp theo
+      const age = Math.floor((Date.now() - new Date(cached.rows[0].created_at)) / 60000);
       cache.set(memKey, { data: cached.rows[0].data, cacheAge }, TTL.VERY_LONG);
-      return res.json({
-        success: true,
-        cached: true,
-        cacheSource: "db",
-        cacheAge,
-        data: cached.rows[0].data,
-      });
+      return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: cached.rows[0].data });
     }
 
-    // Helper lấy stale cache
-    const getStaleOrError = async (msg) => {
-      const retryAfter = aiService.getRateLimitRemaining();
-      const stale = await db.query(
-        `SELECT data, created_at FROM ai_insights
-         WHERE user_id = $1 AND insight_type = 'full_analysis'
-         ORDER BY created_at DESC LIMIT 1`,
-        [userId],
-      );
-      if (stale.rows.length > 0) {
-        const age = Math.floor(
-          (Date.now() - new Date(stale.rows[0].created_at)) / 60000,
-        );
-        return res.json({
-          success: true,
-          cached: true,
-          cacheSource: "stale",
-          cacheAge: age,
-          rateLimited: true,
-          retryAfter,
-          message: msg,
-          data: stale.rows[0].data,
-        });
-      }
-      return res.json({
-        success: false,
-        rateLimited: true,
-        retryAfter,
-        message: "Hệ thống AI đang quá tải, vui lòng thử lại sau vài phút.",
-      });
-    };
-
-    // ── In-flight deduplication ──────────────────────────────────────────────
-    // CRITICAL: register a deferred promise SYNCHRONOUSLY (no await before .set)
-    // so any concurrent request arriving after this line will wait on it instead
-    // of creating a second Gemini call.
     if (inFlightRequests.has(userId)) {
-      // Another request is already calling AI — wait for its result
       const data = await inFlightRequests.get(userId);
-      if (data) {
-        cache.set(memKey, { data, cacheAge: 0 }, TTL.VERY_LONG);
-        return res.json({
-          success: true,
-          cached: true,
-          cacheSource: "inflight",
-          cacheAge: 0,
-          data,
-        });
-      }
-      // inflight failed (null) — re-check rate limit, serve stale or 429
-      if (aiService.isRateLimited()) {
-        return getStaleOrError(
-          "Hệ thống AI đang tạm thời bận, đang hiển thị kết quả phân tích gần nhất.",
-        );
-      }
-      // rate limit already cleared — fall through to try again below
+      if (data) { cache.set(memKey, { data, cacheAge: 0 }, TTL.VERY_LONG); return res.json({ success: true, cached: true, cacheSource: 'inflight', cacheAge: 0, data }); }
+      if (aiService.isRateLimited()) return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
     } else {
-      // No inflight yet — register a DEFERRED promise synchronously so the next
-      // concurrent request sees it before we do any async work.
-      let resolveInflight;
-      const inflightPromise = new Promise((resolve) => {
-        resolveInflight = resolve;
-      });
+      let resolveInflight; const inflightPromise = new Promise(r => { resolveInflight = r; });
       inFlightRequests.set(userId, inflightPromise);
-      // Store resolver on a closure variable accessible to the rest of this request
       req._resolveInflight = resolveInflight;
       req._inflightPromise = inflightPromise;
     }
 
-    // Cleanup helper — resolves the deferred and removes from map
-    const cleanupInflight = (result) => {
-      if (req._resolveInflight) {
-        req._resolveInflight(result ?? null);
-        req._resolveInflight = null;
-        setImmediate(() => {
-          if (inFlightRequests.get(userId) === req._inflightPromise) {
-            inFlightRequests.delete(userId);
-          }
-        });
-      }
-    };
-
-    // Re-check rate limit (may have changed while we were awaiting cache queries)
     if (aiService.isRateLimited()) {
-      cleanupInflight(null);
-      return getStaleOrError(
-        "Hệ thống AI đang tạm thời bận, đang hiển thị kết quả phân tích gần nhất.",
-      );
+      if (req._resolveInflight) req._resolveInflight(null);
+      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
     }
 
-    // Fetch exam attempts — dùng schema thực tế (user_exam_attempts)
-    // Lưu ý: table thực có thể là exam_attempts (schema mới) hoặc user_exam_attempts (schema cũ)
-    // Dùng COALESCE để tương thích cả hai
-    let attempts;
-    try {
-      // Thử schema mới trước (có table exam_attempts + subjects)
-      attempts = await db.query(
-        `SELECT 
-          ea.id,
-          ea.total_score as score,
-          ea.total_correct,
-          ea.total_incorrect as total_wrong,
-          ea.submit_time as completed_at,
-          s.name as subject,
-          e.title as exam_title,
-          e.total_questions
-         FROM exam_attempts ea
-         JOIN exams e ON ea.exam_id = e.id
-         JOIN subjects s ON e.subject_id = s.id
-         WHERE ea.user_id = $1 AND ea.status = 'completed'
-         ORDER BY ea.submit_time DESC
-         LIMIT 20`,
-        [userId],
-      );
-    } catch {
-      // Fallback schema cũ (user_exam_attempts, subject column trên exams)
-      attempts = await db.query(
-        `SELECT 
-          uea.id,
-          uea.score,
-          uea.total_correct,
-          uea.total_wrong,
-          uea.completed_at,
-          e.subject as subject,
-          e.title as exam_title,
-          e.total_questions
-         FROM user_exam_attempts uea
-         JOIN exams e ON uea.exam_id = e.id
-         WHERE uea.user_id = $1 AND uea.is_completed = true
-         ORDER BY uea.completed_at DESC
-         LIMIT 20`,
-        [userId],
-      );
-    }
-
-    if (attempts.rows.length === 0) {
-      cleanupInflight(null);
-      return res.json({
-        success: true,
-        hasEnoughData: false,
-        message:
-          "Bạn chưa hoàn thành đề thi nào. Hãy làm ít nhất 3 đề để AI phân tích.",
-      });
-    }
-
-    // Helper lấy stale cache
-    const getStaleCache = async () => {
-      const stale = await db.query(
-        `SELECT data, created_at FROM ai_insights
-         WHERE user_id = $1 AND insight_type = 'full_analysis'
-         ORDER BY created_at DESC LIMIT 1`,
-        [userId],
-      );
-      return stale.rows[0] || null;
-    };
-
-    // Final rate-limit guard (một lần nữa, phòng request tới trong khoảng await attempts)
-    if (aiService.isRateLimited()) {
-      cleanupInflight(null);
-      return getStaleOrError(
-        "Hệ thống AI đang tạm thời bận, đang hiển thị kết quả phân tích gần nhất.",
-      );
-    }
-
-    // AI Analysis — gọi trực tiếp, không cần wrap promise riêng
-    // vì dedup đã được đăng ký đồng bộ ở trên rồi
-    let weaknessAnalysis;
-    let roadmap;
-    let recommendedMaterials;
-    try {
-      const weakness = await aiService.analyzeWeaknesses(attempts.rows);
-      if (!weakness.hasEnoughData) {
-        cleanupInflight(null);
-        return res.json({ success: true, ...weakness });
-      } else {
-        const [rm, materialsRes] = await Promise.all([
-          aiService.generateRoadmap(weakness),
-          db.query(
-            "SELECT * FROM materials WHERE is_active = true ORDER BY created_at DESC LIMIT 50",
-          ),
-        ]);
-        const recommended = await aiService.recommendMaterials(
-          weakness,
-          materialsRes.rows,
-        );
-        weaknessAnalysis = weakness;
-        roadmap = rm;
-        recommendedMaterials = recommended;
-      }
-    } catch (aiErr) {
-      cleanupInflight(null);
-      if (aiErr.isRateLimit) {
-        const staleRow = await getStaleCache();
-        if (staleRow) {
-          const staleAge = Math.floor(
-            (Date.now() - new Date(staleRow.created_at)) / 60000,
-          );
-          console.warn(
-            `⚠️  Gemini rate limited — trả cache cũ (${staleAge} phút) cho user ${userId}`,
-          );
-          return res.json({
-            success: true,
-            cached: true,
-            cacheSource: "stale",
-            cacheAge: staleAge,
-            rateLimited: true,
-            retryAfter: aiService.getRateLimitRemaining(),
-            message:
-              "Hệ thống AI đang bận, đang hiển thị kết quả phân tích gần nhất.",
-            data: staleRow.data,
-          });
-        }
-        return res.json({
-          success: false,
-          rateLimited: true,
-          retryAfter: aiService.getRateLimitRemaining(),
-          message:
-            "Hệ thống AI hiện đang quá tải, vui lòng thử lại sau vài phút.",
-        });
-      }
-      throw aiErr;
-    }
-
-    const fullAnalysis = {
-      totalExams: attempts.rows.length,
-      weaknesses: weaknessAnalysis.weaknesses || [],
-      strengths: weaknessAnalysis.strengths || [],
-      suggestions: weaknessAnalysis.suggestions || [],
-      subjectStats: weaknessAnalysis.subjectStats || [],
-      roadmap: roadmap?.roadmap || [],
-      recommendedMaterials: recommendedMaterials || [],
-      analyzedAt: new Date().toISOString(),
-    };
-
-    await db.query(
-      `INSERT INTO ai_insights (user_id, insight_type, data)
-       VALUES ($1, $2, $3)`,
-      [userId, "full_analysis", JSON.stringify(fullAnalysis)],
-    );
-
-    cache.set(memKey, { data: fullAnalysis, cacheAge: 0 }, TTL.VERY_LONG);
-    cleanupInflight(fullAnalysis); // unblock waiting requests with the fresh result
-
-    res.json({
-      success: true,
-      cached: false,
-      cacheSource: "none",
-      data: fullAnalysis,
-    });
-  } catch (error) {
-    // Release any inflight deferred so waiting requests don't hang
-    if (req._resolveInflight) {
-      req._resolveInflight(null);
-      req._resolveInflight = null;
-    }
-    console.error("AI Analysis Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi phân tích dữ liệu, vui lòng thử lại",
-    });
-  }
-}
-
-/**
- * POST /api/ai/refresh - Force refresh analysis (rate limited per user)
- */
-async function refreshAnalysis(req, res) {
-  try {
-    const userId = req.user.id;
-
-    // Kiểm tra cooldown per-user
-    const cooldownUntil = userCooldowns.get(userId) || 0;
-    if (Date.now() < cooldownUntil) {
-      const remainMin = Math.ceil((cooldownUntil - Date.now()) / 60000);
-      return res.json({
-        success: false,
-        rateLimited: true,
-        message: `Bạn vừa làm mới phân tích. Vui lòng đợi thêm ${remainMin} phút trước khi làm mới lại.`,
-      });
-    }
-
-    // Set cooldown cho user này
-    userCooldowns.set(userId, Date.now() + REFRESH_COOLDOWN_MS);
-
-    // Xóa in-memory cache
-    cache.del(`ai:full_analysis:${userId}`);
-
-    // Chỉ xóa DB cache cũ hơn 30 phút (giữ lại để fallback nếu API bị 429)
-    await db.query(
-      `DELETE FROM ai_insights
-       WHERE user_id = $1 AND insight_type = 'full_analysis'
-       AND created_at < NOW() - INTERVAL '30 minutes'`,
+    const attempts = await db.query(
+      `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              ea.submit_time, e.title as exam_title, e.total_questions,
+              s.name as subject_name, s.name_cn
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       LEFT JOIN subjects s ON e.subject_id = s.id
+       WHERE ea.user_id = $1 AND ea.status = 'completed'
+       ORDER BY ea.submit_time DESC LIMIT 20`,
       [userId],
     );
 
-    // Gọi lại analyze để sinh kết quả mới
+    if (attempts.rows.length === 0) {
+      if (req._resolveInflight) req._resolveInflight(null);
+      return res.json({ success: true, hasEnoughData: false, message: 'Chưa có bài thi nào.' });
+    }
+
+    const fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, []);
+
+    await db.query(`INSERT INTO ai_insights (user_id, insight_type, data) VALUES ($1, $2, $3)`,
+      [userId, 'full_analysis', JSON.stringify(fullAnalysis)]);
+
+    cache.set(memKey, { data: fullAnalysis, cacheAge: 0 }, TTL.VERY_LONG);
+    if (req._resolveInflight) req._resolveInflight(fullAnalysis);
+    res.json({ success: true, cached: false, cacheSource: 'none', data: fullAnalysis });
+  } catch (error) {
+    if (req._resolveInflight) req._resolveInflight(null);
+    console.error('analyzeUserPerformance error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi phân tích.' });
+  }
+}
+
+async function refreshAnalysis(req, res) {
+  try {
+    const userId = req.user.id;
+    const cooldownUntil = userCooldowns.get(userId) || 0;
+    if (Date.now() < cooldownUntil) {
+      const remainMin = Math.ceil((cooldownUntil - Date.now()) / 60000);
+      return res.json({ success: false, rateLimited: true, message: `Đợi ${remainMin} phút.` });
+    }
+    userCooldowns.set(userId, Date.now() + REFRESH_COOLDOWN_MS);
+    cache.del(`ai:full_analysis:${userId}`);
+    await db.query(`DELETE FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis' AND created_at < NOW() - INTERVAL '30 minutes'`, [userId]);
     await analyzeUserPerformance(req, res);
   } catch (error) {
-    console.error("Refresh Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi làm mới phân tích",
-    });
+    console.error('refreshAnalysis error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi làm mới.' });
   }
 }
 
 module.exports = {
+  analyzeExamResult,
+  explainWrongAnswers,
+  analyzeTopics,
+  getPracticeRecommendations,
+  askAI,
+  analyzeProgress,
+  recommendNextExam,
   analyzeUserPerformance,
   refreshAnalysis,
 };

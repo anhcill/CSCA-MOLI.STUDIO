@@ -655,7 +655,7 @@ export default function AdminCouponsPage() {
               <div className="md:col-span-2">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Áp dụng cho cấp bậc</label>
                 <div className="flex flex-wrap gap-2">
-                  {[['all', 'Tất cả'], ['vip', 'VIP'], ['premium', 'Premium']].map(([val, label]) => (
+                  {[['all', 'Tất cả'], ['vip', 'VIP'], ['premium', 'Pre']].map(([val, label]) => (
                     <button
                       key={val}
                       onClick={() => setForm(f => ({ ...f, applicable_tiers: [val as string] }))}

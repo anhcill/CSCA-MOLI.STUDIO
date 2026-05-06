@@ -366,3 +366,122 @@ export async function getHardestExams(): Promise<HardestExamsData> {
 export async function markInsightRead(id: number): Promise<void> {
   await axios.put(`${BASE}/read/${id}`);
 }
+
+// ─── HISTORY STATISTICS ─────────────────────────────────────────────────────────
+
+export interface ScoreDistribution {
+  range: string;
+  count: number;
+  percentage: number;
+}
+
+export interface SubjectStat {
+  subjectId: number;
+  subjectCode: string;
+  subjectName: string;
+  attemptCount: number;
+  avgScore: number;
+  maxScore: number;
+  avgPercentage: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  passRate: number;
+  avgDurationSeconds: number;
+  recentScores: number[];
+  progress: number;
+}
+
+export interface DifficultyStat {
+  difficulty: string;
+  attemptCount: number;
+  avgPercentage: number;
+  maxPercentage: number;
+  passRate: number;
+  avgDurationSeconds: number;
+}
+
+export interface MonthlyTrend {
+  month: string;
+  monthLabel: string;
+  attemptCount: number;
+  avgScore: number;
+  avgPercentage: number;
+  maxScore: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  passRate: number;
+}
+
+export interface TimeStats {
+  avgDurationSeconds: number;
+  maxDurationSeconds: number;
+  minDurationSeconds: number;
+  avgSecondsPerQuestion: number;
+  avgTimeUsedPercent: number;
+  correctAvgSeconds: number;
+  incorrectAvgSeconds: number;
+}
+
+export interface PassFailStats {
+  passCount: number;
+  failCount: number;
+  totalCount: number;
+  passRate: number;
+  excellentRate: number;
+}
+
+export interface RecentAttempt {
+  id: number;
+  examId: number;
+  examTitle: string;
+  score: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  totalUnanswered: number;
+  totalQuestions: number;
+  durationSeconds: number;
+  percentage: number;
+  difficultyLevel: string;
+  subjectName: string;
+  subjectCode: string;
+  submitTime: string;
+}
+
+export interface ImprovementStats {
+  firstHalfAvg: number;
+  secondHalfAvg: number;
+  improvement: number;
+  trend: 'improving' | 'stable' | 'declining';
+}
+
+export interface HistoryOverview {
+  totalAttempts: number;
+  uniqueExams: number;
+  activeDays: number;
+  avgScore: number;
+  maxScore: number;
+  minScore: number;
+  avgPercentage: number;
+  totalCorrect: number;
+  totalIncorrect: number;
+  totalUnanswered: number;
+  avgDurationSeconds: number;
+  totalDurationSeconds: number;
+}
+
+export interface HistoryStatsData {
+  overview: HistoryOverview;
+  scoreDistribution: ScoreDistribution[];
+  subjects: SubjectStat[];
+  difficulties: DifficultyStat[];
+  monthlyTrend: MonthlyTrend[];
+  timeStats: TimeStats;
+  passFail: PassFailStats;
+  recentAttempts: RecentAttempt[];
+  improvement: ImprovementStats;
+}
+
+export async function getHistoryStats(): Promise<HistoryStatsData> {
+  const res = await axios.get(`${BASE}/history-stats`);
+  return res.data.data;
+}

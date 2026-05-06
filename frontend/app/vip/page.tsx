@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
+import { getVipDisplay } from '@/lib/utils/permissions';
 import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
 import { FiLoader, FiTag, FiPercent, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
@@ -10,6 +11,7 @@ import axios from '@/lib/utils/axios';
 interface VipPackage {
   id: number;
   name: string;
+  tier: string;
   duration_days: number;
   price: number;
   description: string;
@@ -37,8 +39,8 @@ interface Discount {
 }
 
 function deriveColor(pkg: VipPackage) {
-  const isPremium = pkg.name.toLowerCase().includes('premium');
-  if (isPremium) {
+  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
+  if (isPre) {
     return pkg.duration_days >= 300
       ? { gradient: 'from-amber-600 to-red-600', border: 'border-amber-300', tag: 'bg-amber-600 text-white', icon: 'text-amber-500' }
       : { gradient: 'from-amber-500 to-orange-600', border: 'border-amber-200', tag: 'bg-amber-100 text-amber-700', icon: 'text-amber-500' };
@@ -130,9 +132,12 @@ export default function VipPricingPage() {
     setCouponError('');
   };
 
-  const isVip = mounted && user?.is_vip;
-  const vipPkgs = packages.filter(p => !p.name.toLowerCase().includes('premium'));
-  const premiumPkgs = packages.filter(p => p.name.toLowerCase().includes('premium'));
+  // Lọc gói theo tier
+  const freePkgs = packages.filter(p => !p.name.toLowerCase().includes('vip') && !p.name.toLowerCase().includes('pre') && p.price === 0);
+  const vipPkgs = packages.filter(p => (p.tier === 'vip' || /vip/i.test(p.name)) && !/pre/i.test(p.name));
+  const premiumPkgs = packages.filter(p => p.tier === 'premium' || /pre/i.test(p.name));
+
+  const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 py-16 px-4 pt-24 sm:px-6 lg:px-8">
@@ -153,7 +158,7 @@ export default function VipPricingPage() {
           {isVip && (
             <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-100 border border-amber-200 rounded-full text-sm text-amber-800 font-semibold">
               <FaCrown className="text-yellow-500" size={14} />
-              Bạn đang là thành viên PRO — cảm ơn bạn đã tin tưởng CSCA!
+              Bạn đang là {userTier === 'premium' ? 'thành viên Pre' : userTier === 'vip' ? 'thành viên VIP' : 'thành viên PRO'} — cảm ơn bạn đã tin tưởng CSCA!
             </div>
           )}
         </div>
@@ -252,7 +257,7 @@ export default function VipPricingPage() {
               <div>
                 <h2 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
                   <FaStar className="text-amber-500" size={18} />
-                  Gói Premium — Đề thi + Video giải đề + Team cố vấn
+                  Gói Pre — Đề thi + Video giải đề + Team cố vấn
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
                   {premiumPkgs.map(pkg => {
@@ -275,59 +280,63 @@ export default function VipPricingPage() {
         )}
 
         {/* Feature comparison */}
-        <div className="mt-16 max-w-3xl mx-auto">
+        <div className="mt-16 max-w-4xl mx-auto">
           <h3 className="text-xl font-black text-gray-900 text-center mb-6">So sánh tính năng</h3>
           <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[400px]">
+            <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left px-6 py-3 font-bold text-gray-700">Tính năng</th>
-                  <th className="text-center px-4 py-3 font-bold text-indigo-600">
-                    {packages.find(p => !p.name.toLowerCase().includes('premium') && p.is_active)?.name || 'VIP'}
-                  </th>
-                  <th className="text-center px-4 py-3 font-bold text-amber-600">
-                    {packages.find(p => p.name.toLowerCase().includes('premium') && p.is_active)?.name || 'Premium'}
-                  </th>
+                  <th className="text-left px-5 py-3 font-bold text-gray-600">Tính năng</th>
+                  <th className="text-center px-3 py-3 font-bold text-gray-500 text-xs">Miễn phí</th>
+                  <th className="text-center px-3 py-3 font-bold text-indigo-600 text-xs">VIP</th>
+                  <th className="text-center px-3 py-3 font-bold text-amber-600 text-xs">Pre</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(() => {
                   if (comparisonFeatures.length > 0) {
                     return comparisonFeatures.map((feat) => (
-                      <tr key={feat.id} className={feat.sort_order % 20 === 0 ? 'bg-gray-50/50' : 'bg-white'}>
-                        <td className="px-6 py-3 font-medium text-gray-700">{feat.feature_name}</td>
-                        <td className="text-center px-4 py-3">
+                      <tr key={feat.id} className="bg-white">
+                        <td className="px-5 py-3 font-medium text-gray-700">{feat.feature_name}</td>
+                        <td className="text-center px-3 py-3">
+                          {feat.basic_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                        <td className="text-center px-3 py-3">
                           {feat.vip_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
                         </td>
-                        <td className="text-center px-4 py-3">
+                        <td className="text-center px-3 py-3">
                           {feat.premium_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
                         </td>
                       </tr>
                     ));
                   }
 
-                  // Fallback to dynamic generation if no features defined
                   const allFeatures = Array.from(new Set(packages.flatMap(p => p.features || [])));
                   if (allFeatures.length === 0) {
                     return (
                       <tr>
-                        <td colSpan={3} className="px-6 py-6 text-center text-gray-400 text-sm">Không có dữ liệu tính năng</td>
+                        <td colSpan={4} className="px-6 py-6 text-center text-gray-400 text-sm">Không có dữ liệu tính năng</td>
                       </tr>
                     );
                   }
                   return allFeatures.map((feat, i) => {
-                    const vipPackages = packages.filter(p => !p.name.toLowerCase().includes('premium') && p.is_active);
-                    const prePackages = packages.filter(p => p.name.toLowerCase().includes('premium') && p.is_active);
+                    const freePackages = packages.filter(p => p.price === 0 && p.is_active);
+                    const vipPackages = packages.filter(p => (p.tier === 'vip' || /vip/i.test(p.name)) && !/pre/i.test(p.name) && p.is_active);
+                    const prePackages = packages.filter(p => (p.tier === 'premium' || /pre/i.test(p.name)) && p.is_active);
+                    const freeHas = freePackages.some(p => (p.features || []).includes(feat));
                     const vipHas = vipPackages.some(p => (p.features || []).includes(feat));
                     const preHas = prePackages.some(p => (p.features || []).includes(feat));
                     return (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-6 py-3 font-medium text-gray-700">{feat}</td>
-                        <td className="text-center px-4 py-3">
+                        <td className="px-5 py-3 font-medium text-gray-700">{feat}</td>
+                        <td className="text-center px-3 py-3">
+                          {freeHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                        </td>
+                        <td className="text-center px-3 py-3">
                           {vipHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
                         </td>
-                        <td className="text-center px-4 py-3">
+                        <td className="text-center px-3 py-3">
                           {preHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
                         </td>
                       </tr>
@@ -354,7 +363,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
   onSelectPkg?: (p: VipPackage | null) => void;
 }) {
   const colors = deriveColor(pkg);
-  const isPremium = pkg.name.toLowerCase().includes('premium');
+  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');
@@ -399,7 +408,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
             <h3 className="text-xl font-black">{pkg.name}</h3>
             <p className="text-white/70 text-sm mt-1">{pkg.duration_days} ngày sử dụng</p>
           </div>
-          {isPremium && !isSelected && (
+          {isPre && !isSelected && (
             <div className="bg-white/20 rounded-xl p-2 text-center">
               <FaVideo size={20} className="mx-auto text-white" />
               <span className="text-[9px] font-bold text-white/80 block mt-0.5">Cố vấn</span>
@@ -480,13 +489,13 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
         <button
           onClick={(e) => { e.stopPropagation(); onCheckout(pkg); }}
           className={`w-full py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
-            ${isPremium
+            ${isPre
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
               : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
         >
           {!isVip ? 'Nâng cấp ngay'
-            : isPremium ? 'Nâng cấp lên Premium'
+            : isPre ? 'Nâng cấp lên Pre'
             : 'Gia hạn ngay'}
         </button>
       </div>

@@ -21,7 +21,7 @@ export interface Exam {
   solution_video_url?: string;
   solution_description?: string;
   shuffle_mode?: boolean;
-  vip_tier?: string; // 'basic' | 'vip_thong_minh' | 'vip_pro'
+  vip_tier?: string; // 'basic' | 'vip' | 'premium'
   // New: Stats
   pass_rate?: number;
   overall_difficulty?: string;

@@ -590,7 +590,7 @@ export default function AdminVipPage() {
                                   ) : (
                                     <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-bold flex items-center gap-1 w-max">
                                       <FaCrown size={10} />
-                                      {u.subscription_tier === 'premium' ? 'Premium' : u.subscription_tier === 'vip_pro' ? 'VIP Pro' : 'VIP'}
+                                      {u.subscription_tier === 'premium' ? 'Pre' : u.subscription_tier === 'vip' ? 'VIP' : 'VIP'}
                                     </span>
                                   )
                                 ) : (
@@ -821,7 +821,7 @@ export default function AdminVipPage() {
                         <th className="p-4 font-semibold text-gray-600 w-16 text-center">STT</th>
                         <th className="p-4 font-semibold text-gray-600">Tên tính năng</th>
                         <th className="p-4 font-semibold text-gray-600 text-center">VIP</th>
-                        <th className="p-4 font-semibold text-gray-600 text-center">Premium</th>
+                        <th className="p-4 font-semibold text-gray-600 text-center">Pre</th>
                         <th className="p-4 font-semibold text-gray-600 text-right">Thao tác</th>
                       </tr>
                     </thead>
@@ -1070,7 +1070,7 @@ export default function AdminVipPage() {
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-xl hover:bg-gray-50 transition-colors">
                   <input type="checkbox" checked={featForm.premium_has || false} onChange={e => setFeatForm(f => ({ ...f, premium_has: e.target.checked }))} className="w-4 h-4 text-violet-600" />
-                  <span className="text-sm font-semibold text-gray-700">Có ở Premium</span>
+                  <span className="text-sm font-semibold text-gray-700">Có ở Pre</span>
                 </label>
               </div>
               <div>

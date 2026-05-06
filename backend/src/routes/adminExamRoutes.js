@@ -5,30 +5,34 @@ const {
 	authorizePermission,
 } = require("../middleware/authMiddleware");
 const AdminExamController = require("../controllers/adminExamController");
+const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
 
 // All routes require authentication and exam management permission
 router.use(authenticate);
 router.use(authorizePermission("exams.manage"));
 
-// Counts (place before /:examId to avoid route conflict)
+// Counts (place before /:examId to avoid route conflict) — no rate limit needed
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
 
-// Exam CRUD
+// Exam CRUD — rate limited for write operations
 router.get("/", AdminExamController.getAllExams);
-router.post("/", AdminExamController.createExam);
-router.put("/:examId", AdminExamController.updateExam);
-router.delete("/:examId", AdminExamController.deleteExam);
+router.post("/", examWriteLimiter, AdminExamController.createExam);
+router.put("/:examId", examWriteLimiter, AdminExamController.updateExam);
+router.delete("/:examId", examDeleteLimiter, AdminExamController.deleteExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 
-// Question CRUD
-router.post("/:examId/questions", AdminExamController.addQuestion);
-router.put("/questions/:questionId", AdminExamController.updateQuestion);
-router.delete("/questions/:questionId", AdminExamController.deleteQuestion);
+// Question CRUD — all write operations are rate limited
+router.post("/:examId/questions", examWriteLimiter, AdminExamController.addQuestion);
+router.put("/questions/:questionId", examWriteLimiter, AdminExamController.updateQuestion);
+router.delete("/questions/:questionId", examWriteLimiter, AdminExamController.deleteQuestion);
 
-// ── Ngày 11-12: Schedule management (Live / Upcoming) ────────────────────────
+// Schedule management — separate rate limit
 router.get("/:examId/schedule", AdminExamController.getSchedule);
-router.put("/:examId/schedule", AdminExamController.setSchedule);
-router.delete("/:examId/schedule", AdminExamController.clearSchedule);
+router.put("/:examId/schedule", scheduleLimiter, AdminExamController.setSchedule);
+router.delete("/:examId/schedule", scheduleLimiter, AdminExamController.clearSchedule);
+
+// ── Question reordering ──────────────────────────────────────────────────────
+router.put("/:examId/questions/reorder", examWriteLimiter, AdminExamController.reorderQuestions);
 
 module.exports = router;

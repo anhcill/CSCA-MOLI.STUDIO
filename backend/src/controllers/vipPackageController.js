@@ -138,8 +138,8 @@ const VipPackageController = {
   async getComparisonFeatures(req, res) {
     try {
       const result = await db.query(
-        `SELECT id, feature_name, vip_has, premium_has, sort_order 
-         FROM vip_features_comparison 
+        `SELECT id, feature_name, COALESCE(basic_has, false) as basic_has, COALESCE(vip_has, false) as vip_has, COALESCE(premium_has, false) as premium_has, sort_order
+         FROM vip_features_comparison
          ORDER BY sort_order ASC, id ASC`
       );
       res.json({ success: true, data: result.rows });
@@ -155,16 +155,16 @@ const VipPackageController = {
    */
   async createComparisonFeature(req, res) {
     try {
-      const { feature_name, vip_has, premium_has, sort_order } = req.body;
+      const { feature_name, basic_has, vip_has, premium_has, sort_order } = req.body;
       if (!feature_name) {
         return res.status(400).json({ success: false, message: 'Thiếu tên tính năng' });
       }
 
       const result = await db.query(
-        `INSERT INTO vip_features_comparison (feature_name, vip_has, premium_has, sort_order)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO vip_features_comparison (feature_name, basic_has, vip_has, premium_has, sort_order)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [feature_name, vip_has || false, premium_has || false, sort_order || 0]
+        [feature_name, basic_has || false, vip_has || false, premium_has || false, sort_order || 0]
       );
       res.json({ success: true, message: 'Đã thêm tính năng', data: result.rows[0] });
     } catch (err) {
@@ -180,13 +180,14 @@ const VipPackageController = {
   async updateComparisonFeature(req, res) {
     try {
       const { id } = req.params;
-      const { feature_name, vip_has, premium_has, sort_order } = req.body;
+      const { feature_name, basic_has, vip_has, premium_has, sort_order } = req.body;
 
       const fields = [];
       const values = [];
       let idx = 1;
 
       if (feature_name !== undefined) { fields.push(`feature_name = $${idx++}`); values.push(feature_name); }
+      if (basic_has !== undefined) { fields.push(`basic_has = $${idx++}`); values.push(basic_has); }
       if (vip_has !== undefined) { fields.push(`vip_has = $${idx++}`); values.push(vip_has); }
       if (premium_has !== undefined) { fields.push(`premium_has = $${idx++}`); values.push(premium_has); }
       if (sort_order !== undefined) { fields.push(`sort_order = $${idx++}`); values.push(sort_order); }

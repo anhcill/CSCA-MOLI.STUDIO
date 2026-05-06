@@ -25,6 +25,7 @@ export default function CreateExamPage() {
     // Exam metadata
     const [examData, setExamData] = useState({
         title: '',
+        titleCn: '',      // P0: title tiếng Trung
         subjectId: 0,
         duration: 90,
         totalPoints: 100,
@@ -35,6 +36,7 @@ export default function CreateExamPage() {
         solution_description: '',
         vip_tier: 'basic',
         is_simulated: false,
+        difficulty_level: 'medium',
         start_time: '',
         end_time: '',
     });
@@ -153,10 +155,13 @@ export default function CreateExamPage() {
 
     const addQuestion = () => {
         setQuestions([...questions, {
-            _id: `q-${Date.now()}-${Math.random()}`, // Unique stable ID
+            _id: `q-${Date.now()}-${Math.random()}`,
+            questionType: 'single_choice' as const,
             questionText: '',
             questionTextCn: '',
             imageUrl: '',
+            passageText: '',
+            passageImageUrl: '',
             points: 1,
             explanation: '',
             explanationCn: '',
@@ -166,7 +171,18 @@ export default function CreateExamPage() {
                 { text: '', textCn: '', imageUrl: '' },
                 { text: '', textCn: '', imageUrl: '' }
             ],
-            correctAnswer: 'A'
+            correctAnswer: 'A',
+            linkedOptions: [
+                { key: 'A', text: '', textCn: '' },
+                { key: 'B', text: '', textCn: '' },
+                { key: 'C', text: '', textCn: '' },
+                { key: 'D', text: '', textCn: '' },
+                { key: 'E', text: '', textCn: '' },
+                { key: 'F', text: '', textCn: '' },
+            ],
+            correctAnswerKey: 'A',
+            subQuestionNumber: 0,
+            difficulty: 'medium',
         }]);
     };
 
@@ -178,16 +194,30 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            await examAdminApi.addQuestion(currentExamId, data);
-            alert(`Câu hỏi ${index + 1} đã được lưu!`);
+            const res = await examAdminApi.addQuestion(currentExamId, data as any);
 
-            // Update local state
+            // Update local state với thông tin từ backend
             const newQuestions = [...questions];
-            newQuestions[index] = { ...newQuestions[index], ...data };
+            const dataWithId = data as QuestionFormData & { _id?: string };
+            newQuestions[index] = {
+                ...newQuestions[index],
+                ...data,
+                _id: dataWithId._id || `q-${res.questionId}`,
+            };
             setQuestions(newQuestions);
+
+            const typeLabel: Record<string, string> = {
+                single_choice: 'Trắc nghiệm',
+                fill_blank_pool: 'Điền từ (Pool)',
+                fill_blank_item: 'Điền từ con',
+                reading_passage: 'Đọc hiểu',
+                reading_item: 'Đọc hiểu con',
+                true_false: 'Đúng/Sai',
+            };
+            alert(`${typeLabel[res.questionType] || 'Câu hỏi'} ${index + 1} đã được lưu!`);
         } catch (error) {
             console.error('Error saving question:', error);
-            alert('Lưu câu hỏi thất bại');
+            alert('Lưu câu hỏi thất bại: ' + (error as any)?.response?.data?.message || '');
         } finally {
             setLoading(false);
         }
@@ -271,6 +301,17 @@ export default function CreateExamPage() {
                         </div>
 
                         <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tên đề thi (Tiếng Trung)</label>
+                            <input
+                                type="text"
+                                value={examData.titleCn}
+                                onChange={(e) => { setExamData({ ...examData, titleCn: e.target.value }); setExamMetadataDirty(true); }}
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="输入中文标题..."
+                            />
+                        </div>
+
+                        <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Môn học *</label>
                             <select
                                 value={examData.subjectId}
@@ -304,6 +345,19 @@ export default function CreateExamPage() {
                                 step="0.1"
                                 className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Độ khó</label>
+                            <select
+                                value={examData.difficulty_level || 'medium'}
+                                onChange={(e) => { setExamData({ ...examData, difficulty_level: e.target.value }); setExamMetadataDirty(true); }}
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="easy">Dễ</option>
+                                <option value="medium">Trung bình</option>
+                                <option value="hard">Khó</option>
+                            </select>
                         </div>
 
                         <div className="md:col-span-2">
@@ -438,14 +492,14 @@ export default function CreateExamPage() {
                             <div className="grid grid-cols-3 gap-3">
                                 {[
                                     { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
-                                    { value: 'vip_thong_minh', label: 'VIP Thông minh', desc: 'Gói VIP Thông minh', color: 'blue' },
-                                    { value: 'vip_pro', label: 'VIP Pro', desc: 'Gói VIP Pro', color: 'purple' },
+                                    { value: 'vip', label: 'VIP', desc: 'Gói VIP', color: 'blue' },
+                                    { value: 'premium', label: 'Pre', desc: 'Gói Pre', color: 'amber' },
                                 ].map(tier => (
                                     <button key={tier.value}
                                         onClick={() => setExamData({ ...examData, vip_tier: tier.value })}
                                         className={`relative p-3 rounded-xl border-2 text-left transition-all ${
                                             examData.vip_tier === tier.value
-                                                ? tier.color === 'purple' ? 'border-purple-500 bg-purple-50' :
+                                                ? tier.color === 'amber' ? 'border-amber-500 bg-amber-50' :
                                                   tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
                                                   'border-gray-500 bg-gray-100'
                                                 : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -454,12 +508,12 @@ export default function CreateExamPage() {
                                             {tier.label}
                                         </p>
                                         <p className="text-xs text-gray-500 mt-0.5">{tier.desc}</p>
-                                        {examData.vip_tier === tier.value && (
-                                            <div className={`absolute top-2 right-2 w-4 h-4 rounded-full ${
-                                                tier.color === 'purple' ? 'bg-purple-500' :
-                                                tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
-                                            }`}>
-                                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    {examData.vip_tier === tier.value && (
+                                        <div className={`absolute top-2 right-2 w-4 h-4 rounded-full ${
+                                            tier.color === 'amber' ? 'bg-amber-500' :
+                                            tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                        }`}>
+                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                                 </svg>
                                             </div>

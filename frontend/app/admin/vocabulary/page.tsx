@@ -35,7 +35,7 @@ const SUBJECTS = [
 const VIP_TIERS = [
   { value: 'basic', label: 'Miễn phí', color: 'gray' },
   { value: 'vip', label: 'VIP', color: 'blue' },
-  { value: 'premium', label: 'Premium', color: 'amber' },
+  { value: 'premium', label: 'Pre', color: 'amber' },
 ];
 
 const EMPTY_FORM = {
@@ -347,7 +347,7 @@ export default function AdminVocabularyPage() {
                             {VIP_TIERS.find(t => t.value === (item.vip_tier || 'basic'))?.label || 'VIP'}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-300">Free</span>
+                          <span className="text-xs text-gray-400">Miễn phí</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
