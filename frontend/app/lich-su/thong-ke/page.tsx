@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
-import LeftSidebar from '@/components/layout/LeftSidebar';
-import RightSidebar from '@/components/layout/RightSidebar';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import {
@@ -116,11 +114,8 @@ export default function ThongKePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
         <Header />
-        <main className="container mx-auto px-6 py-8 max-w-[1400px]">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-3"><LeftSidebar /></div>
-            <div className="lg:col-span-6">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
+        <main className="container mx-auto px-6 py-8 max-w-[1100px]">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <span className="text-4xl">🔒</span>
                 </div>
@@ -130,9 +125,6 @@ export default function ThongKePage() {
                   Đăng nhập ngay
                 </Link>
               </div>
-            </div>
-            <div className="lg:col-span-3"><RightSidebar /></div>
-          </div>
         </main>
       </div>
     );
@@ -142,17 +134,10 @@ export default function ThongKePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
       <Header />
 
-      <main className="container mx-auto px-6 py-8 max-w-[1400px]">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Sidebar */}
-          <div className="lg:col-span-3">
-            <LeftSidebar />
-          </div>
+      <main className="container mx-auto px-6 py-8 max-w-[1100px]">
+        <div className="space-y-6">
 
-          {/* Main Content */}
-          <div className="lg:col-span-9 space-y-6">
-
-            {/* Hero Header */}
+          {/* Hero Header */}
             <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
               {/* Background decoration */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
@@ -721,12 +706,6 @@ export default function ThongKePage() {
                 </div>
               </>
             )}
-          </div>
-
-          {/* Right Sidebar */}
-          <div className="lg:col-span-3 hidden lg:block">
-            <RightSidebar />
-          </div>
         </div>
       </main>
     </div>
