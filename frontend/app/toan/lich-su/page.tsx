@@ -1,6 +1,6 @@
 import Header from '@/components/layout/Header';
 import SubjectNavigation from '@/components/layout/SubjectNavigation';
-import ExamHistory from '@/components/toan/ExamHistory';
+import ExamHistory from '@/components/exam/ExamHistory';
 
 export default function ToanLichSuPage() {
     const subjectCode = 'MATH';

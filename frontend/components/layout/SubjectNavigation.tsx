@@ -9,7 +9,6 @@ import {
   BsStars,
   BsGraphUp,
 } from 'react-icons/bs';
-import ExamHistory from '../toan/ExamHistory';
 import { AIInsights } from '../ai/AIInsights';
 
 interface MenuItem {
