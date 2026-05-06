@@ -205,12 +205,17 @@ const ExamAttempt = {
   // Lấy lịch sử làm bài của user
   async getUserHistory(userId, subjectCode = null, limit = 10) {
     let query = `
-      SELECT 
+      SELECT
         ea.*,
         e.code as exam_code,
         e.title as exam_title,
+        e.total_questions,
         s.name as subject_name,
-        s.code as subject_code
+        s.code as subject_code,
+        (
+          SELECT COUNT(*)::INTEGER
+          FROM questions q WHERE q.exam_id = e.id
+        ) as question_count
       FROM exam_attempts ea
       INNER JOIN exams e ON ea.exam_id = e.id
       INNER JOIN subjects s ON e.subject_id = s.id

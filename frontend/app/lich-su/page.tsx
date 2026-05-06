@@ -167,6 +167,13 @@ export default function LichSuPage() {
                 <FiRefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                 Tải lại
               </button>
+              <Link
+                href="/lich-su/thong-ke"
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+              >
+                <FiBarChart2 size={14} />
+                Thống kê chi tiết
+              </Link>
             </div>
           </div>
 

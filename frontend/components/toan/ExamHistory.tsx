@@ -159,8 +159,8 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
             {/* Progress Bar */}
             <div className="mt-3 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
               <div
-                className={`h-full ${getStatusColor(item.total_score >= 80 ? 'excellent' : item.total_score >= 70 ? 'good' : 'average')} transition-all duration-500`}
-                style={{ width: `${(item.total_correct / (item.total_correct + item.total_incorrect + item.total_unanswered)) * 100}%` }}
+                className={`h-full ${item.total_score >= 8 ? 'bg-green-500' : item.total_score >= 7 ? 'bg-blue-500' : item.total_score >= 5 ? 'bg-yellow-500' : 'bg-red-500'} transition-all duration-500`}
+                style={{ width: `${(item.total_correct / item.total_questions) * 100}%` }}
               ></div>
             </div>
           </button>
