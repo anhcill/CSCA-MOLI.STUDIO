@@ -223,31 +223,31 @@ async function analyzeExamResult(attemptData) {
   }).join('\n\n');
 
   const prompt = `Bạn là chuyên gia giáo dục cho kỳ thi HSK/CSCA.
-Hãy phân tích kết quả bài thi sau và đưa ra phản hồi bằng TIẾNG VIỆT.
+Phân tích bằng TIẾNG VIỆT, NGẮN GỌN, DỄ HIỂU.
 
-📊 THÔNG TIN BÀI THI:
+THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
 - Số câu đúng: ${correctCount}/${totalQuestions} (${percentage}%)
-- Thời gian làm: ${attemptData.duration || 'N/A'} phút
+- Thời gian: ${attemptData.duration || 'N/A'} phút
 
-📋 CHI TIẾT TỪNG CÂU:
+CHI TIẾT TỪNG CÂU:
 ${questionsText}
 
-YÊU CẦU — trả về JSON:
+YÊU CẦU — trả về JSON, mỗi trường text tối đa 2-3 câu:
 {
   "score": ${percentage},
-  "grade": "Mô tả ngắn (VD: Xuất sắc / Khá / Cần cố gắng)",
-  "gradeColor": "emerald|blue|amber|red" (màu hiển thị),
-  "summary": "Tổng kết 2-3 câu về kết quả bài thi này",
+  "grade": "Mô tả ngắn",
+  "gradeColor": "emerald|blue|amber|red",
+  "summary": "Tổng kết 1-2 câu",
   "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
   "weaknesses": ["Điểm yếu 1", "Điểm yếu 2"],
-  "analysis": "Phân tích chi tiết 3-5 câu về lý do sai và cách cải thiện",
-  "overallAdvice": "Lời khuyên tổng quát 2-3 câu cho việc ôn luyện tiếp theo",
-  "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2"]
+  "analysis": "Phân tích ngắn gọn 2-3 câu",
+  "overallAdvice": "Lời khuyên 1-2 câu",
+  "priorityTopics": ["Chủ đề 1", "Chủ đề 2"]
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 1500 });
     const ai = parseAIMaybeJSON(raw) || ruleBasedExamAnalysis(attemptData);
 
     return {

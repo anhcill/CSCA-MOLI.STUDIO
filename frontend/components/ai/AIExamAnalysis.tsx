@@ -3,6 +3,18 @@
 import { useState } from 'react';
 import { FiZap, FiRefreshCw, FiTrendingUp, FiTrendingDown, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 
+// Strip markdown symbols from AI text
+function cleanMarkdown(text: string): string {
+    if (!text) return '';
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '$1')  // **bold** -> text
+        .replace(/\*(.+?)\*/g, '$1')        // *italic* -> text
+        .replace(/_(.+?)_/g, '$1')          // _underline_ -> text
+        .replace(/#{1,6}\s?/g, '')          // # headers -> text
+        .replace(/`(.+?)`/g, '$1')          // `code` -> text
+        .replace(/^[-*]\s/gm, '• ');       // - bullet -> • bullet
+}
+
 interface AIExamAnalysisProps {
     attemptId: number;
     aiAnalysis: any;
@@ -92,7 +104,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 }`}>{analysis.grade}</span>
                             </div>
                             {analysis.summary && (
-                                <p className="text-sm text-gray-700 leading-relaxed">{analysis.summary}</p>
+                                <p className="text-sm text-gray-700 leading-relaxed">{cleanMarkdown(analysis.summary)}</p>
                             )}
                         </div>
                     )}
@@ -127,7 +139,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 {analysis.strengths.map((s: string, i: number) => (
                                     <div key={i} className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                                         <FiCheckCircle className="text-green-600 shrink-0 mt-0.5" size={14} />
-                                        <span className="text-sm text-green-800">{s}</span>
+                                        <span className="text-sm text-green-800">{cleanMarkdown(s)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -142,7 +154,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 {analysis.weaknesses.map((w: string, i: number) => (
                                     <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                                         <FiTrendingDown className="text-amber-600 shrink-0 mt-0.5" size={14} />
-                                        <span className="text-sm text-amber-800">{w}</span>
+                                        <span className="text-sm text-amber-800">{cleanMarkdown(w)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -153,7 +165,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {analysis.analysis && (
                         <div className="bg-white border border-purple-200 rounded-xl p-4">
                             <h4 className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-2">🔍 Phân tích chi tiết</h4>
-                            <p className="text-sm text-gray-700 leading-relaxed">{analysis.analysis}</p>
+                            <p className="text-sm text-gray-700 leading-relaxed">{cleanMarkdown(analysis.analysis)}</p>
                         </div>
                     )}
 
@@ -161,7 +173,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {analysis.overallAdvice && (
                         <div className="bg-purple-100 border border-purple-200 rounded-xl p-4">
                             <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-2">💡 Lời khuyên</h4>
-                            <p className="text-sm text-purple-900 font-medium leading-relaxed">{analysis.overallAdvice}</p>
+                            <p className="text-sm text-purple-900 font-medium leading-relaxed">{cleanMarkdown(analysis.overallAdvice)}</p>
                         </div>
                     )}
 
