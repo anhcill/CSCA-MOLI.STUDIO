@@ -14,6 +14,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import SearchBar from './SearchBar';
 import NotificationBell from './NotificationBell';
+import MessageBadge from './MessageBadge';
 import ThemeToggle from './ThemeToggle';
 
 const COURSES = [
@@ -174,6 +175,9 @@ export default function Header() {
             <div className="hidden sm:block">
               <ThemeToggle />
             </div>
+
+            {/* Message Badge */}
+            <MessageBadge />
 
             {/* Notification Bell */}
             <div className="hidden sm:block">

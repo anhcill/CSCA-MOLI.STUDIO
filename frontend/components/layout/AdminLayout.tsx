@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
-  FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare,
+  FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift
 } from 'react-icons/fi';
@@ -93,6 +93,13 @@ const NAV_SECTIONS = [
         label: 'Forum',
         icon: FiMessageSquare,
         href: '/admin/posts',
+        permission: 'forum.manage',
+        roles: [],
+      },
+      {
+        label: 'Báo cáo',
+        icon: FiFlag,
+        href: '/admin/reports',
         permission: 'forum.manage',
         roles: [],
       },
