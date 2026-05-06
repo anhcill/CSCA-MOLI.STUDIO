@@ -157,23 +157,23 @@ export default function Header() {
           <div className="flex items-center justify-end gap-1 sm:gap-2 flex-shrink-0">
 
             {/* Search Bar - Hidden on mobile/tablet, visible on lg+ */}
-            <div className="hidden lg:block w-48 xl:w-56">
+            <div className="hidden lg:block w-40 xl:w-52">
               <SearchBar />
-            </div>
-
-            {/* Theme toggle */}
-            <div className="hidden sm:block">
-              <ThemeToggle />
             </div>
 
             {/* VIP Upgrade Banner */}
             {!mounted ? (
               <div className="hidden xl:block w-[88px] h-[28px] bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"></div>
             ) : (!user || !isVipActive(user)) && (
-              <Link href="/vip" className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-xs font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300">
+              <Link href="/vip" className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-xs font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300 flex-shrink-0">
                 <FaCrown className="text-yellow-200" size={12} /> <span>Nâng cấp</span>
               </Link>
             )}
+
+            {/* Theme toggle */}
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
 
             {/* Notification Bell */}
             <div className="hidden sm:block">

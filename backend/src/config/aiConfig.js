@@ -17,16 +17,17 @@ const config = {
   // Endpoint: https://platform.beeknoee.com/api/v1/v1/chat/completions
   beeknoee: {
     apiKeys: [
+      process.env.BEEKNOEE_API_KEY    || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff82f3ca9a6bb1c42fd8c2dc4ef5e7a2e9a',
       process.env.BEEKNOEE_API_KEY_1 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff87f8ef41543cb46d19a7552bb9b00e01c',
       process.env.BEEKNOEE_API_KEY_2 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff835601c6fd9904ddfa85a9b3f377943e2',
     ],
-    model:       process.env.BEEKNOEE_MODEL     || 'deepseek/deepseek-r1',
+    model:       process.env.BEEKNOEE_MODEL     || 'deepseek/deepseek-chat-v3.1',
     baseUrl:     'https://platform.beeknoee.com/api/v1',
     timeout:     60000,
     maxTokens:   4000,
     temperature: 0.3,
     // Round-robin: đợi bao lâu giữa 2 request (ms) để tránh rate limit
-    delayBetweenRequests: 2000,
+    delayBetweenRequests: 500,
   },
 
   // ── Gemini (Google) ───────────────────────────────────────────────

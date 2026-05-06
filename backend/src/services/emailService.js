@@ -94,7 +94,29 @@ class EmailService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 2. Mail xác nhận thanh toán (QUAN TRỌNG)
+  // 2. Mail xác nhận email (verify email)
+  // ─────────────────────────────────────────────────────────────────────────────
+  async sendVerificationEmail(email, name, verifyUrl) {
+    const content = `
+      <h2 style="margin:0 0 20px;font-size:20px">Xác nhận email của bạn</h2>
+      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
+      <p style="margin:0 0 24px">Cảm ơn bạn đã đăng ký CSCA Platform! Vui lòng nhấn vào nút bên dưới để xác nhận địa chỉ email của bạn.</p>
+      <div style="text-align:center;margin:0 0 24px">
+        <a href="${verifyUrl}" style="display:inline-block;padding:16px 36px;background:#667eea;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Xác nhận email →</a>
+      </div>
+      <p style="margin:0 0 16px;font-size:14px;color:#666">Nếu nút không hoạt động, sao chép đường dẫn sau vào trình duyệt:</p>
+      <p style="margin:0 0 24px;word-break:break-all;background:#f4f4f8;padding:12px 16px;border-radius:8px;font-size:12px;color:#666">${verifyUrl}</p>
+      <p style="background:#fef9c3;border-left:4px solid #eab308;border-radius:0 8px 8px 0;padding:14px 18px;margin:0;font-size:14px;color:#713f12">⏰ Liên kết này có hiệu lực trong <strong>24 giờ</strong>. Nếu bạn không yêu cầu xác nhận email, hãy bỏ qua email này.</p>`;
+
+    await this._send({
+      to: email,
+      subject: '📧 Xác nhận email đăng ký CSCA Platform',
+      html: this._wrapper({ title: 'Xác nhận email của bạn', emoji: '📧', content }),
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3. Mail xác nhận thanh toán (QUAN TRỌNG)
   // ─────────────────────────────────────────────────────────────────────────────
   async sendPaymentConfirmation({ email, name, packageName, amount, durationDays, transactionCode, method }) {
     const formattedAmount = new Intl.NumberFormat('vi-VN').format(amount) + '₫';

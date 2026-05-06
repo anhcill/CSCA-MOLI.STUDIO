@@ -44,23 +44,29 @@ function getNextKey() {
 }
 
 async function waitBetweenRequests() {
-  const delay = BEE.delayBetweenRequests || 2000;
+  const delay = BEE.delayBetweenRequests || 500;
   const elapsed = Date.now() - lastRequestTime;
   if (elapsed < delay) {
     const wait = delay - elapsed;
-    console.log(`⏳ Đợi ${wait}ms trước request tiếp theo...`);
     await new Promise(r => setTimeout(r, wait));
   }
   lastRequestTime = Date.now();
 }
 
-// Global mutex: chỉ 1 request AI tại 1 thời điểm
-let inFlight = null;
+// Global concurrency: max 3 concurrent AI requests
+let concurrentCount = 0;
+const MAX_CONCURRENT = 3;
 
-async function withMutex(fn) {
-  if (inFlight) { await inFlight.catch(() => {}); }
-  inFlight = fn();
-  return inFlight;
+async function withConcurrency(fn) {
+  while (concurrentCount >= MAX_CONCURRENT) {
+    await new Promise(r => setTimeout(r, 500));
+  }
+  concurrentCount++;
+  try {
+    return await fn();
+  } finally {
+    concurrentCount--;
+  }
 }
 
 // ─── AI Core: Gọi Beeknoee (DeepSeek R1) ───────────────────────────────────────
@@ -87,48 +93,48 @@ async function callBeeknoee(prompt, options = {}) {
     temperature,
   };
 
-  let resolveMutex;
-  const mutexPromise = new Promise(r => { resolveMutex = r; });
-  inFlight = mutexPromise;
+  return withConcurrency(async () => {
+    try {
+      const response = await axios.post(
+        `${BEE.baseUrl}/chat/completions`,
+        payload,
+        {
+          timeout: BEE.timeout,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        }
+      );
 
-  try {
-    const response = await axios.post(
-      `${BEE.baseUrl}/chat/completions`,
-      payload,
-      {
-        timeout: BEE.timeout,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
+      // OpenAI-compatible response: choices[0].message.content
+      const text = response.data?.choices?.[0]?.message?.content || '';
+      return typeof text === 'string' ? text.trim() : JSON.stringify(text);
+    } catch (err) {
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        const e = new Error('AI_TIMEOUT');
+        throw e;
       }
-    );
-
-    // OpenAI-compatible response: choices[0].message.content
-    const text = response.data?.choices?.[0]?.message?.content || '';
-    return typeof text === 'string' ? text.trim() : JSON.stringify(text);
-  } catch (err) {
-    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-      const e = new Error('AI_TIMEOUT');
-      throw e;
+      if (err.response?.status === 429) {
+        // Key bị rate limit → chuyển sang key khác ngay
+        console.warn(`⚠️ Key #${(currentKeyIndex % BEE.apiKeys.length)} bị rate limit, thử key khác...`);
+        currentKeyIndex++;
+        setRateLimit(aiConfig.general.globalBackoffMs);
+        const e = new Error('RATE_LIMITED');
+        e.retryAfter = getRateLimitRemaining();
+        throw e;
+      }
+      throw err;
     }
-    if (err.response?.status === 429) {
-      // Key bị rate limit → chuyển sang key khác ngay
-      console.warn(`⚠️ Key #${(currentKeyIndex % BEE.apiKeys.length)} bị rate limit, thử key khác...`);
-      currentKeyIndex++;
-      setRateLimit(aiConfig.general.globalBackoffMs);
-      const e = new Error('RATE_LIMITED');
-      e.retryAfter = getRateLimitRemaining();
-      throw e;
-    }
-    throw err;
-  } finally {
-    resolveMutex();
-    setTimeout(() => { inFlight = null; }, 200);
-  }
+  });
 }
 
 // ─── Parse JSON từ AI response ────────────────────────────────────────────────
+function getAnswerText(options, key) {
+  if (!options || !key) return '';
+  const opt = options.find(o => o.key === key);
+  return opt ? (opt.text || opt.text_cn || '') : '';
+}
 function parseAIMaybeJSON(text) {
   try { return JSON.parse(text); } catch {}
   // Thử tìm JSON block trong markdown
@@ -200,9 +206,10 @@ async function analyzeExamResult(attemptData) {
   const questionsText = questions.slice(0, 80).map(q => {
     const status = q.is_correct ? '✓ ĐÚNG' : '✗ SAI';
     const userAnswer = q.selected_answer_key
-      ? `${q.selected_answer_key}. ${q.selected_answer_text || ''}`
+      ? `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`
       : 'CHƯA TRẢ LỜI';
     const correctKey = q.correct_answer_key || '?';
+    const correctAnswerText = getAnswerText(q.options, correctKey);
     const optionsText = (q.options || [])
       .slice(0, 8)
       .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
@@ -211,7 +218,7 @@ async function analyzeExamResult(attemptData) {
   Đề bài: ${q.question_text || q.question_text_cn || ''}
   Lựa chọn: ${optionsText}
   Bạn chọn: ${userAnswer}
-  Đáp án đúng: ${correctKey}. ${q.correct_answer_text || ''}
+  Đáp án đúng: ${correctKey}. ${correctAnswerText || ''}
   Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}`.substring(0, 600);
   }).join('\n\n');
 
@@ -275,41 +282,40 @@ async function explainWrongAnswers(questions) {
     return `[Câu ${i + 1}]
 Đề bài: ${q.question_text || q.question_text_cn || ''}
 Lựa chọn: ${optionsText}
-Bạn chọn: ${q.selected_answer_key || '?'}. ${q.selected_answer_text || ''}
-Đúng: ${q.correct_answer_key || '?'}. ${q.correct_answer_text || ''}
+Bạn chọn: ${q.selected_answer_key || '?'}. ${getAnswerText(q.options, q.selected_answer_key)}
+Đúng: ${q.correct_answer_key || '?'}. ${getAnswerText(q.options, q.correct_answer_key)}
 Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}
 Loại câu: ${q.question_type || 'single_choice'}`;
   }).join('\n\n');
 
-  const prompt = `Bạn là giáo viên tiếng Trung chuyên nghiệp.
-Với mỗi câu sai dưới đây, hãy giải thích bằng TIẾNG VIỆT rõ ràng.
+  const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT, NGẮN GỌN.
 
 CÁC CÂU SAI:
 ${questionsText}
 
-YÊU CẦU — trả về JSON array:
+YÊU CẦU — trả về JSON, mỗi trường tối đa 2-3 câu:
 {
   "explanations": [
     {
       "questionNumber": 1,
       "yourAnswer": "Bạn chọn: ..." ,
       "correctAnswer": "Đáp án đúng: ...",
-      "whyWrong": "Giải thích ngắn tại sao đáp án bạn chọn sai",
-      "knowledgeNote": "Ghi chú kiến thức: giải thích khái niệm/ngữ pháp/nghĩa liên quan",
-      "tip": "Mẹo nhớ/cách tránh sai lần sau",
-      "vocabulary": [{"word": "từ mới", "pinyin": "pīnyīn", "meaning": "nghĩa tiếng Việt"}]
+      "whyWrong": "Tại sao sai (1-2 câu)",
+      "knowledgeNote": "Kiến thức liên quan (1-2 câu)",
+      "tip": "Mẹo nhớ (1 câu)",
+      "vocabulary": []
     }
   ]
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 4000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 1000 });
     const ai = parseAIMaybeJSON(raw);
     if (ai && ai.explanations) return ai;
     return { explanations: wrongQuestions.map((q, i) => ({
       questionNumber: q.question_number || i + 1,
-      yourAnswer: `${q.selected_answer_key}. ${q.selected_answer_text || ''}`,
-      correctAnswer: `${q.correct_answer_key}. ${q.correct_answer_text || ''}`,
+      yourAnswer: `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`,
+      correctAnswer: `${q.correct_answer_key}. ${getAnswerText(q.options, q.correct_answer_key)}`,
       whyWrong: 'Hãy ôn lại phần này và làm lại bài.',
       knowledgeNote: q.explanation || q.explanation_cn || '',
       tip: 'Đọc kỹ đề bài và học thuộc từ vựng liên quan.',
@@ -320,8 +326,8 @@ YÊU CẦU — trả về JSON array:
     return {
       explanations: wrongQuestions.map((q, i) => ({
         questionNumber: q.question_number || i + 1,
-        yourAnswer: `${q.selected_answer_key}. ${q.selected_answer_text || ''}`,
-        correctAnswer: `${q.correct_answer_key}. ${q.correct_answer_text || ''}`,
+        yourAnswer: `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`,
+        correctAnswer: `${q.correct_answer_key}. ${getAnswerText(q.options, q.correct_answer_key)}`,
         whyWrong: 'Hãy ôn lại phần này.',
         knowledgeNote: q.explanation || '',
         tip: 'Học thuộc từ vựng và ngữ pháp liên quan.',
@@ -512,18 +518,24 @@ async function askAI(question, context = {}) {
     .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
     .join('\n');
 
-  const prompt = `Bạn là trợ lý học tập tiếng Trung thân thiện, trả lời BẰNG TIẾNG VIỆT.
+  const prompt = `Bạn là trợ lý học tập tiếng Trung. Trả lời BẰNG TIẾNG VIỆT, NGẮN GỌN, DỄ HIỂU.
+- Dùng dấu gạch đầu dòng (-) thay vì bullet phức tạp
+- KHÔNG dùng emoji trong câu trả lời chính
+- KHÔNG dùng markdown (không *, không **, không ###)
+- Mỗi ý 1 dòng, tối đa 3-5 dòng
+- Nếu có từ mới, ghi: từ - pinyin - nghĩa
+
 Ngữ cảnh bài thi:
 ${contextText}
 Các câu sai gần đây:
 ${recentWrong || '(không có)'}
 
-Câu hỏi của học viên: ${question}
+Câu hỏi: ${question}
 
-Trả lời ngắn gọn, dễ hiểu, có ví dụ minh họa nếu cần. Nếu câu hỏi về từ vựng, hãy kèm theo pinyin và nghĩa.`;
+Trả lời:`;
 
   try {
-    const response = await callBeeknoee(prompt, { temperature: 0.6, maxTokens: 1500 });
+    const response = await callBeeknoee(prompt, { temperature: 0.6, maxTokens: 500 });
     return {
       answer: response,
       timestamp: new Date().toISOString(),
@@ -684,7 +696,7 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 2000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 1000 });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');

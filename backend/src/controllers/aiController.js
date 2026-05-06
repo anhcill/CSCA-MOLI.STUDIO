@@ -51,7 +51,7 @@ async function analyzeExamResult(req, res) {
     const attemptResult = await db.query(
       `SELECT
          ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
-         ea.started_at, ea.submitted_at,
+         ea.start_time, ea.submit_time,
          e.id as exam_id, e.title as exam_title, e.title_cn,
          e.subject_id, e.total_questions, e.duration,
          s.name as subject_name, s.name_cn
@@ -67,8 +67,8 @@ async function analyzeExamResult(req, res) {
     }
 
     const attempt = attemptResult.rows[0];
-    const duration = attempt.submitted_at && attempt.started_at
-      ? Math.round((new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 60000)
+    const duration = attempt.submit_time && attempt.start_time
+      ? Math.round((new Date(attempt.submit_time) - new Date(attempt.start_time)) / 60000)
       : null;
 
     // Lấy câu hỏi chi tiết
@@ -79,14 +79,13 @@ async function analyzeExamResult(req, res) {
            q.id, q.question_number, q.question_text, q.question_text_cn,
            q.question_type, q.difficulty,
            q.points, q.explanation, q.explanation_cn,
-           ua.selected_answer_key, ua.answer_text as selected_answer_text,
-           q.correct_answer as correct_answer_key,
-           a.answer_text as correct_answer_text,
-           CASE WHEN ua.selected_answer_key = q.correct_answer THEN true ELSE false END as is_correct
+           ua.selected_answer_key,
+           ua.is_correct as user_is_correct,
+           ca.answer_key as correct_answer_key,
+           ca.answer_text as correct_answer_text
          FROM user_answers ua
          JOIN questions q ON ua.question_id = q.id
-         LEFT JOIN answers a ON a.question_id = q.id
-           AND a.answer_key = q.correct_answer
+         LEFT JOIN answers ca ON ca.question_id = q.id AND ca.is_correct = true
          WHERE ua.attempt_id = $1
          ORDER BY q.question_number`,
         [attemptId],
@@ -99,10 +98,9 @@ async function analyzeExamResult(req, res) {
         difficulty: q.difficulty,
         points: q.points,
         selected_answer_key: q.selected_answer_key,
-        selected_answer_text: q.selected_answer_text,
         correct_answer_key: q.correct_answer_key,
         correct_answer_text: q.correct_answer_text,
-        is_correct: q.is_correct,
+        is_correct: q.user_is_correct,
         options: [],
       }));
     } catch {
@@ -142,7 +140,7 @@ async function analyzeExamResult(req, res) {
         totalQuestions: attempt.total_questions,
         correctCount: attempt.total_correct,
         duration,
-        submittedAt: attempt.submitted_at,
+        submittedAt: attempt.submit_time,
       },
       aiAnalysis,
     });
@@ -176,17 +174,18 @@ async function explainWrongAnswers(req, res) {
     // Lấy tất cả câu hỏi + đáp án + câu trả lời user
     const questionsResult = await db.query(
       `SELECT
-         q.question_number,
+         q.id, q.question_number,
          q.question_text, q.question_text_cn,
          q.question_type, q.difficulty,
          q.explanation, q.explanation_cn,
-         q.correct_answer as correct_answer_key,
          q.points,
          ua.selected_answer_key,
-         ua.answer_text as selected_answer_text,
-         CASE WHEN ua.selected_answer_key = q.correct_answer THEN true ELSE false END as is_correct
+         ua.is_correct,
+         ca.answer_key as correct_answer_key,
+         ca.answer_text as correct_answer_text
        FROM user_answers ua
        JOIN questions q ON ua.question_id = q.id
+       LEFT JOIN answers ca ON ca.question_id = q.id AND ca.is_correct = true
        WHERE ua.attempt_id = $1
        ORDER BY q.question_number`,
       [attemptId],
@@ -195,12 +194,10 @@ async function explainWrongAnswers(req, res) {
     // Lấy answers cho mỗi câu
     const questions = await Promise.all(questionsResult.rows.map(async (q) => {
       const answersResult = await db.query(
-        `SELECT answer_key, answer_text, answer_text_cn
-         FROM answers WHERE question_id = (
-           SELECT id FROM questions WHERE question_number = $1 AND exam_id = $2
-         )
+        `SELECT answer_key, answer_text, answer_text_cn, is_correct
+         FROM answers WHERE question_id = $1
          ORDER BY answer_key`,
-        [q.question_number, attemptResult.rows[0].id],
+        [q.id],
       ).catch(() => ({ rows: [] }));
 
       return {
@@ -209,7 +206,7 @@ async function explainWrongAnswers(req, res) {
           key: a.answer_key,
           text: a.answer_text,
           text_cn: a.answer_text_cn,
-          is_correct: a.answer_key === q.correct_answer_key,
+          is_correct: a.is_correct,
         })),
       };
     }));

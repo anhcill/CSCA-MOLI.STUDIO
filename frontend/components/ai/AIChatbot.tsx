@@ -141,9 +141,15 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                 ? 'bg-blue-600 text-white rounded-tr-sm'
                                 : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                         }`}>
-                            {msg.content.split('\n').map((line, i) => (
-                                <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
-                            ))}
+                            {msg.content.split('\n').map((line, i) => {
+                                const trimmed = line.trim();
+                                const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ');
+                                return (
+                                    <p key={i} className={i > 0 ? (isBullet ? 'mt-0.5 pl-3' : 'mt-1') : ''}>
+                                        {isBullet ? trimmed.substring(2) : trimmed}
+                                    </p>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}
