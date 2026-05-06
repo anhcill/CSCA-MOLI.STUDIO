@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
-import examApi from '@/lib/api/exams';
+import examApi, { SUBJECT_SLUG_TO_CODE } from '@/lib/api/exams';
 import Link from 'next/link';
 import {
   FiCalendar, FiCheckCircle, FiXCircle, FiClock,
@@ -97,7 +97,11 @@ export default function LichSuPage() {
   const loadHistory = async () => {
     try {
       setLoading(true);
-      const data = await examApi.getHistory(undefined, 100);
+      // Convert slug → code if present (e.g. "toan" → "MATH")
+      const subjectCode = subjectParam
+        ? (SUBJECT_SLUG_TO_CODE[subjectParam] || subjectParam.toUpperCase())
+        : undefined;
+      const data = await examApi.getHistory(subjectCode, 100);
       setHistory(data || []);
     } catch (e) {
       console.error(e);
@@ -107,7 +111,10 @@ export default function LichSuPage() {
   };
 
   const displayFiltered = subjectParam
-    ? filtered.filter(h => h.subject_code === subjectParam)
+    ? filtered.filter(h => {
+        const mappedCode = SUBJECT_SLUG_TO_CODE[subjectParam] || subjectParam.toUpperCase();
+        return h.subject_code === mappedCode;
+      })
     : filtered;
 
   const avgScore = history.length

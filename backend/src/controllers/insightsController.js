@@ -322,7 +322,8 @@ async function getWeekdayAnalysis(req, res) {
 async function getHistoryStats(req, res) {
   try {
     const userId = req.user.id;
-    const data = await historyStatsService.getHistoryStats(userId);
+    const { subject } = req.query;
+    const data = await historyStatsService.getHistoryStats(userId, subject || null);
     return res.json({ success: true, data });
   } catch (error) {
     console.error("History Stats Error:", error);

@@ -1,6 +1,7 @@
 /**
  * HISTORY STATISTICS SERVICE
  * Thống kê chi tiết cho trang lịch sử thi
+ * Hỗ trợ filter theo môn học (subjectCode)
  */
 
 const { pool } = require("../config/database");
@@ -12,37 +13,38 @@ function round2(num) {
 /**
  * Lấy tất cả thống kê chi tiết cho trang thống kê lịch sử thi
  * @param {number} userId
+ * @param {string|null} subjectCode - mã môn học (MATH, PHYSICS, ...), null = tất cả
  * @returns {Promise<Object>}
  */
-async function getHistoryStats(userId) {
+async function getHistoryStats(userId, subjectCode = null) {
   const client = await pool.connect();
   try {
     // 1. Thống kê tổng quan
-    const overviewStats = await getOverviewStats(client, userId);
+    const overviewStats = await getOverviewStats(client, userId, subjectCode);
 
     // 2. Phân bố điểm số (histogram)
-    const scoreDistribution = await getScoreDistribution(client, userId);
+    const scoreDistribution = await getScoreDistribution(client, userId, subjectCode);
 
     // 3. Thống kê theo môn học
-    const subjectStats = await getSubjectStats(client, userId);
+    const subjectStats = await getSubjectStats(client, userId, subjectCode);
 
     // 4. Thống kê theo độ khó
-    const difficultyStats = await getDifficultyStats(client, userId);
+    const difficultyStats = await getDifficultyStats(client, userId, subjectCode);
 
     // 5. Xu hướng điểm số theo tháng
-    const monthlyTrend = await getMonthlyTrend(client, userId);
+    const monthlyTrend = await getMonthlyTrend(client, userId, subjectCode);
 
     // 6. Thống kê thời gian
-    const timeStats = await getTimeStats(client, userId);
+    const timeStats = await getTimeStats(client, userId, subjectCode);
 
     // 7. Tỷ lệ pass/fail
-    const passFailStats = await getPassFailStats(client, userId);
+    const passFailStats = await getPassFailStats(client, userId, subjectCode);
 
     // 8. Điểm số gần đây nhất
-    const recentAttempts = await getRecentAttempts(client, userId, 20);
+    const recentAttempts = await getRecentAttempts(client, userId, 20, subjectCode);
 
     // 9. So sánh giữa các lần thi
-    const improvementStats = await getImprovementStats(client, userId);
+    const improvementStats = await getImprovementStats(client, userId, subjectCode);
 
     return {
       overview: overviewStats,
@@ -60,7 +62,29 @@ async function getHistoryStats(userId) {
   }
 }
 
-async function getOverviewStats(client, userId) {
+// ─── Shared WHERE clause builder ─────────────────────────────────────────────
+
+/**
+ * Builds shared JOIN + WHERE for subject filtering
+ * @param {number} paramIndex - next $N index for subjectCode
+ * @param {string|null} subjectCode
+ * @returns {{ joins: string, where: string, params: any[] }}
+ */
+function buildSubjectFilter(paramIndex, subjectCode) {
+  if (!subjectCode) {
+    return { joins: '', where: '', params: [] };
+  }
+  return {
+    joins: `JOIN exams e ON ea.exam_id = e.id JOIN subjects s ON e.subject_id = s.id`,
+    where: ` AND s.code = $${paramIndex}`,
+    params: [subjectCode],
+  };
+}
+
+// ─── Overview Stats ─────────────────────────────────────────────────────────
+
+async function getOverviewStats(client, userId, subjectCode = null) {
+  const { joins, where, params } = buildSubjectFilter(2, subjectCode);
   const query = `
     SELECT
       COUNT(*)::INTEGER as total_attempts,
@@ -72,26 +96,17 @@ async function getOverviewStats(client, userId) {
       COALESCE(
         AVG(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
       )::DECIMAL as avg_percentage,
-      COALESCE(
-        SUM(ea.total_correct), 0
-      )::INTEGER as total_correct,
-      COALESCE(
-        SUM(ea.total_incorrect), 0
-      )::INTEGER as total_incorrect,
-      COALESCE(
-        SUM(ea.total_unanswered), 0
-      )::INTEGER as total_unanswered,
-      COALESCE(
-        AVG(ea.duration_seconds), 0
-      )::INTEGER as avg_duration_seconds,
-      COALESCE(
-        SUM(ea.duration_seconds), 0
-      )::INTEGER as total_duration_seconds
+      COALESCE(SUM(ea.total_correct), 0)::INTEGER as total_correct,
+      COALESCE(SUM(ea.total_incorrect), 0)::INTEGER as total_incorrect,
+      COALESCE(SUM(ea.total_unanswered), 0)::INTEGER as total_unanswered,
+      COALESCE(AVG(ea.duration_seconds), 0)::INTEGER as avg_duration_seconds,
+      COALESCE(SUM(ea.duration_seconds), 0)::INTEGER as total_duration_seconds
     FROM exam_attempts ea
-    JOIN exams e ON ea.exam_id = e.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectCode ? `JOIN exams e ON ea.exam_id = e.id` : ''}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectCode ? ` AND e.id IN (SELECT e2.id FROM exams e2 JOIN subjects s2 ON e2.subject_id = s2.id WHERE s2.code = $2)` : ''}
   `;
-  const result = await client.query(query, [userId]);
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const result = await client.query(query, queryParams);
   const r = result.rows[0];
 
   return {
@@ -110,8 +125,20 @@ async function getOverviewStats(client, userId) {
   };
 }
 
-async function getScoreDistribution(client, userId) {
-  // Phân bố điểm theo các khoảng: 0-2, 2-4, 4-6, 6-8, 8-10
+// ─── Score Distribution ────────────────────────────────────────────────────
+
+async function getScoreDistribution(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN exams e ON ea.exam_id = e.id JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode
+    ? ` AND s.code = $2`
+    : '';
+  const totalWhere = subjectCode
+    ? ` AND s2.code = $2`
+    : '';
+
   const query = `
     SELECT
       CASE
@@ -125,59 +152,26 @@ async function getScoreDistribution(client, userId) {
       COUNT(*)::INTEGER as count,
       ROUND(
         COUNT(*)::DECIMAL / NULLIF(
-          (SELECT COUNT(*) FROM exam_attempts WHERE user_id = $1 AND status = 'completed'), 0
+          (SELECT COUNT(*) FROM exam_attempts ea2 ${subjectCode ? `JOIN exams e2 ON ea2.exam_id = e2.id JOIN subjects s2 ON e2.subject_id = s2.id` : ''}
+           WHERE ea2.user_id = $1 AND ea2.status = 'completed'${totalWhere}), 0
         ) * 100, 1
       )::DECIMAL as percentage
     FROM exam_attempts ea
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectJoin}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
     GROUP BY 1
     ORDER BY
       CASE
-        WHEN (CASE
-          WHEN ea.total_score < 2 THEN '0-2'
-          WHEN ea.total_score < 4 THEN '2-4'
-          WHEN ea.total_score < 6 THEN '4-6'
-          WHEN ea.total_score < 8 THEN '6-8'
-          WHEN ea.total_score <= 10 THEN '8-10'
-          ELSE 'unknown'
-        END) = '0-2' THEN 1
-        WHEN (CASE
-          WHEN ea.total_score < 2 THEN '0-2'
-          WHEN ea.total_score < 4 THEN '2-4'
-          WHEN ea.total_score < 6 THEN '4-6'
-          WHEN ea.total_score < 8 THEN '6-8'
-          WHEN ea.total_score <= 10 THEN '8-10'
-          ELSE 'unknown'
-        END) = '2-4' THEN 2
-        WHEN (CASE
-          WHEN ea.total_score < 2 THEN '0-2'
-          WHEN ea.total_score < 4 THEN '2-4'
-          WHEN ea.total_score < 6 THEN '4-6'
-          WHEN ea.total_score < 8 THEN '6-8'
-          WHEN ea.total_score <= 10 THEN '8-10'
-          ELSE 'unknown'
-        END) = '4-6' THEN 3
-        WHEN (CASE
-          WHEN ea.total_score < 2 THEN '0-2'
-          WHEN ea.total_score < 4 THEN '2-4'
-          WHEN ea.total_score < 6 THEN '4-6'
-          WHEN ea.total_score < 8 THEN '6-8'
-          WHEN ea.total_score <= 10 THEN '8-10'
-          ELSE 'unknown'
-        END) = '6-8' THEN 4
-        WHEN (CASE
-          WHEN ea.total_score < 2 THEN '0-2'
-          WHEN ea.total_score < 4 THEN '2-4'
-          WHEN ea.total_score < 6 THEN '4-6'
-          WHEN ea.total_score < 8 THEN '6-8'
-          WHEN ea.total_score <= 10 THEN '8-10'
-          ELSE 'unknown'
-        END) = '8-10' THEN 5
+        WHEN (CASE WHEN ea.total_score < 2 THEN '0-2' WHEN ea.total_score < 4 THEN '2-4' WHEN ea.total_score < 6 THEN '4-6' WHEN ea.total_score < 8 THEN '6-8' WHEN ea.total_score <= 10 THEN '8-10' ELSE 'unknown' END) = '0-2' THEN 1
+        WHEN (CASE WHEN ea.total_score < 2 THEN '0-2' WHEN ea.total_score < 4 THEN '2-4' WHEN ea.total_score < 6 THEN '4-6' WHEN ea.total_score < 8 THEN '6-8' WHEN ea.total_score <= 10 THEN '8-10' ELSE 'unknown' END) = '2-4' THEN 2
+        WHEN (CASE WHEN ea.total_score < 2 THEN '0-2' WHEN ea.total_score < 4 THEN '2-4' WHEN ea.total_score < 6 THEN '4-6' WHEN ea.total_score < 8 THEN '6-8' WHEN ea.total_score <= 10 THEN '8-10' ELSE 'unknown' END) = '4-6' THEN 3
+        WHEN (CASE WHEN ea.total_score < 2 THEN '0-2' WHEN ea.total_score < 4 THEN '2-4' WHEN ea.total_score < 6 THEN '4-6' WHEN ea.total_score < 8 THEN '6-8' WHEN ea.total_score <= 10 THEN '8-10' ELSE 'unknown' END) = '6-8' THEN 4
+        WHEN (CASE WHEN ea.total_score < 2 THEN '0-2' WHEN ea.total_score < 4 THEN '2-4' WHEN ea.total_score < 6 THEN '4-6' WHEN ea.total_score < 8 THEN '6-8' WHEN ea.total_score <= 10 THEN '8-10' ELSE 'unknown' END) = '8-10' THEN 5
       END
   `;
-  const result = await client.query(query, [userId]);
 
-  // Ensure all ranges exist
+  const result = await client.query(query, queryParams);
+
   const allRanges = ['0-2', '2-4', '4-6', '6-8', '8-10'];
   const rangeMap = {};
   for (const row of result.rows) {
@@ -194,7 +188,13 @@ async function getScoreDistribution(client, userId) {
   }));
 }
 
-async function getSubjectStats(client, userId) {
+// ─── Subject Stats ─────────────────────────────────────────────────────────
+
+async function getSubjectStats(client, userId, subjectCode = null) {
+  // Khi filter theo môn, chỉ trả về môn đó; không filter thì trả về tất cả
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+
   const query = `
     SELECT
       s.id as subject_id,
@@ -218,16 +218,14 @@ async function getSubjectStats(client, userId) {
         ), 0
       )::DECIMAL as pass_rate,
       COALESCE(AVG(ea.duration_seconds), 0)::INTEGER as avg_duration_seconds,
-      COALESCE(
-        SUM(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
-      )::DECIMAL as total_percentage_sum,
       (
         SELECT COALESCE(json_agg(ea2.total_score), '[]')
         FROM (
           SELECT ea2_inner.total_score
           FROM exam_attempts ea2_inner
           JOIN exams e2_inner ON ea2_inner.exam_id = e2_inner.id
-          WHERE ea2_inner.user_id = $1 AND e2_inner.subject_id = s.id AND ea2_inner.status = 'completed'
+          JOIN subjects s2_inner ON e2_inner.subject_id = s2_inner.id
+          WHERE ea2_inner.user_id = $1${subjectCode ? ` AND s2_inner.code = $2` : ''} AND e2_inner.subject_id = s.id AND ea2_inner.status = 'completed'
           ORDER BY ea2_inner.submit_time DESC
           LIMIT 5
         ) ea2
@@ -235,11 +233,11 @@ async function getSubjectStats(client, userId) {
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
     JOIN subjects s ON e.subject_id = s.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
     GROUP BY s.id, s.code, s.name
     ORDER BY attempt_count DESC
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
 
   return result.rows.map(r => ({
     subjectId: r.subject_id,
@@ -254,14 +252,21 @@ async function getSubjectStats(client, userId) {
     passRate: parseFloat(r.pass_rate) || 0,
     avgDurationSeconds: parseInt(r.avg_duration_seconds) || 0,
     recentScores: r.recent_scores || [],
-    // Progress trend: compare last score vs first score
     progress: (r.recent_scores && r.recent_scores.length > 1)
       ? round2(r.recent_scores[0] - r.recent_scores[r.recent_scores.length - 1])
       : 0,
   }));
 }
 
-async function getDifficultyStats(client, userId) {
+// ─── Difficulty Stats ─────────────────────────────────────────────────────
+
+async function getDifficultyStats(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     SELECT
       e.difficulty_level,
@@ -288,7 +293,8 @@ async function getDifficultyStats(client, userId) {
       COALESCE(AVG(ea.duration_seconds), 0)::INTEGER as avg_duration_seconds
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectJoin}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
       AND e.difficulty_level IS NOT NULL
     GROUP BY e.difficulty_level
     ORDER BY
@@ -299,7 +305,7 @@ async function getDifficultyStats(client, userId) {
         ELSE 4
       END
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
 
   return result.rows.map(r => ({
     difficulty: r.difficulty_level,
@@ -311,7 +317,15 @@ async function getDifficultyStats(client, userId) {
   }));
 }
 
-async function getMonthlyTrend(client, userId) {
+// ─── Monthly Trend ─────────────────────────────────────────────────────────
+
+async function getMonthlyTrend(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     SELECT
       TO_CHAR(ea.submit_time, 'YYYY-MM') as month,
@@ -322,12 +336,8 @@ async function getMonthlyTrend(client, userId) {
         AVG(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
       )::DECIMAL as avg_percentage,
       COALESCE(MAX(ea.total_score), 0)::DECIMAL as max_score,
-      COALESCE(
-        SUM(ea.total_correct), 0
-      )::INTEGER as total_correct,
-      COALESCE(
-        SUM(ea.total_incorrect), 0
-      )::INTEGER as total_incorrect,
+      COALESCE(SUM(ea.total_correct), 0)::INTEGER as total_correct,
+      COALESCE(SUM(ea.total_incorrect), 0)::INTEGER as total_incorrect,
       COALESCE(
         ROUND(
           COUNT(DISTINCT CASE WHEN
@@ -339,12 +349,13 @@ async function getMonthlyTrend(client, userId) {
       )::DECIMAL as pass_rate
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectJoin}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
       AND ea.submit_time >= NOW() - INTERVAL '6 months'
     GROUP BY TO_CHAR(ea.submit_time, 'YYYY-MM'), TO_CHAR(ea.submit_time, 'MM/YYYY')
     ORDER BY month ASC
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
 
   return result.rows.map(r => ({
     month: r.month,
@@ -359,7 +370,15 @@ async function getMonthlyTrend(client, userId) {
   }));
 }
 
-async function getTimeStats(client, userId) {
+// ─── Time Stats ───────────────────────────────────────────────────────────
+
+async function getTimeStats(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     SELECT
       COALESCE(AVG(ea.duration_seconds), 0)::INTEGER as avg_duration_seconds,
@@ -368,7 +387,6 @@ async function getTimeStats(client, userId) {
       COALESCE(
         AVG(ea.duration_seconds::DECIMAL / NULLIF(e.total_questions, 0)), 0
       )::DECIMAL as avg_seconds_per_question,
-      -- So sánh với thời gian cho phép
       COALESCE(
         AVG(
           CASE WHEN e.duration > 0
@@ -377,7 +395,6 @@ async function getTimeStats(client, userId) {
           END
         ), 0
       )::DECIMAL as avg_time_used_percent,
-      -- Câu hỏi đúng vs sai: thời gian trung bình
       COALESCE(
         AVG(ua.time_spent_seconds) FILTER (WHERE ua.is_correct = true), 0
       )::DECIMAL as correct_avg_seconds,
@@ -387,9 +404,10 @@ async function getTimeStats(client, userId) {
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
     LEFT JOIN user_answers ua ON ea.id = ua.attempt_id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectJoin}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
   const r = result.rows[0];
 
   return {
@@ -403,7 +421,15 @@ async function getTimeStats(client, userId) {
   };
 }
 
-async function getPassFailStats(client, userId) {
+// ─── Pass/Fail Stats ──────────────────────────────────────────────────────
+
+async function getPassFailStats(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     SELECT
       COUNT(CASE WHEN
@@ -425,9 +451,10 @@ async function getPassFailStats(client, userId) {
       )::DECIMAL as excellent_rate
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    ${subjectJoin}
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
   const r = result.rows[0];
 
   return {
@@ -439,7 +466,12 @@ async function getPassFailStats(client, userId) {
   };
 }
 
-async function getRecentAttempts(client, userId, limit) {
+// ─── Recent Attempts ──────────────────────────────────────────────────────
+
+async function getRecentAttempts(client, userId, limit, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode, limit] : [userId, limit];
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     SELECT
       ea.id,
@@ -461,11 +493,11 @@ async function getRecentAttempts(client, userId, limit) {
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
     JOIN subjects s ON e.subject_id = s.id
-    WHERE ea.user_id = $1 AND ea.status = 'completed'
+    WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
     ORDER BY ea.submit_time DESC
-    LIMIT $2
+    LIMIT ${subjectCode ? '$3' : '$2'}
   `;
-  const result = await client.query(query, [userId, limit]);
+  const result = await client.query(query, queryParams);
 
   return result.rows.map(r => ({
     id: r.id,
@@ -485,7 +517,15 @@ async function getRecentAttempts(client, userId, limit) {
   }));
 }
 
-async function getImprovementStats(client, userId) {
+// ─── Improvement Stats ────────────────────────────────────────────────────
+
+async function getImprovementStats(client, userId, subjectCode = null) {
+  const queryParams = subjectCode ? [userId, subjectCode] : [userId];
+  const subjectJoin = subjectCode
+    ? `JOIN subjects s ON e.subject_id = s.id`
+    : '';
+  const subjectWhere = subjectCode ? ` AND s.code = $2` : '';
+
   const query = `
     WITH ranked AS (
       SELECT
@@ -497,7 +537,8 @@ async function getImprovementStats(client, userId) {
         COUNT(*) OVER () as total_count
       FROM exam_attempts ea
       JOIN exams e ON ea.exam_id = e.id
-      WHERE ea.user_id = $1 AND ea.status = 'completed'
+      ${subjectJoin}
+      WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectWhere}
     ),
     first_half AS (
       SELECT AVG(score) as avg_score
@@ -513,7 +554,7 @@ async function getImprovementStats(client, userId) {
       (SELECT avg_score FROM first_half) as first_half_avg,
       (SELECT avg_score FROM second_half) as second_half_avg
   `;
-  const result = await client.query(query, [userId]);
+  const result = await client.query(query, queryParams);
   const r = result.rows[0];
 
   const firstHalf = parseFloat(r.first_half_avg) || 0;

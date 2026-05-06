@@ -67,6 +67,20 @@ export interface TopicStats {
   error_percentage: number;
 }
 
+// Map URL slug → DB subject code
+export const SUBJECT_SLUG_TO_CODE: Record<string, string> = {
+  toan: 'MATH',
+  'vat-ly': 'PHYSICS',
+  hoa: 'CHEMISTRY',
+  'tiengtrung-xahoi': 'CHINESE_SOC',
+  'tiengtrung-tunhien': 'CHINESE_SCI',
+};
+
+// Reverse map
+export const SUBJECT_CODE_TO_SLUG: Record<string, string> = Object.fromEntries(
+  Object.entries(SUBJECT_SLUG_TO_CODE).map(([slug, code]) => [code, slug])
+);
+
 const examApi = {
   // Lấy danh sách đề thi theo môn
   async getExamsBySubject(subjectCode: string, subjectSlug?: string): Promise<Exam[]> {
