@@ -102,7 +102,7 @@ async function getOverviewStats(client, userId, subjectCode = null) {
       COALESCE(AVG(ea.duration_seconds), 0)::INTEGER as avg_duration_seconds,
       COALESCE(SUM(ea.duration_seconds), 0)::INTEGER as total_duration_seconds
     FROM exam_attempts ea
-    ${subjectCode ? `JOIN exams e ON ea.exam_id = e.id` : ''}
+    JOIN exams e ON ea.exam_id = e.id
     WHERE ea.user_id = $1 AND ea.status = 'completed'${subjectCode ? ` AND e.id IN (SELECT e2.id FROM exams e2 JOIN subjects s2 ON e2.subject_id = s2.id WHERE s2.code = $2)` : ''}
   `;
   const queryParams = subjectCode ? [userId, subjectCode] : [userId];
