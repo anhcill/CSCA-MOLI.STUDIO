@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { FiSend, FiMessageCircle, FiUser, FiCpu, FiZap, FiTrash2 } from 'react-icons/fi';
+import { FiSend, FiUser, FiCpu, FiZap, FiTrash2, FiCopy, FiCheck } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
 
 interface Message {
@@ -17,29 +17,90 @@ interface AIChatbotProps {
 }
 
 const QUICK_QUESTIONS = [
-    { label: 'Tại sao câu này sai?', prompt: 'Tại sao câu tôi chọn lại sai?' },
-    { label: 'Giải thích từ vựng', prompt: 'Giải thích từ vựng khó trong bài này' },
-    { label: 'Mẹo làm bài tốt hơn', prompt: 'Cho tôi mẹo để làm bài tốt hơn lần sau' },
-    { label: 'Học gì tiếp theo?', prompt: 'Tôi nên học gì tiếp theo để cải thiện điểm số?' },
+    { label: 'Tại sao sai?', prompt: 'Tại sao câu tôi chọn lại sai?' },
+    { label: 'Giải thích từ', prompt: 'Giải thích từ vựng khó trong bài này' },
+    { label: 'Mẹo làm bài', prompt: 'Cho tôi mẹo để làm bài tốt hơn' },
+    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện?' },
 ];
+
+// Format AI response into readable paragraphs
+function formatMessage(text: string): React.ReactNode[] {
+    if (!text) return [];
+    const lines = text.split('\n').filter(l => l.trim());
+    const blocks: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i].trim();
+
+        // Skip label prefixes like "1.", "2.", "Giải thích:", etc.
+        const labelPrefix = /^(Điều kiện|Giải thích|Ví dụ|Công thức|Từ mới|Từ vựng|Lời khuyên|Kết luận|Note|Ghi chú|Phân tích)[\s:：.]/i;
+        if (line.match(/^\d+[.)]\s/) || line.match(labelPrefix)) {
+            blocks.push(
+                <p key={i} className="mt-2 font-medium text-purple-800">
+                    {line.replace(/^\d+[.)]\s*/, '')}
+                </p>
+            );
+            i++;
+            continue;
+        }
+
+        // Math formula lines (contain math symbols)
+        if (line.match(/[=<>≤≥√∑∏π]/) && !line.match(/^[A-ZÀÁ]/)) {
+            blocks.push(
+                <p key={i} className="mt-1 font-mono text-sm bg-purple-50 px-2 py-1 rounded text-purple-900">
+                    {line}
+                </p>
+            );
+            i++;
+            continue;
+        }
+
+        // Regular content line
+        if (line && !line.match(/^[-*•]\s*$/) && line.length > 0) {
+            const clean = line
+                .replace(/\*\*(.+?)\*\*/g, '$1')
+                .replace(/\*(.+?)\*/g, '$1')
+                .replace(/^[-•*]\s+/, '');
+
+            blocks.push(
+                <p key={i} className="mt-1">{clean}</p>
+            );
+        }
+        i++;
+    }
+
+    return blocks;
+}
 
 export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
             role: 'ai',
-            content: `Chào bạn! 👋 Tôi là trợ lý AI học tập.\n\nBạn có thể hỏi tôi về:\n• Tại sao câu này sai?\n• Giải thích từ vựng\n• Mẹo làm bài tốt hơn\n• Nên học gì tiếp theo?\n\nHãy đặt câu hỏi nhé!`,
+            content: 'Chào bạn! Tôi là trợ lý AI học tập. Bạn có thể hỏi tôi về bài thi, từ vựng, mẹo làm bài. Hãy đặt câu hỏi nhé!',
             timestamp: new Date().toISOString(),
         },
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    const copyMessage = async (text: string, id: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch {
+            // fallback
+        }
+    };
 
     const sendMessage = async (text: string) => {
         if (!text.trim() || loading) return;
@@ -56,14 +117,14 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
 
         try {
             const res = await authFetch('/api/ai/ask', {
-        method: 'POST',
-        credentials: 'include',
-        body: JSON.stringify({
-            question: text.trim(),
-            attemptId: attemptId,
-        }),
-    });
-    const data = await res.json();
+                method: 'POST',
+                credentials: 'include',
+                body: JSON.stringify({
+                    question: text.trim(),
+                    attemptId: attemptId,
+                }),
+            });
+            const data = await res.json();
 
             const aiMsg: Message = {
                 id: (Date.now() + 1).toString(),
@@ -74,7 +135,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 timestamp: new Date().toISOString(),
             };
             setMessages(prev => [...prev, aiMsg]);
-        } catch (error) {
+        } catch {
             const errMsg: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'ai',
@@ -92,7 +153,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setMessages([{
             id: 'welcome',
             role: 'ai',
-            content: 'Đã xóa cuộc trò chuyện. Hãy đặt câu hỏi mới nhé! 👋',
+            content: 'Đã xóa cuộc trò chuyện. Hãy đặt câu hỏi mới nhé!',
             timestamp: new Date().toISOString(),
         }]);
     };
@@ -107,9 +168,9 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         <FiCpu className="text-white" size={18} />
                     </div>
                     <div>
-                        <h3 className="font-bold text-gray-900 text-sm">🤖 Trợ lý AI</h3>
+                        <h3 className="font-bold text-gray-900 text-sm">Trợ lý AI</h3>
                         <p className="text-xs text-gray-500">
-                            {examTitle ? `Phân tích: ${examTitle}` : 'DeepSeek R1 powered'}
+                            {examTitle ? `Phân tích: ${examTitle}` : 'DeepSeek R1'}
                         </p>
                     </div>
                 </div>
@@ -136,20 +197,51 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         </div>
 
                         {/* Bubble */}
-                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                            msg.role === 'user'
-                                ? 'bg-blue-600 text-white rounded-tr-sm'
-                                : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-                        }`}>
-                            {msg.content.split('\n').map((line, i) => {
-                                const trimmed = line.trim();
-                                const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ');
-                                return (
-                                    <p key={i} className={i > 0 ? (isBullet ? 'mt-0.5 pl-3' : 'mt-1') : ''}>
-                                        {isBullet ? trimmed.substring(2) : trimmed}
-                                    </p>
-                                );
-                            })}
+                        <div className="max-w-[80%]">
+                            <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                                msg.role === 'user'
+                                    ? 'bg-blue-600 text-white rounded-tr-sm'
+                                    : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                            }`}>
+                                {msg.role === 'ai'
+                                    ? formatMessage(msg.content)
+                                    : msg.content.split('\n').map((line, i) => (
+                                        <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
+                                    ))
+                                }
+                            </div>
+
+                            {/* Copy button for AI messages */}
+                            {msg.role === 'ai' && (
+                                <div className="flex items-center gap-1 mt-1">
+                                    <button
+                                        onClick={() => copyMessage(msg.content, msg.id)}
+                                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-purple-600 transition-colors px-1">
+                                        {copiedId === msg.id ? (
+                                            <>
+                                                <FiCheck size={12} className="text-green-500" />
+                                                <span className="text-green-500">Đã copy</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FiCopy size={12} />
+                                                <span>Copy</span>
+                                            </>
+                                        )}
+                                    </button>
+                                    <span className="text-xs text-gray-300">·</span>
+                                    <span className="text-xs text-gray-400">
+                                        {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Time for user messages */}
+                            {msg.role === 'user' && (
+                                <p className="text-xs text-gray-400 mt-1 text-right">
+                                    {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            )}
                         </div>
                     </div>
                 ))}
