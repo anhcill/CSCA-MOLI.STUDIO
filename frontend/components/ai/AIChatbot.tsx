@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { FiSend, FiMessageCircle, FiUser, FiCpu, FiZap, FiTrash2 } from 'react-icons/fi';
+import { authFetch } from '@/lib/utils/authFetch';
 
 interface Message {
     id: string;
@@ -54,9 +55,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setLoading(true);
 
         try {
-import { authFetch } from '@/lib/utils/authFetch';
-
-    const res = await authFetch('/api/ai/ask', {
+            const res = await authFetch('/api/ai/ask', {
         method: 'POST',
         credentials: 'include',
         body: JSON.stringify({
