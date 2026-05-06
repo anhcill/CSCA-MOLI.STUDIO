@@ -50,7 +50,7 @@ export default function SubjectNavigation({
 }: SubjectNavigationProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'menu' | 'history' | 'stats'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'stats'>('menu');
   const items = menuItems || getDefaultMenuItems(subjectSlug);
 
   // Build full href with subject param
@@ -76,23 +76,34 @@ export default function SubjectNavigation({
       
       {/* Tab Controls (Floating Pills) */}
       <div className="bg-white/80 backdrop-blur-xl border border-gray-100 rounded-2xl shadow-sm p-1.5 flex gap-1 relative z-20">
-        {(['menu', 'history', 'stats'] as const).map((tab) => {
-          const labels = { menu: 'Kho tài liệu', history: 'Lịch sử thi', stats: 'Phân tích AI' };
-          const isActive = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl relative ${
-                  isActive
-                  ? 'text-gray-900 shadow-sm bg-white'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
-                }`}
-            >
-              {labels[tab]}
-            </button>
-          );
-        })}
+        <button
+          onClick={() => setActiveTab('menu')}
+          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl relative ${
+              activeTab === 'menu'
+              ? 'text-gray-900 shadow-sm bg-white'
+              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
+            }`}
+        >
+          Kho tài liệu
+        </button>
+
+        <Link
+          href="/lich-su"
+          className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-center text-gray-500 hover:text-gray-800 hover:bg-gray-50/50"
+        >
+          Lịch sử thi
+        </Link>
+
+        <button
+          onClick={() => setActiveTab('stats')}
+          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl relative ${
+              activeTab === 'stats'
+              ? 'text-gray-900 shadow-sm bg-white'
+              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
+            }`}
+        >
+          Phân tích AI
+        </button>
       </div>
 
       {/* Tab Content Cards */}
@@ -122,12 +133,6 @@ export default function SubjectNavigation({
                   </Link>
                 );
               })}
-            </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div className="max-h-[500px] overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-300 pr-1 custom-scrollbar">
-              <ExamHistory subjectCode={subjectCode} />
             </div>
           )}
 
