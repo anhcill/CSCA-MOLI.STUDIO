@@ -311,7 +311,7 @@ export default function LichSuPage() {
 
                         {/* Score */}
                         <div className="col-span-2 text-center">
-                          <span className="text-lg font-black text-gray-900">{(item.total_score || 0).toFixed(1)}</span>
+                          <span className="text-lg font-black text-gray-900">{Number(item.total_score || 0).toFixed(1)}</span>
                           <span className="text-xs text-gray-400">/10</span>
                         </div>
 
