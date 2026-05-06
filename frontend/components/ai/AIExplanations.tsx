@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { FiCheckCircle, FiXCircle, FiBookOpen, FiZap, FiAlertCircle } from 'react-icons/fi';
+import { authFetch } from '@/lib/utils/authFetch';
 
 interface QuestionResult {
     question_number: number;
@@ -55,8 +56,6 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
         }, 1000);
         return () => clearInterval(t);
     }, [retryAfter]);
-
-import { authFetch } from '@/lib/utils/authFetch';
 
     const loadExplanations = async () => {
         try {
