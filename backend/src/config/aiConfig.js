@@ -21,7 +21,7 @@ const config = {
       process.env.BEEKNOEE_API_KEY_1 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff87f8ef41543cb46d19a7552bb9b00e01c',
       process.env.BEEKNOEE_API_KEY_2 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff835601c6fd9904ddfa85a9b3f377943e2',
     ],
-    model:       process.env.BEEKNOEE_MODEL     || 'deepseek/deepseek-chat-v3.1',
+    model:       process.env.BEEKNOEE_MODEL     || 'gpt-5.4-mini',
     baseUrl:     'https://platform.beeknoee.com/api/v1',
     timeout:     60000,
     maxTokens:   4000,
@@ -33,14 +33,14 @@ const config = {
   // ── Gemini (Google) ───────────────────────────────────────────────
   gemini: {
     apiKey:   process.env.GEMINI_API_KEY  || '',
-    model:    process.env.GEMINI_MODEL     || 'gemini-2.0-flash',
+    model:    process.env.GEMINI_MODEL     || 'gpt-5.4-mini',
     timeout:  30000,
   },
 
   // ── OpenAI compatible ─────────────────────────────────────────────
   openai: {
     apiKey:   process.env.OPENAI_API_KEY  || '',
-    model:    process.env.OPENAI_MODEL     || 'gpt-4o-mini',
+    model:    process.env.OPENAI_MODEL     || 'gpt-5.4-mini',
     baseUrl:  process.env.OPENAI_BASE_URL  || 'https://api.openai.com/v1',
     timeout:  30000,
   },

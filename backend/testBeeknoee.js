@@ -2,7 +2,7 @@
 const axios = require('axios');
 
 const API_KEY = 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff82f3ca9a6bb1c42fd8c2dc4ef5e7a2e9a';
-const MODEL = 'deepseek/deepseek-r1';
+const MODEL = 'gpt-5.4-mini';
 const BASE = 'https://platform.beeknoee.com/api/v1';
 
 async function test(prompt, label) {
