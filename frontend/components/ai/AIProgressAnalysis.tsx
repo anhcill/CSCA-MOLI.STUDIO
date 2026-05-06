@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiBarChart2, FiClock } from 'react-icons/fi';
+import { authFetch } from '@/lib/utils/authFetch';
 
 interface HistoryItem {
     examTitle: string;
@@ -35,7 +36,7 @@ export default function AIProgressAnalysis({ userId }: { userId?: number }) {
     const loadProgress = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/ai/progress', { credentials: 'include' });
+            const res = await authFetch('/api/ai/progress');
             const result = await res.json();
             if (result.success) setData(result);
             else setError(result.message || 'Lỗi tải dữ liệu');

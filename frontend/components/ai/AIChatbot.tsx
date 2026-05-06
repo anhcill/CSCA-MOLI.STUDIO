@@ -54,16 +54,17 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setLoading(true);
 
         try {
-            const res = await fetch('/api/ai/ask', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    question: text.trim(),
-                    attemptId: attemptId,
-                }),
-            });
-            const data = await res.json();
+import { authFetch } from '@/lib/utils/authFetch';
+
+    const res = await authFetch('/api/ai/ask', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+            question: text.trim(),
+            attemptId: attemptId,
+        }),
+    });
+    const data = await res.json();
 
             const aiMsg: Message = {
                 id: (Date.now() + 1).toString(),

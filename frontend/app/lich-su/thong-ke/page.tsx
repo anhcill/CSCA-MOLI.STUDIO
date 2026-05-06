@@ -24,19 +24,30 @@ import {
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatTime(seconds: number): string {
-  if (!seconds) return '—';
+  if (!seconds || isNaN(seconds)) return '—';
+  if (seconds < 0) return '—';
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  if (m === 0) return `${s}s`;
+  if (m === 0) return `${Math.round(s)}s`;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function formatDuration(seconds: number): string {
-  if (!seconds) return '—';
+  if (!seconds || isNaN(seconds)) return '—';
+  if (seconds < 0) return '—';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.round(seconds % 60);
   if (h > 0) return `${h}h ${m}m`;
-  return `${m} phút`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function formatPercent(value: number): string {
+  if (!value || isNaN(value)) return '—';
+  if (value > 999) return `${(value / 100).toFixed(1)}k%`;
+  return `${Math.min(value, 999).toFixed(0)}%`;
 }
 
 function formatDate(dateStr: string): string {
@@ -584,11 +595,35 @@ export default function ThongKePage() {
                     <p className="text-xs text-gray-400 mb-4">Phân tích thời gian làm bài</p>
                     <div className="space-y-3">
                       {[
-                        { label: 'TB thời gian/bài', value: formatTime(stats.timeStats.avgDurationSeconds), color: 'text-gray-800' },
-                        { label: 'TB thời gian/câu', value: `${stats.timeStats.avgSecondsPerQuestion.toFixed(0)}s`, color: 'text-gray-800' },
-                        { label: 'Thời gian sử dụng', value: `${stats.timeStats.avgTimeUsedPercent.toFixed(0)}%`, color: stats.timeStats.avgTimeUsedPercent > 100 ? 'text-red-500' : 'text-gray-800' },
-                        { label: 'Câu đúng (TB thời gian)', value: `${stats.timeStats.correctAvgSeconds.toFixed(0)}s`, color: 'text-emerald-600' },
-                        { label: 'Câu sai (TB thời gian)', value: `${stats.timeStats.incorrectAvgSeconds.toFixed(0)}s`, color: 'text-red-500' },
+                        {
+                          label: 'TB thời gian/bài',
+                          value: stats.timeStats.avgDurationSeconds > 86400
+                            ? `${Math.round(stats.timeStats.avgDurationSeconds / 3600)}h`
+                            : formatTime(stats.timeStats.avgDurationSeconds),
+                          color: 'text-gray-800',
+                        },
+                        {
+                          label: 'TB thời gian/câu',
+                          value: stats.timeStats.avgSecondsPerQuestion > 3600
+                            ? `${Math.round(stats.timeStats.avgSecondsPerQuestion / 60)} phút`
+                            : `${Math.round(stats.timeStats.avgSecondsPerQuestion)}s`,
+                          color: 'text-gray-800',
+                        },
+                        {
+                          label: 'Thời gian sử dụng',
+                          value: formatPercent(stats.timeStats.avgTimeUsedPercent),
+                          color: stats.timeStats.avgTimeUsedPercent > 100 ? 'text-red-500' : 'text-gray-800',
+                        },
+                        {
+                          label: 'Câu đúng (TB thời gian)',
+                          value: formatTime(stats.timeStats.correctAvgSeconds),
+                          color: 'text-emerald-600',
+                        },
+                        {
+                          label: 'Câu sai (TB thời gian)',
+                          value: formatTime(stats.timeStats.incorrectAvgSeconds),
+                          color: 'text-red-500',
+                        },
                       ].map((item, i) => (
                         <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                           <span className="text-sm text-gray-600">{item.label}</span>

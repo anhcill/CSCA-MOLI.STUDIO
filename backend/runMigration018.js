@@ -1,170 +1,85 @@
 /**
- * Run VIP migration: create vip_packages + vip_features_comparison tables
- * and seed with default data (VIP + Premium plans only)
- *
- * Usage: node runMigration018.js
+ * Run VIP migration 018 (v3): update existing vip_packages + seed features
+ * Usage: node backend/runMigration018.js
  */
 
-require('dotenv').config({ path: require('path').resolve(__dirname, '../backend/.env') });
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
-  ssl: { rejectUnauthorized: false },
-});
+const { Client } = require('pg');
+const pool = new Client({ connectionString: 'postgresql://postgres:yREnxOwrFSmIQCSdRDghFjAcSFAhoorK@nozomi.proxy.rlwy.net:47269/railway' });
 
 async function run() {
   const client = await pool.connect();
 
   try {
-    console.log('🔄 Running migration 018: vip_packages + vip_features_comparison...\n');
+    console.log('🔄 Running migration 018 (v3): update vip_packages...\n');
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS vip_packages (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        tier VARCHAR(20) NOT NULL DEFAULT 'vip',
-        duration_days INTEGER NOT NULL,
-        price INTEGER NOT NULL DEFAULT 0,
-        description TEXT,
-        features TEXT[] DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
-        sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ vip_packages table created');
+    // 1. Add tier column to existing vip_packages table
+    try {
+      await client.query(`ALTER TABLE vip_packages ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'vip';`);
+      console.log('✅ Added tier column to vip_packages');
+    } catch (e) { /* column may already exist */ }
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS vip_features_comparison (
-        id SERIAL PRIMARY KEY,
-        feature_name VARCHAR(255) NOT NULL,
-        basic_has BOOLEAN DEFAULT false,
-        vip_has BOOLEAN DEFAULT false,
-        premium_has BOOLEAN DEFAULT false,
-        sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ vip_features_comparison table created');
+    // 2. Update existing packages: set tier appropriately
+    await client.query(`UPDATE vip_packages SET tier = 'vip' WHERE id IN (1, 2);`);
+    await client.query(`UPDATE vip_packages SET tier = 'premium' WHERE id = 3;`);
+    console.log('✅ Updated tier for existing packages (id 1,2 → vip; id 3 → premium)');
 
-    // ── Seed vip_packages ──────────────────────────────────────────
-    // Delete existing and insert fresh (2 plans only: VIP + Premium)
-    await client.query(`DELETE FROM vip_packages;`);
-
-    const vipPackages = [
+    // 3. Insert additional packages (only if they don't exist)
+    const additionalPackages = [
       {
-        name: 'Gói VIP 30 ngày',
-        tier: 'vip',
-        duration_days: 30,
-        price: 199000,
-        description: 'Truy cập toàn bộ đề thi VIP, phân tích AI, lịch sử thi chi tiết',
-        features: JSON.stringify([
-          'Truy cập tất cả đề thi VIP',
-          'AI phân tích kết quả bài thi',
-          'Lịch sử thi không giới hạn',
-          'Phân tích theo chủ đề',
-          'Gợi ý đề tiếp theo phù hợp',
-        ]),
-        sort_order: 1,
-      },
-      {
-        name: 'Gói VIP 90 ngày',
+        name: 'VIP 90 ngày',
         tier: 'vip',
         duration_days: 90,
         price: 499000,
         description: 'Tiết kiệm 17% so với mua lẻ — đủ thời gian ôn tập toàn diện',
-        features: JSON.stringify([
-          'Truy cập tất cả đề thi VIP',
-          'AI phân tích kết quả bài thi',
-          'Lịch sử thi không giới hạn',
-          'Phân tích theo chủ đề',
-          'Gợi ý đề tiếp theo phù hợp',
-          'Hỗ trợ ưu tiên qua email',
-        ]),
+        features: ["Truy cập tất cả đề thi VIP", "AI phân tích kết quả bài thi", "Lịch sử thi không giới hạn", "Phân tích theo chủ đề", "Gợi ý đề tiếp theo phù hợp", "Hỗ trợ ưu tiên qua email"],
         sort_order: 2,
       },
       {
-        name: 'Gói VIP 365 ngày',
+        name: 'VIP 365 ngày',
         tier: 'vip',
         duration_days: 365,
         price: 1499000,
         description: 'Gói năm — cam kết học tập dài hạn, tiết kiệm tối đa',
-        features: JSON.stringify([
-          'Truy cập tất cả đề thi VIP',
-          'AI phân tích kết quả bài thi',
-          'Lịch sử thi không giới hạn',
-          'Phân tích theo chủ đề',
-          'Gợi ý đề tiếp theo phù hợp',
-          'Hỗ trợ ưu tiên qua email',
-          'Báo cáo tiến bộ hàng tháng',
-        ]),
+        features: ["Truy cập tất cả đề thi VIP", "AI phân tích kết quả bài thi", "Lịch sử thi không giới hạn", "Phân tích theo chủ đề", "Gợi ý đề tiếp theo phù hợp", "Hỗ trợ ưu tiên qua email", "Báo cáo tiến bộ hàng tháng"],
         sort_order: 3,
       },
       {
-        name: 'Gói Premium 30 ngày',
-        tier: 'premium',
-        duration_days: 30,
-        price: 399000,
-        description: 'Bao gồm video giải đề + đội ngũ cố vấn hỗ trợ 1-1',
-        features: JSON.stringify([
-          'Tất cả tính năng VIP',
-          'Video giải đề chi tiết từng câu',
-          'Đội ngũ cố vấn hỗ trợ 1-1',
-          'Phân tích AI nâng cao',
-          'Lộ trình học cá nhân hóa',
-        ]),
-        sort_order: 10,
-      },
-      {
-        name: 'Gói Premium 90 ngày',
+        name: 'Pre 90 ngày',
         tier: 'premium',
         duration_days: 90,
         price: 999000,
         description: 'Tiết kiệm 17% — đủ thời gian học chuyên sâu',
-        features: JSON.stringify([
-          'Tất cả tính năng VIP',
-          'Video giải đề chi tiết từng câu',
-          'Đội ngũ cố vấn hỗ trợ 1-1',
-          'Phân tích AI nâng cao',
-          'Lộ trình học cá nhân hóa',
-          'Workshop hàng tuần',
-        ]),
+        features: ["Tất cả tính năng VIP", "Video giải đề chi tiết từng câu", "Đội ngũ cố vấn hỗ trợ 1-1", "Phân tích AI nâng cao", "Lộ trình học cá nhân hóa", "Workshop hàng tuần"],
         sort_order: 11,
       },
       {
-        name: 'Gói Premium 365 ngày',
+        name: 'Pre 365 ngày',
         tier: 'premium',
         duration_days: 365,
         price: 2999000,
         description: 'Gói năm Premium — trải nghiệm đầy đủ nhất, tiết kiệm tối đa',
-        features: JSON.stringify([
-          'Tất cả tính năng Premium',
-          'Video giải đề chi tiết từng câu',
-          'Đội ngũ cố vấn hỗ trợ 1-1',
-          'Phân tích AI nâng cao',
-          'Lộ trình học cá nhân hóa',
-          'Workshop hàng tuần',
-          'Báo cáo tiến bộ hàng tháng',
-          'Ưu tiên truy cập đề mới',
-        ]),
+        features: ["Tất cả tính năng Premium", "Video giải đề chi tiết từng câu", "Đội ngũ cố vấn hỗ trợ 1-1", "Phân tích AI nâng cao", "Lộ trình học cá nhân hóa", "Workshop hàng tuần", "Báo cáo tiến bộ hàng tháng", "Ưu tiên truy cập đề mới"],
         sort_order: 12,
       },
     ];
 
-    for (const pkg of vipPackages) {
-      await client.query(
-        `INSERT INTO vip_packages (name, tier, duration_days, price, description, features, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [pkg.name, pkg.tier, pkg.duration_days, pkg.price, pkg.description, pkg.features, pkg.sort_order]
-      );
-      console.log(`  ✅ Inserted: ${pkg.name} (${pkg.tier})`);
+    for (const pkg of additionalPackages) {
+      try {
+        await client.query(
+          `INSERT INTO vip_packages (name, tier, duration_days, price, description, features, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [pkg.name, pkg.tier, pkg.duration_days, pkg.price, pkg.description, pkg.features, pkg.sort_order]
+        );
+        console.log(`  ✅ Inserted: ${pkg.name}`);
+      } catch (e) {
+        if (e.code === '23505') console.log(`  ⏭️  Skipped (already exists): ${pkg.name}`);
+        else throw e;
+      }
     }
 
-    // ── Seed vip_features_comparison ──────────────────────────────
+    // 4. Seed vip_features_comparison (wipe + re-insert)
     await client.query(`DELETE FROM vip_features_comparison;`);
+    console.log('✅ Cleared vip_features_comparison');
 
     const features = [
       { feature_name: 'Đề thi cơ bản', basic_has: true, vip_has: true, premium_has: true, sort_order: 1 },
@@ -188,9 +103,14 @@ async function run() {
         [feat.feature_name, feat.basic_has, feat.vip_has, feat.premium_has, feat.sort_order]
       );
     }
-    console.log(`  ✅ Inserted ${features.length} comparison features`);
+    console.log(`✅ Inserted ${features.length} comparison features`);
 
-    console.log('\n✅ Migration 018 completed successfully!');
+    // 5. Verify
+    const final = await client.query(`SELECT id, name, tier, duration_days, price, is_active FROM vip_packages ORDER BY sort_order, id`);
+    console.log('\n=== Final vip_packages ===');
+    console.table(final.rows);
+
+    console.log('\n✅ Migration 018 (v3) completed!');
   } catch (err) {
     console.error('\n❌ Migration failed:', err.message);
     throw err;

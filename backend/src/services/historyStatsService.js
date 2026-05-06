@@ -130,14 +130,49 @@ async function getScoreDistribution(client, userId) {
       )::DECIMAL as percentage
     FROM exam_attempts ea
     WHERE ea.user_id = $1 AND ea.status = 'completed'
-    GROUP BY range_label
+    GROUP BY 1
     ORDER BY
-      CASE range_label
-        WHEN '0-2' THEN 1
-        WHEN '2-4' THEN 2
-        WHEN '4-6' THEN 3
-        WHEN '6-8' THEN 4
-        WHEN '8-10' THEN 5
+      CASE
+        WHEN (CASE
+          WHEN ea.total_score < 2 THEN '0-2'
+          WHEN ea.total_score < 4 THEN '2-4'
+          WHEN ea.total_score < 6 THEN '4-6'
+          WHEN ea.total_score < 8 THEN '6-8'
+          WHEN ea.total_score <= 10 THEN '8-10'
+          ELSE 'unknown'
+        END) = '0-2' THEN 1
+        WHEN (CASE
+          WHEN ea.total_score < 2 THEN '0-2'
+          WHEN ea.total_score < 4 THEN '2-4'
+          WHEN ea.total_score < 6 THEN '4-6'
+          WHEN ea.total_score < 8 THEN '6-8'
+          WHEN ea.total_score <= 10 THEN '8-10'
+          ELSE 'unknown'
+        END) = '2-4' THEN 2
+        WHEN (CASE
+          WHEN ea.total_score < 2 THEN '0-2'
+          WHEN ea.total_score < 4 THEN '2-4'
+          WHEN ea.total_score < 6 THEN '4-6'
+          WHEN ea.total_score < 8 THEN '6-8'
+          WHEN ea.total_score <= 10 THEN '8-10'
+          ELSE 'unknown'
+        END) = '4-6' THEN 3
+        WHEN (CASE
+          WHEN ea.total_score < 2 THEN '0-2'
+          WHEN ea.total_score < 4 THEN '2-4'
+          WHEN ea.total_score < 6 THEN '4-6'
+          WHEN ea.total_score < 8 THEN '6-8'
+          WHEN ea.total_score <= 10 THEN '8-10'
+          ELSE 'unknown'
+        END) = '6-8' THEN 4
+        WHEN (CASE
+          WHEN ea.total_score < 2 THEN '0-2'
+          WHEN ea.total_score < 4 THEN '2-4'
+          WHEN ea.total_score < 6 THEN '4-6'
+          WHEN ea.total_score < 8 THEN '6-8'
+          WHEN ea.total_score <= 10 THEN '8-10'
+          ELSE 'unknown'
+        END) = '8-10' THEN 5
       END
   `;
   const result = await client.query(query, [userId]);
@@ -187,12 +222,15 @@ async function getSubjectStats(client, userId) {
         SUM(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
       )::DECIMAL as total_percentage_sum,
       (
-        SELECT ARRAY_AGG(ea2.total_score ORDER BY ea2.submit_time DESC)
-        FROM exam_attempts ea2
-        JOIN exams e2 ON ea2.exam_id = e2.id
-        WHERE ea2.user_id = $1 AND e2.subject_id = s.id AND ea2.status = 'completed'
-        ORDER BY ea2.submit_time DESC
-        LIMIT 5
+        SELECT COALESCE(json_agg(ea2.total_score), '[]')
+        FROM (
+          SELECT ea2_inner.total_score
+          FROM exam_attempts ea2_inner
+          JOIN exams e2_inner ON ea2_inner.exam_id = e2_inner.id
+          WHERE ea2_inner.user_id = $1 AND e2_inner.subject_id = s.id AND ea2_inner.status = 'completed'
+          ORDER BY ea2_inner.submit_time DESC
+          LIMIT 5
+        ) ea2
       ) as recent_scores
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id

@@ -113,7 +113,7 @@ export default function ProfilePage() {
   const { user: authUser, updateUser, logout } = useAuthStore();
 
   const [mounted, setMounted] = useState(false);
-  const [profileUser, setProfileUser] = useState(authUser);
+  const [profileUser, setProfileUser] = useState<any>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings' | 'devices'>('info');
@@ -123,7 +123,9 @@ export default function ProfilePage() {
 
   const [packages, setPackages] = useState<any[]>([]);
   const [pkgsLoading, setPkgsLoading] = useState(false);
+  const [userLoading, setUserLoading] = useState(true);
   const [purchasedPkgIds, setPurchasedPkgIds] = useState<Set<number>>(new Set());
+  const [userPkgMap, setUserPkgMap] = useState<Record<number, any>>({}); // package_id -> package data
 
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -166,9 +168,10 @@ export default function ProfilePage() {
     }
   }, [authUser]);
 
-  // Fetch fresh user data on mount
+  // Fetch fresh user data on mount (force refresh VIP status)
   useEffect(() => {
     if (!mounted) return;
+    setUserLoading(true);
     getCurrentUser()
       .then(res => {
         if (res?.success && res?.data?.user) {
@@ -178,7 +181,7 @@ export default function ProfilePage() {
         }
       })
       .catch(() => {})
-      .finally(() => setStatsLoading(false));
+      .finally(() => setUserLoading(false));
   }, [mounted]);
 
   useEffect(() => {
@@ -189,24 +192,44 @@ export default function ProfilePage() {
       .finally(() => setStatsLoading(false));
   }, [authUser?.id]);
 
+  // Fetch payment history on mount to get user's active package name
   useEffect(() => {
-    if (activeTab === 'vip' && packages.length === 0) {
-      setPkgsLoading(true);
-      Promise.all([
-        axios.get('/vip/packages'),
-        axios.get('/payments/history').catch(() => ({ data: { data: [] } }))
-      ]).then(([pkgRes, histRes]) => {
-        setPackages(pkgRes.data.data || []);
-        const hist = histRes.data.data || [];
+    if (!mounted) return;
+    axios.get('/payments/history')
+      .then(res => {
+        const hist = res.data?.data || [];
         const purchased = new Set<number>();
+        const pkgMap: Record<number, any> = {};
         hist.forEach((tx: any) => {
           if (tx.status === 'completed' && tx.package_id) {
             purchased.add(tx.package_id);
+            // package data will be populated when packages load
           }
         });
         setPurchasedPkgIds(purchased);
-      }).catch(() => {})
-      .finally(() => setPkgsLoading(false));
+        // Also fetch packages to get names
+        return axios.get('/vip/packages').then(pkgRes => {
+          const allPkgs = pkgRes.data?.data || [];
+          setPackages(allPkgs);
+          hist.forEach((tx: any) => {
+            if (tx.status === 'completed' && tx.package_id) {
+              const found = allPkgs.find((p: any) => p.id === tx.package_id);
+              if (found) pkgMap[tx.package_id] = found;
+            }
+          });
+          setUserPkgMap(pkgMap);
+        });
+      })
+      .catch(() => {});
+  }, [mounted]);
+
+  useEffect(() => {
+    if (activeTab === 'vip' && packages.length === 0) {
+      setPkgsLoading(true);
+      axios.get('/vip/packages')
+        .then(res => setPackages(res.data?.data || []))
+        .catch(() => {})
+        .finally(() => setPkgsLoading(false));
     }
   }, [activeTab]);
 
@@ -321,6 +344,34 @@ export default function ProfilePage() {
     ? new Date(profileUser.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })
     : '';
 
+  if (!mounted || userLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <main className="container mx-auto px-4 py-8 max-w-3xl space-y-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-pulse">
+            <div className="flex items-start gap-5">
+              <div className="w-20 h-20 rounded-2xl bg-gray-200 shrink-0" />
+              <div className="flex-1 space-y-3">
+                <div className="h-5 bg-gray-200 rounded w-48" />
+                <div className="h-4 bg-gray-200 rounded w-32" />
+                <div className="h-4 bg-gray-200 rounded w-64" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-pulse">
+            <div className="h-8 bg-gray-100 rounded w-1/2 mb-6" />
+            <div className="space-y-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-10 bg-gray-100 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (!profileUser) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -360,14 +411,23 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
-                  {profileUser?.is_vip && (
-                    <span className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
-                      <FaCrown size={10} /> PRO
-                      {vipDaysLeft !== null && vipDaysLeft > 0 && (
-                        <span className="ml-1 bg-white/30 px-1 rounded text-[10px]">{vipDaysLeft}d</span>
-                      )}
-                    </span>
-                  )}
+                  {profileUser?.is_vip && (() => {
+                    // Find the user's active purchased package
+                    const purchasedIds = Array.from(purchasedPkgIds);
+                    const activePkg = purchasedIds.length > 0
+                      ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
+                      : null;
+                    const pkgName = activePkg?.name || 'PRO';
+                    const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
+                    return (
+                      <span className={`bg-gradient-to-r ${isPre ? 'from-amber-400 to-orange-500' : 'from-indigo-500 to-purple-600'} text-white text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm`}>
+                        <FaCrown size={10} /> {pkgName}
+                        {vipDaysLeft !== null && vipDaysLeft > 0 && (
+                          <span className="ml-1 bg-white/30 px-1 rounded text-[10px]">{vipDaysLeft}d</span>
+                        )}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <p className="text-sm text-gray-400">@{profileUser.username}</p>
                 <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
@@ -382,12 +442,30 @@ export default function ProfilePage() {
               </div>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <button
-                onClick={isEditing ? () => setIsEditing(false) : initEdit}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors"
-              >
-                {isEditing ? <><FiX size={14} />Hủy</> : <><FiEdit2 size={14} />Chỉnh sửa</>}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setUserLoading(true);
+                    getCurrentUser().then(res => {
+                      if (res?.success && res?.data?.user) {
+                        setProfileUser(res.data.user);
+                        updateUser(res.data.user);
+                      }
+                    }).finally(() => setUserLoading(false));
+                  }}
+                  disabled={userLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-xl transition-colors"
+                  title="Làm mới"
+                >
+                  <FiRefreshCw size={14} className={userLoading ? 'animate-spin' : ''} />
+                </button>
+                <button
+                  onClick={isEditing ? () => setIsEditing(false) : initEdit}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors"
+                >
+                  {isEditing ? <><FiX size={14} />Hủy</> : <><FiEdit2 size={14} />Chỉnh sửa</>}
+                </button>
+              </div>
               {profileUser.target_score && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600">
                   <FiTarget size={12} className="text-gray-400" />
@@ -539,28 +617,36 @@ export default function ProfilePage() {
                     <FaCrown className="text-white" size={24} />
                   </div>
                   <div className="flex-1">
-                    {profileUser?.is_vip ? (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-lg font-black text-amber-900">Bạn đang là thành viên PRO</h3>
-                          <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1">
-                            <FaCrown size={10} /> ACTIVE
-                          </span>
-                        </div>
-                        <p className="text-sm text-amber-700">
-                          Hạn VIP: <span className="font-bold">
-                            {profileUser.vip_expires_at ? new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                          </span>
-                          {vipDaysLeft !== null && (
-                            <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? 'bg-amber-200 text-amber-900' : 'bg-red-200 text-red-900'}`}>
-                              {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
+                    {profileUser?.is_vip ? (() => {
+                      const purchasedIds = Array.from(purchasedPkgIds);
+                      const activePkg = purchasedIds.length > 0
+                        ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
+                        : null;
+                      const pkgName = activePkg?.name || 'PRO';
+                      const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className={`text-lg font-black ${isPre ? 'text-amber-900' : 'text-indigo-900'}`}>Bạn đang là thành viên {pkgName}</h3>
+                            <span className={`px-2 py-0.5 ${isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900'} text-xs font-bold rounded-full flex items-center gap-1`}>
+                              <FaCrown size={10} /> ACTIVE
                             </span>
-                          )}
-                        </p>
-                      </>
-                    ) : (
+                          </div>
+                          <p className={`text-sm ${isPre ? 'text-amber-700' : 'text-indigo-700'}`}>
+                            Hạn VIP: <span className="font-bold">
+                              {profileUser.vip_expires_at ? new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
+                            </span>
+                            {vipDaysLeft !== null && (
+                              <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? (isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900') : 'bg-red-200 text-red-900'}`}>
+                                {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
+                              </span>
+                            )}
+                          </p>
+                        </>
+                      );
+                    })() : (
                       <>
-                        <h3 className="text-lg font-black text-indigo-900 mb-1">Nâng cấp lên PRO</h3>
+                        <h3 className="text-lg font-black text-indigo-900 mb-1">Nâng cấp lên VIP</h3>
                         <p className="text-sm text-indigo-700">Mở khóa tất cả đề thi, tài liệu và tính năng độc quyền để đạt điểm cao nhất!</p>
                         <button onClick={() => window.location.href = '/vip'}
                           className="mt-3 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all">
@@ -575,7 +661,7 @@ export default function ProfilePage() {
               {/* 3 VIP Packages */}
               <div>
                 <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <FiZap className="text-indigo-500" size={18} /> Các gói PRO
+                  <FiZap className="text-indigo-500" size={18} /> Các gói VIP
                 </h3>
                 {pkgsLoading ? (
                   <div className="flex justify-center py-6"><div className="w-8 h-8 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"/></div>

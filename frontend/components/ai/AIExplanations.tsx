@@ -56,13 +56,13 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
         return () => clearInterval(t);
     }, [retryAfter]);
 
+import { authFetch } from '@/lib/utils/authFetch';
+
     const loadExplanations = async () => {
         try {
             setLoading(true);
             setError(null);
-            const res = await fetch(`/api/ai/exam/${attemptId}/explanations`, {
-                credentials: 'include',
-            });
+            const res = await authFetch(`/api/ai/exam/${attemptId}/explanations`);
             const data = await res.json();
 
             if (data.rateLimited) {
@@ -95,10 +95,8 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
         setLoadingIndex(index);
         try {
             // Gọi chatbot với câu hỏi cụ thể
-            const res = await fetch('/api/ai/ask', {
+            const res = await authFetch('/api/ai/ask', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
                     question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng?`,
                     attemptId,

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import examApi from '@/lib/api/exams';
 import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMinus, FiTrendingUp, FiTrendingDown, FiZap, FiChevronDown, FiMessageCircle, FiBarChart2 } from 'react-icons/fi';
+import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 
@@ -78,7 +79,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const loadAIAnalysis = async (attemptId: number) => {
         try {
             setAiLoading(true);
-            const res = await fetch(`/api/ai/exam-result/${attemptId}`, { credentials: 'include' });
+            const res = await authFetch(`/api/ai/exam-result/${attemptId}`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
                 setAiAnalysis(data);
@@ -404,10 +405,8 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
     const loadExplanation = async () => {
         try {
             // Gọi AI hỏi giải thích tự động cho câu này
-            const res = await fetch('/api/ai/ask', {
+            const res = await authFetch('/api/ai/ask', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
                     question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng? Hãy giải thích chi tiết kiến thức liên quan và mẹo ghi nhớ.`,
                     attemptId,
