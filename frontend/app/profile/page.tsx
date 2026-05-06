@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { updateProfile, updateAvatar, getUserStats, changePassword, UserStats } from '@/lib/api/users';
 import axios from '@/lib/utils/axios';
 import { canAccessAdminPanel } from '@/lib/utils/permissions';
 import { getCurrentUser } from '@/lib/api/auth';
 import Header from '@/components/layout/Header';
-import { AIInsights } from '@/components/ai/AIInsights';
 import {
   FiEdit2, FiSave, FiX, FiUser, FiMail, FiBook,
   FiAward, FiTarget, FiMessageSquare, FiUpload,
@@ -111,6 +111,7 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
 
 export default function ProfilePage() {
   const { user: authUser, updateUser, logout } = useAuthStore();
+  const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
   const [profileUser, setProfileUser] = useState<any>(null);
@@ -574,8 +575,8 @@ export default function ProfilePage() {
 
           {/* ── Tab: Thống kê ────────────────────────────── */}
           {activeTab === 'stats' && (
-            <div className="p-6">
-              <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 {statsLoading ? (
                   <><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /></>
                 ) : (
@@ -588,7 +589,7 @@ export default function ProfilePage() {
                 )}
               </div>
               {!statsLoading && stats && profileUser.target_score && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6">
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-600">Tiến độ đến mục tiêu</span>
                     <span className="text-sm font-semibold text-gray-800">{stats.avg_score}/{profileUser.target_score}</span>
@@ -602,9 +603,13 @@ export default function ProfilePage() {
                   </p>
                 </div>
               )}
-              <div className="border-t border-gray-100 pt-6">
-                <AIInsights userId={profileUser.id} />
-              </div>
+              <button
+                onClick={() => router.push('/lich-su/thong-ke')}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all"
+              >
+                <FiAward size={16} />
+                Xem thống kê chi tiết toàn bộ
+              </button>
             </div>
           )}
 
