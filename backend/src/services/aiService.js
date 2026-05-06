@@ -518,12 +518,15 @@ async function askAI(question, context = {}) {
     .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
     .join('\n');
 
-  const prompt = `Bạn là trợ lý học tập tiếng Trung. Trả lời BẰNG TIẾNG VIỆT, NGẮN GỌN, DỄ HIỂU.
-- Dùng dấu gạch đầu dòng (-) thay vì bullet phức tạp
+  const prompt = `Bạn là trợ lý học tập tiếng Trung. Trả lời BẰNG TIẾNG VIỆT.
+
+Cách trả lời:
+- Viết đủ dài, chi tiết, dễ hiểu cho học sinh
+- Giải thích rõ từng bước một, không bỏ qua bước nào
+- Dùng ví dụ cụ thể để minh họa
+- Nếu có từ mới, ghi: từ - pinyin - nghĩa
 - KHÔNG dùng emoji trong câu trả lời chính
 - KHÔNG dùng markdown (không *, không **, không ###)
-- Mỗi ý 1 dòng, tối đa 3-5 dòng
-- Nếu có từ mới, ghi: từ - pinyin - nghĩa
 
 Ngữ cảnh bài thi:
 ${contextText}
@@ -532,10 +535,10 @@ ${recentWrong || '(không có)'}
 
 Câu hỏi: ${question}
 
-Trả lời:`;
+Trả lời chi tiết:`;
 
   try {
-    const response = await callBeeknoee(prompt, { temperature: 0.6, maxTokens: 500 });
+    const response = await callBeeknoee(prompt, { temperature: 0.6, maxTokens: 2000 });
     return {
       answer: response,
       timestamp: new Date().toISOString(),
