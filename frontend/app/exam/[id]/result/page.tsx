@@ -467,7 +467,9 @@ function ExamResultContent() {
 
         {/* ── TAB: CHATBOT AI ── */}
         {activeTab === 'chat' && (
-          <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+            <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
+          </div>
         )}
       </main>
 

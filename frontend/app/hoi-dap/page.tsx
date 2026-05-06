@@ -5,7 +5,7 @@ import { qaApi, Ticket } from '@/lib/api/qaApi';
 import { canChatInstructor } from '@/lib/utils/permissions';
 import {
   FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle,
-  FiClock, FiPlus, FiAlertCircle, FiZap
+  FiClock, FiPlus, FiAlertCircle, FiZap, FiChevronRight
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import Link from 'next/link';
@@ -13,24 +13,25 @@ import Header from '@/components/layout/Header';
 
 function StatusBadge({ status }: { status: string }) {
   if (status === 'pending') return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-amber-100 text-amber-700">
-      <FiClock size={9} /> ĐANG CHỜ
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-700">
+      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+      ĐANG CHỜ
     </span>
   );
   if (status === 'answered') return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-100 text-emerald-700">
-      <FiCheckCircle size={9} /> CỐ VẤN ĐÃ TRẢ LỜI
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-700">
+      <FiCheckCircle size={12} /> CỐ VẤN ĐÃ TRẢ LỜI
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg bg-gray-100 text-gray-500">
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-gray-100 text-gray-500">
       ĐÃ ĐÓNG
     </span>
   );
 }
 
 export default function StudentQAPage() {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user } = useAuthStore();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -39,7 +40,6 @@ export default function StudentQAPage() {
   const [image, setImage] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Chat với giảng viên = Premium only
   const isPremium = canChatInstructor(user);
   const isVip = user?.is_vip || user?.subscription_tier === 'vip';
 
@@ -55,8 +55,8 @@ export default function StudentQAPage() {
     try {
       const data = await qaApi.getMyTickets();
       setTickets(data);
-    } catch (error) {
-      console.error("Load tickets error:", error);
+    } catch {
+      console.error("Load tickets error");
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +80,7 @@ export default function StudentQAPage() {
       setShowForm(false);
       loadTickets();
     } catch (error: any) {
-      alert(error.response?.data?.message || "Lỗi khi gửi câu hỏi. Vui lòng thử lại!");
+      alert(error.response?.data?.message || "Lỗi khi gửi câu hỏi.");
     } finally {
       setIsSubmitting(false);
     }
@@ -91,9 +91,9 @@ export default function StudentQAPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <Header />
-        <div className="max-w-4xl mx-auto p-8 flex items-center justify-center gap-3 text-gray-500 mt-20">
-          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          Đang tải...
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+          <div className="w-10 h-10 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-gray-500">Đang tải...</p>
         </div>
       </div>
     );
@@ -104,11 +104,13 @@ export default function StudentQAPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <Header />
-        <div className="max-w-lg mx-auto my-20 p-8 bg-white rounded-2xl shadow-xl text-center border border-gray-100">
-          <div className="text-4xl mb-4">🔐</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Cần đăng nhập</h2>
+        <div className="max-w-md mx-auto my-20 p-8 bg-white rounded-2xl shadow-xl text-center border border-gray-100">
+          <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <FiMessageSquare size={28} className="text-blue-500" />
+          </div>
+          <h2 className="text-xl font-black text-gray-900 mb-2">Cần đăng nhập</h2>
           <p className="text-gray-500 text-sm mb-6">Vui lòng đăng nhập để sử dụng tính năng Hỏi đáp cùng Cố vấn.</p>
-          <Link href="/login" className="inline-block px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">
+          <Link href="/login" className="inline-block px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/25">
             Đăng nhập ngay
           </Link>
         </div>
@@ -121,7 +123,7 @@ export default function StudentQAPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/10">
         <Header />
-        <div className="max-w-5xl mx-auto px-4 py-12">
+        <div className="max-w-5xl mx-auto px-4 py-10">
           {/* Hero upsell */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 p-8 md:p-12 mb-8 text-white">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
@@ -138,7 +140,7 @@ export default function StudentQAPage() {
                 </p>
                 {isVip && (
                   <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-white/15 border border-white/30 rounded-xl text-sm font-medium">
-                    <FiAlertCircle size={14} /> Tài khoản VIP của bạn chưa có quyền này — cần nâng lên <strong>Premium</strong>
+                    <FiAlertCircle size={14} /> Tài khoản VIP cần nâng lên <strong>Premium</strong> để sử dụng
                   </div>
                 )}
               </div>
@@ -163,7 +165,7 @@ export default function StudentQAPage() {
           <div className="text-center">
             <Link href="/vip"
               className="inline-flex items-center gap-3 px-10 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black rounded-2xl shadow-xl hover:shadow-orange-500/40 transition-all hover:scale-105 text-lg">
-                    <FiZap /> Nâng cấp Pre ngay
+              <FiZap /> Nâng cấp Premium ngay
             </Link>
             <p className="text-gray-400 text-xs mt-4">Kích hoạt ngay lập tức sau thanh toán</p>
           </div>
@@ -179,34 +181,37 @@ export default function StudentQAPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       <Header />
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
 
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-3">
-              <span className="p-2.5 bg-blue-100 text-blue-600 rounded-xl"><FiMessageSquare size={22} /></span>
-              Hỏi Đáp Cùng Cố Vấn
-            </h1>
-            <p className="text-gray-500 mt-1 text-sm">Gửi câu hỏi — cố vấn sẽ giải đáp chi tiết trong thời gian sớm nhất!</p>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+              <FiMessageSquare size={22} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-gray-900">Hỏi Đáp Cùng Cố Vấn</h1>
+              <p className="text-gray-500 text-sm">Cố vấn CSCA sẽ giải đáp chi tiết trong 2-4 giờ</p>
+            </div>
           </div>
           <button
             onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all hover:-translate-y-0.5">
-            <FiPlus /> Câu hỏi mới
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all">
+            <FiPlus size={16} />
+            <span>Câu hỏi mới</span>
           </button>
         </div>
 
-        {/* Stats row */}
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           {[
-            { label: 'Tổng câu hỏi', value: tickets.length, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-200' },
-            { label: 'Đang chờ', value: pendingCount, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
-            { label: 'Đã được trả lời', value: answeredCount, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' },
+            { label: 'Tổng câu hỏi', value: tickets.length, color: 'from-gray-600 to-gray-700', bg: 'bg-gray-50 border-gray-200' },
+            { label: 'Đang chờ', value: pendingCount, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-50 border-amber-200' },
+            { label: 'Đã trả lời', value: answeredCount, color: 'from-emerald-500 to-green-500', bg: 'bg-emerald-50 border-emerald-200' },
           ].map((s, i) => (
-            <div key={i} className={`p-4 rounded-2xl border text-center ${s.bg}`}>
-              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+            <div key={i} className={`p-5 rounded-2xl border text-center ${s.bg}`}>
+              <p className={`text-3xl font-black bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
+              <p className="text-sm text-gray-500 mt-1 font-medium">{s.label}</p>
             </div>
           ))}
         </div>
@@ -217,10 +222,13 @@ export default function StudentQAPage() {
             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
               <div className="flex items-center justify-between p-5 border-b">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <FiMessageSquare className="text-blue-600" /> Gửi câu hỏi mới
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FiMessageSquare size={16} className="text-blue-600" />
+                  </div>
+                  Gửi câu hỏi mới
                 </h2>
                 <button onClick={() => { setShowForm(false); setContent(''); setImage(null); }}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <FiX size={18} />
                 </button>
               </div>
@@ -230,7 +238,7 @@ export default function StudentQAPage() {
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    className="w-full p-3.5 rounded-xl border bg-gray-50 border-gray-200 h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all focus:bg-white text-sm"
+                    className="w-full p-3.5 rounded-xl border bg-gray-50 border-gray-200 h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all focus:bg-white focus:border-blue-300 text-sm"
                     placeholder="Mô tả câu hỏi hoặc bài toán bạn cần giải đáp..."
                   />
                 </div>
@@ -239,7 +247,7 @@ export default function StudentQAPage() {
                   <div className="relative inline-block">
                     <img src={URL.createObjectURL(image)} alt="Preview" className="h-28 rounded-xl border border-gray-200 shadow-sm" />
                     <button type="button" onClick={() => setImage(null)}
-                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600">
+                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors">
                       <FiX size={12} />
                     </button>
                   </div>
@@ -256,7 +264,7 @@ export default function StudentQAPage() {
                     className="flex-1 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors text-sm">Hủy</button>
                   <button type="submit" disabled={isSubmitting || (!content && !image)}
                     className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all text-sm">
-                    {isSubmitting ? 'Đang gửi...' : <><FiSend /> Gửi cho Cố vấn</>}
+                    {isSubmitting ? 'Đang gửi...' : <><FiSend size={14} /> Gửi cho Cố vấn</>}
                   </button>
                 </div>
               </form>
@@ -267,11 +275,13 @@ export default function StudentQAPage() {
         {/* Ticket list */}
         {tickets.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-            <div className="text-5xl mb-4">💬</div>
+            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <FiMessageSquare size={28} className="text-blue-400" />
+            </div>
             <h3 className="font-bold text-gray-700 text-lg mb-2">Chưa có câu hỏi nào</h3>
             <p className="text-gray-400 text-sm mb-6">Đừng ngại hỏi khi gặp bài khó — cố vấn luôn sẵn sàng giúp bạn!</p>
             <button onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all">
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/25">
               <FiPlus /> Đặt câu hỏi đầu tiên
             </button>
           </div>
@@ -287,22 +297,22 @@ export default function StudentQAPage() {
                     <img src={ticket.image_url} alt="Problem" className="w-16 h-16 object-cover rounded-xl border border-gray-100 shrink-0 hidden sm:block" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <div className="flex flex-wrap items-center gap-2 mb-2.5">
                       <StatusBadge status={ticket.status} />
                       {ticket.status === 'answered' && (
                         <span className="animate-pulse text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           🔔 Mới
                         </span>
                       )}
-                      <span className="text-[10px] text-gray-400 ml-auto">{new Date(ticket.created_at).toLocaleString('vi-VN')}</span>
+                      <span className="text-[11px] text-gray-400 ml-auto">{new Date(ticket.created_at).toLocaleString('vi-VN')}</span>
                     </div>
-                    <p className="text-gray-900 font-medium text-sm line-clamp-2">{ticket.content || '(Chỉ có hình ảnh)'}</p>
-                    <div className="flex items-center gap-3 mt-3">
-                      <span className="flex items-center gap-1 text-xs text-gray-400">
-                        <FiMessageSquare size={11} /> {ticket.reply_count || 0} phản hồi
+                    <p className="text-gray-900 font-medium text-sm line-clamp-2 mb-2">{ticket.content || '(Chỉ có hình ảnh)'}</p>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                        <FiMessageSquare size={12} /> {ticket.reply_count || 0} phản hồi
                       </span>
-                      <span className="text-xs text-blue-600 font-semibold group-hover:underline ml-auto">
-                        Vào xem →
+                      <span className="ml-auto text-xs text-blue-600 font-semibold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                        Vào xem <FiChevronRight size={13} />
                       </span>
                     </div>
                   </div>

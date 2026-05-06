@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { FiSend, FiUser, FiCpu, FiZap, FiTrash2, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
 
 interface Message {
@@ -17,10 +17,10 @@ interface AIChatbotProps {
 }
 
 const QUICK_QUESTIONS = [
-    { label: 'Tại sao sai?', prompt: 'Tại sao câu tôi chọn lại sai?' },
-    { label: 'Giải thích từ', prompt: 'Giải thích từ vựng khó trong bài này' },
-    { label: 'Mẹo làm bài', prompt: 'Cho tôi mẹo để làm bài tốt hơn' },
-    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện?' },
+    { label: 'Tại sao sai?', prompt: 'Tại sao câu tôi chọn lại sai?', emoji: '❓' },
+    { label: 'Giải thích từ vựng', prompt: 'Giải thích từ vựng khó trong bài này', emoji: '📖' },
+    { label: 'Mẹo làm bài', prompt: 'Cho tôi mẹo để làm bài tốt hơn', emoji: '💡' },
+    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện?', emoji: '🎯' },
 ];
 
 // Format AI response into readable paragraphs
@@ -37,7 +37,7 @@ function formatMessage(text: string): React.ReactNode[] {
         const labelPrefix = /^(Điều kiện|Giải thích|Ví dụ|Công thức|Từ mới|Từ vựng|Lời khuyên|Kết luận|Note|Ghi chú|Phân tích)[\s:：.]/i;
         if (line.match(/^\d+[.)]\s/) || line.match(labelPrefix)) {
             blocks.push(
-                <p key={i} className="mt-2 font-medium text-purple-800">
+                <p key={`label-${i}`} className="mt-3 first:mt-0 font-semibold text-purple-800 text-sm">
                     {line.replace(/^\d+[.)]\s*/, '')}
                 </p>
             );
@@ -48,7 +48,7 @@ function formatMessage(text: string): React.ReactNode[] {
         // Math formula lines (contain math symbols)
         if (line.match(/[=<>≤≥√∑∏π]/) && !line.match(/^[A-ZÀÁ]/)) {
             blocks.push(
-                <p key={i} className="mt-1 font-mono text-sm bg-purple-50 px-2 py-1 rounded text-purple-900">
+                <p key={`math-${i}`} className="mt-1 font-mono text-sm bg-purple-50 px-3 py-2 rounded-lg text-purple-900">
                     {line}
                 </p>
             );
@@ -64,7 +64,7 @@ function formatMessage(text: string): React.ReactNode[] {
                 .replace(/^[-•*]\s+/, '');
 
             blocks.push(
-                <p key={i} className="mt-1">{clean}</p>
+                <p key={`text-${i}`} className="mt-1 text-sm leading-relaxed">{clean}</p>
             );
         }
         i++;
@@ -159,129 +159,173 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg flex flex-col h-[70vh]">
+        <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white rounded-t-2xl shrink-0">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-200">
                         <FiCpu className="text-white" size={18} />
                     </div>
                     <div>
-                        <h3 className="font-bold text-gray-900 text-sm">Trợ lý AI</h3>
-                        <p className="text-xs text-gray-500">
-                            {examTitle ? `Phân tích: ${examTitle}` : 'DeepSeek R1'}
+                        <h3 className="font-bold text-gray-900 text-base">Trợ lý AI</h3>
+                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                            {examTitle ? (
+                                <>
+                                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />
+                                    {examTitle}
+                                </>
+                            ) : (
+                                <>
+                                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full inline-block" />
+                                    DeepSeek R1
+                                </>
+                            )}
                         </p>
                     </div>
                 </div>
                 <button onClick={clearChat}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Xóa cuộc trò chuyện">
-                    <FiTrash2 size={16} />
+                    className="flex items-center gap-1.5 px-3 py-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-sm">
+                    <FiTrash2 size={14} />
+                    <span>Xóa chat</span>
                 </button>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                {messages.map(msg => (
-                    <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                        {/* Avatar */}
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                            msg.role === 'user'
-                                ? 'bg-blue-600 text-white'
-                                : msg.role === 'system'
-                                ? 'bg-gray-200 text-gray-600'
-                                : 'bg-purple-600 text-white'
-                        }`}>
-                            {msg.role === 'user' ? <FiUser size={14} /> : <FiCpu size={14} />}
-                        </div>
+            {/* Main content: Messages + Quick Questions Sidebar */}
+            <div className="flex flex-1 overflow-hidden">
 
-                        {/* Bubble */}
-                        <div className="max-w-[80%]">
-                            <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-gray-50/50">
+                    {messages.map(msg => (
+                        <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+
+                            {/* Avatar */}
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                                 msg.role === 'user'
-                                    ? 'bg-blue-600 text-white rounded-tr-sm'
-                                    : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                                    ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md'
+                                    : msg.role === 'system'
+                                    ? 'bg-gray-200 text-gray-600'
+                                    : 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md shadow-purple-200'
                             }`}>
-                                {msg.role === 'ai'
-                                    ? formatMessage(msg.content)
-                                    : msg.content.split('\n').map((line, i) => (
-                                        <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
-                                    ))
-                                }
+                                {msg.role === 'user' ? <FiUser size={15} /> : <FiCpu size={15} />}
                             </div>
 
-                            {/* Copy button for AI messages */}
-                            {msg.role === 'ai' && (
-                                <div className="flex items-center gap-1 mt-1">
-                                    <button
-                                        onClick={() => copyMessage(msg.content, msg.id)}
-                                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-purple-600 transition-colors px-1">
-                                        {copiedId === msg.id ? (
-                                            <>
-                                                <FiCheck size={12} className="text-green-500" />
-                                                <span className="text-green-500">Đã copy</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FiCopy size={12} />
-                                                <span>Copy</span>
-                                            </>
-                                        )}
-                                    </button>
-                                    <span className="text-xs text-gray-300">·</span>
-                                    <span className="text-xs text-gray-400">
-                                        {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Time for user messages */}
-                            {msg.role === 'user' && (
-                                <p className="text-xs text-gray-400 mt-1 text-right">
-                                    {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            {/* Bubble */}
+                            <div className="max-w-[75%]">
+                                {/* Sender name */}
+                                <p className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-right text-blue-600' : 'text-purple-600'}`}>
+                                    {msg.role === 'user' ? 'Bạn' : 'Trợ lý AI'}
                                 </p>
-                            )}
-                        </div>
-                    </div>
-                ))}
 
-                {/* Loading */}
-                {loading && (
-                    <div className="flex gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
-                            <FiCpu size={14} />
-                        </div>
-                        <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
-                            <div className="flex gap-1">
-                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                <div className={`rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-sm ${
+                                    msg.role === 'user'
+                                        ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-tr-sm'
+                                        : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
+                                }`}>
+                                    {msg.role === 'ai'
+                                        ? formatMessage(msg.content)
+                                        : msg.content.split('\n').map((line, i) => (
+                                            <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
+                                        ))
+                                    }
+                                </div>
+
+                                {/* Copy + Time row for AI messages */}
+                                {msg.role === 'ai' && (
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <button
+                                            onClick={() => copyMessage(msg.content, msg.id)}
+                                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-purple-600 transition-colors px-2 py-1 rounded-lg hover:bg-purple-50">
+                                            {copiedId === msg.id ? (
+                                                <>
+                                                    <FiCheck size={12} className="text-green-500" />
+                                                    <span className="text-green-600 font-medium">Đã copy</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <FiCopy size={12} />
+                                                    <span>Copy</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="text-xs text-gray-400">
+                                            {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Time for user messages */}
+                                {msg.role === 'user' && (
+                                    <p className="text-xs text-gray-400 mt-1.5 text-right">
+                                        {new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                )}
                             </div>
-                            <span className="text-xs text-gray-500">AI đang suy nghĩ...</span>
+                        </div>
+                    ))}
+
+                    {/* Loading */}
+                    {loading && (
+                        <div className="flex gap-4">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-200">
+                                <FiCpu size={15} />
+                            </div>
+                            <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm border border-gray-100">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                    <span className="text-sm text-gray-500">AI đang suy nghĩ...</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Quick Questions Sidebar */}
+                <div className="w-64 border-l border-gray-100 bg-white p-4 flex flex-col shrink-0 overflow-y-auto">
+                    <div className="mb-4">
+                        <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1">
+                            <FiMessageCircle size={14} className="text-purple-500" />
+                            Câu hỏi nhanh
+                        </h4>
+                        <p className="text-xs text-gray-400">Bấm để hỏi ngay</p>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        {QUICK_QUESTIONS.map((q, i) => (
+                            <button key={i}
+                                onClick={() => sendMessage(q.prompt)}
+                                disabled={loading}
+                                className="group w-full text-left px-4 py-3 bg-white border border-gray-200 rounded-xl hover:border-purple-300 hover:bg-purple-50 hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <span className="mr-2">{q.emoji}</span>
+                                        <span className="font-medium text-gray-700 group-hover:text-purple-700">{q.label}</span>
+                                    </div>
+                                    <FiChevronRight size={14} className="text-gray-300 group-hover:text-purple-500 transition-colors" />
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Info box */}
+                    <div className="mt-auto pt-4">
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p className="text-xs text-amber-700 font-medium mb-1">⚠️ Lưu ý</p>
+                            <p className="text-xs text-amber-600 leading-relaxed">AI có thể sai. Hãy kiểm chứng thông tin quan trọng.</p>
                         </div>
                     </div>
-                )}
-
-                <div ref={messagesEndRef} />
-            </div>
-
-            {/* Quick Questions */}
-            <div className="px-5 pb-2">
-                <div className="flex flex-wrap gap-2">
-                    {QUICK_QUESTIONS.map((q, i) => (
-                        <button key={i}
-                            onClick={() => sendMessage(q.prompt)}
-                            disabled={loading}
-                            className="px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-full text-xs font-medium hover:bg-purple-100 disabled:opacity-50 transition-colors flex items-center gap-1">
-                            <FiZap size={10} /> {q.label}
-                        </button>
-                    ))}
                 </div>
             </div>
 
-            {/* Input */}
-            <div className="px-5 pb-4 pt-2 border-t border-gray-100">
+            {/* Input Area */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-white rounded-b-2xl shrink-0">
                 <div className="flex gap-3 items-end">
                     <textarea
                         ref={inputRef}
@@ -293,21 +337,18 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                 sendMessage(input);
                             }
                         }}
-                        placeholder="Nhập câu hỏi..."
-                        rows={1}
-                        className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                        placeholder="Nhập câu hỏi cho AI..."
+                        rows={2}
+                        className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder:text-gray-400"
                         style={{ maxHeight: '120px' }}
                     />
                     <button
                         onClick={() => sendMessage(input)}
                         disabled={!input.trim() || loading}
-                        className="w-11 h-11 bg-purple-600 text-white rounded-xl flex items-center justify-center hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md">
-                        <FiSend size={16} />
+                        className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl flex items-center justify-center hover:shadow-lg hover:shadow-purple-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0">
+                        <FiSend size={18} />
                     </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2 text-center">
-                    AI có thể sai · Kiểm chứng thông tin quan trọng
-                </p>
             </div>
         </div>
     );

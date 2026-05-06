@@ -181,6 +181,9 @@ app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
 app.use("/api/coupons", require("./routes/couponRoutes")); // Coupons (validate & apply)
 app.use("/api/admin/coupons", require("./routes/adminCouponRoutes")); // Admin Coupon Management
 app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
+app.use("/api/messages", require("./routes/messages")); // Private messaging
+app.use("/api/users", require("./routes/userProfile")); // Public user profiles
+app.use("/api/users", require("./routes/userActions")); // Block/Report actions
 
 // ====================================
 // ERROR HANDLING
