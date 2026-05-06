@@ -9,6 +9,7 @@ import {
   getHistoryStats,
   type HistoryStatsData,
 } from '@/lib/api/insights';
+import { SUBJECT_SLUG_TO_CODE } from '@/lib/api/exams';
 import {
   FiBarChart2, FiTrendingUp, FiTrendingDown, FiMinus,
   FiTarget, FiAward, FiClock, FiCheckCircle, FiXCircle,
@@ -113,7 +114,11 @@ export default function ThongKePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getHistoryStats(subjectParam || undefined);
+      // Convert slug → code (e.g. "toan" → "MATH")
+      const subjectCode = subjectParam
+        ? (SUBJECT_SLUG_TO_CODE[subjectParam] || subjectParam.toUpperCase())
+        : undefined;
+      const data = await getHistoryStats(subjectCode);
       setStats(data);
     } catch (e: any) {
       console.error(e);
@@ -127,9 +132,10 @@ export default function ThongKePage() {
   const displayStats: HistoryStatsData | null = useMemo(() => {
     if (!stats || !subjectParam) return stats;
 
-    // Filter attempts by subject
-    const subjectAttempts = stats.recentAttempts.filter(a => a.subjectCode === subjectParam);
-    const subjectSubject = stats.subjects.find(s => s.subjectCode === subjectParam);
+    // Map slug to code for comparison
+    const mappedCode = SUBJECT_SLUG_TO_CODE[subjectParam] || subjectParam.toUpperCase();
+    const subjectAttempts = stats.recentAttempts.filter(a => a.subjectCode === mappedCode);
+    const subjectSubject = stats.subjects.find(s => s.subjectCode === mappedCode);
     const subjectScoreDist = stats.scoreDistribution;
 
     // Recompute overview for this subject only
