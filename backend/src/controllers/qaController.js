@@ -1,18 +1,18 @@
 const Ticket = require("../models/Ticket");
-const { checkVipAccess } = require("../middleware/authMiddleware");
+const { canChatWithInstructor } = require("../middleware/authMiddleware");
 
 const qaController = {
   // 1. Tạo ticket mới (Gửi câu hỏi)
   async createTicket(req, res) {
     try {
       const user = req.user;
-      
-      // Chặn nếu không có Premium/VIP
-      if (!checkVipAccess(user)) {
+
+      // Chặn nếu không có Premium
+      if (!canChatWithInstructor(user)) {
         return res.status(403).json({
           success: false,
-          code: "VIP_REQUIRED",
-          message: "Tính năng Hỏi-Đáp 1:1 chỉ dành cho thành viên VIP.",
+          code: "PREMIUM_REQUIRED",
+          message: "Tính năng Hỏi-Đáp 1:1 chỉ dành cho thành viên Premium.",
         });
       }
 

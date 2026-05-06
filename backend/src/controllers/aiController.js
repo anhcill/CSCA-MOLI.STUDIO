@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const aiService = require('../services/aiService');
 const { cache, TTL } = require('../config/cache');
+const { canUseAIFeatures } = require('../middleware/authMiddleware');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -42,6 +43,10 @@ async function analyzeExamResult(req, res) {
   try {
     const userId = req.user.id;
     const { attemptId } = req.params;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
 
     if (!attemptId) {
       return res.status(400).json({ success: false, message: 'Thiếu attemptId' });
@@ -160,6 +165,10 @@ async function explainWrongAnswers(req, res) {
     const userId = req.user.id;
     const { attemptId } = req.params;
 
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const attemptResult = await db.query(
       `SELECT ea.id, e.title as exam_title, e.subject_id
        FROM exam_attempts ea
@@ -245,6 +254,10 @@ async function analyzeTopics(req, res) {
   try {
     const userId = req.user.id;
 
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const attempts = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
               ea.submit_time, e.title as exam_title, e.total_questions,
@@ -282,6 +295,11 @@ async function analyzeTopics(req, res) {
 async function getPracticeRecommendations(req, res) {
   try {
     const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const { weaknesses, examId } = req.body;
 
     // Lấy danh sách đề thi để gợi ý
@@ -323,6 +341,11 @@ async function getPracticeRecommendations(req, res) {
 async function askAI(req, res) {
   try {
     const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const { question, attemptId, conversationHistory } = req.body;
 
     if (!question || question.trim().length < 3) {
@@ -382,6 +405,10 @@ async function analyzeProgress(req, res) {
   try {
     const userId = req.user.id;
 
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const attempts = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
               ea.submit_time, e.title as exam_title, e.total_questions
@@ -433,6 +460,10 @@ async function analyzeProgress(req, res) {
 async function recommendNextExam(req, res) {
   try {
     const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
 
     // Lấy điểm mới nhất
     const latestAttempt = await db.query(
@@ -487,6 +518,11 @@ async function recommendNextExam(req, res) {
 async function analyzeUserPerformance(req, res) {
   try {
     const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
     const memKey = `ai:full_analysis:${userId}`;
 
     if (aiService.isRateLimited()) {

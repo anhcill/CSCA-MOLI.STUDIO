@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
+import { PremiumGate } from '@/components/common/PremiumGate';
 import {
   FiAlertCircle, FiCheckCircle, FiTrendingUp, FiTrendingDown,
   FiBook, FiRefreshCw, FiClock, FiAward, FiTarget
@@ -88,6 +89,13 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
 
       const response = await axios[method](endpoint);
       const d = response.data;
+
+      // Check if user needs premium access
+      if (d.code === 'PREMIUM_REQUIRED') {
+        setError('PREMIUM_REQUIRED');
+        setLoading(false);
+        return;
+      }
 
       if (d.rateLimited) {
         setRateLimitMsg(d.message || 'Hệ thống AI đang bận, vui lòng thử lại sau.');

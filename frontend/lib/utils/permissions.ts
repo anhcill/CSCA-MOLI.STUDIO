@@ -45,9 +45,33 @@ export const TIER_META: Record<TierLevel, {
 export function isVipActive(user: User | null | undefined): boolean {
   if (!user) return false;
   const isVip = user.is_vip === true;
-  const hasTier = user.subscription_tier === 'vip' || user.subscription_tier === 'premium';
+  const hasTier = user.subscription_tier === 'vip';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
-  return (isVip || hasTier) && notExpired;
+  return isVip || (hasTier && notExpired);
+}
+
+// ─── Check Premium access (AI + Video + Chat) ─────────────────────────────────────
+export function isPremiumActive(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const isPremium = user.subscription_tier === 'premium';
+  const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
+  return isPremium && notExpired;
+}
+
+// ─── Can use AI features (Premium or VIP) ──────────────────────────────────
+export function canUseAI(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return isPremiumActive(user) || isVipActive(user);
+}
+
+// ─── Can watch video explanations (Premium only) ─────────────────────────────────
+export function canWatchVideo(user: User | null | undefined): boolean {
+  return isPremiumActive(user);
+}
+
+// ─── Can chat with instructor (Premium only) ────────────────────────────────────
+export function canChatInstructor(user: User | null | undefined): boolean {
+  return isPremiumActive(user);
 }
 
 // ─── Get user tier level ──────────────────────────────────────────────────────

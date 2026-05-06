@@ -65,40 +65,40 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
 
 // ── Upsell Modal ───────────────────────────────────────────────────────────────
 function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () => void }) {
-  const isVip = tier === 'vip';
+  const isPre = tier === 'premium';
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`relative bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden`}>
-        <div className={`p-8 text-center ${isVip ? 'bg-gradient-to-br from-indigo-600 to-purple-700' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
-          <div className="text-5xl mb-3">{isVip ? '🔒' : '👑'}</div>
+        <div className={`p-8 text-center ${isPre ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-indigo-600 to-purple-700'}`}>
+          <div className="text-5xl mb-3">{isPre ? '👑' : '🔒'}</div>
           <h2 className="text-xl font-black text-white mb-1">
-            {isVip ? 'Cần tài khoản VIP' : 'Cần tài khoản Pre'}
+            {isPre ? 'Cần tài khoản Pre' : 'Video giải đề chỉ dành cho Pre'}
           </h2>
           <p className="text-white/80 text-sm">
-            {isVip ? 'Video giải đề này dành riêng cho thành viên VIP trở lên.' : 'Video Pre độc quyền — chỉ dành cho tài khoản Pre.'}
+            {isPre ? 'Video giải đề Pre độc quyền — chỉ dành cho tài khoản Pre.' : 'Video giải đề này dành cho thành viên Pre. VIP chỉ có AI phân tích.'}
           </p>
         </div>
         <div className="p-6">
           <div className="space-y-2.5 mb-6">
-            {(isVip ? [
-              'Xem toàn bộ video giải đề VIP',
-              'Truy cập đề thi cao cấp không giới hạn',
+            {(isPre ? [
+              'Xem toàn bộ video giải đề Pre',
+              'Chat 1-1 với cố vấn chuyên gia',
               'Phân tích AI chi tiết từng câu',
             ] : [
-              'Video giải đề Pre độc quyền',
-              'Hỏi đáp 1-1 với cố vấn chuyên gia',
-              'Ưu tiên trả lời trong 2 giờ',
+              'Phân tích AI chi tiết từng câu',
+              'Truy cập đề thi cao cấp không giới hạn',
+              'Nâng cấp Pre để xem video giải đề',
             ]).map((f, i) => (
               <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${isVip ? 'bg-indigo-500' : 'bg-amber-500'}`}>✓</div>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${isPre ? 'bg-amber-500' : 'bg-indigo-500'}`}>✓</div>
                 {f}
               </div>
             ))}
           </div>
           <Link href="/vip"
-            className={`block text-center py-3.5 font-bold rounded-xl text-white text-sm transition-all hover:-translate-y-0.5 shadow-lg ${isVip ? 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-indigo-500/30' : 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30'}`}>
-            {isVip ? '🚀 Nâng cấp VIP ngay' : '👑 Nâng cấp Pre ngay'}
+            className={`block text-center py-3.5 font-bold rounded-xl text-white text-sm transition-all hover:-translate-y-0.5 shadow-lg ${isPre ? 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30' : 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-indigo-500/30'}`}>
+            {isPre ? '👑 Nâng cấp Pre ngay' : '👑 Nâng cấp Pre ngay'}
           </Link>
           <button onClick={onClose} className="w-full mt-3 py-2.5 text-gray-500 text-sm hover:text-gray-700 font-medium">Để sau</button>
         </div>
@@ -120,12 +120,11 @@ function getTierLevel(user: any): TierLevel {
 
 function canWatchVideo(userTier: TierLevel, examVipTier: string | null | undefined): boolean {
   const tier = userTier as string;
+  // Video giải đề = Premium only
   if (tier === 'premium') return true;
-  if (!examVipTier || examVipTier === 'basic') {
-    return tier === 'vip' || tier === 'premium';
-  }
-  if (examVipTier === 'vip') return tier === 'vip' || tier === 'premium';
+  // Nếu đề có gắn tier cụ thể
   if (examVipTier === 'premium') return tier === 'premium';
+  if (examVipTier === 'vip') return false; // VIP không xem được video
   return false;
 }
 
@@ -354,7 +353,7 @@ export default function GiaiDeChiTietPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-900 text-sm">Có {lockedCount} video giải đề cần nâng cấp để xem</p>
-                <p className="text-gray-500 text-xs mt-0.5">Nâng cấp VIP để mở khóa toàn bộ video hướng dẫn giải đề</p>
+                <p className="text-gray-500 text-xs mt-0.5">Nâng cấp gói Pre để mở khóa video hướng dẫn giải đề</p>
               </div>
               <Link href="/vip"
                 className="shrink-0 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm">

@@ -235,13 +235,48 @@ const optionalAuth = (req, res, next) => {
 // ─── VIP helper (exported for use in controllers/routes) ─────────────────────
 /**
  * Checks if a user object represents an active VIP member.
- * Handles both req.user (decoded JWT) and DB user objects.
+ * VIP only has AI analysis (no video/chat).
  */
 const checkVipAccess = (user) => {
   if (!user) return false;
-  const isVip = user.is_vip === true || user.subscription_tier === 'vip' || user.subscription_tier === 'premium';
+  const isVip = user.is_vip === true || user.subscription_tier === 'vip';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
   return isVip && notExpired;
+};
+
+/**
+ * Premium = VIP + Video giải đề + Chat giảng viên
+ * Premium has ALL features: AI + Video + Chat
+ */
+const checkPremiumAccess = (user) => {
+  if (!user) return false;
+  const isPremium = user.subscription_tier === 'premium';
+  const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
+  return isPremium && notExpired;
+};
+
+/**
+ * Can use AI features: Premium OR VIP
+ */
+const canUseAIFeatures = (user) => {
+  if (!user) return false;
+  const isPremium = checkPremiumAccess(user);
+  const isVip = checkVipAccess(user);
+  return isPremium || isVip;
+};
+
+/**
+ * Can watch video explanations: Premium only
+ */
+const canWatchVideoExplanation = (user) => {
+  return checkPremiumAccess(user);
+};
+
+/**
+ * Can chat with instructor: Premium only
+ */
+const canChatWithInstructor = (user) => {
+  return checkPremiumAccess(user);
 };
 
 module.exports = {
@@ -251,4 +286,8 @@ module.exports = {
   authorizePermission,
   authorizeAnyPermission,
   checkVipAccess,
+  checkPremiumAccess,
+  canUseAIFeatures,
+  canWatchVideoExplanation,
+  canChatWithInstructor,
 };

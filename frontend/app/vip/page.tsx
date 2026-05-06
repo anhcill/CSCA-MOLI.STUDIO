@@ -245,21 +245,53 @@ export default function VipPricingPage() {
                   </div>
                 </div>
 
-                {/* Combined grid: all packages in 1 row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch justify-items-center">
-                  {[...vipPkgs, ...premiumPkgs].map(pkg => {
-                    const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
-                    return (
+                {/* Combined grid: Free + VIP + Pre all on same row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+                  {/* Free — left */}
+                  <div>
+                    {freePkgs.map(pkg => (
                       <PlanCard
                         key={pkg.id} pkg={pkg} isVip={!!isVip}
                         onCheckout={handleCheckout}
-                        discount={discount}
+                        discount={null}
                         onApplyCoupon={handleApplyCoupon}
                         selectedPkg={selectedPkg}
                         onSelectPkg={setSelectedPkg}
                       />
-                    );
-                  })}
+                    ))}
+                  </div>
+                  {/* VIP — middle */}
+                  <div>
+                    {vipPkgs.map(pkg => {
+                      const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
+                      return (
+                        <PlanCard
+                          key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          onCheckout={handleCheckout}
+                          discount={discount}
+                          onApplyCoupon={handleApplyCoupon}
+                          selectedPkg={selectedPkg}
+                          onSelectPkg={setSelectedPkg}
+                        />
+                      );
+                    })}
+                  </div>
+                  {/* Premium — right */}
+                  <div>
+                    {premiumPkgs.map(pkg => {
+                      const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
+                      return (
+                        <PlanCard
+                          key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          onCheckout={handleCheckout}
+                          discount={discount}
+                          onApplyCoupon={handleApplyCoupon}
+                          selectedPkg={selectedPkg}
+                          onSelectPkg={setSelectedPkg}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

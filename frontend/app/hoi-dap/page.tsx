@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import { qaApi, Ticket } from '@/lib/api/qaApi';
+import { canChatInstructor } from '@/lib/utils/permissions';
 import {
   FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle,
   FiClock, FiPlus, FiAlertCircle, FiZap
@@ -38,8 +39,8 @@ export default function StudentQAPage() {
   const [image, setImage] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Hỏi đáp cố vấn dành cho gói PREMIUM và VIP (đã đồng bộ với backend)
-  const isPremium = user?.subscription_tier === 'premium' || user?.subscription_tier === 'vip' || user?.is_vip || user?.role === 'super_admin';
+  // Chat với giảng viên = Premium only
+  const isPremium = canChatInstructor(user);
   const isVip = user?.is_vip || user?.subscription_tier === 'vip';
 
   useEffect(() => {

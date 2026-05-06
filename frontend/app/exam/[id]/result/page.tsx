@@ -505,15 +505,18 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={loading ? undefined : onClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header — ẩn nút X khi đang loading */}
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-bold text-lg text-gray-900">
             Phân tích câu {question.question_number || question.sub_question_number}
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <span className="text-gray-400 text-xl">×</span>
-          </button>
+          {!loading && (
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <span className="text-gray-400 text-xl">×</span>
+            </button>
+          )}
         </div>
         <div className="p-6">
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
@@ -570,9 +573,11 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
           )}
         </div>
         <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
-            Đóng
-          </button>
+          {!loading && (
+            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
+              Đóng
+            </button>
+          )}
         </div>
       </div>
     </div>
