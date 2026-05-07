@@ -1,8 +1,99 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiCheckCircle, FiXCircle, FiBookOpen, FiZap, FiAlertCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiBookOpen, FiZap, FiAlertCircle, FiCpu } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
+
+/* ─── AI Text Formatter ──────────────────────────────────────────── */
+function parseAIExplanation(text: string): React.ReactNode[] {
+    if (!text) return [];
+    const lines = text.split('\n').filter(l => l.trim());
+    const blocks: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i].trim();
+
+        // Section heading (## heading, ### heading, or "## Tiêu đề")
+        if (/^#{1,3}\s/.test(line)) {
+            blocks.push(
+                <h4 key={`h-${i}`} className="mt-3 first:mt-0 font-bold text-purple-800 text-sm flex items-center gap-1.5">
+                    <FiCpu size={12} className="shrink-0" />
+                    {line.replace(/^#{1,3}\s/, '')}
+                </h4>
+            );
+            i++; continue;
+        }
+
+        // Bold label + content: "Tại sao sai:** Nội dung" or "Tại sao sai: Nội dung"
+        const labelMatch = line.match(/^([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸĐ][^\s:：]*[:：.]?\s?)(.+)/);
+        if (labelMatch) {
+            const label = labelMatch[1].replace(/[:：.]\s?$/, '').trim();
+            const content = labelMatch[2].trim();
+            blocks.push(
+                <div key={`lb-${i}`} className="mt-2 first:mt-0">
+                    <span className="font-semibold text-purple-800 text-sm">{label} </span>
+                    <span className="text-gray-700 text-sm">{content}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Bullet points (—, •, -, *)
+        if (/^[—•\-\*]\s/.test(line)) {
+            const bulletText = line.replace(/^[—•\-\*]\s/, '');
+            if (bulletText) {
+                blocks.push(
+                    <div key={`b-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
+                        <span className="text-purple-400 shrink-0 mt-0.5">•</span>
+                        <span className="text-gray-700 text-sm flex-1">{bulletText}</span>
+                    </div>
+                );
+            }
+            i++; continue;
+        }
+
+        // Numbered list "1. " or "1) "
+        const numMatch = line.match(/^(\d+[.)]\s)(.+)/);
+        if (numMatch) {
+            blocks.push(
+                <div key={`n-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
+                    <span className="text-purple-600 font-bold text-sm shrink-0 w-5">{numMatch[1].trim()}</span>
+                    <span className="text-gray-700 text-sm flex-1">{numMatch[2]}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Math formula lines (contain =, ≤, ≥, √, ∑, π, →, ⇒, etc.)
+        if (/[=<>≤≥√∑∏π→⇒∈∉⊂⊃∀∃]/.test(line) && !/^[A-ZÀÁ][a-zàáạảã]/.test(line)) {
+            blocks.push(
+                <div key={`m-${i}`} className="mt-1 font-mono text-sm bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg text-purple-900 overflow-x-auto">
+                    {line}
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Empty separator line
+        if (!line) { i++; continue; }
+
+        // Regular paragraph — clean **bold** markers
+        const clean = line
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/`(.+?)`/g, '$1');
+
+        if (clean.length > 0) {
+            blocks.push(
+                <p key={`p-${i}`} className="mt-1 first:mt-0 text-sm text-gray-700 leading-relaxed">{clean}</p>
+            );
+        }
+        i++;
+    }
+
+    return blocks;
+}
 
 interface QuestionResult {
     question_number: number;
@@ -215,20 +306,20 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                                     <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
                                         <FiZap size={12} /> Tại sao sai?
                                     </p>
-                                    <p className="text-sm text-gray-700 leading-relaxed">{exp.whyWrong}</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed">{parseAIExplanation(exp.whyWrong)}</p>
                                 </div>
 
-                                {exp.knowledgeNote && (
+                                        {exp.knowledgeNote && (
                                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                         <p className="text-xs font-bold text-blue-700 mb-2">📖 Kiến thức liên quan</p>
-                                        <p className="text-sm text-blue-800 leading-relaxed">{exp.knowledgeNote}</p>
+                                        <p className="text-sm text-blue-800 leading-relaxed">{parseAIExplanation(exp.knowledgeNote)}</p>
                                     </div>
                                 )}
 
                                 {exp.tip && (
                                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                                         <p className="text-xs font-bold text-amber-700 mb-2">💡 Mẹo ghi nhớ</p>
-                                        <p className="text-sm text-amber-800">{exp.tip}</p>
+                                        <p className="text-sm text-amber-800">{parseAIExplanation(exp.tip)}</p>
                                     </div>
                                 )}
 

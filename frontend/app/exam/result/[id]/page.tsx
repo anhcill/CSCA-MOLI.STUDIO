@@ -10,6 +10,96 @@ import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 
+/* ─── AI Text Formatter ──────────────────────────────────────────── */
+function parseAIExplanation(text: string): React.ReactNode[] {
+    if (!text) return [];
+    const lines = text.split('\n').filter(l => l.trim());
+    const blocks: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i].trim();
+
+        // Section heading
+        if (/^#{1,3}\s/.test(line)) {
+            blocks.push(
+                <h4 key={`h-${i}`} className="mt-3 first:mt-0 font-bold text-purple-800 text-sm flex items-center gap-1.5">
+                    <FiCpu size={12} className="shrink-0" />
+                    {line.replace(/^#{1,3}\s/, '')}
+                </h4>
+            );
+            i++; continue;
+        }
+
+        // Bold label + content
+        const labelMatch = line.match(/^([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸĐ][^\s:：]*[:：.]?\s?)(.+)/);
+        if (labelMatch) {
+            const label = labelMatch[1].replace(/[:：.]\s?$/, '').trim();
+            const content = labelMatch[2].trim();
+            blocks.push(
+                <div key={`lb-${i}`} className="mt-2 first:mt-0">
+                    <span className="font-semibold text-purple-800 text-sm">{label} </span>
+                    <span className="text-gray-700 text-sm">{content}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Bullet points
+        if (/^[—•\-\*]\s/.test(line)) {
+            const bulletText = line.replace(/^[—•\-\*]\s/, '');
+            if (bulletText) {
+                blocks.push(
+                    <div key={`b-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
+                        <span className="text-purple-400 shrink-0 mt-0.5">•</span>
+                        <span className="text-gray-700 text-sm flex-1">{bulletText}</span>
+                    </div>
+                );
+            }
+            i++; continue;
+        }
+
+        // Numbered list
+        const numMatch = line.match(/^(\d+[.)]\s)(.+)/);
+        if (numMatch) {
+            blocks.push(
+                <div key={`n-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
+                    <span className="text-purple-600 font-bold text-sm shrink-0 w-5">{numMatch[1].trim()}</span>
+                    <span className="text-gray-700 text-sm flex-1">{numMatch[2]}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Math formula
+        if (/[=<>≤≥√∑∏π→⇒∈∉⊂⊃∀∃]/.test(line) && !/^[A-ZÀÁ][a-zàáạảã]/.test(line)) {
+            blocks.push(
+                <div key={`m-${i}`} className="mt-1 font-mono text-sm bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg text-purple-900 overflow-x-auto">
+                    {line}
+                </div>
+            );
+            i++; continue;
+        }
+
+        if (!line) { i++; continue; }
+
+        // Regular paragraph — clean **bold** markers
+        const clean = line
+            .replace(/\*\*(.+?)\*\*/g, '$1')
+            .replace(/\*(.+?)\*/g, '$1')
+            .replace(/`(.+?)`/g, '$1');
+
+        if (clean.length > 0) {
+            blocks.push(
+                <p key={`p-${i}`} className="mt-1 first:mt-0 text-sm text-gray-700 leading-relaxed">{clean}</p>
+            );
+        }
+        i++;
+    }
+
+    return blocks;
+}
+
 interface AnswerOption {
     key: string;
     text: string;
@@ -57,6 +147,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const [showExplanationModal, setShowExplanationModal] = useState<QuestionResult | null>(null);
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [reviewStarted, setReviewStarted] = useState(false);
 
     useEffect(() => {
         loadResult();
@@ -175,7 +266,10 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                         { key: 'chat', label: '🤖 Hỏi AI', icon: FiMessageCircle },
                     ].map(tab => (
                         <button key={tab.key}
-                            onClick={() => setActiveTab(tab.key as any)}
+                            onClick={() => {
+                                setActiveTab(tab.key as any);
+                                if (tab.key === 'review') setReviewStarted(false);
+                            }}
                             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${
                                 activeTab === tab.key
                                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-200'
@@ -313,11 +407,28 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 {/* ── TAB: XEM LẠI BÀI ── */}
                 {activeTab === 'review' && (
                     <div className="space-y-4">
-                        {answers.length === 0 ? (
-                            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
-                                <p className="text-lg">Không có dữ liệu câu hỏi chi tiết</p>
+                        {!reviewStarted ? (
+                            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-purple-200 rounded-2xl p-6 mb-4 text-center">
+                                <div className="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <FiBookOpen className="text-purple-600" size={24} />
+                                </div>
+                                <h3 className="font-bold text-gray-900 text-lg mb-2">Xem lại từng câu</h3>
+                                <p className="text-gray-500 text-sm mb-5 max-w-md mx-auto">
+                                    Hãy xem lại đáp án từng câu bên dưới. Sau khi xem hết, AI phân tích sẽ hiện ra giúp bạn tổng hợp kiến thức.
+                                </p>
+                                <button
+                                    onClick={() => setReviewStarted(true)}
+                                    className="px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold text-sm hover:bg-purple-700 transition-colors shadow-lg shadow-purple-200">
+                                    Bắt đầu xem lại
+                                </button>
                             </div>
                         ) : (
+                            <>
+                                {answers.length === 0 ? (
+                                    <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
+                                        <p className="text-lg">Không có dữ liệu câu hỏi chi tiết</p>
+                                    </div>
+                                ) : (
                             answers.map((q, index) => {
                                 const status = !q.selected_answer_key ? 'unanswered'
                                     : q.is_correct ? 'correct' : 'incorrect';
@@ -422,6 +533,18 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                 );
                             })
                         )}
+                        </>
+                        )}
+
+                        {/* AI Analysis — chỉ hiện khi đã bắt đầu xem lại */}
+                        {reviewStarted && (
+                            <AIExamAnalysis
+                                attemptId={result.id}
+                                aiAnalysis={aiAnalysis}
+                                aiLoading={aiLoading}
+                                onRefresh={() => loadAIAnalysis(result.id)}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -515,12 +638,12 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                     ) : explanation?.success ? (
                         <div className="space-y-3">
                             <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                                <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
-                                    🤖 AI phân tích
+                                <p className="text-xs font-bold text-purple-700 mb-3 flex items-center gap-1.5">
+                                    <FiCpu size={12} /> 🤖 AI phân tích
                                 </p>
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                    {explanation.answer}
-                                </p>
+                                <div className="space-y-1">
+                                    {parseAIExplanation(explanation.answer)}
+                                </div>
                             </div>
                             {(question.explanation || question.explanation_cn) && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">

@@ -45,10 +45,25 @@ function formatMessage(text: string): React.ReactNode[] {
             continue;
         }
 
-        // Math formula lines (contain math symbols)
-        if (line.match(/[=<>≤≥√∑∏π]/) && !line.match(/^[A-ZÀÁ]/)) {
+        // Bullet points
+        if (/^[—•\-\*]\s/.test(line)) {
+            const bulletText = line.replace(/^[—•\-\*]\s/, '');
+            if (bulletText) {
+                blocks.push(
+                    <div key={`b-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
+                        <span className="text-purple-400 shrink-0 mt-0.5">•</span>
+                        <span className="text-gray-700 text-sm flex-1 leading-relaxed">{bulletText}</span>
+                    </div>
+                );
+            }
+            i++;
+            continue;
+        }
+
+        // Math formula lines
+        if (line.match(/[=<>≤≥√∑∏π→⇒∈∉⊂⊃]/) && !line.match(/^[A-ZÀÁ]/)) {
             blocks.push(
-                <p key={`math-${i}`} className="mt-1 font-mono text-sm bg-purple-50 px-3 py-2 rounded-lg text-purple-900">
+                <p key={`math-${i}`} className="mt-1 font-mono text-sm bg-purple-50 px-3 py-2 rounded-lg text-purple-900 overflow-x-auto">
                     {line}
                 </p>
             );
@@ -64,7 +79,7 @@ function formatMessage(text: string): React.ReactNode[] {
                 .replace(/^[-•*]\s+/, '');
 
             blocks.push(
-                <p key={`text-${i}`} className="mt-1 text-sm leading-relaxed">{clean}</p>
+                <p key={`text-${i}`} className="mt-1 first:mt-0 text-sm text-gray-700 leading-relaxed">{clean}</p>
             );
         }
         i++;

@@ -233,7 +233,7 @@ export default function MessagesPage() {
             <ChatPanel
               partnerId={selectedPartner}
               partnerName={selectedConv?.full_name || 'Người dùng'}
-              partnerAvatar={selectedConv ? getAvatar(selectedConv) : `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedConv?.full_name || 'User')}&background=random&size=80`}
+              partnerAvatar={selectedConv ? getAvatar(selectedConv) : 'https://ui-avatars.com/api/?name=User&background=random&size=80'}
               onBack={() => { setSelectedPartner(null); router.replace('/tin-nhan', undefined); }}
               onNewMessageReceived={() => {
                 if (!selectedPartner) return;

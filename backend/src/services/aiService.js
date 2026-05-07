@@ -223,24 +223,18 @@ async function analyzeExamResult(attemptData) {
   Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}`.substring(0, 600);
   }).join('\n\n');
 
-  const prompt = `Bạn là chuyên gia giáo dục cho kỳ thi HSK/CSCA.
-Phân tích bằng TIẾNG VIỆT, NGẮN GỌN, DỄ HIỂU.
+  const prompt = `Phân tích bài thi cho học sinh. Viết TIẾNG VIỆT, mỗi phần ngắn gọn 1-3 câu, đi thẳng vào nội dung.
 
 THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
-- Số câu đúng: ${correctCount}/${totalQuestions} (${percentage}%)
-- Thời gian: ${attemptData.duration || 'N/A'} phút
+- Đúng: ${correctCount}/${totalQuestions} (${percentage}%)
 ${attemptData.previousAttempt ? `
-SO SÁNH VỚI LẦN TRƯỚC:
-- Lần trước: ${attemptData.previousAttempt.examTitle} — ${attemptData.previousAttempt.score}%
-- Lần này: ${percentage}%
-- Chênh lệch: ${attemptData.previousAttempt.delta >= 0 ? '+' : ''}${attemptData.previousAttempt.delta}%
-` : '(Không có lần thi trước để so sánh)'}
+SO SÁNH: Lần trước ${attemptData.previousAttempt.score}% → Lần này ${percentage}% (${attemptData.previousAttempt.delta >= 0 ? '+' : ''}${attemptData.previousAttempt.delta}%)` : ''}
 
 CHI TIẾT TỪNG CÂU:
 ${questionsText}
 
-YÊU CẦU — trả về JSON, mỗi trường text tối đa 2-3 câu:
+TRẢ VỀ JSON, mỗi text tối đa 3 câu:
 {
   "score": ${percentage},
   "grade": "Mô tả ngắn",
@@ -248,10 +242,10 @@ YÊU CẦU — trả về JSON, mỗi trường text tối đa 2-3 câu:
   "summary": "Tổng kết 1-2 câu",
   "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
   "weaknesses": ["Điểm yếu 1", "Điểm yếu 2"],
-  "analysis": "Phân tích ngắn gọn 2-3 câu",
-  "overallAdvice": "Lời khuyên 1-2 câu",
+  "analysis": "Phân tích 2-3 câu về lý do sai",
+  "overallAdvice": "Lời khuyên 2-3 câu",
   "priorityTopics": ["Chủ đề 1", "Chủ đề 2"],
-  "studyPlan": "Kế hoạch học ngắn gọn 2-3 câu, gồm: ôn gì, làm gì, bao lâu"
+  "studyPlan": "Kế hoạch học 2-3 câu"
 }`;
 
   try {
@@ -296,21 +290,28 @@ Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}
 Loại câu: ${q.question_type || 'single_choice'}`;
   }).join('\n\n');
 
-  const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT, NGẮN GỌN.
+  const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT.
+
+YÊU CẦU:
+- Viết plain text thuần túy, không dùng **bold**, không dùng ##, không dùng bullet, không dùng bất kỳ ký hiệu markdown nào
+- Mỗi phần: 1-3 câu ngắn gọn
+- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 电脑 (diàn nǎo)
+- Đi thẳng vào vấn đề, không lặp đề bài
+- Viết tự nhiên như đang giảng cho học sinh
 
 CÁC CÂU SAI:
 ${questionsText}
 
-YÊU CẦU — trả về JSON, mỗi trường tối đa 2-3 câu:
+TRẢ VỀ JSON:
 {
   "explanations": [
     {
       "questionNumber": 1,
-      "yourAnswer": "Bạn chọn: ..." ,
+      "yourAnswer": "Bạn chọn: ...",
       "correctAnswer": "Đáp án đúng: ...",
-      "whyWrong": "Tại sao sai (1-2 câu)",
-      "knowledgeNote": "Kiến thức liên quan (1-2 câu)",
-      "tip": "Mẹo nhớ (1 câu)",
+      "whyWrong": "Giải thích 1-2 câu tại sao sai",
+      "knowledgeNote": "Kiến thức liên quan 1-2 câu",
+      "tip": "Mẹo nhớ 1 câu",
       "vocabulary": []
     }
   ]
@@ -384,17 +385,16 @@ async function analyzeTopics(examAttempts) {
   const strengths = subjects.filter(s => s.average >= 75).sort((a, b) => b.average - a.average);
   const weaknesses = subjects.filter(s => s.average < 75).sort((a, b) => a.average - b.average);
 
-  const prompt = `Phân tích kết quả học tập qua ${examAttempts.length} bài thi và đưa ra lời khuyên bằng TIẾNG VIỆT.
+  const prompt = `Phân tích kết quả học tập qua ${examAttempts.length} bài thi. Viết TIẾNG VIỆT, mỗi phần ngắn gọn.
 
 KẾT QUẢ THEO MÔN:
-${subjects.map(s => `- ${s.name}: ${s.average}% (${s.count} lần thi)`).join('\n')}
+${subjects.map(s => `- ${s.name}: ${s.average}% (${s.count} lần)`).join('\n')}
 
 TRẢ VỀ JSON:
 {
-  "topicStats": [...],  // mảng các môn đã phân tích
-  "strengths": [{"name": "Tên môn", "average": 87, "advice": "Lời khuyên ngắn"}],
-  "weaknesses": [{"name": "Tên môn", "average": 45, "advice": "Lời khuyên ngắn"}],
-  "topRecommendations": ["Gợi ý 1", "Gợi ý 2", "Gợi ý 3"]
+  "strengths": [{"name": "...", "average": 87, "advice": "1 câu"}],
+  "weaknesses": [{"name": "...", "average": 45, "advice": "1 câu"}],
+  "topRecommendations": ["Gợi ý 1", "Gợi ý 2"]
 }`;
 
   try {
@@ -456,7 +456,7 @@ async function getPracticeRecommendations(weaknesses, availableExams = []) {
     };
   }
 
-  const prompt = `Dựa vào các điểm yếu sau, hãy gợi ý bài học bằng TIẾNG VIỆT:
+  const prompt = `Gợi ý bài học dựa trên điểm yếu. Viết TIẾNG VIỆT, mỗi phần ngắn gọn.
 
 ĐIỂM YẾU: ${weakSubjects.join(', ')}
 
@@ -464,15 +464,14 @@ TRẢ VỀ JSON:
 {
   "recommendations": [
     {
-      "type": "vocabulary|grammar|reading|listening|grammar",
-      "title": "Tiêu đề gợi ý (ngắn, hấp dẫn)",
-      "description": "Mô tả 1-2 câu tại sao cần học phần này",
+      "type": "vocabulary|grammar|reading",
+      "title": "Tiêu đề ngắn gọn",
+      "description": "1-2 câu mô tả tại sao cần học phần này",
       "priority": "high|medium|low",
-      "estimatedTime": "30-60 phút",
       "actionSteps": ["Bước 1", "Bước 2", "Bước 3"]
     }
   ],
-  "studyPlan": "Lịch học tổng quát 1 tuần"
+  "studyPlan": "Lịch học 1-2 câu"
 }`;
 
   try {
@@ -526,16 +525,19 @@ async function askAI(question, context = {}) {
     .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
     .join('\n');
 
-  const prompt = `Bạn là một người bạn giỏi tiếng Trung, đang trò chuyện với học sinh Việt Nam. Trả lời BẰNG TIẾNG VIỆT, giọng vui vẻ, thân thiện, tự nhiên như đang chat.
+  const prompt = `Trả lời câu hỏi của học sinh về tiếng Trung. Viết TIẾNG VIỆT, plain text thuần túy.
 
-PHONG CÁCH:
-- Nói CHUYỆN, không phải giảng bài. Viết như đang nhắn tin cho bạn.
-- Có gì nói nấy, không cần theo khuôn mẫu. Câu hỏi ngắn thì trả lời ngắn, câu hỏi dài thì giải thích kỹ.
-- Khi dùng từ tiếng Trung, ghi kèm pinyin ngay bên cạnh (không cần tách dòng riêng).
-- Đưa ví dụ thật, có thể đặt vào tình huống cụ thể.
-- Khi cần, dùng gạch đầu dòng cho dễ đọc, nhưng đừng lạm dụng.
-- KHÔNG bắt đầu bằng "Chào bạn", "Rất vui được gặp bạn" hay bất kỳ lời chào máy móc nào.
-- KHÔNG viết cứng: "Giải thích ngắn gọn:", "Phân tích chi tiết:", "Công thức:", "Ví dụ:", "Từ mới:", "Lời động viên:".
+YÊU CẦU:
+- Không dùng **bold**, không dùng ##, không dùng bullet, không ký hiệu markdown gì cả
+- Viết tự nhiên như đang nhắn tin cho bạn
+- Câu hỏi ngắn → trả lời ngắn
+- Câu hỏi dài → giải thích đầy đủ nhưng không lan man
+- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học
+- Đưa ví dụ cụ thể trong đời thường khi cần
+
+TRÁNH:
+- KHÔNG bắt đầu bằng "Chào bạn", "Rất vui được..."
+- KHÔNG lặp lại câu hỏi của user
 
 Ngữ cảnh bài thi (nếu có):
 ${contextText || '(không có)'}
@@ -600,27 +602,20 @@ async function analyzeProgress(examAttempts) {
   const delta = last - first;
   const avg = Math.round(history.reduce((s, h) => s + h.score, 0) / history.length);
 
-  const prompt = `So sánh tiến bộ học tập qua ${history.length} bài thi.
+  const prompt = `So sánh tiến bộ qua ${history.length} bài thi. Viết TIẾNG VIỆT, ngắn gọn.
 
-LỊCH SỬ ĐIỂM (theo thứ tự thời gian):
-${history.map((h, i) => `${i + 1}. ${h.examTitle} (${new Date(h.date).toLocaleDateString('vi-VN')}): ${h.score}% (${h.correct}/${h.total})`).join('\n')}
+LỊCH SỬ (theo thời gian):
+${history.map((h, i) => `${i + 1}. ${h.examTitle}: ${h.score}% (${h.correct}/${h.total})`).join('\n')}
 
-PHÂN TÍCH:
-- Điểm lần đầu: ${first}%
-- Điểm lần gần nhất: ${last}%
-- Chênh lệch: ${delta > 0 ? '+' : ''}${delta}%
-- Điểm trung bình: ${avg}%
+Hiện tại: ${last}% | Trung bình: ${avg}% | Thay đổi: ${delta > 0 ? '+' : ''}${delta}%
 
 TRẢ VỀ JSON:
 {
-  "hasEnoughData": true,
-  "totalAttempts": ${history.length},
-  "history": [...],
   "delta": ${delta},
   "trend": "improving|declining|stable",
   "summary": "Tổng kết 2-3 câu về xu hướng",
   "improvementNotes": ["Ghi chú 1", "Ghi chú 2"],
-  "warningNotes": ["Cảnh báo 1"] (nếu có)
+  "warningNotes": ["Cảnh báo"] (nếu có)
 }`;
 
   try {
@@ -688,21 +683,18 @@ async function recommendNextExam(context = {}) {
       isRecommended: e.difficulty_level === level,
     }));
 
-  const prompt = `Gợi ý đề thi tiếp theo phù hợp với trình độ của học viên.
+  const prompt = `Gợi ý đề thi tiếp theo phù hợp. Viết TIẾNG VIỆT, ngắn gọn.
 
-TRÌNH ĐỘ HIỆN TẠI:
-- Mức độ khuyến nghị: ${level}
-- Điểm lần trước: ${userScore || 'N/A'}%
-- Môn: ${subjectName || 'Tổng hợp'}
+TRÌNH ĐỘ: ${level} (${userScore || 'N/A'}%)
+MÔN: ${subjectName || 'Tổng hợp'}
 
-CÁC ĐỀ CÓ SẴN:
+ĐỀ CÓ SẴN:
 ${recommendations.map(e => `- "${e.title}" (${e.difficultyLevel}, ${e.totalQuestions} câu)`).join('\n')}
 
 TRẢ VỀ JSON:
 {
-  "recommendedExam": { "id": ..., "title": "...", "reason": "Tại sao gợi ý đề này" },
-  "alternativeExams": [...],
-  "studyAdvice": "Lời khuyên trước khi làm đề tiếp theo"
+  "recommendedExam": { "id": ..., "reason": "1-2 câu tại sao gợi ý đề này" },
+  "studyAdvice": "Lời khuyên ngắn trước khi làm đề tiếp theo"
 }`;
 
   try {
