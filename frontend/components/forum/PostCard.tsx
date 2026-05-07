@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   FiHeart, FiMessageCircle, FiShare2, FiMoreHorizontal,
   FiEdit2, FiTrash2, FiSend, FiLoader, FiX
@@ -9,7 +10,6 @@ import { useAuthStore } from '@/lib/store/authStore';
 import * as postsApi from '@/lib/api/posts';
 import type { Post } from '@/lib/api/posts';
 import PostAuthor from './PostAuthor';
-import UserProfileCard from './UserProfileCard';
 
 function timeAgo(ts: string) {
   const s = (Date.now() - new Date(ts).getTime()) / 1000;
@@ -58,8 +58,6 @@ export default function PostCard({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [authorCardOpen, setAuthorCardOpen] = useState(false);
-  const [authorRef, setAuthorRef] = useState<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleEdit = () => {
@@ -106,15 +104,6 @@ export default function PostCard({
             isVip={post.author_is_vip}
           />
         </div>
-
-        {/* Author profile card */}
-        {authorCardOpen && (
-          <UserProfileCard
-            userId={post.user_id}
-            anchorRef={{ current: authorRef } as React.RefObject<HTMLElement>}
-            onClose={() => setAuthorCardOpen(false)}
-          />
-        )}
 
         {isOwn && (
           <div className="relative" ref={menuRef}>
@@ -277,22 +266,10 @@ function CommentsSection({
   onLikeComment?: (postId: number, comment: postsApi.Comment) => void;
 }) {
   const { user, isAuthenticated } = useAuthStore();
-  const [avatarRef, setAvatarRef] = useState<HTMLDivElement | null>(null);
-  const [showAvatarCard, setShowAvatarCard] = useState(false);
-  const [cardUserId, setCardUserId] = useState<number | null>(null);
-  const [cardAnchor, setCardAnchor] = useState<HTMLDivElement | null>(null);
-  const cardAnchorRef = useRef<HTMLDivElement | null>(null);
-  const currentUserAvatarRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const getAvatarUrl = (avatar?: string | null, avatarUrl?: string | null, name?: string, size = 36) =>
     avatarUrl || avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || '')}&background=random&size=${size * 2}`;
-
-  const openProfileCard = (userId: number, anchorEl: HTMLDivElement | null) => {
-    setCardUserId(userId);
-    cardAnchorRef.current = anchorEl;
-    setCardAnchor(anchorEl);
-    setShowAvatarCard(true);
-  };
 
   const parents = comments.filter(c => !c.parent_id);
   const childrenMap = new Map<number, postsApi.Comment[]>();
@@ -372,7 +349,6 @@ function CommentsSection({
               onLikeComment={onLikeComment}
               onSetReplyingTo={onSetReplyingTo}
               replyingTo={replyingTo}
-              onOpenProfileCard={openProfileCard}
             />
           ))}
 
@@ -383,14 +359,6 @@ function CommentsSection({
             </div>
           )}
         </div>
-      )}
-
-      {showAvatarCard && cardUserId && cardAnchor && (
-        <UserProfileCard
-          userId={cardUserId}
-          anchorRef={cardAnchorRef as React.RefObject<HTMLElement | null>}
-          onClose={() => setShowAvatarCard(false)}
-        />
       )}
     </div>
   );
@@ -404,7 +372,6 @@ function CommentThread({
   onLikeComment,
   onSetReplyingTo,
   replyingTo,
-  onOpenProfileCard,
 }: {
   comment: postsApi.Comment;
   postId: number;
@@ -412,9 +379,8 @@ function CommentThread({
   onLikeComment?: (postId: number, comment: postsApi.Comment) => void;
   onSetReplyingTo?: (val: { postId: number; commentId: number; userId: number; userName: string } | null | undefined) => void;
   replyingTo?: { postId: number; commentId: number; userId: number; userName: string } | null | undefined;
-  onOpenProfileCard?: (userId: number, anchorEl: HTMLDivElement | null) => void;
 }) {
-  const [avatarEl, setAvatarEl] = useState<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   const getAvatarUrl = (avatar?: string | null, avatarUrl?: string | null, name?: string) =>
     avatarUrl || avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || '')}&background=random&size=64`;
@@ -423,8 +389,7 @@ function CommentThread({
     <div>
       <div className="flex gap-3 items-start">
         <div
-          ref={setAvatarEl}
-          onClick={() => onOpenProfileCard?.(comment.user_id, avatarEl)}
+          onClick={() => router.push(`/profile/user/${comment.user_id}`)}
           className="shrink-0 cursor-pointer"
         >
           <img
@@ -472,7 +437,7 @@ function CommentThread({
           {replies.map(r => (
             <div key={r.id} className="flex gap-3 items-start">
               <div
-                onClick={() => onOpenProfileCard?.(r.user_id, null)}
+                onClick={() => router.push(`/profile/user/${r.user_id}`)}
                 className="shrink-0 cursor-pointer"
               >
                 <img

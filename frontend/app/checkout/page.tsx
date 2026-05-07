@@ -268,18 +268,36 @@ function CheckoutContent() {
     axios.get('/vip/packages')
       .then(res => {
         const pkgs: DbPackage[] = res.data.data || [];
-        setAllPackages(pkgs);
+
+        // Ẩn gói mà user đã có (hoặc cấp thấp hơn cấp hiện tại)
+        const userTier = user?.subscription_tier;
+        const filteredPkgs = pkgs.filter(pkg => {
+          if (userTier === 'premium') {
+            // Premium không thấy gói premium và vip
+            return pkg.tier !== 'premium' && pkg.tier !== 'vip';
+          }
+          if (userTier === 'vip') {
+            // VIP không thấy gói vip (nhưng vẫn thấy premium)
+            return pkg.tier !== 'vip';
+          }
+          return true;
+        });
+
+        setAllPackages(filteredPkgs);
         if (urlPackageId) {
-          const found = pkgs.find(p => p.id === parseInt(urlPackageId));
+          const found = filteredPkgs.find(p => p.id === parseInt(urlPackageId));
           if (found) setSelectedPkg(found);
-        } else if (pkgs.length > 0) {
-          setSelectedPkg(pkgs[0]);
+        } else if (filteredPkgs.length > 0) {
+          setSelectedPkg(filteredPkgs[0]);
+        } else {
+          // Tài khoản đã có gói cao nhất → redirect về trang VIP
+          router.push('/vip');
         }
       })
       .catch(() => setAllPackages([]))
       .finally(() => setPkgLoading(false));
     if (urlMethod) setSelectedMethod(urlMethod);
-  }, [isAuthenticated, urlPackageId, urlMethod, router]);
+  }, [isAuthenticated, urlPackageId, urlMethod, router, user?.subscription_tier]);
 
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
@@ -384,6 +402,18 @@ function CheckoutContent() {
         {pkgLoading ? (
           <div className="flex justify-center py-10">
             <FiLoader size={28} className="animate-spin text-indigo-500" />
+          </div>
+        ) : allPackages.length === 0 ? (
+          <div className="text-center py-10 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200">
+            <div className="text-4xl mb-3">👑</div>
+            <h3 className="font-black text-gray-900 mb-1">Bạn đã có gói cao nhất!</h3>
+            <p className="text-sm text-gray-500 mb-4">Tài khoản của bạn đã được nâng cấp. Không cần mua thêm.</p>
+            <button
+              onClick={() => router.push('/profile')}
+              className="px-6 py-2.5 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-colors shadow-lg shadow-amber-200 text-sm"
+            >
+              Xem thông tin tài khoản
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
