@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiArrowLeft, FiSend, FiSmile, FiMoreVertical,
-  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX
+  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX, FiPalette, FiUpload, FiTrash2
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
+import { useChatBgStore, CHAT_BG_PRESETS } from '@/lib/store/chatBgStore';
 import { getMessages, sendMessage, reportMessage, blockUser, ForumMessage } from '@/lib/api/messages';
 import {
   initSocket, joinConversation, leaveConversation,
@@ -30,6 +31,7 @@ interface Props {
 
 export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBack, onNewMessageReceived }: Props) {
   const { user } = useAuthStore();
+  const { bgType, bgPresetId, bgValue, setBgPreset, setBgCustom, resetBg } = useChatBgStore();
   const [messages, setMessages] = useState<ForumMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -62,6 +64,12 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const isAtBottomRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
   const scrollHeightBeforeRef = useRef<number>(0);
+
+  // Background picker state
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const [customBgUrl, setCustomBgUrl] = useState('');
+  const [bgError, setBgError] = useState('');
+  const bgInputRef = useRef<HTMLInputElement>(null);
 
   const updateScrollPosition = () => {
     if (!messagesScrollRef.current) return;
@@ -319,6 +327,43 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     setShowReport(true);
   };
 
+  // ── Background picker handlers ───────────────────────────────────────────────
+  const handleApplyCustomBg = () => {
+    const url = customBgUrl.trim();
+    if (!url) {
+      setBgError('Vui lòng nhập URL hình ảnh.');
+      return;
+    }
+    // Basic URL validation
+    if (!/^https?:\/\/.+/i.test(url)) {
+      setBgError('URL không hợp lệ. Phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+    setBgError('');
+    setBgCustom(url);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setBgError('Chỉ chấp nhận file hình ảnh.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setBgError('File quá lớn. Tối đa 5MB.');
+      return;
+    }
+    setBgError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setBgCustom(dataUrl);
+      setCustomBgUrl('');
+    };
+    reader.readAsDataURL(file);
+  };
+
   useEffect(() => {
     const handler = () => setSelectedMsgId(null);
     document.addEventListener('click', handler);
@@ -410,6 +455,12 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               className="absolute right-0 top-11 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 py-1.5 z-[100] overflow-hidden"
             >
               <button
+                onClick={() => { setShowMenu(false); setShowBgPicker(true); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-violet-600 hover:bg-violet-50 transition-colors"
+              >
+                <FiPalette size={14} /> Đổi nền chat
+              </button>
+              <button
                 onClick={() => { setShowMenu(false); setShowReport(true); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 transition-colors"
               >
@@ -427,10 +478,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         </div>
       </div>
 
-      {/* ── Chat Background Pattern ── */}
-      <div className="flex-1 overflow-y-auto relative" style={{
-        background: 'linear-gradient(180deg, #f5f3ff 0%, #ede9fe 30%, #ddd6fe 60%, #c4b5fd 100%)',
-      }}>
+      {/* ── Chat Background ── */}
+      <div className="flex-1 overflow-y-auto relative" style={{ background: bgValue }}>
+        {/* Overlay for custom images to ensure readability */}
+        {bgType === 'custom' && (
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] pointer-events-none" />
+        )}
+
         <div ref={messagesScrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto py-4 px-3">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -637,6 +691,149 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           </button>
         </div>
       </div>
+
+      {/* ── Background Picker Modal ── */}
+      {showBgPicker && (
+        <div className="fixed inset-0 z-[9999] bg-black/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div
+            className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle bar for mobile */}
+            <div className="sm:hidden w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-1" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:pt-5 sm:pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-md">
+                  <FiPalette size={15} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-900 text-sm">Đổi nền chat</h3>
+                  <p className="text-[10px] text-gray-400 font-medium">Chọn màu hoặc hình ảnh yêu thích</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBgPicker(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all active:scale-90"
+              >
+                <FiX size={15} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+
+              {/* Preset gradients */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Màu nền có sẵn</p>
+                  <button
+                    onClick={resetBg}
+                    className="text-[10px] text-violet-500 font-bold hover:text-violet-700 transition-colors"
+                  >
+                    Đặt lại mặc định
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2.5">
+                  {CHAT_BG_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => setBgPreset(preset.id)}
+                      title={preset.label}
+                      className={`relative w-full aspect-square rounded-2xl shadow-md overflow-hidden transition-all active:scale-90 ${
+                        bgPresetId === preset.id
+                          ? 'ring-2 ring-violet-500 ring-offset-2 shadow-xl -translate-y-0.5'
+                          : 'hover:-translate-y-0.5 hover:shadow-lg'
+                      }`}
+                      style={{ background: preset.bg }}
+                    >
+                      {bgPresetId === preset.id && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-5 h-5 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-md">
+                            <FiCheck size={11} className="text-violet-600" />
+                          </div>
+                        </div>
+                      )}
+                      <span className="absolute bottom-0.5 left-0 right-0 text-[8px] font-bold text-center text-white drop-shadow-md truncate px-0.5">
+                        {preset.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">hoặc</span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+
+              {/* Custom image URL */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">Dùng hình ảnh</p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={customBgUrl}
+                    onChange={(e) => { setCustomBgUrl(e.target.value); setBgError(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCustomBg()}
+                    placeholder="Dán URL hình ảnh vào đây..."
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-gray-300"
+                  />
+                  <button
+                    onClick={handleApplyCustomBg}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-95 transition-all"
+                  >
+                    Áp dụng
+                  </button>
+                </div>
+                {bgError && (
+                  <p className="text-[10px] text-red-500 mt-1.5 font-semibold">{bgError}</p>
+                )}
+              </div>
+
+              {/* Upload from device */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">Tải ảnh lên</p>
+                <button
+                  onClick={() => bgInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-violet-400 hover:bg-violet-50/40 transition-all group"
+                >
+                  <FiUpload size={16} className="text-gray-400 group-hover:text-violet-500 transition-colors" />
+                  <span className="text-xs font-bold text-gray-400 group-hover:text-violet-600 transition-colors">
+                    Chọn ảnh từ thiết bị (tối đa 5MB)
+                  </span>
+                </button>
+                <input
+                  ref={bgInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                {bgType === 'custom' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden ring-2 ring-violet-200">
+                      <img src={bgValue.replace('url(', '').replace(')', '')} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-[10px] text-violet-500 font-semibold flex-1 truncate">Đang dùng ảnh tùy chỉnh</span>
+                    <button
+                      onClick={resetBg}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-bold transition-colors"
+                    >
+                      <FiTrash2 size={10} /> Xóa ảnh
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom safe area for mobile */}
+            <div className="h-5 sm:hidden" />
+          </div>
+        </div>
+      )}
 
       {/* ── Report Modal ── */}
       {showReport && (
