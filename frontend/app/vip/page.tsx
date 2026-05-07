@@ -158,7 +158,7 @@ export default function VipPricingPage() {
             <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"> PRO</span>
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mx-auto">
-            Mở khoá toàn bộ đề thi, video giải đề chính thức và đội ngũ cố vấn hỗ trợ riêng
+            Mở khoá đề thi cao cấp, phân tích bài thi bằng AI, video giải đề chi tiết và hỏi đáp 1-1 với giảng viên
           </p>
           {isVip && (
             <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-100 border border-amber-200 rounded-full text-sm text-amber-800 font-semibold">
@@ -236,25 +236,24 @@ export default function VipPricingPage() {
             {(vipPkgs.length > 0 || premiumPkgs.length > 0) && (
               <div className="mb-10">
                 {/* Section header */}
-                <div className="flex items-center gap-4 mb-4">
+                <div className="flex items-center justify-center gap-6 mb-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 bg-gray-300 rounded-md flex items-center justify-center">
-                      <span className="text-white text-[8px] font-black">F</span>
+                    <div className="w-6 h-6 bg-gray-300 rounded-lg flex items-center justify-center">
+                      <span className="text-white text-[10px] font-black">F</span>
                     </div>
-                    <span className="text-lg font-black text-gray-900">Gói Free</span>
-                    <span className="text-xs text-gray-400 font-medium">— Miễn phí dùng thử</span>
+                    <span className="text-base font-black text-gray-700">Miễn phí</span>
                   </div>
-                  <div className="w-px h-5 bg-gray-200" />
+                  <div className="w-px h-5 bg-gray-300" />
                   <div className="flex items-center gap-2">
                     <FaCrown className="text-indigo-500" size={18} />
-                    <span className="text-lg font-black text-gray-900">Gói VIP</span>
-                    <span className="text-xs text-gray-400 font-medium">— Mở khoá đề thi</span>
+                    <span className="text-base font-black text-gray-700">VIP</span>
+                    <span className="text-xs text-gray-400 font-medium">— Đề thi cao cấp + AI</span>
                   </div>
-                  <div className="w-px h-5 bg-gray-200" />
+                  <div className="w-px h-5 bg-gray-300" />
                   <div className="flex items-center gap-2">
                     <FaStar className="text-amber-500" size={18} />
-                    <span className="text-lg font-black text-gray-900">Gói Pre</span>
-                    <span className="text-xs text-gray-400 font-medium">— Đề thi + Video + Team cố vấn</span>
+                    <span className="text-base font-black text-gray-700">Pre</span>
+                    <span className="text-xs text-gray-400 font-medium">— Đề thi + Video giải đề + Hỏi đáp giảng viên</span>
                   </div>
                 </div>
 
@@ -262,16 +261,53 @@ export default function VipPricingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
                   {/* Free — left */}
                   <div className="flex flex-col">
-                    {freePkgs.map(pkg => (
-                      <PlanCard
-                        key={pkg.id} pkg={pkg} isVip={!!isVip}
-                        onCheckout={handleCheckout}
-                        discount={null}
-                        onApplyCoupon={handleApplyCoupon}
-                        selectedPkg={selectedPkg}
-                        onSelectPkg={setSelectedPkg}
-                      />
-                    ))}
+                    {freePkgs.length > 0 ? (
+                      freePkgs.map(pkg => (
+                        <PlanCard
+                          key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          onCheckout={handleCheckout}
+                          discount={null}
+                          onApplyCoupon={handleApplyCoupon}
+                          selectedPkg={selectedPkg}
+                          onSelectPkg={setSelectedPkg}
+                        />
+                      ))
+                    ) : (
+                      /* Hardcoded Free card when no free package in DB */
+                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white">
+                          <h3 className="text-lg font-black">Miễn phí</h3>
+                          <p className="text-white/70 text-xs mt-0.5">Dùng thử không giới hạn</p>
+                          <div className="mt-3 flex items-baseline gap-1">
+                            <span className="text-3xl font-black">0</span>
+                            <span className="text-white/70 text-xs">đ</span>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <ul className="space-y-2 mb-3">
+                            {[
+                              'Đề thi cơ bản miễn phí',
+                              'Xem kết quả sau thi',
+                              'Theo dõi lịch sử thi',
+                            ].map((feat, i) => (
+                              <li key={i} className="flex items-start gap-2.5">
+                                <FaCheckCircle size={16} className="text-gray-400 mt-0.5 shrink-0" />
+                                <span className="text-sm text-gray-700">{feat}</span>
+                              </li>
+                            ))}
+                            {[...Array(5)].map((_, i) => (
+                              <li key={i} className="flex items-start gap-2.5">
+                                <span className="text-gray-300 font-bold mt-0.5 shrink-0">—</span>
+                                <span className="text-sm text-gray-300">{['', 'Đề thi cao cấp (VIP/Pre)', 'Phân tích bài thi bằng AI', 'Video giải đề chi tiết', 'Hỏi đáp 1-1 giảng viên'][i + 3]}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="py-3.5 rounded-xl text-center text-sm font-semibold text-gray-400 bg-gray-50 border border-dashed border-gray-200">
+                            Miễn phí — không cần đăng ký
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {/* VIP — middle */}
                   <div className="flex flex-col">
@@ -320,61 +356,71 @@ export default function VipPricingPage() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="text-left px-5 py-3 font-bold text-gray-600">Tính năng</th>
-                  <th className="text-center px-3 py-3 font-bold text-gray-500 text-xs">Miễn phí</th>
-                  <th className="text-center px-3 py-3 font-bold text-indigo-600 text-xs">VIP</th>
-                  <th className="text-center px-3 py-3 font-bold text-amber-600 text-xs">Pre</th>
+                  <th className="text-center px-3 py-3">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div className="w-6 h-6 bg-gray-300 rounded-lg flex items-center justify-center">
+                        <span className="text-white text-[10px] font-black">F</span>
+                      </div>
+                      <span className="font-bold text-gray-500 text-xs">Miễn phí</span>
+                    </div>
+                  </th>
+                  <th className="text-center px-3 py-3">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <FaCrown className="text-indigo-500" size={18} />
+                      <span className="font-bold text-indigo-600 text-xs">VIP</span>
+                    </div>
+                  </th>
+                  <th className="text-center px-3 py-3">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <FaStar className="text-amber-500" size={18} />
+                      <span className="font-bold text-amber-600 text-xs">Pre</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(() => {
-                  if (comparisonFeatures.length > 0) {
-                    return comparisonFeatures.map((feat) => (
-                      <tr key={feat.id} className="bg-white">
-                        <td className="px-5 py-3 font-medium text-gray-700">{feat.feature_name}</td>
-                        <td className="text-center px-3 py-3">
-                          {feat.basic_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                        <td className="text-center px-3 py-3">
-                          {feat.vip_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                        <td className="text-center px-3 py-3">
-                          {feat.premium_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                      </tr>
-                    ));
-                  }
+                {/* Static comparison rows */}
+                {([
+                  { feat: 'Đề thi cơ bản', free: true, vip: true, pre: true },
+                  { feat: 'Đề thi cao cấp (VIP/Pre)', free: false, vip: true, pre: true },
+                  { feat: 'Phân tích bài thi bằng AI', free: false, vip: true, pre: true },
+                  { feat: 'Gợi ý đề thi phù hợp (AI)', free: false, vip: true, pre: true },
+                  { feat: 'Phân tích tiến bộ (AI)', free: false, vip: true, pre: true },
+                  { feat: 'Video giải đề chi tiết', free: false, vip: false, pre: true },
+                  { feat: 'Hỏi đáp 1-1 với giảng viên', free: false, vip: false, pre: true },
+                  { feat: 'Theo dõi lịch sử thi', free: true, vip: true, pre: true },
+                  { feat: 'Bảng xếp hạng', free: true, vip: true, pre: true },
+                  { feat: 'Hỗ trợ ưu tiên', free: false, vip: false, pre: true },
+                ] as { feat: string; free: boolean; vip: boolean; pre: boolean }[]).map((row, i) => (
+                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-5 py-3 font-medium text-gray-700">{row.feat}</td>
+                    <td className="text-center px-3 py-3">
+                      {row.free ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center px-3 py-3">
+                      {row.vip ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center px-3 py-3">
+                      {row.pre ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                  </tr>
+                ))}
 
-                  const allFeatures = Array.from(new Set(packages.flatMap(p => p.features || [])));
-                  if (allFeatures.length === 0) {
-                    return (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-6 text-center text-gray-400 text-sm">Không có dữ liệu tính năng</td>
-                      </tr>
-                    );
-                  }
-                  return allFeatures.map((feat, i) => {
-                    const freePackages = packages.filter(p => p.price === 0 && p.is_active);
-                    const vipPackages = packages.filter(p => (p.tier === 'vip' || /vip/i.test(p.name)) && !/pre/i.test(p.name) && p.is_active);
-                    const prePackages = packages.filter(p => (p.tier === 'premium' || /pre/i.test(p.name)) && p.is_active);
-                    const freeHas = freePackages.some(p => (p.features || []).includes(feat));
-                    const vipHas = vipPackages.some(p => (p.features || []).includes(feat));
-                    const preHas = prePackages.some(p => (p.features || []).includes(feat));
-                    return (
-                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-5 py-3 font-medium text-gray-700">{feat}</td>
-                        <td className="text-center px-3 py-3">
-                          {freeHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                        <td className="text-center px-3 py-3">
-                          {vipHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                        <td className="text-center px-3 py-3">
-                          {preHas ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  });
-                })()}
+                {/* Dynamic features from DB if any */}
+                {comparisonFeatures.length > 0 && comparisonFeatures.map((feat) => (
+                  <tr key={`db-${feat.id}`} className="bg-white">
+                    <td className="px-5 py-3 font-medium text-gray-700">{feat.feature_name}</td>
+                    <td className="text-center px-3 py-3">
+                      {feat.basic_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center px-3 py-3">
+                      {feat.vip_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center px-3 py-3">
+                      {feat.premium_has ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             </div>
