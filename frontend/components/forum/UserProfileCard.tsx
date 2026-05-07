@@ -222,12 +222,30 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
                 <FiUser size={12} /> Xem trang cá nhân
               </button>
               {isAuthenticated && currentUser?.id !== userId && (
-                <button
-                  onClick={handleMessage}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100"
-                >
-                  <FiMessageSquare size={12} /> Nhắn tin
-                </button>
+                <>
+                  <button
+                    onClick={handleMessage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100"
+                  >
+                    <FiMessageSquare size={12} /> Nhắn tin
+                  </button>
+                  {!profile.isBlocked ? (
+                    <button
+                      onClick={() => setShowReportModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-red-500 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-red-100 hover:bg-red-50"
+                    >
+                      <FiFlag size={12} /> Report
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleBlock}
+                      disabled={blocking}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-gray-500 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-gray-100 disabled:opacity-50"
+                    >
+                      <FiUserX size={12} /> {blocking ? 'Đang bỏ chặn...' : 'Bỏ chặn'}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -262,28 +280,6 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
             <FiCalendar size={10} />
             Tham gia {new Date(profile.created_at).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
           </p>
-
-          {/* Report */}
-          {isAuthenticated && currentUser?.id !== userId && (
-            <div className="px-5 mt-3 pt-3 border-t border-gray-100 pb-4">
-              {!profile.isBlocked ? (
-                <button
-                  onClick={() => setShowReportModal(true)}
-                  className="flex items-center gap-1.5 py-2 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg px-2 transition-colors"
-                >
-                  <FiFlag size={12} /> Báo cáo người dùng
-                </button>
-              ) : (
-                <button
-                  onClick={handleBlock}
-                  disabled={blocking}
-                  className="flex items-center gap-1.5 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg px-2 transition-colors disabled:opacity-50"
-                >
-                  <FiUserX size={12} /> {blocking ? 'Đang bỏ chặn...' : 'Bỏ chặn người dùng'}
-                </button>
-              )}
-            </div>
-          )}
         </>
       ) : (
         <div className="p-6 text-center text-gray-400 text-sm">Không tìm thấy người dùng</div>

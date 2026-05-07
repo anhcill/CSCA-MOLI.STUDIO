@@ -245,10 +245,10 @@ export default function UserProfilePage({ params }: Props) {
 
             {/* Action buttons */}
             {!isOwnProfile && (
-              <div className="flex gap-3 mt-5">
+              <div className="flex items-center gap-3 mt-5">
                 <button
                   onClick={handleMessage}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30 hover:-translate-y-0.5 transition-all"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30 hover:-translate-y-0.5 transition-all"
                 >
                   <FiMessageSquare size={15} /> Nhắn tin
                 </button>

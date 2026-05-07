@@ -96,3 +96,12 @@ export const reportMessage = async (messageId: number, reason: string) => {
   const res = await axios.post(`/messages/${messageId}/report`, { reason });
   return res.data as { success: boolean; message: string };
 };
+
+/**
+ * Block/Unblock một người dùng
+ * @route POST /api/users/:id/block
+ */
+export const blockUser = async (userId: number) => {
+  const res = await axios.post(`/users/${userId}/block`);
+  return res.data as { success: boolean; message: string; blocked: boolean };
+};

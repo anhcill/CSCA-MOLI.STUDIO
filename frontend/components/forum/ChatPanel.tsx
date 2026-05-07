@@ -6,7 +6,7 @@ import {
   FiUserX, FiFlag, FiCheck, FiCheckCircle
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
-import { getMessages, sendMessage, reportMessage, ForumMessage } from '@/lib/api/messages';
+import { getMessages, sendMessage, reportMessage, blockUser, ForumMessage } from '@/lib/api/messages';
 import {
   initSocket, joinConversation, leaveConversation,
   startTyping, stopTyping,
@@ -43,6 +43,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
+  const [blocked, setBlocked] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<number>(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -63,9 +68,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
   };
 
-  // Initialize scroll position on mount
+  // Initialize scroll position and track scroll events
   useEffect(() => {
     isAtBottomRef.current = true;
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateScrollPosition, { passive: true });
+    return () => el.removeEventListener('scroll', updateScrollPosition);
   }, []);
 
   // Load messages
@@ -87,8 +96,16 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         setPage(pageNum);
       }
     } catch (err: any) {
+      const status = err?.response?.status;
       const msg = err?.response?.data?.message || err?.message || 'Không thể tải tin nhắn';
-      if (pageNum === 1) setError(msg);
+      if (pageNum === 1) {
+        if (status === 403 && msg.includes('chặn')) {
+          setBlocked(true);
+          setError('Bạn đã chặn hoặc bị chặn bởi người dùng này.');
+        } else {
+          setError(msg);
+        }
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -159,10 +176,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   useEffect(() => {
     if (loading) return;
     if (isAutoScrollingRef.current) return;
-    if (isAtBottomRef.current || page === 1) {
+    // Only scroll if user is at the bottom (not when scrolled up reading old messages)
+    if (isAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, loading, page]);
+  }, [messages, loading]);
 
   // Load more (infinite scroll top)
   const handleScroll = () => {
@@ -244,9 +262,10 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     if (!reportReason.trim() || reportReason.length < 5) return;
     setReporting(true);
     try {
-      await reportMessage(messages[0]?.id || partnerId, reportReason);
+      await reportMessage(selectedMsgId || messages[messages.length - 1]?.id, reportReason);
       setShowReport(false);
       setReportReason('');
+      setSelectedMsgId(null);
       alert('Đã gửi report. Cảm ơn bạn!');
     } catch (err: any) {
       alert(err?.response?.data?.message || 'Lỗi khi gửi report');
@@ -254,6 +273,52 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       setReporting(false);
     }
   };
+
+  // Block/Unblock user
+  const handleBlockUser = async () => {
+    setBlocking(true);
+    setShowMenu(false);
+    try {
+      await blockUser(partnerId);
+      alert('Đã chặn người dùng.');
+      onBack();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Lỗi khi chặn');
+    } finally {
+      setBlocking(false);
+    }
+  };
+
+  // Long press / context menu on message to select for report
+  const handleMsgTouchStart = (msgId: number) => {
+    touchStartRef.current = Date.now();
+    longPressTimerRef.current = setTimeout(() => {
+      setSelectedMsgId(msgId);
+      setShowMenu(false);
+      setShowReport(true);
+    }, 500);
+  };
+
+  const handleMsgTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMsgContextMenu = (e: React.MouseEvent, msgId: number) => {
+    e.preventDefault();
+    setSelectedMsgId(msgId);
+    setShowMenu(false);
+    setShowReport(true);
+  };
+
+  // Close selected message on outside click
+  useEffect(() => {
+    const handler = () => setSelectedMsgId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
 
   // Close menu on outside click
   useEffect(() => {
@@ -337,10 +402,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                 <FiFlag size={14} /> Report tin nhắn
               </button>
               <button
-                onClick={() => { setShowMenu(false); setShowReport(true); }}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                onClick={handleBlockUser}
+                disabled={blocking}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                <FiUserX size={14} /> Chặn người này
+                <FiUserX size={14} /> {blocking ? 'Đang chặn...' : 'Chặn người này'}
               </button>
             </div>
           )}
@@ -413,6 +479,10 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                       className={`max-w-[75%] flex items-end gap-1.5 ${
                         isOwn(msg) ? 'flex-row-reverse' : 'flex-row'
                       }`}
+                      onContextMenu={(e) => handleMsgContextMenu(e, msg.id)}
+                      onTouchStart={() => handleMsgTouchStart(msg.id)}
+                      onTouchEnd={handleMsgTouchEnd}
+                      onClick={() => setSelectedMsgId(prev => prev === msg.id ? null : prev)}
                     >
                       <img
                         src={isOwn(msg)
@@ -468,6 +538,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
       {/* Input area */}
       <div className="shrink-0 px-4 py-3 border-t border-gray-100 bg-white">
+        {blocked && (
+          <div className="mb-2 p-2 bg-red-50 rounded-xl text-center text-xs text-red-600 font-semibold">
+            Bạn đã chặn hoặc bị chặn bởi người dùng này.
+          </div>
+        )}
         {/* Emoji picker */}
         {showEmoji && (
           <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50 rounded-2xl mb-2 max-h-32 overflow-y-auto">
@@ -486,7 +561,9 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         <div className="flex items-end gap-2">
           <button
             onClick={() => setShowEmoji(v => !v)}
+            disabled={blocked}
             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+              blocked ? 'bg-gray-50 text-gray-300 cursor-not-allowed' :
               showEmoji ? 'bg-violet-100 text-violet-600' : 'hover:bg-gray-100 text-gray-400'
             }`}
           >
@@ -499,18 +576,19 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
             value={text}
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Nhập tin nhắn..."
+            placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn..."}
             rows={1}
-            className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-gray-50 border border-gray-200 text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
+            disabled={blocked}
+            className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-gray-50 border border-gray-200 text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ height: '44px', maxHeight: '120px', overflowY: 'auto' }}
           />
           </div>
 
           <button
             onClick={handleSend}
-            disabled={!text.trim() || sending}
+            disabled={!text.trim() || sending || blocked}
             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-              text.trim() && !sending
+              text.trim() && !sending && !blocked
                 ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
                 : 'bg-gray-100 text-gray-300 cursor-not-allowed'
             }`}
