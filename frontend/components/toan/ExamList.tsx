@@ -14,7 +14,7 @@ interface ExamListProps {
   subjectSlug?: string;
 }
 
-type FilterType = 'all' | 'done' | 'not-done' | 'pro';
+type FilterType = 'all' | 'done' | 'not-done';
 type SortType = 'newest' | 'oldest' | 'name';
 
 export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProps) {
@@ -84,8 +84,6 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       result = result.filter(e => (e.user_attempt_count || 0) > 0);
     } else if (filter === 'not-done') {
       result = result.filter(e => (e.user_attempt_count || 0) === 0);
-    } else if (filter === 'pro') {
-      result = result.filter(e => e.is_premium);
     }
 
     // Search
@@ -133,7 +131,6 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     total: exams.length,
     done: exams.filter(e => (e.user_attempt_count || 0) > 0).length,
     notDone: exams.filter(e => (e.user_attempt_count || 0) === 0).length,
-    pro: exams.filter(e => e.is_premium).length,
   }), [exams]);
 
   const years = [...groupedByYear.keys()].filter(y => y > 0);
@@ -234,7 +231,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             </h3>
             {exam.is_premium && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-900 text-xs font-bold rounded-md shadow-sm shrink-0">
-                <FaCrown size={10} /> PRO
+                <FaCrown size={10} /> VIP
               </span>
             )}
             {exam.shuffle_mode && (
@@ -375,7 +372,6 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             { value: 'all', label: 'Tất cả', emoji: '📋', count: stats.total },
             { value: 'done', label: 'Đã làm', emoji: '✓', count: stats.done },
             { value: 'not-done', label: 'Chưa làm', emoji: '○', count: stats.notDone },
-            { value: 'pro', label: 'PRO', emoji: '👑', count: stats.pro },
           ] as { value: FilterType; label: string; emoji: string; count: number }[]).map(f => (
             <button
               key={f.value}
