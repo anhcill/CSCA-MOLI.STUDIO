@@ -489,18 +489,16 @@ export default function CreateExamPage() {
                         {/* VIP Tier */}
                         <div className="md:col-span-2">
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Phân loại nội dung</label>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {[
                                     { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
-                                    { value: 'vip', label: 'VIP', desc: 'Gói VIP', color: 'blue' },
-                                    { value: 'premium', label: 'Pre', desc: 'Gói Pre', color: 'amber' },
+                                    { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'amber' },
                                 ].map(tier => (
                                     <button key={tier.value}
                                         onClick={() => setExamData({ ...examData, vip_tier: tier.value })}
                                         className={`relative p-3 rounded-xl border-2 text-left transition-all ${
                                             examData.vip_tier === tier.value
                                                 ? tier.color === 'amber' ? 'border-amber-500 bg-amber-50' :
-                                                  tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
                                                   'border-gray-500 bg-gray-100'
                                                 : 'border-gray-200 hover:border-gray-300 bg-white'
                                         }`}>
@@ -510,8 +508,7 @@ export default function CreateExamPage() {
                                         <p className="text-xs text-gray-500 mt-0.5">{tier.desc}</p>
                                     {examData.vip_tier === tier.value && (
                                         <div className={`absolute top-2 right-2 w-4 h-4 rounded-full ${
-                                            tier.color === 'amber' ? 'bg-amber-500' :
-                                            tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                            tier.color === 'amber' ? 'bg-amber-500' : 'bg-gray-500'
                                         }`}>
                                             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -521,6 +518,7 @@ export default function CreateExamPage() {
                                     </button>
                                 ))}
                             </div>
+                            <p className="text-xs text-gray-400 mt-2">Chọn "VIP" để chỉ thành viên VIP/Premium mới được làm bài thi này</p>
                         </div>
                     </div>
 

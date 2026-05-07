@@ -332,7 +332,7 @@ export default function ExamsPage() {
                                         Trạng thái
                                     </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-slate-400 uppercase tracking-wider">
-                                        VIP
+                                        Phân loại
                                     </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-slate-400 uppercase tracking-wider">
                                         Phòng thi
@@ -385,13 +385,8 @@ export default function ExamsPage() {
                                                     </span>
                                                 )}
                                                 {exam.vip_tier !== 'basic' ? (
-                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md shadow-sm ${
-                                                        exam.vip_tier === 'premium'
-                                                            ? 'bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900'
-                                                            : 'bg-gradient-to-r from-indigo-200 to-purple-400 text-indigo-900'
-                                                    }`}>
-                                                        <FaCrown size={10} />
-                                                        {exam.vip_tier === 'premium' ? 'Pre' : 'VIP'}
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md shadow-sm bg-gradient-to-r from-amber-200 to-orange-300 text-orange-900">
+                                                        <FaCrown size={10} /> VIP
                                                     </span>
                                                 ) : (
                                                     <span className="text-xs text-gray-400 font-medium">Miễn phí</span>
