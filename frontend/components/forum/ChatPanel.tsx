@@ -398,14 +398,17 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
         <div className="relative" ref={menuRef}>
           <button
-            onClick={() => setShowMenu(v => !v)}
+            onClick={(e) => { e.stopPropagation(); setShowMenu(v => !v); }}
             className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-95 transition-all"
           >
             <FiMoreVertical size={18} className="text-gray-500" />
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-11 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 py-1.5 z-50 overflow-hidden">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-11 w-52 bg-white rounded-2xl shadow-2xl border border-gray-100 py-1.5 z-[100] overflow-hidden"
+            >
               <button
                 onClick={() => { setShowMenu(false); setShowReport(true); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 transition-colors"
