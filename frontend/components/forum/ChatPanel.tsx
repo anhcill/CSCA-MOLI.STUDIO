@@ -259,10 +259,18 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     /^https?:\/\/.*\.(jpg|jpeg|png|gif|webp|mp4|webm)/i.test(content.trim());
 
   const handleReportMessage = async () => {
-    if (!reportReason.trim() || reportReason.length < 5) return;
+    const msgId = selectedMsgId ?? messages[messages.length - 1]?.id;
+    if (!msgId) {
+      alert('Vui lòng chọn một tin nhắn để report (nhấn giữ hoặc bấm chuột phải vào tin nhắn).');
+      return;
+    }
+    if (!reportReason.trim() || reportReason.length < 5) {
+      alert('Lý do report phải từ 5 ký tự trở lên.');
+      return;
+    }
     setReporting(true);
     try {
-      await reportMessage(selectedMsgId || messages[messages.length - 1]?.id, reportReason);
+      await reportMessage(msgId, reportReason);
       setShowReport(false);
       setReportReason('');
       setSelectedMsgId(null);
