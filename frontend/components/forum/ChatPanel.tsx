@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiArrowLeft, FiSend, FiSmile, FiMoreVertical,
-  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX, FiPalette, FiUpload, FiTrash2
+  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX, FiSliders, FiUpload, FiTrash2
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useChatBgStore, CHAT_BG_PRESETS } from '@/lib/store/chatBgStore';
@@ -458,7 +458,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                 onClick={() => { setShowMenu(false); setShowBgPicker(true); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-violet-600 hover:bg-violet-50 transition-colors"
               >
-                <FiPalette size={14} /> Đổi nền chat
+                <FiSliders size={14} /> Đổi nền chat
               </button>
               <button
                 onClick={() => { setShowMenu(false); setShowReport(true); }}
@@ -706,7 +706,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
             <div className="flex items-center justify-between px-5 pt-4 pb-3 sm:pt-5 sm:pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-md">
-                  <FiPalette size={15} className="text-white" />
+                  <FiSliders size={15} className="text-white" />
                 </div>
                 <div>
                   <h3 className="font-black text-gray-900 text-sm">Đổi nền chat</h3>
