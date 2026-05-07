@@ -185,31 +185,36 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
               </div>
             </div>
 
-            {/* Avatar overlap + actions */}
-            <div className="px-5 -mt-8 flex items-center justify-between">
-              <div className="flex gap-1.5 flex-wrap">
+            {/* Avatar overlap + stats row */}
+            <div className="px-5 -mt-8">
+              <div className="flex items-end gap-2 mb-3">
                 {profile.badges.slice(0, 4).map(b => (
                   <span key={b.type} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getBadgeStyle(b.type)}`}>
                     {b.label}
                   </span>
                 ))}
               </div>
-              {isAuthenticated && currentUser?.id !== userId && (
-                <button
-                  onClick={handleMessage}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100"
-                >
-                  <FiMessageSquare size={12} /> Nhắn tin
-                </button>
-              )}
 
-              {/* Xem trang cá nhân */}
-              <button
-                onClick={handleViewProfile}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-gray-200"
-              >
-                <FiUser size={12} /> Xem trang cá nhân
-              </button>
+              {/* Action buttons - always visible, stacked on mobile */}
+              <div className="flex gap-2 flex-wrap">
+                {/* Xem trang cá nhân - always visible unless viewing own profile */}
+                <button
+                  onClick={handleViewProfile}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                >
+                  <FiUser size={12} /> Xem trang cá nhân
+                </button>
+
+                {/* Nhắn tin - only when logged in and not own profile */}
+                {isAuthenticated && currentUser?.id !== userId && (
+                  <button
+                    onClick={handleMessage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100"
+                  >
+                    <FiMessageSquare size={12} /> Nhắn tin
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Bio */}
