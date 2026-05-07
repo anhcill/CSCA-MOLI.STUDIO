@@ -286,6 +286,12 @@ export default function GiaiDeChiTietPage() {
   const videosOnly = useMemo(() => filtered.filter(e => e.solution_video_url), [filtered]);
   const lockedCount = useMemo(() => videosOnly.filter(e => !isAdmin && !isPremiumActive(user)).length, [videosOnly, user, isAdmin]);
 
+  // Hide exams with video from non-premium/non-admin users
+  const visibleExams = useMemo(() => {
+    if (isAdmin || isPremiumActive(user)) return filtered;
+    return filtered.filter(e => !e.solution_video_url);
+  }, [filtered, user, isAdmin]);
+
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20">
@@ -381,8 +387,8 @@ export default function GiaiDeChiTietPage() {
 
           {/* Stats */}
           <div className="flex items-center gap-4 mb-6 text-xs text-gray-500">
-            <span className="font-medium">Tổng cộng: <strong className="text-gray-700">{filtered.length} đề</strong></span>
-            {videosOnly.length > 0 && (
+            <span className="font-medium">Tổng cộng: <strong className="text-gray-700">{visibleExams.length} đề</strong></span>
+            {videosOnly.length > 0 && (isAdmin || isPremiumActive(user)) && (
               <span className="font-medium">Có video: <strong className="text-purple-600">{videosOnly.length} đề</strong></span>
             )}
             {lockedCount > 0 && (
@@ -397,7 +403,7 @@ export default function GiaiDeChiTietPage() {
                 <div key={i} className="h-52 bg-white rounded-2xl border border-gray-100 animate-pulse" />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : visibleExams.length === 0 ? (
             <div className="text-center py-20">
               <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FiVideo className="text-purple-400 text-2xl" />
@@ -408,7 +414,7 @@ export default function GiaiDeChiTietPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filtered.map(exam => (
+              {visibleExams.map(exam => (
                 <ExamCard
                   key={exam.id}
                   exam={exam as any}

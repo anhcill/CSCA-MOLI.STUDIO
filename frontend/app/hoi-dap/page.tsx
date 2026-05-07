@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import { qaApi, Ticket } from '@/lib/api/qaApi';
 import { canChatInstructor } from '@/lib/utils/permissions';
@@ -45,6 +45,7 @@ export default function StudentQAPage() {
   const isPremium = canChatInstructor(syncedUser);
   const isVip = syncedUser?.is_vip || syncedUser?.subscription_tier === 'vip';
 
+  // Sync user from backend and load tickets
   useEffect(() => {
     const init = async () => {
       if (!user) { setIsLoading(false); return; }
@@ -55,12 +56,18 @@ export default function StudentQAPage() {
         }
       } catch {}
       setIsLoading(false);
-      if (canChatInstructor(useAuthStore.getState().user)) {
-        loadTickets();
-      }
     };
     init();
   }, [user]);
+
+  // Load tickets when user is premium (fires after syncedUser updates from setUser)
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (isPremium && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadTickets();
+    }
+  }, [isPremium]);
 
   const loadTickets = async () => {
     try {

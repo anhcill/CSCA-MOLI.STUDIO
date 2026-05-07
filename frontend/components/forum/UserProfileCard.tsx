@@ -122,10 +122,13 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
     const cardH = 400;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    let top = rect.bottom + 8;
-    let left = rect.left;
-    if (left + cardW > vw - 8) left = vw - cardW - 8;
-    if (top + cardH > vh - 8) top = rect.top - cardH - 8;
+    // Use absolute positioning relative to viewport
+    // top is relative to viewport, but since parent has overflow:visible,
+    // we use scrollY to convert to document coordinates for position:absolute
+    let top = window.scrollY + rect.bottom + 8;
+    let left = window.scrollX + rect.left;
+    if (left + cardW > vw - 8) left = window.scrollX + vw - cardW - 8;
+    if (top + cardH > window.scrollY + vh - 8) top = window.scrollY + rect.top - cardH - 8;
     if (left < 8) left = 8;
     setPos({ top, left });
   }, [anchorRef]);
@@ -135,6 +138,7 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
   }, [updatePos]);
 
   useEffect(() => {
+    // Listen to window scroll and resize to reposition
     window.addEventListener('scroll', updatePos, true);
     window.addEventListener('resize', updatePos);
     return () => {
