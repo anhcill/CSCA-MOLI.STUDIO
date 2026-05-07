@@ -12,6 +12,7 @@ import axios from '@/lib/utils/axios';
 import { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
+import { isPremiumActive } from '@/lib/utils/permissions';
 import Link from 'next/link';
 
 // ── Video Modal ────────────────────────────────────────────────────────────────
@@ -108,38 +109,19 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
 }
 
 // ── Exam Card ──────────────────────────────────────────────────────────────────
-type TierLevel = 'basic' | 'vip' | 'premium';
-
-function getTierLevel(user: any): TierLevel {
-  if (!user) return 'basic';
-  if (user.role === 'super_admin' || user.role === 'admin' || hasPermission(user, 'exams.manage')) return 'premium';
-  if (user.subscription_tier === 'premium') return 'premium';
-  if (user.subscription_tier === 'vip' || user.is_vip) return 'vip';
-  return 'basic';
-}
-
-function canWatchVideo(userTier: TierLevel, examVipTier: string | null | undefined): boolean {
-  const tier = userTier as string;
-  // Video giải đề = Premium only
-  if (tier === 'premium') return true;
-  // Nếu đề có gắn tier cụ thể
-  if (examVipTier === 'premium') return tier === 'premium';
-  if (examVipTier === 'vip') return false; // VIP không xem được video
-  return false;
-}
-
 function ExamCard({
-  exam, onPlay, isAdmin, userTier, onLocked
+  exam, onPlay, isAdmin, user, onLocked
 }: {
   exam: Exam & { vip_tier?: string };
   onPlay: (e: Exam) => void;
   isAdmin: boolean;
-  userTier: TierLevel;
+  user: any;
   onLocked: (tier: 'vip' | 'premium') => void;
 }) {
   const hasVideo = !!exam.solution_video_url;
-  const allowed = isAdmin || canWatchVideo(userTier, exam.vip_tier);
-  const neededTier = (exam.vip_tier === 'premium' ? 'premium' : 'vip') as 'vip' | 'premium';
+  // Video giải đề = Premium only (cần kiểm tra expiry date)
+  const allowed = isAdmin || isPremiumActive(user);
+  const neededTier = 'premium';
 
   const tierBadge = exam.vip_tier === 'premium'
     ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-lg"><FaCrown size={8} /> Pre</span>
@@ -245,7 +227,6 @@ function ExamCard({
 export default function GiaiDeChiTietPage() {
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
-  const userTier = getTierLevel(user);
   const searchParams = useSearchParams() as unknown as URLSearchParams;
   const initialSubject = searchParams.get('subject') || '';
   const [exams, setExams] = useState<(Exam & { vip_tier?: string })[]>([]);
@@ -303,7 +284,7 @@ export default function GiaiDeChiTietPage() {
   }, [exams, activeSubject, search]);
 
   const videosOnly = useMemo(() => filtered.filter(e => e.solution_video_url), [filtered]);
-  const lockedCount = useMemo(() => videosOnly.filter(e => !isAdmin && !canWatchVideo(userTier, (e as any).vip_tier)).length, [videosOnly, userTier, isAdmin]);
+  const lockedCount = useMemo(() => videosOnly.filter(e => !isAdmin && !isPremiumActive(user)).length, [videosOnly, user, isAdmin]);
 
   return (
     <>
@@ -344,8 +325,8 @@ export default function GiaiDeChiTietPage() {
           </div>
         </div>
 
-        {/* ── Tier Banner (if not vip) ──────────────────────────────── */}
-        {userTier === 'basic' && lockedCount > 0 && (
+        {/* ── Tier Banner (if not premium) ─────────────────────────────── */}
+        {!isPremiumActive(user) && lockedCount > 0 && (
           <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
             <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl">
               <div className="p-2.5 bg-indigo-100 rounded-xl shrink-0">
@@ -433,7 +414,7 @@ export default function GiaiDeChiTietPage() {
                   exam={exam as any}
                   onPlay={setPlaying}
                   isAdmin={isAdmin}
-                  userTier={userTier}
+                  user={user}
                   onLocked={(tier) => setUpsellTier(tier)}
                 />
               ))}

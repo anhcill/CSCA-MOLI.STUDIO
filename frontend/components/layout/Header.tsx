@@ -209,7 +209,7 @@ export default function Header() {
                 </button>
 
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-3xl shadow-2xl border border-gray-100 py-3 z-[200] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
                     onClick={(e) => e.stopPropagation()}>
                     <div className="px-5 py-3 border-b border-gray-100 mb-2 flex items-center gap-3">
                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">

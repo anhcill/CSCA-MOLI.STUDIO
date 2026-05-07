@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
 import { qaApi, Ticket } from '@/lib/api/qaApi';
 import { canChatInstructor } from '@/lib/utils/permissions';
+import { getCurrentUser } from '@/lib/api/auth';
 import {
   FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle,
   FiClock, FiPlus, FiAlertCircle, FiZap, FiChevronRight
@@ -40,16 +41,26 @@ export default function StudentQAPage() {
   const [image, setImage] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isPremium = canChatInstructor(user);
-  const isVip = user?.is_vip || user?.subscription_tier === 'vip';
+  const syncedUser = useAuthStore((s) => s.user);
+  const isPremium = canChatInstructor(syncedUser);
+  const isVip = syncedUser?.is_vip || syncedUser?.subscription_tier === 'vip';
 
   useEffect(() => {
-    if (user && isPremium) {
-      loadTickets();
-    } else {
+    const init = async () => {
+      if (!user) { setIsLoading(false); return; }
+      try {
+        const res = await getCurrentUser();
+        if (res?.success && res?.data?.user) {
+          useAuthStore.getState().setUser(res.data.user as any);
+        }
+      } catch {}
       setIsLoading(false);
-    }
-  }, [user, isPremium]);
+      if (canChatInstructor(useAuthStore.getState().user)) {
+        loadTickets();
+      }
+    };
+    init();
+  }, [user]);
 
   const loadTickets = async () => {
     try {
