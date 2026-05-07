@@ -68,13 +68,28 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
   };
 
-  // Initialize scroll position and track scroll events
+  // Initialize scroll position tracking (start as false to avoid auto-scroll on mount)
   useEffect(() => {
-    isAtBottomRef.current = true;
+    isAtBottomRef.current = false; // Don't auto-scroll until we've measured actual position
     const el = messagesScrollRef.current;
     if (!el) return;
+    const measure = () => {
+      // Wait for layout to settle
+      requestAnimationFrame(() => {
+        if (el) {
+          const { scrollTop, scrollHeight, clientHeight } = el;
+          isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+        }
+      });
+    };
+    measure();
+    // Re-measure after a short delay (layout may not be ready on first render)
+    const t = setTimeout(measure, 100);
     el.addEventListener('scroll', updateScrollPosition, { passive: true });
-    return () => el.removeEventListener('scroll', updateScrollPosition);
+    return () => {
+      el.removeEventListener('scroll', updateScrollPosition);
+      clearTimeout(t);
+    };
   }, []);
 
   // Load messages
@@ -177,8 +192,15 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     if (loading) return;
     if (isAutoScrollingRef.current) return;
     // Only scroll if user is at the bottom (not when scrolled up reading old messages)
-    if (isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isAtBottomRef.current && messagesEndRef.current && messagesScrollRef.current) {
+      // Wait for DOM to fully update, then scroll to true bottom
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (messagesScrollRef.current && messagesEndRef.current) {
+            messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
+          }
+        });
+      });
     }
   }, [messages, loading]);
 
