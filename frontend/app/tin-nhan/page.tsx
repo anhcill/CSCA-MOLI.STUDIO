@@ -129,7 +129,13 @@ export default function MessagesPage() {
 
         {/* ── Conversation List ── */}
         <div className={`${selectedPartner ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}>
-          <div className="p-4 border-b border-gray-100">
+          <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+            <button
+              onClick={() => router.push('/forum')}
+              className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+            >
+              <FiChevronRight size={16} className="rotate-180" />
+            </button>
             <h1 className="font-black text-lg text-gray-900 flex items-center gap-2">
               <FiMessageSquare className="text-violet-600" /> Tin nhắn
             </h1>
@@ -226,8 +232,8 @@ export default function MessagesPage() {
           {selectedPartner ? (
             <ChatPanel
               partnerId={selectedPartner}
-              partnerName={selectedConv?.full_name || ''}
-              partnerAvatar={selectedConv ? getAvatar(selectedConv) : ''}
+              partnerName={selectedConv?.full_name || 'Người dùng'}
+              partnerAvatar={selectedConv ? getAvatar(selectedConv) : `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedConv?.full_name || 'User')}&background=random&size=80`}
               onBack={() => { setSelectedPartner(null); router.replace('/tin-nhan', undefined); }}
               onNewMessageReceived={() => {
                 if (!selectedPartner) return;

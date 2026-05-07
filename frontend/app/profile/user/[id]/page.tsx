@@ -8,7 +8,7 @@ import Header from '@/components/layout/Header';
 import {
   FiArrowLeft, FiMessageSquare, FiBook, FiAward,
   FiCalendar, FiTrendingUp, FiStar, FiX, FiFlag,
-  FiUserX
+  FiUserX, FiEdit3, FiActivity
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -50,9 +50,9 @@ export default function UserProfilePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [blocking, setBlocking] = useState(false);
-  const [reporting, setReporting] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState('');
+  const [reporting, setReporting] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -68,13 +68,11 @@ export default function UserProfilePage({ params }: Props) {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-  const handleMessage = () => {
-    router.push(`/tin-nhan?to=${userId}`);
-  };
+  const handleMessage = () => router.push(`/tin-nhan?to=${userId}`);
 
   const handleBlock = async () => {
     if (!isAuthenticated) return;
-    if (!confirm('Chặn người dùng này?')) return;
+    if (!confirm(profile?.is_vip ? 'Chặn người dùng này?' : 'Chặn người dùng này?')) return;
     setBlocking(true);
     try {
       await axios.post(`/users/${userId}/block`);
@@ -102,7 +100,7 @@ export default function UserProfilePage({ params }: Props) {
   };
 
   const getAvatar = (p: PublicProfile) =>
-    p.avatar_url || p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name)}&background=random&size=128`;
+    p.avatar_url || p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name)}&background=random&size=256`;
 
   const getBadgeStyle = (type: string) => {
     switch (type) {
@@ -116,34 +114,33 @@ export default function UserProfilePage({ params }: Props) {
     }
   };
 
-  const getAvatarSize = (s: string) => s === 'sm' ? 28 : s === 'lg' ? 64 : 48;
-
   const joinDate = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long' })
     : '';
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#f8fafc]">
         <Header />
-        <main className="container mx-auto px-4 py-8 max-w-3xl">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-pulse">
-            <div className="flex items-start gap-5">
-              <div className="w-20 h-20 rounded-2xl bg-gray-200 shrink-0" />
-              <div className="flex-1 space-y-3">
-                <div className="h-5 bg-gray-200 rounded w-48" />
-                <div className="h-4 bg-gray-200 rounded w-32" />
+        <div className="max-w-3xl mx-auto px-4 pt-8">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden animate-pulse">
+            <div className="h-40 bg-gradient-to-br from-violet-600 to-indigo-600" />
+            <div className="px-8 pb-8 -mt-16">
+              <div className="w-24 h-24 rounded-2xl bg-gray-200 border-4 border-white shadow-lg" />
+              <div className="mt-4 space-y-2">
+                <div className="h-6 bg-gray-200 rounded w-48" />
+                <div className="h-4 bg-gray-100 rounded w-32" />
               </div>
             </div>
           </div>
-        </main>
+        </div>
       </div>
     );
   }
 
   if (notFound || !profile) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#f8fafc]">
         <Header />
         <main className="container mx-auto px-4 py-16 max-w-lg text-center">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
@@ -154,7 +151,7 @@ export default function UserProfilePage({ params }: Props) {
             <p className="text-gray-500 text-sm mb-6">Người dùng này có thể không tồn tại hoặc đã bị chặn.</p>
             <button
               onClick={() => router.push('/forum')}
-              className="px-6 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-gray-800 transition-colors"
+              className="px-6 py-2.5 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition-colors"
             >
               Quay về diễn đàn
             </button>
@@ -170,192 +167,142 @@ export default function UserProfilePage({ params }: Props) {
     <div className="min-h-screen bg-[#f8fafc]">
       <Header />
 
-      {/* Back button */}
+      {/* Back */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <button
             onClick={() => router.back()}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium"
           >
-            <FiArrowLeft size={16} />
-            Quay về
+            <FiArrowLeft size={16} /> Quay về
           </button>
         </div>
       </div>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
-        {/* Profile Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-          {/* Header gradient */}
-          <div className="bg-gradient-to-br from-violet-600 to-indigo-600 p-6 pb-16 relative">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-bl-full" />
+
+        {/* Profile Hero */}
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+          {/* Banner */}
+          <div className="h-40 bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-600 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute top-8 left-8 w-32 h-32 rounded-full bg-white/10" />
+              <div className="absolute bottom-4 right-16 w-20 h-20 rounded-full bg-white/10" />
+            </div>
           </div>
 
           {/* Avatar + Info */}
-          <div className="px-6 -mt-12 relative">
-            <div className="flex items-end justify-between">
-              <div className="flex items-end gap-4">
-                <img
-                  src={getAvatar(profile)}
-                  alt={profile.full_name}
-                  className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-lg"
-                />
-                <div className="pb-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-xl font-black text-gray-900">{profile.full_name}</h1>
-                    {profile.role === 'admin' && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-700">Admin</span>
-                    )}
-                    {profile.role === 'moderator' && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700">Mod</span>
-                    )}
-                    {profile.is_vip && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 flex items-center gap-1">
-                        <FaCrown size={10} /> {profile.subscription_tier || 'VIP'}
-                      </span>
-                    )}
-                    {profile.is_verified && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-100 text-cyan-700">✓ Đã xác minh</span>
-                    )}
-                  </div>
-                  <p className="text-gray-500 text-sm">@{profile.username}</p>
-                  <p className="text-gray-400 text-xs mt-1 flex items-center gap-1">
-                    <FiCalendar size={11} />
-                    Tham gia {joinDate}
-                  </p>
-                </div>
-              </div>
+          <div className="px-8 pb-8 -mt-16 relative">
+            {/* Avatar */}
+            <img
+              src={getAvatar(profile)}
+              alt={profile.full_name}
+              className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-xl relative z-10"
+            />
 
-              {/* Actions */}
-              {!isOwnProfile && isAuthenticated && (
-                <div className="flex gap-2 pb-1">
-                  <button
-                    onClick={handleMessage}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-md hover:bg-violet-700 transition-colors"
-                  >
-                    <FiMessageSquare size={14} />
-                    Nhắn tin
-                  </button>
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowReport(true)}
-                      className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
-                      title="Báo cáo"
-                    >
-                      <FiFlag size={16} />
-                    </button>
-                  </div>
+            {/* Name + badges */}
+            <div className="mt-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-black text-gray-900">{profile.full_name}</h1>
+                {profile.role === 'admin' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-700">Admin</span>
+                )}
+                {profile.role === 'moderator' && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-blue-100 text-blue-700">Mod</span>
+                )}
+                {profile.is_vip && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-700 flex items-center gap-1">
+                    <FaCrown size={10} /> {profile.subscription_tier || 'VIP'}
+                  </span>
+                )}
+                {profile.is_verified && (
+                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-cyan-100 text-cyan-700">✓ Đã xác minh</span>
+                )}
+              </div>
+              <p className="text-gray-500 text-sm mt-1">@{profile.username}</p>
+
+              {/* Badges */}
+              {profile.badges.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {profile.badges.map(b => (
+                    <span key={b.type} className={`px-3 py-1 rounded-full text-xs font-bold ${getBadgeStyle(b.type)}`}>
+                      {b.label}
+                    </span>
+                  ))}
                 </div>
               )}
-              {!isOwnProfile && !isAuthenticated && (
-                <button
-                  onClick={() => router.push('/auth')}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-md hover:bg-violet-700 transition-colors"
-                >
-                  <FiMessageSquare size={14} />
-                  Nhắn tin
-                </button>
+
+              {/* Bio */}
+              {profile.bio && (
+                <p className="mt-3 text-sm text-gray-600 leading-relaxed">{profile.bio}</p>
               )}
+
+              {/* Joined */}
+              <p className="mt-3 text-xs text-gray-400 flex items-center gap-1.5">
+                <FiCalendar size={12} /> Tham gia {joinDate}
+              </p>
             </div>
 
-            {/* Badges */}
-            {profile.badges.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                {profile.badges.map(b => (
-                  <span key={b.type} className={`px-3 py-1 rounded-full text-xs font-bold ${getBadgeStyle(b.type)}`}>
-                    {b.label}
-                  </span>
-                ))}
+            {/* Action buttons */}
+            {!isOwnProfile && (
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={handleMessage}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30 hover:-translate-y-0.5 transition-all"
+                >
+                  <FiMessageSquare size={15} /> Nhắn tin
+                </button>
+                <button
+                  onClick={() => setShowReport(true)}
+                  className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
+                  title="Báo cáo"
+                >
+                  <FiFlag size={15} />
+                </button>
+                <button
+                  onClick={handleBlock}
+                  disabled={blocking}
+                  className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center disabled:opacity-50"
+                  title="Chặn"
+                >
+                  <FiUserX size={15} />
+                </button>
               </div>
-            )}
-
-            {/* Bio */}
-            {profile.bio && (
-              <p className="mt-4 text-sm text-gray-600 leading-relaxed">{profile.bio}</p>
             )}
           </div>
 
           {/* Stats */}
-          <div className="px-6 py-5 mt-4 border-t border-gray-100">
-            <div className="grid grid-cols-4 gap-4">
+          <div className="px-8 pb-8">
+            <div className="grid grid-cols-4 gap-3">
               {[
-                { icon: FiBook, label: 'Đề thi', value: profile.total_completed, color: 'bg-blue-50 text-blue-600' },
-                { icon: FiTrendingUp, label: 'Điểm TB', value: Number(profile.avg_score).toFixed(1), color: 'bg-emerald-50 text-emerald-600' },
-                { icon: FiAward, label: 'Điểm cao', value: profile.highest_score, color: 'bg-amber-50 text-amber-600' },
-                { icon: FiStar, label: 'Bài viết', value: profile.total_posts, color: 'bg-violet-50 text-violet-600' },
+                { icon: FiBook, label: 'Đề thi', value: profile.total_completed, color: 'from-blue-50 to-blue-100 text-blue-600' },
+                { icon: FiTrendingUp, label: 'Điểm TB', value: Number(profile.avg_score).toFixed(1), color: 'from-emerald-50 to-emerald-100 text-emerald-600' },
+                { icon: FiAward, label: 'Điểm cao', value: profile.highest_score, color: 'from-amber-50 to-amber-100 text-amber-600' },
+                { icon: FiStar, label: 'Bài viết', value: profile.total_posts, color: 'from-violet-50 to-violet-100 text-violet-600' },
               ].map(stat => {
                 const Icon = stat.icon;
                 return (
-                  <div key={stat.label} className={`${stat.color} rounded-xl p-3 text-center`}>
-                    <Icon size={16} className="mx-auto mb-1 opacity-70" />
+                  <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center`}>
+                    <Icon size={14} className="mx-auto mb-1 opacity-70" />
                     <p className="text-lg font-black">{stat.value}</p>
                     <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
                   </div>
                 );
               })}
             </div>
-          </div>
 
-          {/* More stats */}
-          <div className="px-6 pb-5 grid grid-cols-3 gap-3">
-            {[
-              { label: 'Streak hiện tại', value: `${profile.current_streak} ngày`, color: 'bg-rose-50 text-rose-600' },
-              { label: 'Streak dài nhất', value: `${profile.longest_streak} ngày`, color: 'bg-orange-50 text-orange-600' },
-              { label: 'Tổng lượt thích', value: profile.total_likes_received, color: 'bg-pink-50 text-pink-600' },
-            ].map(stat => (
-              <div key={stat.label} className={`${stat.color} rounded-xl p-3 text-center`}>
-                <p className="text-sm font-black">{stat.value}</p>
-                <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Block button */}
-          {!isOwnProfile && isAuthenticated && (
-            <div className="px-6 pb-5">
-              <button
-                onClick={handleBlock}
-                disabled={blocking}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 text-gray-500 text-sm font-medium hover:bg-red-50 hover:text-red-500 transition-colors"
-              >
-                <FiUserX size={14} />
-                {blocking ? 'Đang chặn...' : 'Chặn người dùng này'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Info section */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="font-bold text-gray-900 mb-4">Giới thiệu</h2>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 py-2 border-b border-gray-50">
-              <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                <FiCalendar size={14} className="text-gray-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Tham gia</p>
-                <p className="text-sm font-medium text-gray-800">{joinDate}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 py-2">
-              <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                <FiAward size={14} className="text-gray-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-400">Trạng thái</p>
-                <p className="text-sm font-medium text-gray-800 flex items-center gap-2">
-                  {profile.is_vip ? (
-                    <>
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 flex items-center gap-1">
-                        <FaCrown size={10} /> {profile.subscription_tier || 'VIP'}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-gray-500">Thành viên thường</span>
-                  )}
-                </p>
-              </div>
+            {/* Extra stats */}
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              {[
+                { label: 'Streak hiện tại', value: `${profile.current_streak} ngày`, color: 'from-rose-50 to-rose-100 text-rose-600' },
+                { label: 'Streak dài nhất', value: `${profile.longest_streak} ngày`, color: 'from-orange-50 to-orange-100 text-orange-600' },
+                { label: 'Lượt thích', value: profile.total_likes_received, color: 'from-pink-50 to-pink-100 text-pink-600' },
+              ].map(stat => (
+                <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center`}>
+                  <p className="text-sm font-black">{stat.value}</p>
+                  <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -372,7 +319,7 @@ export default function UserProfilePage({ params }: Props) {
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              Mô tả lý do báo cáo người dùng này. Đội ngũ kiểm duyệt sẽ xem xét trong thời gian sớm nhất.
+              Mô tả lý do báo cáo. Đội ngũ kiểm duyệt sẽ xem xét trong thời gian sớm nhất.
             </p>
             <textarea
               value={reportReason}

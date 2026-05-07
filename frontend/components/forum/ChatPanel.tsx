@@ -317,7 +317,8 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       <div
         ref={messagesScrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-1"
+        className="flex-1 overflow-y-auto overflow-anchor-none px-4 py-3 space-y-1"
+        style={{ contain: 'layout' }}
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -467,12 +468,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
             placeholder="Nhập tin nhắn..."
             rows={1}
             className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-gray-50 border border-gray-200 text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
-            style={{ maxHeight: '120px', minHeight: '44px' }}
-            onInput={e => {
-              const el = e.target as HTMLTextAreaElement;
-              el.style.height = 'auto';
-              el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-            }}
+            style={{ height: '44px', maxHeight: '120px', overflowY: 'auto' }}
           />
           </div>
 
