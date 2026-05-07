@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FiMessageSquare, FiSearch, FiChevronRight } from 'react-icons/fi';
+import { FiMessageSquare, FiSearch, FiChevronRight, FiSend, FiSmile, FiImage } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 import ChatPanel from '@/components/forum/ChatPanel';
 import {
-  initSocket, onNewMessage, onUnreadCountUpdate
+  initSocket, onNewMessage, onUnreadCountUpdate,
+  joinConversation, leaveConversation
 } from '@/lib/socket';
 
 interface Conversation {
@@ -44,12 +45,8 @@ export default function MessagesPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  useEffect(() => {
-    if (!isAuthenticated) { router.push('/login'); return; }
-    loadConversations(1);
-  }, [isAuthenticated]);
-
-  const loadConversations = async (pageNum: number) => {
+  // ── Load conversations (only once on mount) ──────────────────────────────
+  const loadConversations = useCallback(async (pageNum: number) => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
       const res = await axios.get('/messages', {
@@ -60,40 +57,81 @@ export default function MessagesPage() {
       setConversations(prev => pageNum === 1 ? convs : [...prev, ...convs]);
       setHasMore(pageNum < (data?.pagination?.totalPages || 1));
       setPage(pageNum);
-    } catch (err) {
-      console.error('Load conversations error:', err);
+    } catch {
+      console.error('Load conversations error:');
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, []);
 
-  const loadMore = () => {
-    if (!loadingMore && hasMore) loadConversations(page + 1);
-  };
+  useEffect(() => {
+    if (!isAuthenticated) { router.push('/login'); return; }
+    loadConversations(1);
+  }, [isAuthenticated, loadConversations]);
 
-  // Socket: refresh conversation list on new message + init socket
+  // ── Socket: real-time update WITHOUT full reload ─────────────────────────
   useEffect(() => {
     if (!isAuthenticated) return;
 
     initSocket();
 
-    const unsubMessage = onNewMessage((msg: unknown) => {
-      // Refresh conversation list when a new message arrives
-      if (!selectedPartner) {
-        loadConversations(1);
-      }
+    const unsubMessage = onNewMessage((msg: any) => {
+      // Optimistic update: update conversation in place, no full fetch
+      setConversations(prev => {
+        const senderId = msg.sender_id;
+        const myId = user?.id;
+
+        if (senderId === myId) {
+          // Tin nhắn tôi gửi → cập nhật conversation của partner
+          return prev.map(c =>
+            c.partner_id === msg.receiver_id
+              ? { ...c, last_message_content: msg.content, last_message_at: msg.created_at, last_message_id: msg.id, is_read: true }
+              : c
+          );
+        } else {
+          // Tin nhắn từ partner → cập nhật conversation
+          return prev.map(c =>
+            c.partner_id === senderId
+              ? { ...c, last_message_content: msg.content, last_message_at: msg.created_at, last_message_id: msg.id, is_read: false, unread_count: c.unread_count + 1 }
+              : c
+          );
+        }
+      });
     });
 
     const unsubUnread = onUnreadCountUpdate(() => {
-      loadConversations(1);
+      // Mark current chat partner's conversation as read
+      if (selectedPartner) {
+        setConversations(prev => prev.map(c =>
+          c.partner_id === selectedPartner
+            ? { ...c, is_read: true, unread_count: 0 }
+            : c
+        ));
+      }
     });
 
     return () => {
       unsubMessage();
       unsubUnread();
     };
-  }, [isAuthenticated, selectedPartner]);
+  }, [isAuthenticated, user?.id, selectedPartner]);
+
+  // Join/leave conversation on partner change
+  useEffect(() => {
+    if (selectedPartner) {
+      joinConversation(selectedPartner);
+      // Mark as read optimistically
+      setConversations(prev => prev.map(c =>
+        c.partner_id === selectedPartner
+          ? { ...c, is_read: true, unread_count: 0 }
+          : c
+      ));
+    }
+    return () => {
+      if (selectedPartner) leaveConversation(selectedPartner);
+    };
+  }, [selectedPartner]);
 
   const getAvatar = (c: Conversation) =>
     c.avatar_url || c.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.full_name)}&background=random&size=80`;
@@ -102,10 +140,10 @@ export default function MessagesPage() {
     const d = new Date(ts);
     const now = new Date();
     const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-    if (diff < 60) return 'vừa xong';
+    if (diff < 60) return 'vừa';
     if (diff < 3600) return `${Math.floor(diff / 60)}p`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    if (diff < 604800) return `${Math.floor(diff / 86400)}ngày`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
     return d.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' });
   };
 
@@ -122,104 +160,126 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col">
-      <Header />
-
-      <div className="flex flex-1 max-w-5xl mx-auto w-full p-4 gap-4" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+    <div className="flex flex-col h-screen bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50">
+      <div className="flex flex-1 max-w-6xl mx-auto w-full h-full overflow-hidden">
 
         {/* ── Conversation List ── */}
-        <div className={`${selectedPartner ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}>
-          <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+        <div className={`${selectedPartner ? 'hidden lg:flex' : 'flex'} flex-col w-full lg:w-80 shrink-0 bg-white/80 backdrop-blur-xl border-r border-violet-100/50`}>
+          {/* Header */}
+          <div className="px-5 pt-5 pb-4 flex items-center gap-3 border-b border-violet-100/50">
             <button
               onClick={() => router.push('/forum')}
-              className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors shrink-0"
+              className="w-9 h-9 rounded-2xl bg-violet-100 hover:bg-violet-200 flex items-center justify-center text-violet-600 transition-all active:scale-90"
             >
               <FiChevronRight size={16} className="rotate-180" />
             </button>
-            <h1 className="font-black text-lg text-gray-900 flex items-center gap-2">
-              <FiMessageSquare className="text-violet-600" /> Tin nhắn
-            </h1>
+            <div>
+              <h1 className="font-black text-gray-900 text-lg flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                Tin nhắn
+              </h1>
+              <p className="text-[11px] text-gray-400">Gen Z Chat</p>
+            </div>
           </div>
 
           {/* Search */}
-          <div className="px-4 py-2 border-b border-gray-100">
+          <div className="px-4 py-3">
             <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={14} />
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-violet-300" size={14} />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Tìm người..."
-                className="w-full pl-8 pr-3 py-2 text-sm rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
+                placeholder="Tìm cuộc trò chuyện..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm rounded-2xl bg-violet-50/70 border border-violet-100 focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-violet-300"
               />
             </div>
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto pb-safe">
             {loading ? (
               <div className="p-4 space-y-3">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gray-200 shrink-0" />
+                  <div key={i} className="flex items-center gap-3 animate-pulse">
+                    <div className="w-13 h-13 rounded-2xl bg-violet-100 shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3 bg-gray-200 rounded w-3/4" />
-                      <div className="h-2 bg-gray-100 rounded w-full" />
+                      <div className="h-3.5 bg-violet-100 rounded-xl w-3/4" />
+                      <div className="h-3 bg-violet-50 rounded-xl w-full" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-                <FiMessageSquare size={32} className="mb-2 opacity-30" />
-                <p className="text-sm font-semibold">Chưa có cuộc trò chuyện</p>
+              <div className="flex flex-col items-center justify-center h-52 text-center px-6">
+                <div className="w-16 h-16 rounded-full bg-violet-100 flex items-center justify-center mb-4">
+                  <FiMessageSquare size={28} className="text-violet-300" />
+                </div>
+                <p className="font-bold text-gray-500 text-sm">Chưa có cuộc trò chuyện nào</p>
+                <p className="text-xs text-gray-400 mt-1">Bắt đầu nhắn tin với mọi người trên forum</p>
               </div>
             ) : (
               <>
-                {filtered.map(conv => (
+                {filtered.map((conv, idx) => (
                   <button
                     key={conv.partner_id}
                     onClick={() => handleSelect(conv.partner_id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-50 text-left ${
-                      selectedPartner === conv.partner_id ? 'bg-violet-50' : ''
-                    } ${!conv.is_read && conv.sender_id !== user?.id ? 'bg-blue-50/40' : ''}`}
+                    className={`w-full flex items-center gap-3 px-5 py-4 hover:bg-violet-50/60 active:bg-violet-100/40 transition-all border-b border-gray-50/60 text-left group animate-in fade-in slide-in-from-bottom-2 ${
+                      selectedPartner === conv.partner_id ? 'bg-violet-50/80 border-l-3 border-l-violet-500' : ''
+                    }`}
+                    style={{ animationDelay: `${idx * 30}ms` }}
                   >
+                    {/* Avatar */}
                     <div className="relative shrink-0">
                       <img
                         src={getAvatar(conv)}
                         alt={conv.full_name}
-                        className="w-11 h-11 rounded-2xl object-cover"
+                        className="w-13 h-13 rounded-2xl object-cover ring-2 ring-violet-100 group-hover:ring-violet-200 transition-all shadow-sm"
                       />
-                      {conv.unread_count > 0 && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                      {!conv.is_read && conv.sender_id !== user?.id && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-pink-500 to-rose-500 rounded-full flex items-center justify-center shadow-lg animate-in zoom-in-75 duration-200">
                           <span className="text-white text-[9px] font-black">{conv.unread_count > 9 ? '9+' : conv.unread_count}</span>
                         </span>
                       )}
                     </div>
+
+                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-sm font-bold truncate ${!conv.is_read && conv.sender_id !== user?.id ? 'text-gray-900' : 'text-gray-700'}`}>
+                        <span className={`text-sm font-bold truncate ${
+                          !conv.is_read && conv.sender_id !== user?.id ? 'text-gray-900' : 'text-gray-700'
+                        }`}>
                           {conv.full_name}
                         </span>
-                        <span className="text-[10px] text-gray-400 shrink-0">{formatTime(conv.last_message_at)}</span>
+                        <span className={`text-[10px] shrink-0 ${!conv.is_read && conv.sender_id !== user?.id ? 'text-violet-500 font-semibold' : 'text-gray-400'}`}>
+                          {formatTime(conv.last_message_at)}
+                        </span>
                       </div>
-                      <p className={`text-xs truncate mt-0.5 ${!conv.is_read && conv.sender_id !== user?.id ? 'text-gray-700 font-semibold' : 'text-gray-400'}`}>
-                        {conv.sender_id === user?.id ? 'Bạn: ' : ''}{conv.last_message_content}
+                      <p className={`text-xs truncate mt-0.5 ${
+                        !conv.is_read && conv.sender_id !== user?.id
+                          ? 'text-gray-800 font-semibold'
+                          : conv.sender_id === user?.id
+                            ? 'text-violet-500 font-medium'
+                            : 'text-gray-400'
+                      }`}>
+                        {conv.sender_id === user?.id ? '✓ ' : ''}{conv.last_message_content}
                       </p>
                     </div>
+
+                    {/* Unread dot */}
                     {!conv.is_read && conv.sender_id !== user?.id && (
-                      <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                      <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0 shadow-sm shadow-violet-200" />
                     )}
                   </button>
                 ))}
 
                 {hasMore && (
                   <button
-                    onClick={loadMore}
+                    onClick={() => loadConversations(page + 1)}
                     disabled={loadingMore}
-                    className="w-full py-3 text-center text-xs font-bold text-violet-600 hover:bg-violet-50 transition-colors"
+                    className="w-full py-3.5 text-center text-xs font-bold text-violet-500 hover:text-violet-700 hover:bg-violet-50 transition-colors active:bg-violet-100"
                   >
-                    {loadingMore ? 'Đang tải...' : 'Tải thêm'}
+                    {loadingMore ? 'Loading...' : 'Tải thêm ↓'}
                   </button>
                 )}
               </>
@@ -228,41 +288,47 @@ export default function MessagesPage() {
         </div>
 
         {/* ── Chat Panel ── */}
-        <div className={`${selectedPartner ? 'flex' : 'hidden md:hidden'} flex-1 flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-h-0`}>
+        <div className={`${selectedPartner ? 'flex' : 'hidden lg:flex'} flex-1 flex-col bg-white/40 backdrop-blur-xl min-h-0`}>
           {selectedPartner ? (
             <ChatPanel
               partnerId={selectedPartner}
-              partnerName={selectedConv?.full_name || 'Người dùng'}
-              partnerAvatar={selectedConv ? getAvatar(selectedConv) : 'https://ui-avatars.com/api/?name=User&background=random&size=80'}
+              partnerName={selectedConv?.full_name || 'User'}
+              partnerAvatar={selectedConv ? getAvatar(selectedConv) : ''}
               onBack={() => { setSelectedPartner(null); router.replace('/tin-nhan', undefined); }}
               onNewMessageReceived={() => {
-                if (!selectedPartner) return;
-                loadConversations(1);
+                // Optimistic update without full reload
+                setConversations(prev => {
+                  const updated = prev.map(c =>
+                    c.partner_id === selectedPartner
+                      ? { ...c, is_read: true, last_message_at: new Date().toISOString() }
+                      : c
+                  );
+                  // Move to top
+                  const conv = updated.find(c => c.partner_id === selectedPartner);
+                  if (conv) {
+                    return [conv, ...updated.filter(c => c.partner_id !== selectedPartner)];
+                  }
+                  return updated;
+                });
               }}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <FiMessageSquare size={56} className="mb-3 opacity-20" />
-              <p className="font-bold text-base">Chọn cuộc trò chuyện</p>
-              <p className="text-sm mt-1">Chọn một người để bắt đầu nhắn tin</p>
+            <div className="flex flex-col items-center justify-center h-full text-center px-8">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-6 shadow-xl shadow-violet-100/50">
+                <FiMessageSquare size={40} className="text-violet-400" />
+              </div>
+              <h2 className="text-xl font-black text-gray-800 mb-2">Gen Z Chat 💬</h2>
+              <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
+                Chọn một cuộc trò chuyện để bắt đầu nhắn tin với mọi người
+              </p>
+              <div className="mt-6 flex items-center gap-2">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <span className="text-xs text-gray-400">Online • Không reload khi nhắn tin</span>
+              </div>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function Header() {
-  return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 py-3 shadow-sm">
-      <div className="max-w-5xl mx-auto px-4 flex items-center gap-3">
-        <FiMessageSquare className="text-violet-600" size={22} />
-        <div>
-          <h1 className="font-black text-gray-900">Tin nhắn</h1>
-          <p className="text-[11px] text-gray-400">Trao đổi học tập cùng cộng đồng</p>
-        </div>
-      </div>
-    </header>
   );
 }

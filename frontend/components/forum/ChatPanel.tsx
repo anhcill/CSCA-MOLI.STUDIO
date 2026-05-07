@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiArrowLeft, FiSend, FiSmile, FiMoreVertical,
-  FiUserX, FiFlag, FiCheck, FiCheckCircle
+  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getMessages, sendMessage, reportMessage, blockUser, ForumMessage } from '@/lib/api/messages';
@@ -15,6 +15,14 @@ import {
 } from '@/lib/socket';
 
 const QUICK_EMOJIS = ['😀', '👍', '🙏', '❤️', '😊', '🎉', '💯', '🔥', '😍', '🤔', '😅', '😂'];
+const GIF_PACKS = [
+  { name: 'Hello', items: ['https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', 'https://media.giphy.com/media/XreQmk7ETCk0ADtemo/giphy.gif', 'https://media.giphy.com/media/3o7TKF1f0ktJyL4f1C/giphy.gif', 'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif', 'https://media.giphy.com/media/3oz8xIsloV7zOmt81G/giphy.gif', 'https://media.giphy.com/media/l0MYGb1LuZ3n7dRnO/giphy.gif'] },
+  { name: 'Wow', items: ['https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif', 'https://media.giphy.com/media/3o7TKP19SKz硵f8U/giphy.gif', 'https://media.giphy.com/media/26FPy3QZQqGtDcrja/giphy.gif', 'https://media.giphy.com/media/l0HlvU6gXTC1EzfMQ/giphy.gif', 'https://media.giphy.com/media/3o7TKW潮B7hF3C5e/giphy.gif', 'https://media.giphy.com/media/l41YtZfZFLZdfxF1W/giphy.gif'] },
+  { name: 'Haha', items: ['https://media.giphy.com/media/3oEjHAUOqG3lSS0f1C/giphy.gif', 'https://media.giphy.com/media/J0WtGUqIhWGWs/giphy.gif', 'https://media.giphy.com/media/3o7TSSWmQEJmBzy发表评论/144/giphy.gif', 'https://media.giphy.com/media/3oEjI6lp生c8Y7P1S/giphy.gif', 'https://media.giphy.com/media/l3fQf1OEAq0iri9RC/giphy.gif', 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif'] },
+  { name: 'Thumbs', items: ['https://media.giphy.com/media/f7zRl189JbrjI/giphy.gif', 'https://media.giphy.com/media/YyleoSB6E6IXdRcP5j/giphy.gif', 'https://media.giphy.com/media/1AIeYgwnqeBUxh6juu/giphy.gif', 'https://media.giphy.com/media/7TtvM9EF5mqrdeQ1Wf/giphy.gif', 'https://media.giphy.com/media/3oriO6qJiXajN0TyDu/giphy.gif', 'https://media.giphy.com/media/26n7b7PjBTqMZeWj6/giphy.gif'] },
+  { name: 'Love', items: ['https://media.giphy.com/media/l4FGsYUYsJwJyaWuI/giphy.gif', 'https://media.giphy.com/media/XsUtdIeBLXgN3f3bL5/giphy.gif', 'https://media.giphy.com/media/l0MYJnJQ4EiYLxvQ4/giphy.gif', 'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif', 'https://media.giphy.com/media/l0HlNQ03J5JxX6OBi/giphy.gif', 'https://media.giphy.com/media/26BRv0ThflsHCsDrG/giphy.gif'] },
+  { name: 'OK', items: ['https://media.giphy.com/media/YOrJApkHQ4SEU/giphy.gif', 'https://media.giphy.com/media/3oz8xIsloV7zOmt81G/giphy.gif', 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', 'https://media.giphy.com/media/3o7TKF1f0ktJyL4f1C/giphy.gif', 'https://media.giphy.com/media/26FPy3QZQqGtDcrja/giphy.gif', 'https://media.giphy.com/media/l3q2K5bvM5X3EmEdO/giphy.gif'] },
+];
 const PAGE_SIZE = 50;
 const TYPING_TIMEOUT = 3000;
 const TYPING_DEBOUNCE = 500;
@@ -46,6 +54,8 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [blocking, setBlocking] = useState(false);
   const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
   const [blocked, setBlocked] = useState(false);
+  const [showGif, setShowGif] = useState(false);
+  const [activeGifTab, setActiveGifTab] = useState(0);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<number>(0);
 
@@ -239,6 +249,25 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     }
   };
 
+  // Send GIF
+  const handleSendGif = async (gifUrl: string) => {
+    if (sending) return;
+    setShowGif(false);
+    setSending(true);
+    stopTyping(partnerId);
+    try {
+      const res = await sendMessage(partnerId, gifUrl);
+      if (res.success && res.data?.message) {
+        setMessages(prev => [...prev, res.data.message]);
+        onNewMessageReceived?.();
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Không thể gửi GIF');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Emit typing indicator on input change
   const handleInputChange = (value: string) => {
     setText(value);
@@ -278,6 +307,10 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       el.focus();
     }, 0);
   };
+
+  // Check if content is an image/GIF URL
+  const isImageUrl = (content: string) =>
+    /^https?:\/\/.*\.(jpg|jpeg|png|gif|webp|mp4|webm)/i.test(content.trim());
 
   // Report message
   const handleReportMessage = async () => {
@@ -522,7 +555,17 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                               : 'bg-gray-100 text-gray-800 rounded-bl-md'
                           }`}
                         >
-                          {msg.content}
+                          {isImageUrl(msg.content) ? (
+                            <img
+                              src={msg.content}
+                              alt="GIF"
+                              className="max-w-[200px] max-h-[150px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(msg.content, '_blank')}
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            msg.content
+                          )}
                         </div>
                         <div className={`flex items-center gap-1 text-[10px] text-gray-400 ${
                           isOwn(msg) ? 'justify-end' : 'justify-start'
@@ -580,9 +623,61 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           </div>
         )}
 
+        {/* GIF picker */}
+        {showGif && (
+          <div className="mb-2 bg-gray-50 rounded-2xl overflow-hidden border border-gray-200">
+            {/* GIF tabs */}
+            <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 overflow-x-auto">
+              {GIF_PACKS.map((pack, idx) => (
+                <button
+                  key={pack.name}
+                  onClick={() => setActiveGifTab(idx)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-all ${
+                    activeGifTab === idx
+                      ? 'bg-violet-500 text-white shadow-sm'
+                      : 'bg-white text-gray-500 hover:bg-violet-50'
+                  }`}
+                >
+                  {pack.name}
+                </button>
+              ))}
+            </div>
+            {/* GIF grid */}
+            <div className="grid grid-cols-3 gap-1 p-2 max-h-48 overflow-y-auto">
+              {GIF_PACKS[activeGifTab].items.map((url) => (
+                <button
+                  key={url}
+                  onClick={() => handleSendGif(url)}
+                  className="overflow-hidden rounded-xl hover:ring-2 ring-violet-400 transition-all active:scale-95"
+                >
+                  <img
+                    src={url}
+                    alt="GIF"
+                    className="w-full h-20 object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
+          {/* GIF button */}
           <button
-            onClick={() => setShowEmoji(v => !v)}
+            onClick={() => { setShowGif(v => !v); if (!showGif) setShowEmoji(false); }}
+            disabled={blocked}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+              blocked ? 'bg-gray-50 text-gray-300 cursor-not-allowed' :
+              showGif ? 'bg-pink-100 text-pink-600' : 'hover:bg-pink-50 text-pink-400'
+            }`}
+            title="GIF"
+          >
+            <span className="text-base font-black">GIF</span>
+          </button>
+
+          <button
+            onClick={() => { setShowEmoji(v => !v); if (!showEmoji) setShowGif(false); }}
             disabled={blocked}
             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
               blocked ? 'bg-gray-50 text-gray-300 cursor-not-allowed' :

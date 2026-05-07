@@ -93,7 +93,7 @@ export default function PostCard({
 
       {/* Header */}
       <div className="flex items-start justify-between px-6 pt-6 mb-4">
-        <div ref={setAuthorRef} className="relative">
+        <div>
           <PostAuthor
             userId={post.user_id}
             name={post.author_name || 'Học viên Ẩn danh'}
@@ -290,10 +290,7 @@ function CommentsSection({
       {/* Comment input */}
       {isAuthenticated && (
         <div className="flex gap-4 items-start mb-6">
-          <div
-            ref={currentUserAvatarRef}
-            className="shrink-0"
-          >
+          <div className="shrink-0">
             <img
               src={getAvatarUrl(user?.avatar, user?.avatar_url, user?.full_name, 36)}
               alt=""
