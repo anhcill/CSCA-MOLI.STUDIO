@@ -115,7 +115,7 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
   };
 
   const [pos, setPos] = useState({ top: 0, left: 0 });
-  useEffect(() => {
+  const updatePos = useCallback(() => {
     if (!anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
     const cardW = 340;
@@ -129,6 +129,19 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
     if (left < 8) left = 8;
     setPos({ top, left });
   }, [anchorRef]);
+
+  useEffect(() => {
+    updatePos();
+  }, [updatePos]);
+
+  useEffect(() => {
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [updatePos]);
 
   const getAvatar = (p: Profile) => p.avatar_url || p.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name)}&background=random&size=128`;
 

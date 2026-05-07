@@ -52,12 +52,33 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const lastTypingEmitRef = useRef<number>(0);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isPartnerTypingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isAtBottomRef = useRef(true);
+  const isAutoScrollingRef = useRef(false);
+  const scrollHeightBeforeRef = useRef<number>(0);
+
+  // Track if user is near the bottom
+  const updateScrollPosition = () => {
+    if (!messagesScrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesScrollRef.current;
+    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+  };
+
+  // Initialize scroll position on mount
+  useEffect(() => {
+    isAtBottomRef.current = true;
+  }, []);
 
   // Load messages
   const loadMessages = useCallback(async (pageNum: number) => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
       setError(null);
+
+      // Save scroll height before prepending old messages
+      if (pageNum > 1 && messagesScrollRef.current) {
+        scrollHeightBeforeRef.current = messagesScrollRef.current.scrollHeight;
+      }
+
       const res = await getMessages(partnerId, pageNum, PAGE_SIZE);
       if (res.success && res.data) {
         const msgs: ForumMessage[] = res.data.messages || [];
@@ -73,6 +94,18 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       setLoadingMore(false);
     }
   }, [partnerId]);
+
+  // Restore scroll position after prepending older messages
+  useEffect(() => {
+    if (page <= 1 || loading || loadingMore) return;
+    if (!messagesScrollRef.current || scrollHeightBeforeRef.current === 0) return;
+    const newHeight = messagesScrollRef.current.scrollHeight;
+    const diff = newHeight - scrollHeightBeforeRef.current;
+    if (diff > 0) {
+      messagesScrollRef.current.scrollTop += diff;
+    }
+    scrollHeightBeforeRef.current = 0;
+  }, [messages, page, loading, loadingMore]);
 
   // Initial load + socket setup
   useEffect(() => {
@@ -93,7 +126,6 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           if (prev.some(x => x.id === m.id)) return prev;
           return [...prev, m];
         });
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         onNewMessageReceived?.();
       }
     });
@@ -123,10 +155,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     };
   }, [partnerId, user?.id]);
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages only when already at bottom
   useEffect(() => {
     if (loading) return;
-    if (page === 1) {
+    if (isAutoScrollingRef.current) return;
+    if (isAtBottomRef.current || page === 1) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, loading, page]);
@@ -134,6 +167,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   // Load more (infinite scroll top)
   const handleScroll = () => {
     if (!messagesScrollRef.current || loadingMore || !hasMore) return;
+    updateScrollPosition();
     if (messagesScrollRef.current.scrollTop < 80) {
       loadMessages(page + 1);
     }
@@ -152,7 +186,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       const res = await sendMessage(partnerId, content);
       if (res.success && res.data?.message) {
         setMessages(prev => [...prev, res.data.message]);
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        // Don't manually scroll here - let the useEffect handle it via messages dependency
         onNewMessageReceived?.();
       }
     } catch (err: any) {
