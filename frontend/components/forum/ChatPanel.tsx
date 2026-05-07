@@ -270,7 +270,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-white shrink-0">
         <button
           onClick={onBack}
-          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-colors md:hidden"
+          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-colors bg-gray-50 border border-gray-200"
         >
           <FiArrowLeft size={18} className="text-gray-600" />
         </button>

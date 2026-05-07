@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FiMessageSquare, FiUserX, FiFlag, FiStar, FiTrendingUp,
-  FiBookOpen, FiAward, FiCalendar, FiX, FiExternalLink
+  FiBookOpen, FiAward, FiCalendar, FiX, FiExternalLink, FiUser
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -106,6 +106,11 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
     onClose();
   };
 
+  const handleViewProfile = () => {
+    router.push(`/profile/user/${userId}`);
+    onClose();
+  };
+
   // Position calculation
   const [pos, setPos] = useState({ top: 0, left: 0 });
   useEffect(() => {
@@ -197,6 +202,14 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
                   <FiMessageSquare size={12} /> Nhắn tin
                 </button>
               )}
+
+              {/* Xem trang cá nhân */}
+              <button
+                onClick={handleViewProfile}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all border border-gray-200"
+              >
+                <FiUser size={12} /> Xem trang cá nhân
+              </button>
             </div>
 
             {/* Bio */}
