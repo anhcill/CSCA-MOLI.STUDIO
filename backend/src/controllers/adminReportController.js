@@ -172,6 +172,57 @@ exports.resolveReport = async (req, res) => {
         ON CONFLICT (blocker_id, blocked_id) DO NOTHING
       `, [reported_user_id, reporter_id]);
 
+      // ── Auto-block check: if user has 3+ pending reports, ban them ──
+      const reportCountRes = await db.query(`
+        SELECT COUNT(*)::INTEGER as cnt FROM forum_reports
+        WHERE reported_user_id = $1 AND status = 'pending'
+      `, [reported_user_id]);
+
+      const pendingCount = parseInt(reportCountRes.rows[0].cnt);
+
+      if (pendingCount >= 3) {
+        // Get reporter info for admin notification
+        const reporterRes = await db.query(`SELECT full_name FROM users WHERE id = $1`, [reporter_id]);
+        const reporterName = reporterRes.rows[0]?.full_name || 'Unknown';
+
+        // Block ALL users who reported this person (symmetric blocks)
+        const allReporters = await db.query(`
+          SELECT DISTINCT reporter_id FROM forum_reports
+          WHERE reported_user_id = $1 AND status = 'pending'
+        `, [reported_user_id]);
+
+        for (const row of allReporters.rows) {
+          await db.query(`
+            INSERT INTO forum_blocks (blocker_id, blocked_id)
+            VALUES ($1, $2)
+            ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+          `, [row.reporter_id, reported_user_id]);
+          await db.query(`
+            INSERT INTO forum_blocks (blocker_id, blocked_id)
+            VALUES ($1, $2)
+            ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+          `, [reported_user_id, row.reporter_id]);
+        }
+
+        // Mark all pending reports as resolved
+        await db.query(`
+          UPDATE forum_reports
+          SET status = 'resolved', resolved_by = $1, resolved_at = NOW()
+          WHERE reported_user_id = $2 AND status = 'pending'
+        `, [adminId, reported_user_id]);
+
+        // Notify admin
+        const adminUsers = await db.query(`
+          SELECT id FROM users WHERE role IN ('admin', 'super_admin')
+        `);
+        for (const admin of adminUsers.rows) {
+          await db.query(`
+            INSERT INTO notifications (recipient_id, actor_id, type)
+            VALUES ($1, $2, 'system_alert')
+          `, [admin.id, adminId]);
+        }
+      }
+
       // Notify reporter that action was taken
       await db.query(`
         INSERT INTO notifications (recipient_id, actor_id, type)
@@ -188,7 +239,9 @@ exports.resolveReport = async (req, res) => {
     res.json({
       success: true,
       message: action === 'resolve'
-        ? "Đã xử lý report. Người dùng đã bị chặn."
+        ? pendingCount >= 3
+          ? "Đã xử lý report. Người dùng đã bị chặn toàn bộ do nhận 3+ reports."
+          : "Đã xử lý report. Người dùng đã bị chặn."
         : "Đã bỏ qua report.",
     });
   } catch (error) {
@@ -223,6 +276,53 @@ exports.bulkResolve = async (req, res) => {
       WHERE id = ANY($3::int[]) AND status = 'pending'
       RETURNING id
     `, [newStatus, adminId, report_ids]);
+
+    // If resolving, check auto-block for each unique reported user
+    if (action === 'resolve') {
+      // Get all unique reported users from these reports
+      const usersRes = await db.query(`
+        SELECT DISTINCT reported_user_id FROM forum_reports
+        WHERE id = ANY($1::int[]) AND status = 'resolved'
+      `, [report_ids]);
+
+      for (const { reported_user_id } of usersRes.rows) {
+        const countRes = await db.query(`
+          SELECT COUNT(*)::INTEGER as cnt FROM forum_reports
+          WHERE reported_user_id = $1 AND status = 'pending'
+        `, [reported_user_id]);
+
+        if (parseInt(countRes.rows[0].cnt) >= 3) {
+          // Auto-block: all reporters block this user
+          const reporters = await db.query(`
+            SELECT DISTINCT reporter_id FROM forum_reports
+            WHERE reported_user_id = $1 AND status = 'pending'
+          `, [reported_user_id]);
+
+          for (const row of reporters.rows) {
+            await db.query(`
+              INSERT INTO forum_blocks (blocker_id, blocked_id) VALUES ($1, $2)
+              ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+            `, [row.reporter_id, reported_user_id]);
+            await db.query(`
+              INSERT INTO forum_blocks (blocker_id, blocked_id) VALUES ($1, $2)
+              ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+            `, [reported_user_id, row.reporter_id]);
+          }
+
+          await db.query(`
+            UPDATE forum_reports
+            SET status = 'resolved', resolved_by = $1, resolved_at = NOW()
+            WHERE reported_user_id = $2 AND status = 'pending'
+          `, [adminId, reported_user_id]);
+
+          // Notify admins
+          const admins = await db.query(`SELECT id FROM users WHERE role IN ('admin', 'super_admin')`);
+          for (const admin of admins.rows) {
+            await db.query(`INSERT INTO notifications (recipient_id, actor_id, type) VALUES ($1, $2, 'system_alert')`, [admin.id, adminId]);
+          }
+        }
+      }
+    }
 
     res.json({
       success: true,

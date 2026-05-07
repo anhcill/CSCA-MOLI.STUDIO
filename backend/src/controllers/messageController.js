@@ -1,4 +1,6 @@
 const db = require("../config/database");
+const { getIO } = require("../socket/singleton");
+const { emitNewMessage, emitUnreadCount } = require("../socket");
 
 /**
  * Get conversation list — all users this user has messaged with
@@ -225,6 +227,20 @@ exports.sendMessage = async (req, res) => {
       VALUES ($1, $2, 'new_message', $3)
     `, [receiverId, senderId, msg.id]);
 
+    // ── Socket.io: emit real-time message ───────────────────────────────────
+    try {
+      emitNewMessage(getIO(), senderId, receiverId, msg);
+
+      // Update unread count for receiver
+      const countRes = await db.query(`
+        SELECT COUNT(*)::INTEGER as cnt FROM forum_messages
+        WHERE receiver_id = $1 AND is_read = FALSE
+      `, [receiverId]);
+      emitUnreadCount(getIO(), receiverId, parseInt(countRes.rows[0].cnt));
+    } catch (socketErr) {
+      console.warn('[Socket] Failed to emit message event:', socketErr.message);
+    }
+
     res.status(201).json({ success: true, data: { message: msg } });
   } catch (error) {
     console.error("Send message error:", error);
@@ -251,6 +267,17 @@ exports.markAsRead = async (req, res) => {
 
     if (!result.rows[0]) {
       return res.status(404).json({ success: false, message: "Không tìm thấy tin nhắn" });
+    }
+
+    // Emit unread count update to receiver
+    const countRes = await db.query(`
+      SELECT COUNT(*)::INTEGER as cnt FROM forum_messages
+      WHERE receiver_id = $1 AND is_read = FALSE
+    `, [userId]);
+    try {
+      emitUnreadCount(getIO(), userId, parseInt(countRes.rows[0].cnt));
+    } catch (socketErr) {
+      console.warn('[Socket] Failed to emit unread count:', socketErr.message);
     }
 
     res.json({ success: true, message: "Đã đánh dấu đã đọc" });

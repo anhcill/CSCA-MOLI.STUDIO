@@ -10,6 +10,8 @@ export interface Post {
     author_name: string;
     author_avatar?: string;
     author_email: string;
+    author_role?: string;
+    author_is_vip?: boolean;
     like_count: number;
     comment_count: number;
     is_liked: boolean;

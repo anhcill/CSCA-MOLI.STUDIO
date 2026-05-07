@@ -1,4 +1,5 @@
 require("dotenv").config(); // reload env - 2026-02-19
+const http = require("http");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -41,6 +42,10 @@ app.use(
         connectSrc: [
           "'self'",
           process.env.FRONTEND_URL || "http://localhost:3000",
+          "https://*.vercel.app",
+          "https://*.moli.studio",
+          "wss://*",
+          "ws://*",
         ],
         // Cho phép frontend nhúng PDF từ backend vào iframe
         frameAncestors: [
@@ -205,25 +210,47 @@ app.use((err, req, res, next) => {
 });
 
 // ====================================
-// START SERVER
+// SOCKET.IO
 // ====================================
-app.listen(PORT, async () => {
-  console.log(`
+let io = null;
+try {
+  const { initSocket } = require('./socket');
+  const httpServer = http.createServer(app);
+  io = initSocket(httpServer);
+  const { setIO } = require('./socket/singleton');
+  setIO(io);
+  console.log('✅ Socket.io initialized');
+
+  // ====================================
+  // START SERVER
+  // ====================================
+  httpServer.listen(PORT, async () => {
+    console.log(`
 ╔════════════════════════════════════════╗
 ║     CSCA API Server Started            ║
 ╠════════════════════════════════════════╣
 ║  Port:        ${PORT}                     ║
 ║  Environment: ${process.env.NODE_ENV || "development"}            ║
 ║  Database:    ${process.env.DB_NAME || "csca_db"}                ║
+║  Socket.io:   Enabled                 ║
 ╚════════════════════════════════════════╝
   `);
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-  console.log(`📚 API Docs: http://localhost:${PORT}/`);
-  console.log(`❤️  Health: http://localhost:${PORT}/health`);
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log(`📚 API Docs: http://localhost:${PORT}/`);
+    console.log(`❤️  Health: http://localhost:${PORT}/health`);
 
-  // Run database optimizations: tạo indexes mới + migrate schema
-  await runOptimizations();
-});
+    await runOptimizations();
+  });
+
+  // Make io accessible to routes via app.locals
+  app.locals.io = io;
+} catch (err) {
+  console.warn('⚠️  Socket.io failed to initialize, falling back to HTTP-only mode:', err.message);
+  app.listen(PORT, async () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    await runOptimizations();
+  });
+}
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (err) => {

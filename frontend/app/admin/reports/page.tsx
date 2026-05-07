@@ -143,7 +143,7 @@ export default function AdminReportsPage() {
   };
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Quản lý Report" description="Xử lý báo cáo vi phạm từ người dùng về hành vi không phù hợp">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
