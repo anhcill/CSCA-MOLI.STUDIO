@@ -332,6 +332,12 @@ const AdminExamController = {
           }
         }
 
+        // ── Validate correct answer: single_choice / reading_item ──
+        if ((qType === QUESTION_TYPES.SINGLE_CHOICE || qType === QUESTION_TYPES.READING_ITEM) && !correctAnswer) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ message: "Cần chọn đáp án đúng (correctAnswer)" });
+        }
+
         // ── Validate correct answer: fill_blank_item ──
         if (qType === QUESTION_TYPES.FILL_BLANK_ITEM && !correctAnswerKey) {
           await client.query("ROLLBACK");
@@ -397,7 +403,7 @@ const AdminExamController = {
                 key,
                 sanitize(normAnswers[i].en),
                 sanitize(normAnswers[i].cn),
-                key === (correctAnswer || 'A'),
+                key === correctAnswer,
                 answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
               ],
             );
@@ -573,7 +579,7 @@ const AdminExamController = {
                   key,
                   sanitize(normalizedAnswers[i].en),
                   sanitize(normalizedAnswers[i].cn),
-                  key === (correctAnswer || 'A'),
+                  key === correctAnswer,
                   answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
                 ],
               );
@@ -765,6 +771,10 @@ const AdminExamController = {
                         await client.query("ROLLBACK");
                         return res.status(400).json({ message: "Cần ít nhất 2 đáp án" });
                     }
+                    if (!correctAnswer) {
+                        await client.query("ROLLBACK");
+                        return res.status(400).json({ message: "Cần chọn đáp án đúng (correctAnswer)" });
+                    }
                 }
 
                 // ── Insert the new question ──
@@ -818,7 +828,7 @@ const AdminExamController = {
                             [
                                 questionId, key,
                                 sanitize(normAnswers[i].en), sanitize(normAnswers[i].cn),
-                                key === (correctAnswer || 'A'),
+                                key === correctAnswer,
                                 answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
                             ],
                         );
