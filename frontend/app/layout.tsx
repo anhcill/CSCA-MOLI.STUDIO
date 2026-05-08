@@ -4,6 +4,7 @@ import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import Providers from "@/components/layout/Providers";
 import ClientShell from "@/components/layout/ClientShell";
 import "./globals.css";
+import "@/components/admin/MathInput.css";
 
 const inter = Inter({
   subsets: ["latin"],

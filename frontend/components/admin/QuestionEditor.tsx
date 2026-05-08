@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
+import MathInput, { renderMathDisplay } from './MathInput';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
 
@@ -432,20 +433,16 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       <summary className="px-4 py-2 cursor-pointer text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg">
         💡 Giải thích đáp án (tùy chọn)
       </summary>
-      <div className="px-4 pb-4 space-y-2">
-        <input
-          type="text"
+      <div className="px-4 pb-4">
+        <MathInput
+          label="Giải thích (Tiếng Việt)"
           value={form.explanation}
-          onChange={e => set('explanation', e.target.value)}
-          className="w-full px-3 py-1.5 border rounded-lg text-sm"
-          placeholder="Giải thích (Tiếng Việt)..."
-        />
-        <input
-          type="text"
-          value={form.explanationCn}
-          onChange={e => set('explanationCn', e.target.value)}
-          className="w-full px-3 py-1.5 border rounded-lg text-sm"
-          placeholder="解释正确答案 (中文)..."
+          onChange={v => set('explanation', v)}
+          placeholder="VD: Vì f'(x) = 2x + 1, nên \(f'(0) = 1\) → đáp án B"
+          cnLabel="Giải thích (中文)"
+          cnValue={form.explanationCn}
+          onCnChange={v => set('explanationCn', v)}
+          cnPlaceholder="解释正确答案..."
         />
       </div>
     </details>

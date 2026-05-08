@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { FiTrash2, FiSave, FiPlus, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
+import MathInput from './MathInput';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -384,20 +385,14 @@ export default function FillBlankGroup({
                       <summary className="px-3 py-1.5 cursor-pointer text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">
                         💡 Giải thích (tùy chọn)
                       </summary>
-                      <div className="px-3 pb-2 space-y-1.5">
-                        <input
-                          type="text"
+                      <div className="px-3 pb-2">
+                        <MathInput
                           value={item.explanation}
-                          onChange={e => setSubItem(item._localId, 'explanation', e.target.value)}
-                          className="w-full px-2 py-1 border rounded text-xs bg-white"
-                          placeholder="Giải thích (Tiếng Việt)..."
-                        />
-                        <input
-                          type="text"
-                          value={item.explanationCn}
-                          onChange={e => setSubItem(item._localId, 'explanationCn', e.target.value)}
-                          className="w-full px-2 py-1 border rounded text-xs bg-white"
-                          placeholder="解释正确答案 (中文)..."
+                          onChange={v => setSubItem(item._localId, 'explanation', v)}
+                          placeholder="VD: Vì f'(x) = 2x + 1, nên \(f'(0) = 1\) → đáp án A"
+                          cnValue={item.explanationCn}
+                          onCnChange={v => setSubItem(item._localId, 'explanationCn', v)}
+                          cnPlaceholder="解释正确答案..."
                         />
                       </div>
                     </details>
