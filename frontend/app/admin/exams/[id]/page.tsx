@@ -322,6 +322,8 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const [showConfirmExit, setShowConfirmExit] = useState(false);
+
     // ── Toggle edit mode ──────────────────────────────────────────────────────
     const enterEditMode = () => {
         setEditMode('edit');
@@ -329,14 +331,17 @@ export default function AdminExamDetailPage() {
     };
 
     const exitEditMode = () => {
-        if (confirm('Thoát chế độ sửa? Các thay đổi chưa lưu sẽ bị mất.')) {
-            setEditMode('view');
-            setLocalQuestions([...savedQuestions]);
-            setEditingQuestionId(null);
-            setShowQuickAdd(false);
-            setAddingAfterId(null);
-            setQuickAddPosition(null);
-        }
+        setShowConfirmExit(true);
+    };
+
+    const handleConfirmExit = () => {
+        setEditMode('view');
+        setLocalQuestions([...savedQuestions]);
+        setEditingQuestionId(null);
+        setShowQuickAdd(false);
+        setAddingAfterId(null);
+        setQuickAddPosition(null);
+        setShowConfirmExit(false);
     };
 
     // ── Toggle exam settings ──────────────────────────────────────────────────
@@ -1039,6 +1044,32 @@ export default function AdminExamDetailPage() {
                     </div>
                 )}
             </main>
+
+            {/* Confirm exit modal */}
+            {showConfirmExit && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Thoát chế độ sửa?</h3>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Các thay đổi chưa lưu sẽ bị mất. Bạn có chắc muốn thoát?
+                        </p>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowConfirmExit(false)}
+                                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                onClick={handleConfirmExit}
+                                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                            >
+                                Thoát
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
