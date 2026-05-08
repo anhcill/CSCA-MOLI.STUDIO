@@ -1017,6 +1017,7 @@ export default function AdminExamDetailPage() {
                                     onClick={() => {
                                         setShowAddFillBlank(true);
                                         setPendingFillBlankGroups(prev => [...prev, {
+                                            _id: `fbg-${Date.now()}`,
                                             _localId: `fbg-${Date.now()}`,
                                             passageText: '',
                                             passageImageUrl: '',
@@ -1039,6 +1040,7 @@ export default function AdminExamDetailPage() {
                                     onClick={() => {
                                         setShowAddReadingPassage(true);
                                         setPendingReadingGroups(prev => [...prev, {
+                                            _id: `rpg-${Date.now()}`,
                                             _localId: `rpg-${Date.now()}`,
                                             passageText: '',
                                             passageImageUrl: '',
@@ -1112,6 +1114,7 @@ export default function AdminExamDetailPage() {
                                                     key={q._localId}
                                                     startNumber={q._questionNumber}
                                                     initialData={{
+                                                        _id: q._localId,
                                                         _localId: q._localId,
                                                         passageText: '',
                                                         passageImageUrl: '',
@@ -1143,6 +1146,7 @@ export default function AdminExamDetailPage() {
                                                     key={q._localId}
                                                     startNumber={q._questionNumber}
                                                     initialData={{
+                                                        _id: q._localId,
                                                         _localId: q._localId,
                                                         passageText: '',
                                                         passageImageUrl: '',

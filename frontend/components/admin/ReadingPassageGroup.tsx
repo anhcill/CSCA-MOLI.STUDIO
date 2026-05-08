@@ -22,6 +22,7 @@ export interface ReadingSubQuestion {
 }
 
 export interface ReadingPassageGroupData {
+  _id: string;
   _localId: string;
   passageText: string;
   passageImageUrl: string;
@@ -73,6 +74,7 @@ export default function ReadingPassageGroup({
     initialData
       ? { ...initialData }
       : {
+          _id: `rg-${Date.now()}`,
           _localId: `rg-${Date.now()}`,
           passageText: '',
           passageImageUrl: '',

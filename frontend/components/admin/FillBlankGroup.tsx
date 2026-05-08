@@ -20,6 +20,7 @@ export interface BlankSubItem {
 }
 
 export interface FillBlankGroupData {
+  _id: string;
   _localId: string;
   passageText: string;
   passageImageUrl: string;
@@ -78,6 +79,7 @@ export default function FillBlankGroup({
     initialData
       ? { ...initialData }
       : {
+          _id: `fbg-${Date.now()}`,
           _localId: `fbg-${Date.now()}`,
           passageText: '',
           passageImageUrl: '',
