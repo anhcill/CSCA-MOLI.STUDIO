@@ -650,24 +650,23 @@ const AdminExamController = {
     async insertQuestion(req, res) {
         const MAX_RETRIES = 5;
 
-        try {
-            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-                const { examId } = req.params;
-                const { questionData, afterQuestionId, atPosition } = req.body;
+        const { examId } = req.params;
+        const { questionData, afterQuestionId, atPosition } = req.body || {};
 
-            if (!questionData) {
-                return res.status(400).json({ message: "questionData là bắt buộc" });
-            }
+        if (!questionData) {
+            return res.status(400).json({ message: "questionData là bắt buộc" });
+        }
 
-            const {
-                questionType, questionText, questionTextCn, imageUrl,
-                points, explanation, explanationCn, answers, correctAnswer,
-                passageText, passageImageUrl, difficulty, linkedOptions,
-                correctAnswerKey, subQuestionNumber,
-            } = questionData;
+        const {
+            questionType, questionText, questionTextCn, imageUrl,
+            points, explanation, explanationCn, answers, correctAnswer,
+            passageText, passageImageUrl, difficulty, linkedOptions,
+            correctAnswerKey, subQuestionNumber,
+        } = questionData;
 
-            const qType = questionType || 'single_choice';
+        const qType = questionType || 'single_choice';
 
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const client = await pool.connect();
             try {
                 await client.query("BEGIN");
@@ -850,28 +849,25 @@ const AdminExamController = {
                 });
             } catch (error) {
                 await client.query("ROLLBACK");
-                throw error;
-            } finally {
+                // Chỉ retry khi gặp duplicate key (23505), không retry các lỗi khác
+                const isDuplicateKey =
+                    error.code === '23505' &&
+                    error.constraint === 'questions_exam_id_question_number_key';
+
+                if (isDuplicateKey) {
+                    console.warn(`[insertQuestion] Duplicate key on attempt ${attempt + 1}, retrying...`);
+                    client.release();
+                    continue; // thử lại với vị trí mới
+                }
+
+                console.error("Insert question error:", error);
                 client.release();
+                return res.status(500).json({ message: "Failed to insert question" });
             }
+        } // end for
 
-            // Nếu vào đây = thành công, break khỏi retry loop
-            break;
-        }
-        } catch (error) {
-            // Chỉ retry khi gặp duplicate key (23505), không retry các lỗi khác
-            const isDuplicateKey =
-                error.code === '23505' &&
-                error.constraint === 'questions_exam_id_question_number_key';
-
-            if (isDuplicateKey) {
-                console.warn(`[insertQuestion] Duplicate key on attempt, retrying...`);
-                continue; // thử lại với vị trí mới
-            }
-
-            console.error("Insert question error:", error);
-            res.status(500).json({ message: "Failed to insert question" });
-        }
+        // Nếu hết retries mà vẫn lỗi
+        return res.status(500).json({ message: "Failed to insert question after retries" });
     },
 
     // ── P2: Question reordering ─────────────────────────────────────────────────
