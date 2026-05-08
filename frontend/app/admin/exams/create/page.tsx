@@ -219,23 +219,22 @@ export default function CreateExamPage() {
             setLoading(true);
 
             if (data.questionType === 'reading_passage') {
-                const newGroupId = `rpg-${Date.now()}`;
-                await examAdminApi.insertReadingPassageGroup(currentExamId, {
-                    _localId: newGroupId,
+                const res = await examAdminApi.insertReadingPassageGroup(currentExamId, {
+                    _localId: `rpg-${Date.now()}`,
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
                     subQuestions: [],
                 });
                 setReadingPassageGroups(prev => [...prev, {
-                    _id: newGroupId,
-                    _localId: newGroupId,
+                    _id: String(res.groupId),
+                    _localId: `rpg-${Date.now()}`,
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
                     subQuestions: [],
                 }]);
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                await examAdminApi.insertFillBlankGroup(currentExamId, {
+                const res = await examAdminApi.insertFillBlankGroup(currentExamId, {
                     _localId: `fbg-${Date.now()}`,
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
@@ -250,7 +249,7 @@ export default function CreateExamPage() {
                     subItems: [],
                 });
                 setFillBlankGroups(prev => [...prev, {
-                    _id: `fbg-${Date.now()}`,
+                    _id: String(res.groupId),
                     _localId: `fbg-${Date.now()}`,
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
@@ -340,14 +339,17 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            await examAdminApi.insertReadingPassageGroup(currentExamId, data as any);
+            const numericGroupId = Number(data._id.replace('rpg-', '').replace(/[^0-9]/g, ''));
+            await examAdminApi.updateReadingPassageGroup(currentExamId, numericGroupId, {
+                passageText: data.passageText,
+                passageImageUrl: data.passageImageUrl,
+                subQuestions: data.subQuestions,
+            });
 
-            // Update local state với subQuestions đầy đủ (có số câu đúng)
             const updated = [...readingPassageGroups];
-            updated[index] = { ...data, _id: updated[index]._id };
+            updated[index] = { ...data };
             setReadingPassageGroups(updated);
 
-            // Update next start number
             if (data.subQuestions.length > 0) {
                 setNextPassageStartNumber(data.subQuestions.length);
             }
@@ -361,10 +363,22 @@ export default function CreateExamPage() {
         }
     };
 
-    const deleteReadingPassageGroup = (index: number) => {
-        if (confirm('Xóa đoạn đọc hiểu này?')) {
+    const deleteReadingPassageGroup = async (index: number) => {
+        const group = readingPassageGroups[index];
+        if (!confirm('Xóa đoạn đọc hiểu này?')) return;
+        try {
+            setLoading(true);
+            const numericGroupId = Number(group._id.replace('rpg-', '').replace(/[^0-9]/g, ''));
+            if (currentExamId && numericGroupId > 0) {
+                await examAdminApi.deleteReadingPassageGroup(currentExamId, numericGroupId);
+            }
             const newGroups = readingPassageGroups.filter((_, i) => i !== index);
             setReadingPassageGroups(newGroups);
+        } catch (error) {
+            console.error('Error deleting reading passage group:', error);
+            alert('Xóa thất bại');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -395,14 +409,18 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            await examAdminApi.insertFillBlankGroup(currentExamId, data as any);
+            const numericGroupId = Number(data._id.replace('fbg-', '').replace(/[^0-9]/g, ''));
+            await examAdminApi.updateFillBlankGroup(currentExamId, numericGroupId, {
+                passageText: data.passageText,
+                passageImageUrl: data.passageImageUrl,
+                linkedOptions: data.linkedOptions,
+                subItems: data.subItems,
+            });
 
-            // Update local state
             const updated = [...fillBlankGroups];
-            updated[index] = { ...data, _id: updated[index]._id };
+            updated[index] = { ...data };
             setFillBlankGroups(updated);
 
-            // Update next start number
             if (data.subItems.length > 0) {
                 setNextFillBlankStartNumber(data.subItems.length);
             }
@@ -416,10 +434,22 @@ export default function CreateExamPage() {
         }
     };
 
-    const deleteFillBlankGroup = (index: number) => {
-        if (confirm('Xóa nhóm điền từ này?')) {
+    const deleteFillBlankGroup = async (index: number) => {
+        const group = fillBlankGroups[index];
+        if (!confirm('Xóa nhóm điền từ này?')) return;
+        try {
+            setLoading(true);
+            const numericGroupId = Number(group._id.replace('fbg-', '').replace(/[^0-9]/g, ''));
+            if (currentExamId && numericGroupId > 0) {
+                await examAdminApi.deleteFillBlankGroup(currentExamId, numericGroupId);
+            }
             const newGroups = fillBlankGroups.filter((_, i) => i !== index);
             setFillBlankGroups(newGroups);
+        } catch (error) {
+            console.error('Error deleting fill blank group:', error);
+            alert('Xóa thất bại');
+        } finally {
+            setLoading(false);
         }
     };
 

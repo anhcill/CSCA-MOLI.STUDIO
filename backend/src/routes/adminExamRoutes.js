@@ -38,4 +38,14 @@ router.delete("/:examId/schedule", scheduleLimiter, AdminExamController.clearSch
 // ── Question reordering ──────────────────────────────────────────────────────
 router.put("/:examId/questions/reorder", examWriteLimiter, AdminExamController.reorderQuestions);
 
+// ── Fill blank group (pool + sub-items) ───────────────────────────────────
+router.post("/:examId/fill-blank-group", examWriteLimiter, AdminExamController.insertFillBlankGroup);
+router.put("/:examId/fill-blank-group/:groupId", examWriteLimiter, AdminExamController.updateFillBlankGroup);
+router.delete("/:examId/fill-blank-group/:groupId", examWriteLimiter, AdminExamController.deleteFillBlankGroup);
+
+// ── Reading passage group (passage + sub-questions) ─────────────────────────
+router.post("/:examId/reading-passage-group", examWriteLimiter, AdminExamController.insertReadingPassageGroup);
+router.put("/:examId/reading-passage-group/:groupId", examWriteLimiter, AdminExamController.updateReadingPassageGroup);
+router.delete("/:examId/reading-passage-group/:groupId", examWriteLimiter, AdminExamController.deleteReadingPassageGroup);
+
 module.exports = router;

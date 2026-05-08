@@ -157,10 +157,26 @@ export const examAdminApi = {
         const response = await axios.post(`/admin/exams/${examId}/fill-blank-group`, data);
         return response.data;
     },
+    updateFillBlankGroup: async (examId: number, groupId: number, data: any) => {
+        const response = await axios.put(`/admin/exams/${examId}/fill-blank-group/${groupId}`, data);
+        return response.data;
+    },
+    deleteFillBlankGroup: async (examId: number, groupId: number) => {
+        const response = await axios.delete(`/admin/exams/${examId}/fill-blank-group/${groupId}`);
+        return response.data;
+    },
 
     // ── Reading passage group (passage + sub-questions) ───────────────────────
     insertReadingPassageGroup: async (examId: number, data: any) => {
         const response = await axios.post(`/admin/exams/${examId}/reading-passage-group`, data);
+        return response.data;
+    },
+    updateReadingPassageGroup: async (examId: number, groupId: number, data: any) => {
+        const response = await axios.put(`/admin/exams/${examId}/reading-passage-group/${groupId}`, data);
+        return response.data;
+    },
+    deleteReadingPassageGroup: async (examId: number, groupId: number) => {
+        const response = await axios.delete(`/admin/exams/${examId}/reading-passage-group/${groupId}`);
         return response.data;
     },
 };

@@ -356,8 +356,8 @@ const AdminExamController = {
              image_url,
              passage_text, passage_image_url,
              question_group_type, difficulty,
-             linked_options, sub_question_number, passage_group_id
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+             linked_options, sub_question_number, passage_group_id, correct_answer
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
            RETURNING id`,
           [
             examId,
@@ -371,11 +371,12 @@ const AdminExamController = {
             imageUrl ? sanitize(imageUrl) : null,
             passageText ? sanitize(passageText) : null,
             passageImageUrl ? sanitize(passageImageUrl) : null,
-            qType,   // dùng question_type làm question_group_type luôn
+            qType,
             difficulty || null,
             linkedOpts ? JSON.stringify(linkedOpts) : null,
             subQn,
             passageGroupId,
+            qType === QUESTION_TYPES.FILL_BLANK_ITEM ? correctAnswerKey : null,
           ],
         );
 
@@ -788,8 +789,8 @@ const AdminExamController = {
                         points, explanation, explanation_cn,
                         image_url, passage_text, passage_image_url,
                         question_group_type, difficulty,
-                        linked_options, sub_question_number, passage_group_id
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                        linked_options, sub_question_number, passage_group_id, correct_answer
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                     RETURNING id`,
                     [
                         examId, targetPosition, qType,
@@ -803,6 +804,7 @@ const AdminExamController = {
                         qType, difficulty || null,
                         linkedOpts ? JSON.stringify(linkedOpts) : null,
                         subQn, passageGroupId,
+                        qType === 'fill_blank_item' ? correctAnswerKey : null,
                     ],
                 );
 
@@ -1424,6 +1426,640 @@ const AdminExamController = {
     } catch (error) {
       console.error('Clear schedule error:', error);
       res.status(500).json({ message: 'Failed to clear schedule' });
+    }
+  },
+
+  // ── FILL BLANK GROUP (pool + sub-items) ────────────────────────────────────
+  // POST /api/admin/exams/:examId/fill-blank-group
+  async insertFillBlankGroup(req, res) {
+    try {
+      const { examId } = req.params;
+      const {
+        passageText,
+        passageImageUrl,
+        linkedOptions,
+        subItems,
+      } = req.body;
+
+      if (!passageText || !passageText.trim()) {
+        return res.status(400).json({ message: 'Điền từ cần có đoạn văn (passageText)' });
+      }
+
+      const normalizedOpts = normalizeLinkedOptions(linkedOptions || []);
+      if (!normalizedOpts || normalizedOpts.length < 2) {
+        return res.status(400).json({ message: 'Cần ít nhất 2 từ chọn A-F có nội dung' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        // Count existing questions
+        const countRes = await client.query(
+          'SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1',
+          [examId]
+        );
+        let questionNumber = countRes.rows[0].count + 1;
+        const startNumber = questionNumber;
+
+        // Insert the FILL_BLANK_POOL question (passage + pool)
+        const poolResult = await client.query(
+          `INSERT INTO questions (
+             exam_id, question_number, question_type,
+             question_text, question_text_cn,
+             points, passage_text, passage_image_url,
+             question_group_type, difficulty,
+             linked_options, sub_question_number, passage_group_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           RETURNING id`,
+          [
+            examId, questionNumber, QUESTION_TYPES.FILL_BLANK_POOL,
+            'Điền từ', '填空',
+            0,  // pool không tính điểm
+            sanitize(passageText),
+            passageImageUrl ? sanitize(passageImageUrl) : null,
+            QUESTION_TYPES.FILL_BLANK_POOL, 'medium',
+            JSON.stringify(normalizedOpts), null, null,
+          ]
+        );
+        const poolId = poolResult.rows[0].id;
+
+        // Self-assign passage_group_id
+        await client.query(
+          'UPDATE questions SET passage_group_id = id WHERE id = $1',
+          [poolId]
+        );
+
+        // Insert sub-items (fill_blank_items)
+        const insertedSubQuestions = [];
+        const validSubItems = Array.isArray(subItems) ? subItems.filter(
+          item => item.correctAnswerKey && normalizedOpts.some(o => o.key === item.correctAnswerKey)
+        ) : [];
+
+        for (const item of validSubItems) {
+          questionNumber++;
+          const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+          const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
+          const subResult = await client.query(
+            `INSERT INTO questions (
+               exam_id, question_number, question_type,
+               question_text, question_text_cn,
+               points, explanation, explanation_cn,
+               question_group_type, difficulty,
+               correct_answer, sub_question_number, passage_group_id
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             RETURNING id`,
+            [
+              examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
+              sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+              parsedPoints,
+              item.explanation ? sanitize(item.explanation) : null,
+              item.explanationCn ? sanitize(item.explanationCn) : null,
+              QUESTION_TYPES.FILL_BLANK_ITEM,
+              item.difficulty || 'medium',
+              item.correctAnswerKey,
+              item.subQuestionNumber || questionNumber,
+              poolId,
+            ]
+          );
+          insertedSubQuestions.push({
+            id: subResult.rows[0].id,
+            questionNumber,
+            correctAnswerKey: item.correctAnswerKey,
+          });
+        }
+
+        // Update exam total_questions
+        await client.query(
+          'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
+          [1 + insertedSubQuestions.length, examId]
+        );
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.insert_fill_blank_group', {
+          examId, poolId, subQuestions: insertedSubQuestions.length,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.status(201).json({
+          message: 'Nhóm điền từ đã được tạo',
+          groupId: poolId,
+          questionNumber: startNumber,
+          subQuestions: insertedSubQuestions,
+          totalItems: 1 + insertedSubQuestions.length,
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Insert fill blank group error:', error);
+      res.status(500).json({ message: 'Failed to create fill blank group' });
+    }
+  },
+
+  // PUT /api/admin/exams/:examId/fill-blank-group/:groupId
+  async updateFillBlankGroup(req, res) {
+    try {
+      const { examId, groupId } = req.params;
+      const {
+        passageText,
+        passageImageUrl,
+        linkedOptions,
+        subItems,
+      } = req.body;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        // Update pool question
+        const updates = [];
+        const vals = [];
+        let idx = 1;
+
+        if (passageText !== undefined) {
+          updates.push(`passage_text = $${idx++}`);
+          vals.push(passageText ? sanitize(passageText) : null);
+        }
+        if (passageImageUrl !== undefined) {
+          updates.push(`passage_image_url = $${idx++}`);
+          vals.push(passageImageUrl ? sanitize(passageImageUrl) : null);
+        }
+        if (linkedOptions !== undefined) {
+          const normalizedOpts = normalizeLinkedOptions(linkedOptions || []);
+          updates.push(`linked_options = $${idx++}`);
+          vals.push(normalizedOpts ? JSON.stringify(normalizedOpts) : null);
+        }
+
+        if (updates.length > 0) {
+          vals.push(groupId);
+          await client.query(
+            `UPDATE questions SET ${updates.join(', ')} WHERE id = $${idx}`,
+            vals
+          );
+        }
+
+        // Update sub-items
+        if (Array.isArray(subItems)) {
+          // Delete existing sub-items
+          await client.query(
+            'DELETE FROM questions WHERE passage_group_id = $1 AND question_type = $2',
+            [groupId, QUESTION_TYPES.FILL_BLANK_ITEM]
+          );
+
+          // Get current max question_number for this exam
+          const countRes = await client.query(
+            'SELECT COALESCE(MAX(question_number), 0)::int as max_num FROM questions WHERE exam_id = $1',
+            [examId]
+          );
+          let questionNumber = countRes.rows[0].max_num;
+
+          const normalizedOpts = normalizeLinkedOptions(linkedOptions || []) || [];
+          const insertedSubs = [];
+
+          for (const item of subItems) {
+            if (!item.correctAnswerKey) continue;
+            if (normalizedOpts.length > 0 && !normalizedOpts.some(o => o.key === item.correctAnswerKey)) continue;
+
+            questionNumber++;
+            const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+            const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
+
+            const subResult = await client.query(
+              `INSERT INTO questions (
+                 exam_id, question_number, question_type,
+                 question_text, question_text_cn,
+                 points, explanation, explanation_cn,
+                 question_group_type, difficulty,
+                 correct_answer, sub_question_number, passage_group_id
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+               RETURNING id`,
+              [
+                examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
+                sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+                parsedPoints,
+                item.explanation ? sanitize(item.explanation) : null,
+                item.explanationCn ? sanitize(item.explanationCn) : null,
+                QUESTION_TYPES.FILL_BLANK_ITEM,
+                item.difficulty || 'medium',
+                item.correctAnswerKey,
+                item.subQuestionNumber || questionNumber,
+                groupId,
+              ]
+            );
+            insertedSubs.push({ id: subResult.rows[0].id, questionNumber });
+          }
+
+          // Update exam total_questions
+          const netChange = 1 + insertedSubs.length;
+          await client.query(
+            'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
+            [netChange, examId]
+          );
+        }
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.update_fill_blank_group', {
+          examId, groupId,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.json({ message: 'Nhóm điền từ đã được cập nhật' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Update fill blank group error:', error);
+      res.status(500).json({ message: 'Failed to update fill blank group' });
+    }
+  },
+
+  // DELETE /api/admin/exams/:examId/fill-blank-group/:groupId
+  async deleteFillBlankGroup(req, res) {
+    try {
+      const { examId, groupId } = req.params;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        // Count sub-questions to update total
+        const countRes = await client.query(
+          `SELECT COUNT(*)::int as count FROM questions
+           WHERE passage_group_id = $1 AND question_type = $2`,
+          [groupId, QUESTION_TYPES.FILL_BLANK_ITEM]
+        );
+        const subCount = countRes.rows[0].count;
+        const totalDelete = 1 + subCount;
+
+        // Delete sub-questions first
+        await client.query(
+          'DELETE FROM questions WHERE passage_group_id = $1',
+          [groupId]
+        );
+        // Delete pool question
+        await client.query('DELETE FROM questions WHERE id = $1', [groupId]);
+
+        // Update exam total
+        await client.query(
+          'UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2',
+          [totalDelete, examId]
+        );
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.delete_fill_blank_group', {
+          examId, groupId,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.json({ message: 'Nhóm điền từ đã được xóa' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Delete fill blank group error:', error);
+      res.status(500).json({ message: 'Failed to delete fill blank group' });
+    }
+  },
+
+  // ── READING PASSAGE GROUP (passage + sub-questions) ──────────────────────────
+  // POST /api/admin/exams/:examId/reading-passage-group
+  async insertReadingPassageGroup(req, res) {
+    try {
+      const { examId } = req.params;
+      const {
+        passageText,
+        passageImageUrl,
+        subQuestions,
+      } = req.body;
+
+      if (!passageText || !passageText.trim()) {
+        return res.status(400).json({ message: 'Đọc hiểu cần có đoạn văn (passageText)' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        const countRes = await client.query(
+          'SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1',
+          [examId]
+        );
+        let questionNumber = countRes.rows[0].count + 1;
+        const startNumber = questionNumber;
+
+        // Insert READING_PASSAGE question
+        const passageResult = await client.query(
+          `INSERT INTO questions (
+             exam_id, question_number, question_type,
+             question_text, question_text_cn,
+             points, passage_text, passage_image_url,
+             question_group_type, sub_question_number, passage_group_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING id`,
+          [
+            examId, questionNumber, QUESTION_TYPES.READING_PASSAGE,
+            'Đoạn văn đọc hiểu', '阅读理解',
+            0, sanitize(passageText),
+            passageImageUrl ? sanitize(passageImageUrl) : null,
+            QUESTION_TYPES.READING_PASSAGE, null, null,
+          ]
+        );
+        const passageId = passageResult.rows[0].id;
+        await client.query(
+          'UPDATE questions SET passage_group_id = id WHERE id = $1',
+          [passageId]
+        );
+
+        // Insert sub-questions
+        const insertedSubs = [];
+        const validSubQs = Array.isArray(subQuestions) ? subQuestions.filter(
+          q => q.correctAnswer && Array.isArray(q.answers) && q.answers.length >= 2
+        ) : [];
+
+        for (const q of validSubQs) {
+          questionNumber++;
+          const parsedPoints = clamp(parsePositiveNumber(q.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+          const normQ = normalizeBilingualText(q.questionText, q.questionTextCn);
+
+          const subResult = await client.query(
+            `INSERT INTO questions (
+               exam_id, question_number, question_type,
+               question_text, question_text_cn,
+               points, explanation, explanation_cn,
+               question_group_type, difficulty,
+               sub_question_number, passage_group_id
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             RETURNING id`,
+            [
+              examId, questionNumber, QUESTION_TYPES.READING_ITEM,
+              sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+              parsedPoints,
+              q.explanation ? sanitize(q.explanation) : null,
+              q.explanationCn ? sanitize(q.explanationCn) : null,
+              QUESTION_TYPES.READING_ITEM,
+              q.difficulty || 'medium',
+              q.subQuestionNumber || questionNumber,
+              passageId,
+            ]
+          );
+          const subId = subResult.rows[0].id;
+
+          // Insert answers
+          const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+          for (let i = 0; i < q.answers.length; i++) {
+            const normA = normalizeBilingualText(q.answers[i].text, q.answers[i].textCn);
+            if (!normA) continue;
+            await client.query(
+              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                subId, answerKeys[i],
+                sanitize(normA.en), sanitize(normA.cn),
+                answerKeys[i] === q.correctAnswer,
+                q.answers[i]?.imageUrl ? sanitize(q.answers[i].imageUrl) : null,
+              ]
+            );
+          }
+
+          insertedSubs.push({ id: subId, questionNumber, correctAnswer: q.correctAnswer });
+        }
+
+        await client.query(
+          'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
+          [1 + insertedSubs.length, examId]
+        );
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.insert_reading_passage_group', {
+          examId, passageId, subQuestions: insertedSubs.length,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.status(201).json({
+          message: 'Đoạn đọc hiểu đã được tạo',
+          groupId: passageId,
+          questionNumber: startNumber,
+          subQuestions: insertedSubs,
+          totalItems: 1 + insertedSubs.length,
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Insert reading passage group error:', error);
+      res.status(500).json({ message: 'Failed to create reading passage group' });
+    }
+  },
+
+  // PUT /api/admin/exams/:examId/reading-passage-group/:groupId
+  async updateReadingPassageGroup(req, res) {
+    try {
+      const { examId, groupId } = req.params;
+      const {
+        passageText,
+        passageImageUrl,
+        subQuestions,
+      } = req.body;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        // Update passage
+        const updates = [];
+        const vals = [];
+        let idx = 1;
+
+        if (passageText !== undefined) {
+          updates.push(`passage_text = $${idx++}`);
+          vals.push(passageText ? sanitize(passageText) : null);
+        }
+        if (passageImageUrl !== undefined) {
+          updates.push(`passage_image_url = $${idx++}`);
+          vals.push(passageImageUrl ? sanitize(passageImageUrl) : null);
+        }
+
+        if (updates.length > 0) {
+          vals.push(groupId);
+          await client.query(
+            `UPDATE questions SET ${updates.join(', ')} WHERE id = $${idx}`,
+            vals
+          );
+        }
+
+        // Update sub-questions
+        if (Array.isArray(subQuestions)) {
+          await client.query(
+            'DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1 AND question_type = $2)',
+            [groupId, QUESTION_TYPES.READING_ITEM]
+          );
+          await client.query(
+            'DELETE FROM questions WHERE passage_group_id = $1 AND question_type = $2',
+            [groupId, QUESTION_TYPES.READING_ITEM]
+          );
+
+          const countRes = await client.query(
+            'SELECT COALESCE(MAX(question_number), 0)::int as max_num FROM questions WHERE exam_id = $1',
+            [examId]
+          );
+          let questionNumber = countRes.rows[0].max_num;
+          const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+          const insertedSubs = [];
+
+          for (const q of subQuestions) {
+            if (!q.correctAnswer || !Array.isArray(q.answers)) continue;
+
+            questionNumber++;
+            const parsedPoints = clamp(parsePositiveNumber(q.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+            const normQ = normalizeBilingualText(q.questionText, q.questionTextCn);
+
+            const subResult = await client.query(
+              `INSERT INTO questions (
+                 exam_id, question_number, question_type,
+                 question_text, question_text_cn,
+                 points, explanation, explanation_cn,
+                 question_group_type, difficulty,
+                 sub_question_number, passage_group_id
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+               RETURNING id`,
+              [
+                examId, questionNumber, QUESTION_TYPES.READING_ITEM,
+                sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+                parsedPoints,
+                q.explanation ? sanitize(q.explanation) : null,
+                q.explanationCn ? sanitize(q.explanationCn) : null,
+                QUESTION_TYPES.READING_ITEM,
+                q.difficulty || 'medium',
+                q.subQuestionNumber || questionNumber,
+                groupId,
+              ]
+            );
+            const subId = subResult.rows[0].id;
+
+            for (let i = 0; i < q.answers.length; i++) {
+              const normA = normalizeBilingualText(q.answers[i].text, q.answers[i].textCn);
+              if (!normA) continue;
+              await client.query(
+                `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                  subId, answerKeys[i],
+                  sanitize(normA.en), sanitize(normA.cn),
+                  answerKeys[i] === q.correctAnswer,
+                  q.answers[i]?.imageUrl ? sanitize(q.answers[i].imageUrl) : null,
+                ]
+              );
+            }
+            insertedSubs.push({ id: subId, questionNumber });
+          }
+
+          const netChange = 1 + insertedSubs.length;
+          await client.query(
+            'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
+            [netChange, examId]
+          );
+        }
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.update_reading_passage_group', {
+          examId, groupId,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.json({ message: 'Đoạn đọc hiểu đã được cập nhật' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Update reading passage group error:', error);
+      res.status(500).json({ message: 'Failed to update reading passage group' });
+    }
+  },
+
+  // DELETE /api/admin/exams/:examId/reading-passage-group/:groupId
+  async deleteReadingPassageGroup(req, res) {
+    try {
+      const { examId, groupId } = req.params;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
+
+        const countRes = await client.query(
+          `SELECT COUNT(*)::int as count FROM questions
+           WHERE passage_group_id = $1`,
+          [groupId]
+        );
+        const totalCount = countRes.rows[0].count;
+
+        await client.query(
+          'DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1)',
+          [groupId]
+        );
+        await client.query('DELETE FROM questions WHERE passage_group_id = $1', [groupId]);
+        await client.query('DELETE FROM questions WHERE id = $1', [groupId]);
+
+        await client.query(
+          'UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2',
+          [totalCount, examId]
+        );
+
+        await client.query('COMMIT');
+        cache.delByPrefix('exams:');
+        cache.del('exams:lobby');
+
+        UserActivity.log(req.user.id, 'admin.delete_reading_passage_group', {
+          examId, groupId,
+          ip: req.ip, userAgent: req.headers['user-agent'],
+        });
+
+        res.json({ message: 'Đoạn đọc hiểu đã được xóa' });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Delete reading passage group error:', error);
+      res.status(500).json({ message: 'Failed to delete reading passage group' });
     }
   },
 };
