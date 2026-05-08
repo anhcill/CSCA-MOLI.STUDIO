@@ -1,9 +1,5 @@
-fix: retry loop on duplicate key in insertQuestion (race condition)
+fix: remove default correctAnswer 'A' — require explicit selection
 
-- Wrap insertQuestion in a retry loop (up to 5 attempts) for
-  "questions_exam_id_question_number_key" duplicate violations
-- When a duplicate key is caught, retry recalculates the position
-  and attempts again, ensuring eventual success even under race
-- Complement advisory lock fix (pg_advisory_xact_lock) already in place
-- Railway deployment pending — this retry is resilient to both old
-  and new server versions
+- correctAnswer defaults to '' instead of 'A'
+- Add validation: cannot save single_choice/reading_item without selecting correct answer
+- Prevents accidental save with wrong default answer

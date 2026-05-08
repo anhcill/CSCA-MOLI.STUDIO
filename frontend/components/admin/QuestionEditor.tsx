@@ -74,7 +74,7 @@ function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
     explanation: initial?.explanation || '',
     explanationCn: initial?.explanationCn || '',
     answers: initial?.answers?.length ? initial.answers : DEFAULT_ANSWERS(),
-    correctAnswer: initial?.correctAnswer || 'A',
+    correctAnswer: initial?.correctAnswer ?? '',
     linkedOptions: initial?.linkedOptions?.length ? initial.linkedOptions : DEFAULT_LINKED_OPTIONS,
     correctAnswerKey: initial?.correctAnswerKey || 'A',
     subQuestionNumber: initial?.subQuestionNumber || 0,
@@ -119,6 +119,12 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
       // Câu con điền từ: không cần questionText
     } else if (!form.questionText.trim() && !form.questionTextCn.trim()) {
       alert('Vui lòng nhập nội dung câu hỏi (Tiếng Việt hoặc Tiếng Trung)');
+      return;
+    }
+
+    if ((form.questionType === 'single_choice' || form.questionType === 'reading_item') &&
+        !form.correctAnswer) {
+      alert('Vui lòng chọn đáp án đúng');
       return;
     }
 
