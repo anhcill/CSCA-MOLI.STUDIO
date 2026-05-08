@@ -126,5 +126,55 @@ export default function sitemap(): MetadataRoute.Sitemap {
         },
     ];
 
-    return [...staticRoutes, ...subjectRoutes, ...toanExtra];
+    // Blog routes
+    const blogRoutes: MetadataRoute.Sitemap = [
+        {
+            url: `${BASE_URL}/blog`,
+            lastModified: now,
+            changeFrequency: 'daily' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/blog/cach-luyen-thi-hsk-3-hieu-qua-trong-3-thang`,
+            lastModified: new Date('2026-05-01'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/so-sanh-hsk-1-vs-hsk-2-nen-thi-bac-nao`,
+            lastModified: new Date('2026-05-03'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/tu-vung-hsk-4-theo-chu-de-hoc-ngay`,
+            lastModified: new Date('2026-05-05'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/bi-quyet-dat-200-200-diem-hskk`,
+            lastModified: new Date('2026-05-07'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/lich-thi-hsk-2026-dang-ky-ngay`,
+            lastModified: new Date('2026-05-08'),
+            changeFrequency: 'weekly' as const,
+            priority: 0.9,
+        },
+    ];
+
+    // FAQ
+    const faqRoutes: MetadataRoute.Sitemap = [
+        {
+            url: `${BASE_URL}/cau-hoi-thuong-gap`,
+            lastModified: now,
+            changeFrequency: 'monthly' as const,
+            priority: 0.7,
+        },
+    ];
+
+    return [...staticRoutes, ...faqRoutes, ...blogRoutes, ...subjectRoutes, ...toanExtra];
 }
