@@ -17,6 +17,10 @@ interface VipPackage {
   description: string;
   features: string[];
   is_active: boolean;
+  // Extra fields returned by the API
+  highlight?: string;
+  badge?: string;
+  badge_color?: string;
 }
 
 interface CouponResult {
@@ -274,10 +278,14 @@ export default function VipPricingPage() {
                       ))
                     ) : (
                       /* Hardcoded Free card when no free package in DB */
-                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300 cursor-pointer">
-                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 pt-6 text-white">
-                          <h3 className="text-lg font-black">Miễn phí</h3>
-                          <p className="text-white/70 text-xs mt-0.5">Dùng thử không giới hạn</p>
+                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300">
+                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white pt-6">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-lg font-black">Miễn phí</h3>
+                              <p className="text-white/70 text-xs mt-0.5">Không giới hạn thời gian</p>
+                            </div>
+                          </div>
                           <div className="mt-3 flex items-baseline gap-1">
                             <span className="text-3xl font-black">0</span>
                             <span className="text-white/70 text-xs">đ</span>
@@ -288,6 +296,7 @@ export default function VipPricingPage() {
                         </div>
                         <div className="p-4 flex flex-col flex-1">
                           <ul className="space-y-2.5 flex-1 mt-2">
+                            {/* Real features */}
                             {[
                               'Đề thi cơ bản miễn phí',
                               'Xem kết quả sau thi',
@@ -298,6 +307,7 @@ export default function VipPricingPage() {
                                 <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
                               </li>
                             ))}
+                            {/* Disabled features */}
                             {[
                               'Truy cập tất cả đề thi VIP / Premium',
                               'AI phân tích kết quả bài thi',
@@ -312,8 +322,9 @@ export default function VipPricingPage() {
                               </li>
                             ))}
                           </ul>
+                          <div className="mb-4 pt-5 mt-auto" />
                           <div className="pt-5 mt-auto">
-                            <div className="py-2.5 rounded-xl text-center text-sm font-bold text-gray-500 bg-gray-50 border border-dashed border-gray-200">
+                            <div className="py-3.5 rounded-xl text-center text-sm font-black text-gray-500 bg-gradient-to-r from-gray-400 to-slate-500 shadow-md">
                               Miễn phí — Không cần đăng ký
                             </div>
                           </div>
@@ -454,9 +465,17 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
 }) {
   const colors = deriveColor(pkg);
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
+  const isFree = pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name);
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');
+
+  // Pad all cards to the same number of features (9 = max across all tiers)
+  const MAX_FEATURES = 9;
+  const paddedFeatures = [
+    ...(pkg.features || []),
+    ...Array(Math.max(0, MAX_FEATURES - (pkg.features || []).length)).fill(null),
+  ];
 
   const handleLocalApply = async () => {
     if (!onApplyCoupon || !localCoupon.trim()) return;
@@ -534,12 +553,16 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
       {/* Features */}
       <div className="p-4 flex flex-col flex-1">
         <ul className="space-y-2.5 flex-1 mt-2">
-          {(pkg.features || []).map((feat, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <FaCheckCircle size={16} className={`${colors.icon} mt-0.5 shrink-0`} />
-              <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
-            </li>
-          ))}
+          {paddedFeatures.map((feat, i) =>
+            feat ? (
+              <li key={i} className="flex items-start gap-2.5">
+                <FaCheckCircle size={16} className={`${colors.icon} mt-0.5 shrink-0`} />
+                <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
+              </li>
+            ) : (
+              <li key={`pad-${i}`} className="flex items-start gap-2.5 opacity-0 pointer-events-none select-none" style={{ minHeight: '24px' }} aria-hidden="true" />
+            )
+          )}
         </ul>
 
         {/* Per-card coupon input */}

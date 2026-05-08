@@ -22,6 +22,9 @@ router.put("/:examId", examWriteLimiter, AdminExamController.updateExam);
 router.delete("/:examId", examDeleteLimiter, AdminExamController.deleteExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 
+// Question insertion at specific position
+router.post("/:examId/questions/insert", examWriteLimiter, AdminExamController.insertQuestion);
+
 // Question CRUD — all write operations are rate limited
 router.post("/:examId/questions", examWriteLimiter, AdminExamController.addQuestion);
 router.put("/questions/:questionId", examWriteLimiter, AdminExamController.updateQuestion);

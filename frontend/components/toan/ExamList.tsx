@@ -31,8 +31,13 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    console.log('[ExamList] mount, props:', { subjectCode, subjectSlug });
     loadExams();
   }, [subjectCode, subjectSlug]);
+
+  useEffect(() => {
+    console.log('[ExamList] exams state changed:', exams.length, exams.map(e => ({ id: e.id, title: e.title, premium: e.is_premium })));
+  }, [exams]);
 
   // Keyboard shortcut: focus search on /
   useEffect(() => {

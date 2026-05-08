@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/lib/store/authStore';
+import { canAccessAdminPanel } from '@/lib/utils/permissions';
 import { FiX, FiHeart } from 'react-icons/fi';
 
 const DAILY_MESSAGES = [
@@ -55,7 +56,7 @@ export default function AdminDailyLetter() {
   const [message, setMessage] = useState(DAILY_MESSAGES[1]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !canAccessAdminPanel(user)) return;
 
     const today = new Date().toDateString();
     const lastShown = localStorage.getItem('admin_daily_letter_date');

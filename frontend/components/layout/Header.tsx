@@ -72,12 +72,12 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
   return (
-    <header className={`relative overflow-visible sticky top-0 z-[60] transition-all duration-300 ${scrolled ? 'shadow-lg' : 'shadow-sm'} py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
+    <header className={`relative overflow-visible sticky top-0 z-[60] transition-all duration-300 ${scrolled ? 'shadow-lg' : 'shadow-sm'} py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-100 dark:border-gray-800`}>
       <div className="container mx-auto px-4 md:px-6 overflow-visible">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex xl:items-start items-center justify-between gap-2 sm:gap-4">
 
           {/* ── LOGO ── */}
-          <Link href="/" className="flex-shrink-0 flex items-center gap-2 sm:gap-3 group">
+          <Link href="/" className="flex-shrink-0 flex items-center gap-2 sm:gap-3 group xl:mt-1">
             <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_10px_22px_rgba(14,116,244,0.35)] group-hover:shadow-[0_14px_26px_rgba(14,116,244,0.45)] group-hover:-translate-y-0.5 group-hover:rotate-2 transition-all duration-300">
               <span className="text-white font-black text-base sm:text-lg leading-none lowercase">m</span>
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-cyan-100 border border-white/90 shadow-sm"></span>
@@ -88,7 +88,8 @@ export default function Header() {
           </Link>
 
           {/* ── DESKTOP NAVIGATION ── */}
-          <nav className="hidden xl:flex items-center justify-center gap-1 flex-1">
+          <div className="hidden xl:flex flex-col flex-1 gap-2 ml-4">
+            <nav className="flex items-center gap-1">
             {/* Trang chủ */}
              <Link
                 href={MAIN_NAV[0].href}
@@ -154,22 +155,17 @@ export default function Header() {
             })}
           </nav>
 
-          {/* ── RIGHT ACTIONS ── */}
-          <div className="flex items-center justify-end gap-1 sm:gap-2 flex-shrink-0">
-
-            {/* Search Bar - Hidden on mobile/tablet, visible on lg+ */}
-            <div className="hidden lg:block w-36 xl:w-48">
+            {/* Desktop Search Bar Below Nav */}
+            <div className="w-full max-w-md hidden lg:block mx-auto">
               <SearchBar />
             </div>
+          </div>
 
-            {/* VIP Upgrade Banner */}
-            {!mounted ? (
-              <div className="hidden xl:block w-[88px] h-[28px] bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"></div>
-            ) : (!user || !isVipActive(user)) && (
+          {/* ── RIGHT ACTIONS ── */}
+          <div className="flex items-center justify-end gap-1 sm:gap-2 flex-shrink-0 xl:mt-2">
               <Link href="/vip" className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 text-white text-xs font-bold shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-0.5 transition-all duration-300 flex-shrink-0">
                 <FaCrown className="text-yellow-200" size={12} /> <span>Nâng cấp</span>
               </Link>
-            )}
 
             {/* Theme toggle */}
             <div className="hidden sm:block">

@@ -16,21 +16,18 @@ export default function TiengTrungTuNhienDeMoPhongPage() {
             
             <Header />
 
-            <main className="container mx-auto px-4 md:px-6 py-6 md:py-8 max-w-[1400px] relative z-10">
-                <div className={`w-full rounded-[2rem] bg-gradient-to-r ${colorScheme.from} ${colorScheme.to} p-8 lg:p-12 shadow-xl shadow-fuchsia-900/10 relative overflow-hidden text-white flex flex-col md:flex-row items-center justify-between gap-8 mb-8`}>
+            <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 max-w-[1400px] relative z-10">
+                <div className={`w-full rounded-2xl bg-gradient-to-r ${colorScheme.from} ${colorScheme.to} p-5 lg:p-6 shadow-lg shadow-fuchsia-900/10 relative overflow-hidden text-white flex items-center justify-between gap-4 mb-5`}>
                     <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
-                    <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-white/20 rounded-full blur-3xl mix-blend-overlay pointer-events-none" />
-                    <div className="absolute -top-32 -right-32 w-96 h-96 bg-white/20 rounded-full blur-3xl mix-blend-overlay pointer-events-none" />
+                    <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-white/20 rounded-full blur-2xl mix-blend-overlay pointer-events-none" />
+                    <div className="absolute -top-16 -right-16 w-48 h-48 bg-white/20 rounded-full blur-2xl mix-blend-overlay pointer-events-none" />
                     
                     <div className="relative z-10 w-full max-w-3xl">
-                        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/20 rounded-full shadow-sm text-xs font-bold uppercase tracking-widest backdrop-blur-md mb-5 border border-white/30">
-                            🔬 Phân hệ đề thi
-                        </div>
-                        <h1 className="text-4xl lg:text-5xl font-black mb-4 drop-shadow-md tracking-tight leading-tight">
+                        <h1 className="text-xl lg:text-2xl font-black drop-shadow-md tracking-tight leading-tight">
                             Đề Mô Phỏng Tiếng Trung Tự Nhiên
                         </h1>
-                        <p className="text-white/90 font-medium text-lg leading-relaxed max-w-2xl">
-                            Cập nhật liên tục các đề thi chuẩn cấu trúc từ CSCA. Luyện tập ngay hôm nay để được AI phân tích lộ trình cải thiện điểm số.
+                        <p className="text-white/90 font-medium text-sm leading-relaxed max-w-2xl mt-1">
+                            Luyện tập ngay hôm nay để được AI phân tích lộ trình cải thiện điểm số.
                         </p>
                     </div>
                 </div>

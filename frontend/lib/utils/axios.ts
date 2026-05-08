@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 // Cache token in memory to avoid localStorage blocking
 let cachedToken: string | null = null;

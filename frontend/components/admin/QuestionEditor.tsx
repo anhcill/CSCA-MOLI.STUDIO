@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiTrash2, FiSave, FiPlus } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
 
@@ -43,6 +43,8 @@ interface QuestionEditorProps {
   initialData?: Partial<QuestionFormData>;
   onSave: (data: QuestionFormData) => void;
   onDelete?: () => void;
+  /** Pass an existing saved question to enable UPDATE instead of CREATE */
+  savedQuestionId?: number;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────────
@@ -92,9 +94,19 @@ const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const LINKED_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 // ─── Component ──────────────────────────────────────────────────────────────────
-export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete }: QuestionEditorProps) {
+export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete, savedQuestionId }: QuestionEditorProps) {
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
+
+  // Track whether we've loaded saved data (prevents overwriting with defaults on re-render)
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (initialData) {
+      setForm(getDefaults(initialData));
+      setInitialized(true);
+    }
+  }, [initialData]);
 
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -124,7 +136,6 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
 
     setSaving(true);
     onSave(form);
-    setTimeout(() => setSaving(false), 1500);
   };
 
   const qtype = QUESTION_TYPE_LABELS[form.questionType];
@@ -466,15 +477,22 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
             {questionNumber}
           </span>
           <div>
-            <h3 className="text-white font-bold">Câu hỏi {questionNumber}</h3>
+            <h3 className="text-white font-bold">
+              {savedQuestionId ? `Sửa Câu ${questionNumber}` : `Câu hỏi ${questionNumber}`}
+            </h3>
             <p className="text-white/70 text-xs">{qtype.desc}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {savedQuestionId && (
+            <span className="px-2 py-1 bg-yellow-400/30 text-yellow-200 rounded text-xs font-semibold">
+              Đã lưu
+            </span>
+          )}
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg font-semibold text-sm hover:bg-indigo-50 disabled:opacity-60">
             <FiSave size={15} />
-            {saving ? 'Đang lưu...' : 'Lưu'}
+            {saving ? 'Đang lưu...' : savedQuestionId ? 'Cập nhật' : 'Lưu'}
           </button>
           {onDelete && (
             <button onClick={onDelete}

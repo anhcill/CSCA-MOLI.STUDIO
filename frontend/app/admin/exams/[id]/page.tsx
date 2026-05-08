@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiCheckCircle, FiXCircle, FiImage, FiEye } from 'react-icons/fi';
+import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
+import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
+import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
+import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
 
 interface Answer {
     id: number;
@@ -17,20 +20,31 @@ interface Answer {
     is_correct: boolean;
 }
 
-interface Question {
+interface SavedQuestion {
     id: number;
     question_number: number;
+    question_type: string;
     question_text: string;
     question_text_cn?: string;
     image_url?: string;
+    passage_text?: string;
+    passage_image_url?: string;
     points: number;
     explanation?: string;
-    answers: Answer[];
+    explanation_cn?: string;
+    difficulty?: string;
+    linked_options?: any;
+    sub_question_number?: number;
+    passage_group_id?: number;
+    answers?: Answer[];
+    effective_linked_options?: any;
+    effective_passage_text?: string;
 }
 
 interface Exam {
     id: number;
     title: string;
+    title_cn?: string;
     subject_name?: string;
     duration: number;
     total_points: number;
@@ -46,16 +60,81 @@ interface Exam {
     vip_tier?: string;
 }
 
+type EditMode = 'view' | 'edit';
+
+// Convert saved DB question → QuestionFormData
+function dbToFormData(q: SavedQuestion): QuestionFormData {
+    const answers = (q.answers || []).map(a => ({
+        text: a.answer_text || '',
+        textCn: a.answer_text_cn || '',
+        imageUrl: a.image_url || '',
+    }));
+
+    // Find correct answer key
+    const correctAnswer = (q.answers || []).find(a => a.is_correct)?.answer_key || 'A';
+
+    return {
+        questionType: (q.question_type as any) || 'single_choice',
+        questionText: q.question_text || '',
+        questionTextCn: q.question_text_cn || '',
+        imageUrl: q.image_url || '',
+        passageText: q.effective_passage_text || q.passage_text || '',
+        passageImageUrl: q.passage_image_url || '',
+        points: q.points || 1,
+        explanation: q.explanation || '',
+        explanationCn: q.explanation_cn || '',
+        answers,
+        correctAnswer,
+        linkedOptions: (q.effective_linked_options || q.linked_options || []).map((o: any) => ({
+            key: o.key || 'A',
+            text: o.text || '',
+            textCn: o.textCn || '',
+        })),
+        correctAnswerKey: correctAnswer,
+        subQuestionNumber: q.sub_question_number || q.question_number || 0,
+        difficulty: q.difficulty || 'medium',
+    };
+}
+
 export default function AdminExamDetailPage() {
     const { id } = useParams();
     const router = useRouter();
     const { user, isAuthenticated } = useAuthStore();
+
     const [exam, setExam] = useState<Exam | null>(null);
-    const [questions, setQuestions] = useState<Question[]>([]);
+    const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([]);
     const [loading, setLoading] = useState(true);
-    const [deleting, setDeleting] = useState<number | null>(null);
+    const [editMode, setEditMode] = useState<EditMode>('view');
+
+    // Editing state (local question list while in edit mode)
+    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _id: string; _questionNumber: number })[]>([]);
+    const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+    const [addingAfterId, setAddingAfterId] = useState<number | null>(null);
+    const [showAddMenu, setShowAddMenu] = useState(false);
+
+    // Metadata editing
+    const [editingMeta, setEditingMeta] = useState(false);
+    const [metaForm, setMetaForm] = useState({
+        title: '', titleCn: '', duration: 90,
+        totalPoints: 100, description: '', allow_download: true,
+        is_premium: false, shuffle_mode: false, solution_video_url: '',
+        solution_description: '', vip_tier: 'basic', is_simulated: false,
+    });
+    const [metaDirty, setMetaDirty] = useState(false);
+    const [savingMeta, setSavingMeta] = useState(false);
+
+    // Video URL
     const [videoUrl, setVideoUrl] = useState('');
     const [solutionDesc, setSolutionDesc] = useState('');
+
+    // Saving states
+    const [savingQuestionId, setSavingQuestionId] = useState<number | null>(null);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [reordering, setReordering] = useState(false);
+
+    // New question form state (quick add)
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
+    const [quickAddPosition, setQuickAddPosition] = useState<number | null>(null);
 
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -75,7 +154,26 @@ export default function AdminExamDetailPage() {
             setLoading(true);
             const data = await examAdminApi.getExamForEdit(Number(id));
             setExam(data.exam);
-            setQuestions(data.questions || []);
+            setSavedQuestions(data.questions || []);
+            setLocalQuestions(data.questions || []);
+            if (data.exam) {
+                setVideoUrl(data.exam.solution_video_url || '');
+                setSolutionDesc(data.exam.solution_description || '');
+                setMetaForm({
+                    title: data.exam.title || '',
+                    titleCn: data.exam.title_cn || '',
+                    duration: data.exam.duration || 90,
+                    totalPoints: data.exam.total_points || 100,
+                    description: data.exam.description || '',
+                    allow_download: data.exam.allow_download !== false,
+                    is_premium: data.exam.is_premium || false,
+                    shuffle_mode: data.exam.shuffle_mode || false,
+                    solution_video_url: data.exam.solution_video_url || '',
+                    solution_description: data.exam.solution_description || '',
+                    vip_tier: data.exam.vip_tier || 'basic',
+                    is_simulated: data.exam.is_simulated || false,
+                });
+            }
         } catch (error: any) {
             alert('Không thể tải đề thi: ' + (error.response?.data?.message || error.message));
             router.push('/admin/exams');
@@ -84,25 +182,169 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    // ── Metadata editing ──────────────────────────────────────────────────────
+    const handleMetaChange = (key: string, value: any) => {
+        setMetaForm(prev => ({ ...prev, [key]: value }));
+        setMetaDirty(true);
+    };
+
+    const handleSaveMeta = async () => {
+        if (!exam) return;
+        try {
+            setSavingMeta(true);
+            await examAdminApi.updateExam(exam.id, {
+                title: metaForm.title,
+                titleCn: metaForm.titleCn,
+                duration: metaForm.duration,
+                totalPoints: metaForm.totalPoints,
+                description: metaForm.description,
+                allow_download: metaForm.allow_download,
+                is_premium: metaForm.is_premium,
+                shuffle_mode: metaForm.shuffle_mode,
+                solution_video_url: metaForm.solution_video_url,
+                solution_description: metaForm.solution_description,
+                vip_tier: metaForm.vip_tier,
+                is_simulated: metaForm.is_simulated,
+            });
+            setExam({ ...exam, title: metaForm.title, duration: metaForm.duration,
+                total_points: metaForm.totalPoints, allow_download: metaForm.allow_download,
+                is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
+                solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
+                vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated });
+            setMetaDirty(false);
+            setEditingMeta(false);
+        } catch (error: any) {
+            alert('Lỗi lưu metadata: ' + (error.response?.data?.message || ''));
+        } finally {
+            setSavingMeta(false);
+        }
+    };
+
+    // ── Question update ───────────────────────────────────────────────────────
+    const handleUpdateQuestion = async (savedQuestionId: number, data: QuestionFormData) => {
+        try {
+            setSavingQuestionId(savedQuestionId);
+            await examAdminApi.updateQuestion(savedQuestionId, {
+                questionType: data.questionType,
+                questionText: data.questionText,
+                questionTextCn: data.questionTextCn,
+                imageUrl: data.imageUrl,
+                points: data.points,
+                explanation: data.explanation,
+                explanationCn: data.explanationCn,
+                answers: data.answers,
+                correctAnswer: data.correctAnswer,
+                passageText: data.passageText,
+                passageImageUrl: data.passageImageUrl,
+                linkedOptions: data.linkedOptions,
+                correctAnswerKey: data.correctAnswerKey,
+                subQuestionNumber: data.subQuestionNumber,
+                difficulty: data.difficulty,
+            });
+
+            // Update local state
+            const updated = savedQuestions.map(q =>
+                q.id === savedQuestionId
+                    ? {
+                        ...q,
+                        question_text: data.questionText,
+                        question_text_cn: data.questionTextCn,
+                        question_type: data.questionType,
+                        image_url: data.imageUrl,
+                        passage_text: data.passageText,
+                        passage_image_url: data.passageImageUrl,
+                        points: data.points,
+                        explanation: data.explanation,
+                        explanation_cn: data.explanationCn,
+                        difficulty: data.difficulty,
+                        answers: (data.answers || []).map((a, i) => ({
+                            id: q.answers?.[i]?.id || 0,
+                            answer_key: String.fromCharCode(65 + i),
+                            answer_text: a.text,
+                            answer_text_cn: a.textCn,
+                            image_url: a.imageUrl,
+                            is_correct: String.fromCharCode(65 + i) === data.correctAnswer,
+                        })),
+                    }
+                    : q
+            );
+            setSavedQuestions(updated);
+            setLocalQuestions(updated);
+            setEditingQuestionId(null);
+            alert('Đã cập nhật câu hỏi!');
+        } catch (error: any) {
+            alert('Lỗi cập nhật: ' + (error.response?.data?.message || ''));
+        } finally {
+            setSavingQuestionId(null);
+        }
+    };
+
+    // ── Add question (insert at position) ─────────────────────────────────────
+    const handleInsertQuestion = async (data: QuestionFormData, afterQuestionId?: number, atPosition?: number) => {
+        if (!exam) return;
+        try {
+            setSavingQuestionId(-1); // -1 = adding
+            const res = await examAdminApi.insertQuestion(exam.id, data as any, afterQuestionId, atPosition);
+            await loadExam();
+            setShowQuickAdd(false);
+            setQuickAddPosition(null);
+            setAddingAfterId(null);
+            setShowAddMenu(false);
+            alert('Đã thêm câu hỏi!');
+        } catch (error: any) {
+            alert('Lỗi thêm câu hỏi: ' + (error.response?.data?.message || ''));
+        } finally {
+            setSavingQuestionId(null);
+        }
+    };
+
+    // ── Quick add new question ────────────────────────────────────────────────
+    const handleQuickAddSave = async (data: QuestionFormData) => {
+        const afterId = addingAfterId;
+        const atPos = quickAddPosition;
+        await handleInsertQuestion(data, afterId ?? undefined, atPos ?? undefined);
+    };
+
+    // ── Delete question ────────────────────────────────────────────────────────
     const handleDeleteQuestion = async (questionId: number) => {
         if (!confirm('Xóa câu hỏi này?')) return;
         try {
-            setDeleting(questionId);
+            setDeletingId(questionId);
             await examAdminApi.deleteQuestion(questionId);
-            setQuestions(prev => prev.filter(q => q.id !== questionId));
+            const updated = savedQuestions.filter(q => q.id !== questionId);
+            setSavedQuestions(updated);
+            setLocalQuestions(updated);
             if (exam) setExam({ ...exam, total_questions: exam.total_questions - 1 });
         } catch (error: any) {
             alert('Lỗi xóa câu hỏi: ' + (error.response?.data?.message || ''));
         } finally {
-            setDeleting(null);
+            setDeletingId(null);
         }
     };
 
+    // ── Toggle edit mode ──────────────────────────────────────────────────────
+    const enterEditMode = () => {
+        setEditMode('edit');
+        setLocalQuestions([...savedQuestions]);
+    };
+
+    const exitEditMode = () => {
+        if (confirm('Thoát chế độ sửa? Các thay đổi chưa lưu sẽ bị mất.')) {
+            setEditMode('view');
+            setLocalQuestions([...savedQuestions]);
+            setEditingQuestionId(null);
+            setShowQuickAdd(false);
+            setAddingAfterId(null);
+            setQuickAddPosition(null);
+        }
+    };
+
+    // ── Toggle exam settings ──────────────────────────────────────────────────
     const handleStatusChange = async (status: 'draft' | 'published' | 'archived') => {
         try {
             await examAdminApi.updateExamStatus(Number(id), status);
             if (exam) setExam({ ...exam, status });
-        } catch (error: any) {
+        } catch {
             alert('Lỗi đổi trạng thái');
         }
     };
@@ -132,8 +374,7 @@ export default function AdminExamDetailPage() {
         if (!exam) return;
         try {
             await examAdminApi.updateExam(Number(id), {
-                solution_video_url: videoUrl,
-                solution_description: solutionDesc,
+                solution_video_url: videoUrl, solution_description: solutionDesc,
             });
             setExam({ ...exam, solution_video_url: videoUrl, solution_description: solutionDesc });
         } catch {
@@ -184,6 +425,10 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const handleSetVipTierMeta = (tier: string) => {
+        handleMetaChange('vip_tier', tier);
+    };
+
     useEffect(() => {
         if (exam) {
             setVideoUrl(exam.solution_video_url || '');
@@ -191,6 +436,7 @@ export default function AdminExamDetailPage() {
         }
     }, [exam]);
 
+    // ── Render ─────────────────────────────────────────────────────────────────
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -207,6 +453,8 @@ export default function AdminExamDetailPage() {
             ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
             : 'bg-gray-100 text-gray-700 border-gray-200';
 
+    const questions = editMode ? localQuestions : savedQuestions;
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -215,7 +463,13 @@ export default function AdminExamDetailPage() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => router.push('/admin/exams')}
+                                onClick={() => {
+                                    if (editMode) {
+                                        exitEditMode();
+                                    } else {
+                                        router.push('/admin/exams');
+                                    }
+                                }}
                                 className="text-gray-500 hover:text-gray-800 transition-colors"
                             >
                                 <FiChevronLeft size={22} />
@@ -228,282 +482,553 @@ export default function AdminExamDetailPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => router.push(`/admin/exams/create?examId=${id}`)}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                            >
-                                <FiEdit2 size={16} /> Sửa đề
-                            </button>
-                            <select
-                                value={exam.status}
-                                onChange={e => handleStatusChange(e.target.value as any)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border cursor-pointer outline-none ${statusColor}`}
-                            >
-                                <option value="draft">🔒 Đang ẩn (Nháp)</option>
-                                <option value="published">👁️ Đang hiển thị</option>
-                                <option value="archived">📦 Lưu trữ</option>
-                            </select>
-                            <button
-                                onClick={handleDeleteExam}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-                            >
-                                <FiTrash2 size={16} /> Xóa đề
-                            </button>
+                            {editMode ? (
+                                <>
+                                    <button
+                                        onClick={exitEditMode}
+                                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                                    >
+                                        <FiX size={16} /> Thoát sửa
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={enterEditMode}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                                    >
+                                        <FiEdit2 size={16} /> Sửa đề
+                                    </button>
+                                    <select
+                                        value={exam.status}
+                                        onChange={e => handleStatusChange(e.target.value as any)}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border cursor-pointer outline-none ${statusColor}`}
+                                    >
+                                        <option value="draft">🔒 Đang ẩn (Nháp)</option>
+                                        <option value="published">👁️ Đang hiển thị</option>
+                                        <option value="archived">📦 Lưu trữ</option>
+                                    </select>
+                                    <button
+                                        onClick={handleDeleteExam}
+                                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+                                    >
+                                        <FiTrash2 size={16} /> Xóa đề
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
             </header>
 
             <main className="max-w-5xl mx-auto px-6 py-8">
-                {/* Exam Info */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                        <div>
-                            <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Môn học</p>
-                            <p className="font-bold text-gray-900">{exam.subject_name || '—'}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Thời gian</p>
-                            <p className="font-bold text-gray-900">{exam.duration} phút</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Tổng điểm</p>
-                            <p className="font-bold text-gray-900">{exam.total_points} điểm</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Số câu</p>
-                            <p className="font-bold text-gray-900">{exam.total_questions} câu</p>
-                        </div>
-                    </div>
-                    {exam.description && (
-                        <p className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-600">{exam.description}</p>
-                    )}
-                    {/* Download toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-semibold text-gray-700">Cho phép tải PDF</p>
-                            <p className="text-xs text-gray-400">Thí sinh có thể in / tải đề thi này về máy</p>
-                        </div>
-                        <button
-                            onClick={handleToggleDownload}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.allow_download ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                        >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.allow_download ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
-                        </button>
-                    </div>
 
-                        {/* VIP Tier selector */}
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                        <label className="block text-sm font-semibold text-gray-700 mb-3">Phân loại nội dung</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {[
-                                { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
-                                { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'blue' },
-                            ].map(tier => (
-                                <button key={tier.value}
-                                    onClick={() => handleSetVipTier(tier.value)}
-                                    className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
-                                        exam.vip_tier === tier.value
-                                            ? tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
-                                              'border-gray-500 bg-gray-100'
-                                            : 'border-gray-200 hover:border-gray-300 bg-white'
-                                    }`}>
-                                    <p className={`text-xs font-bold ${exam.vip_tier === tier.value ? 'text-gray-900' : 'text-gray-600'}`}>
-                                        {tier.label}
-                                    </p>
-                                    {exam.vip_tier === tier.value && (
-                                        <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
-                                            tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
-                                        }`}>
-                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                    )}
+                {/* ── EDIT MODE: Metadata Form ── */}
+                {editMode && (
+                    <div className="bg-white rounded-xl border border-blue-200 p-6 mb-6 shadow-md">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-gray-900">Chỉnh sửa thông tin đề thi</h2>
+                            {!editingMeta && (
+                                <button
+                                    onClick={() => setEditingMeta(true)}
+                                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                >
+                                    ✏️ Chỉnh sửa
                                 </button>
-                            ))}
+                            )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-2">VIP & Premium dùng chung đề. Chỉ khác chức năng bổ sung.</p>
-                    </div>
 
-                    {/* Premium toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                        {editingMeta ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Tên đề thi</label>
+                                        <input type="text" value={metaForm.title}
+                                            onChange={e => handleMetaChange('title', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Tên đề (Tiếng Trung)</label>
+                                        <input type="text" value={metaForm.titleCn}
+                                            onChange={e => handleMetaChange('titleCn', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian (phút)</label>
+                                        <input type="number" value={metaForm.duration}
+                                            onChange={e => handleMetaChange('duration', parseInt(e.target.value))}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Tổng điểm</label>
+                                        <input type="number" value={metaForm.totalPoints}
+                                            onChange={e => handleMetaChange('totalPoints', parseFloat(e.target.value))}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+                                        <textarea value={metaForm.description}
+                                            onChange={e => handleMetaChange('description', e.target.value)}
+                                            rows={2}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Video Giải Đề</label>
+                                        <input type="url" value={metaForm.solution_video_url}
+                                            onChange={e => handleMetaChange('solution_video_url', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm"
+                                            placeholder="https://youtube.com/..." />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Mô Tả Video</label>
+                                        <input type="text" value={metaForm.solution_description}
+                                            onChange={e => handleMetaChange('solution_description', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+
+                                    {/* VIP Tier */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Phân loại nội dung</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[
+                                                { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
+                                                { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'blue' },
+                                            ].map(tier => (
+                                                <button key={tier.value}
+                                                    onClick={() => handleSetVipTierMeta(tier.value)}
+                                                    className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
+                                                        metaForm.vip_tier === tier.value
+                                                            ? tier.color === 'blue' ? 'border-blue-500 bg-blue-50' : 'border-gray-500 bg-gray-100'
+                                                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                                                    }`}>
+                                                    <p className={`text-xs font-bold ${metaForm.vip_tier === tier.value ? 'text-gray-900' : 'text-gray-600'}`}>
+                                                        {tier.label}
+                                                    </p>
+                                                    {metaForm.vip_tier === tier.value && (
+                                                        <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
+                                                            tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                                        }`}>
+                                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Toggles */}
+                                    <div className="md:col-span-2 flex flex-wrap gap-6">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={metaForm.allow_download}
+                                                onChange={e => handleMetaChange('allow_download', e.target.checked)}
+                                                className="w-4 h-4" />
+                                            <span className="text-sm font-medium text-gray-700">Cho phép tải PDF</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={metaForm.shuffle_mode}
+                                                onChange={e => handleMetaChange('shuffle_mode', e.target.checked)}
+                                                className="w-4 h-4" />
+                                            <span className="text-sm font-medium text-gray-700">Chế độ xáo trộn</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={metaForm.is_premium}
+                                                onChange={e => handleMetaChange('is_premium', e.target.checked)}
+                                                className="w-4 h-4" />
+                                            <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                                                <FaCrown size={12} className="text-amber-500" /> Nội dung Premium
+                                            </span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={metaForm.is_simulated}
+                                                onChange={e => handleMetaChange('is_simulated', e.target.checked)}
+                                                className="w-4 h-4" />
+                                            <span className="text-sm font-medium text-gray-700">🎯 Đề mô phỏng</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button onClick={handleSaveMeta} disabled={savingMeta || !metaDirty}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium">
+                                        <FiSave size={15} />
+                                        {savingMeta ? 'Đang lưu...' : '💾 Lưu thông tin'}
+                                    </button>
+                                    <button onClick={() => { setEditingMeta(false); setMetaDirty(false); }}
+                                        className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                                        Hủy
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div><span className="font-semibold text-gray-500">Tên:</span> {exam.title}</div>
+                                <div><span className="font-semibold text-gray-500">TG:</span> {exam.duration} phút</div>
+                                <div><span className="font-semibold text-gray-500">Điểm:</span> {exam.total_points}</div>
+                                <div><span className="font-semibold text-gray-500">VIP:</span> {exam.vip_tier || 'basic'}</div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── VIEW MODE: Exam Info ── */}
+                {!editMode && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Môn học</p>
+                                <p className="font-bold text-gray-900">{exam.subject_name || '—'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Thời gian</p>
+                                <p className="font-bold text-gray-900">{exam.duration} phút</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Tổng điểm</p>
+                                <p className="font-bold text-gray-900">{exam.total_points} điểm</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Số câu</p>
+                                <p className="font-bold text-gray-900">{exam.total_questions} câu</p>
+                            </div>
+                        </div>
+                        {exam.description && (
+                            <p className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-600">{exam.description}</p>
+                        )}
+
+                        {/* Download toggle */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold text-gray-700">Cho phép tải PDF</p>
+                                <p className="text-xs text-gray-400">Thí sinh có thể in / tải đề thi này về máy</p>
+                            </div>
+                            <button
+                                onClick={handleToggleDownload}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${
+                                    exam.allow_download ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                            >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                    exam.allow_download ? 'translate-x-7' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+
+                        {/* VIP Tier */}
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">Phân loại nội dung</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
+                                    { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'blue' },
+                                ].map(tier => (
+                                    <button key={tier.value}
+                                        onClick={() => handleSetVipTier(tier.value)}
+                                        className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
+                                            exam.vip_tier === tier.value
+                                                ? tier.color === 'blue' ? 'border-blue-500 bg-blue-50' : 'border-gray-500 bg-gray-100'
+                                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                                        }`}>
+                                        <p className={`text-xs font-bold ${exam.vip_tier === tier.value ? 'text-gray-900' : 'text-gray-600'}`}>
+                                            {tier.label}
+                                        </p>
+                                        {exam.vip_tier === tier.value && (
+                                            <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
+                                                tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
+                                            }`}>
+                                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">VIP & Premium dùng chung đề. Chỉ khác chức năng bổ sung.</p>
+                        </div>
+
+                        {/* Premium toggle */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">
+                                    <FaCrown size={14} className="text-amber-500" /> Nội dung Premium (VIP)
+                                </p>
+                                <p className="text-xs text-gray-400">Chỉ thành viên VIP mới được truy cập đề thi này</p>
+                            </div>
+                            <button
+                                onClick={handleTogglePremium}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${
+                                    exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
+                                }`}
+                            >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                    exam.is_premium ? 'translate-x-7' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+
+                        {/* Video URL */}
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Video Giải Đề (URL)</label>
+                            <input
+                                type="url" value={videoUrl}
+                                onChange={(e) => setVideoUrl(e.target.value)}
+                                onBlur={handleSaveVideo}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                placeholder="https://www.youtube.com/watch?v=..."
+                            />
+                        </div>
+
+                        <div className="mt-3">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Mô Tả Video</label>
+                            <textarea
+                                value={solutionDesc}
+                                onChange={(e) => setSolutionDesc(e.target.value)}
+                                onBlur={handleSaveVideo}
+                                rows={2}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                placeholder="Mô tả ngắn về nội dung video..."
+                            />
+                        </div>
+
+                        {/* Shuffle toggle */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold text-gray-700">Chế độ xáo trộn</p>
+                                <p className="text-xs text-gray-400">Xáo trộn câu hỏi và đáp án mỗi lần làm bài</p>
+                            </div>
+                            <button
+                                onClick={handleToggleShuffle}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${
+                                    exam.shuffle_mode ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-300'
+                                }`}
+                            >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                    exam.shuffle_mode ? 'translate-x-7' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+
+                        {/* Simulated toggle */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">🎯 Đề mô phỏng</p>
+                                <p className="text-xs text-gray-400">Được phân loại vào kho đề thi mô phỏng</p>
+                            </div>
+                            <button
+                                onClick={handleToggleSimulated}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${
+                                    exam.is_simulated ? 'bg-gradient-to-r from-pink-500 to-rose-600' : 'bg-gray-300'
+                                }`}
+                            >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                    exam.is_simulated ? 'translate-x-7' : 'translate-x-1'
+                                }`} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Questions Section ── */}
+                {editMode && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">
-                                <FaCrown size={14} className="text-amber-500" /> Nội dung Premium (VIP)
-                            </p>
-                            <p className="text-xs text-gray-400">Chỉ thành viên VIP mới được truy cập đề thi này</p>
+                            <p className="font-bold text-blue-900">Chế độ sửa đề</p>
+                            <p className="text-sm text-blue-700">Nhấn <strong>✏️ Sửa</strong> ở câu để chỉnh sửa nội dung. <strong>+ Thêm</strong> để chèn câu mới (đánh số lại tự động).</p>
                         </div>
                         <button
-                            onClick={handleTogglePremium}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'
-                            }`}
+                            onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
                         >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.is_premium ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
+                            <FiPlus size={15} /> Thêm câu hỏi mới (cuối)
                         </button>
                     </div>
+                )}
 
-                    {/* Video URL */}
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Video Giải Đề (URL)</label>
-                        <input
-                            type="url"
-                            value={videoUrl}
-                            onChange={(e) => setVideoUrl(e.target.value)}
-                            onBlur={handleSaveVideo}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder="https://www.youtube.com/watch?v=..."
-                        />
-                        <p className="text-xs text-gray-400 mt-1">Dán link YouTube. Lưu tự động khi rời khỏi ô.</p>
-                    </div>
-
-                    {/* Solution description */}
-                    <div className="mt-3">
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Mô Tả Video</label>
-                        <textarea
-                            value={solutionDesc}
-                            onChange={(e) => setSolutionDesc(e.target.value)}
-                            onBlur={handleSaveVideo}
-                            rows={2}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder="Mô tả ngắn về nội dung video..."
-                        />
-                    </div>
-
-                    {/* Shuffle toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-semibold text-gray-700">Chế độ xáo trộn</p>
-                            <p className="text-xs text-gray-400">Xáo trộn câu hỏi và đáp án mỗi lần làm bài</p>
-                        </div>
-                        <button
-                            onClick={handleToggleShuffle}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.shuffle_mode ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 'bg-gray-300'
-                            }`}
-                        >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.shuffle_mode ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
-                        </button>
-                    </div>
-
-                    {/* Simulated toggle */}
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">🎯 Đề mô phỏng</p>
-                            <p className="text-xs text-gray-400">Được phân loại vào kho đề thi mô phỏng</p>
-                        </div>
-                        <button
-                            onClick={handleToggleSimulated}
-                            className={`relative w-12 h-6 rounded-full transition-colors ${
-                                exam.is_simulated ? 'bg-gradient-to-r from-pink-500 to-rose-600' : 'bg-gray-300'
-                            }`}
-                        >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                                exam.is_simulated ? 'translate-x-7' : 'translate-x-1'
-                            }`} />
-                        </button>
-                    </div>
-
-                </div>
-
-                {/* Questions */}
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-gray-900">Danh sách câu hỏi ({questions.length})</h2>
-                    <button
-                        onClick={() => router.push(`/admin/exams/create?examId=${id}`)}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                    >
-                        <FiPlus size={16} /> Thêm câu hỏi
-                    </button>
+                    <h2 className="text-lg font-bold text-gray-900">
+                        {editMode ? 'Danh sách câu hỏi (chế độ sửa)' : `Danh sách câu hỏi (${questions.length})`}
+                    </h2>
                 </div>
 
                 {questions.length === 0 ? (
                     <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
                         <p className="text-lg mb-2">Chưa có câu hỏi nào</p>
-                        <p className="text-sm">Click "Thêm câu hỏi" để bắt đầu</p>
+                        {editMode ? (
+                            <button
+                                onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(1); }}
+                                className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                            >
+                                Thêm câu hỏi đầu tiên
+                            </button>
+                        ) : null}
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {questions.map((q, idx) => (
-                            <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-6">
-                                {/* Question Header */}
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-start gap-3 flex-1">
-                                        <span className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-bold">
-                                            {q.question_number}
-                                        </span>
-                                        <div className="flex-1">
-                                            <p className="text-gray-900 font-medium">{q.question_text}</p>
-                                            {q.question_text_cn && q.question_text_cn !== q.question_text && (
-                                                <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
-                                            )}
-                                            {q.image_url && (
-                                                <img src={q.image_url} alt="question" className="mt-2 max-h-32 rounded-lg border border-gray-200" />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 ml-4">
-                                        <span className="text-xs text-gray-400">{q.points} điểm</span>
-                                        <button
-                                            onClick={() => handleDeleteQuestion(q.id)}
-                                            disabled={deleting === q.id}
-                                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                                            title="Xóa câu hỏi"
-                                        >
-                                            {deleting === q.id
-                                                ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent" />
-                                                : <FiTrash2 size={15} />
-                                            }
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Answers */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    {q.answers?.map(a => (
-                                        <div
-                                            key={a.id}
-                                            className={`flex items-start gap-2 px-3 py-2 rounded-lg border ${a.is_correct
-                                                    ? 'border-green-300 bg-green-50'
-                                                    : 'border-gray-200 bg-gray-50'
-                                                }`}
-                                        >
-                                            <span className={`font-bold text-sm flex-shrink-0 ${a.is_correct ? 'text-green-700' : 'text-gray-500'}`}>
-                                                {a.answer_key}.
+                        {questions.map((q, idx) => {
+                            if ('_pending' in q) {
+                                // New unsaved question — show QuestionEditor
+                                return (
+                                    <div key={q._id} className="border-2 border-dashed border-blue-300 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">
+                                                CÂU MỚI #{q._questionNumber}
                                             </span>
-                                            <div className="flex-1 text-sm">
-                                                <span className={a.is_correct ? 'text-green-800 font-medium' : 'text-gray-700'}>
-                                                    {a.answer_text}
-                                                </span>
-                                                {a.answer_text_cn && a.answer_text_cn !== a.answer_text && (
-                                                    <p className="text-gray-500 text-xs mt-0.5">{a.answer_text_cn}</p>
-                                                )}
-                                                {a.image_url && (
-                                                    <img src={a.image_url} alt={a.answer_key} className="mt-1 max-h-16 rounded border border-gray-200" />
-                                                )}
-                                            </div>
-                                            {a.is_correct && <FiCheckCircle className="text-green-600 flex-shrink-0 mt-0.5" size={15} />}
+                                            <span className="text-xs text-gray-500">Chưa lưu — điền thông tin và nhấn Lưu</span>
                                         </div>
-                                    ))}
-                                </div>
-
-                                {q.explanation && (
-                                    <div className="mt-3 pt-3 border-t border-gray-100">
-                                        <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Giải thích:</p>
-                                        <p className="text-sm text-gray-600">{q.explanation}</p>
+                                        <QuestionEditor
+                                            questionNumber={q._questionNumber}
+                                            onSave={handleQuickAddSave}
+                                            onDelete={() => {
+                                                setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                setShowQuickAdd(false);
+                                            }}
+                                        />
                                     </div>
-                                )}
+                                );
+                            }
+
+                            const isEditing = editingQuestionId === q.id;
+                            const formData = dbToFormData(q);
+
+                            return (
+                                <div key={q.id} className={`bg-white rounded-xl border ${isEditing ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'} p-6`}>
+                                    {isEditing ? (
+                                        // Edit mode: show QuestionEditor
+                                        <QuestionEditor
+                                            questionNumber={q.question_number}
+                                            initialData={formData}
+                                            savedQuestionId={q.id}
+                                            onSave={(data) => handleUpdateQuestion(q.id, data)}
+                                            onDelete={() => handleDeleteQuestion(q.id)}
+                                        />
+                                    ) : (
+                                        // View mode: show question card with edit button
+                                        <>
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex items-start gap-3 flex-1">
+                                                    <span className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-bold">
+                                                        {q.question_number}
+                                                    </span>
+                                                    <div className="flex-1">
+                                                        <p className="text-gray-900 font-medium">{q.question_text}</p>
+                                                        {q.question_text_cn && q.question_text_cn !== q.question_text && (
+                                                            <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
+                                                        )}
+                                                        {q.image_url && (
+                                                            <img src={q.image_url} alt="question" className="mt-2 max-h-32 rounded-lg border border-gray-200" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 ml-4">
+                                                    <span className="text-xs text-gray-400">{q.points} điểm</span>
+                                                    {editMode && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => setEditingQuestionId(q.id)}
+                                                                className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors text-sm font-medium"
+                                                                title="Sửa câu hỏi"
+                                                            >
+                                                                <FiEdit2 size={13} /> Sửa
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteQuestion(q.id)}
+                                                                disabled={deletingId === q.id}
+                                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                                                title="Xóa câu hỏi"
+                                                            >
+                                                                {deletingId === q.id
+                                                                    ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-500 border-t-transparent" />
+                                                                    : <FiTrash2 size={15} />
+                                                                }
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Answers */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {q.answers?.map(a => (
+                                                    <div
+                                                        key={a.id}
+                                                        className={`flex items-start gap-2 px-3 py-2 rounded-lg border ${a.is_correct
+                                                                ? 'border-green-300 bg-green-50'
+                                                                : 'border-gray-200 bg-gray-50'
+                                                            }`}
+                                                    >
+                                                        <span className={`font-bold text-sm flex-shrink-0 ${a.is_correct ? 'text-green-700' : 'text-gray-500'}`}>
+                                                            {a.answer_key}.
+                                                        </span>
+                                                        <div className="flex-1 text-sm">
+                                                            <span className={a.is_correct ? 'text-green-800 font-medium' : 'text-gray-700'}>
+                                                                {a.answer_text}
+                                                            </span>
+                                                            {a.answer_text_cn && a.answer_text_cn !== a.answer_text && (
+                                                                <p className="text-gray-500 text-xs mt-0.5">{a.answer_text_cn}</p>
+                                                            )}
+                                                            {a.image_url && (
+                                                                <img src={a.image_url} alt={a.answer_key} className="mt-1 max-h-16 rounded border border-gray-200" />
+                                                            )}
+                                                        </div>
+                                                        {a.is_correct && <FiCheckCircle className="text-green-600 flex-shrink-0 mt-0.5" size={15} />}
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {q.explanation && (
+                                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                                    <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Giải thích:</p>
+                                                    <p className="text-sm text-gray-600">{q.explanation}</p>
+                                                </div>
+                                            )}
+
+                                            {/* Insert button between questions (edit mode) */}
+                                            {editMode && (
+                                                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-center">
+                                                    <button
+                                                        onClick={() => {
+                                                            setAddingAfterId(q.id);
+                                                            setQuickAddPosition(q.question_number + 1);
+                                                            // Add a pending question to local state
+                                                            const newQ = {
+                                                                _pending: true as const,
+                                                                _id: `pending-${Date.now()}`,
+                                                                _questionNumber: q.question_number + 1,
+                                                            };
+                                                            setLocalQuestions(prev => {
+                                                                const arr = [...prev];
+                                                                // Shift all questions after this by +1 in local display
+                                                                // The backend handles actual DB shift, we just show a placeholder
+                                                                arr.splice(idx + 1, 0, newQ);
+                                                                return arr;
+                                                            });
+                                                            setShowQuickAdd(true);
+                                                        }}
+                                                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 border border-green-200 rounded-lg transition-colors text-xs font-medium"
+                                                    >
+                                                        <FiPlus size={12} /> Chèn câu hỏi sau câu {q.question_number}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* Append button at bottom */}
+                        {editMode && !showQuickAdd && (
+                            <div className="text-center py-4">
+                                <button
+                                    onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium mx-auto"
+                                >
+                                    <FiPlus size={16} /> Thêm câu hỏi mới (cuối danh sách)
+                                </button>
                             </div>
-                        ))}
+                        )}
                     </div>
                 )}
             </main>

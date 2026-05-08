@@ -80,9 +80,19 @@ export const examAdminApi = {
         return response.data;
     },
 
-    // Add question to exam
+    // Add question to exam (append to end)
     addQuestion: async (examId: number, data: QuestionData) => {
         const response = await axios.post(`/admin/exams/${examId}/questions`, data);
+        return response.data;
+    },
+
+    // Insert question at specific position (shifts existing questions)
+    insertQuestion: async (examId: number, questionData: QuestionData, afterQuestionId?: number, atPosition?: number) => {
+        const response = await axios.post(`/admin/exams/${examId}/questions/insert`, {
+            questionData,
+            afterQuestionId,
+            atPosition,
+        });
         return response.data;
     },
 
