@@ -29,13 +29,13 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     <>
       {showFloatingContacts && <FloatingContactButtons />}
 
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-[100dvh] flex flex-col">
         <div className="flex-1">
           {children}
         </div>
 
         {!noFooter && (
-          <div id="footer-shell" className="mt-auto">
+          <div id="footer-shell">
             <Footer />
           </div>
         )}
