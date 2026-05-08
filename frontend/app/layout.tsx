@@ -19,33 +19,33 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://csca.edu.vn'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://moly-studio.io.vn'),
   title: {
-    default: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc (CIS) & Bài Thi CSCA',
-    template: '%s | CSCA - Nền Tảng Luyện Thi',
+    default: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK Online & Ôn Thi CSCA',
+    template: '%s | CSCA MOLI.STUDIO',
   },
-  description: 'Nền tảng giáo dục trực tuyến CSCA cung cấp 500+ đề thi thử chuẩn hoá, lộ trình ôn thi cá nhân hoá bằng AI cho du học sinh chinh phục học bổng Đại học Trung Quốc an toàn.',
-  keywords: ['ôn thi csca', 'thi csca', 'du học trung quốc', 'học bổng cis', 'du học sinh', 'tài liệu csca', 'đề thi csca', 'đề thi toán lý hóa'],
-  authors: [{ name: 'CSCA Education' }],
-  creator: 'CSCA',
+  description: 'Nền tảng giáo dục trực tuyến CSCA MOLI.STUDIO cung cấp 500+ đề thi thử chuẩn hoá HSK/HSKK, lộ trình ôn thi cá nhân hoá bằng AI cho du học sinh chinh phục học bổng Đại học Trung Quốc.',
+  keywords: ['ôn thi HSK', 'thi HSK online', 'luyện thi HSKK', 'CSCA MOLI.STUDIO', 'ôn thi CSCA', 'du học trung quốc', 'tiếng trung', 'đề thi mô phỏng HSK', 'luyện thi tiếng trung'],
+  authors: [{ name: 'CSCA MOLI.STUDIO' }],
+  creator: 'CSCA MOLI.STUDIO',
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
-    siteName: 'CSCA',
-    title: 'CSCA - Ôn thi học bổng Trung Quốc',
-    description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi, AI phân tích lộ trình và 10,000+ học viên.',
+    siteName: 'CSCA MOLI.STUDIO',
+    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
+    description: 'Nền tảng ôn thi HSK/HSKK/CSCA với 500+ đề thi mô phỏng, AI phân tích lộ trình và 10,000+ học viên.',
     url: '/',
     images: [{
       url: '/images/du-hoc-trung-quoc-1200x799.jpg',
       width: 1200,
       height: 799,
-      alt: 'CSCA - Ôn thi học bổng Trung Quốc',
+      alt: 'CSCA MOLI.STUDIO - Luyện thi HSK/HSKK & CSCA',
     }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CSCA - Ôn thi học bổng Trung Quốc',
-    description: 'Nền tảng ôn thi học bổng CSCA với 500+ đề thi, AI phân tích lộ trình và 10,000+ học viên.',
+    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
+    description: 'Nền tảng ôn thi HSK/HSKK/CSCA với 500+ đề thi mô phỏng, AI phân tích lộ trình.',
     images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
   robots: {
