@@ -49,10 +49,17 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const loadExams = async () => {
     try {
       setLoading(true);
-      const data = await examApi.getExamsBySubject(subjectCode, subjectSlug);
-      setExams(data);
+      const response = await examApi.getExamsBySubject(subjectCode, subjectSlug);
+      // Validate: ensure data is an array
+      if (!Array.isArray(response)) {
+        console.error('API returned non-array data:', response);
+        setExams([]);
+        return;
+      }
+      setExams(response);
     } catch (error: any) {
-      console.error('Error loading exams:', error);
+      console.error('Error loading exams:', error?.response?.data || error?.message || error);
+      setExams([]);
     } finally {
       setLoading(false);
     }
@@ -321,22 +328,30 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   }
 
   // ─── EMPTY ─────────────────────────────────────────────────────────
-  if (filteredExams.length === 0) {
+  const hasSearch = search.trim().length > 0;
+  const noResults = filteredExams.length === 0 && !loading;
+
+  if (noResults) {
     return (
       <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-gray-100 p-16 text-center shadow-sm">
         <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300">
           <FiSearch size={36} />
         </div>
         <p className="text-gray-500 font-semibold text-lg">
-          {search ? `Không tìm thấy đề "${search}"` : 'Không có đề thi phù hợp'}
+          {hasSearch ? `Không tìm thấy đề "${search}"` : 'Không có đề thi phù hợp'}
         </p>
         <p className="text-gray-400 text-sm mt-1">
-          {search ? 'Thử từ khóa khác' : 'Đội ngũ đang cập nhật thêm đề thi'}
+          {hasSearch ? 'Thử từ khóa khác' : 'Đội ngũ đang cập nhật thêm đề thi'}
         </p>
-        {search && (
+        {hasSearch && (
           <button onClick={() => setSearch('')} className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
             Xóa tìm kiếm
           </button>
+        )}
+        {!hasSearch && exams.length === 0 && !loading && (
+          <p className="text-xs text-gray-400 mt-3">
+            Mã môn: {subjectCode || subjectSlug || '?'}
+          </p>
         )}
       </div>
     );
