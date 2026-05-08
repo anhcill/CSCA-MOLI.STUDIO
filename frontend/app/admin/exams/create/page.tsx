@@ -75,21 +75,27 @@ export default function CreateExamPage() {
         | { type: 'reading'; group: ReadingPassageGroupData & { _id: string }; index: number; displayNumber: number }
         | { type: 'fill'; group: FillBlankGroupData & { _id: string }; index: number; displayNumber: number };
 
-    // Build interleaved list with running question numbers
+    // Build ordered list preserving insertion order, assigning running question numbers
     const buildAllQuestions = (): AllQuestionItem[] => {
         const result: AllQuestionItem[] = [];
         let runningNumber = 1;
 
+        // Collect all items in insertion order with their index in respective arrays
+        const allItems: { kind: 'single' | 'reading' | 'fill'; index: number }[] = [];
         const maxLen = Math.max(questions.length, readingPassageGroups.length, fillBlankGroups.length);
         for (let i = 0; i < maxLen; i++) {
-            if (i < questions.length) {
-                result.push({ type: 'single', question: questions[i], index: i, displayNumber: runningNumber++ });
-            }
-            if (i < readingPassageGroups.length) {
-                result.push({ type: 'reading', group: readingPassageGroups[i], index: i, displayNumber: runningNumber++ });
-            }
-            if (i < fillBlankGroups.length) {
-                result.push({ type: 'fill', group: fillBlankGroups[i], index: i, displayNumber: runningNumber++ });
+            if (i < questions.length) allItems.push({ kind: 'single', index: i });
+            if (i < readingPassageGroups.length) allItems.push({ kind: 'reading', index: i });
+            if (i < fillBlankGroups.length) allItems.push({ kind: 'fill', index: i });
+        }
+
+        for (const item of allItems) {
+            if (item.kind === 'single') {
+                result.push({ type: 'single', question: questions[item.index], index: item.index, displayNumber: runningNumber++ });
+            } else if (item.kind === 'reading') {
+                result.push({ type: 'reading', group: readingPassageGroups[item.index], index: item.index, displayNumber: runningNumber++ });
+            } else {
+                result.push({ type: 'fill', group: fillBlankGroups[item.index], index: item.index, displayNumber: runningNumber++ });
             }
         }
         return result;
