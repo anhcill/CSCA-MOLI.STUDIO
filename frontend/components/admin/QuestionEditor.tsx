@@ -37,7 +37,11 @@ export interface QuestionFormData {
 
 interface QuestionEditorProps {
   questionNumber: number;
+  /** Initial data for existing questions (already saved in DB) */
   initialData?: Partial<QuestionFormData>;
+  /** When adding a NEW question, optionally set the initial question type (e.g. reading_passage, fill_blank_pool)
+   *  instead of defaulting to single_choice */
+  initialQuestionType?: QuestionType;
   onSave: (data: QuestionFormData) => void;
   onDelete?: () => void;
   /** Called when the user clicks the Cancel button to exit editing */
@@ -71,7 +75,7 @@ function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
     explanation: initial?.explanation || '',
     explanationCn: initial?.explanationCn || '',
     answers: initial?.answers?.length ? initial.answers : DEFAULT_ANSWERS(),
-    correctAnswer: initial?.correctAnswer ?? '',
+    correctAnswer: initial?.correctAnswer || 'A',
     linkedOptions: initial?.linkedOptions?.length ? initial.linkedOptions : DEFAULT_LINKED_OPTIONS,
     correctAnswerKey: initial?.correctAnswerKey || 'A',
     subQuestionNumber: initial?.subQuestionNumber || 0,
@@ -89,15 +93,20 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, { label: string; desc: string; 
 const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 // ─── Component ──────────────────────────────────────────────────────────────────
-export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
+export default function QuestionEditor({ questionNumber, initialData, initialQuestionType, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (initialData) {
-      setForm(getDefaults(initialData));
-    }
+    setForm(getDefaults(initialData));
   }, [initialData]);
+
+  // When initialQuestionType is provided (new question with specific type), apply it
+  useEffect(() => {
+    if (initialQuestionType && !savedQuestionId && !initialData) {
+      setForm(prev => ({ ...prev, questionType: initialQuestionType }));
+    }
+  }, [initialQuestionType, savedQuestionId, initialData]);
 
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));

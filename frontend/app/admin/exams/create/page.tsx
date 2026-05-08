@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiPlus, FiSave, FiEye } from 'react-icons/fi';
+import { FiPlus, FiSave, FiEye, FiX } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
@@ -60,6 +60,41 @@ export default function CreateExamPage() {
     const [nextPassageStartNumber, setNextPassageStartNumber] = useState(1);
     // Số câu tiếp theo cho điền từ (VD: đã có 10 câu → startNumber = 11)
     const [nextFillBlankStartNumber, setNextFillBlankStartNumber] = useState(1);
+    // ── Unified add-question flow (giống trang sửa đề) ──
+    const [pendingQuestions, setPendingQuestions] = useState<({ _pending: true; _localId: string; _questionNumber: number; _questionType: string })[]>([]);
+    const [showAddForm, setShowAddForm] = useState(false);
+
+    // ── Computed: total question count ──
+    const totalQuestionCount = questions.length
+        + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0)
+        + fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0);
+
+    // ── Computed: interleave all question types in display order with question numbers ──
+    type AllQuestionItem =
+        | { type: 'single'; question: QuestionFormData & { _id: string }; index: number; displayNumber: number }
+        | { type: 'reading'; group: ReadingPassageGroupData & { _id: string }; index: number; displayNumber: number }
+        | { type: 'fill'; group: FillBlankGroupData & { _id: string }; index: number; displayNumber: number };
+
+    // Build interleaved list with running question numbers
+    const buildAllQuestions = (): AllQuestionItem[] => {
+        const result: AllQuestionItem[] = [];
+        let runningNumber = 1;
+
+        const maxLen = Math.max(questions.length, readingPassageGroups.length, fillBlankGroups.length);
+        for (let i = 0; i < maxLen; i++) {
+            if (i < questions.length) {
+                result.push({ type: 'single', question: questions[i], index: i, displayNumber: runningNumber++ });
+            }
+            if (i < readingPassageGroups.length) {
+                result.push({ type: 'reading', group: readingPassageGroups[i], index: i, displayNumber: runningNumber++ });
+            }
+            if (i < fillBlankGroups.length) {
+                result.push({ type: 'fill', group: fillBlankGroups[i], index: i, displayNumber: runningNumber++ });
+            }
+        }
+        return result;
+    };
+    const allQuestions: AllQuestionItem[] = buildAllQuestions();
     const [currentExamId, setCurrentExamId] = useState<number | null>(null);
     const [examMetadataDirty, setExamMetadataDirty] = useState(false);
     const [savingMetadata, setSavingMetadata] = useState(false);
@@ -163,37 +198,69 @@ export default function CreateExamPage() {
         }
     };
 
-    const addQuestion = () => {
-        setQuestions([...questions, {
-            _id: `q-${Date.now()}-${Math.random()}`,
-            questionType: 'single_choice' as const,
-            questionText: '',
-            questionTextCn: '',
-            imageUrl: '',
-            passageText: '',
-            passageImageUrl: '',
-            points: 1,
-            explanation: '',
-            explanationCn: '',
-            answers: [
-                { text: '', textCn: '', imageUrl: '' },
-                { text: '', textCn: '', imageUrl: '' },
-                { text: '', textCn: '', imageUrl: '' },
-                { text: '', textCn: '', imageUrl: '' }
-            ],
-            correctAnswer: 'A',
-            linkedOptions: [
-                { key: 'A', text: '', textCn: '' },
-                { key: 'B', text: '', textCn: '' },
-                { key: 'C', text: '', textCn: '' },
-                { key: 'D', text: '', textCn: '' },
-                { key: 'E', text: '', textCn: '' },
-                { key: 'F', text: '', textCn: '' },
-            ],
-            correctAnswerKey: 'A',
-            subQuestionNumber: 0,
-            difficulty: 'medium',
-        }]);
+    const handleQuickAddSave = async (data: QuestionFormData) => {
+        if (!currentExamId) {
+            alert('Vui lòng tạo đề thi trước');
+            return;
+        }
+        try {
+            setLoading(true);
+
+            if (data.questionType === 'reading_passage') {
+                await examAdminApi.addQuestion(currentExamId, {
+                    questionType: 'reading_passage',
+                    questionText: '',
+                    questionTextCn: '',
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    points: 0,
+                    difficulty: 'medium',
+                });
+                setReadingPassageGroups(prev => [...prev, {
+                    _id: `rpg-${Date.now()}`,
+                    _localId: `rpg-${Date.now()}`,
+                    passageText: data.passageText || '',
+                    passageImageUrl: data.passageImageUrl || '',
+                    subQuestions: [],
+                }]);
+                alert('Đã thêm đoạn đọc hiểu!');
+            } else if (data.questionType === 'fill_blank_pool') {
+                await examAdminApi.addQuestion(currentExamId, {
+                    questionType: 'fill_blank_pool',
+                    questionText: '',
+                    questionTextCn: '',
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    linkedOptions: data.linkedOptions,
+                    points: 0,
+                    difficulty: 'medium',
+                });
+                setFillBlankGroups(prev => [...prev, {
+                    _id: `fbg-${Date.now()}`,
+                    _localId: `fbg-${Date.now()}`,
+                    passageText: data.passageText || '',
+                    passageImageUrl: data.passageImageUrl || '',
+                    linkedOptions: data.linkedOptions || [],
+                    subItems: [],
+                }]);
+                alert('Đã thêm nhóm điền từ!');
+            } else {
+                await examAdminApi.addQuestion(currentExamId, data as any);
+                const newQ = {
+                    _id: `q-${Date.now()}`,
+                    ...data,
+                };
+                setQuestions(prev => [...prev, newQ]);
+                alert('Đã thêm câu hỏi trắc nghiệm!');
+            }
+            setPendingQuestions([]);
+            setShowAddForm(false);
+        } catch (error) {
+            console.error('Error saving question:', error);
+            alert('Lưu câu hỏi thất bại: ' + (error as any)?.response?.data?.message || '');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const saveQuestion = async (index: number, data: QuestionFormData) => {
@@ -731,32 +798,41 @@ export default function CreateExamPage() {
                 {currentExamId && (
                     <>
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({questions.length + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0) + fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0)})</h2>
+                            <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({totalQuestionCount})</h2>
                             <div className="flex items-center space-x-3">
-                                <button
-                                    onClick={addFillBlankGroup}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                                >
-                                    <FiPlus />
-                                    <span>📝 Điền Từ</span>
-                                </button>
-                                <button
-                                    onClick={addReadingPassageGroup}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                                >
-                                    <FiPlus />
-                                    <span>📖 Đọc Hiểu</span>
-                                </button>
-                                <button
-                                    onClick={addQuestion}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                >
-                                    <FiPlus />
-                                    <span>Trắc Nghiệm</span>
-                                </button>
+                                {!showAddForm && (
+                                    <button
+                                        onClick={() => {
+                                            const nextNum = totalQuestionCount + 1;
+                                            setPendingQuestions(prev => [...prev, {
+                                                _pending: true as const,
+                                                _localId: `pending-${Date.now()}`,
+                                                _questionNumber: nextNum,
+                                                _questionType: 'single_choice',
+                                            }]);
+                                            setShowAddForm(true);
+                                        }}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                    >
+                                        <FiPlus />
+                                        <span>Thêm Câu Hỏi</span>
+                                    </button>
+                                )}
+                                {showAddForm && (
+                                    <button
+                                        onClick={() => {
+                                            setPendingQuestions([]);
+                                            setShowAddForm(false);
+                                        }}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 border border-gray-300"
+                                    >
+                                        <FiX />
+                                        <span>Hủy thêm</span>
+                                    </button>
+                                )}
                                 <button
                                     onClick={publishExam}
-                                    disabled={loading || (questions.length === 0 && fillBlankGroups.length === 0 && readingPassageGroups.length === 0)}
+                                    disabled={loading || totalQuestionCount === 0}
                                     className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     <FiEye />
@@ -765,56 +841,86 @@ export default function CreateExamPage() {
                             </div>
                         </div>
 
-                        {/* Fill Blank Groups */}
-                        {fillBlankGroups.map((group, index) => (
-                            <FillBlankGroup
-                                key={group._id}
-                                startNumber={nextFillBlankStartNumber > 1
-                                    ? nextFillBlankStartNumber
-                                    : questions.length + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0) + index * 3 + 1}
-                                initialData={group}
-                                onSave={(data) => saveFillBlankGroup(index, data)}
-                                onDelete={() => deleteFillBlankGroup(index)}
+                        {/* ── Inline form when adding ── */}
+                        {showAddForm && pendingQuestions.map(q => (
+                            <QuestionEditor
+                                key={q._localId}
+                                questionNumber={q._questionNumber}
+                                initialQuestionType={q._questionType as any}
+                                onSave={(data) => {
+                                    handleQuickAddSave(data);
+                                    setShowAddForm(false);
+                                }}
+                                onDelete={() => {
+                                    setPendingQuestions([]);
+                                    setShowAddForm(false);
+                                }}
+                                onCancel={() => {
+                                    setPendingQuestions([]);
+                                    setShowAddForm(false);
+                                }}
                             />
                         ))}
 
-                        {/* Reading Passage Groups */}
-                        {readingPassageGroups.map((group, index) => (
-                            <ReadingPassageGroup
-                                key={group._id}
-                                startNumber={nextPassageStartNumber > 1
-                                    ? nextPassageStartNumber
-                                    : questions.length + index * 3 + 1}
-                                initialData={group}
-                                onSave={(data) => saveReadingPassageGroup(index, data)}
-                                onDelete={() => deleteReadingPassageGroup(index)}
-                            />
-                        ))}
-
-                        {/* Single Questions */}
-                        <div className="space-y-6">
-                            {questions.map((question, index) => (
-                                <QuestionEditor
-                                    key={question._id}
-                                    questionNumber={index + 1}
-                                    initialData={question}
-                                    onSave={(data) => saveQuestion(index, data)}
-                                    onDelete={() => deleteQuestion(index)}
-                                />
-                            ))}
-
-                            {questions.length === 0 && (
-                                <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                                    <p className="text-gray-500 mb-4">No questions yet</p>
-                                    <button
-                                        onClick={addQuestion}
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                    >
-                                        Add First Question
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                        {/* All questions rendered in order (single + groups interleaved) */}
+                        {allQuestions.length === 0 && !showAddForm ? (
+                            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                                <p className="text-gray-500 mb-4">Chưa có câu hỏi nào</p>
+                                <button
+                                    onClick={() => {
+                                        setPendingQuestions([{
+                                            _pending: true as const,
+                                            _localId: `pending-${Date.now()}`,
+                                            _questionNumber: 1,
+                                            _questionType: 'single_choice',
+                                        }]);
+                                        setShowAddForm(true);
+                                    }}
+                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                >
+                                    Thêm Câu Hỏi Đầu Tiên
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {allQuestions.map((item, idx) => {
+                                    if (item.type === 'single') {
+                                        return (
+                                            <QuestionEditor
+                                                key={item.question._id}
+                                                questionNumber={item.displayNumber}
+                                                initialData={item.question}
+                                                onSave={(data) => saveQuestion(item.index, data)}
+                                                onDelete={() => deleteQuestion(item.index)}
+                                            />
+                                        );
+                                    }
+                                    if (item.type === 'reading') {
+                                        return (
+                                            <ReadingPassageGroup
+                                                key={item.group._id}
+                                                startNumber={item.displayNumber}
+                                                initialData={item.group}
+                                                onSave={(data) => saveReadingPassageGroup(item.index, data)}
+                                                onDelete={() => deleteReadingPassageGroup(item.index)}
+                                            />
+                                        );
+                                    }
+                                    if (item.type === 'fill') {
+                                        return (
+                                            <FillBlankGroup
+                                                key={item.group._id}
+                                                startNumber={item.displayNumber}
+                                                initialData={item.group}
+                                                onSave={(data) => saveFillBlankGroup(item.index, data)}
+                                                onDelete={() => deleteFillBlankGroup(item.index)}
+                                            />
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </div>
+                        )}
                     </>
                 )}
             </div>

@@ -107,7 +107,7 @@ export default function AdminExamDetailPage() {
     const [editMode, setEditMode] = useState<EditMode>('view');
 
     // Editing state (local question list while in edit mode)
-    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _localId: string; _questionNumber: number })[]>([]);
+    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _localId: string; _questionNumber: number; _questionType: string })[]>([]);
     const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
     const [addingAfterId, setAddingAfterId] = useState<number | null>(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -304,9 +304,55 @@ export default function AdminExamDetailPage() {
 
     // ── Quick add new question ────────────────────────────────────────────────
     const handleQuickAddSave = async (data: QuestionFormData) => {
-        const afterId = addingAfterId;
-        const atPos = quickAddPosition;
-        await handleInsertQuestion(data, afterId ?? undefined, atPos ?? undefined);
+        if (!exam) return;
+        try {
+            setSavingQuestionId(-1);
+
+            if (data.questionType === 'reading_passage') {
+                // Reading passage: save via the group API (appends at end)
+                const passageRes = await examAdminApi.addQuestion(exam.id, {
+                    questionType: 'reading_passage',
+                    questionText: '',
+                    questionTextCn: '',
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    points: 0,
+                    difficulty: 'medium',
+                });
+                const passageGroupId = passageRes.passageGroupId || passageRes.questionId;
+                // Load exam to get the group ID, then save sub-questions
+                await loadExam();
+                alert('Đã thêm đoạn đọc hiểu!');
+            } else if (data.questionType === 'fill_blank_pool') {
+                // Fill blank pool: save via the group API
+                await examAdminApi.addQuestion(exam.id, {
+                    questionType: 'fill_blank_pool',
+                    questionText: '',
+                    questionTextCn: '',
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    linkedOptions: data.linkedOptions,
+                    points: 0,
+                    difficulty: 'medium',
+                });
+                await loadExam();
+                alert('Đã thêm nhóm điền từ!');
+            } else {
+                // Single choice / trắc nghiệm: insert at correct position
+                const afterId = addingAfterId;
+                const atPos = quickAddPosition;
+                await handleInsertQuestion(data, afterId ?? undefined, atPos ?? undefined);
+                // handleInsertQuestion calls loadExam internally
+            }
+
+            setLocalQuestions(prev => prev.filter(q => !('_pending' in q)));
+            setAddingAfterId(null);
+            setQuickAddPosition(null);
+        } catch (error: any) {
+            alert('Lỗi: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSavingQuestionId(null);
+        }
     };
 
     // ── Add fill blank group ──────────────────────────────────────────────────
@@ -883,21 +929,15 @@ export default function AdminExamDetailPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={() => {
-                                    setShowAddFillBlank(true);
-                                    setPendingFillBlankGroups(prev => [...prev, {
-                                        _localId: `fbg-${Date.now()}`,
-                                        passageText: '',
-                                        passageImageUrl: '',
-                                        linkedOptions: [
-                                            { key: 'A', text: '', textCn: '' },
-                                            { key: 'B', text: '', textCn: '' },
-                                            { key: 'C', text: '', textCn: '' },
-                                            { key: 'D', text: '', textCn: '' },
-                                            { key: 'E', text: '', textCn: '' },
-                                            { key: 'F', text: '', textCn: '' },
-                                        ],
-                                        subItems: [],
+                                    const nextNum = exam.total_questions + 1;
+                                    setLocalQuestions(prev => [...prev, {
+                                        _pending: true as const,
+                                        _localId: `pending-fbg-${Date.now()}`,
+                                        _questionNumber: nextNum,
+                                        _questionType: 'fill_blank_pool',
                                     }]);
+                                    setAddingAfterId(null);
+                                    setQuickAddPosition(nextNum);
                                 }}
                                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
                             >
@@ -905,20 +945,32 @@ export default function AdminExamDetailPage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    setShowAddReadingPassage(true);
-                                    setPendingReadingGroups(prev => [...prev, {
-                                        _localId: `rpg-${Date.now()}`,
-                                        passageText: '',
-                                        passageImageUrl: '',
-                                        subQuestions: [],
+                                    const nextNum = exam.total_questions + 1;
+                                    setLocalQuestions(prev => [...prev, {
+                                        _pending: true as const,
+                                        _localId: `pending-rpg-${Date.now()}`,
+                                        _questionNumber: nextNum,
+                                        _questionType: 'reading_passage',
                                     }]);
+                                    setAddingAfterId(null);
+                                    setQuickAddPosition(nextNum);
                                 }}
                                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
                             >
                                 <FiPlus size={15} /> 📖 Đọc Hiểu
                             </button>
                             <button
-                                onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                                onClick={() => {
+                                    const nextNum = exam.total_questions + 1;
+                                    setLocalQuestions(prev => [...prev, {
+                                        _pending: true as const,
+                                        _localId: `pending-${Date.now()}`,
+                                        _questionNumber: nextNum,
+                                        _questionType: 'single_choice',
+                                    }]);
+                                    setAddingAfterId(null);
+                                    setQuickAddPosition(nextNum);
+                                }}
                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
                             >
                                 <FiPlus size={15} /> Trắc Nghiệm
@@ -1015,28 +1067,109 @@ export default function AdminExamDetailPage() {
 
                         {questions.map((q, idx) => {
                             if ('_pending' in q) {
+                                const isReading = q._questionType === 'reading_passage';
+                                const isFillBlank = q._questionType === 'fill_blank_pool';
+                                const borderColor = isReading ? 'border-purple-300' : isFillBlank ? 'border-green-300' : 'border-blue-300';
+                                const bgColor = isReading ? 'bg-purple-50' : isFillBlank ? 'bg-green-50' : 'bg-blue-50';
+                                const label = isReading ? '📖 Đọc Hiểu mới' : isFillBlank ? '📝 Điền Từ mới' : 'Câu mới';
+                                const typeLabel = isReading ? 'Đọc Hiểu' : isFillBlank ? 'Điền Từ' : 'Trắc Nghiệm';
+
                                 return (
-                                    <div key={q._localId} className="border-2 border-dashed border-blue-300 rounded-xl p-4">
+                                    <div key={q._localId} className={`border-2 border-dashed ${borderColor} rounded-xl p-4`}>
                                         <div className="flex items-center gap-2 mb-3">
-                                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">
-                                                CÂU MỚI #{q._questionNumber}
+                                            <span className={`px-2 py-1 ${bgColor} text-blue-700 rounded text-xs font-bold`}>
+                                                {label} #{q._questionNumber}
                                             </span>
                                             <span className="text-xs text-gray-500">Chưa lưu — điền thông tin và nhấn Lưu</span>
                                         </div>
-                                        <QuestionEditor
-                                            questionNumber={q._questionNumber}
-                                            onSave={handleQuickAddSave}
-                                            onDelete={() => {
-                                                setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
-                                                setShowQuickAdd(false);
-                                            }}
-                                            onCancel={() => {
-                                                setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
-                                                setShowQuickAdd(false);
-                                                setAddingAfterId(null);
-                                                setQuickAddPosition(null);
-                                            }}
-                                        />
+
+                                        {(isReading || isFillBlank) ? (
+                                            isReading ? (
+                                                <ReadingPassageGroup
+                                                    key={q._localId}
+                                                    startNumber={q._questionNumber}
+                                                    initialData={{
+                                                        _localId: q._localId,
+                                                        passageText: '',
+                                                        passageImageUrl: '',
+                                                        subQuestions: [],
+                                                    }}
+                                                    onSave={(data) => handleQuickAddSave({
+                                                        questionType: 'reading_passage',
+                                                        questionText: '',
+                                                        questionTextCn: '',
+                                                        imageUrl: '',
+                                                        passageText: data.passageText,
+                                                        passageImageUrl: data.passageImageUrl,
+                                                        points: 0,
+                                                        explanation: '',
+                                                        explanationCn: '',
+                                                        answers: [],
+                                                        correctAnswer: 'A',
+                                                        linkedOptions: [],
+                                                        correctAnswerKey: 'A',
+                                                        subQuestionNumber: 0,
+                                                        difficulty: 'medium',
+                                                    })}
+                                                    onDelete={() => {
+                                                        setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                    }}
+                                                />
+                                            ) : (
+                                                <FillBlankGroup
+                                                    key={q._localId}
+                                                    startNumber={q._questionNumber}
+                                                    initialData={{
+                                                        _localId: q._localId,
+                                                        passageText: '',
+                                                        passageImageUrl: '',
+                                                        linkedOptions: [
+                                                            { key: 'A', text: '', textCn: '' },
+                                                            { key: 'B', text: '', textCn: '' },
+                                                            { key: 'C', text: '', textCn: '' },
+                                                            { key: 'D', text: '', textCn: '' },
+                                                            { key: 'E', text: '', textCn: '' },
+                                                            { key: 'F', text: '', textCn: '' },
+                                                        ],
+                                                        subItems: [],
+                                                    }}
+                                                    onSave={(data) => handleQuickAddSave({
+                                                        questionType: 'fill_blank_pool',
+                                                        questionText: '',
+                                                        questionTextCn: '',
+                                                        imageUrl: '',
+                                                        passageText: data.passageText,
+                                                        passageImageUrl: data.passageImageUrl,
+                                                        points: 0,
+                                                        explanation: '',
+                                                        explanationCn: '',
+                                                        answers: [],
+                                                        correctAnswer: 'A',
+                                                        linkedOptions: data.linkedOptions,
+                                                        correctAnswerKey: 'A',
+                                                        subQuestionNumber: 0,
+                                                        difficulty: 'medium',
+                                                    })}
+                                                    onDelete={() => {
+                                                        setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                    }}
+                                                />
+                                            )
+                                        ) : (
+                                            <QuestionEditor
+                                                questionNumber={q._questionNumber}
+                                                initialQuestionType={'single_choice'}
+                                                onSave={handleQuickAddSave}
+                                                onDelete={() => {
+                                                    setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                }}
+                                                onCancel={() => {
+                                                    setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                    setAddingAfterId(null);
+                                                    setQuickAddPosition(null);
+                                                }}
+                                            />
+                                        )}
                                     </div>
                                 );
                             }
@@ -1145,6 +1278,7 @@ export default function AdminExamDetailPage() {
                                                                     _pending: true as const,
                                                                     _localId: `pending-${Date.now()}`,
                                                                     _questionNumber: q.question_number + 1,
+                                                                    _questionType: 'single_choice',
                                                                 };
                                                                 setLocalQuestions(prev => {
                                                                     const arr = [...prev];
@@ -1159,14 +1293,17 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const newIdx = pendingReadingGroups.length;
-                                                                setPendingReadingGroups(prev => [...prev, {
-                                                                    _localId: `rpg-${Date.now()}-${Math.random()}`,
-                                                                    passageText: '',
-                                                                    passageImageUrl: '',
-                                                                    subQuestions: [],
-                                                                }]);
-                                                                setShowAddReadingPassage(true);
+                                                                const newQ = {
+                                                                    _pending: true as const,
+                                                                    _localId: `pending-rpg-${Date.now()}`,
+                                                                    _questionNumber: q.question_number + 1,
+                                                                    _questionType: 'reading_passage',
+                                                                };
+                                                                setLocalQuestions(prev => {
+                                                                    const arr = [...prev];
+                                                                    arr.splice(idx + 1, 0, newQ);
+                                                                    return arr;
+                                                                });
                                                             }}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors text-xs font-medium"
                                                         >
@@ -1174,22 +1311,17 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const newIdx = pendingFillBlankGroups.length;
-                                                                setPendingFillBlankGroups(prev => [...prev, {
-                                                                    _localId: `fbg-${Date.now()}-${Math.random()}`,
-                                                                    passageText: '',
-                                                                    passageImageUrl: '',
-                                                                    linkedOptions: [
-                                                                        { key: 'A', text: '', textCn: '' },
-                                                                        { key: 'B', text: '', textCn: '' },
-                                                                        { key: 'C', text: '', textCn: '' },
-                                                                        { key: 'D', text: '', textCn: '' },
-                                                                        { key: 'E', text: '', textCn: '' },
-                                                                        { key: 'F', text: '', textCn: '' },
-                                                                    ],
-                                                                    subItems: [],
-                                                                }]);
-                                                                setShowAddFillBlank(true);
+                                                                const newQ = {
+                                                                    _pending: true as const,
+                                                                    _localId: `pending-fbg-${Date.now()}`,
+                                                                    _questionNumber: q.question_number + 1,
+                                                                    _questionType: 'fill_blank_pool',
+                                                                };
+                                                                setLocalQuestions(prev => {
+                                                                    const arr = [...prev];
+                                                                    arr.splice(idx + 1, 0, newQ);
+                                                                    return arr;
+                                                                });
                                                             }}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 border border-green-200 rounded-lg transition-colors text-xs font-medium"
                                                         >
@@ -1205,26 +1337,20 @@ export default function AdminExamDetailPage() {
                         })}
 
                         {/* Append buttons at bottom */}
-                        {editMode && !showQuickAdd && (
+                        {editMode && (
                             <div className="text-center py-4">
                                 <div className="flex items-center justify-center gap-3 flex-wrap">
                                     <button
                                         onClick={() => {
-                                            setShowAddFillBlank(true);
-                                            setPendingFillBlankGroups(prev => [...prev, {
-                                                _localId: `fbg-${Date.now()}-${Math.random()}`,
-                                                passageText: '',
-                                                passageImageUrl: '',
-                                                linkedOptions: [
-                                                    { key: 'A', text: '', textCn: '' },
-                                                    { key: 'B', text: '', textCn: '' },
-                                                    { key: 'C', text: '', textCn: '' },
-                                                    { key: 'D', text: '', textCn: '' },
-                                                    { key: 'E', text: '', textCn: '' },
-                                                    { key: 'F', text: '', textCn: '' },
-                                                ],
-                                                subItems: [],
+                                            const nextNum = exam.total_questions + 1;
+                                            setLocalQuestions(prev => [...prev, {
+                                                _pending: true as const,
+                                                _localId: `pending-fbg-${Date.now()}`,
+                                                _questionNumber: nextNum,
+                                                _questionType: 'fill_blank_pool',
                                             }]);
+                                            setAddingAfterId(null);
+                                            setQuickAddPosition(nextNum);
                                         }}
                                         className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 text-sm font-medium"
                                     >
@@ -1232,20 +1358,32 @@ export default function AdminExamDetailPage() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            setShowAddReadingPassage(true);
-                                            setPendingReadingGroups(prev => [...prev, {
-                                                _localId: `rpg-${Date.now()}-${Math.random()}`,
-                                                passageText: '',
-                                                passageImageUrl: '',
-                                                subQuestions: [],
+                                            const nextNum = exam.total_questions + 1;
+                                            setLocalQuestions(prev => [...prev, {
+                                                _pending: true as const,
+                                                _localId: `pending-rpg-${Date.now()}`,
+                                                _questionNumber: nextNum,
+                                                _questionType: 'reading_passage',
                                             }]);
+                                            setAddingAfterId(null);
+                                            setQuickAddPosition(nextNum);
                                         }}
                                         className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 text-sm font-medium"
                                     >
                                         <FiPlus size={15} /> 📖 Đọc Hiểu (cuối)
                                     </button>
                                     <button
-                                        onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                                        onClick={() => {
+                                            const nextNum = exam.total_questions + 1;
+                                            setLocalQuestions(prev => [...prev, {
+                                                _pending: true as const,
+                                                _localId: `pending-${Date.now()}`,
+                                                _questionNumber: nextNum,
+                                                _questionType: 'single_choice',
+                                            }]);
+                                            setAddingAfterId(null);
+                                            setQuickAddPosition(nextNum);
+                                        }}
                                         className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-medium"
                                     >
                                         <FiPlus size={15} /> 🔘 Trắc Nghiệm (cuối)
@@ -1259,20 +1397,25 @@ export default function AdminExamDetailPage() {
 
             {/* Confirm exit modal */}
             {showConfirmExit && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+                <div
+                    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowConfirmExit(false); }}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-gray-900 mb-2">Thoát chế độ sửa?</h3>
                         <p className="text-sm text-gray-500 mb-6">
                             Các thay đổi chưa lưu sẽ bị mất. Bạn có chắc muốn thoát?
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
+                                type="button"
                                 onClick={() => setShowConfirmExit(false)}
                                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
                             >
                                 Hủy
                             </button>
                             <button
+                                type="button"
                                 onClick={handleConfirmExit}
                                 className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
                             >
