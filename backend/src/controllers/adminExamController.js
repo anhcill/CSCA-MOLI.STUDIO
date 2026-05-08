@@ -602,7 +602,6 @@ const AdminExamController = {
       const { questionId } = req.params;
 
       const client = await pool.connect();
-
       try {
         await client.query("BEGIN");
 
@@ -612,10 +611,13 @@ const AdminExamController = {
         );
 
         if (examResult.rows.length === 0) {
+          await client.query("ROLLBACK");
           return res.status(404).json({ message: "Question not found" });
         }
 
         const examId = examResult.rows[0].exam_id;
+
+        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
         await client.query("DELETE FROM questions WHERE id = $1", [questionId]);
         await client.query(
@@ -626,7 +628,6 @@ const AdminExamController = {
         await client.query("COMMIT");
 
         UserActivity.log(req.user.id, 'admin.delete_question', { examId, questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
-
 
         res.json({ message: "Question deleted" });
       } catch (error) {
@@ -667,6 +668,9 @@ const AdminExamController = {
             const client = await pool.connect();
             try {
                 await client.query("BEGIN");
+
+                // ── Serialize concurrent inserts to the same exam ──
+                await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
                 // ── Determine target position ──
                 let targetPosition;
@@ -868,6 +872,9 @@ const AdminExamController = {
             const client = await pool.connect();
             try {
                 await client.query("BEGIN");
+
+                // ── Serialize concurrent operations on the same exam ──
+                await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
                 // Verify all questions belong to this exam
                 const verifyResult = await client.query(
