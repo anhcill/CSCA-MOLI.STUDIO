@@ -47,18 +47,21 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   }, []);
 
   const loadExams = async () => {
+    console.log('[ExamList] loadExams called:', { subjectCode, subjectSlug });
     try {
       setLoading(true);
       const response = await examApi.getExamsBySubject(subjectCode, subjectSlug);
+      console.log('[ExamList] API response type:', typeof response, Array.isArray(response) ? `array(${response.length})` : response);
       // Validate: ensure data is an array
       if (!Array.isArray(response)) {
-        console.error('API returned non-array data:', response);
+        console.error('[ExamList] API returned non-array data:', response);
         setExams([]);
         return;
       }
       setExams(response);
+      console.log('[ExamList] Set exams count:', response.length);
     } catch (error: any) {
-      console.error('Error loading exams:', error?.response?.data || error?.message || error);
+      console.error('[ExamList] Error loading exams:', error?.response?.data || error?.message || error);
       setExams([]);
     } finally {
       setLoading(false);
