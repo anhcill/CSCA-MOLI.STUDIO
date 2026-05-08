@@ -1,1 +1,7 @@
-chore(exam): add console debug logging to ExamList
+fix: add fill_blank_item to question type constraint, enable publish when questions exist in any group, add image upload for answer options
+
+- Add fill_blank_item to chk_question_type CHECK constraint (already applied via fix_constraint.js)
+- Fix publish button disabled logic: check all question groups (single_choice, fill_blank_groups, reading_passage_groups)
+- Fix publishExam validation: count total questions from all groups
+- Add image upload support for individual answer options in QuestionEditor
+- Remove obsolete test/debug script files from backend
