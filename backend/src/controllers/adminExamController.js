@@ -693,10 +693,14 @@ const AdminExamController = {
 
                 // ── Shift all questions at or after targetPosition by +1 ──
                 await client.query(
-                    `UPDATE questions
-                     SET question_number = question_number + 1
-                     WHERE exam_id = $1 AND question_number >= $2
-                     ORDER BY question_number DESC`,
+                    `UPDATE questions AS q
+                     SET question_number = q.question_number + 1
+                     FROM (
+                         SELECT id FROM questions
+                         WHERE exam_id = $1 AND question_number >= $2
+                         ORDER BY question_number DESC
+                     ) AS sub
+                     WHERE q.id = sub.id`,
                     [examId, targetPosition],
                 );
 
