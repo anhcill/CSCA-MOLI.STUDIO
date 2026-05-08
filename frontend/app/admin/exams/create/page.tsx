@@ -64,10 +64,11 @@ export default function CreateExamPage() {
     const [pendingQuestions, setPendingQuestions] = useState<({ _pending: true; _localId: string; _questionNumber: number; _questionType: string })[]>([]);
     const [showAddForm, setShowAddForm] = useState(false);
 
-    // ── Computed: total question count ──
+    // ── Computed: total question count (includes pending) ──
     const totalQuestionCount = questions.length
         + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0)
-        + fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0);
+        + fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0)
+        + pendingQuestions.length;
 
     // ── Computed: interleave all question types in display order with question numbers ──
     type AllQuestionItem =
@@ -76,6 +77,7 @@ export default function CreateExamPage() {
         | { type: 'fill'; group: FillBlankGroupData & { _id: string }; index: number; displayNumber: number };
 
     // Build ordered list preserving insertion order, assigning running question numbers
+    // NOTE: reading/fill groups with N sub-questions consume N numbers in the sequence
     const buildAllQuestions = (): AllQuestionItem[] => {
         const result: AllQuestionItem[] = [];
         let runningNumber = 1;
@@ -93,9 +95,13 @@ export default function CreateExamPage() {
             if (item.kind === 'single') {
                 result.push({ type: 'single', question: questions[item.index], index: item.index, displayNumber: runningNumber++ });
             } else if (item.kind === 'reading') {
-                result.push({ type: 'reading', group: readingPassageGroups[item.index], index: item.index, displayNumber: runningNumber++ });
+                const group = readingPassageGroups[item.index];
+                result.push({ type: 'reading', group, index: item.index, displayNumber: runningNumber });
+                runningNumber += group.subQuestions?.length || 1;
             } else {
-                result.push({ type: 'fill', group: fillBlankGroups[item.index], index: item.index, displayNumber: runningNumber++ });
+                const group = fillBlankGroups[item.index];
+                result.push({ type: 'fill', group, index: item.index, displayNumber: runningNumber });
+                runningNumber += group.subItems?.length || 1;
             }
         }
         return result;
@@ -213,33 +219,35 @@ export default function CreateExamPage() {
             setLoading(true);
 
             if (data.questionType === 'reading_passage') {
-                await examAdminApi.addQuestion(currentExamId, {
-                    questionType: 'reading_passage',
-                    questionText: '',
-                    questionTextCn: '',
-                    passageText: data.passageText,
-                    passageImageUrl: data.passageImageUrl,
-                    points: 0,
-                    difficulty: 'medium',
+                const newGroupId = `rpg-${Date.now()}`;
+                await examAdminApi.insertReadingPassageGroup(currentExamId, {
+                    _localId: newGroupId,
+                    passageText: data.passageText || '',
+                    passageImageUrl: data.passageImageUrl || '',
+                    subQuestions: [],
                 });
                 setReadingPassageGroups(prev => [...prev, {
-                    _id: `rpg-${Date.now()}`,
-                    _localId: `rpg-${Date.now()}`,
+                    _id: newGroupId,
+                    _localId: newGroupId,
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
                     subQuestions: [],
                 }]);
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                await examAdminApi.addQuestion(currentExamId, {
-                    questionType: 'fill_blank_pool',
-                    questionText: '',
-                    questionTextCn: '',
-                    passageText: data.passageText,
-                    passageImageUrl: data.passageImageUrl,
-                    linkedOptions: data.linkedOptions,
-                    points: 0,
-                    difficulty: 'medium',
+                await examAdminApi.insertFillBlankGroup(currentExamId, {
+                    _localId: `fbg-${Date.now()}`,
+                    passageText: data.passageText || '',
+                    passageImageUrl: data.passageImageUrl || '',
+                    linkedOptions: data.linkedOptions || [
+                        { key: 'A', text: '', textCn: '' },
+                        { key: 'B', text: '', textCn: '' },
+                        { key: 'C', text: '', textCn: '' },
+                        { key: 'D', text: '', textCn: '' },
+                        { key: 'E', text: '', textCn: '' },
+                        { key: 'F', text: '', textCn: '' },
+                    ],
+                    subItems: [],
                 });
                 setFillBlankGroups(prev => [...prev, {
                     _id: `fbg-${Date.now()}`,
@@ -332,51 +340,16 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            // 1. Lưu đoạn văn (reading_passage)
-            const passageRes = await examAdminApi.addQuestion(currentExamId, {
-                questionType: 'reading_passage',
-                questionText: '',
-                questionTextCn: '',
-                passageText: data.passageText,
-                passageImageUrl: data.passageImageUrl,
-                points: 0,
-                difficulty: 'medium',
-            });
+            await examAdminApi.insertReadingPassageGroup(currentExamId, data as any);
 
-            const passageGroupId = passageRes.passageGroupId || passageRes.questionId;
-
-            // 2. Lưu từng câu con (reading_item)
-            const savedSubIds: number[] = [];
-            for (const sq of data.subQuestions) {
-                const itemRes = await examAdminApi.addQuestion(currentExamId, {
-                    questionType: 'reading_item',
-                    questionText: sq.questionText,
-                    questionTextCn: sq.questionTextCn,
-                    imageUrl: sq.imageUrl,
-                    passageText: '', // đã nằm ở passage cha
-                    points: sq.points,
-                    explanation: sq.explanation,
-                    explanationCn: sq.explanationCn,
-                    answers: sq.answers,
-                    correctAnswer: sq.correctAnswer,
-                    difficulty: sq.difficulty,
-                    subQuestionNumber: sq.subQuestionNumber,
-                });
-                savedSubIds.push(itemRes.questionId);
-            }
-
-            // 3. Cập nhật local state
+            // Update local state với subQuestions đầy đủ (có số câu đúng)
             const updated = [...readingPassageGroups];
-            updated[index] = {
-                ...data,
-                _id: updated[index]._id,
-            };
+            updated[index] = { ...data, _id: updated[index]._id };
             setReadingPassageGroups(updated);
 
-            // 4. Cập nhật số câu tiếp theo
-            const lastSub = data.subQuestions[data.subQuestions.length - 1];
-            if (lastSub) {
-                setNextPassageStartNumber(lastSub.subQuestionNumber + 1);
+            // Update next start number
+            if (data.subQuestions.length > 0) {
+                setNextPassageStartNumber(data.subQuestions.length);
             }
 
             alert(`Đoạn đọc hiểu đã lưu! (${data.subQuestions.length} câu)`);
@@ -422,42 +395,16 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            // 1. Lưu pool (fill_blank_pool)
-            const poolRes = await examAdminApi.addQuestion(currentExamId, {
-                questionType: 'fill_blank_pool',
-                questionText: '',
-                questionTextCn: '',
-                passageText: data.passageText,
-                passageImageUrl: data.passageImageUrl,
-                linkedOptions: data.linkedOptions,
-                points: 0,
-                difficulty: 'medium',
-            });
+            await examAdminApi.insertFillBlankGroup(currentExamId, data as any);
 
-            // 2. Lưu từng chỗ trống (fill_blank_item)
-            for (const item of data.subItems) {
-                await examAdminApi.addQuestion(currentExamId, {
-                    questionType: 'fill_blank_item',
-                    questionText: item.questionText,
-                    questionTextCn: item.questionTextCn,
-                    points: item.points,
-                    explanation: item.explanation,
-                    explanationCn: item.explanationCn,
-                    correctAnswerKey: item.correctAnswerKey,
-                    difficulty: item.difficulty,
-                    subQuestionNumber: item.subQuestionNumber,
-                });
-            }
-
-            // 3. Cập nhật local state
+            // Update local state
             const updated = [...fillBlankGroups];
             updated[index] = { ...data, _id: updated[index]._id };
             setFillBlankGroups(updated);
 
-            // 4. Cập nhật số câu tiếp theo
-            const lastItem = data.subItems[data.subItems.length - 1];
-            if (lastItem) {
-                setNextFillBlankStartNumber(lastItem.subQuestionNumber + 1);
+            // Update next start number
+            if (data.subItems.length > 0) {
+                setNextFillBlankStartNumber(data.subItems.length);
             }
 
             alert(`Điền từ đã lưu! (${data.subItems.length} chỗ trống)`);

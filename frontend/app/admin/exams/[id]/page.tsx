@@ -544,6 +544,29 @@ export default function AdminExamDetailPage() {
 
     const questions = editMode ? localQuestions : savedQuestions;
 
+    // Compute the next question number by finding the max in localQuestions
+    // (savedQuestions have real numbers from DB, pending groups track their own)
+    const getNextQuestionNum = (): number => {
+        let max = 0;
+        for (const q of localQuestions) {
+            if ('_pending' in q) {
+                if (q._questionType === 'reading_passage' || q._questionType === 'fill_blank_pool') {
+                    max = Math.max(max, q._questionNumber + 10); // generous placeholder for group sub-questions
+                } else {
+                    max = Math.max(max, q._questionNumber);
+                }
+            } else {
+                max = Math.max(max, q.question_number);
+            }
+        }
+        return max + 1;
+    };
+
+    // Estimate how many question slots a pending reading/fill group takes (display only)
+    const getPendingGroupSlots = (q: { _pending: true; _questionType: string }): number => {
+        return (q._questionType === 'reading_passage' || q._questionType === 'fill_blank_pool') ? 10 : 1;
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -929,7 +952,7 @@ export default function AdminExamDetailPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={() => {
-                                    const nextNum = exam.total_questions + 1;
+                                    const nextNum = getNextQuestionNum();
                                     setLocalQuestions(prev => [...prev, {
                                         _pending: true as const,
                                         _localId: `pending-fbg-${Date.now()}`,
@@ -945,7 +968,7 @@ export default function AdminExamDetailPage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    const nextNum = exam.total_questions + 1;
+                                    const nextNum = getNextQuestionNum();
                                     setLocalQuestions(prev => [...prev, {
                                         _pending: true as const,
                                         _localId: `pending-rpg-${Date.now()}`,
@@ -961,7 +984,7 @@ export default function AdminExamDetailPage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    const nextNum = exam.total_questions + 1;
+                                    const nextNum = getNextQuestionNum();
                                     setLocalQuestions(prev => [...prev, {
                                         _pending: true as const,
                                         _localId: `pending-${Date.now()}`,
@@ -1272,12 +1295,13 @@ export default function AdminExamDetailPage() {
                                                     <div className="flex items-center justify-center gap-2 flex-wrap">
                                                         <button
                                                             onClick={() => {
-                                                                setAddingAfterId(q.id);
-                                                                setQuickAddPosition(q.question_number + 1);
+                                                                const nextNum = getNextQuestionNum();
+                                                                setAddingAfterId('_pending' in q ? null : q.id);
+                                                                setQuickAddPosition(nextNum);
                                                                 const newQ = {
                                                                     _pending: true as const,
                                                                     _localId: `pending-${Date.now()}`,
-                                                                    _questionNumber: q.question_number + 1,
+                                                                    _questionNumber: nextNum,
                                                                     _questionType: 'single_choice',
                                                                 };
                                                                 setLocalQuestions(prev => {
@@ -1293,10 +1317,11 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
+                                                                const nextNum = getNextQuestionNum();
                                                                 const newQ = {
                                                                     _pending: true as const,
                                                                     _localId: `pending-rpg-${Date.now()}`,
-                                                                    _questionNumber: q.question_number + 1,
+                                                                    _questionNumber: nextNum,
                                                                     _questionType: 'reading_passage',
                                                                 };
                                                                 setLocalQuestions(prev => {
@@ -1311,10 +1336,11 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
+                                                                const nextNum = getNextQuestionNum();
                                                                 const newQ = {
                                                                     _pending: true as const,
                                                                     _localId: `pending-fbg-${Date.now()}`,
-                                                                    _questionNumber: q.question_number + 1,
+                                                                    _questionNumber: nextNum,
                                                                     _questionType: 'fill_blank_pool',
                                                                 };
                                                                 setLocalQuestions(prev => {
@@ -1342,7 +1368,7 @@ export default function AdminExamDetailPage() {
                                 <div className="flex items-center justify-center gap-3 flex-wrap">
                                     <button
                                         onClick={() => {
-                                            const nextNum = exam.total_questions + 1;
+                                            const nextNum = getNextQuestionNum();
                                             setLocalQuestions(prev => [...prev, {
                                                 _pending: true as const,
                                                 _localId: `pending-fbg-${Date.now()}`,
@@ -1358,7 +1384,7 @@ export default function AdminExamDetailPage() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            const nextNum = exam.total_questions + 1;
+                                            const nextNum = getNextQuestionNum();
                                             setLocalQuestions(prev => [...prev, {
                                                 _pending: true as const,
                                                 _localId: `pending-rpg-${Date.now()}`,
@@ -1374,7 +1400,7 @@ export default function AdminExamDetailPage() {
                                     </button>
                                     <button
                                         onClick={() => {
-                                            const nextNum = exam.total_questions + 1;
+                                            const nextNum = getNextQuestionNum();
                                             setLocalQuestions(prev => [...prev, {
                                                 _pending: true as const,
                                                 _localId: `pending-${Date.now()}`,
