@@ -9,10 +9,7 @@ import ImageUpload from './ImageUpload';
 type QuestionType =
   | 'single_choice'
   | 'fill_blank_pool'
-  | 'fill_blank_item'
-  | 'reading_passage'
-  | 'reading_item'
-  | 'true_false';
+  | 'reading_passage';
 
 export interface LinkedOption {
   key: string;   // 'A', 'B', 'C', 'D', 'E', 'F'
@@ -86,27 +83,19 @@ function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
 const QUESTION_TYPE_LABELS: Record<QuestionType, { label: string; desc: string; color: string; bg: string }> = {
   single_choice:    { label: '🔘 Trắc nghiệm A-B-C-D',  desc: 'Câu hỏi chọn 1 đáp án đúng', color: 'blue',  bg: 'bg-blue-50 border-blue-200' },
   fill_blank_pool:  { label: '📝 Điền từ (Pool A-F)',   desc: 'Bắt đầu nhóm điền từ, có 6 từ chọn', color: 'green', bg: 'bg-green-50 border-green-200' },
-  fill_blank_item:  { label: '🔤 Câu điền từ con',       desc: 'Câu con trong nhóm điền từ', color: 'emerald', bg: 'bg-emerald-50 border-emerald-200' },
   reading_passage:  { label: '📖 Đọc hiểu (đầu đoạn)',  desc: 'Bắt đầu đoạn văn đọc hiểu', color: 'purple', bg: 'bg-purple-50 border-purple-200' },
-  reading_item:     { label: '📋 Câu đọc hiểu con',       desc: 'Câu con trong đoạn đọc hiểu', color: 'violet', bg: 'bg-violet-50 border-violet-200' },
-  true_false:       { label: '✅ Đúng / Sai',             desc: 'Chọn Đúng hoặc Sai', color: 'cyan', bg: 'bg-cyan-50 border-cyan-200' },
 };
 
 const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const LINKED_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
 
-  // Track whether we've loaded saved data (prevents overwriting with defaults on re-render)
-  const [initialized, setInitialized] = useState(false);
-
   useEffect(() => {
     if (initialData) {
       setForm(getDefaults(initialData));
-      setInitialized(true);
     }
   }, [initialData]);
 
@@ -114,21 +103,17 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
     setForm(prev => ({ ...prev, [key]: value }));
 
   const handleSave = () => {
-    // Validation cơ bản
-    if (form.questionType === 'fill_blank_item') {
-      // Câu con điền từ: không cần questionText
-    } else if (!form.questionText.trim() && !form.questionTextCn.trim()) {
+    if (!form.questionText.trim() && !form.questionTextCn.trim()) {
       alert('Vui lòng nhập nội dung câu hỏi (Tiếng Việt hoặc Tiếng Trung)');
       return;
     }
 
-    if ((form.questionType === 'single_choice' || form.questionType === 'reading_item') &&
-        !form.correctAnswer) {
+    if (form.questionType === 'single_choice' && !form.correctAnswer) {
       alert('Vui lòng chọn đáp án đúng');
       return;
     }
 
-    if ((form.questionType === 'single_choice' || form.questionType === 'reading_item') &&
+    if (form.questionType === 'single_choice' &&
         form.answers.every(a => !a.text.trim() && !a.textCn.trim())) {
       alert('Vui lòng nhập ít nhất 2 đáp án');
       return;
@@ -149,28 +134,29 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
   const qtype = QUESTION_TYPE_LABELS[form.questionType];
 
   // ── Render loại câu hỏi ─────────────────────────────────────────────────────
-  const renderQuestionTypeSelector = () => (
-    <div className={`p-4 rounded-xl border-2 ${qtype.bg}`}>
-      <label className="block text-sm font-bold mb-2" style={{ color: `var(--tw-colors[${
-        qtype.color === 'blue' ? 'blue-600' :
-        qtype.color === 'green' ? 'green-600' :
-        qtype.color === 'emerald' ? 'emerald-600' :
-        qtype.color === 'purple' ? 'purple-600' :
-        qtype.color === 'violet' ? 'violet-600' :
-        'cyan-600' }])` }}>
-        Loại câu hỏi
-      </label>
-      <select
-        value={form.questionType}
-        onChange={e => set('questionType', e.target.value as QuestionType)}
-        className="w-full px-3 py-2 rounded-lg border bg-white font-medium"
-      >
-        {(Object.entries(QUESTION_TYPE_LABELS) as [QuestionType, typeof qtype][]).map(([val, info]) => (
-          <option key={val} value={val}>{info.label} — {info.desc}</option>
+  const renderQuestionTypeSelector = () => {
+    const types = [
+      { val: 'single_choice' as QuestionType, label: '🔘 Trắc nghiệm', bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100', active: 'bg-blue-600 text-white border-blue-600' },
+      { val: 'fill_blank_pool' as QuestionType, label: '📝 Điền từ', bg: 'bg-green-50 border-green-200 hover:bg-green-100', active: 'bg-green-600 text-white border-green-600' },
+      { val: 'reading_passage' as QuestionType, label: '📖 Đọc hiểu', bg: 'bg-purple-50 border-purple-200 hover:bg-purple-100', active: 'bg-purple-600 text-white border-purple-600' },
+    ];
+    return (
+      <div className="flex gap-3">
+        {types.map(t => (
+          <button
+            key={t.val}
+            type="button"
+            onClick={() => set('questionType', t.val)}
+            className={`flex-1 py-3 px-4 rounded-xl border-2 font-bold text-sm transition-all ${
+              form.questionType === t.val ? t.active : t.bg
+            }`}
+          >
+            {t.label}
+          </button>
         ))}
-      </select>
-    </div>
-  );
+      </div>
+    );
+  };
 
   // ── Passage cho fill_blank_pool và reading_passage ─────────────────────────
   const renderPassageSection = () => (
@@ -257,80 +243,26 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
   // ── Nội dung câu hỏi ───────────────────────────────────────────────────────
   const renderQuestionContent = () => (
     <div className="space-y-3">
-      {form.questionType !== 'fill_blank_item' && (
-        <>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Câu hỏi (Tiếng Việt)</label>
-            <textarea
-              value={form.questionText}
-              onChange={e => set('questionText', e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2 border rounded-lg"
-              placeholder="Nhập câu hỏi..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
-            <textarea
-              value={form.questionTextCn}
-              onChange={e => set('questionTextCn', e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2 border rounded-lg"
-              placeholder="输入中文问题..."
-            />
-          </div>
-        </>
-      )}
-
-      {form.questionType === 'fill_blank_item' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <p className="text-xs text-amber-700 mb-2">
-            ⚠️ Câu điền từ con — nội dung câu hỏi dùng chung từ đoạn văn ở trên.
-            Chỉ cần chọn đáp án đúng và số câu.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Số câu con (VD: 35, 36, 37...)</label>
-              <input
-                type="number"
-                value={form.subQuestionNumber || ''}
-                onChange={e => set('subQuestionNumber', parseInt(e.target.value) || 0)}
-                className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                placeholder="35"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
-              <select
-                value={form.correctAnswerKey}
-                onChange={e => set('correctAnswerKey', e.target.value)}
-                className="w-full px-3 py-1.5 border rounded-lg text-sm"
-              >
-                {form.linkedOptions.map(opt => (
-                  <option key={opt.key} value={opt.key}>
-                    {opt.key}. {opt.textCn || opt.text || '...'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {form.questionType === 'reading_item' && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Số câu con (VD: 34, 35, 36...)</label>
-            <input
-              type="number"
-              value={form.subQuestionNumber || ''}
-              onChange={e => set('subQuestionNumber', parseInt(e.target.value) || 0)}
-              className="w-full px-3 py-1.5 border rounded-lg text-sm"
-              placeholder="34"
-            />
-          </div>
-        </div>
-      )}
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Câu hỏi (Tiếng Việt)</label>
+        <textarea
+          value={form.questionText}
+          onChange={e => set('questionText', e.target.value)}
+          rows={2}
+          className="w-full px-4 py-2 border rounded-lg"
+          placeholder="Nhập câu hỏi..."
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
+        <textarea
+          value={form.questionTextCn}
+          onChange={e => set('questionTextCn', e.target.value)}
+          rows={2}
+          className="w-full px-4 py-2 border rounded-lg"
+          placeholder="输入中文问题..."
+        />
+      </div>
 
       <ImageUpload
         label="Hình ảnh câu hỏi (tùy chọn)"
@@ -345,7 +277,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-gray-800 text-sm">Các lựa chọn</h4>
-        {form.questionType !== 'true_false' && form.answers.length < 8 && (
+        {form.answers.length < 8 && (
           <button onClick={() => set('answers', [...form.answers, { text: '', textCn: '', imageUrl: '' }])}
             className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100">
             + Thêm lựa chọn
@@ -355,7 +287,7 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
 
       {form.answers.map((ans, i) => {
         const key = ANSWER_KEYS[i];
-        const isCorrect = form.correctAnswer === key || form.correctAnswerKey === key;
+        const isCorrect = form.correctAnswer === key;
         return (
           <div key={key} className={`rounded-lg p-3 border ${isCorrect ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
             <div className="flex items-center gap-2 mb-2">
@@ -363,46 +295,39 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                 type="radio"
                 name="correctAnswer"
                 checked={isCorrect}
-                onChange={() => {
-                  if (form.questionType === 'fill_blank_item') set('correctAnswerKey', key);
-                  else set('correctAnswer', key);
-                }}
+                onChange={() => set('correctAnswer', key)}
                 className="w-4 h-4 text-blue-600"
               />
               <span className={`font-bold text-sm ${isCorrect ? 'text-green-700' : 'text-gray-500'}`}>
                 {key}. {isCorrect && <span className="text-green-600 text-xs ml-1">✓ Đáp án đúng</span>}
               </span>
-              {form.questionType !== 'true_false' && form.answers.length > 2 && (
+              {form.answers.length > 2 && (
                 <button onClick={() => set('answers', form.answers.filter((_, j) => j !== i))}
                   className="ml-auto text-gray-400 hover:text-red-500">
                   <FiTrash2 size={13} />
                 </button>
               )}
             </div>
-            {form.questionType !== 'true_false' && (
-              <>
-                <input
-                  type="text"
-                  value={ans.text}
-                  onChange={e => {
-                    const a = [...form.answers]; a[i] = { ...a[i], text: e.target.value };
-                    set('answers', a);
-                  }}
-                  className="w-full px-3 py-1 border rounded mb-1.5 text-sm"
-                  placeholder={`Lựa chọn ${key} (Tiếng Việt)...`}
-                />
-                <input
-                  type="text"
-                  value={ans.textCn}
-                  onChange={e => {
-                    const a = [...form.answers]; a[i] = { ...a[i], textCn: e.target.value };
-                    set('answers', a);
-                  }}
-                  className="w-full px-3 py-1 border rounded text-sm"
-                  placeholder={`选项${key} (中文)...`}
-                />
-              </>
-            )}
+            <input
+              type="text"
+              value={ans.text}
+              onChange={e => {
+                const a = [...form.answers]; a[i] = { ...a[i], text: e.target.value };
+                set('answers', a);
+              }}
+              className="w-full px-3 py-1 border rounded mb-1.5 text-sm"
+              placeholder={`Lựa chọn ${key} (Tiếng Việt)...`}
+            />
+            <input
+              type="text"
+              value={ans.textCn}
+              onChange={e => {
+                const a = [...form.answers]; a[i] = { ...a[i], textCn: e.target.value };
+                set('answers', a);
+              }}
+              className="w-full px-3 py-1 border rounded text-sm"
+              placeholder={`选项${key} (中文)...`}
+            />
 
             {/* Ảnh đính kèm đáp án */}
             {ans.imageUrl && (
@@ -476,20 +401,19 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
           <option value="hard">Khó</option>
         </select>
       </div>
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
-        <select
-          value={form.questionType === 'fill_blank_item' ? form.correctAnswerKey : form.correctAnswer}
-          onChange={e => {
-            if (form.questionType === 'fill_blank_item') set('correctAnswerKey', e.target.value);
-            else set('correctAnswer', e.target.value);
-          }}
-          className="w-full px-3 py-1.5 border rounded-lg text-sm">
-          {ANSWER_KEYS.slice(0, Math.max(4, form.answers.length, form.linkedOptions.length)).map(k => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-      </div>
+      {form.questionType === 'single_choice' && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
+          <select
+            value={form.correctAnswer}
+            onChange={e => set('correctAnswer', e.target.value)}
+            className="w-full px-3 py-1.5 border rounded-lg text-sm">
+            {ANSWER_KEYS.slice(0, Math.max(4, form.answers.length)).map(k => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 
@@ -572,34 +496,10 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
           renderPassageSection()}
 
         {/* 3. Nội dung câu hỏi */}
-        {form.questionType !== 'fill_blank_pool' &&
-          form.questionType !== 'reading_passage' &&
-          renderQuestionContent()}
+        {form.questionType === 'single_choice' && renderQuestionContent()}
 
-        {/* 4. Đáp án */}
-        {(form.questionType === 'single_choice' || form.questionType === 'reading_item') &&
-          renderChoicesSection()}
-
-        {/* True/False */}
-        {form.questionType === 'true_false' && (
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-gray-700">Chọn đáp án đúng:</p>
-            {['Đúng', 'Sai'].map((label, i) => {
-              const key = i === 0 ? 'T' : 'F';
-              return (
-                <button key={key}
-                  onClick={() => set('correctAnswer', key)}
-                  className={`w-full p-3 rounded-lg border-2 text-left font-medium transition-all ${
-                    form.correctAnswer === key
-                      ? 'border-green-500 bg-green-50 text-green-800'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                  {key === 'T' ? '✅ Đúng (True)' : '❌ Sai (False)'}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* 4. Đáp án (chỉ trắc nghiệm) */}
+        {form.questionType === 'single_choice' && renderChoicesSection()}
 
         {/* 5. Metadata */}
         {renderMeta()}

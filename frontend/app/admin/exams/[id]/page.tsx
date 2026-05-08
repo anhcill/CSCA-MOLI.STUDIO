@@ -35,7 +35,7 @@ interface SavedQuestion {
     difficulty?: string;
     linked_options?: any;
     sub_question_number?: number;
-    passage_group_id?: number;
+    passage_group_localId?: number;
     answers?: Answer[];
     effective_linked_options?: any;
     effective_passage_text?: string;
@@ -107,10 +107,14 @@ export default function AdminExamDetailPage() {
     const [editMode, setEditMode] = useState<EditMode>('view');
 
     // Editing state (local question list while in edit mode)
-    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _id: string; _questionNumber: number })[]>([]);
+    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _localId: string; _questionNumber: number })[]>([]);
     const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
     const [addingAfterId, setAddingAfterId] = useState<number | null>(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [showAddFillBlank, setShowAddFillBlank] = useState(false);
+    const [showAddReadingPassage, setShowAddReadingPassage] = useState(false);
+    const [pendingFillBlankGroups, setPendingFillBlankGroups] = useState<FillBlankGroupData[]>([]);
+    const [pendingReadingGroups, setPendingReadingGroups] = useState<ReadingPassageGroupData[]>([]);
 
     // Metadata editing
     const [editingMeta, setEditingMeta] = useState(false);
@@ -303,6 +307,40 @@ export default function AdminExamDetailPage() {
         const afterId = addingAfterId;
         const atPos = quickAddPosition;
         await handleInsertQuestion(data, afterId ?? undefined, atPos ?? undefined);
+    };
+
+    // ── Add fill blank group ──────────────────────────────────────────────────
+    const handleAddFillBlankGroup = async (data: FillBlankGroupData) => {
+        if (!exam) return;
+        try {
+            setSavingQuestionId(-1);
+            await examAdminApi.insertFillBlankGroup(exam.id, data as any);
+            await loadExam();
+            setPendingFillBlankGroups(prev => prev.filter(g => g._localId !== data._localId));
+            if (pendingFillBlankGroups.length === 1) setShowAddFillBlank(false);
+            alert('Đã thêm nhóm điền từ!');
+        } catch (error: any) {
+            alert('Lỗi thêm nhóm điền từ: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSavingQuestionId(null);
+        }
+    };
+
+    // ── Add reading passage group ──────────────────────────────────────────────
+    const handleAddReadingPassageGroup = async (data: ReadingPassageGroupData) => {
+        if (!exam) return;
+        try {
+            setSavingQuestionId(-1);
+            await examAdminApi.insertReadingPassageGroup(exam.id, data as any);
+            await loadExam();
+            setPendingReadingGroups(prev => prev.filter(g => g._localId !== data._localId));
+            if (pendingReadingGroups.length === 1) setShowAddReadingPassage(false);
+            alert('Đã thêm nhóm đọc hiểu!');
+        } catch (error: any) {
+            alert('Lỗi thêm nhóm đọc hiểu: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSavingQuestionId(null);
+        }
     };
 
     // ── Delete question ────────────────────────────────────────────────────────
@@ -837,17 +875,55 @@ export default function AdminExamDetailPage() {
 
                 {/* ── Questions Section ── */}
                 {editMode && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <p className="font-bold text-blue-900">Chế độ sửa đề</p>
                             <p className="text-sm text-blue-700">Nhấn <strong>✏️ Sửa</strong> ở câu để chỉnh sửa nội dung. <strong>+ Thêm</strong> để chèn câu mới (đánh số lại tự động).</p>
                         </div>
-                        <button
-                            onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                        >
-                            <FiPlus size={15} /> Thêm câu hỏi mới (cuối)
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                                onClick={() => {
+                                    setShowAddFillBlank(true);
+                                    setPendingFillBlankGroups(prev => [...prev, {
+                                        _localId: `fbg-${Date.now()}`,
+                                        passageText: '',
+                                        passageImageUrl: '',
+                                        linkedOptions: [
+                                            { key: 'A', text: '', textCn: '' },
+                                            { key: 'B', text: '', textCn: '' },
+                                            { key: 'C', text: '', textCn: '' },
+                                            { key: 'D', text: '', textCn: '' },
+                                            { key: 'E', text: '', textCn: '' },
+                                            { key: 'F', text: '', textCn: '' },
+                                        ],
+                                        subItems: [],
+                                    }]);
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+                            >
+                                <FiPlus size={15} /> 📝 Điền Từ
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowAddReadingPassage(true);
+                                    setPendingReadingGroups(prev => [...prev, {
+                                        _localId: `rpg-${Date.now()}`,
+                                        passageText: '',
+                                        passageImageUrl: '',
+                                        subQuestions: [],
+                                    }]);
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+                            >
+                                <FiPlus size={15} /> 📖 Đọc Hiểu
+                            </button>
+                            <button
+                                onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                            >
+                                <FiPlus size={15} /> Trắc Nghiệm
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -857,25 +933,90 @@ export default function AdminExamDetailPage() {
                     </h2>
                 </div>
 
-                {questions.length === 0 ? (
+                {questions.length === 0 && pendingFillBlankGroups.length === 0 && pendingReadingGroups.length === 0 ? (
                     <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
-                        <p className="text-lg mb-2">Chưa có câu hỏi nào</p>
-                        {editMode ? (
-                            <button
-                                onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(1); }}
-                                className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                            >
-                                Thêm câu hỏi đầu tiên
-                            </button>
-                        ) : null}
+                        <p className="text-lg mb-4">Chưa có câu hỏi nào</p>
+                        {editMode && (
+                            <div className="flex items-center justify-center gap-3 flex-wrap">
+                                <button
+                                    onClick={() => {
+                                        setShowAddFillBlank(true);
+                                        setPendingFillBlankGroups(prev => [...prev, {
+                                            _localId: `fbg-${Date.now()}`,
+                                            passageText: '',
+                                            passageImageUrl: '',
+                                            linkedOptions: [
+                                                { key: 'A', text: '', textCn: '' },
+                                                { key: 'B', text: '', textCn: '' },
+                                                { key: 'C', text: '', textCn: '' },
+                                                { key: 'D', text: '', textCn: '' },
+                                                { key: 'E', text: '', textCn: '' },
+                                                { key: 'F', text: '', textCn: '' },
+                                            ],
+                                            subItems: [],
+                                        }]);
+                                    }}
+                                    className="mt-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                                >
+                                    📝 Điền Từ
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowAddReadingPassage(true);
+                                        setPendingReadingGroups(prev => [...prev, {
+                                            _localId: `rpg-${Date.now()}`,
+                                            passageText: '',
+                                            passageImageUrl: '',
+                                            subQuestions: [],
+                                        }]);
+                                    }}
+                                    className="mt-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                                >
+                                    📖 Đọc Hiểu
+                                </button>
+                                <button
+                                    onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(1); }}
+                                    className="mt-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                >
+                                    🔘 Trắc Nghiệm
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="space-y-4">
+                        {/* Pending Fill Blank Groups */}
+                        {pendingFillBlankGroups.map((group, index) => (
+                            <FillBlankGroup
+                                key={group._localId}
+                                startNumber={1}
+                                initialData={group}
+                                onSave={(data) => handleAddFillBlankGroup(data)}
+                                onDelete={() => {
+                                    setPendingFillBlankGroups(prev => prev.filter((_, i) => i !== index));
+                                    if (pendingFillBlankGroups.length === 1) setShowAddFillBlank(false);
+                                }}
+                            />
+                        ))}
+
+                        {/* Pending Reading Passage Groups */}
+                        {pendingReadingGroups.map((group, index) => (
+                            <ReadingPassageGroup
+                                key={group._localId}
+                                startNumber={1}
+                                initialData={group}
+                                onSave={(data) => handleAddReadingPassageGroup(data)}
+                                onDelete={() => {
+                                    setPendingReadingGroups(prev => prev.filter((_, i) => i !== index));
+                                    if (pendingReadingGroups.length === 1) setShowAddReadingPassage(false);
+                                }}
+                            />
+                        ))}
+
                         {questions.map((q, idx) => {
                             if ('_pending' in q) {
-                                // New unsaved question — show QuestionEditor
                                 return (
-                                    <div key={q._id} className="border-2 border-dashed border-blue-300 rounded-xl p-4">
+                                    <div key={q._localId} className="border-2 border-dashed border-blue-300 rounded-xl p-4">
                                         <div className="flex items-center gap-2 mb-3">
                                             <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">
                                                 CÂU MỚI #{q._questionNumber}
@@ -906,7 +1047,6 @@ export default function AdminExamDetailPage() {
                             return (
                                 <div key={q.id} className={`bg-white rounded-xl border ${isEditing ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'} p-6`}>
                                     {isEditing ? (
-                                        // Edit mode: show QuestionEditor
                                         <QuestionEditor
                                             questionNumber={q.question_number}
                                             initialData={formData}
@@ -916,7 +1056,6 @@ export default function AdminExamDetailPage() {
                                             onCancel={() => setEditingQuestionId(null)}
                                         />
                                     ) : (
-                                        // View mode: show question card with edit button
                                         <>
                                             <div className="flex items-start justify-between mb-4">
                                                 <div className="flex items-start gap-3 flex-1">
@@ -960,7 +1099,6 @@ export default function AdminExamDetailPage() {
                                                 </div>
                                             </div>
 
-                                            {/* Answers */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 {q.answers?.map(a => (
                                                     <div
@@ -996,32 +1134,68 @@ export default function AdminExamDetailPage() {
                                                 </div>
                                             )}
 
-                                            {/* Insert button between questions (edit mode) */}
                                             {editMode && (
-                                                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-center">
-                                                    <button
-                                                        onClick={() => {
-                                                            setAddingAfterId(q.id);
-                                                            setQuickAddPosition(q.question_number + 1);
-                                                            // Add a pending question to local state
-                                                            const newQ = {
-                                                                _pending: true as const,
-                                                                _id: `pending-${Date.now()}`,
-                                                                _questionNumber: q.question_number + 1,
-                                                            };
-                                                            setLocalQuestions(prev => {
-                                                                const arr = [...prev];
-                                                                // Shift all questions after this by +1 in local display
-                                                                // The backend handles actual DB shift, we just show a placeholder
-                                                                arr.splice(idx + 1, 0, newQ);
-                                                                return arr;
-                                                            });
-                                                            setShowQuickAdd(true);
-                                                        }}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 border border-green-200 rounded-lg transition-colors text-xs font-medium"
-                                                    >
-                                                        <FiPlus size={12} /> Chèn câu hỏi sau câu {q.question_number}
-                                                    </button>
+                                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                                                        <button
+                                                            onClick={() => {
+                                                                setAddingAfterId(q.id);
+                                                                setQuickAddPosition(q.question_number + 1);
+                                                                const newQ = {
+                                                                    _pending: true as const,
+                                                                    _localId: `pending-${Date.now()}`,
+                                                                    _questionNumber: q.question_number + 1,
+                                                                };
+                                                                setLocalQuestions(prev => {
+                                                                    const arr = [...prev];
+                                                                    arr.splice(idx + 1, 0, newQ);
+                                                                    return arr;
+                                                                });
+                                                                setShowQuickAdd(true);
+                                                            }}
+                                                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors text-xs font-medium"
+                                                        >
+                                                            <FiPlus size={12} /> Trắc Nghiệm
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const newIdx = pendingReadingGroups.length;
+                                                                setPendingReadingGroups(prev => [...prev, {
+                                                                    _localId: `rpg-${Date.now()}-${Math.random()}`,
+                                                                    passageText: '',
+                                                                    passageImageUrl: '',
+                                                                    subQuestions: [],
+                                                                }]);
+                                                                setShowAddReadingPassage(true);
+                                                            }}
+                                                            className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors text-xs font-medium"
+                                                        >
+                                                            <FiPlus size={12} /> 📖 Đọc Hiểu
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const newIdx = pendingFillBlankGroups.length;
+                                                                setPendingFillBlankGroups(prev => [...prev, {
+                                                                    _localId: `fbg-${Date.now()}-${Math.random()}`,
+                                                                    passageText: '',
+                                                                    passageImageUrl: '',
+                                                                    linkedOptions: [
+                                                                        { key: 'A', text: '', textCn: '' },
+                                                                        { key: 'B', text: '', textCn: '' },
+                                                                        { key: 'C', text: '', textCn: '' },
+                                                                        { key: 'D', text: '', textCn: '' },
+                                                                        { key: 'E', text: '', textCn: '' },
+                                                                        { key: 'F', text: '', textCn: '' },
+                                                                    ],
+                                                                    subItems: [],
+                                                                }]);
+                                                                setShowAddFillBlank(true);
+                                                            }}
+                                                            className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 border border-green-200 rounded-lg transition-colors text-xs font-medium"
+                                                        >
+                                                            <FiPlus size={12} /> 📝 Điền Từ
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </>
@@ -1030,15 +1204,53 @@ export default function AdminExamDetailPage() {
                             );
                         })}
 
-                        {/* Append button at bottom */}
+                        {/* Append buttons at bottom */}
                         {editMode && !showQuickAdd && (
                             <div className="text-center py-4">
-                                <button
-                                    onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
-                                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium mx-auto"
-                                >
-                                    <FiPlus size={16} /> Thêm câu hỏi mới (cuối danh sách)
-                                </button>
+                                <div className="flex items-center justify-center gap-3 flex-wrap">
+                                    <button
+                                        onClick={() => {
+                                            setShowAddFillBlank(true);
+                                            setPendingFillBlankGroups(prev => [...prev, {
+                                                _localId: `fbg-${Date.now()}-${Math.random()}`,
+                                                passageText: '',
+                                                passageImageUrl: '',
+                                                linkedOptions: [
+                                                    { key: 'A', text: '', textCn: '' },
+                                                    { key: 'B', text: '', textCn: '' },
+                                                    { key: 'C', text: '', textCn: '' },
+                                                    { key: 'D', text: '', textCn: '' },
+                                                    { key: 'E', text: '', textCn: '' },
+                                                    { key: 'F', text: '', textCn: '' },
+                                                ],
+                                                subItems: [],
+                                            }]);
+                                        }}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 text-sm font-medium"
+                                    >
+                                        <FiPlus size={15} /> 📝 Điền Từ (cuối)
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowAddReadingPassage(true);
+                                            setPendingReadingGroups(prev => [...prev, {
+                                                _localId: `rpg-${Date.now()}-${Math.random()}`,
+                                                passageText: '',
+                                                passageImageUrl: '',
+                                                subQuestions: [],
+                                            }]);
+                                        }}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 text-sm font-medium"
+                                    >
+                                        <FiPlus size={15} /> 📖 Đọc Hiểu (cuối)
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowQuickAdd(true); setAddingAfterId(null); setQuickAddPosition(exam.total_questions + 1); }}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-medium"
+                                    >
+                                        <FiPlus size={15} /> 🔘 Trắc Nghiệm (cuối)
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>

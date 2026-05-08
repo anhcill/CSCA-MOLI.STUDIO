@@ -150,5 +150,17 @@ export const examAdminApi = {
     reorderQuestions: async (examId: number, orderedIds: number[]) => {
         const response = await axios.put(`/admin/exams/${examId}/questions/reorder`, { orderedIds });
         return response.data;
-    }
+    },
+
+    // ── Fill blank group (pool + sub-items) ──────────────────────────────────
+    insertFillBlankGroup: async (examId: number, data: any) => {
+        const response = await axios.post(`/admin/exams/${examId}/fill-blank-group`, data);
+        return response.data;
+    },
+
+    // ── Reading passage group (passage + sub-questions) ───────────────────────
+    insertReadingPassageGroup: async (examId: number, data: any) => {
+        const response = await axios.post(`/admin/exams/${examId}/reading-passage-group`, data);
+        return response.data;
+    },
 };
