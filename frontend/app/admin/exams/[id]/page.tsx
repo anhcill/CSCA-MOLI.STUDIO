@@ -884,6 +884,12 @@ export default function AdminExamDetailPage() {
                                                 setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
                                                 setShowQuickAdd(false);
                                             }}
+                                            onCancel={() => {
+                                                setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
+                                                setShowQuickAdd(false);
+                                                setAddingAfterId(null);
+                                                setQuickAddPosition(null);
+                                            }}
                                         />
                                     </div>
                                 );
@@ -902,6 +908,7 @@ export default function AdminExamDetailPage() {
                                             savedQuestionId={q.id}
                                             onSave={(data) => handleUpdateQuestion(q.id, data)}
                                             onDelete={() => handleDeleteQuestion(q.id)}
+                                            onCancel={() => setEditingQuestionId(null)}
                                         />
                                     ) : (
                                         // View mode: show question card with edit button

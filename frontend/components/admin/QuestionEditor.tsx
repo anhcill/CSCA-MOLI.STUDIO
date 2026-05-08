@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiTrash2, FiSave, FiPlus } from 'react-icons/fi';
+import { FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
@@ -43,6 +43,8 @@ interface QuestionEditorProps {
   initialData?: Partial<QuestionFormData>;
   onSave: (data: QuestionFormData) => void;
   onDelete?: () => void;
+  /** Called when the user clicks the Cancel button to exit editing */
+  onCancel?: () => void;
   /** Pass an existing saved question to enable UPDATE instead of CREATE */
   savedQuestionId?: number;
 }
@@ -94,7 +96,7 @@ const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const LINKED_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 // ─── Component ──────────────────────────────────────────────────────────────────
-export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete, savedQuestionId }: QuestionEditorProps) {
+export default function QuestionEditor({ questionNumber, initialData, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
 
@@ -395,6 +397,50 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
                 />
               </>
             )}
+
+            {/* Ảnh đính kèm đáp án */}
+            {ans.imageUrl && (
+              <div className="mt-1">
+                <img src={ans.imageUrl} alt={`Option ${key}`} className="h-20 rounded border object-contain bg-white" />
+              </div>
+            )}
+            <div className="mt-1.5">
+              <label className="text-xs text-gray-400 cursor-pointer hover:text-blue-500">
+                <span className="underline">+ Thêm ảnh đáp án</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    try {
+                      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                      const data = await res.json();
+                      if (data.url) {
+                        const a = [...form.answers]; a[i] = { ...a[i], imageUrl: data.url };
+                        set('answers', a);
+                      }
+                    } catch {
+                      alert('Upload ảnh thất bại');
+                    }
+                  }}
+                />
+              </label>
+              {ans.imageUrl && (
+                <button
+                  onClick={() => {
+                    const a = [...form.answers]; a[i] = { ...a[i], imageUrl: '' };
+                    set('answers', a);
+                  }}
+                  className="ml-2 text-xs text-red-400 hover:text-red-600 underline"
+                >
+                  Xóa ảnh
+                </button>
+              )}
+            </div>
           </div>
         );
       })}
@@ -488,6 +534,13 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
             <span className="px-2 py-1 bg-yellow-400/30 text-yellow-200 rounded text-xs font-semibold">
               Đã lưu
             </span>
+          )}
+          {onCancel && (
+            <button onClick={onCancel}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 text-white rounded-lg font-semibold text-sm hover:bg-white/30">
+              <FiX size={15} />
+              Hủy
+            </button>
           )}
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-700 rounded-lg font-semibold text-sm hover:bg-indigo-50 disabled:opacity-60">

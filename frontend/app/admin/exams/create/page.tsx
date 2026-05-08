@@ -409,7 +409,12 @@ export default function CreateExamPage() {
             return;
         }
 
-        if (questions.length === 0) {
+        const totalQuestions =
+            questions.length +
+            readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0) +
+            fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0);
+
+        if (totalQuestions === 0) {
             alert('Vui lòng thêm ít nhất một câu hỏi');
             return;
         }
@@ -751,7 +756,7 @@ export default function CreateExamPage() {
                                 </button>
                                 <button
                                     onClick={publishExam}
-                                    disabled={loading || questions.length === 0}
+                                    disabled={loading || (questions.length === 0 && fillBlankGroups.length === 0 && readingPassageGroups.length === 0)}
                                     className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     <FiEye />

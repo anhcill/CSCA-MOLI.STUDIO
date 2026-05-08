@@ -707,6 +707,33 @@ async function runOptimizations() {
       `);
     }
 
+    // ── Fix chk_question_type constraint to include all question types ──────────
+    await pool.query(`
+      DO $$
+      BEGIN
+          IF EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'chk_question_type'
+              AND conrelid = 'questions'::regclass
+          ) THEN
+              ALTER TABLE questions DROP CONSTRAINT chk_question_type;
+          END IF;
+      EXCEPTION WHEN OTHERS THEN
+          RAISE NOTICE 'Constraint drop skipped: %', SQLERRM;
+      END $$;
+    `);
+    await pool.query(`
+      ALTER TABLE questions ADD CONSTRAINT chk_question_type
+        CHECK (question_type IN (
+          'single_choice',
+          'fill_blank_pool',
+          'fill_blank_item',
+          'reading_passage',
+          'reading_item',
+          'true_false'
+        ))
+    `);
+
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,
     );
