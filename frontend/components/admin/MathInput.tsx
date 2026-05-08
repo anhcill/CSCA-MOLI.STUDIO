@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { FiSigma, FiSuperscript } from 'react-icons/fi';
+import { FiDivide, FiHash } from 'react-icons/fi';
 
 interface MathInputProps {
   value: string;
@@ -163,7 +163,7 @@ export default function MathInput({
           className="absolute top-2 right-2 p-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-700 transition-colors"
           title="Chèn công thức toán học"
         >
-          <FiSigma size={16} />
+          <FiDivide size={16} />
         </button>
       </div>
 
@@ -171,7 +171,7 @@ export default function MathInput({
       {showMath && (
         <div className="border-2 border-purple-300 rounded-xl bg-purple-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center gap-2 mb-2">
-            <FiSigma className="text-purple-600" size={16} />
+            <FiDivide className="text-purple-600" size={16} />
             <span className="text-sm font-semibold text-purple-700">
               Chèn công thức toán học
             </span>
@@ -227,7 +227,7 @@ export default function MathInput({
           {previewHtml && (
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-2 mb-1">
-                <FiSuperscript size={12} className="text-gray-400" />
+                <FiHash size={12} className="text-gray-400" />
                 <span className="text-xs text-gray-500">Xem trước:</span>
               </div>
               <div
@@ -243,12 +243,12 @@ export default function MathInput({
               Mẹo: Viết công thức nhanh
             </summary>
             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 bg-white rounded p-2 border">
-              <span className="font-mono">\\sqrt{x}</span><span>→ √x</span>
-              <span className="font-mono">\\frac{a}{b}</span><span>→ a/b</span>
-              <span className="font-mono">x^{2}</span><span>→ x²</span>
-              <span className="font-mono">\\sum_{i=1}^{n}</span><span>→ Σ</span>
-              <span className="font-mono">\\int_{a}^{b}</span><span>→ ∫</span>
-              <span className="font-mono">\\pi</span><span>→ π</span>
+              <span className="font-mono">{"\\sqrt{x}"}</span><span>→ √x</span>
+              <span className="font-mono">{"\\frac{a}{b}"}</span><span>→ a/b</span>
+              <span className="font-mono">{"x^{2}"}</span><span>→ x²</span>
+              <span className="font-mono">{"\\sum_{i=1}^{n}"}</span><span>→ Σ</span>
+              <span className="font-mono">{"\\int_{a}^{b}"}</span><span>→ ∫</span>
+              <span className="font-mono">{"\\pi"}</span><span>→ π</span>
             </div>
           </details>
         </div>
