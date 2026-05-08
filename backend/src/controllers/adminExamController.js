@@ -648,7 +648,9 @@ const AdminExamController = {
     // afterQuestionId: insert AFTER this question ID (shifts all after by +1)
     // atPosition: insert at this question_number (shifts all >= atPosition by +1)
     async insertQuestion(req, res) {
-        try {
+        const MAX_RETRIES = 5;
+
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const { examId } = req.params;
             const { questionData, afterQuestionId, atPosition } = req.body;
 
@@ -851,7 +853,20 @@ const AdminExamController = {
             } finally {
                 client.release();
             }
+
+            // Nếu vào đây = thành công, break khỏi retry loop
+            break;
         } catch (error) {
+            // Chỉ retry khi gặp duplicate key (23505), không retry các lỗi khác
+            const isDuplicateKey =
+                error.code === '23505' &&
+                error.constraint === 'questions_exam_id_question_number_key';
+
+            if (isDuplicateKey) {
+                console.warn(`[insertQuestion] Duplicate key on attempt, retrying...`);
+                continue; // thử lại với vị trí mới
+            }
+
             console.error("Insert question error:", error);
             res.status(500).json({ message: "Failed to insert question" });
         }
