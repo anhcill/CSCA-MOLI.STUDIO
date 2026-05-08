@@ -22,6 +22,9 @@ router.post("/", messageController.sendMessage);
 // PUT  /api/messages/:id/read    - Mark as read
 router.put("/:id/read", messageController.markAsRead);
 
+// DELETE /api/messages/:id       - Recall/Delete a message
+router.delete("/:id", messageController.deleteMessage);
+
 // POST /api/messages/:id/report - Report a message
 router.post("/:id/report", blockController.reportMessage);
 

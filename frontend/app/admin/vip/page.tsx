@@ -493,12 +493,20 @@ export default function AdminVipPage() {
 
         {/* ── Action bar ─────────────────────────────────────── */}
         <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={() => setShowGrantModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-yellow-500/25 transition-all text-sm">
-            <FaCrown size={14} />
-            Cấp VIP thủ công
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowGrantModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-yellow-500/25 transition-all text-sm">
+              <FaCrown size={14} />
+              Cấp VIP thủ công
+            </button>
+            <button
+              onClick={() => { setShowCreateModal(true); setActiveTab('packages'); }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-bold rounded-xl shadow-lg transition-all text-sm">
+              <FiPlus size={14} />
+              Thêm gói mới
+            </button>
+          </div>
           <button
             onClick={loadStats}
             className="inline-flex items-center gap-2 px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm transition-colors">

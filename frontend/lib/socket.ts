@@ -7,11 +7,13 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 type MessageHandler = (message: unknown) => void;
+type DeleteMessageHandler = (data: { messageId: number; senderId: number }) => void;
 type UnreadCountHandler = (count: number) => void;
 type NotificationHandler = (notification: unknown) => void;
 type TypingHandler = (data: { userId: number; partnerId: number }) => void;
 
 const messageHandlers = new Set<MessageHandler>();
+const deleteMessageHandlers = new Set<DeleteMessageHandler>();
 const unreadCountHandlers = new Set<UnreadCountHandler>();
 const notificationHandlers = new Set<NotificationHandler>();
 const typingHandlers = new Set<TypingHandler>();
@@ -72,6 +74,10 @@ export function initSocket(): Socket {
 
   socket.on('message_notification', (data) => {
     messageHandlers.forEach(handler => handler(data.message));
+  });
+
+  socket.on('message_deleted', (data: { messageId: number; senderId: number }) => {
+    deleteMessageHandlers.forEach(handler => handler(data));
   });
 
   // ─── Unread count events ──────────────────────────────────────────────────
@@ -144,6 +150,11 @@ export function stopTyping(partnerId: number) {
 export function onNewMessage(handler: MessageHandler) {
   messageHandlers.add(handler);
   return () => messageHandlers.delete(handler);
+}
+
+export function onMessageDeleted(handler: DeleteMessageHandler) {
+  deleteMessageHandlers.add(handler);
+  return () => deleteMessageHandlers.delete(handler);
 }
 
 export function onUnreadCountUpdate(handler: UnreadCountHandler) {

@@ -55,7 +55,7 @@ export default function HoaDeMoPhongPage() {
                         </div>
 
                         {/* Exam List */}
-                        <ExamList subjectCode={subjectCode} subjectSlug="hoa-hoc" />
+                        <ExamList subjectCode={subjectCode} subjectSlug="hoa" />
                     </div>
 
                     {/* Sidebar */}
@@ -63,7 +63,7 @@ export default function HoaDeMoPhongPage() {
                         <SubjectNavigation
                             subject="Hóa Học"
                             subjectCode="CHEMISTRY"
-                            subjectSlug="hoa-hoc"
+                            subjectSlug="hoa"
                             colorScheme={{
                                 from: 'from-emerald-500',
                                 to: 'to-cyan-600'

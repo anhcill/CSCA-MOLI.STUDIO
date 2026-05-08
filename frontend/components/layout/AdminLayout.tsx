@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
+import AdminDailyLetter from '@/components/admin/AdminDailyLetter';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -185,6 +186,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
+      <AdminDailyLetter />
 
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside className={`

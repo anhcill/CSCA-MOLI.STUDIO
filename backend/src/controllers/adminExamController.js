@@ -53,13 +53,19 @@ async function getLatestPassageGroupId(client, examId) {
 }
 
 // ─── Helper: normalize linked_options (pool A-F) ─────────────────────────────────
+// Frontend convention: text = Tiếng Việt, textCn = Tiếng Trung
+// Backend: nếu text rỗng thì dùng textCn làm fallback cho cả hai
 function normalizeLinkedOptions(rawOptions) {
   if (!Array.isArray(rawOptions) || rawOptions.length < 2) return null;
-  return rawOptions.map((opt, i) => ({
-    key:   opt.key || String.fromCharCode(65 + i),
-    text:  (opt.text || '').trim(),
-    textCn:(opt.textCn || opt.text || '').trim(),
-  }));
+  return rawOptions.map((opt, i) => {
+    const text = (opt.text || '').trim();
+    const textCn = (opt.textCn || opt.text || '').trim();
+    return {
+      key:   opt.key || String.fromCharCode(65 + i),
+      text:  text || textCn,
+      textCn: textCn || text,
+    };
+  });
 }
 
 const AdminExamController = {
@@ -290,8 +296,8 @@ const AdminExamController = {
           }
         }
 
-        if (qType === QUESTION_TYPES.READING_ITEM || qType === QUESTION_TYPES.READING_PASSAGE) {
-          // Đọc hiểu: số câu con
+        if (qType === QUESTION_TYPES.READING_ITEM || qType === QUESTION_TYPES.READING_PASSAGE || qType === QUESTION_TYPES.FILL_BLANK_ITEM) {
+          // Đọc hiểu & Điền từ: số câu con
           subQn = subQuestionNumber || questionNumber;
         }
 

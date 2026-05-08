@@ -9,6 +9,11 @@ export interface ForumMessage {
   content: string;
   is_read: boolean;
   created_at: string;
+  is_deleted?: boolean;
+  reply_to_id?: number | null;
+  reply_content?: string | null;
+  reply_is_deleted?: boolean;
+  reply_sender_name?: string | null;
 }
 
 export interface Conversation {
@@ -65,9 +70,18 @@ export const getMessages = async (partnerId: number, page = 1, limit = 50) => {
  * Gửi tin nhắn
  * @route POST /api/messages
  */
-export const sendMessage = async (receiverId: number, content: string) => {
-  const res = await axios.post('/messages', { receiver_id: receiverId, content });
+export const sendMessage = async (receiverId: number, content: string, replyToId?: number) => {
+  const res = await axios.post('/messages', { receiver_id: receiverId, content, reply_to_id: replyToId });
   return res.data as { success: boolean; data: { message: ForumMessage } };
+};
+
+/**
+ * Thu hồi tin nhắn
+ * @route DELETE /api/messages/:id
+ */
+export const deleteMessage = async (messageId: number) => {
+  const res = await axios.delete(`/messages/${messageId}`);
+  return res.data as { success: boolean; message: string };
 };
 
 /**

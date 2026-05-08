@@ -1,5 +1,5 @@
 /**
- * VIP Expiration Reminder Cron Script
+ * VIP Expiration Cron Script
  * Chạy mỗi ngày (nên chạy vào lúc 8h sáng)
  *
  * Cách chạy:
@@ -7,12 +7,77 @@
  *   2. Tự động (Railway/Heroku): thêm cron job trong Railway
  *      - Schedule: "0 1 * * *" (chạy 1h sáng mỗi ngày, giờ UTC = 8h VN)
  *      - Command: node scripts/vip_expiration_reminder.js
- *   3. Hoặc dùng node-cron: npm install node-cron
- *      - Xem file: scripts/vip_expiration_cron.js
  */
 require('dotenv').config();
 const db = require('../src/config/database');
 const emailService = require('../src/services/emailService');
+const DeviceSessionService = require('../src/services/deviceSessionService');
+const UserActivity = require('../src/models/UserActivity');
+
+async function revokeExpiredVips() {
+  console.log(`[VIP Auto-Revoke] Bắt đầu thu hồi VIP hết hạn...`);
+
+  // Tìm tất cả user hết hạn (is_vip=TRUE nhưng vip_expires_at <= now)
+  const expiredRes = await db.query(`
+    SELECT id, email, full_name, username, vip_expires_at, subscription_tier
+    FROM users
+    WHERE is_vip = TRUE
+      AND vip_expires_at IS NOT NULL
+      AND vip_expires_at <= NOW()
+  `);
+
+  if (expiredRes.rows.length === 0) {
+    console.log(`[VIP Auto-Revoke] Không có user VIP nào hết hạn.`);
+    return { revoked: 0, failed: 0 };
+  }
+
+  console.log(`[VIP Auto-Revoke] Tìm thấy ${expiredRes.rows.length} user hết hạn. Bắt đầu revoke...`);
+
+  let revoked = 0;
+  let failed = 0;
+
+  for (const user of expiredRes.rows) {
+    const name = user.full_name || user.username || 'bạn';
+    try {
+      // Revoke sessions → tokens die immediately
+      await DeviceSessionService.removeAllUserSessions(user.id);
+
+      // Update user to basic
+      await db.query(
+        `UPDATE users
+         SET is_vip = FALSE, subscription_tier = 'basic', updated_at = NOW()
+         WHERE id = $1`,
+        [user.id]
+      );
+
+      // Log activity via UserActivity model
+      UserActivity.log(user.id, 'system.revoke_expired_vip', {
+        previous_tier: user.subscription_tier,
+        previous_expires: user.vip_expires_at,
+        reason: 'auto_expire',
+      }).catch(() => {});
+
+      // Gửi email thông báo
+      emailService.sendVipExpiredEmail({
+        email: user.email,
+        name,
+        expiredAt: user.vip_expires_at,
+      }).catch(err => console.error(`[Auto-Revoke] Email error for ${user.email}:`, err.message));
+
+      revoked++;
+      console.log(`  ✅ Revoked: ${user.email} (${user.subscription_tier} → basic)`);
+    } catch (err) {
+      failed++;
+      console.error(`  ❌ Lỗi revoke ${user.email}: ${err.message}`);
+    }
+
+    // Delay nhẹ
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  console.log(`[VIP Auto-Revoke] Hoàn thành: ${revoked} revoked, ${failed} failed.`);
+  return { revoked, failed };
+}
 
 async function sendExpirationReminders() {
   const DAYS_BEFORE = [3, 2, 1]; // Nhắc trước 3, 2, 1 ngày
@@ -99,9 +164,22 @@ async function sendExpirationReminders() {
   console.log(`[VIP Reminder] Hoàn thành: ${totalSent} gửi thành công, ${totalFailed} thất bại.`);
 }
 
-sendExpirationReminders()
+async function main() {
+  console.log('='.repeat(60));
+  console.log(`[VIP Cron] Bắt đầu — ${new Date().toISOString()}`);
+  console.log('='.repeat(60));
+
+  await revokeExpiredVips();
+  await sendExpirationReminders();
+
+  console.log('='.repeat(60));
+  console.log(`[VIP Cron] Hoàn thành — ${new Date().toISOString()}`);
+  console.log('='.repeat(60));
+}
+
+main()
   .then(() => process.exit(0))
   .catch(err => {
-    console.error('[VIP Reminder] Lỗi nghiêm trọng:', err);
+    console.error('[VIP Cron] Lỗi nghiêm trọng:', err);
     process.exit(1);
   });

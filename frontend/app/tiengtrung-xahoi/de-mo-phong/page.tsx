@@ -55,15 +55,15 @@ export default function TiengTrungXaHoiDeMoPhongPage() {
                         </div>
 
                         {/* Exam List */}
-                        <ExamList subjectCode={subjectCode} subjectSlug="tieng-trung-xh" />
+                        <ExamList subjectCode={subjectCode} subjectSlug="tiengtrung-xahoi" />
                     </div>
 
                     {/* Sidebar */}
                     <div className="lg:col-span-4">
                         <SubjectNavigation
                             subject="Tiếng Trung XH"
-                            subjectCode="CHINESE"
-                            subjectSlug="tieng-trung-xh"
+                            subjectCode="CHINESE_SOC"
+                            subjectSlug="tiengtrung-xahoi"
                             colorScheme={{
                                 from: 'from-rose-500',
                                 to: 'to-purple-600'

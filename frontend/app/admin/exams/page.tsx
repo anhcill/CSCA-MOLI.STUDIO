@@ -349,8 +349,13 @@ export default function ExamsPage() {
                                             #{exam.id}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-sm font-medium text-gray-900 dark:text-white">{exam.title}</div>
-                                            <div className="text-xs text-gray-500 dark:text-slate-400">{exam.duration} phút • {exam.total_points} điểm</div>
+                                            <button
+                                                onClick={() => router.push(`/admin/exams/${exam.id}`)}
+                                                className="text-left hover:text-purple-600 transition-colors"
+                                            >
+                                                <div className="text-sm font-medium text-gray-900 dark:text-white">{exam.title}</div>
+                                                <div className="text-xs text-gray-500 dark:text-slate-400">{exam.duration} phút • {exam.total_points} điểm</div>
+                                            </button>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">
                                             {exam.subject_name}

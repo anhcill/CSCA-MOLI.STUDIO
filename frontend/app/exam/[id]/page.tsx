@@ -185,7 +185,8 @@ export default function ExamPage() {
   const processedQuestions = useMemo(() => {
     let currentGroup: any = null;
     return questions.map((q: any) => {
-       if (q.question_group_type === 'reading_passage_start' || q.question_group_type === 'fill_in_the_blank_pool_start') {
+       if (q.question_group_type === 'reading_passage' || q.question_group_type === 'reading_passage_start' ||
+           q.question_group_type === 'fill_blank_pool' || q.question_group_type === 'fill_in_the_blank_pool_start') {
           currentGroup = {
              text: q.passage_text || '',
              image: q.passage_image_url || '',
@@ -373,7 +374,7 @@ export default function ExamPage() {
                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-400 to-orange-400" />
                    <h3 className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
                        <FiGrid size={14} /> 
-                       {currentQuestion.groupContext.type === 'reading_passage_start' ? 'Đoạn văn đọc hiểu dùng chung' : 'Nội dung dùng chung'}
+                       {currentQuestion.groupContext.type === 'reading_passage' || currentQuestion.groupContext.type === 'reading_passage_start' ? 'Đoạn văn đọc hiểu dùng chung' : 'Nội dung dùng chung'}
                    </h3>
                    <div className="text-[17px] text-slate-800 leading-loose font-serif whitespace-pre-wrap">
                       {currentQuestion.groupContext.text}

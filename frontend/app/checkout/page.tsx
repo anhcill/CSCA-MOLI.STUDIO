@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import axios from '@/lib/utils/axios';
+import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy, FaCheckCircle } from 'react-icons/fa';
 import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
@@ -165,15 +166,20 @@ function BankTransferScreen({
 // ── Success Screen ─────────────────────────────────────────────────────────────
 function SuccessScreen({ packageName, vipExpires }: { packageName?: string; vipExpires?: string }) {
   const router = useRouter();
-  const { updateUser } = useAuthStore();
+  const { updateUser, setTokens, refreshToken } = useAuthStore();
 
   useEffect(() => {
-    // Force refresh user data
-    axios.get('/auth/me').then(res => {
-      if (res.data?.data?.user) {
-        updateUser(res.data.data.user);
-      }
-    }).catch(() => {});
+    // Force refresh user data + update JWT token in sessionStorage
+    getCurrentUser()
+      .then((response) => {
+        if (response?.success && response?.data?.user) {
+          updateUser(response.data.user);
+          if ((response.data as any).token) {
+            setTokens((response.data as any).token, refreshToken || '');
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return (

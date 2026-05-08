@@ -15,7 +15,7 @@ import axios from '@/lib/utils/axios';
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const { setUser, setTokens, refreshToken } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [verifying, setVerifying] = useState(true);
   const [result, setResult] = useState<{
@@ -47,10 +47,14 @@ function SuccessContent() {
         });
 
         if (verifyRes.data.success) {
+          // CRITICAL: fetch fresh user + token so VIP features work immediately
           try {
             const userRes = await getCurrentUser();
             if (userRes.success && userRes.data?.user) {
               setUser(userRes.data.user);
+              if ((userRes.data as any).token) {
+                setTokens((userRes.data as any).token, refreshToken || '');
+              }
             }
           } catch (_) {}
 
@@ -68,6 +72,9 @@ function SuccessContent() {
           const userRes = await getCurrentUser();
           if (userRes.success && userRes.data?.user) {
             setUser(userRes.data.user);
+            if ((userRes.data as any).token) {
+              setTokens((userRes.data as any).token, refreshToken || '');
+            }
             if (userRes.data.user.is_vip) {
               setResult({ success: true, status: 'completed' });
               return;
@@ -81,7 +88,7 @@ function SuccessContent() {
     };
 
     verify();
-  }, [mounted, orderId, resultCode, setUser]);
+  }, [mounted, orderId, resultCode, setUser, setTokens, refreshToken]);
 
   if (!mounted) return null;
 

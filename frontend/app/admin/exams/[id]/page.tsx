@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiCheckCircle, FiXCircle, FiImage } from 'react-icons/fi';
+import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiCheckCircle, FiXCircle, FiImage, FiEye } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Answer {
@@ -228,6 +228,12 @@ export default function AdminExamDetailPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => router.push(`/admin/exams/create?examId=${id}`)}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                            >
+                                <FiEdit2 size={16} /> Sửa đề
+                            </button>
                             <select
                                 value={exam.status}
                                 onChange={e => handleStatusChange(e.target.value as any)}
@@ -290,21 +296,19 @@ export default function AdminExamDetailPage() {
                         </button>
                     </div>
 
-                    {/* VIP Tier selector */}
+                        {/* VIP Tier selector */}
                     <div className="mt-4 pt-4 border-t border-gray-100">
                         <label className="block text-sm font-semibold text-gray-700 mb-3">Phân loại nội dung</label>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                             {[
-                                { value: 'basic', label: 'Miễn phí', desc: 'Mọi người', color: 'gray' },
-                                { value: 'vip', label: 'VIP', desc: 'Gói VIP', color: 'blue' },
-                                { value: 'premium', label: 'Pre', desc: 'Gói Pre', color: 'amber' },
+                                { value: 'basic', label: 'Miễn phí', desc: 'Mọi người đều xem được', color: 'gray' },
+                                { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'blue' },
                             ].map(tier => (
                                 <button key={tier.value}
                                     onClick={() => handleSetVipTier(tier.value)}
                                     className={`relative p-2.5 rounded-xl border-2 text-center transition-all ${
                                         exam.vip_tier === tier.value
-                                            ? tier.color === 'amber' ? 'border-amber-500 bg-amber-50' :
-                                              tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
+                                            ? tier.color === 'blue' ? 'border-blue-500 bg-blue-50' :
                                               'border-gray-500 bg-gray-100'
                                             : 'border-gray-200 hover:border-gray-300 bg-white'
                                     }`}>
@@ -313,7 +317,6 @@ export default function AdminExamDetailPage() {
                                     </p>
                                     {exam.vip_tier === tier.value && (
                                         <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
-                                            tier.color === 'amber' ? 'bg-amber-500' :
                                             tier.color === 'blue' ? 'bg-blue-500' : 'bg-gray-500'
                                         }`}>
                                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -324,6 +327,7 @@ export default function AdminExamDetailPage() {
                                 </button>
                             ))}
                         </div>
+                        <p className="text-xs text-gray-400 mt-2">VIP & Premium dùng chung đề. Chỉ khác chức năng bổ sung.</p>
                     </div>
 
                     {/* Premium toggle */}

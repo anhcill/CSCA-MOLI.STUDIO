@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { FiPlus, FiSave, FiEye } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
+import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
+import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -50,6 +52,14 @@ export default function CreateExamPage() {
 
     // Questions with unique IDs
     const [questions, setQuestions] = useState<(QuestionFormData & { _id: string })[]>([]);
+    // Reading passage groups (đoạn văn + nhiều câu con gom chung 1 card)
+    const [readingPassageGroups, setReadingPassageGroups] = useState<(ReadingPassageGroupData & { _id: string })[]>([]);
+    // Fill blank groups (điền từ + nhiều chỗ trống gom chung 1 card)
+    const [fillBlankGroups, setFillBlankGroups] = useState<(FillBlankGroupData & { _id: string })[]>([]);
+    // Số câu tiếp theo cho đoạn đọc hiểu (VD: đề đã có 72 câu → startNumber = 73)
+    const [nextPassageStartNumber, setNextPassageStartNumber] = useState(1);
+    // Số câu tiếp theo cho điền từ (VD: đã có 10 câu → startNumber = 11)
+    const [nextFillBlankStartNumber, setNextFillBlankStartNumber] = useState(1);
     const [currentExamId, setCurrentExamId] = useState<number | null>(null);
     const [examMetadataDirty, setExamMetadataDirty] = useState(false);
     const [savingMetadata, setSavingMetadata] = useState(false);
@@ -227,6 +237,169 @@ export default function CreateExamPage() {
         if (confirm('Xóa câu hỏi này?')) {
             const newQuestions = questions.filter((_, i) => i !== index);
             setQuestions(newQuestions);
+        }
+    };
+
+    // ── Reading Passage Group ──────────────────────────────────────────────
+    const addReadingPassageGroup = () => {
+        setReadingPassageGroups([...readingPassageGroups, {
+            _id: `rpg-${Date.now()}`,
+            _localId: `rg-${Date.now()}`,
+            passageText: '',
+            passageImageUrl: '',
+            subQuestions: [],
+        }]);
+    };
+
+    const saveReadingPassageGroup = async (index: number, data: ReadingPassageGroupData) => {
+        if (!currentExamId) {
+            alert('Vui lòng tạo đề thi trước');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // 1. Lưu đoạn văn (reading_passage)
+            const passageRes = await examAdminApi.addQuestion(currentExamId, {
+                questionType: 'reading_passage',
+                questionText: '',
+                questionTextCn: '',
+                passageText: data.passageText,
+                passageImageUrl: data.passageImageUrl,
+                points: 0,
+                difficulty: 'medium',
+            });
+
+            const passageGroupId = passageRes.passageGroupId || passageRes.questionId;
+
+            // 2. Lưu từng câu con (reading_item)
+            const savedSubIds: number[] = [];
+            for (const sq of data.subQuestions) {
+                const itemRes = await examAdminApi.addQuestion(currentExamId, {
+                    questionType: 'reading_item',
+                    questionText: sq.questionText,
+                    questionTextCn: sq.questionTextCn,
+                    imageUrl: sq.imageUrl,
+                    passageText: '', // đã nằm ở passage cha
+                    points: sq.points,
+                    explanation: sq.explanation,
+                    explanationCn: sq.explanationCn,
+                    answers: sq.answers,
+                    correctAnswer: sq.correctAnswer,
+                    difficulty: sq.difficulty,
+                    subQuestionNumber: sq.subQuestionNumber,
+                });
+                savedSubIds.push(itemRes.questionId);
+            }
+
+            // 3. Cập nhật local state
+            const updated = [...readingPassageGroups];
+            updated[index] = {
+                ...data,
+                _id: updated[index]._id,
+            };
+            setReadingPassageGroups(updated);
+
+            // 4. Cập nhật số câu tiếp theo
+            const lastSub = data.subQuestions[data.subQuestions.length - 1];
+            if (lastSub) {
+                setNextPassageStartNumber(lastSub.subQuestionNumber + 1);
+            }
+
+            alert(`Đoạn đọc hiểu đã lưu! (${data.subQuestions.length} câu)`);
+        } catch (error) {
+            console.error('Error saving reading passage group:', error);
+            alert('Lưu đoạn đọc hiểu thất bại: ' + (error as any)?.response?.data?.message || '');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const deleteReadingPassageGroup = (index: number) => {
+        if (confirm('Xóa đoạn đọc hiểu này?')) {
+            const newGroups = readingPassageGroups.filter((_, i) => i !== index);
+            setReadingPassageGroups(newGroups);
+        }
+    };
+
+    // ── Fill Blank Group ──────────────────────────────────────────────────
+    const addFillBlankGroup = () => {
+        setFillBlankGroups([...fillBlankGroups, {
+            _id: `fbg-${Date.now()}`,
+            _localId: `fbg-${Date.now()}`,
+            passageText: '',
+            passageImageUrl: '',
+            linkedOptions: [
+                { key: 'A', text: '', textCn: '' },
+                { key: 'B', text: '', textCn: '' },
+                { key: 'C', text: '', textCn: '' },
+                { key: 'D', text: '', textCn: '' },
+                { key: 'E', text: '', textCn: '' },
+                { key: 'F', text: '', textCn: '' },
+            ],
+            subItems: [],
+        }]);
+    };
+
+    const saveFillBlankGroup = async (index: number, data: FillBlankGroupData) => {
+        if (!currentExamId) {
+            alert('Vui lòng tạo đề thi trước');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // 1. Lưu pool (fill_blank_pool)
+            const poolRes = await examAdminApi.addQuestion(currentExamId, {
+                questionType: 'fill_blank_pool',
+                questionText: '',
+                questionTextCn: '',
+                passageText: data.passageText,
+                passageImageUrl: data.passageImageUrl,
+                linkedOptions: data.linkedOptions,
+                points: 0,
+                difficulty: 'medium',
+            });
+
+            // 2. Lưu từng chỗ trống (fill_blank_item)
+            for (const item of data.subItems) {
+                await examAdminApi.addQuestion(currentExamId, {
+                    questionType: 'fill_blank_item',
+                    questionText: item.questionText,
+                    questionTextCn: item.questionTextCn,
+                    points: item.points,
+                    explanation: item.explanation,
+                    explanationCn: item.explanationCn,
+                    correctAnswerKey: item.correctAnswerKey,
+                    difficulty: item.difficulty,
+                    subQuestionNumber: item.subQuestionNumber,
+                });
+            }
+
+            // 3. Cập nhật local state
+            const updated = [...fillBlankGroups];
+            updated[index] = { ...data, _id: updated[index]._id };
+            setFillBlankGroups(updated);
+
+            // 4. Cập nhật số câu tiếp theo
+            const lastItem = data.subItems[data.subItems.length - 1];
+            if (lastItem) {
+                setNextFillBlankStartNumber(lastItem.subQuestionNumber + 1);
+            }
+
+            alert(`Điền từ đã lưu! (${data.subItems.length} chỗ trống)`);
+        } catch (error) {
+            console.error('Error saving fill blank group:', error);
+            alert('Lưu điền từ thất bại: ' + (error as any)?.response?.data?.message || '');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const deleteFillBlankGroup = (index: number) => {
+        if (confirm('Xóa nhóm điền từ này?')) {
+            const newGroups = fillBlankGroups.filter((_, i) => i !== index);
+            setFillBlankGroups(newGroups);
         }
     };
 
@@ -518,7 +691,7 @@ export default function CreateExamPage() {
                                     </button>
                                 ))}
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">Chọn "VIP" để chỉ thành viên VIP/Premium mới được làm bài thi này</p>
+                            <p className="text-xs text-gray-400 mt-2">VIP & Premium dùng chung đề. Chỉ khác chức năng bổ sung.</p>
                         </div>
                     </div>
 
@@ -553,14 +726,28 @@ export default function CreateExamPage() {
                 {currentExamId && (
                     <>
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({questions.length})</h2>
+                            <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({questions.length + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0) + fillBlankGroups.reduce((acc, g) => acc + (g.subItems?.length || 0), 0)})</h2>
                             <div className="flex items-center space-x-3">
                                 <button
-                                    onClick={addQuestion}
+                                    onClick={addFillBlankGroup}
                                     className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                                 >
                                     <FiPlus />
-                                    <span>Thêm Câu Hỏi</span>
+                                    <span>📝 Điền Từ</span>
+                                </button>
+                                <button
+                                    onClick={addReadingPassageGroup}
+                                    className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                                >
+                                    <FiPlus />
+                                    <span>📖 Đọc Hiểu</span>
+                                </button>
+                                <button
+                                    onClick={addQuestion}
+                                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                >
+                                    <FiPlus />
+                                    <span>Trắc Nghiệm</span>
                                 </button>
                                 <button
                                     onClick={publishExam}
@@ -573,6 +760,33 @@ export default function CreateExamPage() {
                             </div>
                         </div>
 
+                        {/* Fill Blank Groups */}
+                        {fillBlankGroups.map((group, index) => (
+                            <FillBlankGroup
+                                key={group._id}
+                                startNumber={nextFillBlankStartNumber > 1
+                                    ? nextFillBlankStartNumber
+                                    : questions.length + readingPassageGroups.reduce((acc, g) => acc + (g.subQuestions?.length || 0), 0) + index * 3 + 1}
+                                initialData={group}
+                                onSave={(data) => saveFillBlankGroup(index, data)}
+                                onDelete={() => deleteFillBlankGroup(index)}
+                            />
+                        ))}
+
+                        {/* Reading Passage Groups */}
+                        {readingPassageGroups.map((group, index) => (
+                            <ReadingPassageGroup
+                                key={group._id}
+                                startNumber={nextPassageStartNumber > 1
+                                    ? nextPassageStartNumber
+                                    : questions.length + index * 3 + 1}
+                                initialData={group}
+                                onSave={(data) => saveReadingPassageGroup(index, data)}
+                                onDelete={() => deleteReadingPassageGroup(index)}
+                            />
+                        ))}
+
+                        {/* Single Questions */}
                         <div className="space-y-6">
                             {questions.map((question, index) => (
                                 <QuestionEditor

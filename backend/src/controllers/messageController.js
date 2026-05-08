@@ -121,8 +121,15 @@ exports.getMessages = async (req, res) => {
         m.receiver_id,
         m.content,
         m.is_read,
-        m.created_at
+        m.created_at,
+        m.is_deleted,
+        m.reply_to_id,
+        rm.content as reply_content,
+        rm.is_deleted as reply_is_deleted,
+        ru.full_name as reply_sender_name
       FROM forum_messages m
+      LEFT JOIN forum_messages rm ON m.reply_to_id = rm.id
+      LEFT JOIN users ru ON rm.sender_id = ru.id
       WHERE (m.sender_id = $1 AND m.receiver_id = $2)
          OR (m.sender_id = $2 AND m.receiver_id = $1)
       ORDER BY m.created_at DESC
@@ -169,7 +176,7 @@ exports.getMessages = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   try {
     const senderId = req.user.id;
-    const { receiver_id, content } = req.body;
+    const { receiver_id, content, reply_to_id } = req.body;
 
     if (!receiver_id || !content) {
       return res.status(400).json({ success: false, message: "Thiếu thông tin" });
@@ -214,12 +221,27 @@ exports.sendMessage = async (req, res) => {
     }
 
     const result = await db.query(`
-      INSERT INTO forum_messages (sender_id, receiver_id, content)
-      VALUES ($1, $2, $3)
-      RETURNING id, sender_id, receiver_id, content, is_read, created_at
-    `, [senderId, receiverId, content.trim()]);
+      INSERT INTO forum_messages (sender_id, receiver_id, content, reply_to_id)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, sender_id, receiver_id, content, is_read, created_at, is_deleted, reply_to_id
+    `, [senderId, receiverId, content.trim(), reply_to_id || null]);
 
     const msg = result.rows[0];
+
+    // Fetch reply info explicitly if present
+    if (msg.reply_to_id) {
+      const replyRes = await db.query(`
+        SELECT rm.content as reply_content, rm.is_deleted as reply_is_deleted, ru.full_name as reply_sender_name 
+        FROM forum_messages rm
+        LEFT JOIN users ru ON rm.sender_id = ru.id
+        WHERE rm.id = $1
+      `, [msg.reply_to_id]);
+      if (replyRes.rows.length > 0) {
+        msg.reply_content = replyRes.rows[0].reply_content;
+        msg.reply_is_deleted = replyRes.rows[0].reply_is_deleted;
+        msg.reply_sender_name = replyRes.rows[0].reply_sender_name;
+      }
+    }
 
     // Create notification for receiver
     await db.query(`
@@ -305,6 +327,44 @@ exports.getUnreadCount = async (req, res) => {
     res.json({ success: true, data: { count: parseInt(result.rows[0].count) } });
   } catch (error) {
     console.error("Unread count error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+/**
+ * Recall/Delete a message
+ * @route   DELETE /api/messages/:id
+ * @access  Private
+ */
+exports.deleteMessage = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const messageId = parseInt(req.params.id);
+
+    const result = await db.query(`
+      UPDATE forum_messages
+      SET is_deleted = TRUE, deleted_at = NOW()
+      WHERE id = $1 AND sender_id = $2 AND is_deleted = FALSE
+      RETURNING id, sender_id, receiver_id, is_deleted
+    `, [messageId, userId]);
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy tin nhắn hoặc bạn không có quyền thu hồi" });
+    }
+
+    const msg = result.rows[0];
+
+    // Emit event back to sender and receiver
+    try {
+      getIO().to(`user_${msg.receiver_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
+      getIO().to(`user_${msg.sender_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
+    } catch (socketErr) {
+      console.warn('[Socket] Failed to emit delete message event:', socketErr.message);
+    }
+
+    res.json({ success: true, message: "Tin nhắn đã được thu hồi", data: { id: msg.id } });
+  } catch (error) {
+    console.error("Delete message error:", error);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };

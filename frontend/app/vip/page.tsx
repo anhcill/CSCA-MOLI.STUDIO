@@ -274,17 +274,20 @@ export default function VipPricingPage() {
                       ))
                     ) : (
                       /* Hardcoded Free card when no free package in DB */
-                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden">
-                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white">
+                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300 cursor-pointer">
+                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 pt-6 text-white">
                           <h3 className="text-lg font-black">Miễn phí</h3>
                           <p className="text-white/70 text-xs mt-0.5">Dùng thử không giới hạn</p>
                           <div className="mt-3 flex items-baseline gap-1">
                             <span className="text-3xl font-black">0</span>
                             <span className="text-white/70 text-xs">đ</span>
                           </div>
+                          <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2">
+                            Truy cập đề thi cơ bản miễn phí
+                          </p>
                         </div>
-                        <div className="p-4">
-                          <ul className="space-y-2 mb-3">
+                        <div className="p-4 flex flex-col flex-1">
+                          <ul className="space-y-2.5 flex-1 mt-2">
                             {[
                               'Đề thi cơ bản miễn phí',
                               'Xem kết quả sau thi',
@@ -292,18 +295,27 @@ export default function VipPricingPage() {
                             ].map((feat, i) => (
                               <li key={i} className="flex items-start gap-2.5">
                                 <FaCheckCircle size={16} className="text-gray-400 mt-0.5 shrink-0" />
-                                <span className="text-sm text-gray-700">{feat}</span>
+                                <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
                               </li>
                             ))}
-                            {[...Array(5)].map((_, i) => (
-                              <li key={i} className="flex items-start gap-2.5">
+                            {[
+                              'Truy cập tất cả đề thi VIP / Premium',
+                              'AI phân tích kết quả bài thi',
+                              'Video giải đề chi tiết từng câu',
+                              'Đội ngũ cố vấn hỗ trợ 1-1',
+                              'Gợi ý đề tiếp theo phù hợp',
+                              'Lộ trình học cá nhân hóa'
+                            ].map((feat, i) => (
+                              <li key={`d-${i}`} className="flex items-start gap-2.5 opacity-50">
                                 <span className="text-gray-300 font-bold mt-0.5 shrink-0">—</span>
-                                <span className="text-sm text-gray-300">{['', 'Đề thi cao cấp (VIP/Pre)', 'Phân tích bài thi bằng AI', 'Video giải đề chi tiết', 'Hỏi đáp 1-1 giảng viên'][i + 3]}</span>
+                                <span className="text-sm font-medium text-gray-400 leading-snug">{feat}</span>
                               </li>
                             ))}
                           </ul>
-                          <div className="py-3.5 rounded-xl text-center text-sm font-semibold text-gray-400 bg-gray-50 border border-dashed border-gray-200">
-                            Miễn phí — không cần đăng ký
+                          <div className="pt-5 mt-auto">
+                            <div className="py-2.5 rounded-xl text-center text-sm font-bold text-gray-500 bg-gray-50 border border-dashed border-gray-200">
+                              Miễn phí — Không cần đăng ký
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -514,24 +526,24 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
             </>
           )}
         </div>
-        {pkg.description && (
-          <p className="text-white/70 text-[10px] mt-1.5 line-clamp-2">{pkg.description}</p>
-        )}
+        <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2">
+          {pkg.description || (isPre ? 'Truy cập toàn bộ tính năng và bài giảng' : 'Truy cập kho đề thi giới hạn')}
+        </p>
       </div>
 
       {/* Features */}
       <div className="p-4 flex flex-col flex-1">
-        <ul className="space-y-2 mb-3 flex-1">
+        <ul className="space-y-2.5 flex-1 mt-2">
           {(pkg.features || []).map((feat, i) => (
             <li key={i} className="flex items-start gap-2.5">
               <FaCheckCircle size={16} className={`${colors.icon} mt-0.5 shrink-0`} />
-              <span className="text-sm text-gray-700">{feat}</span>
+              <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
             </li>
           ))}
         </ul>
 
         {/* Per-card coupon input */}
-        <div className="mb-4">
+        <div className="mb-4 pt-5 mt-auto">
           {discount ? (
             <div className="flex items-center justify-between gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
               <div className="flex items-center gap-1.5 text-emerald-700 font-bold">

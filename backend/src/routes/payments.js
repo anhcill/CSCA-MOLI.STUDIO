@@ -855,7 +855,7 @@ router.get('/check-status', authenticate, async (req, res) => {
         data: {
           package_name: transaction.package_name,
           vip_expires_at: freshUser?.vip_expires_at || null,
-          subscription_tier: freshUser?.subscription_tier || 'vip',
+          subscription_tier: freshUser?.subscription_tier || 'basic',
         },
       });
     }

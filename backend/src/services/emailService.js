@@ -256,6 +256,38 @@ class EmailService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // 8. Mail thông báo VIP đã hết hạn (auto-revoke)
+  // ─────────────────────────────────────────────────────────────────────────────
+  async sendVipExpiredEmail({ email, name, expiredAt }) {
+    const formattedDate = expiredAt
+      ? new Date(expiredAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })
+      : 'không rõ';
+
+    const content = `
+      <div style="background:linear-gradient(135deg,#6b7280 0%,#374151 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
+        <div style="font-size:48px;margin-bottom:12px">📅</div>
+        <h2 style="margin:0 0 8px;font-size:22px;color:#fff">Tài khoản VIP đã hết hạn</h2>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">Ngày hết hạn: <strong>${formattedDate}</strong></p>
+      </div>
+      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
+      <p style="margin:0 0 24px">Tài khoản VIP của bạn trên nền tảng CSCA đã hết hạn vào ngày <strong>${formattedDate}</strong>. Mọi quyền lợi VIP đã tạm thời bị tạm khóa.</p>
+      <div style="background:#f9f9f9;border-radius:12px;padding:20px;margin:0 0 24px">
+        <p style="margin:0 0 12px;font-weight:700;color:#333">🎁 Bạn vẫn giữ được:</p>
+        <div style="margin:0 0 8px;font-size:14px;color:#555">✓ Tài khoản và lịch sử học tập</div>
+        <div style="margin:0 0 8px;font-size:14px;color:#555">✓ Điểm số và thống kê cá nhân</div>
+        <div style="margin:0;font-size:14px;color:#555">✓ Đề thi miễn phí (nếu có)</div>
+      </div>
+      <p style="margin:0 0 24px">Để tiếp tục truy cập đề thi cao cấp, phân tích AI và các tính năng VIP, bạn có thể gia hạn bất kỳ lúc nào.</p>
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/vip" style="display:inline-block;padding:14px 32px;background:#f59e0b;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Gia hạn VIP ngay →</a>`;
+
+    await this._send({
+      to: email,
+      subject: `📅 [CSCA] Tài khoản VIP đã hết hạn — Gia hạn ngay để tiếp tục!`,
+      html: this._wrapper({ title: 'VIP đã hết hạn', emoji: '📅', content }),
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // 7. Mail cảnh báo bảo mật (login từ IP lạ / đổi mật khẩu)
   // ─────────────────────────────────────────────────────────────────────────────
   async sendSecurityAlert({ email, name, event, ip, location, device, time }) {

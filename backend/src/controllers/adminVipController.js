@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const emailService = require('../services/emailService');
 const UserActivity = require('../models/UserActivity');
+const DeviceSessionService = require('../services/deviceSessionService');
 
 const AdminVipController = {
   /**
@@ -155,16 +156,21 @@ const AdminVipController = {
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
+      // ── Revoke VIP: set is_vip=FALSE, subscription_tier='basic', clear expiry ──
+      // Set subscription_tier to 'basic' (not NULL) for DB consistency
       const result = await db.query(
-        `UPDATE users SET is_vip = FALSE, subscription_tier = NULL, vip_expires_at = NULL, updated_at = NOW()
-         WHERE id = $1 RETURNING id, email, full_name`,
+        `UPDATE users SET is_vip = FALSE, subscription_tier = 'basic', vip_expires_at = NULL, updated_at = NOW()
+         WHERE id = $1 RETURNING id, email, full_name, subscription_tier`,
         [userId]
       );
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 
+      // Revoke ALL active sessions for this user → tokens become invalid immediately
+      await DeviceSessionService.removeAllUserSessions(userId);
+
       UserActivity.log(req.user.id, 'admin.revoke_vip', { userId, ip: req.ip, userAgent: req.headers['user-agent'] });
-      console.info(`[VIP] ${adminName} revoked VIP from user#${userId}`);
-      res.json({ success: true, message: 'Đã thu hồi VIP', data: result.rows[0] });
+      console.info(`[VIP] ${adminName} revoked VIP from user#${userId} (all sessions killed)`);
+      res.json({ success: true, message: 'Đã thu hồi VIP và đăng xuất tất cả thiết bị', data: result.rows[0] });
     } catch (err) {
       console.error('Admin revokeVip error:', err);
       res.status(500).json({ success: false, message: 'Lỗi thu hồi VIP' });

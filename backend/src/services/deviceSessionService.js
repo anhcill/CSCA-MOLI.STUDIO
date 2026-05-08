@@ -102,16 +102,43 @@ class DeviceSessionService {
 
   /**
    * Remove a session (logout)
+   * Also blacklists the JWT so the token becomes invalid immediately.
    */
   static async removeSession(jti) {
     await db.query(`DELETE FROM user_sessions WHERE jti = $1`, [jti]);
+    await db.query(
+      `INSERT INTO token_blacklist (token_jti, expires_at) VALUES ($1, NOW() + INTERVAL '1 day')
+       ON CONFLICT (token_jti) DO NOTHING`,
+      [jti]
+    ).catch(() => {});
   }
 
   /**
    * Remove all sessions for a user (logout everywhere)
+   * Also blacklists all associated JWTs so they become invalid immediately.
    */
   static async removeAllUserSessions(userId) {
+    // 1. Get all jti's to blacklist
+    const sessions = await db.query(
+      `SELECT jti, expires_at FROM user_sessions WHERE user_id = $1`,
+      [userId]
+    );
+
+    // 2. Delete sessions from user_sessions
     await db.query(`DELETE FROM user_sessions WHERE user_id = $1`, [userId]);
+
+    // 3. Blacklist all associated JWTs immediately (tokens die right away)
+    if (sessions.rows.length > 0) {
+      const values = sessions.rows.map((_, i) => `($1, $${i + 2}, $${sessions.rows.length + i + 2})`).join(', ');
+      const jtiArr = sessions.rows.map(r => r.jti);
+      const expArr = sessions.rows.map(r => r.expires_at);
+      await db.query(
+        `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
+         VALUES ${values}
+         ON CONFLICT (token_jti) DO NOTHING`,
+        [userId, ...jtiArr, ...expArr]
+      );
+    }
   }
 
   /**

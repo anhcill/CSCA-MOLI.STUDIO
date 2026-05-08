@@ -469,30 +469,35 @@ const AdminController = {
                 if (existing.rowCount > 0) return res.status(409).json({ message: 'Email đã được sử dụng bởi user khác' });
             }
 
-            // Tính VIP expires
-            let vipFields = '';
-            let vipParams = [];
-            if (subscription_tier === 'vip' || subscription_tier === 'premium') {
-                const days = parseInt(vip_days) || 30;
-                const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-                vipFields = ', is_vip = TRUE, vip_expires_at = $__VIP__';
-                vipParams = [expiresAt];
-            } else if (subscription_tier === 'basic') {
-                vipFields = ', is_vip = FALSE, vip_expires_at = NULL';
-            }
-
             const setClauses = [];
             const params = [];
 
             if (full_name) { params.push(full_name); setClauses.push(`full_name = $${params.length}`); }
             if (email) { params.push(email); setClauses.push(`email = $${params.length}`); }
-            if (subscription_tier) { params.push(subscription_tier); setClauses.push(`subscription_tier = $${params.length}`); }
-            if (vipParams.length > 0) {
-                params.push(vipParams[0]);
-                setClauses.push(`is_vip = ${subscription_tier !== 'basic'}`, `vip_expires_at = $${params.length}`);
-            }
-            if (subscription_tier === 'basic') {
-                setClauses.push(`is_vip = FALSE`, `vip_expires_at = NULL`);
+
+            // ── subscription_tier logic ──────────────────────────────────────────
+            if (subscription_tier) {
+                params.push(subscription_tier);
+                setClauses.push(`subscription_tier = $${params.length}`);
+
+                if (subscription_tier === 'vip' || subscription_tier === 'premium') {
+                    // Cộng dồn ngày — CÙNG LOGIC với grantVip:
+                    // nếu user còn hạn → cộng tiếp; chưa có → tính từ now
+                    const days = parseInt(vip_days) || 30;
+                    params.push(days);
+                    setClauses.push(
+                        `is_vip = TRUE`,
+                        `vip_expires_at = GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + INTERVAL '1 day' * $${params.length}`
+                    );
+                } else if (subscription_tier === 'basic') {
+                    // Revoke → clear VIP + logout all sessions
+                    setClauses.push(`is_vip = FALSE`, `vip_expires_at = NULL`);
+                    // Revoke all user sessions immediately
+                    const DeviceSessionService = require('../services/deviceSessionService');
+                    DeviceSessionService.removeAllUserSessions(normalizedUserId).catch(err =>
+                        console.error('[updateUserProfile] Session revoke error:', err.message)
+                    );
+                }
             }
 
             if (setClauses.length === 0) return res.status(400).json({ message: 'Không có thông tin cần cập nhật' });

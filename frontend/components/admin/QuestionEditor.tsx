@@ -271,13 +271,13 @@ export default function QuestionEditor({ questionNumber, initialData, onSave, on
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Số câu (VD: 11, 12, 13...)</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Số câu con (VD: 35, 36, 37...)</label>
               <input
                 type="number"
                 value={form.subQuestionNumber || ''}
                 onChange={e => set('subQuestionNumber', parseInt(e.target.value) || 0)}
                 className="w-full px-3 py-1.5 border rounded-lg text-sm"
-                placeholder="11"
+                placeholder="35"
               />
             </div>
             <div>

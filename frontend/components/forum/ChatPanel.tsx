@@ -7,11 +7,11 @@ import {
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useChatBgStore, CHAT_BG_PRESETS } from '@/lib/store/chatBgStore';
-import { getMessages, sendMessage, reportMessage, blockUser, ForumMessage } from '@/lib/api/messages';
+import { getMessages, sendMessage, reportMessage, blockUser, deleteMessage, ForumMessage } from '@/lib/api/messages';
 import {
   initSocket, joinConversation, leaveConversation,
   startTyping, stopTyping,
-  onNewMessage, onTyping, onStoppedTyping,
+  onNewMessage, onMessageDeleted, onTyping, onStoppedTyping,
   disconnectSocket
 } from '@/lib/socket';
 
@@ -48,6 +48,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
+  const [replyingTo, setReplyingTo] = useState<ForumMessage | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -160,6 +161,10 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       }
     });
 
+    const unsubDelete = onMessageDeleted(({ messageId }) => {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_deleted: true } : m));
+    });
+
     const unsubTyping = onTyping(({ userId }) => {
       if (userId === user?.id) return;
       setPartnerTyping(true);
@@ -175,6 +180,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
     return () => {
       unsubMessage();
+      unsubDelete();
       unsubTyping();
       unsubStoppedTyping();
       leaveConversation(partnerId);
@@ -211,11 +217,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     if (!content || sending) return;
     setSending(true);
     setText('');
+    const replyId = replyingTo?.id;
+    setReplyingTo(null);
     stopTyping(partnerId);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     try {
-      const res = await sendMessage(partnerId, content);
+      const res = await sendMessage(partnerId, content, replyId);
       if (res.success && res.data?.message) {
         setMessages(prev => [...prev, res.data.message]);
         onNewMessageReceived?.();
@@ -302,6 +310,22 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     } finally {
       setBlocking(false);
     }
+  };
+
+  const handleRecallMessage = async (msgId: number) => {
+    try {
+      await deleteMessage(msgId);
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, is_deleted: true } : m));
+      setSelectedMsgId(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Lỗi khi thu hồi tin nhắn');
+    }
+  };
+
+  const handleReplyMessage = (msg: ForumMessage) => {
+    setReplyingTo(msg);
+    setSelectedMsgId(null);
+    inputRef.current?.focus();
   };
 
   const handleMsgTouchStart = (msgId: number) => {
@@ -415,7 +439,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   return (
     <>
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100/60 bg-white/90 backdrop-blur-xl shrink-0 shadow-sm">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100/60 bg-white/90 backdrop-blur-xl shrink-0 shadow-sm relative z-50">
         <button
           onClick={onBack}
           className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-95 transition-all bg-gray-50 border border-gray-200 shadow-sm"
@@ -566,21 +590,66 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                             />
                           )}
 
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col gap-0.5 relative group">
+                            
+                            {/* Option actions popup */}
+                            {selectedMsgId === msg.id && (
+                              <div className={`absolute top-0 flex items-center gap-1 bg-white/90 backdrop-blur shadow-md border border-gray-100 rounded-lg p-1 z-10 ${
+                                isOwn(msg) ? 'right-full mr-2' : 'left-full ml-2'
+                              }`}>
+                                <button
+                                  onClick={() => handleReplyMessage(msg)}
+                                  className="px-2 py-1 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded"
+                                >
+                                  Reply
+                                </button>
+                                {isOwn(msg) && !msg.is_deleted && (
+                                  <button
+                                    onClick={() => handleRecallMessage(msg.id)}
+                                    className="px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 rounded"
+                                  >
+                                    Thu hồi
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Reply preview inside bubble */}
+                            {msg.reply_to_id && (
+                              <div className={`text-xs opacity-75 mb-1 px-3 py-1.5 rounded-xl border-l-2 ${
+                                isOwn(msg) ? 'bg-white/10 border-white/40' : 'bg-black/5 border-violet-300/40'
+                              }`}>
+                                <p className="font-bold text-[10px] mb-0.5">
+                                  {msg.reply_sender_name || 'Người dùng'}
+                                </p>
+                                <p className="truncate max-w-[200px]">
+                                  {msg.reply_is_deleted ? 'Tin nhắn đã bị thu hồi' : (msg.reply_content || 'Hình ảnh / File')}
+                                </p>
+                              </div>
+                            )}
+
                             {/* Chat bubble */}
                             <div
-                              className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm ${
-                                isOwn(msg)
-                                  ? 'bg-gradient-to-br from-violet-600 to-purple-600 text-white rounded-br-sm'
-                                  : 'bg-white/90 backdrop-blur-sm text-gray-800 rounded-bl-sm border border-violet-100/50'
+                              className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm cursor-pointer ${
+                                msg.is_deleted 
+                                  ? 'bg-gray-100 italic text-gray-500 border border-gray-200' 
+                                  : isOwn(msg)
+                                    ? 'bg-gradient-to-br from-violet-600 to-purple-600 text-white rounded-br-sm'
+                                    : 'bg-white/90 backdrop-blur-sm text-gray-800 rounded-bl-sm border border-violet-100/50'
                               }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMsgId(prev => prev === msg.id ? null : msg.id);
+                              }}
                             >
-                              {isImageUrl(msg.content) ? (
+                              {msg.is_deleted ? (
+                                <span className="flex items-center gap-1"><FiTrash2 size={12} className="opacity-50" /> Tin nhắn đã thu hồi</span>
+                              ) : isImageUrl(msg.content) ? (
                                 <img
                                   src={msg.content}
                                   alt="Hình ảnh"
                                   className="max-w-[220px] max-h-[180px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                  onClick={() => window.open(msg.content, '_blank')}
+                                  onClick={(e) => { e.stopPropagation(); window.open(msg.content, '_blank') }}
                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                 />
                               ) : (
@@ -630,6 +699,18 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         {blocked && (
           <div className="mb-2 p-2.5 bg-red-50 rounded-2xl text-center text-xs text-red-500 font-bold border border-red-100">
             Bạn đã chặn hoặc bị chặn bởi người dùng này.
+          </div>
+        )}
+
+        {replyingTo && (
+          <div className="mb-2 px-3 py-2 bg-violet-50 rounded-xl flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 border border-violet-100">
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="text-[10px] font-bold text-violet-600">Đang trả lời {isOwn(replyingTo) ? 'chính bạn' : partnerName}</span>
+              <span className="text-xs text-gray-500 truncate mr-2">{replyingTo.is_deleted ? 'Tin nhắn đã thu hồi' : replyingTo.content}</span>
+            </div>
+            <button onClick={() => setReplyingTo(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200/50 transition-colors">
+              <FiX size={14} />
+            </button>
           </div>
         )}
 

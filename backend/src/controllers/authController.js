@@ -287,7 +287,7 @@ const register = async (req, res) => {
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
     const refreshToken = generateRefreshToken({ id: user.id });
 
     const authz = await resolveAuthorizationContext(user);
@@ -459,7 +459,7 @@ const getCurrentUser = async (req, res) => {
           is_verified: user.is_verified,
           is_active: user.is_active,
           is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || null,
+          subscription_tier: user.subscription_tier || 'basic',
           vip_expires_at: user.vip_expires_at || null,
           roles: authz.roles,
           permissions: authz.permissions,
@@ -664,7 +664,7 @@ const googleAuth = async (req, res) => {
           avatar_url: user.avatar_url || picture,
           role: user.role || "student",
           is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || null,
+          subscription_tier: user.subscription_tier || 'basic',
           vip_expires_at: user.vip_expires_at || null,
           roles: authz.roles,
           permissions: authz.permissions,
@@ -849,7 +849,7 @@ const verifyOtpController = async (req, res) => {
       expiresAt,
     });
 
-    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'vip' }));
+    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
     const refreshToken = generateRefreshToken({ id: user.id });
     const authz = await resolveAuthorizationContext(user);
 
@@ -867,7 +867,7 @@ const verifyOtpController = async (req, res) => {
           role: user.role,
           bio: user.bio,
           is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || null,
+          subscription_tier: user.subscription_tier || 'basic',
           vip_expires_at: user.vip_expires_at || null,
           roles: authz.roles,
           permissions: authz.permissions,

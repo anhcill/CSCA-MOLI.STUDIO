@@ -14,6 +14,10 @@ async function main() {
     console.log('\n=== FORUM TABLES ===');
     tables.rows.forEach(t => console.log(t.table_name));
 
+    const cols = await client.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'forum_messages'`);
+    console.log('\n=== FORUM_MESSAGES COLUMNS ===');
+    cols.rows.forEach(c => console.log(c.column_name, c.data_type));
+
   } finally {
     client.release();
     await pool.end();

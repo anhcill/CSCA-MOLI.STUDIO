@@ -273,19 +273,29 @@ class User {
   /**
    * Update VIP Status
    * @param {number} id - User ID
-   * @param {number} durationDays - Number of days to add to VIP expiration
+   * @param {number} durationDays - Number of days to add (0 = permanent/no expiry change, null = permanent VIP)
+   * @param {string} tier - Subscription tier ('vip' or 'premium')
    * @returns {Object} Updated user
    */
   static async updateVipStatus(id, durationDays, tier = 'vip') {
     try {
+      // durationDays === null or < 0 → VIP vĩnh viễn (vip_expires_at = NULL, is_vip = TRUE)
+      // durationDays === 0     → giữ nguyên vip_expires_at, chỉ update tier
+      // durationDays > 0      → cộng dồn
+      let expiresAtExpr;
+      if (durationDays === null || durationDays < 0) {
+        expiresAtExpr = 'NULL';
+      } else if (durationDays === 0) {
+        expiresAtExpr = 'vip_expires_at';
+      } else {
+        expiresAtExpr = `GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + INTERVAL '1 day' * ${parseInt(durationDays, 10)}`;
+      }
+
       const result = await db.query(
         `UPDATE users
-         SET is_vip = true,
+         SET is_vip = TRUE,
              subscription_tier = $3,
-             vip_expires_at = COALESCE(
-                 CASE WHEN vip_expires_at > NOW() THEN vip_expires_at ELSE NOW() END,
-                 NOW()
-             ) + INTERVAL '1 day' * $1,
+             vip_expires_at = ${expiresAtExpr},
              updated_at = NOW()
          WHERE id = $2
          RETURNING id, is_vip, vip_expires_at, subscription_tier`,
