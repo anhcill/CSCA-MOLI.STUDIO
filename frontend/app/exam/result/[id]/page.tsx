@@ -9,6 +9,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
+import { renderMathDisplay } from '@/components/admin/MathInput';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -517,7 +518,10 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         {(q.explanation || q.explanation_cn) && (
                                             <div className="mt-4 ml-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                                 <p className="text-sm font-semibold text-blue-900 mb-1">💡 Giải thích:</p>
-                                                <p className="text-sm text-blue-800">{q.explanation || q.explanation_cn}</p>
+                                                <div
+                                                  className="text-sm text-blue-800 math-preview"
+                                                  dangerouslySetInnerHTML={{ __html: renderMathDisplay(q.explanation || q.explanation_cn || '') }}
+                                                />
                                             </div>
                                         )}
 
@@ -648,7 +652,10 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                             {(question.explanation || question.explanation_cn) && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                     <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
-                                    <p className="text-sm text-blue-800">{question.explanation || question.explanation_cn}</p>
+                                    <div
+                                      className="text-sm text-blue-800 math-preview"
+                                      dangerouslySetInnerHTML={{ __html: renderMathDisplay(question.explanation || question.explanation_cn || '') }}
+                                    />
                                 </div>
                             )}
                         </div>

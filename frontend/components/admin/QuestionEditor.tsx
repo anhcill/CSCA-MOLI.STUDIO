@@ -262,6 +262,15 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           className="w-full px-4 py-2 border rounded-lg"
           placeholder="Nhập câu hỏi..."
         />
+        {form.questionText && (
+          <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
+            <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
+            <div
+              className="text-sm text-gray-800 math-preview"
+              dangerouslySetInnerHTML={{ __html: renderMathDisplay(form.questionText) }}
+            />
+          </div>
+        )}
       </div>
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
@@ -272,6 +281,15 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           className="w-full px-4 py-2 border rounded-lg"
           placeholder="输入中文问题..."
         />
+        {form.questionTextCn && (
+          <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
+            <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
+            <div
+              className="text-sm text-gray-800 math-preview"
+              dangerouslySetInnerHTML={{ __html: renderMathDisplay(form.questionTextCn) }}
+            />
+          </div>
+        )}
       </div>
 
       <ImageUpload

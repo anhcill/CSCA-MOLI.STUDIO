@@ -283,23 +283,201 @@ export default function MathInput({
 }
 
 // Render a string that may contain inline \(...\) or display \[...\] math
+// Also auto-detects raw LaTeX patterns like \frac{}{}, \sqrt{}, etc.
 function renderMathDisplay(text: string): string {
-  // Process display math first (\[...\]) then inline \(...\)
-  const display = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, latex) => {
-    try {
-      return katex.renderToString(latex.trim(), { displayMode: true, throwOnError: false });
-    } catch {
-      return `<span style="color:#dc2626">Lỗi: ${latex}</span>`;
-    }
-  });
+  if (!text) return '';
 
-  return display.replace(/\\\(([\s\S]*?)\\\)/g, (_, latex) => {
+  function safeRender(latex: string): string {
     try {
       return katex.renderToString(latex.trim(), { displayMode: false, throwOnError: false });
     } catch {
-      return `<span style="color:#dc2626">Lỗi: ${latex}</span>`;
+      return latex;
     }
-  });
+  }
+
+  // Find existing \(...\) and \[...\] ranges to skip
+  const skipRanges: [number, number][] = [];
+  let m: RegExpExecArray | null;
+  const skipRe = /\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/g;
+  while ((m = skipRe.exec(text)) !== null) {
+    skipRanges.push([m.index, m.index + m[0].length]);
+  }
+  function isInSkip(pos: number): boolean {
+    return skipRanges.some(([s, e]) => pos >= s && pos < e);
+  }
+
+  const out: string[] = [];
+  let i = 0;
+  const len = text.length;
+
+  while (i < len) {
+    // Skip over HTML tags (already rendered spans)
+    if (text[i] === '<') {
+      const gt = text.indexOf('>', i);
+      if (gt !== -1) {
+        out.push(text.slice(i, gt + 1));
+        i = gt + 1;
+        continue;
+      }
+    }
+
+    // Skip already-wrapped ranges
+    const skip = skipRanges.find(([s]) => s > i);
+    const skipStart = skip ? skip[0] : len;
+    if (isInSkip(i)) {
+      out.push(text.slice(i, skipStart));
+      i = skipStart;
+      continue;
+    }
+
+    // Already wrapped \(...\)
+    if (text.slice(i, i + 2) === '\\(') {
+      const end = text.indexOf('\\)', i);
+      if (end !== -1) {
+        out.push(safeRender(text.slice(i + 2, end)));
+        i = end + 2;
+        continue;
+      }
+    }
+
+    // Already wrapped \[...\]
+    if (text.slice(i, i + 2) === '\\[') {
+      const end = text.indexOf('\\]', i);
+      if (end !== -1) {
+        try {
+          out.push(katex.renderToString(text.slice(i + 2, end).trim(), { displayMode: true, throwOnError: false }));
+        } catch {
+          out.push(text.slice(i, end + 2));
+        }
+        i = end + 2;
+        continue;
+      }
+    }
+
+    // Backslash command
+    if (text[i] === '\\') {
+      let j = i + 1;
+      while (j < len && /[a-zA-Z]/.test(text[j])) j++;
+      const cmd = text.slice(i, j);
+
+      let args = '';
+      while (j < len && /\s/.test(text[j])) j++;
+
+      // Optional [...]
+      if (text[j] === '[') {
+        let depth = 0, k = j;
+        do { if (text[k] === '[') depth++; else if (text[k] === ']') depth--; k++; } while (k < len && depth > 0);
+        args += text.slice(j, k); j = k;
+        while (j < len && /\s/.test(text[j])) j++;
+      }
+      // Optional {...}
+      if (text[j] === '{') {
+        let depth = 0, k = j;
+        do { if (text[k] === '{') depth++; else if (text[k] === '}') depth--; k++; } while (k < len && depth > 0);
+        args += text.slice(j, k); j = k;
+        while (j < len && /\s/.test(text[j])) j++;
+        // Second {...} for \frac
+        if (text[j] === '{') {
+          let depth2 = 0, k2 = j;
+          do { if (text[k2] === '{') depth2++; else if (text[k2] === '}') depth2--; k2++; } while (k2 < len && depth2 > 0);
+          args += text.slice(j, k2); j = k2;
+        }
+      }
+
+      const full = cmd + args;
+      if (full.length > 1) {
+        out.push(safeRender(full));
+        i = j;
+        continue;
+      }
+    }
+
+    // Variable with superscript: x^2, x^{n}
+    if (/[a-zA-Z]/.test(text[i])) {
+      let j = i;
+      while (j < len && /[a-zA-Z]/.test(text[j])) j++;
+      const base = text.slice(i, j);
+      let k = j;
+
+      if (text[k] === '^') {
+        k++;
+        let sup = '';
+        if (text[k] === '{') {
+          let depth = 0, k2 = k;
+          do { if (text[k2] === '{') depth++; else if (text[k2] === '}') depth--; k2++; } while (k2 < len && depth > 0);
+          sup = text.slice(k + 1, k2 - 1); k = k2;
+        } else {
+          let k2 = k;
+          while (k2 < len && /[a-zA-Z0-9]/.test(text[k2])) k2++;
+          sup = text.slice(k, k2); k = k2;
+        }
+
+        let sub = '';
+        if (text[k] === '_') {
+          k++;
+          if (text[k] === '{') {
+            let depth = 0, k2 = k;
+            do { if (text[k2] === '{') depth++; else if (text[k2] === '}') depth--; k2++; } while (k2 < len && depth > 0);
+            sub = text.slice(k + 1, k2 - 1); k = k2;
+          } else {
+            let k2 = k;
+            while (k2 < len && /[a-zA-Z0-9]/.test(text[k2])) k2++;
+            sub = text.slice(k, k2); k = k2;
+          }
+        }
+
+        const latex = sub ? `${base}^{${sup}}_{${sub}}` : `${base}^{${sup}}`;
+        out.push(safeRender(latex));
+        i = k;
+        continue;
+      }
+
+      // Variable with subscript only: x_1
+      if (text[k] === '_') {
+        k++;
+        let sub = '';
+        if (text[k] === '{') {
+          let depth = 0, k2 = k;
+          do { if (text[k2] === '{') depth++; else if (text[k2] === '}') depth--; k2++; } while (k2 < len && depth > 0);
+          sub = text.slice(k + 1, k2 - 1); k = k2;
+        } else {
+          let k2 = k;
+          while (k2 < len && /[a-zA-Z0-9]/.test(text[k2])) k2++;
+          sub = text.slice(k, k2); k = k2;
+        }
+        out.push(safeRender(`${base}_{${sub}}`));
+        i = k;
+        continue;
+      }
+
+      i = j;
+      continue;
+    }
+
+    // Math symbols as unicode chars
+    const sym: Record<string, string> = {
+      '√': '\\sqrt{}', '∑': '\\sum', '∏': '\\prod', '∫': '\\int',
+      '≤': '\\leq', '≥': '\\geq', '≠': '\\neq', '→': '\\to',
+      '⇒': '\\Rightarrow', '∈': '\\in', '∉': '\\notin', '⊂': '\\subset',
+      '⊃': '\\supset', '∀': '\\forall', '∃': '\\exists',
+      '∂': '\\partial', 'Δ': '\\Delta', '±': '\\pm', '×': '\\times',
+      '÷': '\\div', '·': '\\cdot', '⋯': '\\cdots', '…': '\\ldots',
+      'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta',
+      'θ': '\\theta', 'π': '\\pi', 'λ': '\\lambda', 'μ': '\\mu',
+      'σ': '\\sigma', 'ω': '\\omega', '∞': '\\infty',
+    };
+    if (text[i] in sym) {
+      out.push(safeRender(sym[text[i]]));
+      i++;
+      continue;
+    }
+
+    // Plain character
+    out.push(text[i]);
+    i++;
+  }
+
+  return out.join('');
 }
 
 export { renderMathDisplay };
