@@ -650,9 +650,10 @@ const AdminExamController = {
     async insertQuestion(req, res) {
         const MAX_RETRIES = 5;
 
-        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-            const { examId } = req.params;
-            const { questionData, afterQuestionId, atPosition } = req.body;
+        try {
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                const { examId } = req.params;
+                const { questionData, afterQuestionId, atPosition } = req.body;
 
             if (!questionData) {
                 return res.status(400).json({ message: "questionData là bắt buộc" });
@@ -856,6 +857,7 @@ const AdminExamController = {
 
             // Nếu vào đây = thành công, break khỏi retry loop
             break;
+        }
         } catch (error) {
             // Chỉ retry khi gặp duplicate key (23505), không retry các lỗi khác
             const isDuplicateKey =
