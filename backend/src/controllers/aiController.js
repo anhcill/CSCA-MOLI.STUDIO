@@ -642,14 +642,151 @@ async function refreshAnalysis(req, res) {
   }
 }
 
+async function askAIStream(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
+    const { question, attemptId, conversationHistory } = req.body;
+
+    if (!question || question.trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
+    }
+
+    // Lấy context từ bài thi nếu có attemptId
+    let context = {};
+    if (attemptId) {
+      const db = require('../config/database');
+      const attemptResult = await db.query(
+        `SELECT e.title as exam_title, s.name as subject_name,
+                ea.total_score, ea.total_correct, ea.total_incorrect
+         FROM exam_attempts ea
+         JOIN exams e ON ea.exam_id = e.id
+         LEFT JOIN subjects s ON e.subject_id = s.id
+         WHERE ea.id = $1 AND ea.user_id = $2`,
+        [attemptId, userId],
+      );
+      if (attemptResult.rows[0]) {
+        const a = attemptResult.rows[0];
+        context.examTitle = a.exam_title;
+        context.subjectName = a.subject_name;
+        context.userScore = a.total_questions > 0
+          ? Math.round((a.total_correct / a.total_questions) * 100)
+          : parseFloat(a.total_score) || 0;
+      }
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    await aiService.askAIStream(question, context, res);
+  } catch (error) {
+    console.error('askAIStream error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Lỗi chatbot AI stream' });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: true, text: 'Lỗi server' })}\n\n`);
+      res.end();
+    }
+  }
+}
+
+// ─── FEATURE 8: Chấm điểm tự luận / Dịch thuật ───────────────────────────
+/**
+ * POST /api/ai/grade-essay
+ * AI chấm điểm câu trả lời tự luận hoặc bài dịch
+ */
+async function gradeEssay(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
+    const { questionText, questionTextCn, userAnswer, correctAnswer, questionType } = req.body;
+
+    if (!userAnswer || userAnswer.trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Câu trả lời quá ngắn' });
+    }
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        totalScore: 0,
+        feedback: 'AI đang bận, vui lòng thử lại sau!',
+      });
+    }
+
+    const result = await aiService.gradeEssay({
+      questionText,
+      questionTextCn,
+      userAnswer,
+      correctAnswer,
+      questionType,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('gradeEssay error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi chấm bài tự luận' });
+  }
+}
+
+// ─── FEATURE 9: Giảng lại lý thuyết ───────────────────────────────────
+/**
+ * POST /api/ai/teach-grammar
+ * AI tạo bài giảng ngắn về ngữ pháp liên quan đến câu hỏi
+ */
+async function teachGrammar(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (!canUseAIFeatures(req.user)) {
+      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
+    }
+
+    const { question, topic, wrongAnswer, correctAnswer, userLevel } = req.body;
+
+    if (aiService.isRateLimited()) {
+      return res.json({
+        success: true, rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        grammarRule: 'AI đang bận, vui lòng thử lại sau!',
+      });
+    }
+
+    const result = await aiService.teachGrammar({
+      question,
+      topic,
+      wrongAnswer,
+      correctAnswer,
+      userLevel,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('teachGrammar error:', error);
+    res.status(500).json({ success: false, message: 'Lỗi tạo bài giảng' });
+  }
+}
+
 module.exports = {
   analyzeExamResult,
   explainWrongAnswers,
   analyzeTopics,
   getPracticeRecommendations,
   askAI,
+  askAIStream,
   analyzeProgress,
   recommendNextExam,
   analyzeUserPerformance,
   refreshAnalysis,
+  gradeEssay,
+  teachGrammar,
 };

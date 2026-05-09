@@ -25,12 +25,19 @@ router.post('/topics',          aiController.analyzeTopics);             // POST
 router.post('/practice',        aiController.getPracticeRecommendations); // POST /api/ai/practice
 
 // 🚀 FEATURE 5: Chatbot hỏi đáp
-router.post('/ask',             aiController.askAI);                    // POST /api/ai/ask
+router.post('/ask',             aiController.askAI);
+router.post('/ask-stream',      aiController.askAIStream);
 
 // 🧠 FEATURE 6: Phân tích tiến bộ
 router.get('/progress',         aiController.analyzeProgress);           // GET /api/ai/progress
 
 // ⚡ FEATURE 7: Gợi ý đề tiếp theo
 router.get('/next-exam',       aiController.recommendNextExam);        // GET /api/ai/next-exam
+
+// 📝 FEATURE 8: Chấm điểm tự luận / Dịch thuật
+router.post('/grade-essay',   aiController.gradeEssay);              // POST /api/ai/grade-essay
+
+// 🎓 FEATURE 9: Giảng lại lý thuyết
+router.post('/teach-grammar', aiController.teachGrammar);             // POST /api/ai/teach-grammar
 
 module.exports = router;

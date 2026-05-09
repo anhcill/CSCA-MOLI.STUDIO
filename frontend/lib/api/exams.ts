@@ -105,11 +105,12 @@ const examApi = {
   },
 
   // Lưu câu trả lời
-  async saveAnswer(attemptId: number, questionId: number, answerKey: string, timeSpent: number) {
+  async saveAnswer(attemptId: number, questionId: number, answerKey: string, timeSpent: number, essayAnswer?: string) {
     const response = await axios.post(`/attempts/${attemptId}/answers`, {
       questionId,
       answerKey,
-      timeSpent
+      timeSpent,
+      essayAnswer,
     });
     return response.data.data;
   },

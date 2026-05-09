@@ -3,52 +3,92 @@ const { pool } = require("../config/database");
 const ExamAttempt = {
   // Bắt đầu làm bài thi
   async start(userId, examId) {
-    // Check if user already has an in-progress attempt
-    const checkQuery = `
-      SELECT * FROM exam_attempts 
-      WHERE user_id = $1 AND exam_id = $2 AND status = 'in_progress'
-    `;
-    const checkResult = await pool.query(checkQuery, [userId, examId]);
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        // Check if user already has an in-progress attempt
+        const checkQuery = `
+          SELECT * FROM exam_attempts 
+          WHERE user_id = $1 AND exam_id = $2 AND status = 'in_progress'
+        `;
+        const checkResult = await pool.query(checkQuery, [userId, examId]);
 
-    if (checkResult.rows.length > 0) {
-      return checkResult.rows[0]; // Return existing attempt
+        if (checkResult.rows.length > 0) {
+          return checkResult.rows[0]; // Return existing attempt
+        }
+
+        // Create new attempt atomically
+        const insertQuery = `
+          INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
+          VALUES (
+            $1, 
+            $2, 
+            (SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM exam_attempts WHERE user_id = $1 AND exam_id = $2), 
+            'in_progress'
+          )
+          RETURNING *
+        `;
+
+        const result = await pool.query(insertQuery, [userId, examId]);
+        return result.rows[0];
+      } catch (err) {
+        if (err.code === '23505' && err.constraint === 'exam_attempts_user_id_exam_id_attempt_number_key') {
+          // Race condition occurred: another request just inserted the record.
+          retries--;
+          if (retries === 0) throw err;
+          // Wait a bit before retrying to allow the other transaction to finish
+          await new Promise(r => setTimeout(r, 50));
+        } else {
+          throw err;
+        }
+      }
     }
-
-    // Get attempt number
-    const countQuery = `
-      SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_attempt
-      FROM exam_attempts 
-      WHERE user_id = $1 AND exam_id = $2
-    `;
-    const countResult = await pool.query(countQuery, [userId, examId]);
-    const attemptNumber = countResult.rows[0].next_attempt;
-
-    // Create new attempt
-    const insertQuery = `
-      INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
-      VALUES ($1, $2, $3, 'in_progress')
-      RETURNING *
-    `;
-
-    const result = await pool.query(insertQuery, [
-      userId,
-      examId,
-      attemptNumber,
-    ]);
-    return result.rows[0];
   },
 
   // Lưu câu trả lời
-  async saveAnswer(attemptId, questionId, selectedAnswerKey, timeSpent) {
+  async saveAnswer(attemptId, questionId, selectedAnswerKey, timeSpent, essayAnswer = null) {
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
 
-      // Get correct answer
+      // Lấy thông tin câu hỏi để xác định loại
+      const qResult = await client.query(
+        `SELECT question_type FROM questions WHERE id = $1`,
+        [questionId]
+      );
+      const questionType = qResult.rows[0]?.question_type;
+
+      // Nếu là câu tự luận hoặc dịch thuật → lưu essay_answer, không check đáp án
+      if (questionType === 'essay' || questionType === 'translation') {
+        const upsertQuery = `
+          INSERT INTO user_answers (
+            attempt_id, question_id, selected_answer_key,
+            selected_answer_id, is_correct, time_spent_seconds, essay_answer
+          ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+          ON CONFLICT (attempt_id, question_id)
+          DO UPDATE SET
+            selected_answer_key = $3,
+            essay_answer = $5,
+            time_spent_seconds = $4,
+            created_at = CURRENT_TIMESTAMP
+          RETURNING *
+        `;
+        const result = await client.query(upsertQuery, [
+          attemptId,
+          questionId,
+          selectedAnswerKey || 'ESSAY_ANSWER',
+          timeSpent || 0,
+          essayAnswer,
+        ]);
+        await client.query("COMMIT");
+        return result.rows[0];
+      }
+
+      // Multiple-choice: logic cũ
       const answerQuery = `
-        SELECT a.id, a.is_correct 
-        FROM answers a 
+        SELECT a.id, a.is_correct
+        FROM answers a
         WHERE a.question_id = $1 AND a.answer_key = $2
       `;
       const answerResult = await client.query(answerQuery, [
@@ -62,14 +102,13 @@ const ExamAttempt = {
 
       const selectedAnswer = answerResult.rows[0];
 
-      // Insert or update user answer
       const upsertQuery = `
         INSERT INTO user_answers (
           attempt_id, question_id, selected_answer_id,
           selected_answer_key, is_correct, time_spent_seconds
         ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (attempt_id, question_id) 
-        DO UPDATE SET 
+        ON CONFLICT (attempt_id, question_id)
+        DO UPDATE SET
           selected_answer_id = $3,
           selected_answer_key = $4,
           is_correct = $5,

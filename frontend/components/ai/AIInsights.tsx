@@ -140,7 +140,12 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Không thể tải phân tích AI');
+      if (err.response?.data?.code === 'PREMIUM_REQUIRED') {
+        setIsPremiumRequired(true);
+        setHasEnoughData(true);
+      } else {
+        setError(err.response?.data?.message || 'Không thể tải phân tích AI');
+      }
     } finally {
       isFetchingRef.current = false;
       setLoading(false);

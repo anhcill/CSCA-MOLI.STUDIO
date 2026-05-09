@@ -65,7 +65,7 @@ export default function DeMoPhongPage({ params }: { params: { subject: string } 
             
             <Header />
 
-            <main className="container mx-auto px-4 md:px-6 py-4 md:py-6 max-w-[1400px] relative z-10">
+            <main className="w-full mx-auto px-4 md:px-8 py-4 md:py-6 max-w-[1800px] relative z-10">
                 {/* Hero Banner Component */}
                 <div className={`w-full rounded-2xl bg-gradient-to-r ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.via || ''} ${subjectInfo.colorScheme.to} p-5 lg:p-6 shadow-lg relative overflow-hidden text-white flex items-center justify-between gap-4 mb-5`}>
                     <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
@@ -86,9 +86,9 @@ export default function DeMoPhongPage({ params }: { params: { subject: string } 
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
                     {/* Main Content */}
-                    <div className="lg:col-span-8 flex flex-col gap-6">
+                    <div className="lg:col-span-9 flex flex-col gap-6">
                         <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm px-6 py-5 flex items-center justify-between">
                             <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.to} shadow-sm`}>
@@ -109,7 +109,7 @@ export default function DeMoPhongPage({ params }: { params: { subject: string } 
                     </div>
 
                     {/* Sidebar */}
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-3">
                         <SubjectNavigation
                             subject={subjectInfo.name}
                             subjectCode={subjectInfo.code}

@@ -254,7 +254,7 @@ const examController = {
   async saveAnswer(req, res) {
     try {
       const { attemptId } = req.params;
-      const { questionId, answerKey, timeSpent } = req.body;
+      const { questionId, answerKey, timeSpent, essayAnswer } = req.body;
 
       console.log('Save answer request:', { attemptId, questionId, answerKey, timeSpent });
 
@@ -262,7 +262,8 @@ const examController = {
         attemptId,
         questionId,
         answerKey,
-        timeSpent || 0
+        timeSpent || 0,
+        essayAnswer || null
       );
 
       res.json({

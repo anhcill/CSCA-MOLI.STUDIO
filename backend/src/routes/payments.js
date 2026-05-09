@@ -247,17 +247,16 @@ router.post('/create', authenticate, async (req, res) => {
 
     const pkg = pkgRes.rows[0];
 
-    // Kiểm tra user đã mua gói này rồi → chỉ cấm mua lại gói giống hệt
-    const existingPurchase = await require('../config/database').query(
-      `SELECT id, status FROM transactions
-       WHERE user_id = $1 AND package_id = $2 AND status = 'completed'
-       LIMIT 1`,
-      [userId, pkgId]
+    // Kiểm tra xem người dùng có VIP vĩnh viễn chưa
+    const userCheck = await require('../config/database').query(
+      `SELECT is_vip, vip_expires_at FROM users WHERE id = $1`,
+      [userId]
     );
-    if (existingPurchase.rows[0]) {
+    const user = userCheck.rows[0];
+    if (user && user.is_vip && user.vip_expires_at === null) {
       return res.status(400).json({
         success: false,
-        message: 'Bạn đã đăng ký gói này rồi. Vui lòng chọn gói khác hoặc gia hạn khi hết hạn.',
+        message: 'Bạn đã có VIP vĩnh viễn, không cần đăng ký thêm.',
       });
     }
 

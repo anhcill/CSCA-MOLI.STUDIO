@@ -14,14 +14,12 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   }, []);
 
   // Suppress footer on admin/auth/exam routes
-  const isAdmin = mounted && pathname?.startsWith('/admin');
-  const isAuth = mounted && (
-    pathname?.startsWith('/login') ||
+  const isAdmin = pathname?.startsWith('/admin');
+  const isAuth = pathname?.startsWith('/login') ||
     pathname?.startsWith('/register') ||
     pathname?.startsWith('/forgot') ||
-    pathname?.startsWith('/reset')
-  );
-  const isExam = mounted && pathname?.startsWith('/exam/');
+    pathname?.startsWith('/reset');
+  const isExam = pathname?.startsWith('/exam/');
   const noFooter = isAdmin || isAuth || isExam;
   const showFloatingContacts = !isAdmin && !isExam;
 

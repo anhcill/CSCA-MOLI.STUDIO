@@ -78,7 +78,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     </div>
                     <div className="text-left">
                         <h3 className="font-bold text-gray-900">🤖 Phân tích bài thi bằng AI</h3>
-                        <p className="text-gray-500 text-xs">DeepSeek R1 — phân tích thông minh</p>
+                        <p className="text-gray-500 text-xs">Phân tích thông minh</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -252,7 +252,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Footer */}
                     <p className="text-center text-xs text-gray-400">
-                        Phân tích bởi AI · DeepSeek R1 · Nhấn ⚡ để xem chi tiết từng câu
+                        Phân tích bởi AI · Nhấn ⚡ để xem chi tiết từng câu
                     </p>
                 </div>
             )}

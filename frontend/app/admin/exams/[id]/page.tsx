@@ -576,8 +576,10 @@ export default function AdminExamDetailPage() {
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => {
-                                    if (editMode) {
-                                        exitEditMode();
+                                    if (editMode === 'edit') {
+                                        if (confirm('Bạn đang trong chế độ sửa. Thoát sẽ làm mất các thay đổi chưa lưu. Vẫn thoát?')) {
+                                            router.push('/admin/exams');
+                                        }
                                     } else {
                                         router.push('/admin/exams');
                                     }

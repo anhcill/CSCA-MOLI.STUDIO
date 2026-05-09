@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiArrowLeft, FiPrinter, FiZap } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiArrowLeft, FiPrinter, FiZap, FiBook } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -61,6 +61,8 @@ function ExamResultContent() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
   const [showExplanationModal, setShowExplanationModal] = useState<QuestionResult | null>(null);
+  const [showTeachModal, setShowTeachModal] = useState<QuestionResult | null>(null);
+  const [showGradeModal, setShowGradeModal] = useState<QuestionResult | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState<any>(null);
@@ -442,6 +444,22 @@ function ExamResultContent() {
                       )}
                     </div>
 
+                    {/* Essay/Translation answer display */}
+                    {(q.question_type === 'essay' || q.question_type === 'translation') && (
+                      <div className="mt-4 ml-8 space-y-3">
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                          <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                            {q.selected_answer_text || 'Chưa trả lời'}
+                          </p>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                          <p className="text-xs font-bold text-green-700 mb-1">✓ Đáp án mẫu</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{q.correct_answer_text}</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Explanation */}
                     {(q.explanation || q.explanation_cn) && (
                       <div className="mt-4 ml-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -450,13 +468,31 @@ function ExamResultContent() {
                       </div>
                     )}
 
-                    {/* AI button */}
+                    {/* AI buttons */}
                     {status === 'incorrect' && (
-                      <button
-                        onClick={() => setShowExplanationModal(q)}
-                        className="mt-3 ml-8 text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                        <FiZap size={14} /> Hỏi AI giải thích thêm
-                      </button>
+                      <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => setShowExplanationModal(q)}
+                          className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
+                          <FiZap size={14} /> Hỏi AI giải thích thêm
+                        </button>
+                        <button
+                          onClick={() => setShowTeachModal(q)}
+                          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
+                          <FiBook size={14} /> Giảng lại lý thuyết
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Grade essay button */}
+                    {(q.question_type === 'essay' || q.question_type === 'translation') && (
+                      <div className="mt-3 ml-8">
+                        <button
+                          onClick={() => setShowGradeModal(q)}
+                          className="text-sm text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1.5">
+                          <FiCpu size={14} /> Chấm bài bằng AI
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -479,6 +515,28 @@ function ExamResultContent() {
           question={showExplanationModal}
           attemptId={result.id}
           onClose={() => setShowExplanationModal(null)}
+        />
+      )}
+
+      {/* Teach Grammar Modal */}
+      {showTeachModal && (
+        <TeachGrammarModal
+          question={showTeachModal}
+          attemptId={result.id}
+          onClose={() => setShowTeachModal(null)}
+          onAskAI={() => {
+            setShowTeachModal(null);
+            setActiveTab('chat');
+          }}
+        />
+      )}
+
+      {/* Grade Essay Modal */}
+      {showGradeModal && (
+        <GradeEssayModal
+          question={showGradeModal}
+          attemptId={result.id}
+          onClose={() => setShowGradeModal(null)}
         />
       )}
     </div>
@@ -585,6 +643,340 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
             <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
               Đóng
             </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Grade Essay Modal ──────────────────────────────────────────────────────────────
+function GradeEssayModal({ question, attemptId, onClose }: {
+  question: QuestionResult; attemptId: number; onClose: () => void;
+}) {
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadGrade(); }, []);
+
+  const loadGrade = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch('/api/ai/grade-essay', {
+        method: 'POST',
+        body: JSON.stringify({
+          questionText: question.question_text,
+          questionTextCn: question.question_text_cn,
+          userAnswer: question.selected_answer_text,
+          correctAnswer: question.correct_answer_text,
+          questionType: question.question_type,
+        }),
+      });
+      const data = await res.json();
+      setResult(data.success ? data : null);
+    } catch {
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scoreColor = result?.totalScore >= 8 ? 'text-green-600' : result?.totalScore >= 5 ? 'text-amber-600' : 'text-red-600';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={loading ? undefined : onClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
+              <FiCpu className="text-white" size={16} />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">
+                {question.question_type === 'translation' ? 'Chấm bài dịch thuật' : 'Chấm bài tự luận'}
+              </h3>
+              <p className="text-xs text-gray-400">AI chấm điểm và gợi ý</p>
+            </div>
+          </div>
+          {!loading && (
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 text-xl">×</button>
+          )}
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-3 border-orange-200 border-t-orange-600" />
+              <p className="text-gray-500 text-sm">AI đang chấm bài...</p>
+            </div>
+          ) : result ? (
+            <div className="space-y-5">
+              {/* Score */}
+              <div className="text-center">
+                <p className={`text-5xl font-black ${scoreColor}`}>{result.totalScore}/10</p>
+                <div className="w-full bg-gray-100 rounded-full h-3 mt-3 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${result.totalScore >= 8 ? 'bg-green-500' : result.totalScore >= 5 ? 'bg-amber-500' : 'bg-red-500'}`}
+                    style={{ width: `${(result.totalScore / 10) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* User Answer */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                <p className="text-xs font-bold text-indigo-700 mb-2">✍️ Câu trả lời của bạn</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{question.selected_answer_text}</p>
+              </div>
+
+              {/* Model Answer */}
+              {result.modelAnswer && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-green-700 mb-2">✓ Đáp án mẫu</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{result.modelAnswer}</p>
+                </div>
+              )}
+
+              {/* Grading Criteria */}
+              {result.gradingCriteria?.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Tiêu chí chấm điểm</p>
+                  <div className="space-y-2">
+                    {result.gradingCriteria.map((c: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2">
+                        <span className="text-sm text-gray-700">{c.criterion}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-800">{c.score}/{c.maxScore}</span>
+                          {c.comment && <span className="text-xs text-gray-500">· {c.comment}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Errors */}
+              {result.errors?.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">❌ Lỗi sai</p>
+                  <div className="space-y-2">
+                    {result.errors.map((e: any, i: number) => (
+                      <div key={i} className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-semibold text-red-800 line-through">{e.original}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="text-sm font-semibold text-green-700">{e.correct}</span>
+                        </div>
+                        {e.reason && <p className="text-xs text-red-600">{e.reason}</p>}
+                        {e.type && (
+                          <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+                            {e.type}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Feedback */}
+              {result.feedback && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-purple-700 mb-2">💬 Nhận xét</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{result.feedback}</p>
+                </div>
+              )}
+
+              {/* Suggestions */}
+              {result.suggestions?.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Gợi ý cải thiện</p>
+                  <ul className="space-y-2">
+                    {result.suggestions.map((s: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="text-blue-500 shrink-0 mt-0.5">▸</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="pt-2 border-t border-gray-100 flex gap-3">
+                <button onClick={loadGrade} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
+                  <FiZap size={14} /> Chấm lại
+                </button>
+                <button onClick={onClose} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 text-white rounded-xl font-semibold text-sm hover:bg-orange-600 transition-colors">
+                  Đóng
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-sm mb-3">Không thể chấm bài lúc này.</p>
+              <button onClick={loadGrade} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
+                Thử lại
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Teach Grammar Modal (Mini-lesson) ──────────────────────────────────────────
+function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
+  question: QuestionResult; attemptId: number; onClose: () => void; onAskAI: () => void;
+}) {
+  const [lesson, setLesson] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadLesson(); }, []);
+
+  const loadLesson = async () => {
+    try {
+      const res = await authFetch('/api/ai/teach-grammar', {
+        method: 'POST',
+        body: JSON.stringify({
+          question: question.question_text || question.question_text_cn || '',
+          topic: '',
+          wrongAnswer: `${question.selected_answer_key}. ${question.selected_answer_text}`,
+          correctAnswer: `${question.correct_answer_key}. ${question.correct_answer_text}`,
+        }),
+      });
+      const data = await res.json();
+      setLesson(data.success ? data : null);
+    } catch {
+      setLesson(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={loading ? undefined : onClose}>
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
+              <FiBook className="text-white" size={16} />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900">Giảng lại lý thuyết</h3>
+              <p className="text-xs text-gray-400">Bài học về câu {question.question_number || question.sub_question_number}</p>
+            </div>
+          </div>
+          {!loading && (
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 text-xl">×</button>
+          )}
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <div className="animate-spin rounded-full h-10 w-10 border-3 border-indigo-200 border-t-indigo-600" />
+              <p className="text-gray-500 text-sm">AI đang soạn bài giảng...</p>
+            </div>
+          ) : lesson ? (
+            <div className="space-y-5">
+              {/* Title */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                <h4 className="font-bold text-indigo-900 text-lg mb-1">{lesson.title}</h4>
+                <p className="text-xs text-indigo-600">
+                  Câu hỏi gốc: {question.question_text || question.question_text_cn}
+                </p>
+              </div>
+
+              {/* Grammar Rule */}
+              {lesson.grammarRule && (
+                <div>
+                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">📚 Ngữ pháp</h5>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    {lesson.grammarRule}
+                  </p>
+                </div>
+              )}
+
+              {/* Examples */}
+              {lesson.examples?.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">💬 Ví dụ minh hoạ</h5>
+                  <div className="space-y-3">
+                    {lesson.examples.map((ex: any, i: number) => (
+                      <div key={i} className="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <p className="text-base font-semibold text-green-900 mb-1">{ex.chinese}</p>
+                        {ex.pinyin && <p className="text-xs text-green-600 italic mb-2">{ex.pinyin}</p>}
+                        <p className="text-sm text-green-800 mb-1">{ex.vietnamese}</p>
+                        {ex.usage && <p className="text-xs text-green-500">→ {ex.usage}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Memory Tips */}
+              {lesson.memoryTips?.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">💡 Mẹo ghi nhớ</h5>
+                  <ul className="space-y-2">
+                    {lesson.memoryTips.map((tip: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+                        <span className="text-amber-500 shrink-0 mt-0.5">✦</span>
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Common Mistakes */}
+              {lesson.commonMistakes?.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">⚠️ Lưu ý thường sai</h5>
+                  <ul className="space-y-2">
+                    {lesson.commonMistakes.map((m: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+                        <span className="text-red-500 shrink-0 mt-0.5">!</span>
+                        {m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Related Topics */}
+              {lesson.relatedTopics?.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {lesson.relatedTopics.map((t: string, i: number) => (
+                    <span key={i} className="px-3 py-1 bg-gray-100 border border-gray-200 text-gray-600 text-xs rounded-full font-medium">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="pt-2 border-t border-gray-100 flex gap-3">
+                <button
+                  onClick={onAskAI}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-colors">
+                  <FiMessageCircle size={14} /> Hỏi AI thêm
+                </button>
+                <button
+                  onClick={loadLesson}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
+                  <FiZap size={14} /> Soạn lại
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-sm mb-3">Không thể tải bài giảng lúc này.</p>
+              <button onClick={loadLesson} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                Thử lại
+              </button>
+            </div>
           )}
         </div>
       </div>

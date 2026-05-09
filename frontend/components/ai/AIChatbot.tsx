@@ -130,8 +130,17 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setInput('');
         setLoading(true);
 
+        const tempAiId = (Date.now() + 1).toString();
+        const aiMsg: Message = {
+            id: tempAiId,
+            role: 'ai',
+            content: '',
+            timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, aiMsg]);
+
         try {
-            const res = await authFetch('/api/ai/ask', {
+            const res = await authFetch('/api/ai/ask-stream', {
                 method: 'POST',
                 credentials: 'include',
                 body: JSON.stringify({
@@ -139,25 +148,53 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                     attemptId: attemptId,
                 }),
             });
-            const data = await res.json();
 
-            const aiMsg: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'ai',
-                content: data.success
-                    ? data.answer
-                    : data.message || 'Xin lỗi, tôi không thể trả lời lúc này. Vui lòng thử lại sau!',
-                timestamp: new Date().toISOString(),
-            };
-            setMessages(prev => [...prev, aiMsg]);
+            if (!res.body) throw new Error('No response body');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let done = false;
+            let fullContent = '';
+
+            while (!done) {
+                const { value, done: doneReading } = await reader.read();
+                done = doneReading;
+                if (value) {
+                    const chunk = decoder.decode(value, { stream: !done });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const dataStr = line.slice(6).trim();
+                        if (dataStr === '[DONE]') { done = true; break; }
+                        try {
+                            const parsed = JSON.parse(dataStr);
+                            // OpenAI SSE format: choices[0].delta.content
+                            const content = parsed?.choices?.[0]?.delta?.content;
+                            if (content) {
+                                fullContent += content;
+                                setMessages(prev => prev.map(m =>
+                                    m.id === tempAiId ? { ...m, content: fullContent } : m
+                                ));
+                            }
+                            // Error from backend
+                            if (parsed?.error) {
+                                fullContent = parsed.error;
+                                done = true;
+                                break;
+                            }
+                        } catch {
+                            // skip malformed JSON
+                        }
+                    }
+                }
+            }
         } catch {
-            const errMsg: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'ai',
-                content: 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!',
-                timestamp: new Date().toISOString(),
-            };
-            setMessages(prev => [...prev, errMsg]);
+            setMessages(prev => prev.map(m =>
+                m.id === tempAiId
+                    ? { ...m, content: 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!' }
+                    : m
+            ));
         } finally {
             setLoading(false);
             inputRef.current?.focus();
@@ -193,7 +230,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             ) : (
                                 <>
                                     <span className="w-1.5 h-1.5 bg-purple-400 rounded-full inline-block" />
-                                    DeepSeek R1
+                                    Hệ thống AI
                                 </>
                             )}
                         </p>

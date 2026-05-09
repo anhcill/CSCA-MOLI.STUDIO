@@ -36,14 +36,14 @@ export default function Footer() {
 
   return (
     <footer className="bg-gray-950 text-gray-400">
-      <div className="max-w-6xl mx-auto px-6 pt-14 pb-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 lg:gap-10">
+      <div className="max-w-6xl mx-auto px-6 pt-10 pb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 lg:gap-8">
           {/* Brand */}
           <div className="lg:col-span-1">
             <Link href="/" className="text-2xl font-black text-white flex items-center gap-2 mb-3">
               CSCA <span className="text-purple-400">🎯</span>
             </Link>
-            <p className="text-sm text-gray-500 leading-relaxed mb-5">
+            <p className="text-sm text-gray-500 leading-relaxed mb-4">
               Nền tảng luyện thi CSCA toàn diện — giúp học viên Việt Nam chinh phục học bổng tại các trường đại học hàng đầu Trung Quốc.
             </p>
             <div className="flex items-center gap-3">
@@ -63,8 +63,8 @@ export default function Footer() {
 
           {/* Subjects */}
           <div>
-            <h4 className="text-white font-bold mb-4 text-sm uppercase tracking-wider">Môn Học</h4>
-            <ul className="space-y-2.5">
+            <h4 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Môn Học</h4>
+            <ul className="space-y-2">
               {SUBJECTS.map(s => (
                 <li key={s.name}>
                   <Link href={s.href} className="text-sm text-gray-500 hover:text-white transition-colors">{s.name}</Link>
@@ -75,8 +75,8 @@ export default function Footer() {
 
           {/* Resources */}
           <div>
-            <h4 className="text-white font-bold mb-4 text-sm uppercase tracking-wider">Tài Nguyên</h4>
-            <ul className="space-y-2.5">
+            <h4 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Tài Nguyên</h4>
+            <ul className="space-y-2">
               {RESOURCES.map(r => (
                 <li key={r.name}>
                   <Link href={r.href} className="text-sm text-gray-500 hover:text-white transition-colors">{r.name}</Link>
@@ -87,8 +87,8 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="text-white font-bold mb-4 text-sm uppercase tracking-wider">Liên Hệ</h4>
-            <ul className="space-y-3">
+            <h4 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Liên Hệ</h4>
+            <ul className="space-y-2.5">
               <li>
                 <a href="mailto:support@csca.edu.vn" className="flex items-start gap-2.5 text-sm text-gray-500 hover:text-white transition-colors group">
                   <FiMail size={15} className="text-purple-500 shrink-0 mt-0.5" />
@@ -107,9 +107,9 @@ export default function Footer() {
               </li>
             </ul>
 
-            <div className="mt-5">
-              <h4 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Chính sách</h4>
-              <ul className="space-y-2">
+            <div className="mt-4">
+              <h4 className="text-white font-bold mb-2 text-sm uppercase tracking-wider">Chính sách</h4>
+              <ul className="space-y-1.5">
                 {POLICIES.map(p => (
                   <li key={p.name}>
                     <Link href={p.href} className="text-xs text-gray-600 hover:text-gray-300 transition-colors">{p.name}</Link>
@@ -122,7 +122,7 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-white/5">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-600">© {year} CSCA. Bảo lưu mọi quyền.</p>
           <div className="flex items-center gap-4">
             {POLICIES.slice(0, 2).map(p => (

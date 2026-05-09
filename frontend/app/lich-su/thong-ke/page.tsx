@@ -225,7 +225,7 @@ export default function ThongKePage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
         <Header />
-        <main className="container mx-auto px-6 py-8 max-w-[1100px]">
+        <main className="w-full mx-auto px-6 py-8 max-w-[1600px]">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                   <span className="text-4xl">🔒</span>
@@ -245,7 +245,7 @@ export default function ThongKePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-indigo-50 to-blue-50">
       <Header />
 
-      <main className="container mx-auto px-6 py-8 max-w-[1100px]">
+      <main className="w-full mx-auto px-6 py-8 max-w-[1600px]">
         <div className="space-y-6">
 
           {/* Hero Header */}

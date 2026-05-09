@@ -69,7 +69,7 @@ async function withConcurrency(fn) {
   }
 }
 
-// ─── AI Core: Gọi Beeknoee (DeepSeek R1) ───────────────────────────────────────
+// ─── AI Core: Gọi Beeknoee  ───────────────────────────────────────
 async function callBeeknoee(prompt, options = {}) {
   if (isRateLimited()) {
     const e = new Error('RATE_LIMITED');
@@ -312,7 +312,9 @@ TRẢ VỀ JSON:
       "whyWrong": "Giải thích 1-2 câu tại sao sai",
       "knowledgeNote": "Kiến thức liên quan 1-2 câu",
       "tip": "Mẹo nhớ 1 câu",
-      "vocabulary": []
+      "vocabulary": [
+        { "word": "từ vựng tiếng Trung", "pinyin": "pinyin của từ", "meaning": "nghĩa tiếng Việt" }
+      ]
     }
   ]
 }`;
@@ -525,19 +527,18 @@ async function askAI(question, context = {}) {
     .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
     .join('\n');
 
-  const prompt = `Trả lời câu hỏi của học sinh về tiếng Trung. Viết TIẾNG VIỆT, plain text thuần túy.
+  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT.
 
 YÊU CẦU:
-- Không dùng **bold**, không dùng ##, không dùng bullet, không ký hiệu markdown gì cả
-- Viết tự nhiên như đang nhắn tin cho bạn
-- Câu hỏi ngắn → trả lời ngắn
-- Câu hỏi dài → giải thích đầy đủ nhưng không lan man
-- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học
-- Đưa ví dụ cụ thể trong đời thường khi cần
+- CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
+- Viết tự nhiên như đang nhắn tin hướng dẫn.
+- Câu hỏi ngắn → trả lời ngắn gọn.
+- Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
+- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
+- Đưa ví dụ cụ thể trong đời thường khi cần.
 
 TRÁNH:
-- KHÔNG bắt đầu bằng "Chào bạn", "Rất vui được..."
-- KHÔNG lặp lại câu hỏi của user
+- KHÔNG lặp lại câu hỏi của user.
 
 Ngữ cảnh bài thi (nếu có):
 ${contextText || '(không có)'}
@@ -559,6 +560,113 @@ Câu hỏi: ${question}`;
       timestamp: new Date().toISOString(),
       error: true,
     };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 5b: Chatbot hỏi đáp AI (Streaming)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Chatbot trả lời câu hỏi của user về bài thi/kiến thức (Stream qua SSE)
+ * @param {string} question - Câu hỏi của user
+ * @param {Object} context  - Ngữ cảnh (attemptData, questions, etc.)
+ * @param {Object} res - Express Response object (để pipe SSE)
+ */
+async function askAIStream(question, context = {}, res) {
+  const { examTitle, subjectName, questions = [], userScore } = context;
+
+  const contextText = [
+    examTitle && `Đề thi: ${examTitle}`,
+    subjectName && `Môn: ${subjectName}`,
+    userScore !== undefined && `Điểm của bạn: ${userScore}%`,
+    questions.length > 0 && `Số câu: ${questions.length}`,
+  ].filter(Boolean).join('\n');
+
+  const recentWrong = questions
+    .filter(q => !q.is_correct)
+    .slice(0, 5)
+    .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
+    .join('\n');
+
+  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT.
+
+YÊU CẦU:
+- CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
+- Viết tự nhiên như đang nhắn tin hướng dẫn.
+- Câu hỏi ngắn → trả lời ngắn gọn.
+- Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
+- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
+- Đưa ví dụ cụ thể trong đời thường khi cần.
+
+TRÁNH:
+- KHÔNG lặp lại câu hỏi của user.
+
+Ngữ cảnh bài thi (nếu có):
+${contextText || '(không có)'}
+Các câu sai gần đây (nếu có):
+${recentWrong || '(không có)'}
+
+Câu hỏi: ${question}`;
+
+  if (isRateLimited()) {
+    res.write(`data: ${JSON.stringify({ error: 'AI limit. Vui lòng thử lại sau.' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  await waitBetweenRequests();
+
+  const apiKey = getNextKey();
+  if (!apiKey) {
+    res.write(`data: ${JSON.stringify({ error: 'Không có cấu hình AI key' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const BEE = aiConfig.beeknoee;
+  const payload = {
+    model: BEE.model,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 2000,
+    temperature: 0.5,
+    stream: true
+  };
+
+  try {
+    const response = await axios.post(
+      `${BEE.baseUrl}/chat/completions`,
+      payload,
+      {
+        timeout: BEE.timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        responseType: 'stream'
+      }
+    );
+
+    // Truyền trực tiếp chunk SSE sang response của Express
+    response.data.pipe(res);
+
+    response.data.on('end', () => {
+      // response stream đã kết thúc
+    });
+
+    response.data.on('error', err => {
+      console.error('AI Stream Error:', err);
+      res.end();
+    });
+
+  } catch (err) {
+    console.error('Lỗi khi stream AI:', err.message);
+    if (err.response?.status === 429) {
+      console.warn(`⚠️ Key bị rate limit, chuyển key`);
+      currentKeyIndex++;
+      setRateLimit(aiConfig.general?.globalBackoffMs || 60000);
+    }
+    res.write(`data: ${JSON.stringify({ error: 'Lỗi khi gọi AI' })}\n\n`);
+    res.end();
   }
 }
 
@@ -778,6 +886,150 @@ async function recommendMaterials(weaknesses, allMaterials) {
   return allMaterials.slice(0, 5);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 8: Chấm điểm tự luận / Dịch thuật
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * AI chấm điểm câu trả lời tự luận hoặc bài dịch
+ * @param {Object} params - { questionText, questionTextCn, userAnswer, correctAnswer, questionType }
+ */
+async function gradeEssay({ questionText, questionTextCn, userAnswer, correctAnswer, questionType = 'essay' }) {
+  const isTranslation = questionType === 'translation';
+
+  const prompt = `Bạn là giáo viên tiếng Trung chấm bài. Chấm bằng TIẾNG VIỆT.
+
+YÊU CẦU:
+- Đánh giá chi tiết từng khía cạnh
+- Tìm lỗi sai cụ thể, gạch chân từ/phrase bị sai trong câu trả lời
+- Đề xuất câu trả lời chuẩn, đúng ngữ pháp
+- Cho điểm từng phần và tổng điểm (thang 10)
+
+CÂU HỎI:
+${questionText || ''}
+${questionTextCn ? `Tiếng Trung: ${questionTextCn}` : ''}
+${isTranslation ? '\n(Dạng: Dịch thuật)' : '\n(Dạng: Tự luận)'}
+
+CÂU TRẢ LỜI CỦA HỌC SINH:
+${userAnswer}
+
+ĐÁP ÁN THAM KHẢO:
+${correctAnswer || 'Không có'}
+
+TRẢ VỀ JSON:
+{
+  "totalScore": 0-10,
+  "gradingCriteria": [
+    { "criterion": "Tiêu chí", "score": 0-10, "maxScore": 10, "comment": "Nhận xét" }
+  ],
+  "errors": [
+    { "original": "từ/cụm sai", "correct": "sửa lại", "reason": "tại sao sai", "type": "grammar|vocabulary|typo" }
+  ],
+  "modelAnswer": "Câu trả lời mẫu chuẩn",
+  "feedback": "Nhận xét tổng quát 2-3 câu",
+  "suggestions": ["Gợi ý cải thiện 1", "Gợi ý 2"]
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 2000 });
+    const ai = parseAIMaybeJSON(raw);
+
+    if (!ai) throw new Error('Parse failed');
+
+    return {
+      success: true,
+      totalScore: ai.totalScore ?? 0,
+      gradingCriteria: ai.gradingCriteria || [],
+      errors: ai.errors || [],
+      modelAnswer: ai.modelAnswer || '',
+      feedback: ai.feedback || '',
+      suggestions: ai.suggestions || [],
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      success: true,
+      totalScore: 0,
+      gradingCriteria: [],
+      errors: [],
+      modelAnswer: '',
+      feedback: 'Không thể chấm bài lúc này. Bạn hãy thử lại sau nhé!',
+      suggestions: [],
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE 9: Giảng lại lý thuyết (Mini-lesson)
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * AI tạo bài giảng ngắn về ngữ pháp/kiến thức liên quan đến câu hỏi sai
+ * @param {Object} params - { question, topic, wrongAnswer, correctAnswer, userLevel }
+ */
+async function teachGrammar({ question, topic, wrongAnswer, correctAnswer, userLevel = 'beginner' }) {
+  const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
+  const levelText = levelMap[userLevel] || 'sơ cấp';
+
+  const prompt = `Bạn là giáo viên tiếng Trung. Tạo bài giảng ngắn bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
+
+CẤU TRÚC BÀI GIẢNG:
+1. Giải thích ngữ pháp/qui tắc liên quan (ngắn gọn, 3-5 câu)
+2. Đưa 2-3 ví dụ minh hoạ (câu thường gặp trong đời sống)
+3. Mẹo ghi nhớ (1-2 mẹo)
+4. Lưu ý thường sai (1-2 lưu ý)
+
+NGỮ CẢNH:
+- Câu hỏi liên quan: ${question || ''}
+- Chủ đề: ${topic || 'Ngữ pháp tiếng Trung'}
+- Đáp án sai của học sinh: ${wrongAnswer || 'không có'}
+- Đáp án đúng: ${correctAnswer || 'không có'}
+
+YÊU CẦU:
+- Viết plain text, có thể dùng bullet (-)
+- Mỗi phần 2-5 câu, đi thẳng vào vấn đề
+- Từ tiếng Trung gắn kèm pinyin ngay sau
+- Không dùng markdown phức tạp (không **, ##)
+
+TRẢ VỀ JSON:
+{
+  "title": "Tiêu đề bài học",
+  "grammarRule": "Giải thích qui tắc ngữ pháp ngắn gọn",
+  "examples": [
+    { "chinese": "câu tiếng Trung", "pinyin": "pinyin", "vietnamese": "nghĩa tiếng Việt", "usage": "dùng khi nào" }
+  ],
+  "memoryTips": ["Mẹo 1", "Mẹo 2"],
+  "commonMistakes": ["Lỗi thường gặp 1", "Lỗi thường gặp 2"],
+  "relatedTopics": ["Chủ đề liên quan 1", "Chủ đề liên quan 2"]
+}`;
+
+  try {
+    const raw = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: 2500 });
+    const ai = parseAIMaybeJSON(raw);
+
+    if (!ai) throw new Error('Parse failed');
+
+    return {
+      success: true,
+      title: ai.title || 'Bài học ngữ pháp',
+      grammarRule: ai.grammarRule || '',
+      examples: ai.examples || [],
+      memoryTips: ai.memoryTips || [],
+      commonMistakes: ai.commonMistakes || [],
+      relatedTopics: ai.relatedTopics || [],
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      success: false,
+      title: 'Bài học ngữ pháp',
+      grammarRule: 'Không thể tải bài giảng lúc này. Bạn hãy thử lại sau nhé!',
+      examples: [],
+      memoryTips: [],
+      commonMistakes: [],
+      relatedTopics: [],
+    };
+  }
+}
+
 module.exports = {
   // Core functions
   callBeeknoee,
@@ -789,9 +1041,12 @@ module.exports = {
   analyzeTopics,
   getPracticeRecommendations,
   askAI,
+  askAIStream,
   analyzeProgress,
   recommendNextExam,
   generateFullAnalysis,
+  gradeEssay,
+  teachGrammar,
   // Legacy
   analyzeWeaknesses,
   generateRoadmap,

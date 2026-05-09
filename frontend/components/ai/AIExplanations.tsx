@@ -214,16 +214,7 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
         }
     };
 
-    if (loading) {
-        return (
-            <div className="bg-white rounded-2xl border border-gray-100 p-6">
-                <div className="flex items-center gap-3">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-200 border-t-purple-600" />
-                    <span className="text-gray-600 text-sm">AI đang phân tích các câu sai...</span>
-                </div>
-            </div>
-        );
-    }
+
 
     if (wrongQuestions.length === 0) {
         return (
@@ -246,7 +237,7 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                     </div>
                     <div>
                         <h3 className="font-bold text-gray-900">📚 Phân tích câu sai bằng AI</h3>
-                        <p className="text-gray-500 text-xs">DeepSeek R1 giải thích chi tiết từng câu bạn sai</p>
+                        <p className="text-gray-500 text-xs">Hệ thống phân tích chi tiết từng câu bạn sai</p>
                     </div>
                 </div>
                 {error && (
@@ -338,19 +329,31 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                                     </div>
                                 )}
                             </div>
+                        ) : loading || isLoadingThis ? (
+                            <div className="space-y-3 animate-pulse mt-2">
+                                <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-4 h-4 rounded-full bg-purple-200"></div>
+                                        <div className="h-3 bg-purple-200 rounded w-32"></div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="h-2.5 bg-purple-200/60 rounded w-full"></div>
+                                        <div className="h-2.5 bg-purple-200/60 rounded w-5/6"></div>
+                                        <div className="h-2.5 bg-purple-200/60 rounded w-4/6"></div>
+                                    </div>
+                                </div>
+                            </div>
                         ) : (
                             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
                                 <p className="text-gray-500 text-sm mb-3">
-                                    {isLoadingThis ? 'AI đang phân tích...' : 'Chưa có phân tích cho câu này'}
+                                    Chưa có phân tích cho câu này
                                 </p>
-                                {!isLoadingThis && (
-                                    <button
-                                        onClick={() => loadSingleExplanation(q, i)}
-                                        className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-colors">
-                                        <FiZap size={14} className="inline mr-1" />
-                                        Phân tích câu này
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => loadSingleExplanation(q, i)}
+                                    className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-200 transition-colors">
+                                    <FiZap size={14} className="inline mr-1" />
+                                    Phân tích câu này
+                                </button>
                             </div>
                         )}
                     </div>

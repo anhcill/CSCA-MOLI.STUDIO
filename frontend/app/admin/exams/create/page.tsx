@@ -339,15 +339,27 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            const numericGroupId = Number(data._id.replace('rpg-', '').replace(/[^0-9]/g, ''));
-            await examAdminApi.updateReadingPassageGroup(currentExamId, numericGroupId, {
-                passageText: data.passageText,
-                passageImageUrl: data.passageImageUrl,
-                subQuestions: data.subQuestions,
-            });
+            const isNew = String(data._id).startsWith('rpg-');
+            let realId = data._id;
+
+            if (isNew) {
+                const res = await examAdminApi.insertReadingPassageGroup(currentExamId, {
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    subQuestions: data.subQuestions,
+                });
+                realId = String(res.groupId || res.passageGroupId || res.id || res.data?.id || Date.now());
+            } else {
+                const numericGroupId = Number(String(data._id).replace(/[^0-9]/g, ''));
+                await examAdminApi.updateReadingPassageGroup(currentExamId, numericGroupId, {
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    subQuestions: data.subQuestions,
+                });
+            }
 
             const updated = [...readingPassageGroups];
-            updated[index] = { ...data };
+            updated[index] = { ...data, _id: realId };
             setReadingPassageGroups(updated);
 
             if (data.subQuestions.length > 0) {
@@ -368,9 +380,12 @@ export default function CreateExamPage() {
         if (!confirm('Xóa đoạn đọc hiểu này?')) return;
         try {
             setLoading(true);
-            const numericGroupId = Number(group._id.replace('rpg-', '').replace(/[^0-9]/g, ''));
-            if (currentExamId && numericGroupId > 0) {
-                await examAdminApi.deleteReadingPassageGroup(currentExamId, numericGroupId);
+            const isNew = String(group._id).startsWith('rpg-');
+            if (currentExamId && !isNew) {
+                const numericGroupId = Number(String(group._id).replace(/[^0-9]/g, ''));
+                if (numericGroupId > 0) {
+                    await examAdminApi.deleteReadingPassageGroup(currentExamId, numericGroupId);
+                }
             }
             const newGroups = readingPassageGroups.filter((_, i) => i !== index);
             setReadingPassageGroups(newGroups);
@@ -409,16 +424,29 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            const numericGroupId = Number(data._id.replace('fbg-', '').replace(/[^0-9]/g, ''));
-            await examAdminApi.updateFillBlankGroup(currentExamId, numericGroupId, {
-                passageText: data.passageText,
-                passageImageUrl: data.passageImageUrl,
-                linkedOptions: data.linkedOptions,
-                subItems: data.subItems,
-            });
+            const isNew = String(data._id).startsWith('fbg-');
+            let realId = data._id;
+
+            if (isNew) {
+                const res = await examAdminApi.insertFillBlankGroup(currentExamId, {
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    linkedOptions: data.linkedOptions,
+                    subItems: data.subItems,
+                });
+                realId = String(res.groupId || res.passageGroupId || res.id || res.data?.id || Date.now());
+            } else {
+                const numericGroupId = Number(String(data._id).replace(/[^0-9]/g, ''));
+                await examAdminApi.updateFillBlankGroup(currentExamId, numericGroupId, {
+                    passageText: data.passageText,
+                    passageImageUrl: data.passageImageUrl,
+                    linkedOptions: data.linkedOptions,
+                    subItems: data.subItems,
+                });
+            }
 
             const updated = [...fillBlankGroups];
-            updated[index] = { ...data };
+            updated[index] = { ...data, _id: realId };
             setFillBlankGroups(updated);
 
             if (data.subItems.length > 0) {
@@ -439,9 +467,12 @@ export default function CreateExamPage() {
         if (!confirm('Xóa nhóm điền từ này?')) return;
         try {
             setLoading(true);
-            const numericGroupId = Number(group._id.replace('fbg-', '').replace(/[^0-9]/g, ''));
-            if (currentExamId && numericGroupId > 0) {
-                await examAdminApi.deleteFillBlankGroup(currentExamId, numericGroupId);
+            const isNew = String(group._id).startsWith('fbg-');
+            if (currentExamId && !isNew) {
+                const numericGroupId = Number(String(group._id).replace(/[^0-9]/g, ''));
+                if (numericGroupId > 0) {
+                    await examAdminApi.deleteFillBlankGroup(currentExamId, numericGroupId);
+                }
             }
             const newGroups = fillBlankGroups.filter((_, i) => i !== index);
             setFillBlankGroups(newGroups);
@@ -784,22 +815,36 @@ export default function CreateExamPage() {
                             <h2 className="text-2xl font-bold text-gray-900">Câu Hỏi ({totalQuestionCount})</h2>
                             <div className="flex items-center space-x-3">
                                 {!showAddForm && (
-                                    <button
-                                        onClick={() => {
-                                            const nextNum = totalQuestionCount + 1;
-                                            setPendingQuestions(prev => [...prev, {
-                                                _pending: true as const,
-                                                _localId: `pending-${Date.now()}`,
-                                                _questionNumber: nextNum,
-                                                _questionType: 'single_choice',
-                                            }]);
-                                            setShowAddForm(true);
-                                        }}
-                                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                    >
-                                        <FiPlus />
-                                        <span>Thêm Câu Hỏi</span>
-                                    </button>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={addFillBlankGroup}
+                                            className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                                        >
+                                            <span>📝 Thêm Điền Từ</span>
+                                        </button>
+                                        <button
+                                            onClick={addReadingPassageGroup}
+                                            className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
+                                        >
+                                            <span>📖 Thêm Đọc Hiểu</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const nextNum = totalQuestionCount + 1;
+                                                setPendingQuestions(prev => [...prev, {
+                                                    _pending: true as const,
+                                                    _localId: `pending-${Date.now()}`,
+                                                    _questionNumber: nextNum,
+                                                    _questionType: 'single_choice',
+                                                }]);
+                                                setShowAddForm(true);
+                                            }}
+                                            className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                                        >
+                                            <FiPlus />
+                                            <span>Câu Trắc Nghiệm</span>
+                                        </button>
+                                    </div>
                                 )}
                                 {showAddForm && (
                                     <button
@@ -849,20 +894,34 @@ export default function CreateExamPage() {
                         {allQuestions.length === 0 && !showAddForm ? (
                             <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
                                 <p className="text-gray-500 mb-4">Chưa có câu hỏi nào</p>
-                                <button
-                                    onClick={() => {
-                                        setPendingQuestions([{
-                                            _pending: true as const,
-                                            _localId: `pending-${Date.now()}`,
-                                            _questionNumber: 1,
-                                            _questionType: 'single_choice',
-                                        }]);
-                                        setShowAddForm(true);
-                                    }}
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                >
-                                    Thêm Câu Hỏi Đầu Tiên
-                                </button>
+                                <div className="flex justify-center gap-3">
+                                    <button
+                                        onClick={addFillBlankGroup}
+                                        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                                    >
+                                        📝 Thêm Điền Từ
+                                    </button>
+                                    <button
+                                        onClick={addReadingPassageGroup}
+                                        className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                                    >
+                                        📖 Thêm Đọc Hiểu
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setPendingQuestions([{
+                                                _pending: true as const,
+                                                _localId: `pending-${Date.now()}`,
+                                                _questionNumber: 1,
+                                                _questionType: 'single_choice',
+                                            }]);
+                                            setShowAddForm(true);
+                                        }}
+                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                    >
+                                        🔘 Thêm Trắc Nghiệm
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="space-y-6">

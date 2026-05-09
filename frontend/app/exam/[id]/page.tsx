@@ -31,7 +31,7 @@ export default function ExamPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -137,23 +137,20 @@ export default function ExamPage() {
     }
   };
 
-  const handleAnswerSelect = async (answerId: number, answerKey: string) => {
+  const handleAnswerSelect = async (answerId: number, answerKey: string, essayText?: string) => {
     if (!attemptId || submitting) return;
 
     const questionId = questions[currentQuestionIndex].id;
 
-    // Update UI immediately for better UX
     setSelectedAnswers({
       ...selectedAnswers,
-      [questionId]: answerId,
+      [questionId]: essayText !== undefined ? essayText : answerId,
     });
 
-    // Save answer to backend (non-blocking)
     try {
-      await examApi.saveAnswer(attemptId, questionId, answerKey, 0);
+      await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText);
     } catch (error: any) {
       console.error('Error saving answer:', error);
-      // Fails silently for user, state preserved locally.
     }
   };
 
@@ -413,12 +410,37 @@ export default function ExamPage() {
                 </div>
               )}
 
-             {/* Options Grid */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mt-6">
-                {currentQuestion.answers?.map((answer: any, index: number) => {
+            {/* Options Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mt-6">
+               {currentQuestion.question_type === 'essay' || currentQuestion.question_type === 'translation' ? (
+                 /* ─── Essay / Translation input ─── */
+                 <div className="col-span-1 md:col-span-2">
+                   <textarea
+                     value={(currentQuestionAnswer as string) || ''}
+                     onChange={e => {
+                       if (!attemptId || submitting) return;
+                       const questionId = currentQuestion.id;
+                       const text = e.target.value;
+                       setSelectedAnswers(prev => ({ ...prev, [questionId]: text }));
+                       // Save immediately on change (debounced feel via onChange)
+                       handleAnswerSelect(0, 'ESSAY', text).catch(() => {});
+                     }}
+                     placeholder={currentQuestion.question_type === 'translation'
+                       ? 'Nhập câu dịch tiếng Trung vào đây...'
+                       : 'Nhập câu trả lời tự luận vào đây...'}
+                     rows={6}
+                     className="w-full px-5 py-4 border-2 border-indigo-200 rounded-2xl bg-white text-base resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-gray-400 text-gray-800 leading-relaxed shadow-sm"
+                   />
+                   <p className="mt-2 text-xs text-gray-400 flex items-center gap-1.5 px-1">
+                     <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full inline-block" />
+                     Câu trả lời được lưu tự động khi bạn gõ
+                   </p>
+                 </div>
+               ) : (
+                /* ─── Multiple-choice options ─── */
+                currentQuestion.answers?.map((answer: any, index: number) => {
                   const isSelected = currentQuestionAnswer === answer.id;
                   const labelLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
-                  // fallback to manual label if answer_key is missing or unformatted
                   const letter = labelLetters[index] || answer.answer_key || '?';
 
                   return (
@@ -431,7 +453,6 @@ export default function ExamPage() {
                           : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
                         }`}
                     >
-                      {/* Checkbox indicator */}
                       <div className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
                           isSelected
                           ? 'border-indigo-600 bg-indigo-600 text-white'
@@ -439,32 +460,25 @@ export default function ExamPage() {
                         }`}>
                         {isSelected ? <FiCheck strokeWidth={3} /> : letter}
                       </div>
-
-                      {/* Content */}
                       <div className="flex-1 mt-0.5">
                         <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
                            {answer.answer_text}
                         </span>
-
                         {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
                           <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
                              {answer.answer_text_cn}
                           </div>
                         )}
-
                         {answer.image_url && (
                           <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
-                            <img
-                              src={answer.image_url}
-                              alt={`Lựa chọn ${letter}`}
-                              className="max-w-full max-h-32 object-contain mx-auto"
-                            />
+                            <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
                           </div>
                         )}
                       </div>
                     </button>
                   );
-                })}
+                })
+               )}
              </div>
 
            </div>
