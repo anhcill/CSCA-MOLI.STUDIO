@@ -149,10 +149,24 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [aiLoading, setAiLoading] = useState(false);
     const [reviewStarted, setReviewStarted] = useState(false);
+    const [aiLoaded, setAiLoaded] = useState(false);
 
     useEffect(() => {
         loadResult();
     }, [params.id]);
+
+    // Cảnh báo thoát khi AI đang phân tích
+    useEffect(() => {
+        const handler = (e: BeforeUnloadEvent) => {
+            if (!aiLoaded && aiLoading) {
+                e.preventDefault();
+                e.returnValue = 'AI đang phân tích bài thi. Nếu thoát, bạn sẽ mất kết quả phân tích!';
+                return e.returnValue;
+            }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [aiLoaded, aiLoading]);
 
     const loadResult = async () => {
         try {
@@ -392,6 +406,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                             aiAnalysis={aiAnalysis}
                             aiLoading={aiLoading}
                             onRefresh={() => loadAIAnalysis(result.id)}
+                            onAiLoaded={() => setAiLoaded(true)}
                         />
                     </div>
                 )}

@@ -65,12 +65,26 @@ function ExamResultContent() {
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState<any>(null);
+  const [aiLoaded, setAiLoaded] = useState(false);
 
   useEffect(() => {
     if (attemptId) {
       fetchResult();
     }
   }, [attemptId]);
+
+  // Cảnh báo thoát khi AI đang phân tích
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!aiLoaded && aiLoading) {
+        e.preventDefault();
+        e.returnValue = 'AI đang phân tích bài thi. Nếu thoát, bạn sẽ mất kết quả phân tích!';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [aiLoaded, aiLoading]);
 
   const fetchResult = async () => {
     try {
@@ -341,6 +355,7 @@ function ExamResultContent() {
                 aiLoading={aiLoading}
                 onRefresh={() => loadAIAnalysis(result.id)}
                 previousAttempt={previousAttempt}
+                onAiLoaded={() => setAiLoaded(true)}
               />
             </PremiumGate>
           </div>

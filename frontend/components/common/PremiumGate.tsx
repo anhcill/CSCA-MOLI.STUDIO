@@ -107,7 +107,7 @@ export function PremiumGate({ children, type, fallback, showOverlay = true }: Pr
 }
 
 function GateOverlay({ type, config }: { type: GateType; config: GateConfig }) {
-  const [showModal, setShowModal] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   return (
     <>

@@ -152,21 +152,46 @@ function ruleBasedExamAnalysis(attemptData) {
 
   const isPassing = percentage >= 60;
   const isExcellent = percentage >= 85;
+  const wrongCount = totalQuestions - correctCount;
 
   return {
     score: percentage,
     grade: isExcellent ? 'Tuyệt vời!' : isPassing ? 'Đạt yêu cầu' : 'Cần cố gắng',
     gradeColor: isExcellent ? 'emerald' : isPassing ? 'blue' : 'red',
+    summary: isExcellent
+      ? `Bạn làm rất tốt với ${correctCount}/${totalQuestions} câu đúng! Kiến thức của bạn vững chắc.`
+      : isPassing
+      ? `Bạn đạt ${percentage}% - kết quả đạt yêu cầu. Cần ôn luyện thêm để cải thiện điểm số.`
+      : `Bạn đạt ${percentage}% - cần học kỹ hơn. Hãy ôn lại lý thuyết và làm nhiều bài tập hơn.`,
     analysis: isExcellent
       ? `Bạn làm rất tốt! Kiến thức vững chắc.`
       : isPassing
       ? `Kết quả đạt yêu cầu. Cần ôn luyện thêm để cải thiện.`
-      : `Bạn cần học kỹ hơn. Hãy ôn lại lý thuyết và làm nhiều bài tập hơn.`,
-    overallAdvice: isExcellent
-      ? 'Tiếp tục duy trì và thử thách bản thân với các đề khó hơn.'
+      : `Bạn cần học kỹ hơn. Hãy ôn lại từ đầu, chia nhỏ từng chủ đề.`,
+    strengths: isExcellent
+      ? [`Bạn nắm vững kiến thức cơ bản`, `Làm bài nhanh và chính xác`, `Hiểu rõ các khái niệm quan trọng`]
       : isPassing
-      ? 'Hãy tập trung vào những phần bạn sai và ôn lại kiến thức cơ bản.'
-      : 'Học lại từ đầu, chia nhỏ từng chủ đề và luyện tập đều đặn.',
+      ? [`Bạn nắm được một phần kiến thức`, `Có nền tảng cơ bản để phát triển`]
+      : [`Bạn đã bắt đầu tiếp cận nội dung`, `Vẫn có thể cải thiện nhanh nếu chăm chỉ`],
+    weaknesses: isPassing
+      ? [`Còn sai ở một số câu hỏi khó`, `Cần ôn thêm phần nâng cao`]
+      : [`Cần ôn lại toàn bộ kiến thức cơ bản`, `Chưa nắm vững các khái niệm trọng tâm`, `Cần luyện tập nhiều hơn`],
+    overallAdvice: isExcellent
+      ? 'Tiếp tục duy trì và thử thách bản thân với các đề khó hơn. Hãy tập trung vào những phần hiếm khi sai.'
+      : isPassing
+      ? 'Hãy tập trung vào những phần bạn sai, ôn lại kiến thức cơ bản và làm thêm bài tập.'
+      : 'Học lại từ đầu, chia nhỏ từng chủ đề và luyện tập đều đặn mỗi ngày. Đừng nản lòng!',
+    priorityTopics: ['Củng cố kiến thức cơ bản', 'Luyện tập theo chủ đề'],
+    studyPlan: isExcellent
+      ? 'Duy trì thói quen học tập, mỗi tuần làm 1-2 đề thi thử để giữ nhịp. Tập trung vào đề khó hơn.'
+      : isPassing
+      ? 'Tuần 1-2: Ôn lại các phần sai. Tuần 3-4: Làm đề luyện tập. Tuần 5+: Kiểm tra lại kết quả.'
+      : 'Tuần 1: Học lại lý thuyết từ đầu. Tuần 2-3: Luyện bài tập cơ bản. Tuần 4+: Làm đề thi thử.',
+    examTips: ['Đọc kỹ đề bài trước khi trả lời', 'Làm những câu dễ trước', 'Kiểm tra lại bài trước khi nộp'],
+    commonMistakes: ['Đọc đề vội vàng dẫn đến hiểu sai', 'Chọn đáp án đầu tiên mà không xem hết các lựa chọn'],
+    nextExamSuggestion: isPassing
+      ? 'Nên thử đề có độ khó trung bình-cao để thử thách bản thân.'
+      : 'Hãy bắt đầu với đề cơ bản để củng cố kiến thức trước.',
   };
 }
 
@@ -216,40 +241,75 @@ async function analyzeExamResult(attemptData) {
       .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
       .join(' | ');
     return `Câu ${q.question_number}: [${status}]
+  Loại: ${q.question_type || 'single_choice'}
+  Độ khó: ${q.difficulty || 'medium'}
   Đề bài: ${q.question_text || q.question_text_cn || ''}
   Lựa chọn: ${optionsText}
   Bạn chọn: ${userAnswer}
   Đáp án đúng: ${correctKey}. ${correctAnswerText || ''}
-  Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}`.substring(0, 600);
+  Giải thích: ${q.explanation || q.explanation_cn || 'Không có'}
+  ${q.passage_text ? `Đoạn văn: ${q.passage_text.substring(0, 200)}` : ''}`.substring(0, 700);
   }).join('\n\n');
 
-  const prompt = `Phân tích bài thi cho học sinh. Viết TIẾNG VIỆT, mỗi phần ngắn gọn 1-3 câu, đi thẳng vào nội dung.
+  // Phân loại câu sai để AI có thêm context
+  const typeBreakdown = {};
+  questions.forEach(q => {
+    if (!q.is_correct && q.selected_answer_key) {
+      const type = q.question_type || 'single_choice';
+      if (!typeBreakdown[type]) typeBreakdown[type] = { total: 0, wrong: 0 };
+      typeBreakdown[type].total++;
+      typeBreakdown[type].wrong++;
+    }
+  });
+
+  const prompt = `Bạn là giáo viên giỏi, phân tích bài thi chi tiết cho học sinh. VIẾT TIẾNG VIỆT.
+
+HƯỚNG DẪN:
+- Viết đầy đủ, chi tiết, không cắt ngắn
+- Từng câu trả lời phải dài ít nhất 3-5 câu
+- Đưa ra ví dụ cụ thể từ bài thi
+- Nhận xét thật, gợi ý thực tế
+- Dùng ngôn ngữ tự nhiên, thân thiện
 
 THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
 - Đúng: ${correctCount}/${totalQuestions} (${percentage}%)
-${attemptData.previousAttempt ? `
-SO SÁNH: Lần trước ${attemptData.previousAttempt.score}% → Lần này ${percentage}% (${attemptData.previousAttempt.delta >= 0 ? '+' : ''}${attemptData.previousAttempt.delta}%)` : ''}
+- Số câu sai: ${wrongQuestions.length}
+${prevAttempt ? `
+SO SÁNH VỚI LẦN TRƯỚC:
+- Lần trước: ${prevAttempt.score}%
+- Lần này: ${percentage}%
+- Thay đổi: ${prevAttempt.delta >= 0 ? '+' : ''}${prevAttempt.delta}%
+${prevAttempt.delta >= 0 ? '→ Bạn đã TIẾN BỘ!' : '→ Bạn cần ÔN THÊM.'}
+` : ''}
+
+PHÂN TÍCH THEO ĐỘ KHÓ:
+- Dễ: ${difficultyBreakdown.easy.rate}% đúng (${difficultyBreakdown.easy.correct}/${difficultyBreakdown.easy.total})
+- TB: ${difficultyBreakdown.medium.rate}% đúng (${difficultyBreakdown.medium.correct}/${difficultyBreakdown.medium.total})
+- Khó: ${difficultyBreakdown.hard.rate}% đúng (${difficultyBreakdown.hard.correct}/${difficultyBreakdown.hard.total})
 
 CHI TIẾT TỪNG CÂU:
 ${questionsText}
 
-TRẢ VỀ JSON, mỗi text tối đa 3 câu:
+TRẢ VỀ JSON với nội dung đầy đủ, mỗi trường viết dài và chi tiết:
 {
   "score": ${percentage},
-  "grade": "Mô tả ngắn",
+  "grade": "Mô tả đánh giá 1-2 câu",
   "gradeColor": "emerald|blue|amber|red",
-  "summary": "Tổng kết 1-2 câu",
-  "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
-  "weaknesses": ["Điểm yếu 1", "Điểm yếu 2"],
-  "analysis": "Phân tích 2-3 câu về lý do sai",
-  "overallAdvice": "Lời khuyên 2-3 câu",
-  "priorityTopics": ["Chủ đề 1", "Chủ đề 2"],
-  "studyPlan": "Kế hoạch học 2-3 câu"
+  "summary": "Tổng kết 3-5 câu về kết quả bài thi, nhận xét tổng quan",
+  "strengths": ["Điểm mạnh 1 (2-3 câu chi tiết)", "Điểm mạnh 2 (2-3 câu chi tiết)", "Điểm mạnh 3 nếu có"],
+  "weaknesses": ["Điểm yếu 1 - phân tích 2-3 câu tại sao sai", "Điểm yếu 2 - phân tích 2-3 câu", "Điểm yếu 3 nếu có"],
+  "analysis": "Phân tích chi tiết 5-8 câu: (1) Tổng quan lỗi sai - chủ yếu sai ở phần nào, (2) Nguyên nhân cụ thể - vì sao sai, (3) Kiến thức cần bổ sung - cụ thể là gì",
+  "overallAdvice": "Lời khuyên dài 5-8 câu: (1) Ưu tiên học gì trước, (2) Phương pháp ôn luyện cụ thể, (3) Tài liệu nên tham khảo, (4) Thời gian biểu ôn tập",
+  "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2", "Chủ đề ưu tiên 3"],
+  "studyPlan": "Kế hoạch học chi tiết 8-12 câu: Giai đoạn 1 (tuần nào, học gì), Giai đoạn 2, Giai đoạn 3. Có mốc thời gian cụ thể.",
+  "examTips": ["Mẹo thi 1", "Mẹo thi 2", "Mẹo thi 3"],
+  "commonMistakes": ["Lỗi sai phổ biến 1 mà nhiều người hay mắc và cách tránh", "Lỗi sai phổ biến 2"],
+  "nextExamSuggestion": "Gợi ý bài thi tiếp theo phù hợp: nên thử đề nào, độ khó bao nhiêu, lý do tại sao"
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 1500 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 4000 });
     const ai = parseAIMaybeJSON(raw) || ruleBasedExamAnalysis(attemptData);
 
     return {
