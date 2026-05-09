@@ -357,7 +357,7 @@ const AdminExamController = {
              passage_text, passage_image_url,
              question_group_type, difficulty,
              linked_options, sub_question_number, passage_group_id, correct_answer
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
            RETURNING id`,
           [
             examId,
@@ -376,7 +376,6 @@ const AdminExamController = {
             linkedOpts ? JSON.stringify(linkedOpts) : null,
             subQn,
             passageGroupId,
-            qType === QUESTION_TYPES.FILL_BLANK_ITEM ? correctAnswerKey : null,
           ],
         );
 
@@ -789,8 +788,8 @@ const AdminExamController = {
                         points, explanation, explanation_cn,
                         image_url, passage_text, passage_image_url,
                         question_group_type, difficulty,
-                        linked_options, sub_question_number, passage_group_id, correct_answer
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                        linked_options, sub_question_number, passage_group_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                     RETURNING id`,
                     [
                         examId, targetPosition, qType,
@@ -804,7 +803,6 @@ const AdminExamController = {
                         qType, difficulty || null,
                         linkedOpts ? JSON.stringify(linkedOpts) : null,
                         subQn, passageGroupId,
-                        qType === 'fill_blank_item' ? correctAnswerKey : null,
                     ],
                 );
 
@@ -1507,8 +1505,8 @@ const AdminExamController = {
                question_text, question_text_cn,
                points, explanation, explanation_cn,
                question_group_type, difficulty,
-               correct_answer, sub_question_number, passage_group_id
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+               sub_question_number, passage_group_id
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING id`,
             [
               examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
@@ -1518,7 +1516,6 @@ const AdminExamController = {
               item.explanationCn ? sanitize(item.explanationCn) : null,
               QUESTION_TYPES.FILL_BLANK_ITEM,
               item.difficulty || 'medium',
-              item.correctAnswerKey,
               item.subQuestionNumber || questionNumber,
               poolId,
             ]
@@ -1639,8 +1636,8 @@ const AdminExamController = {
                  question_text, question_text_cn,
                  points, explanation, explanation_cn,
                  question_group_type, difficulty,
-                 correct_answer, sub_question_number, passage_group_id
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 sub_question_number, passage_group_id
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                RETURNING id`,
               [
                 examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
@@ -1650,7 +1647,6 @@ const AdminExamController = {
                 item.explanationCn ? sanitize(item.explanationCn) : null,
                 QUESTION_TYPES.FILL_BLANK_ITEM,
                 item.difficulty || 'medium',
-                item.correctAnswerKey,
                 item.subQuestionNumber || questionNumber,
                 groupId,
               ]
