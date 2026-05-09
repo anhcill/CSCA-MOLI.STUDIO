@@ -192,6 +192,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
             const data = await res.json();
             if (data.success) {
                 setAiAnalysis(data);
+                if (!data.cached) setAiLoaded(true);
+                else setAiLoaded(true); // cached vẫn là đã load xong
             }
         } catch (error) {
             console.error('AI analysis error:', error);

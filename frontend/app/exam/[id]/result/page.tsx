@@ -115,6 +115,7 @@ function ExamResultContent() {
       if (data.success) {
         setAiAnalysis(data);
         setPreviousAttempt(data.previousAttempt || null);
+        setAiLoaded(true);
       }
     } catch (error) {
       console.error('AI analysis error:', error);

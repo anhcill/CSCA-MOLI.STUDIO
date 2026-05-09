@@ -177,6 +177,35 @@ async function analyzeExamResult(req, res) {
       }
     } catch { /* no previous attempt */ }
 
+    // Check cache trong DB trước
+    const cacheResult = await db.query(
+      `SELECT data, created_at FROM ai_insights
+       WHERE user_id = $1 AND insight_type = 'full_analysis'
+       AND metadata->>'attemptId' = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId, String(attemptId)],
+    );
+    if (cacheResult.rows[0]) {
+      const age = Math.floor((Date.now() - new Date(cacheResult.rows[0].created_at)) / 60000);
+      return res.json({
+        success: true,
+        cached: true,
+        cacheAge: age,
+        attempt: {
+          id: attempt.id,
+          examTitle: attempt.exam_title,
+          subjectName: attempt.subject_name,
+          totalScore: attempt.total_score,
+          totalQuestions: attempt.total_questions,
+          correctCount: attempt.total_correct,
+          duration,
+          submittedAt: attempt.submit_time,
+        },
+        previousAttempt,
+        aiAnalysis: cacheResult.rows[0].data,
+      });
+    }
+
     // Gọi AI
     if (aiService.isRateLimited()) {
       const retryAfter = aiService.getRateLimitRemaining();
