@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     const token = req.headers.get('authorization')?.replace('Bearer ', '');
 
-    const response = await fetch(`${backendUrl}/api/ai/ask-stream`, {
+    const response = await fetch(`${backendUrl}/ai/ask-stream`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
