@@ -356,7 +356,7 @@ const AdminExamController = {
              image_url,
              passage_text, passage_image_url,
              question_group_type, difficulty,
-             linked_options, sub_question_number, passage_group_id, correct_answer
+             linked_options, sub_question_number, passage_group_id
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
            RETURNING id`,
           [
