@@ -8,7 +8,6 @@ import {
 } from 'react-icons/fi';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Header from '@/components/layout/Header';
 
 /* ─────────────── helpers ─────────────── */
 function groupByDate(replies: any[]) {
@@ -85,6 +84,9 @@ export default function StudentQADetailPage() {
 
   /* ── load data ── */
   useEffect(() => {
+    // Force scroll to top of page on mount
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
     if (user) loadDetail();
   }, [user]);
 
@@ -172,15 +174,12 @@ export default function StudentQADetailPage() {
   /* ── loading state ── */
   if (!ticket) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-violet-50/20">
-        <Header />
-        <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-500 animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center text-lg">💬</div>
-          </div>
-          <p className="text-gray-400 font-medium">Đang tải cuộc trò chuyện...</p>
+      <div className="flex flex-col items-center justify-center" style={{ minHeight: '100dvh', background: 'linear-gradient(135deg, #f8faff 0%, #f0f4ff 50%, #faf5ff 100%)' }}>
+        <div className="relative">
+          <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-500 animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center text-lg">💬</div>
         </div>
+        <p className="text-gray-400 font-medium mt-4">Đang tải cuộc trò chuyện...</p>
       </div>
     );
   }
@@ -190,18 +189,18 @@ export default function StudentQADetailPage() {
   const isPending = ticket.status === 'pending';
 
   return (
-    <div className="flex flex-col" style={{ height: '100vh' }}>
-      <Header />
-
-      {/* ── Back bar ── */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 md:px-6 py-2.5 shrink-0 z-10">
+    <div className="flex flex-col" style={{ minHeight: '100dvh' }}>
+      {/* ── Back bar (replaces full Header for more chat space) ── */}
+      <div className="shrink-0 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-2.5 z-20 flex items-center gap-3">
         <Link
           href="/hoi-dap"
-          className="inline-flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group"
+          className="flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group"
         >
           <FiChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-          <span>Danh sách câu hỏi</span>
+          <span>Quay lại</span>
         </Link>
+        <span className="text-gray-300">|</span>
+        <span className="text-sm font-bold text-gray-700">Hỏi Đáp Cùng Cố Vấn</span>
       </div>
 
       {/* ── Main layout ── */}
@@ -413,8 +412,8 @@ export default function StudentQADetailPage() {
               </div>
             ))}
 
-            {/* Typing indicator when pending and no replies yet */}
-            {isPending && (ticket.replies?.length || 0) > 0 && (
+            {/* Typing indicator when student sent message but advisor hasn't replied yet */}
+            {isPending && (ticket.replies?.length || 0) === 0 && (
               <div className="pt-2">
                 <TypingDots />
               </div>
