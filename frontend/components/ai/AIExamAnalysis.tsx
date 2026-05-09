@@ -7,16 +7,16 @@ import {
     FiClock, FiBookOpen, FiAward, FiAlertTriangle
 } from 'react-icons/fi';
 
-// Strip markdown symbols from AI text
+// Strip markdown symbols from AI text, PRESERVE newlines and list markers
 function cleanMarkdown(text: string): string {
     if (!text) return '';
     return text
         .replace(/\*\*(.+?)\*\*/g, '$1')  // **bold** -> text
         .replace(/\*(.+?)\*/g, '$1')        // *italic* -> text
         .replace(/_(.+?)_/g, '$1')          // _underline_ -> text
-        .replace(/#{1,6}\s?/g, '')          // # headers -> text
+        .replace(/^#{1,6}\s/gm, '')         // # headers -> plain text (keep newline)
         .replace(/`(.+?)`/g, '$1')          // `code` -> text
-        .replace(/^[-*]\s/gm, '• ');       // - bullet -> • bullet
+        .replace(/^\d+\.\s/gm, (m) => m);  // keep numbered lists: "1. " stays "1. "
 }
 
 interface AIExamAnalysisProps {

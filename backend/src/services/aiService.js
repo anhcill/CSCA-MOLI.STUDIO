@@ -291,21 +291,21 @@ PHÂN TÍCH THEO ĐỘ KHÓ:
 CHI TIẾT TỪNG CÂU:
 ${questionsText}
 
-TRẢ VỀ JSON với nội dung đầy đủ, mỗi trường viết dài và chi tiết:
+TRẢ VỀ JSON. QUY TẮC QUAN TRỌNG: Mỗi trường text phải xuống dòng cho từng ý, dùng ký tự xuống dòng \n giữa các câu/ý. KHÔNG viết liền 1 đoạn.
 {
   "score": ${percentage},
   "grade": "Mô tả đánh giá 1-2 câu",
   "gradeColor": "emerald|blue|amber|red",
-  "summary": "Tổng kết 3-5 câu về kết quả bài thi, nhận xét tổng quan",
-  "strengths": ["Điểm mạnh 1 (2-3 câu chi tiết)", "Điểm mạnh 2 (2-3 câu chi tiết)", "Điểm mạnh 3 nếu có"],
-  "weaknesses": ["Điểm yếu 1 - phân tích 2-3 câu tại sao sai", "Điểm yếu 2 - phân tích 2-3 câu", "Điểm yếu 3 nếu có"],
-  "analysis": "Phân tích chi tiết 5-8 câu: (1) Tổng quan lỗi sai - chủ yếu sai ở phần nào, (2) Nguyên nhân cụ thể - vì sao sai, (3) Kiến thức cần bổ sung - cụ thể là gì",
-  "overallAdvice": "Lời khuyên dài 5-8 câu: (1) Ưu tiên học gì trước, (2) Phương pháp ôn luyện cụ thể, (3) Tài liệu nên tham khảo, (4) Thời gian biểu ôn tập",
+  "summary": "Viết 3-5 câu, mỗi câu 1 ý, xuống dòng giữa các câu. Tổng quan về kết quả bài thi.",
+  "strengths": ["Điểm mạnh 1: viết 1-2 câu chi tiết", "Điểm mạnh 2: viết 1-2 câu chi tiết"],
+  "weaknesses": ["Điểm yếu 1: viết 1-2 câu, giải thích vì sao sai", "Điểm yếu 2: viết 1-2 câu"],
+  "analysis": "Xuống dòng cho từng ý:\n1. Tổng quan sai ở phần nào - chỉ rõ từng nhóm kiến thức (ví dụ: 'Sai nhiều ở cơ học: câu 3, 4, 9 về lực đàn hồi, ma sát, gia tốc')\n2. Nguyên nhân cụ thể - vì sao hay sai (ví dụ: 'Học rời rạc từng công thức, chưa hiểu bản chất nên đề đổi cách hỏi là nhầm')\n3. Kiến thức cần bổ sung cụ thể - liệt kê từng phần (ví dụ: 'Cần học lại: định nghĩa lực, vectơ, hợp lực, công thức ω=v/R, chu kỳ-tần số')",
+  "overallAdvice": "Xuống dòng cho từng ý:\n1. Ưu tiên học gì trước (ví dụ: 'Ưu tiên học lại phần cơ học trước vì chiếm nhiều câu sai nhất')\n2. Phương pháp ôn luyện cụ thể (ví dụ: 'Mỗi ngày học 1 công thức, hiểu bản chất trước khi nhớ')\n3. Tài liệu nên tham khảo\n4. Thời gian biểu ôn tập cụ thể (ví dụ: 'Tuần 1: ôn cơ học, Tuần 2: ôn điện từ')",
   "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2", "Chủ đề ưu tiên 3"],
-  "studyPlan": "Kế hoạch học chi tiết 8-12 câu: Giai đoạn 1 (tuần nào, học gì), Giai đoạn 2, Giai đoạn 3. Có mốc thời gian cụ thể.",
+  "studyPlan": "Xuống dòng cho từng giai đoạn:\nGiai đoạn 1 (Tuần 1-2): [Học gì, ví dụ: Học lại lý thuyết cơ học - lực, vectơ, tổng hợp lực]\nGiai đoạn 2 (Tuần 3-4): [Học gì, ví dụ: Luyện bài tập cơ bản từng chủ đề]\nGiai đoạn 3 (Tuần 5+): [Học gì, ví dụ: Làm đề thi thử, kiểm tra lại kết quả]",
   "examTips": ["Mẹo thi 1", "Mẹo thi 2", "Mẹo thi 3"],
-  "commonMistakes": ["Lỗi sai phổ biến 1 mà nhiều người hay mắc và cách tránh", "Lỗi sai phổ biến 2"],
-  "nextExamSuggestion": "Gợi ý bài thi tiếp theo phù hợp: nên thử đề nào, độ khó bao nhiêu, lý do tại sao"
+  "commonMistakes": ["Lỗi sai 1: mô tả lỗi và cách tránh", "Lỗi sai 2: mô tả lỗi và cách tránh"],
+  "nextExamSuggestion": "Viết 2-3 câu, xuống dòng giữa các ý. Gợi ý nên thử đề nào, độ khó bao nhiêu, lý do tại sao."
 }`;
 
   try {
