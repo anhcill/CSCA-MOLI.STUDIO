@@ -181,7 +181,7 @@ async function analyzeExamResult(req, res) {
     const cacheResult = await db.query(
       `SELECT data, created_at FROM ai_insights
        WHERE user_id = $1 AND insight_type = 'full_analysis'
-       AND metadata->>'attemptId' = $2
+       AND attempt_id = $2
        ORDER BY created_at DESC LIMIT 1`,
       [userId, String(attemptId)],
     );
@@ -218,8 +218,20 @@ async function analyzeExamResult(req, res) {
 
     const aiAnalysis = await aiService.analyzeExamResult(attemptData);
 
+    // Lưu vào DB cache để lần sau không phải gọi AI lại
+    try {
+      await db.query(
+        `INSERT INTO ai_insights (user_id, insight_type, data, attempt_id)
+         VALUES ($1, 'full_analysis', $2, $3)`,
+        [userId, JSON.stringify(aiAnalysis), attemptId],
+      );
+    } catch (e) {
+      console.error('Failed to save AI insight:', e);
+    }
+
     res.json({
       success: true,
+      cached: false,
       attempt: {
         id: attempt.id,
         examTitle: attempt.exam_title,
