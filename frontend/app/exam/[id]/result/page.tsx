@@ -106,6 +106,8 @@ function ExamResultContent() {
   };
 
   const loadAIAnalysis = async (attemptId: number) => {
+    // Không load lại nếu đã có analysis rồi
+    if (aiAnalysis && aiAnalysis.attempt?.id === attemptId) return;
     try {
       setAiLoading(true);
       const res = await authFetch(`/api/ai/exam-result/${attemptId}`, { method: 'POST' });
