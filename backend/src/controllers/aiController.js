@@ -76,7 +76,7 @@ async function analyzeExamResult(req, res) {
       ? Math.round((new Date(attempt.submit_time) - new Date(attempt.start_time)) / 60000)
       : null;
 
-    // Lấy câu hỏi chi tiết
+    // Lấy câu hỏi chi tiết (ALL questions in exam, with user answer if exists)
     let questions = [];
     try {
       const questionsResult = await db.query(
@@ -84,32 +84,57 @@ async function analyzeExamResult(req, res) {
            q.id, q.question_number, q.question_text, q.question_text_cn,
            q.question_type, q.difficulty,
            q.points, q.explanation, q.explanation_cn,
+           q.passage_text,
            ua.selected_answer_key,
-           ua.is_correct as user_is_correct,
-           ca.answer_key as correct_answer_key,
-           ca.answer_text as correct_answer_text
-         FROM user_answers ua
-         JOIN questions q ON ua.question_id = q.id
-         LEFT JOIN answers ca ON ca.question_id = q.id AND ca.is_correct = true
-         WHERE ua.attempt_id = $1
+           ua.is_correct as user_is_correct
+         FROM questions q
+         LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.attempt_id = $1
+         WHERE q.exam_id = $2
          ORDER BY q.question_number`,
-        [attemptId],
+        [attemptId, attempt.exam_id],
       );
-      questions = questionsResult.rows.map(q => ({
-        question_number: q.question_number,
-        question_text: q.question_text,
-        question_text_cn: q.question_text_cn,
-        question_type: q.question_type,
-        difficulty: q.difficulty,
-        points: q.points,
-        selected_answer_key: q.selected_answer_key,
-        correct_answer_key: q.correct_answer_key,
-        correct_answer_text: q.correct_answer_text,
-        is_correct: q.user_is_correct,
-        options: [],
-      }));
-    } catch {
-      // Fallback: dùng dữ liệu attempt thuần
+      // Lấy tất cả options cho exam này trong 1 query
+      const answersResult = await db.query(
+        `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.is_correct
+         FROM answers a
+         WHERE a.question_id IN (
+           SELECT q2.id FROM questions q2 WHERE q2.exam_id = $1
+         )
+         ORDER BY a.question_id, a.answer_key`,
+        [attempt.exam_id],
+      );
+      // Group answers by question_id
+      const answersByQ = {};
+      for (const a of answersResult.rows) {
+        if (!answersByQ[a.question_id]) answersByQ[a.question_id] = [];
+        answersByQ[a.question_id].push({
+          key: a.answer_key,
+          text: a.answer_text || '',
+          text_cn: a.answer_text_cn && a.answer_text_cn !== a.answer_text ? a.answer_text_cn : null,
+          is_correct: a.is_correct,
+        });
+      }
+      questions = questionsResult.rows.map(q => {
+        const opts = answersByQ[q.id] || [];
+        const userKey = q.selected_answer_key;
+        const correctOpt = opts.find(o => o.is_correct);
+        return {
+          question_number: q.question_number,
+          question_text: q.question_text,
+          question_text_cn: q.question_text_cn,
+          question_type: q.question_type,
+          difficulty: q.difficulty,
+          points: q.points,
+          passage_text: q.passage_text,
+          selected_answer_key: userKey,
+          correct_answer_key: correctOpt?.key || '',
+          correct_answer_text: correctOpt ? `${correctOpt.key}. ${correctOpt.text}` : '',
+          is_correct: q.user_is_correct || false,
+          options: opts,
+        };
+      });
+    } catch (e) {
+      console.error('Error fetching questions for AI:', e);
     }
 
     const attemptData = {
