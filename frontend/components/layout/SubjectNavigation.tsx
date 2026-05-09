@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -50,23 +50,30 @@ export default function SubjectNavigation({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'menu' | 'stats'>('menu');
+  const [prevTab, setPrevTab] = useState<'menu' | 'stats'>('menu');
   const items = menuItems || getDefaultMenuItems(subjectSlug);
+
+  // Keep AIInsights mounted but hidden to avoid re-fetching on tab switch
+  const [showStats, setShowStats] = useState(false);
+
+  const handleTabChange = (tab: 'menu' | 'stats') => {
+    setPrevTab(activeTab);
+    setActiveTab(tab);
+    setShowStats(tab === 'stats');
+  };
 
   // Build full href with subject param
   const buildSubjectHref = (href: string) => {
     if (!subjectSlug) return href;
-    // Preserve any existing query params and add subject
     const base = `${href}?subject=${subjectSlug}`;
     return base;
   };
 
   const isActiveHref = (href: string) => {
     const fullHref = buildSubjectHref(href);
-    // Remove leading slash for comparison
     const full = fullHref.slice(1);
     const current = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '');
     const currentWithoutSlash = current.startsWith('/') ? current.slice(1) : current;
-    // Exact match or match without query (so /cau-truc-de matches /cau-truc-de?subject=toan)
     return currentWithoutSlash === full || currentWithoutSlash.startsWith(full + '&');
   };
 
@@ -76,8 +83,8 @@ export default function SubjectNavigation({
       {/* Tab Controls (Floating Pills) */}
       <div className="bg-white/80 backdrop-blur-xl border border-gray-100 rounded-2xl shadow-sm p-1.5 flex gap-1 relative z-20">
         <button
-          onClick={() => setActiveTab('menu')}
-          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl relative ${
+          onClick={() => handleTabChange('menu')}
+          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl ${
               activeTab === 'menu'
               ? 'text-gray-900 shadow-sm bg-white'
               : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
@@ -94,8 +101,8 @@ export default function SubjectNavigation({
         </Link>
 
         <button
-          onClick={() => setActiveTab('stats')}
-          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl relative ${
+          onClick={() => handleTabChange('stats')}
+          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl ${
               activeTab === 'stats'
               ? 'text-gray-900 shadow-sm bg-white'
               : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
@@ -135,11 +142,10 @@ export default function SubjectNavigation({
             </div>
           )}
 
-          {activeTab === 'stats' && (
-            <div className="max-h-[600px] overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <AIInsights subjectCode={subjectCode} />
-            </div>
-          )}
+          {/* AI Insights - always mounted, hidden by CSS when not active */}
+          <div className={activeTab === 'stats' ? 'max-h-[600px] overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
+            <AIInsights subjectCode={subjectCode} />
+          </div>
         </div>
       </div>
     </aside>

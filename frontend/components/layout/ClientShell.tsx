@@ -25,14 +25,14 @@ export default function ClientShell({ children }: { children: React.ReactNode })
 
   return (
     <>
-      {showFloatingContacts && <FloatingContactButtons />}
+      {showFloatingContacts && mounted && <FloatingContactButtons />}
 
       <div className="min-h-[100dvh] flex flex-col">
         <div className="flex-1">
           {children}
         </div>
 
-        {!noFooter && (
+        {mounted && !noFooter && (
           <div id="footer-shell">
             <Footer />
           </div>

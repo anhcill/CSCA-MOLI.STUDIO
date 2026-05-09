@@ -186,31 +186,25 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
-                <Header />
-                <main className="container mx-auto px-4 py-8">
-                    <div className="flex flex-col items-center justify-center h-64 gap-4">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600" />
-                        <p className="text-gray-500">Đang tải kết quả...</p>
-                    </div>
-                </main>
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600" />
+                    <p className="text-gray-500">Đang tải kết quả...</p>
+                </div>
             </div>
         );
     }
 
     if (!result) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
-                <Header />
-                <main className="container mx-auto px-4 py-8">
-                    <div className="text-center py-12">
-                        <p className="text-gray-600">Không tìm thấy kết quả bài thi</p>
-                        <button onClick={() => router.back()}
-                            className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
-                            Quay lại
-                        </button>
-                    </div>
-                </main>
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-gray-600 mb-4">Không tìm thấy kết quả bài thi</p>
+                    <button onClick={() => router.back()}
+                        className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        Quay lại
+                    </button>
+                </div>
             </div>
         );
     }
@@ -242,22 +236,19 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
           @page { size: A4; margin: 1.5cm; }
         }
       `}</style>
-            <Header />
+            {/* Minimal Header - chỉ nút quay lại */}
+            <div className="sticky top-0 z-[60] bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 no-print">
+                <button onClick={() => router.back()}
+                    className="flex items-center gap-2 text-gray-600 hover:text-purple-600 transition-colors font-medium text-sm">
+                    <FiArrowLeft size={18} /> Quay lại
+                </button>
+                <div className="flex-1" />
+                <button onClick={() => window.print()}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 text-xs font-medium shadow-sm no-print">
+                    <FiPrinter size={14} /> Xuất PDF
+                </button>
+            </div>
             <main className="container mx-auto px-4 py-6 max-w-5xl">
-
-                {/* Header */}
-                <div className="flex items-center justify-between mb-6 no-print">
-                    <button onClick={() => router.back()}
-                        className="flex items-center gap-2 text-gray-600 hover:text-purple-600 transition-colors font-medium">
-                        <FiArrowLeft size={20} /> Quay lại
-                    </button>
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => window.print()}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium shadow-sm">
-                            <FiPrinter size={16} /> Xuất PDF
-                        </button>
-                    </div>
-                </div>
 
                 {/* Tab Navigation */}
                 <div className="flex gap-2 mb-6 no-print">
