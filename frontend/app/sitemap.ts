@@ -164,6 +164,42 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'weekly' as const,
             priority: 0.9,
         },
+        {
+            url: `${BASE_URL}/blog/csca-la-gi-chung-chi-thi-dau-vao-du-hoc-trung-quoc`,
+            lastModified: new Date('2026-05-01'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/blog/cau-truc-de-thi-csca-phan-toan-tong-hop-tieng-trung`,
+            lastModified: new Date('2026-05-03'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/blog/hoc-bong-csc-trung-quoc-2026-huong-dan-dang-ky-day-du`,
+            lastModified: new Date('2026-05-05'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/blog/cau-truc-de-thi-dau-vao-dai-hoc-trung-quoc-2026`,
+            lastModified: new Date('2026-05-07'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/trung-tam-thi-csca-tai-viet-nam-dia-chi-lich-thi-2026`,
+            lastModified: new Date('2026-05-08'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/mau-de-thi-csca-giai-chi-tiet-2026`,
+            lastModified: new Date('2026-05-09'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
     ];
 
     // FAQ

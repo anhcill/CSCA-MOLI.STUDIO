@@ -43,6 +43,7 @@ app.use(
           "'self'",
           process.env.FRONTEND_URL || "http://localhost:3000",
           "https://*.vercel.app",
+          "https://*.molystudio.online",
           "https://*.moli.studio",
           "wss://*",
           "ws://*",
@@ -60,9 +61,36 @@ app.use(
   }),
 );
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://csca-moli-studio.vercel.app',
+  'https://molystudio.online',
+  'https://www.molystudio.online',
+  'https://*.molystudio.online',
+  'https://moli.studio',
+  'https://www.moli.studio',
+  'https://*.moli.studio',
+];
+
+// Allow FRONTEND_URL env var to add extra origins ( Railway/Vercel deployments )
+const extraOrigins = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// Dynamic origin validator: matches against allowed list, supports subdomains
+const corsOriginValidator = (origin, callback) => {
+  if (!origin) return callback(null, true); // allow no-origin (server-to-server)
+  const allOrigins = [...ALLOWED_ORIGINS, ...extraOrigins];
+  const allowed = allOrigins.some(allowed =>
+    allowed === origin ||
+    allowed === '*' ||
+    (allowed.endsWith('.*') && new RegExp(`^${allowed.replace('.', '\\.').replace('*', '.*')}$`).test(origin))
+  );
+  if (allowed) return callback(null, origin);
+  callback(new Error(`Origin ${origin} not allowed by CORS`));
+};
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: corsOriginValidator,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [

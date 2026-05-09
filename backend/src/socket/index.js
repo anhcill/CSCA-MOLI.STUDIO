@@ -9,8 +9,11 @@ const db = require('../config/database');
 function initSocket(httpServer) {
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://*.vercel.app',
-    'https://*.moli.studio',
+    'https://csca-moli-studio.vercel.app',
+    'https://molystudio.online',
+    'https://www.molystudio.online',
+    'https://moli.studio',
+    'https://www.moli.studio',
   ];
 
   const io = new Server(httpServer, {
@@ -20,7 +23,7 @@ function initSocket(httpServer) {
         const allowed = allowedOrigins.some(
           pattern => {
             if (pattern.includes('*')) {
-              const regex = new RegExp('^' + pattern.replace('*', '.*') + '$');
+              const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
               return regex.test(origin);
             }
             return origin === pattern;

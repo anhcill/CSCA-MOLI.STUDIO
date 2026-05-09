@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import FAQContent, { FAQ_DATA } from './FAQContent';
+import FAQContent from './FAQContent';
+import { FAQ_DATA } from './faqData';
 
 export const metadata: Metadata = {
   title: 'Câu Hỏi Thường Gặp | MOLI.STUDIO',
