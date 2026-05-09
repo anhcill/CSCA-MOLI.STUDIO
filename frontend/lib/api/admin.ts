@@ -100,6 +100,12 @@ export const adminApi = {
             params: { page, limit }
         });
         return response.data;
+    },
+
+    // Get online users count
+    async getOnlineUsers() {
+        const response = await axios.get('/admin/online-users');
+        return response.data as { online: number; users: { id: number; email: string; role: string }[] };
     }
 };
 

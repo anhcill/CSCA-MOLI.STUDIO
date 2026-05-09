@@ -900,6 +900,26 @@ const AdminController = {
             console.error('Error getting user activities:', error);
             res.status(500).json({ message: 'Server error' });
         }
+    },
+
+    // Get online users count via Socket.io
+    async getOnlineUsers(req, res) {
+        try {
+            const { getIO } = require('../socket/singleton');
+            const io = getIO();
+            if (!io) {
+                return res.json({ online: 0, users: [] });
+            }
+            const sockets = Array.from(io.sockets.sockets.values());
+            const users = sockets
+                .filter(s => s.user?.id)
+                .map(s => ({ id: s.user.id, email: s.user.email, role: s.user.role }))
+                .filter((u, i, arr) => arr.findIndex(x => x.id === u.id) === i);
+            res.json({ online: users.length, users });
+        } catch (error) {
+            console.error('Error getting online users:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
     }
 };
 

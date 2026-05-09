@@ -5,7 +5,7 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
 import { adminApi } from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward, FiCalendar } from 'react-icons/fi';
+import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward, FiCalendar, FiWifi } from 'react-icons/fi';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -25,6 +25,11 @@ interface DashboardStats {
     }[];
 }
 
+interface OnlineUsers {
+    online: number;
+    users: { id: number; email: string; role: string }[];
+}
+
 type DatePreset = 'all' | 'today' | 'week' | 'month' | '3months' | 'custom';
 
 export default function AdminDashboard() {
@@ -34,12 +39,30 @@ export default function AdminDashboard() {
         revenue: 0, dateRange: { from: null, to: null }, recentActivities: []
     });
     const [loading, setLoading] = useState(true);
+    const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({ online: 0, users: [] });
+    const [onlineLoading, setOnlineLoading] = useState(true);
     const [datePreset, setDatePreset] = useState<DatePreset>('all');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
 
     useEffect(() => {
         loadStats({});
+    }, []);
+
+    useEffect(() => {
+        const loadOnline = async () => {
+            try {
+                const data = await adminApi.getOnlineUsers();
+                setOnlineUsers(data);
+            } catch {
+                setOnlineUsers({ online: 0, users: [] });
+            } finally {
+                setOnlineLoading(false);
+            }
+        };
+        loadOnline();
+        const interval = setInterval(loadOnline, 30000); // refresh every 30s
+        return () => clearInterval(interval);
     }, []);
 
     const getDateRange = (preset: DatePreset): { from?: string; to?: string } => {
@@ -103,6 +126,7 @@ export default function AdminDashboard() {
         { title: 'Tổng Đề Thi', value: stats.totalExams, icon: FiFileText, tone: 'emerald' },
         { title: 'Lượt Thi', value: stats.totalAttempts, icon: FiTrendingUp, tone: 'violet' },
         { title: 'Doanh Thu', value: stats.revenue, icon: FiAward, tone: 'orange', prefix: '' },
+        { title: 'Đang Online', value: onlineUsers.online, icon: FiWifi, tone: 'green', pulse: true },
     ];
 
     const quickLinks = [
@@ -121,7 +145,7 @@ export default function AdminDashboard() {
         blue: 'from-blue-500 to-blue-600', emerald: 'from-emerald-500 to-emerald-600',
         violet: 'from-violet-500 to-fuchsia-500', orange: 'from-orange-500 to-orange-600',
         pink: 'from-pink-500 to-rose-500', cyan: 'from-cyan-500 to-teal-500',
-        purple: 'from-purple-500 to-indigo-600',
+        purple: 'from-purple-500 to-indigo-600', green: 'from-green-500 to-emerald-600',
     };
 
     return (
@@ -166,18 +190,22 @@ export default function AdminDashboard() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
                 {statCards.map(card => {
                     const Icon = card.icon;
                     const isRevenue = card.title === 'Doanh Thu';
+                    const isOnline = card.title === 'Đang Online';
                     return (
-                        <div key={card.title} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5 shadow-sm">
+                        <div key={card.title} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5 shadow-sm relative overflow-hidden">
+                            {isOnline && !onlineLoading && onlineUsers.online > 0 && (
+                                <span className="absolute top-4 right-4 w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
+                            )}
                             <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${colorMap[card.tone]} text-white mb-3`}>
                                 <Icon size={18} />
                             </div>
                             <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{card.title}</p>
                             <p className="text-3xl font-black text-gray-900 dark:text-white mt-1">
-                                {loading ? '...' : isRevenue
+                                {onlineLoading ? '...' : isRevenue
                                     ? `${card.value.toLocaleString('vi-VN')}đ`
                                     : card.value.toLocaleString()}
                             </p>

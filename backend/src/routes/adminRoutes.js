@@ -16,6 +16,13 @@ router.get(
 	adminController.getDashboardStats,
 );
 
+// Online users (Socket.io connections)
+router.get(
+	"/online-users",
+	authorizePermission("admin.dashboard.view"),
+	adminController.getOnlineUsers,
+);
+
 // User management
 router.get("/users", authorizePermission("users.manage"), adminController.getUsers);
 router.get("/users/:userId/activities", authorizePermission("users.manage"), adminController.getUserActivities);
