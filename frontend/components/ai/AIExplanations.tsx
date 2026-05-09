@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiCheckCircle, FiXCircle, FiBookOpen, FiZap, FiAlertCircle, FiCpu } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
+import { useTypewriter } from '@/hooks/useTypewriter';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -129,6 +130,8 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
     const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [retryAfter, setRetryAfter] = useState<number>(0);
+    const [typingFlags, setTypingFlags] = useState<Set<number>>(new Set());
+    const [doneFlags, setDoneFlags] = useState<Set<number>>(new Set());
 
     const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
 
@@ -172,7 +175,12 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
             }
 
             if (data.success) {
-                setExplanations(data.explanations?.explanations || []);
+                const newExps = data.explanations?.explanations || [];
+                setExplanations(newExps);
+                if (newExps.length > 0) {
+                    setTypingFlags(new Set(newExps.map((_: any, i: number) => i)));
+                    setDoneFlags(new Set());
+                }
             }
         } catch (err) {
             setError('Không thể tải phân tích AI');
@@ -184,7 +192,6 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
     const loadSingleExplanation = async (question: QuestionResult, index: number) => {
         setLoadingIndex(index);
         try {
-            // Gọi chatbot với câu hỏi cụ thể
             const res = await authFetch('/api/ai/ask', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -206,6 +213,8 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                     vocabulary: [],
                 };
                 setExplanations(newExp);
+                setTypingFlags(prev => { const s = new Set(prev); s.add(index); return s; });
+                setDoneFlags(prev => { const s = new Set(prev); s.delete(index); return s; });
             }
         } catch (err) {
             console.error(err);
@@ -297,7 +306,11 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                                     <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
                                         <FiZap size={12} /> Tại sao sai?
                                     </p>
-                                    <p className="text-sm text-gray-700 leading-relaxed">{parseAIExplanation(exp.whyWrong)}</p>
+                                    {typingFlags.has(i) && !doneFlags.has(i) ? (
+                                        <TypewriterText text={exp.whyWrong} onDone={() => setDoneFlags(prev => { const s = new Set(prev); s.add(i); return s; })} />
+                                    ) : (
+                                        <p className="text-sm text-gray-700 leading-relaxed">{parseAIExplanation(exp.whyWrong)}</p>
+                                    )}
                                 </div>
 
                                         {exp.knowledgeNote && (
@@ -360,5 +373,21 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                 );
             })}
         </div>
+    );
+}
+
+/* ─── Typewriter Text ──────────────────────────────────────────── */
+function TypewriterText({ text, onDone }: { text: string; onDone?: () => void }) {
+    const { displayed, done } = useTypewriter(text, { speed: 12, startDelay: 50 });
+
+    useEffect(() => {
+        if (done && onDone) onDone();
+    }, [done, onDone]);
+
+    return (
+        <p className="text-sm text-gray-700 leading-relaxed">
+            {parseAIExplanation(displayed)}
+            {!done && <span className="inline-block w-1.5 h-4 bg-purple-400 ml-0.5 animate-pulse align-middle" />}
+        </p>
     );
 }
