@@ -6,6 +6,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        // Exclude streaming endpoint (handled by its own route)
+        source: "/api/ai/ask-stream",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/ai/ask-stream`,
+      },
+      {
         source: "/api/:path*",
         destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/:path*`,
       },

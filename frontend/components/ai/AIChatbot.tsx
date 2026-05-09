@@ -102,10 +102,11 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const [isStreaming, setIsStreaming] = useState(false);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    }, [messages, isStreaming]);
 
     const copyMessage = async (text: string, id: string) => {
         try {
@@ -155,6 +156,9 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             const decoder = new TextDecoder();
             let done = false;
             let fullContent = '';
+            let charCount = 0;
+
+            setIsStreaming(true);
 
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
@@ -169,15 +173,14 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         if (dataStr === '[DONE]') { done = true; break; }
                         try {
                             const parsed = JSON.parse(dataStr);
-                            // OpenAI SSE format: choices[0].delta.content
                             const content = parsed?.choices?.[0]?.delta?.content;
                             if (content) {
+                                charCount += content.length;
                                 fullContent += content;
                                 setMessages(prev => prev.map(m =>
                                     m.id === tempAiId ? { ...m, content: fullContent } : m
                                 ));
                             }
-                            // Error from backend
                             if (parsed?.error) {
                                 fullContent = parsed.error;
                                 done = true;
@@ -197,6 +200,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             ));
         } finally {
             setLoading(false);
+            setIsStreaming(false);
             inputRef.current?.focus();
         }
     };
@@ -280,6 +284,10 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))
                                     }
+                                    {/* Typing cursor */}
+                                    {msg.role === 'ai' && isStreaming && messages[messages.length - 1]?.id === msg.id && (
+                                        <span className="inline-block w-0.5 h-4 bg-purple-500 ml-0.5 animate-pulse align-middle" />
+                                    )}
                                 </div>
 
                                 {/* Copy + Time row for AI messages */}
