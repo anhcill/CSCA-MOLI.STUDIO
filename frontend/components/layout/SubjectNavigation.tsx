@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -9,7 +8,6 @@ import {
   BsStars,
   BsGraphUp,
 } from 'react-icons/bs';
-import { AIInsights } from '../ai/AIInsights';
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -49,18 +47,7 @@ export default function SubjectNavigation({
 }: SubjectNavigationProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'menu' | 'stats'>('menu');
-  const [prevTab, setPrevTab] = useState<'menu' | 'stats'>('menu');
   const items = menuItems || getDefaultMenuItems(subjectSlug);
-
-  // Keep AIInsights mounted but hidden to avoid re-fetching on tab switch
-  const [showStats, setShowStats] = useState(false);
-
-  const handleTabChange = (tab: 'menu' | 'stats') => {
-    setPrevTab(activeTab);
-    setActiveTab(tab);
-    setShowStats(tab === 'stats');
-  };
 
   // Build full href with subject param
   const buildSubjectHref = (href: string) => {
@@ -79,16 +66,12 @@ export default function SubjectNavigation({
 
   return (
     <aside className="w-full space-y-6 sticky top-24 h-fit">
-      
+
       {/* Tab Controls (Floating Pills) */}
       <div className="bg-white/80 backdrop-blur-xl border border-gray-100 rounded-2xl shadow-sm p-1.5 flex gap-1 relative z-20">
         <button
-          onClick={() => handleTabChange('menu')}
-          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl ${
-              activeTab === 'menu'
-              ? 'text-gray-900 shadow-sm bg-white'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
-            }`}
+          onClick={() => {}}
+          className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-gray-900 shadow-sm bg-white"
         >
           Kho tài liệu
         </button>
@@ -99,25 +82,13 @@ export default function SubjectNavigation({
         >
           Lịch sử thi
         </Link>
-
-        <button
-          onClick={() => handleTabChange('stats')}
-          className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl ${
-              activeTab === 'stats'
-              ? 'text-gray-900 shadow-sm bg-white'
-              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50/50'
-            }`}
-        >
-          Phân tích AI
-        </button>
       </div>
 
       {/* Tab Content Cards */}
       <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
         <div className="p-4">
           {/* Menu */}
-          {activeTab === 'menu' && (
-            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
               {items.map((item, index) => {
                 const Icon = item.icon;
                 const href = buildSubjectHref(item.href);
@@ -140,11 +111,6 @@ export default function SubjectNavigation({
                 );
               })}
             </div>
-          )}
-
-          {/* AI Insights - always mounted, hidden by CSS when not active */}
-          <div className={activeTab === 'stats' ? 'max-h-[600px] overflow-y-auto animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
-            <AIInsights subjectCode={subjectCode} />
           </div>
         </div>
       </div>
