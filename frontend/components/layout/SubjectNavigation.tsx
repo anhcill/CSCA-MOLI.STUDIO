@@ -110,7 +110,6 @@ export default function SubjectNavigation({
                   </Link>
                 );
               })}
-            </div>
           </div>
         </div>
       </div>
