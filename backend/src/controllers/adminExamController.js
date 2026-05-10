@@ -671,6 +671,7 @@ const AdminExamController = {
         } = questionData;
 
         const qType = questionType || 'single_choice';
+        let responseSent = false;
 
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             const client = await pool.connect();
@@ -857,6 +858,7 @@ const AdminExamController = {
                     questionNumber: targetPosition,
                     questionType: qType,
                 });
+                return;
             } catch (error) {
                 await client.query("ROLLBACK");
                 // Chỉ retry khi gặp duplicate key (23505), không retry các lỗi khác
@@ -872,11 +874,14 @@ const AdminExamController = {
 
                 console.error("Insert question error:", error);
                 client.release();
+                if (responseSent) return;
+                responseSent = true;
                 return res.status(500).json({ message: "Failed to insert question" });
             }
         } // end for
 
         // Nếu hết retries mà vẫn lỗi
+        if (responseSent) return;
         return res.status(500).json({ message: "Failed to insert question after retries" });
     },
 
