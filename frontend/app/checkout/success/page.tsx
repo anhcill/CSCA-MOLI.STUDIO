@@ -32,6 +32,7 @@ function SuccessContent() {
 
   useEffect(() => {
     if (!mounted) return;
+    let isCancelled = false;
 
     const verify = async () => {
       if (!orderId) {
@@ -40,14 +41,58 @@ function SuccessContent() {
         return;
       }
 
-      try {
-        const verifyRes = await axios.post('/payments/verify-return', {
-          orderId,
-          resultCode: resultCode || '0',
-        });
+      let attempts = 0;
+      const maxAttempts = 15; // Poll for ~30 seconds
 
-        if (verifyRes.data.success) {
-          // CRITICAL: fetch fresh user + token so VIP features work immediately
+      const poll = async () => {
+        if (isCancelled) return;
+        
+        try {
+          const verifyRes = await axios.post('/payments/verify-return', {
+            orderId,
+            resultCode: resultCode || '0', // Giữ lại để log hoặc debug nếu cần, nhưng backend sẽ không tin tưởng nó nữa
+          });
+
+          if (verifyRes.data.success) {
+            if (verifyRes.data.status === 'completed') {
+              // Thanh toán đã được webhook xử lý thành công
+              try {
+                const userRes = await getCurrentUser();
+                if (userRes.success && userRes.data?.user) {
+                  setUser(userRes.data.user);
+                  if ((userRes.data as any).token) {
+                    setTokens((userRes.data as any).token, refreshToken || '');
+                  }
+                }
+              } catch (_) {}
+
+              setResult({
+                success: true,
+                status: 'completed',
+                data: verifyRes.data.data,
+              });
+              setVerifying(false);
+            } else if (verifyRes.data.status === 'failed' || verifyRes.data.status === 'cancelled') {
+              setResult({ success: false, status: verifyRes.data.status });
+              setVerifying(false);
+            } else {
+              // Status là pending, tiếp tục poll
+              attempts++;
+              if (attempts < maxAttempts) {
+                setTimeout(poll, 2000);
+              } else {
+                setResult({ success: false, status: 'timeout' });
+                setVerifying(false);
+              }
+            }
+          } else {
+            setResult({ success: false, status: verifyRes.data.status || 'unknown' });
+            setVerifying(false);
+          }
+        } catch (err) {
+          console.error('Verify return error:', err);
+          
+          // Fallback check user vip status just in case
           try {
             const userRes = await getCurrentUser();
             if (userRes.success && userRes.data?.user) {
@@ -55,39 +100,29 @@ function SuccessContent() {
               if ((userRes.data as any).token) {
                 setTokens((userRes.data as any).token, refreshToken || '');
               }
+              if (userRes.data.user.is_vip) {
+                setResult({ success: true, status: 'completed' });
+                setVerifying(false);
+                return;
+              }
             }
           } catch (_) {}
 
-          setResult({
-            success: verifyRes.data.status === 'completed',
-            status: verifyRes.data.status,
-            data: verifyRes.data.data,
-          });
-        } else {
-          setResult({ success: false, status: verifyRes.data.status || 'unknown' });
-        }
-      } catch (err) {
-        console.error('Verify return error:', err);
-        try {
-          const userRes = await getCurrentUser();
-          if (userRes.success && userRes.data?.user) {
-            setUser(userRes.data.user);
-            if ((userRes.data as any).token) {
-              setTokens((userRes.data as any).token, refreshToken || '');
-            }
-            if (userRes.data.user.is_vip) {
-              setResult({ success: true, status: 'completed' });
-              return;
-            }
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(poll, 2000);
+          } else {
+            setResult({ success: false, status: 'error' });
+            setVerifying(false);
           }
-        } catch (_) {}
-        setResult({ success: false, status: 'error' });
-      } finally {
-        setVerifying(false);
-      }
+        }
+      };
+
+      poll();
     };
 
     verify();
+    return () => { isCancelled = true; };
   }, [mounted, orderId, resultCode, setUser, setTokens, refreshToken]);
 
   if (!mounted) return null;

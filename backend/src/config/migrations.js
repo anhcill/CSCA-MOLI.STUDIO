@@ -160,10 +160,11 @@ async function runOptimizations() {
     ];
     await Promise.all(tables.map((t) => pool.query(`ANALYZE ${t}`)));
 
-    // Google OAuth columns
+    // Google + Facebook OAuth columns
     await pool.query(`
       ALTER TABLE users 
       ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE,
+      ADD COLUMN IF NOT EXISTS facebook_id VARCHAR(255) UNIQUE,
       ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(20) DEFAULT 'local',
       ADD COLUMN IF NOT EXISTS avatar_url TEXT,
       ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE
@@ -171,6 +172,9 @@ async function runOptimizations() {
     await pool.query(`ALTER TABLE users ALTER COLUMN password DROP NOT NULL`);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_users_facebook_id ON users(facebook_id)`,
     );
     await pool.query(
       `UPDATE users SET oauth_provider = 'local' WHERE oauth_provider IS NULL`,
@@ -733,6 +737,35 @@ async function runOptimizations() {
           'true_false'
         ))
     `);
+
+    // ── Giai đoạn 1: User Retention (Streak & Daily Quests) ───────────────────
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS last_active_date DATE,
+      ADD COLUMN IF NOT EXISTS coins INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS exp INTEGER DEFAULT 0
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_quests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        quest_type VARCHAR(50) NOT NULL, -- 'do_exam', 'login', 'share'
+        target INTEGER NOT NULL DEFAULT 1,
+        progress INTEGER NOT NULL DEFAULT 0,
+        is_completed BOOLEAN DEFAULT FALSE,
+        reward_coins INTEGER DEFAULT 10,
+        date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, quest_type, date)
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_user_quests_user_date ON user_quests(user_id, date)`
+    );
 
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,

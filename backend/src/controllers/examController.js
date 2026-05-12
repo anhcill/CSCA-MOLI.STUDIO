@@ -299,6 +299,18 @@ const examController = {
         status: result.status,
       });
 
+      // Cập nhật tiến độ nhiệm vụ "do_exam"
+      try {
+        const db = require("../config/database");
+        await db.query(
+          `UPDATE user_quests SET progress = progress + 1 
+           WHERE user_id = $1 AND quest_type = 'do_exam' AND date = CURRENT_DATE AND progress < target`,
+          [req.user.id]
+        );
+      } catch (err) {
+        console.error("Failed to update quest progress for do_exam:", err);
+      }
+
       res.json({
         success: true,
         message: "Nộp bài thành công",

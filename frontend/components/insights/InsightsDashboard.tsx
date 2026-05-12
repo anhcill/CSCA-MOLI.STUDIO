@@ -213,7 +213,7 @@ export default function InsightsDashboard() {
             loading={loading.overview}
             icon={<FiBookOpen className="text-amber-500" />}
             label="Câu hỏi đã làm"
-            value={overview ? `${(overview.totalCorrect + overview.totalIncorrect).toLocaleString()} câu` : '--'}
+            value={overview ? `${(overview.totalCorrect + overview.totalIncorrect).toLocaleString('vi-VN')} câu` : '--'}
             sub={`${overview?.totalCorrect || 0} đúng · ${overview?.totalIncorrect || 0} sai`}
             color="amber"
           />

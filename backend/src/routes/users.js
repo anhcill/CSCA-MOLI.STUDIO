@@ -62,6 +62,15 @@ router.post(
 // GET /api/users/roadmap
 router.get("/roadmap", authenticate, userController.getUserRoadmap);
 
+// POST /api/users/record-activity
+router.post("/record-activity", authenticate, userController.recordActivity);
+
+// GET /api/users/quests
+router.get("/quests", authenticate, userController.getDailyQuests);
+
+// POST /api/users/quests/:id/claim
+router.post("/quests/:id/claim", authenticate, userController.claimQuest);
+
 // GET  /api/users/:id
 router.get("/:id", userController.getUserById);
 

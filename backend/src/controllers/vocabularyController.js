@@ -222,3 +222,26 @@ exports.bulkCreate = async (req, res) => {
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };
+
+// POST /api/vocabulary/record-learning
+// Cập nhật tiến độ học từ vựng cho nhiệm vụ hằng ngày (learn_vocab)
+exports.recordLearning = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { wordsCount = 1 } = req.body;
+    
+    // Update learn_vocab quest
+    await db.query(
+      `UPDATE user_quests 
+       SET progress = LEAST(progress + $1, target)
+       WHERE user_id = $2 AND quest_type = 'learn_vocab' AND date = CURRENT_DATE AND progress < target`,
+      [wordsCount, userId]
+    );
+
+    res.json({ success: true, message: "Đã ghi nhận tiến độ học từ vựng" });
+  } catch (error) {
+    console.error("Record vocabulary learning error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+

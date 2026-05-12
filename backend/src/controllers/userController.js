@@ -258,3 +258,185 @@ exports.getUserRoadmap = async (req, res) => {
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };
+
+/**
+ * @desc    Record daily activity to update streak
+ * @route   POST /api/users/record-activity
+ * @access  Private
+ */
+exports.recordActivity = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Fetch current streak
+    const result = await db.query(
+      `SELECT current_streak, longest_streak, last_active_date 
+       FROM users WHERE id = $1`, [userId]
+    );
+    
+    if (!result.rows[0]) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
+    }
+    
+    const user = result.rows[0];
+    
+    // Get current date string (YYYY-MM-DD) in Asia/Ho_Chi_Minh or UTC
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to start of day
+    
+    let lastActive = user.last_active_date ? new Date(user.last_active_date) : null;
+    if (lastActive) lastActive.setHours(0, 0, 0, 0);
+
+    const diffDays = lastActive 
+      ? Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24))
+      : -1;
+
+    if (diffDays === 0) {
+      // Đã ghi nhận hôm nay rồi
+      return res.json({ 
+        success: true, 
+        data: { streak: user.current_streak || 0, increased: false } 
+      });
+    }
+
+    let newStreak = user.current_streak || 0;
+    let newLongest = user.longest_streak || 0;
+
+    if (diffDays === 1) {
+      // Liên tiếp
+      newStreak += 1;
+    } else {
+      // Đứt chuỗi hoặc lần đầu tiên
+      newStreak = 1;
+    }
+
+    newLongest = Math.max(newStreak, newLongest);
+
+    await db.query(
+      `UPDATE users 
+       SET current_streak = $1, longest_streak = $2, last_active_date = CURRENT_DATE 
+       WHERE id = $3`,
+      [newStreak, newLongest, userId]
+    );
+
+    return res.json({ 
+      success: true, 
+      message: "Đã ghi nhận chuỗi ngày học",
+      data: { streak: newStreak, increased: true } 
+    });
+  } catch (error) {
+    console.error("Record activity error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+/**
+ * @desc    Get daily quests
+ * @route   GET /api/users/quests
+ * @access  Private
+ */
+exports.getDailyQuests = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Check if quests exist for today
+    const questsRes = await db.query(
+      `SELECT id, quest_type, target, progress, is_completed, reward_coins
+       FROM user_quests
+       WHERE user_id = $1 AND date = CURRENT_DATE
+       ORDER BY id ASC`,
+      [userId]
+    );
+
+    if (questsRes.rows.length === 0) {
+      // Generate new quests for today
+      // 1. Đăng nhập (login) - target: 1
+      // 2. Làm 1 đề thi (do_exam) - target: 1
+      // 3. Học từ vựng (learn_vocab) - target: 10
+      await db.query(
+        `INSERT INTO user_quests (user_id, quest_type, target, reward_coins, date) VALUES
+         ($1, 'login', 1, 10, CURRENT_DATE),
+         ($1, 'do_exam', 1, 20, CURRENT_DATE),
+         ($1, 'learn_vocab', 10, 15, CURRENT_DATE)
+         ON CONFLICT (user_id, quest_type, date) DO NOTHING`,
+        [userId]
+      );
+      
+      // Update login progress immediately if generated today
+      await db.query(
+        `UPDATE user_quests SET progress = 1 WHERE user_id = $1 AND quest_type = 'login' AND date = CURRENT_DATE AND progress = 0`,
+        [userId]
+      );
+
+      const newQuestsRes = await db.query(
+        `SELECT id, quest_type, target, progress, is_completed, reward_coins
+         FROM user_quests
+         WHERE user_id = $1 AND date = CURRENT_DATE
+         ORDER BY id ASC`,
+        [userId]
+      );
+      return res.json({ success: true, data: { quests: newQuestsRes.rows } });
+    }
+
+    return res.json({ success: true, data: { quests: questsRes.rows } });
+  } catch (error) {
+    console.error("Get daily quests error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+/**
+ * @desc    Claim quest reward
+ * @route   POST /api/users/quests/:id/claim
+ * @access  Private
+ */
+exports.claimQuest = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const questRes = await db.query(
+      `SELECT id, target, progress, is_completed, reward_coins
+       FROM user_quests
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+
+    if (questRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy nhiệm vụ" });
+    }
+
+    const quest = questRes.rows[0];
+
+    if (quest.is_completed) {
+      return res.status(400).json({ success: false, message: "Nhiệm vụ này đã nhận thưởng rồi" });
+    }
+
+    if (quest.progress < quest.target) {
+      return res.status(400).json({ success: false, message: "Nhiệm vụ chưa hoàn thành" });
+    }
+
+    // Mark as completed and give coins
+    await db.query('BEGIN');
+    await db.query(
+      `UPDATE user_quests SET is_completed = TRUE WHERE id = $1`,
+      [id]
+    );
+    await db.query(
+      `UPDATE users SET coins = COALESCE(coins, 0) + $1 WHERE id = $2`,
+      [quest.reward_coins, userId]
+    );
+    await db.query('COMMIT');
+
+    return res.json({ 
+      success: true, 
+      message: \`Nhận thành công \${quest.reward_coins} xu!\`,
+      data: { reward_coins: quest.reward_coins } 
+    });
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error("Claim quest error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+

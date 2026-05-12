@@ -461,6 +461,9 @@ const getCurrentUser = async (req, res) => {
           is_vip: isVipActive(user),
           subscription_tier: user.subscription_tier || 'basic',
           vip_expires_at: user.vip_expires_at || null,
+          coins: user.coins || 0,
+          current_streak: user.current_streak || 0,
+          longest_streak: user.longest_streak || 0,
           roles: authz.roles,
           permissions: authz.permissions,
           created_at: user.created_at,
@@ -565,6 +568,238 @@ const refreshToken = async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Lỗi làm mới token" });
+  }
+};
+
+// ─── Facebook OAuth (Authorization Code Flow) ───────────────────────────────
+const FACEBOOK_OAUTH_VERSION = 'v19.0';
+
+const getBackendBaseUrl = (req) => {
+  const configured = process.env.BACKEND_PUBLIC_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  return `${req.protocol}://${req.get('host')}`;
+};
+
+const getFacebookRedirectUri = (req) => {
+  return `${getBackendBaseUrl(req)}/api/auth/facebook/callback`;
+};
+
+const getFrontendCallbackUrl = () => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  return `${frontendUrl.replace(/\/$/, '')}/auth/facebook/callback`;
+};
+
+const isSafeRedirectUrl = (redirectUrl, fallbackUrl) => {
+  try {
+    const requested = new URL(redirectUrl);
+    const fallback = new URL(fallbackUrl);
+    return requested.origin === fallback.origin;
+  } catch {
+    return false;
+  }
+};
+
+const createFacebookState = (redirectUrl) => {
+  return jwt.sign({ redirect: redirectUrl }, process.env.JWT_SECRET, {
+    expiresIn: '10m',
+    issuer: 'csca-app',
+    audience: 'facebook-oauth',
+  });
+};
+
+const parseFacebookState = (state, fallbackUrl) => {
+  try {
+    const decoded = jwt.verify(state, process.env.JWT_SECRET, {
+      issuer: 'csca-app',
+      audience: 'facebook-oauth',
+    });
+    if (decoded?.redirect) return decoded.redirect;
+  } catch {
+    // Ignore invalid/expired state
+  }
+  return fallbackUrl;
+};
+
+const buildRedirectWithHash = (baseUrl, params) => {
+  const cleanBase = baseUrl.split('#')[0];
+  const hash = new URLSearchParams(params).toString();
+  return hash ? `${cleanBase}#${hash}` : cleanBase;
+};
+
+const facebookAuthStart = async (req, res) => {
+  try {
+    const facebookAppId = process.env.FACEBOOK_APP_ID;
+
+    if (!facebookAppId) {
+      return res
+        .status(500)
+        .json({ success: false, message: 'Thiếu cấu hình Facebook App' });
+    }
+
+    const fallbackRedirect = getFrontendCallbackUrl();
+    const requestedRedirect = typeof req.query.redirect === 'string' ? req.query.redirect : '';
+    const redirectTarget =
+      requestedRedirect && isSafeRedirectUrl(requestedRedirect, fallbackRedirect)
+        ? requestedRedirect
+        : fallbackRedirect;
+
+    const state = createFacebookState(redirectTarget);
+    const redirectUri = getFacebookRedirectUri(req);
+
+    const authUrl = `https://www.facebook.com/${FACEBOOK_OAUTH_VERSION}/dialog/oauth?client_id=${encodeURIComponent(
+      facebookAppId,
+    )}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(
+      state,
+    )}&scope=email,public_profile&response_type=code`;
+
+    return res.redirect(authUrl);
+  } catch (error) {
+    console.error('Facebook auth start error:', error.message);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Không thể khởi tạo đăng nhập Facebook' });
+  }
+};
+
+const facebookAuthCallback = async (req, res) => {
+  const fallbackRedirect = getFrontendCallbackUrl();
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const redirectTarget = state ? parseFacebookState(state, fallbackRedirect) : fallbackRedirect;
+
+  try {
+    const { code, error, error_description } = req.query;
+    const facebookAppId = process.env.FACEBOOK_APP_ID;
+    const facebookAppSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (error) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: String(error),
+          message: String(error_description || 'Facebook login failed'),
+        }),
+      );
+    }
+
+    if (!facebookAppId || !facebookAppSecret) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'missing_config',
+          message: 'Thiếu cấu hình Facebook App',
+        }),
+      );
+    }
+
+    if (!code || typeof code !== 'string') {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'missing_code',
+          message: 'Thiếu mã xác thực Facebook',
+        }),
+      );
+    }
+
+    const redirectUri = getFacebookRedirectUri(req);
+    const tokenUrl = `https://graph.facebook.com/${FACEBOOK_OAUTH_VERSION}/oauth/access_token?client_id=${encodeURIComponent(
+      facebookAppId,
+    )}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${encodeURIComponent(
+      facebookAppSecret,
+    )}&code=${encodeURIComponent(code)}`;
+
+    const tokenRes = await fetch(tokenUrl);
+    const tokenData = await tokenRes.json();
+
+    if (!tokenRes.ok || !tokenData?.access_token) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'token_exchange_failed',
+          message: 'Không thể lấy access token từ Facebook',
+        }),
+      );
+    }
+
+    const accessToken = tokenData.access_token;
+    const profileUrl = `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(
+      accessToken,
+    )}`;
+    const profileRes = await fetch(profileUrl);
+    const profileData = await profileRes.json();
+
+    if (!profileRes.ok || !profileData?.id) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'profile_fetch_failed',
+          message: 'Không thể xác thực Facebook',
+        }),
+      );
+    }
+
+    const { id: facebookId, email, name, picture } = profileData;
+    const avatarUrl = picture?.data?.url || null;
+    const displayName = name || email;
+
+    if (!email) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'missing_email',
+          message: 'Facebook không cung cấp email. Vui lòng cho phép quyền email.',
+        }),
+      );
+    }
+
+    let user = await User.findByFacebookId(facebookId);
+
+    if (!user) {
+      const existingUser = await User.findByEmail(email);
+
+      if (existingUser) {
+        user = await User.linkFacebookAccount(existingUser.id, facebookId, avatarUrl);
+      } else {
+        user = await User.createFromFacebook({ facebookId, email, name: displayName, picture: avatarUrl });
+        emailService.sendWelcomeEmail(email, displayName).catch(() => {});
+      }
+    }
+
+    if (!user.is_active) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'account_disabled',
+          message: 'Tài khoản đã bị vô hiệu hóa',
+        }),
+      );
+    }
+
+    const facebookJti = crypto.randomBytes(16).toString('hex');
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti: facebookJti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Facebook OAuth',
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+      expiresAt: new Date(Date.now() + 604800000),
+    });
+
+    UserActivity.log(user.id, 'facebook_login', {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+    });
+
+    const token = generateToken(buildTokenPayload({ ...user, jti: facebookJti, subscription_tier: user.subscription_tier || 'basic' }));
+    const refreshToken = generateRefreshToken({ id: user.id });
+
+    return res.redirect(
+      buildRedirectWithHash(redirectTarget, {
+        token,
+        refreshToken,
+      }),
+    );
+  } catch (error) {
+    console.error('Facebook auth callback error:', error.message);
+    return res.redirect(
+      buildRedirectWithHash(redirectTarget, {
+        error: 'server_error',
+        message: 'Đăng nhập Facebook thất bại, vui lòng thử lại',
+      }),
+    );
   }
 };
 
@@ -682,6 +917,128 @@ const googleAuth = async (req, res) => {
         success: false,
         message: "Đăng nhập Google thất bại, vui lòng thử lại",
       });
+  }
+};
+
+// ─── Facebook OAuth (Access Token Flow) ─────────────────────────────────────
+const facebookAuth = async (req, res) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Facebook access token không được để trống" });
+    }
+
+    const facebookAppId = process.env.FACEBOOK_APP_ID;
+    const facebookAppSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (!facebookAppId || !facebookAppSecret) {
+      return res
+        .status(500)
+        .json({ success: false, message: "Thiếu cấu hình Facebook App" });
+    }
+
+    // Validate token
+    const debugUrl = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${facebookAppId}|${facebookAppSecret}`;
+    const debugRes = await fetch(debugUrl);
+    const debugData = await debugRes.json();
+
+    if (!debugRes.ok || !debugData?.data?.is_valid || String(debugData?.data?.app_id) !== String(facebookAppId)) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Facebook token không hợp lệ" });
+    }
+
+    // Fetch profile info
+    const profileUrl = `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}`;
+    const profileRes = await fetch(profileUrl);
+    const profileData = await profileRes.json();
+
+    if (!profileRes.ok || !profileData?.id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Không thể xác thực Facebook" });
+    }
+
+    const { id: facebookId, email, name, picture } = profileData;
+    const avatarUrl = picture?.data?.url || null;
+    const displayName = name || email;
+
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Facebook không cung cấp email. Vui lòng cho phép quyền email." });
+    }
+
+    let user = await User.findByFacebookId(facebookId);
+
+    if (!user) {
+      const existingUser = await User.findByEmail(email);
+
+      if (existingUser) {
+        user = await User.linkFacebookAccount(existingUser.id, facebookId, avatarUrl);
+      } else {
+        user = await User.createFromFacebook({ facebookId, email, name: displayName, picture: avatarUrl });
+        emailService.sendWelcomeEmail(email, displayName).catch(() => {});
+      }
+    }
+
+    if (!user.is_active) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
+    }
+
+    const facebookJti = crypto.randomBytes(16).toString("hex");
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti: facebookJti,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Facebook OAuth',
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+      expiresAt: new Date(Date.now() + 604800000),
+    });
+
+    UserActivity.log(user.id, 'facebook_login', {
+      ip: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('User-Agent'),
+    });
+
+    const token = generateToken(buildTokenPayload({ ...user, jti: facebookJti, subscription_tier: user.subscription_tier || 'basic' }));
+    const refreshToken = generateRefreshToken({ id: user.id });
+
+    const authz = await resolveAuthorizationContext(user);
+
+    return res.json({
+      success: true,
+      message: "Đăng nhập Facebook thành công",
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          full_name: user.full_name,
+          avatar: user.avatar || user.avatar_url || avatarUrl,
+          avatar_url: user.avatar_url || avatarUrl,
+          role: user.role || "student",
+          is_vip: isVipActive(user),
+          subscription_tier: user.subscription_tier || 'basic',
+          vip_expires_at: user.vip_expires_at || null,
+          roles: authz.roles,
+          permissions: authz.permissions,
+          created_at: user.created_at,
+        },
+        token,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    console.error("Facebook auth error:", error.message);
+    return res
+      .status(500)
+      .json({ success: false, message: "Đăng nhập Facebook thất bại, vui lòng thử lại" });
   }
 };
 
@@ -968,6 +1325,9 @@ module.exports = {
   logout,
   refreshToken,
   googleAuth,
+  facebookAuthStart,
+  facebookAuthCallback,
+  facebookAuth,
   forgotPassword,
   resetPassword,
   verifyEmail,

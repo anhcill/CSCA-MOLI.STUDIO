@@ -648,60 +648,11 @@ router.post('/verify-return', authenticate, async (req, res) => {
       });
     }
 
-    if (transaction.status === 'pending' && resultCode === '0') {
-      const tier = transaction.package_id
-        ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-        : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-
-      // ── Increment coupon usage CHỉ khi thành công ──────────────────────
-      await incrementCouponUsage(transaction);
-
-      await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
-      const updatedUser = await User.findById(transaction.user_id);
-      const vipExpires = updatedUser?.vip_expires_at || null;
-
-      await Transaction.updateComplete(transaction.id, {
-        status: 'completed',
-        raw_response: { verified_return: true },
-        paid_at: new Date(),
-        vip_expires_at: vipExpires,
-      });
-
-      // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
-      const vrUser = await User.findById(req.user.id);
-      if (vrUser) {
-        Promise.all([
-          emailService.sendPaymentConfirmation({
-            email: vrUser.email,
-            name: vrUser.full_name || vrUser.username,
-            packageName: transaction.package_name,
-            amount: transaction.amount,
-            durationDays: transaction.package_duration,
-            transactionCode: orderId,
-            method: transaction.payment_method || 'unknown',
-          }),
-          emailService.sendVipActivatedEmail({
-            email: vrUser.email,
-            name: vrUser.full_name || vrUser.username,
-            packageName: transaction.package_name,
-            durationDays: transaction.package_duration,
-            expiresAt: vipExpires,
-          }),
-        ]).catch(err => console.error('Verify-return email error:', err.message));
-      }
-
-      return res.json({
-        success: true,
-        status: 'completed',
-        data: {
-          package_name: transaction.package_name,
-          package_duration: transaction.package_duration,
-          amount: transaction.amount,
-          paid_at: new Date().toISOString(),
-          vip_expires_at: vipExpires,
-        }
-      });
-    }
+    // [BẢO MẬT] Bỏ việc tin tưởng resultCode từ frontend để tự động hoàn thành thanh toán.
+    // Việc cập nhật trạng thái thanh toán CHỈ ĐƯỢC PHÉP thông qua Webhook (IPN) từ MoMo/VNPay.
+    // Frontend sẽ poll API này để chờ trạng thái chuyển từ pending sang completed.
+    
+    return res.json({ success: true, status: transaction.status });
 
     return res.json({ success: true, status: transaction.status });
   } catch (err) {

@@ -32,6 +32,8 @@ interface PublicProfile {
   highest_score: number;
   current_streak: number;
   longest_streak: number;
+  coins: number;
+  exp: number;
   total_posts: number;
   total_likes_received: number;
   badges: Badge[];
@@ -292,13 +294,15 @@ export default function UserProfilePage({ params }: Props) {
             </div>
 
             {/* Extra stats */}
-            <div className="grid grid-cols-3 gap-3 mt-3">
+            <div className="grid grid-cols-4 gap-3 mt-3">
               {[
-                { label: 'Streak hiện tại', value: `${profile.current_streak} ngày`, color: 'from-rose-50 to-rose-100 text-rose-600' },
-                { label: 'Streak dài nhất', value: `${profile.longest_streak} ngày`, color: 'from-orange-50 to-orange-100 text-orange-600' },
-                { label: 'Lượt thích', value: profile.total_likes_received, color: 'from-pink-50 to-pink-100 text-pink-600' },
+                { label: 'Streak hiện tại', value: `${profile.current_streak} ngày`, color: 'from-rose-50 to-rose-100 text-rose-600', icon: '🔥' },
+                { label: 'Streak kỷ lục', value: `${profile.longest_streak} ngày`, color: 'from-orange-50 to-orange-100 text-orange-600', icon: '🏆' },
+                { label: 'Tổng Xu', value: profile.coins, color: 'from-yellow-50 to-yellow-100 text-yellow-600', icon: '⭐' },
+                { label: 'Lượt thích', value: profile.total_likes_received, color: 'from-pink-50 to-pink-100 text-pink-600', icon: '❤️' },
               ].map(stat => (
-                <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center`}>
+                <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center flex flex-col items-center justify-center`}>
+                  <div className="text-xl mb-1">{stat.icon}</div>
                   <p className="text-sm font-black">{stat.value}</p>
                   <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
                 </div>

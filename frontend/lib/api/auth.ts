@@ -93,6 +93,14 @@ export const googleAuth = async (credential: string): Promise<AuthResponse> => {
   return response.data;
 };
 
+/**
+ * Facebook OAuth authentication
+ */
+export const facebookAuth = async (accessToken: string): Promise<AuthResponse> => {
+  const response = await axios.post('/auth/facebook', { accessToken });
+  return response.data;
+};
+
 // ─── OTP Authentication ─────────────────────────────────────────────────────────
 
 export interface OtpVerifyResponse {

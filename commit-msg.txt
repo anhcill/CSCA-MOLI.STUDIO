@@ -1,0 +1,6 @@
+fix: chat page scroll, typing indicator logic, and footer suppression
+
+- Fix chat page scroll being pushed to bottom on mount
+- Fix typing indicator showing when advisor already replied (> 0 -> === 0)
+- Add dedicated layout for /hoi-dap chat pages
+- Suppress footer on chat and subject pages in ClientShell

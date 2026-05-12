@@ -9,12 +9,13 @@ import {
   FiMessageSquare, FiFileText, FiGift, FiAward, FiShield,
   FiMoon, FiSun, FiSettings, FiHelpCircle
 } from 'react-icons/fi';
-import { FaCrown } from 'react-icons/fa';
+import { FaCrown, FaFire } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import SearchBar from './SearchBar';
 import NotificationBell from './NotificationBell';
 import MessageBadge from './MessageBadge';
+import DailyQuestsBtn from './DailyQuestsBtn';
 import ThemeToggle from './ThemeToggle';
 
 const COURSES = [
@@ -43,10 +44,11 @@ export default function Header() {
   const [mobileCourseOpen, setMobileCourseOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [streak, setStreak] = useState(0);
   
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, token } = useAuthStore();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -68,6 +70,25 @@ export default function Header() {
   }, []);
 
   useEffect(() => setMobileOpen(false), [pathname]);
+
+  // Record daily activity and get streak
+  useEffect(() => {
+    if (mounted && isAuthenticated && user && token) {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/users/record-activity`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data) {
+          setStreak(data.data.streak);
+        }
+      })
+      .catch(err => console.error("Streak error", err));
+    }
+  }, [mounted, isAuthenticated, user, token]);
 
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 
@@ -172,12 +193,34 @@ export default function Header() {
               <ThemeToggle />
             </div>
 
+            {/* Streak Indicator */}
+            {mounted && isAuthenticated && streak > 0 && (
+              <div 
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${
+                  streak >= 3 
+                  ? 'bg-gradient-to-r from-orange-50 to-rose-50 dark:from-orange-900/30 dark:to-rose-900/30 border-orange-200 dark:border-orange-800/50 shadow-sm' 
+                  : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-800/30'
+                }`} 
+                title={`Chuỗi ngày học liên tiếp: ${streak} ngày`}
+              >
+                <FaFire className={streak >= 3 ? "text-rose-500 animate-pulse" : "text-orange-500"} size={16} />
+                <span className={`font-black text-sm ${streak >= 3 ? 'text-rose-600 dark:text-rose-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                  {streak}
+                </span>
+              </div>
+            )}
+
             {/* Message Badge */}
             <MessageBadge />
 
             {/* Notification Bell */}
             <div className="hidden sm:block">
               <NotificationBell />
+            </div>
+
+            {/* Daily Quests */}
+            <div className="hidden sm:block">
+              <DailyQuestsBtn />
             </div>
 
             {/* User Avatar / Profile Dropdown */}

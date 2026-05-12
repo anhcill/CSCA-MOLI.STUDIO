@@ -18,12 +18,12 @@ export default function SecurityHeaders() {
         httpEquiv="Content-Security-Policy"
         content={[
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://connect.facebook.net",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: https: blob:",
-          "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com",
-          "frame-src https://accounts.google.com",
+          "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://graph.facebook.com https://www.facebook.com",
+          "frame-src https://accounts.google.com https://www.facebook.com https://staticxx.facebook.com",
           "object-src 'none'",
           "base-uri 'self'",
           "form-action 'self'",

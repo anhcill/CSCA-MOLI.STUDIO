@@ -43,13 +43,14 @@ interface ActivityPagination { currentPage: number; totalPages: number; totalAct
 
 const ACTION_LABELS: Record<string, string> = {
   login: 'Đăng nhập', logout: 'Đăng xuất', register: 'Đăng ký',
-  google_login: 'Đăng nhập Google', exam_start: 'Bắt đầu thi',
+  google_login: 'Đăng nhập Google', facebook_login: 'Đăng nhập Facebook', exam_start: 'Bắt đầu thi',
   exam_submit: 'Nộp bài thi', 'admin.change_user_status': 'Đổi trạng thái',
   'admin.delete_user': 'Xóa user',
 };
 const ACTION_COLORS: Record<string, string> = {
   login: 'bg-blue-100 text-blue-700', logout: 'bg-gray-100 text-gray-600',
   register: 'bg-green-100 text-green-700', google_login: 'bg-red-100 text-red-700',
+  facebook_login: 'bg-blue-100 text-blue-700',
   exam_start: 'bg-yellow-100 text-yellow-700', exam_submit: 'bg-purple-100 text-purple-700',
   'admin.change_user_status': 'bg-orange-100 text-orange-700',
   'admin.delete_user': 'bg-red-100 text-red-700',

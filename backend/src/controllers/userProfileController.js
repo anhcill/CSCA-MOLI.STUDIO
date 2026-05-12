@@ -24,6 +24,8 @@ exports.getPublicProfile = async (req, res) => {
         u.subscription_tier,
         u.is_verified,
         u.created_at,
+        COALESCE(u.coins, 0)::INTEGER as coins,
+        COALESCE(u.exp, 0)::INTEGER as exp,
         COALESCE(us.total_exams_taken, 0)::INTEGER as total_exams,
         COALESCE(us.total_exams_completed, 0)::INTEGER as total_completed,
         COALESCE(us.average_score, 0)::DECIMAL as avg_score,

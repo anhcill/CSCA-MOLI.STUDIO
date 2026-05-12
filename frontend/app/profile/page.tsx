@@ -588,6 +588,24 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
+              
+              {!statsLoading && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: 'Streak hiện tại', value: `${profileUser?.current_streak || 0} ngày`, color: 'from-rose-50 to-rose-100 text-rose-600', icon: '🔥' },
+                    { label: 'Streak kỷ lục', value: `${profileUser?.longest_streak || 0} ngày`, color: 'from-orange-50 to-orange-100 text-orange-600', icon: '🏆' },
+                    { label: 'Tổng Xu', value: profileUser?.coins || 0, color: 'from-yellow-50 to-yellow-100 text-yellow-600', icon: '⭐' },
+                    { label: 'Kinh nghiệm', value: `${profileUser?.exp || 0} XP`, color: 'from-blue-50 to-cyan-100 text-cyan-600', icon: '⚡' },
+                  ].map(stat => (
+                    <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center flex flex-col items-center justify-center`}>
+                      <div className="text-xl mb-1">{stat.icon}</div>
+                      <p className="text-sm font-black">{stat.value}</p>
+                      <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {!statsLoading && stats && profileUser.target_score && (
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                   <div className="flex items-center justify-between mb-2">

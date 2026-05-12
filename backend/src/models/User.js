@@ -81,6 +81,24 @@ class User {
   }
 
   /**
+   * Find user by Facebook ID
+   * @param {string} facebookId - Facebook ID
+   * @returns {Object|null} User object or null
+   */
+  static async findByFacebookId(facebookId) {
+    try {
+      const result = await db.query(
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, facebook_id, is_vip, subscription_tier, vip_expires_at
+         FROM users WHERE facebook_id = $1`,
+        [facebookId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Create user from Google OAuth
    * @param {Object} googleData - Google profile data
    * @returns {Object} Created user
@@ -125,6 +143,55 @@ class User {
     } catch (error) {
       if (error.code === "23505") {
         // Unique violation
+        if (error.constraint === "users_email_key") {
+          throw new Error("Email already exists");
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Create user from Facebook OAuth
+   * @param {Object} facebookData - Facebook profile data
+   * @returns {Object} Created user
+   */
+  static async createFromFacebook(facebookData) {
+    const { facebookId, email, name, picture } = facebookData;
+
+    try {
+      const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      let username = baseUsername;
+
+      let counter = 1;
+      while (true) {
+        const existing = await db.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (existing.rows.length === 0) break;
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+
+      const result = await db.query(
+        `INSERT INTO users (username, email, full_name, avatar_url, facebook_id, oauth_provider, email_verified, avatar, is_active)
+         VALUES ($1, $2, $3, $4, $5, 'facebook', true, $6, true)
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+        [
+          username,
+          email,
+          name,
+          picture,
+          facebookId,
+          picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1877F2&color=fff`,
+        ]
+      );
+
+      await db.query("INSERT INTO user_stats (user_id) VALUES ($1)", [
+        result.rows[0].id,
+      ]);
+
+      return result.rows[0];
+    } catch (error) {
+      if (error.code === "23505") {
         if (error.constraint === "users_email_key") {
           throw new Error("Email already exists");
         }
@@ -190,6 +257,29 @@ class User {
          WHERE id = $3
          RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
         [googleId, avatarUrl, userId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Link Facebook account to existing user
+   * @param {number} userId - User ID
+   * @param {string} facebookId - Facebook ID
+   * @param {string} avatarUrl - Facebook avatar URL
+   * @returns {Object} Updated user
+   */
+  static async linkFacebookAccount(userId, facebookId, avatarUrl) {
+    try {
+      const result = await db.query(
+        `UPDATE users
+         SET facebook_id = $1, oauth_provider = 'facebook', email_verified = true,
+             avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
+         WHERE id = $3
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+        [facebookId, avatarUrl, userId]
       );
       return result.rows[0];
     } catch (error) {

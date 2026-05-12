@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CredentialResponse, GoogleLogin, googleLogout } from '@react-oauth/google';
+import { CredentialResponse, GoogleLogin } from '@react-oauth/google';
+import { FiFacebook } from 'react-icons/fi';
 import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -24,6 +25,8 @@ export default function LoginForm() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+  const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
+  const isFacebookEnabled = Boolean(facebookAppId);
 
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
@@ -173,6 +176,23 @@ export default function LoginForm() {
     setErrors({ general: 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
   };
 
+  const handleFacebookLogin = () => {
+    if (!isFacebookEnabled) {
+      setErrors({ general: 'Đăng nhập Facebook chưa được cấu hình.' });
+      return;
+    }
+    if (typeof window === 'undefined') return;
+
+    setIsSubmitting(true);
+    setLoading(true);
+    setErrors({});
+    setLoginAttempts(0);
+
+    const redirect = `${window.location.origin}/auth/facebook/callback`;
+    const authUrl = `/api/auth/facebook?redirect=${encodeURIComponent(redirect)}`;
+    window.location.href = authUrl;
+  };
+
   // ── OTP Handlers ──────────────────────────────────────────────────────────────
   const handleOtpChange = (index: number, value: string) => {
     const digit = value.replace(/\D/g, '').slice(-1);
@@ -273,8 +293,8 @@ export default function LoginForm() {
         <p className="text-gray-600">Đăng nhập để tiếp tục học tập</p>
       </div>
 
-      {/* Google Login - Centered button */}
-      <div className="mb-6 flex justify-center">
+      {/* Social Login Buttons */}
+      <div className="mb-6 space-y-3">
         <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
@@ -286,6 +306,18 @@ export default function LoginForm() {
             shape="rectangular"
           />
         </div>
+
+        {isFacebookEnabled && (
+          <button
+            type="button"
+            onClick={handleFacebookLogin}
+            disabled={isSubmitting}
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1877F2] text-[#1877F2] py-2.5 font-semibold hover:bg-[#1877F2] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FiFacebook className="text-lg" />
+            Đăng nhập với Facebook
+          </button>
+        )}
       </div>
 
       <div className="relative mb-6">

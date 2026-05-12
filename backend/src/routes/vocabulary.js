@@ -112,6 +112,13 @@ router.get("/topics", optionalAuth, async (req, res, next) => {
   }
 });
 
+// POST /vocabulary/record-learning - Track learn_vocab quest progress
+router.post(
+  "/record-learning",
+  authenticate,
+  vocabularyController.recordLearning
+);
+
 // ── Admin routes ──────────────────────────────────────────────────
 router.post(
   "/",
