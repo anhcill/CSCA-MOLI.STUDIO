@@ -1,12 +1,10 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Header from '@/components/layout/Header';
-import { FiBook, FiBookmark, FiSearch, FiChevronRight, FiChevronLeft, FiX } from 'react-icons/fi';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { FiBook, FiBookmark, FiSearch, FiChevronRight, FiChevronLeft, FiX, FiList } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axios from '@/lib/utils/axios';
-import { useAuthStore } from '@/lib/store/authStore';
 import VocabularyLearningPanel from '@/components/vocabulary/VocabularyLearningPanel';
 import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
 
@@ -33,8 +31,10 @@ const SUBJECT_META: Record<string, { label: string; icon: string; color: string 
 };
 
 function VocabularyContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
+  const isStrictSubject = !!subjectParam;
 
   const [topics, setTopics] = useState<Array<{ topic: string; subject: string }>>([]);
   const [words, setWords] = useState<VocabItem[]>([]);
@@ -45,7 +45,6 @@ function VocabularyContent() {
   const [bookmarkedWords, setBookmarkedWords] = useState<Set<number>>(new Set());
 
   useEffect(() => { loadTopics(); }, [selectedSubject]);
-
 
   useEffect(() => {
     if (selectedTopic || searchQuery) loadWords();
@@ -64,7 +63,6 @@ function VocabularyContent() {
     finally { setLoading(false); }
   };
 
-  // Load topics with VIP awareness
   const loadTopics = async () => {
     try {
       setLoading(true);
@@ -113,192 +111,239 @@ function VocabularyContent() {
     }
   };
 
-  // Group topics by subject
   const groupedTopics = topics.reduce((acc, t) => {
     if (!acc[t.subject]) acc[t.subject] = [];
     if (!acc[t.subject].find((x: any) => x.topic === t.topic)) acc[t.subject].push(t);
     return acc;
   }, {} as Record<string, typeof topics>);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-sky-50">
-      <Header />
-      <main className="container mx-auto px-6 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 flex items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <FiBook className="text-white text-2xl" />
-          </div>
-          <div>
-            <h1 className="text-4xl font-black bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">Từ Vựng Chuyên Ngành</h1>
-            <p className="text-gray-600 mt-1">Từ vựng thuật ngữ theo từng môn học</p>
-          </div>
-        </div>
+  const activeMeta = isStrictSubject ? getMeta(subjectParam) : null;
 
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Custom Top Navigation */}
+      <div className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <button 
+            onClick={() => router.back()} 
+            className="flex items-center gap-2 text-gray-600 hover:text-cyan-600 font-medium transition-colors py-2"
+          >
+            <FiChevronLeft size={22} />
+            <span className="hidden sm:inline">Quay lại</span>
+          </button>
+          <div className="font-black text-gray-800 text-lg sm:text-xl text-center absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+            {activeMeta ? (
+              <>
+                <span>{activeMeta.icon}</span>
+                <span className={`bg-gradient-to-r ${activeMeta.color} bg-clip-text text-transparent`}>
+                  Từ Vựng {activeMeta.label}
+                </span>
+              </>
+            ) : (
+              <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-2">
+                <FiBook /> Từ Vựng Chuyên Ngành
+              </span>
+            )}
+          </div>
+          <div className="w-16" /> {/* Spacer for perfect centering */}
+        </div>
+      </div>
+
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-6xl">
         {selectedTopic ? (
           /* Chi tiết topic */
-          <div>
-            <div className="mb-6 flex items-center gap-3 flex-wrap">
-              <button onClick={closeTopic} className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border-2 border-gray-200 hover:border-cyan-400 transition-colors text-gray-700 font-medium">
-                <FiChevronLeft size={18} /> Quay lại
-              </button>
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r ${getMeta(selectedSubject).color} text-white font-semibold text-sm`}>
-                <span>{getMeta(selectedSubject).icon}</span>
-                <span>{getMeta(selectedSubject).label}</span>
-                <span>›</span>
-                <span>{selectedTopic}</span>
-              </div>
-              <div className="flex-1 min-w-[200px] relative">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="text" placeholder="Tìm trong chủ đề..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-8 py-2 bg-white border-2 border-gray-200 rounded-xl focus:border-cyan-400 outline-none text-sm" />
-                {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><FiX size={14} /></button>}
-              </div>
-              <button
-                onClick={exportPdf}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-md"
-                title="Xuất danh sách từ vựng ra PDF"
-              >
-                📄 Xuất PDF
-              </button>
-            </div>
-            <VocabularyLearningPanel subject={selectedSubject} topic={selectedTopic} />
-            {loading ? (
-              <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
-            ) : words.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">Không tìm thấy từ vựng nào</div>
-            ) : (
-              <>
-                {/* 4-column table header */}
-                <div className="bg-gradient-to-r from-cyan-600 to-blue-600 rounded-2xl overflow-hidden shadow-lg mb-4">
-                  <div className="grid grid-cols-4 text-white text-sm font-black uppercase tracking-wider">
-                    <div className="px-5 py-3.5 text-center">Tiếng Trung</div>
-                    <div className="px-5 py-3.5 text-center border-l border-white/20">Pinyin</div>
-                    <div className="px-5 py-3.5 text-center border-l border-white/20">English</div>
-                    <div className="px-5 py-3.5 text-center border-l border-white/20">Tiếng Việt</div>
-                  </div>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Topic Header & Tools */}
+            <div className="mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center gap-4 justify-between">
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <button onClick={closeTopic} className="p-2.5 bg-gray-50 text-gray-600 rounded-xl hover:bg-cyan-50 hover:text-cyan-600 transition-colors">
+                  <FiList size={20} />
+                </button>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedTopic}</h2>
+                  <p className="text-sm text-cyan-600 font-medium flex items-center gap-1 mt-0.5">
+                    {getMeta(selectedSubject).icon} {getMeta(selectedSubject).label}
+                  </p>
                 </div>
+              </div>
 
-                {/* Vocabulary rows */}
-                <div className="space-y-2">
-                  {words.map((word, index) => (
-                    <div
-                      key={word.id}
-                      className="bg-white rounded-xl border border-gray-100 hover:border-cyan-300 hover:shadow-md transition-all group"
-                    >
-                      {/* Mobile: stacked cards */}
-                      <div className="hidden sm:grid sm:grid-cols-4 group-hover:bg-cyan-50/30 transition-colors rounded-xl">
-                        {/* Chinese */}
-                        <div className="px-5 py-4 flex items-center gap-2">
-                          <span className="text-2xl font-black text-gray-900 group-hover:text-cyan-700 transition-colors">
-                            {word.word_cn}
-                          </span>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-64">
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Tìm từ vựng..." 
+                    value={searchQuery} 
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:border-cyan-400 focus:bg-white outline-none text-sm transition-all shadow-inner" 
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <FiX size={16} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={exportPdf}
+                  className="px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors shadow-sm shrink-0"
+                  title="Xuất danh sách từ vựng ra PDF"
+                >
+                  📄 Xuất PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Flashcard & Mini Test Tools */}
+            <VocabularyLearningPanel subject={selectedSubject} topic={selectedTopic} />
+
+            {/* Word List */}
+            <div className="mt-8">
+              {loading ? (
+                <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
+              ) : words.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center border border-gray-100 shadow-sm">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FiSearch className="text-gray-400 text-2xl" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Không tìm thấy từ vựng</h3>
+                  <p className="text-gray-500">Hãy thử tìm kiếm bằng một từ khóa khác.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-2">
+                    <h3 className="font-bold text-gray-800 text-lg">Danh sách từ vựng</h3>
+                    <span className="text-sm font-medium px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full">
+                      {words.length} từ
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {words.map((word) => (
+                      <div
+                        key={word.id}
+                        className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all group relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 p-3 flex gap-2">
                           {word.is_premium && (
-                            <span className="inline-flex items-center justify-center w-5 h-5 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm shrink-0" title="Nội dung VIP">
-                              <FaCrown size={10} className="text-white" />
+                            <span className="inline-flex items-center justify-center w-6 h-6 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm" title="Nội dung VIP">
+                              <FaCrown size={12} className="text-white" />
                             </span>
                           )}
                           <button
                             onClick={() => toggleWordBookmark(word)}
-                            className={`ml-auto p-2 rounded-lg ${bookmarkedWords.has(word.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600'}`}
-                            title="Bookmark tu vung"
+                            className={`p-2 rounded-xl transition-colors ${bookmarkedWords.has(word.id) ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
                           >
-                            <FiBookmark size={15} />
+                            <FiBookmark size={18} className={bookmarkedWords.has(word.id) ? 'fill-current' : ''} />
                           </button>
                         </div>
-                        {/* Pinyin */}
-                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
-                          <span className="text-base text-cyan-700 font-semibold italic group-hover:text-cyan-900 transition-colors">
-                            {word.pinyin}
-                          </span>
-                        </div>
-                        {/* English */}
-                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
-                          <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors">
-                            {word.word_en || '—'}
-                          </span>
-                        </div>
-                        {/* Vietnamese */}
-                        <div className="px-5 py-4 flex items-center border-l border-gray-100">
-                          <span className="text-sm text-gray-700 font-medium group-hover:text-gray-900 transition-colors">
-                            {word.word_vn}
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* Mobile card layout */}
-                      <div className="sm:hidden p-4 space-y-2">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-black text-gray-900">{word.word_cn}</span>
-                          <span className="text-sm text-cyan-600 italic">{word.pinyin}</span>
-                          <button
-                            onClick={() => toggleWordBookmark(word)}
-                            className={`ml-auto p-2 rounded-lg ${bookmarkedWords.has(word.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-300'}`}
-                            title="Bookmark tu vung"
-                          >
-                            <FiBookmark size={15} />
-                          </button>
+                        <div className="pr-16">
+                          <div className="flex items-end gap-3 mb-1">
+                            <span className="text-3xl font-black text-gray-900 group-hover:text-cyan-700 transition-colors">
+                              {word.word_cn}
+                            </span>
+                          </div>
+                          <p className="text-base text-cyan-600 font-semibold italic mb-3">
+                            {word.pinyin}
+                          </p>
+                          
+                          <div className="space-y-1.5">
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-bold text-gray-400 uppercase w-8 mt-0.5 shrink-0">VN</span>
+                              <span className="text-sm text-gray-800 font-medium leading-tight">{word.word_vn}</span>
+                            </div>
+                            {word.word_en && (
+                              <div className="flex items-start gap-2">
+                                <span className="text-xs font-bold text-gray-400 uppercase w-8 mt-0.5 shrink-0">EN</span>
+                                <span className="text-sm text-gray-600 leading-tight">{word.word_en}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {word.word_en && (
-                          <div className="text-xs text-gray-500"><span className="font-semibold text-gray-400 uppercase">EN:</span> {word.word_en}</div>
-                        )}
-                        <div className="text-sm text-gray-700"><span className="font-semibold text-gray-400 uppercase">VN:</span> {word.word_vn}</div>
+
                         {word.example_cn && (
-                          <div className="mt-2 pt-2 border-t border-gray-100">
-                            <p className="text-red-600 text-xs italic">{word.example_cn}</p>
-                            {word.example_vn && <p className="text-gray-400 text-xs mt-0.5">{word.example_vn}</p>}
+                          <div className="mt-4 pt-3 border-t border-gray-50">
+                            <p className="text-gray-800 text-sm">{word.example_cn}</p>
+                            {word.example_vn && <p className="text-gray-500 text-sm mt-1">{word.example_vn}</p>}
                           </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
         ) : (
           /* Danh sách topics */
-          <div>
-            {/* Subject filter */}
-            <div className="mb-6 flex flex-wrap gap-2">
-              <button onClick={() => setSelectedSubject('')}
-                className={`px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${!selectedSubject ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-600 hover:border-cyan-300'}`}>
-                Tất cả môn
-              </button>
-              {Object.entries(SUBJECT_META).map(([key, meta]) => (
-                <button key={key} onClick={() => setSelectedSubject(selectedSubject === key ? '' : key)}
-                  className={`px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${selectedSubject === key ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-600 hover:border-cyan-300'}`}>
-                  {meta.icon} {meta.label}
+          <div className="animate-in fade-in duration-500">
+            {/* Subject filter (Only show if not in strict mode) */}
+            {!isStrictSubject && (
+              <div className="mb-8 flex flex-wrap justify-center gap-3">
+                <button 
+                  onClick={() => setSelectedSubject('')}
+                  className={`px-5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all shadow-sm ${!selectedSubject ? 'border-cyan-500 bg-cyan-50 text-cyan-700 scale-105' : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
+                >
+                  Tất cả môn
                 </button>
-              ))}
-            </div>
+                {Object.entries(SUBJECT_META).map(([key, meta]) => (
+                  <button 
+                    key={key} 
+                    onClick={() => setSelectedSubject(selectedSubject === key ? '' : key)}
+                    className={`px-5 py-2.5 rounded-xl border-2 text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${selectedSubject === key ? `border-transparent bg-gradient-to-r ${meta.color} text-white scale-105` : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
+                  >
+                    <span className="text-lg">{meta.icon}</span> {meta.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading ? (
               <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
             ) : topics.length === 0 ? (
-              <div className="text-center py-20">
-                <p className="text-gray-500 text-lg mb-2">Chưa có từ vựng nào trong hệ thống</p>
-                <p className="text-gray-400 text-sm">Admin có thể thêm từ vựng tại trang quản trị</p>
+              <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm max-w-2xl mx-auto mt-10">
+                <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <FiBook className="text-gray-300 text-4xl" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Chưa có từ vựng nào</h3>
+                <p className="text-gray-500">Hệ thống đang được cập nhật thêm từ vựng cho môn học này. Bạn quay lại sau nhé!</p>
               </div>
             ) : (
-              <div className="space-y-8">
+              <div className="space-y-12">
                 {Object.entries(groupedTopics).map(([subject, subjectTopics]) => {
                   const meta = getMeta(subject);
                   return (
-                    <div key={subject}>
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center text-xl shadow`}>{meta.icon}</div>
-                        <h2 className="text-2xl font-black text-gray-800">{meta.label}</h2>
+                    <div key={subject} className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${meta.color} flex items-center justify-center text-3xl shadow-lg`}>
+                          {meta.icon}
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-black text-gray-900">{meta.label}</h2>
+                          <p className="text-gray-500 text-sm mt-1">{subjectTopics.length} chủ đề từ vựng</p>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {subjectTopics.map(t => (
-                          <button key={t.topic} onClick={() => openTopic(t.topic, t.subject)}
-                            className="group bg-white rounded-2xl p-5 border-2 border-gray-100 hover:border-cyan-300 hover:shadow-lg transition-all text-left">
-                            <div className="flex items-start justify-between">
-                              <h3 className="font-bold text-gray-900 text-lg">{t.topic}</h3>
-                              <FiChevronRight className="text-gray-400 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" size={20} />
+                          <button 
+                            key={t.topic} 
+                            onClick={() => openTopic(t.topic, t.subject)}
+                            className="group relative bg-gray-50 rounded-2xl p-5 border-2 border-transparent hover:border-cyan-400 hover:bg-white hover:shadow-xl transition-all text-left overflow-hidden flex flex-col h-full"
+                          >
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/40 to-transparent rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-500" />
+                            
+                            <h3 className="font-bold text-gray-900 text-lg mb-4 pr-6 leading-tight relative z-10">
+                              {t.topic}
+                            </h3>
+                            
+                            <div className="mt-auto flex items-center justify-between relative z-10">
+                              <span className="text-sm text-cyan-600 font-bold group-hover:text-cyan-700">
+                                Bắt đầu học
+                              </span>
+                              <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors">
+                                <FiChevronRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
+                              </div>
                             </div>
-                            <p className="text-sm text-cyan-600 font-semibold mt-4">Xem từ vựng →</p>
                           </button>
                         ))}
                       </div>
