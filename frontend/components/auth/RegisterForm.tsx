@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
+import { FaFacebook } from 'react-icons/fa';
 import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -26,6 +27,8 @@ export default function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+  const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
+  const isFacebookEnabled = Boolean(facebookAppId);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -130,6 +133,22 @@ export default function RegisterForm() {
     setErrors({ general: 'Đăng ký Google thất bại. Vui lòng thử lại.' });
   };
 
+  const handleFacebookLogin = () => {
+    if (!isFacebookEnabled) {
+      setErrors({ general: 'Đăng ký Facebook chưa được cấu hình.' });
+      return;
+    }
+    if (typeof window === 'undefined') return;
+
+    setIsSubmitting(true);
+    setLoading(true);
+    setErrors({});
+
+    const redirect = `${window.location.origin}/auth/facebook/callback`;
+    const authUrl = `/api/auth/facebook?redirect=${encodeURIComponent(redirect)}`;
+    window.location.href = authUrl;
+  };
+
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
@@ -137,9 +156,9 @@ export default function RegisterForm() {
         <p className="text-gray-600">Bắt đầu hành trình học tập của bạn</p>
       </div>
 
-      {/* Google Register - Custom container for better mobile responsiveness */}
-      <div className="mb-6">
-        <div className="w-full overflow-hidden rounded-lg">
+      {/* Social Login Buttons */}
+      <div className="mb-6 space-y-3">
+        <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={handleGoogleError}
@@ -150,6 +169,18 @@ export default function RegisterForm() {
             width="100%"
           />
         </div>
+
+        {isFacebookEnabled && (
+          <button
+            type="button"
+            onClick={handleFacebookLogin}
+            disabled={isSubmitting}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#1877F2] text-white py-2.5 sm:py-3 text-sm sm:text-base font-bold hover:bg-[#166FE5] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+          >
+            <FaFacebook className="text-xl" />
+            Đăng ký với Facebook
+          </button>
+        )}
       </div>
 
       <div className="relative mb-6">

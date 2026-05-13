@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CredentialResponse, GoogleLogin } from '@react-oauth/google';
-import { FiFacebook } from 'react-icons/fi';
+import { FaFacebook } from 'react-icons/fa';
 import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -312,9 +312,9 @@ export default function LoginForm() {
             type="button"
             onClick={handleFacebookLogin}
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1877F2] text-[#1877F2] py-2.5 sm:py-3 text-sm sm:text-base font-semibold hover:bg-[#1877F2] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#1877F2] text-white py-2.5 sm:py-3 text-sm sm:text-base font-bold hover:bg-[#166FE5] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            <FiFacebook className="text-lg" />
+            <FaFacebook className="text-xl" />
             Đăng nhập với Facebook
           </button>
         )}
