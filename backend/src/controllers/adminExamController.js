@@ -93,14 +93,14 @@ async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
   const offset = 10000;
   await client.query(
     `UPDATE questions
-     SET question_number = question_number + $3
-     WHERE exam_id = $1 AND question_number >= $2 AND question_number > 0`,
+     SET question_number = question_number + $3::int
+     WHERE exam_id = $1::int AND question_number >= $2::int AND question_number > 0`,
     [examId, fromPosition, offset],
   );
   await client.query(
     `UPDATE questions
-     SET question_number = question_number - $3 + $4
-     WHERE exam_id = $1 AND question_number >= ($2 + $3)`,
+     SET question_number = question_number - $3::int + $4::int
+     WHERE exam_id = $1::int AND question_number >= ($2::int + $3::int)`,
     [examId, fromPosition, offset, delta],
   );
 }
