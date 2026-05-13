@@ -189,9 +189,9 @@ const recordReview = async (userId, vocabularyId, quality) => {
         last_reviewed_at, due_at, updated_at
       )
       VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        NOW(), NOW() + ($4 * INTERVAL '1 day'), NOW()
+        $1, $2, $3::numeric(4,2), $4::integer, $5::integer,
+        $6::integer, $7::integer, $8::integer, $9::integer,
+        NOW(), NOW() + ($4::integer * INTERVAL '1 day'), NOW()
       )
       ON CONFLICT (user_id, vocabulary_id)
       DO UPDATE SET
@@ -203,7 +203,7 @@ const recordReview = async (userId, vocabularyId, quality) => {
         correct_count = vocabulary_user_reviews.correct_count + EXCLUDED.correct_count,
         wrong_count = vocabulary_user_reviews.wrong_count + EXCLUDED.wrong_count,
         last_reviewed_at = NOW(),
-        due_at = EXCLUDED.due_at,
+        due_at = NOW() + (EXCLUDED.interval_days * INTERVAL '1 day'),
         updated_at = NOW()
       RETURNING *
     `,
