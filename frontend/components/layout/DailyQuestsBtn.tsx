@@ -27,7 +27,7 @@ export default function DailyQuestsBtn() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; coins: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user, updateUser } = useAuthStore();
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -73,6 +73,7 @@ export default function DailyQuestsBtn() {
     try {
       const { data } = await axios.post(`/users/quests/${id}/claim`);
       if (data.success) {
+        const rewardCoins = quest?.reward_coins || 0;
         confetti({
           particleCount: 100,
           spread: 70,
@@ -80,7 +81,10 @@ export default function DailyQuestsBtn() {
           colors: ['#f43f5e', '#fbbf24', '#34d399', '#60a5fa']
         });
         setQuests(prev => prev.map(q => q.id === id ? { ...q, is_completed: true } : q));
-        setToast({ message: `Đã nhận thưởng thành công!`, coins: quest?.reward_coins || 0 });
+        if (rewardCoins > 0) {
+          updateUser({ coins: (user?.coins || 0) + rewardCoins });
+        }
+        setToast({ message: `Đã nhận thưởng thành công!`, coins: rewardCoins });
         setTimeout(() => setToast(null), 4000);
       } else {
         alert(data.message);

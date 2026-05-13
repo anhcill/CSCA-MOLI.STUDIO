@@ -15,6 +15,22 @@
   word-break: break-word;
 }
 
+.rich-math-text {
+  overflow-x: auto;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.rich-math-text .katex-display {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.rich-math-text .katex {
+  font-size: 1.05em;
+}
+
 /* Preset button hover effect */
 .math-preset-btn:hover .katex {
   transform: scale(1.1);

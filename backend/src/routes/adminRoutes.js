@@ -45,7 +45,7 @@ router.get(
 // User management
 router.get("/users", authorizePermission("users.manage"), adminController.getUsers);
 router.get("/users/:userId/activities", authorizePermission("users.manage"), adminController.getUserActivities);
-router.get("/roles", authorizePermission("users.manage"), adminController.getAdminRoleOptions);
+router.get("/roles", authorizePermission("admin.super"), adminController.getAdminRoleOptions);
 router.put("/users/:userId/status", authorizePermission("users.manage"), adminController.updateUserStatus);
 router.delete(
 	"/users/:userId",
@@ -59,7 +59,7 @@ router.put(
 );
 router.put(
 	"/users/:userId/admin-roles",
-	authorizePermission("users.manage"),
+	authorizePermission("admin.super"),
 	adminController.updateUserAdminRoles,
 );
 router.patch(

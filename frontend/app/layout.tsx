@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import Providers from "@/components/layout/Providers";
 import ClientShell from "@/components/layout/ClientShell";
+import { getCanonicalSiteUrl } from "@/lib/seo/site";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 import "@/components/admin/MathInput.css";
 
@@ -18,22 +20,27 @@ const plusJakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const SITE_URL = getCanonicalSiteUrl();
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://moly-studio.io.vn'),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK Online & Ôn Thi CSCA',
+    default: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc - MOLI.STUDIO',
     template: '%s | CSCA MOLI.STUDIO',
   },
-  description: 'Nền tảng giáo dục trực tuyến CSCA MOLI.STUDIO cung cấp 500+ đề thi thử chuẩn hoá HSK/HSKK, lộ trình ôn thi cá nhân hoá bằng AI cho du học sinh chinh phục học bổng Đại học Trung Quốc.',
-  keywords: ['ôn thi HSK', 'thi HSK online', 'luyện thi HSKK', 'CSCA MOLI.STUDIO', 'ôn thi CSCA', 'du học trung quốc', 'tiếng trung', 'đề thi mô phỏng HSK', 'luyện thi tiếng trung'],
+  description: 'Nền tảng ôn thi CSCA, luyện đề học bổng CSC và du học Trung Quốc cho học sinh Việt Nam: đề mô phỏng, từ vựng, lộ trình học và lời giải chi tiết.',
+  keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'đề thi CSCA', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
   authors: [{ name: 'CSCA MOLI.STUDIO' }],
   creator: 'CSCA MOLI.STUDIO',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
     siteName: 'CSCA MOLI.STUDIO',
-    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
-    description: 'Nền tảng ôn thi HSK/HSKK/CSCA với 500+ đề thi mô phỏng, AI phân tích lộ trình và 10,000+ học viên.',
+    title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
+    description: 'Luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc với đề mô phỏng, từ vựng, lộ trình cá nhân hóa.',
     url: '/',
     images: [{
       url: '/images/du-hoc-trung-quoc-1200x799.jpg',
@@ -44,8 +51,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
-    description: 'Nền tảng ôn thi HSK/HSKK/CSCA với 500+ đề thi mô phỏng, AI phân tích lộ trình.',
+    title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
+    description: 'Luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc.',
     images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
   robots: {
@@ -90,20 +97,20 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebSite",
               "name": "CSCA MOLI.STUDIO",
-              "url": "https://moly-studio.io.vn",
-              "description": "Nền tảng luyện thi HSK/HSKK online với 500+ đề thi mô phỏng",
+              "url": SITE_URL,
+              "description": "Nền tảng ôn thi CSCA, học bổng CSC và du học Trung Quốc cho học sinh Việt Nam",
               "potentialAction": {
                 "@type": "SearchAction",
-                "target": "https://moly-studio.io.vn/search?q={search_term_string}",
+                "target": `${SITE_URL}/search?q={search_term_string}`,
                 "query-input": "required name=search_term_string"
               },
               "publisher": {
                 "@type": "Organization",
                 "name": "CSCA MOLI.STUDIO",
-                "url": "https://moly-studio.io.vn",
+                "url": SITE_URL,
                 "logo": {
                   "@type": "ImageObject",
-                  "url": "https://moly-studio.io.vn/images/logo.png"
+                  "url": `${SITE_URL}/images/logo.png`
                 },
                 "sameAs": [
                   "https://www.facebook.com/molistudio",
@@ -122,9 +129,9 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "Organization",
               "name": "CSCA MOLI.STUDIO",
-              "url": "https://moly-studio.io.vn",
-              "description": "Nền tảng giáo dục trực tuyến chuyên luyện thi HSK/HSKK, hỗ trợ du học sinh chinh phục học bổng Đại học Trung Quốc",
-              "knowsAbout": ["Thi HSK", "Thi HSKK", "Tiếng Trung", "Du học Trung Quốc", "Học bổng"],
+              "url": SITE_URL,
+              "description": "Nền tảng giáo dục trực tuyến chuyên ôn thi CSCA, học bổng CSC và du học Trung Quốc",
+              "knowsAbout": ["CSCA", "Ôn thi CSCA", "Học bổng CSC", "Du học Trung Quốc", "Tiếng Trung", "Thi HSK"],
               "areaServed": {
                 "@type": "Country",
                 "name": "Vietnam"

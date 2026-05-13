@@ -165,12 +165,14 @@ function getPermissionSet(user?: User | null) {
 
 export function hasPermission(user: User | null | undefined, permission: string): boolean {
   if (!user || !permission) return false;
+  if (getRoleSet(user).has('super_admin')) return true;
   const permissions = getPermissionSet(user);
   return permissions.has('*') || permissions.has(permission);
 }
 
 export function hasAnyPermission(user: User | null | undefined, permissionCodes: string[]): boolean {
   if (!user || !Array.isArray(permissionCodes) || permissionCodes.length === 0) return false;
+  if (getRoleSet(user).has('super_admin')) return true;
   const permissions = getPermissionSet(user);
   if (permissions.has('*')) return true;
   return permissionCodes.some((code) => permissions.has(code));

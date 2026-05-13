@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import examApi, { Exam, Question } from '@/lib/api/exams';
 import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield } from 'react-icons/fi';
@@ -43,6 +43,8 @@ export default function ExamPage() {
   const [showViolation, setShowViolation] = useState(false);
   const [lastViolation, setLastViolation] = useState('');
   const [isScreenCaptured, setIsScreenCaptured] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const submitInFlightRef = useRef(false);
 
   const { maxViolations } = useExamProtection({
     enabled: !!attemptId && !submitting,
@@ -158,10 +160,10 @@ export default function ExamPage() {
     const questionId = questions[currentQuestionIndex].id;
     const q = questions[currentQuestionIndex] as any;
 
-    setSelectedAnswers({
-      ...selectedAnswers,
+    setSelectedAnswers((prev) => ({
+      ...prev,
       [questionId]: essayText !== undefined ? essayText : answerId,
-    });
+    }));
 
     // Track pool answer keys for fill_blank_item
     if (q.question_type === 'fill_blank_item' && q.passage_group_id) {
@@ -184,23 +186,25 @@ export default function ExamPage() {
   };
 
   const handleSubmit = async (options: { force?: boolean } = {}) => {
-    if (!attemptId || submitting) return;
+    if (!attemptId || submitting || submitInFlightRef.current) return;
 
     if (!options.force) {
-      const confirmed = confirm('Chắc chắn nộp bài chứ? Bạn không thể thay đổi sau khi nộp.');
-      if (!confirmed) return;
+      setShowSubmitConfirm(true);
+      return;
     }
 
     try {
+      submitInFlightRef.current = true;
       setSubmitting(true);
+      setShowSubmitConfirm(false);
       await examApi.submitExam(attemptId);
       // Redirect to result page
       router.push(`/exam/${examId}/result?attemptId=${attemptId}`);
     } catch (error) {
       console.error('Error submitting exam:', error);
-      alert('Đã có lỗi xảy ra mạng lúc Nộp. Đừng hoảng loạn, thử ấn nộp lại.');
-    } finally {
+      submitInFlightRef.current = false;
       setSubmitting(false);
+      alert('Đã có lỗi xảy ra mạng lúc Nộp. Đừng hoảng loạn, thử ấn nộp lại.');
     }
   };
 
@@ -340,14 +344,14 @@ export default function ExamPage() {
       )}
       
       {/* FOCUS TOP BAR */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-gray-200 z-50 flex items-center justify-between px-4 sm:px-8 shadow-sm">
+      <div className="fixed top-0 left-0 right-0 min-h-16 bg-white/95 backdrop-blur-md border-b border-gray-200 z-50 flex items-center justify-between gap-2 px-3 py-2 sm:px-8 shadow-sm">
         {/* Left Side: Info */}
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white items-center justify-center shadow-inner font-black">
              {exam.title.substring(0, 1) || 'E'}
           </div>
-          <div>
-            <h1 className="font-bold text-gray-900 leading-tight max-w-[200px] sm:max-w-md truncate">
+          <div className="min-w-0">
+            <h1 className="font-bold text-gray-900 leading-tight max-w-[42vw] sm:max-w-md truncate">
                {exam.title}
             </h1>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -357,8 +361,8 @@ export default function ExamPage() {
         </div>
 
         {/* Right Side: Tools */}
-        <div className="flex items-center gap-3 sm:gap-6">
-          <div className={`flex items-center gap-2 px-4 py-1.5 sm:py-2 rounded-xl font-mono text-xl sm:text-2xl font-bold tracking-tight shadow-inner border ${
+        <div className="flex shrink-0 items-center gap-2 sm:gap-6">
+          <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-2xl font-bold tracking-tight shadow-inner border ${
               isTimeCritical 
                 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' 
                 : 'bg-slate-100 text-slate-700 border-slate-200'
@@ -370,7 +374,7 @@ export default function ExamPage() {
           <button
             onClick={() => handleSubmit()}
             disabled={submitting}
-            className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 sm:px-8 py-2 sm:py-2.5 rounded-xl font-bold shadow-md hover:shadow-xl hover:shadow-teal-500/20 active:scale-95 transition-all outline-none disabled:opacity-60"
+            className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 sm:px-8 py-2 sm:py-2.5 rounded-xl font-bold shadow-md hover:shadow-xl hover:shadow-teal-500/20 active:scale-95 transition-all outline-none disabled:opacity-60"
           >
             {submitting ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -392,13 +396,13 @@ export default function ExamPage() {
 
       {/* MAIN EXAM ARENA */}
       <div 
-        className="max-w-[1500px] mx-auto pt-24 pb-16 px-4 md:px-8 flex flex-col lg:flex-row gap-6 lg:gap-10 transition-[filter] duration-200"
+        className="max-w-[1500px] mx-auto pt-24 pb-32 sm:pb-16 px-3 sm:px-4 md:px-8 flex flex-col lg:flex-row gap-5 lg:gap-10 transition-[filter] duration-200"
         style={{ filter: isScreenCaptured ? 'blur(30px)' : 'none' }}
       >
         
         {/* Left Area: The Question Board */}
         <div className="lg:flex-1 lg:max-w-4xl max-w-full">
-           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 md:p-12 transition-all duration-300">
+           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 p-4 sm:p-6 md:p-12 transition-all duration-300">
              
              {/* Question Badge */}
              <div className="flex items-center gap-3 mb-6">
@@ -425,7 +429,7 @@ export default function ExamPage() {
              )}
 
              {/* Question Text */}
-             <div className="text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.8] tracking-tight mb-8">
+             <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
                 {(currentQuestion.question_text || '').split('\n').map((line: string, idx: number) => (
                   <span key={idx}>
                     {line}
@@ -509,7 +513,7 @@ export default function ExamPage() {
                       <button
                         key={answer.id}
                         onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
-                        className={`relative w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-4 outline-none ${
+                        className={`relative w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-3 sm:gap-4 outline-none ${
                             isSelected
                             ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20'
                             : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
@@ -522,7 +526,7 @@ export default function ExamPage() {
                           }`}>
                           {isSelected ? <FiCheck strokeWidth={3} /> : letter}
                         </div>
-                        <div className="flex-1 mt-0.5">
+                        <div className="min-w-0 flex-1 mt-0.5">
                           <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
                              {answer.answer_text}
                           </span>
@@ -541,6 +545,43 @@ export default function ExamPage() {
                     );
                   });
                 })()
+/*
+                  return (
+                    <button
+                      key={answer.id}
+                      onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
+                      className={`relative w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-3 sm:gap-4 outline-none ${
+                          isSelected
+                          ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20'
+                          : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
+                        }`}
+                    >
+                      <div className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
+                          isSelected
+                          ? 'border-indigo-600 bg-indigo-600 text-white'
+                          : 'border-slate-300 text-slate-500 group-hover:border-indigo-300 group-hover:text-indigo-500 bg-white'
+                        }`}>
+                        {isSelected ? <FiCheck strokeWidth={3} /> : letter}
+                      </div>
+                      <div className="min-w-0 flex-1 mt-0.5">
+                        <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                           {answer.answer_text}
+                        </span>
+                        {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
+                          <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
+                             {answer.answer_text_cn}
+                          </div>
+                        )}
+                        {answer.image_url && (
+                          <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
+                            <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+*/
                )}
              </div>
 
@@ -648,6 +689,76 @@ export default function ExamPage() {
         )}
 
       </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-md sm:hidden">
+        <div className="mx-auto flex max-w-md items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiến độ</p>
+            <p className="truncate text-sm font-black text-slate-900">
+              {answeredCount}/{questions.length} câu - {formatTime(timeLeft)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleSubmit()}
+            disabled={submitting}
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 text-sm font-black text-white shadow-lg shadow-teal-500/20 active:scale-95 disabled:opacity-60"
+          >
+            {submitting ? (
+              <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            ) : (
+              <FiSend size={18} />
+            )}
+            Nộp bài
+          </button>
+        </div>
+      </div>
+
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:items-center">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl sm:p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <FiSend size={20} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-slate-900">Nộp bài thi?</h2>
+                <p className="text-sm text-slate-500">Sau khi nộp bạn không thể sửa đáp án.</p>
+              </div>
+            </div>
+
+            <div className="mb-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-400">Đã làm</p>
+                <p className="font-black text-slate-900">{answeredCount}/{questions.length}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-400">Còn lại</p>
+                <p className="font-black text-slate-900">{formatTime(timeLeft)}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSubmitConfirm(false)}
+                disabled={submitting}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 active:bg-slate-50 disabled:opacity-60"
+              >
+                Kiểm tra lại
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit({ force: true })}
+                disabled={submitting}
+                className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white active:bg-emerald-700 disabled:opacity-60"
+              >
+                {submitting ? 'Đang nộp...' : 'Nộp ngay'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

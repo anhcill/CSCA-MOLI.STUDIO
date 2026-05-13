@@ -365,6 +365,7 @@ async function runOptimizations() {
       INSERT INTO permissions (code, name, description)
       VALUES
         ('admin.dashboard.view', 'Admin Dashboard View', 'Truy cập dashboard quản trị tổng quan'),
+        ('admin.super', 'Super Admin Control', 'Phân quyền và giám sát admin khác'),
         ('system.manage', 'System Management', 'Toàn quyền quản trị hệ thống'),
         ('users.manage', 'User Management', 'Quản lý người dùng và vai trò'),
         ('forum.manage', 'Forum Moderation', 'Kiểm duyệt/xóa bài viết forum'),
@@ -397,6 +398,7 @@ async function runOptimizations() {
     const rolePermissions = {
       super_admin: [
         "admin.dashboard.view",
+        "admin.super",
         "system.manage",
         "users.manage",
         "forum.manage",

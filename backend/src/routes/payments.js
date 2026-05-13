@@ -6,6 +6,10 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
+const db = require('../config/database');
+
+const COIN_VALUE_VND = 100;
+const MAX_COIN_DISCOUNT_RATIO = 0.2;
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
 const rateLimitMap = new Map();
@@ -184,6 +188,53 @@ function getStoredCouponCode(transaction) {
   } catch (_) { return null; }
 }
 
+function getStoredPaymentMeta(transaction) {
+  if (!transaction?.raw_response) return {};
+  try {
+    return typeof transaction.raw_response === 'string'
+      ? JSON.parse(transaction.raw_response)
+      : transaction.raw_response;
+  } catch (_) {
+    return {};
+  }
+}
+
+function getStoredCoinSpend(transaction) {
+  const raw = getStoredPaymentMeta(transaction);
+  const coinsUsed = Number.parseInt(raw?.coinsUsed, 10);
+  const coinDiscountAmount = Number.parseInt(raw?.coinDiscountAmount, 10);
+  return {
+    coinsUsed: Number.isFinite(coinsUsed) && coinsUsed > 0 ? coinsUsed : 0,
+    coinDiscountAmount: Number.isFinite(coinDiscountAmount) && coinDiscountAmount > 0 ? coinDiscountAmount : 0,
+  };
+}
+
+async function getReservedCoins(userId) {
+  const reservedRes = await db.query(
+    `SELECT COALESCE(SUM((raw_response->>'coinsUsed')::int), 0) AS reserved
+     FROM transactions
+     WHERE user_id = $1
+       AND status = 'pending'
+       AND created_at >= NOW() - INTERVAL '24 hours'
+       AND raw_response ? 'coinsUsed'`,
+    [userId]
+  );
+  return Number.parseInt(reservedRes.rows[0]?.reserved, 10) || 0;
+}
+
+async function applyCoinSpend(transaction) {
+  const { coinsUsed } = getStoredCoinSpend(transaction);
+  if (!coinsUsed) return;
+
+  await db.query(
+    `UPDATE users
+     SET coins = GREATEST(0, COALESCE(coins, 0) - $1)
+     WHERE id = $2
+     RETURNING coins`,
+    [coinsUsed, transaction.user_id]
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,7 +254,7 @@ router.post('/create', authenticate, async (req, res) => {
       });
     }
 
-    const { package_id, payment_method = 'momo', coupon_code, idempotency_key } = req.body;
+    const { package_id, payment_method = 'momo', coupon_code, idempotency_key, use_coins, coins_to_use } = req.body;
     const userId = req.user.id;
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -236,7 +287,7 @@ router.post('/create', authenticate, async (req, res) => {
     }
 
     // Lấy gói từ DB
-    const pkgRes = await require('../config/database').query(
+    const pkgRes = await db.query(
       `SELECT id, name, tier, duration_days, price, is_active FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
       [pkgId]
     );
@@ -248,8 +299,8 @@ router.post('/create', authenticate, async (req, res) => {
     const pkg = pkgRes.rows[0];
 
     // Kiểm tra xem người dùng có VIP vĩnh viễn chưa
-    const userCheck = await require('../config/database').query(
-      `SELECT is_vip, vip_expires_at FROM users WHERE id = $1`,
+    const userCheck = await db.query(
+      `SELECT is_vip, vip_expires_at, COALESCE(coins, 0) AS coins FROM users WHERE id = $1`,
       [userId]
     );
     const user = userCheck.rows[0];
@@ -274,7 +325,7 @@ router.post('/create', authenticate, async (req, res) => {
 
     // ── Áp dụng coupon nếu có (CHỈ validation, chưa increment) ───────────
     if (coupon_code && typeof coupon_code === 'string' && coupon_code.trim().length > 0) {
-      const couponRes = await require('../config/database').query(
+      const couponRes = await db.query(
         `SELECT * FROM coupons WHERE UPPER(code) = UPPER($1) AND is_active = TRUE`,
         [coupon_code.trim()]
       );
@@ -320,7 +371,31 @@ router.post('/create', authenticate, async (req, res) => {
       }
     }
 
+    let coinsUsed = 0;
+    let coinDiscountAmount = 0;
+    if (use_coins === true || Number.parseInt(coins_to_use, 10) > 0) {
+      const requestedCoins = Number.parseInt(coins_to_use, 10);
+      const reservedCoins = await getReservedCoins(userId);
+      const availableCoins = Math.max(0, Number(user?.coins || 0) - reservedCoins);
+      const maxCoinsByOrder = Math.floor((finalAmount * MAX_COIN_DISCOUNT_RATIO) / COIN_VALUE_VND);
+      const maxUsableCoins = Math.max(0, Math.min(availableCoins, maxCoinsByOrder));
+      coinsUsed = Number.isFinite(requestedCoins) && requestedCoins > 0
+        ? Math.min(requestedCoins, maxUsableCoins)
+        : maxUsableCoins;
+      coinDiscountAmount = coinsUsed * COIN_VALUE_VND;
+      finalAmount = Math.max(0, finalAmount - coinDiscountAmount);
+    }
+
     // Lưu transaction pending — lưu giá đã giảm vào amount, coupon vào raw_response
+    const paymentMeta = {
+      couponCode: coupon_code?.trim() || null,
+      coinsUsed,
+      coinValueVnd: COIN_VALUE_VND,
+      coinDiscountAmount,
+      originalAmount: Number(pkg.price),
+      couponDiscountAmount: discountAmount,
+    };
+
     const transaction = await Transaction.create({
       user_id: userId,
       amount: finalAmount,
@@ -330,6 +405,7 @@ router.post('/create', authenticate, async (req, res) => {
       package_name: pkg.name,
       transaction_code: orderId,
       coupon_code: coupon_code?.trim() || null,
+      raw_response: paymentMeta,
     });
 
     // Nếu payment_method là bank_transfer → trả về thông tin QR
@@ -351,6 +427,11 @@ router.post('/create', authenticate, async (req, res) => {
           discount_amount: discountAmount,
           original_amount: pkg.price,
           final_amount: finalAmount,
+        } : null,
+        appliedCoins: coinsUsed > 0 ? {
+          coins_used: coinsUsed,
+          coin_value_vnd: COIN_VALUE_VND,
+          discount_amount: coinDiscountAmount,
         } : null,
       });
     }
@@ -383,6 +464,11 @@ router.post('/create', authenticate, async (req, res) => {
         discount_amount: discountAmount,
         original_amount: pkg.price,
         final_amount: finalAmount,
+      } : null,
+      appliedCoins: coinsUsed > 0 ? {
+        coins_used: coinsUsed,
+        coin_value_vnd: COIN_VALUE_VND,
+        discount_amount: coinDiscountAmount,
       } : null,
     });
   } catch (err) {
@@ -442,6 +528,7 @@ router.post('/momo-webhook', async (req, res) => {
 
         // ── Increment coupon usage CHỈ khi thành công ──────────────────────
         await incrementCouponUsage(transaction);
+        await applyCoinSpend(transaction);
 
         // Update user VIP with tier
         await User.updateVipStatus(transaction.user_id, durationDays, tier);
@@ -536,6 +623,7 @@ router.post('/vnpay-webhook', async (req, res) => {
       if (transaction.status !== 'completed') {
         // Increment coupon usage CHỉ khi thành công
         await incrementCouponUsage(transaction);
+        await applyCoinSpend(transaction);
 
         const tier = transaction.package_id
           ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
@@ -738,6 +826,7 @@ router.post('/sepay-webhook', async (req, res) => {
 
     // Increment coupon usage CHỉ khi thành công
     await incrementCouponUsage(transaction);
+    await applyCoinSpend(transaction);
 
     const tier = transaction.package_id
       ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'

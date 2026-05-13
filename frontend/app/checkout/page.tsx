@@ -45,6 +45,9 @@ const PAYMENT_METHODS = [
   },
 ];
 
+const COIN_VALUE_VND = 100;
+const MAX_COIN_DISCOUNT_RATIO = 0.2;
+
 // ── QR Payment Screen ──────────────────────────────────────────────────────────
 function BankTransferScreen({
   orderId,
@@ -93,10 +96,10 @@ function BankTransferScreen({
   };
 
   const InfoRow = ({ label, value, copyKey }: { label: string; value: string; copyKey: string }) => (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-500 w-32 shrink-0">{label}</span>
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="font-bold text-gray-900 text-sm truncate">{value}</span>
+    <div className="flex flex-col gap-1 py-3 border-b border-gray-100 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 sm:w-32 sm:shrink-0 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal sm:text-gray-500">{label}</span>
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:justify-end">
+        <span className="min-w-0 break-all font-bold text-gray-900 text-sm sm:truncate">{value}</span>
         <button
           onClick={() => copy(value, copyKey)}
           className="shrink-0 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
@@ -122,11 +125,11 @@ function BankTransferScreen({
 
       {/* QR Code */}
       <div className="flex justify-center">
-        <div className="bg-white p-4 rounded-2xl shadow-lg border-2 border-indigo-100">
+        <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-lg border-2 border-indigo-100">
           <img
             src={bank.qrUrl}
             alt="QR Chuyển khoản"
-            className="w-52 h-52 object-contain"
+            className="h-48 w-48 object-contain sm:h-52 sm:w-52"
             onError={(e) => {
               (e.target as HTMLImageElement).src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`Bank:${bank.bankCode}|Acc:${bank.accountNumber}|Amount:${bank.amount}|Content:${bank.content}`)}`;
             }}
@@ -135,7 +138,7 @@ function BankTransferScreen({
       </div>
 
       {/* Bank Info */}
-      <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+      <div className="bg-gray-50 rounded-2xl p-4 sm:p-5 border border-gray-100">
         <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Thông tin chuyển khoản</h3>
         <InfoRow label="Ngân hàng" value={bank.bankCode} copyKey="bank" />
         <InfoRow label="Số tài khoản" value={bank.accountNumber} copyKey="account" />
@@ -155,7 +158,7 @@ function BankTransferScreen({
       </div>
 
       {/* Status indicator */}
-      <div className="flex items-center justify-center gap-3 py-3 bg-indigo-50 rounded-xl">
+      <div className="flex items-center justify-center gap-3 rounded-xl bg-indigo-50 px-3 py-3 text-center">
         <FiRefreshCw size={16} className="text-indigo-500 animate-spin" />
         <span className="text-indigo-700 text-sm font-medium">Hệ thống đang tự động kiểm tra thanh toán{dots}</span>
       </div>
@@ -202,7 +205,7 @@ function SuccessScreen({ packageName, vipExpires }: { packageName?: string; vipE
           </p>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           onClick={() => router.push('/hoi-dap')}
           className="py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors text-sm"
@@ -224,7 +227,7 @@ function SuccessScreen({ packageName, vipExpires }: { packageName?: string; vipE
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, updateUser } = useAuthStore();
 
   const [allPackages, setAllPackages] = useState<DbPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<DbPackage | null>(null);
@@ -243,6 +246,7 @@ function CheckoutContent() {
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
   const [couponMismatchError, setCouponMismatchError] = useState('');
+  const [useCoins, setUseCoins] = useState(false);
 
   // Re-validate coupon whenever package or coupon code changes
   useEffect(() => {
@@ -265,6 +269,17 @@ function CheckoutContent() {
         setCouponMismatchError(err.response?.data?.message || 'Mã không hợp lệ');
       });
   }, [appliedCouponCode, selectedPkg]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getCurrentUser()
+      .then((response) => {
+        if (response?.success && response?.data?.user) {
+          updateUser(response.data.user);
+        }
+      })
+      .catch(() => {});
+  }, [isAuthenticated, updateUser]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -305,6 +320,22 @@ function CheckoutContent() {
     if (urlMethod) setSelectedMethod(urlMethod);
   }, [isAuthenticated, urlPackageId, urlMethod, router, user?.subscription_tier]);
 
+  const userCoins = Math.max(0, Number(user?.coins || 0));
+  const baseAmount = selectedPkg ? Number(selectedPkg.price) : 0;
+  const subtotalAfterCoupon = selectedPkg ? Number(appliedCouponInfo?.final_amount ?? baseAmount) : 0;
+  const maxCoinUse = selectedPkg
+    ? Math.min(userCoins, Math.floor((subtotalAfterCoupon * MAX_COIN_DISCOUNT_RATIO) / COIN_VALUE_VND))
+    : 0;
+  const coinDiscountAmount = useCoins ? maxCoinUse * COIN_VALUE_VND : 0;
+  const payableAmount = Math.max(0, subtotalAfterCoupon - coinDiscountAmount);
+  const hasDiscount = selectedPkg ? payableAmount < baseAmount : false;
+
+  useEffect(() => {
+    if (useCoins && maxCoinUse <= 0) {
+      setUseCoins(false);
+    }
+  }, [useCoins, maxCoinUse]);
+
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
     if (couponMismatchError) { setError(couponMismatchError); return; }
@@ -315,7 +346,9 @@ function CheckoutContent() {
         package_id: selectedPkg.id,
         payment_method: selectedMethod,
         coupon_code: appliedCouponCode,
-        idempotency_key: `${selectedPkg.id}_${selectedMethod}_${Date.now()}`,
+        use_coins: useCoins,
+        coins_to_use: useCoins ? maxCoinUse : 0,
+        idempotency_key: `${selectedPkg.id}_${selectedMethod}_${useCoins ? maxCoinUse : 0}_${Date.now()}`,
       });
       if (res.data.success) {
         if (res.data.appliedCoupon) {
@@ -377,11 +410,11 @@ function CheckoutContent() {
           <FaCrown size={14} className="text-amber-500" />
           Nâng cấp CSCA PRO
         </div>
-        <h1 className="text-3xl font-black text-gray-900">
+        <h1 className="text-2xl font-black text-gray-900 sm:text-3xl">
           Mở khóa tất cả tính năng
           <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"> PRO</span>
         </h1>
-        <p className="text-gray-500 text-sm">
+        <p className="text-gray-500 text-sm break-words">
           Thanh toán với tài khoản
           <span className="font-semibold text-gray-700 ml-1">{user.email}</span>
         </p>
@@ -431,7 +464,7 @@ function CheckoutContent() {
                   key={pkg.id}
                   onClick={() => setSelectedPkg(pkg)}
                   className={`w-full text-left rounded-2xl border-2 transition-all duration-300 overflow-hidden
-                    ${selected ? 'border-transparent shadow-xl scale-[1.02] ring-4 ring-indigo-200' : 'border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white'}`}
+                    ${selected ? 'border-transparent shadow-xl sm:scale-[1.02] ring-4 ring-indigo-200' : 'border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white'}`}
                 >
                   <div className={`p-5 pb-4 bg-gradient-to-r ${ui.color} text-white`}>
                     <div className="flex items-start justify-between">
@@ -444,7 +477,7 @@ function CheckoutContent() {
                       </div>
                     </div>
                     <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-4xl font-black">{pkg.price.toLocaleString('vi-VN')}</span>
+                      <span className="text-3xl font-black sm:text-4xl">{pkg.price.toLocaleString('vi-VN')}</span>
                       <span className="text-sm text-white/70">đ</span>
                     </div>
                   </div>
@@ -479,7 +512,7 @@ function CheckoutContent() {
             <button
               key={method.id}
               onClick={() => setSelectedMethod(method.id)}
-              className={`relative w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-200 text-left
+              className={`relative w-full flex items-center gap-3 p-4 sm:gap-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 text-left
                 ${selectedMethod === method.id ? `${method.selectedBg} shadow-lg` : `${method.border} ${method.bg} ${method.hoverBg} hover:shadow-md`}`}
             >
               {method.recommended && (
@@ -505,6 +538,47 @@ function CheckoutContent() {
         </div>
       </div>
 
+      {/* Step 3: Coins */}
+      {selectedPkg && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">3</div>
+            <h2 className="text-lg font-black text-gray-900">Dùng xu tích lũy</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => maxCoinUse > 0 && setUseCoins(v => !v)}
+            disabled={maxCoinUse <= 0}
+            className={`w-full rounded-2xl border-2 p-4 text-left transition-all sm:p-5 ${
+              useCoins && maxCoinUse > 0
+                ? 'border-amber-400 bg-amber-50 shadow-lg'
+                : maxCoinUse > 0
+                  ? 'border-amber-200 bg-white hover:border-amber-300 hover:bg-amber-50'
+                  : 'border-gray-200 bg-gray-50 opacity-75'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-black text-gray-900">Dùng xu để giảm giá</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Bạn có {userCoins.toLocaleString('vi-VN')} xu. 1 xu = {COIN_VALUE_VND.toLocaleString('vi-VN')}đ, tối đa 20% đơn hàng.
+                </p>
+                {maxCoinUse > 0 ? (
+                  <p className="mt-2 text-sm font-bold text-amber-700">
+                    Có thể dùng {maxCoinUse.toLocaleString('vi-VN')} xu, giảm {coinDiscountAmount.toLocaleString('vi-VN')}đ
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm font-bold text-gray-500">Chưa đủ điều kiện dùng xu cho đơn này</p>
+                )}
+              </div>
+              <div className={`h-6 w-11 rounded-full p-0.5 transition-colors ${useCoins && maxCoinUse > 0 ? 'bg-amber-500' : 'bg-gray-300'}`}>
+                <div className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${useCoins && maxCoinUse > 0 ? 'translate-x-5' : ''}`} />
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* Order summary */}
       {selectedPkg && (
         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 sm:p-6 text-white space-y-4 shadow-2xl">
@@ -512,7 +586,7 @@ function CheckoutContent() {
             <FaLock size={14} className="text-amber-400" />
             <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Xác nhận đơn hàng</h3>
           </div>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color} flex items-center justify-center shrink-0`}>
                 <FaCrown size={16} className="text-white sm:w-5 sm:h-5" />
@@ -522,24 +596,41 @@ function CheckoutContent() {
                 <p className="text-xs text-gray-400">{selectedPkg.duration_days} ngày sử dụng</p>
               </div>
             </div>
-            <div className="text-right shrink-0">
-              {appliedCouponInfo ? (
+            <div className="shrink-0 text-left sm:text-right">
+              {hasDiscount ? (
                 <div className="space-y-1">
                   <span className="text-sm font-black line-through text-gray-500 block">
                     {selectedPkg.price.toLocaleString('vi-VN')}đ
                   </span>
                   <span className="text-xl sm:text-2xl font-black text-emerald-400 block">
-                    {appliedCouponInfo.final_amount.toLocaleString('vi-VN')}đ
+                    {payableAmount.toLocaleString('vi-VN')}đ
                   </span>
-                  <span className="inline-block px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-bold">
-                    -{appliedCouponInfo.discount_amount.toLocaleString('vi-VN')}đ
-                  </span>
+                  <div className="flex flex-wrap gap-1 sm:justify-end">
+                    {appliedCouponInfo && (
+                      <span className="inline-block px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-bold">
+                        -{appliedCouponInfo.discount_amount.toLocaleString('vi-VN')}đ
+                      </span>
+                    )}
+                    {useCoins && maxCoinUse > 0 && (
+                      <span className="inline-block px-2 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded-lg font-bold">
+                        -{coinDiscountAmount.toLocaleString('vi-VN')}đ
+                      </span>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <span className="text-xl sm:text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
               )}
             </div>
           </div>
+          {useCoins && maxCoinUse > 0 && (
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-700 text-sm">
+              <span className="text-gray-400">Dùng xu</span>
+              <span className="font-bold text-amber-300">
+                {maxCoinUse.toLocaleString('vi-VN')} xu (-{coinDiscountAmount.toLocaleString('vi-VN')}đ)
+              </span>
+            </div>
+          )}
           {appliedCouponCode && appliedCouponInfo && (
             <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
               <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-mono font-bold">
@@ -567,14 +658,14 @@ function CheckoutContent() {
         <button
           onClick={handleProceed}
           disabled={!selectedPkg || loading}
-          className={`w-full flex items-center justify-center gap-3 px-8 py-4 rounded-2xl text-white font-black text-lg shadow-2xl transition-all
+          className={`w-full flex flex-wrap items-center justify-center gap-2 px-5 py-4 sm:gap-3 sm:px-8 rounded-2xl text-white font-black text-base sm:text-lg shadow-2xl transition-all
             ${!selectedPkg || loading ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl hover:shadow-indigo-200 active:scale-[0.99]'}`}
         >
           {loading ? (
             <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
           ) : selectedPkg ? (
             <>
-              <span>{appliedCouponInfo ? `${appliedCouponInfo.final_amount.toLocaleString('vi-VN')}đ` : `${selectedPkg.price.toLocaleString('vi-VN')}đ`}</span>
+              <span>{`${payableAmount.toLocaleString('vi-VN')}đ`}</span>
               <span className="opacity-60">—</span>
               <span>Tiến hành thanh toán</span>
               <FaArrowRight size={18} />
@@ -593,11 +684,11 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50 py-12 px-4 pt-28">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50 px-3 py-6 pt-20 sm:px-4 sm:py-12 sm:pt-28">
       <div className="w-full max-w-3xl mx-auto">
-        <div className="bg-white shadow-2xl rounded-[2rem] overflow-hidden border border-gray-100">
+        <div className="bg-white shadow-2xl rounded-3xl sm:rounded-[2rem] overflow-hidden border border-gray-100">
           <div className="h-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500" />
-          <div className="p-8 sm:p-10">
+          <div className="p-4 sm:p-10">
             <Suspense fallback={
               <div className="flex justify-center items-center py-24">
                 <FiLoader size={40} className="animate-spin text-indigo-600" />

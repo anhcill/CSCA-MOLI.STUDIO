@@ -123,7 +123,7 @@ function VocabularyContent() {
     <div className="min-h-screen bg-gray-50">
       {/* Custom Top Navigation */}
       <div className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-3 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-2">
           <button 
             onClick={() => router.back()} 
             className="flex items-center gap-2 text-gray-600 hover:text-cyan-600 font-medium transition-colors py-2"
@@ -131,16 +131,16 @@ function VocabularyContent() {
             <FiChevronLeft size={22} />
             <span className="hidden sm:inline">Quay lại</span>
           </button>
-          <div className="font-black text-gray-800 text-lg sm:text-xl text-center absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+          <div className="pointer-events-none min-w-0 flex-1 px-2 text-center text-base font-black text-gray-800 sm:text-xl">
             {activeMeta ? (
               <>
                 <span>{activeMeta.icon}</span>
-                <span className={`bg-gradient-to-r ${activeMeta.color} bg-clip-text text-transparent`}>
+                <span className={`truncate bg-gradient-to-r ${activeMeta.color} bg-clip-text text-transparent`}>
                   Từ Vựng {activeMeta.label}
                 </span>
               </>
             ) : (
-              <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent flex items-center gap-2">
+              <span className="inline-flex max-w-full items-center justify-center gap-2 truncate bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
                 <FiBook /> Từ Vựng Chuyên Ngành
               </span>
             )}
@@ -154,20 +154,20 @@ function VocabularyContent() {
           /* Chi tiết topic */
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Topic Header & Tools */}
-            <div className="mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center gap-4 justify-between">
-              <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-stretch md:items-center gap-4 justify-between">
+              <div className="flex items-center gap-3 w-full md:w-auto min-w-0">
                 <button onClick={closeTopic} className="p-2.5 bg-gray-50 text-gray-600 rounded-xl hover:bg-cyan-50 hover:text-cyan-600 transition-colors">
                   <FiList size={20} />
                 </button>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedTopic}</h2>
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-bold text-gray-900 sm:text-xl">{selectedTopic}</h2>
                   <p className="text-sm text-cyan-600 font-medium flex items-center gap-1 mt-0.5">
                     {getMeta(selectedSubject).icon} {getMeta(selectedSubject).label}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-col gap-3 w-full sm:flex-row md:w-auto">
                 <div className="relative flex-1 md:w-64">
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 
@@ -278,10 +278,10 @@ function VocabularyContent() {
           <div className="animate-in fade-in duration-500">
             {/* Subject filter (Only show if not in strict mode) */}
             {!isStrictSubject && (
-              <div className="mb-8 flex flex-wrap justify-center gap-3">
+              <div className="mb-8 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:justify-center sm:gap-3 sm:overflow-visible sm:pb-0">
                 <button 
                   onClick={() => setSelectedSubject('')}
-                  className={`px-5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all shadow-sm ${!selectedSubject ? 'border-cyan-500 bg-cyan-50 text-cyan-700 scale-105' : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
+                  className={`shrink-0 px-4 sm:px-5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all shadow-sm ${!selectedSubject ? 'border-cyan-500 bg-cyan-50 text-cyan-700 sm:scale-105' : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
                 >
                   Tất cả môn
                 </button>
@@ -289,7 +289,7 @@ function VocabularyContent() {
                   <button 
                     key={key} 
                     onClick={() => setSelectedSubject(selectedSubject === key ? '' : key)}
-                    className={`px-5 py-2.5 rounded-xl border-2 text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${selectedSubject === key ? `border-transparent bg-gradient-to-r ${meta.color} text-white scale-105` : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
+                    className={`shrink-0 px-4 sm:px-5 py-2.5 rounded-xl border-2 text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${selectedSubject === key ? `border-transparent bg-gradient-to-r ${meta.color} text-white sm:scale-105` : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
                   >
                     <span className="text-lg">{meta.icon}</span> {meta.label}
                   </button>
@@ -300,7 +300,7 @@ function VocabularyContent() {
             {loading ? (
               <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
             ) : topics.length === 0 ? (
-              <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm max-w-2xl mx-auto mt-10">
+              <div className="bg-white rounded-3xl p-8 sm:p-16 text-center border border-gray-100 shadow-sm max-w-2xl mx-auto mt-10">
                 <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
                   <FiBook className="text-gray-300 text-4xl" />
                 </div>

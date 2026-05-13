@@ -129,6 +129,7 @@ const ROLE_OPTIONS: AdminRoleOption[] = [
 export default function AdminUsersPage() {
   const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
+  const canManageAdminScopes = hasPermission(user, 'admin.super');
   const [users, setUsers] = useState<User[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ currentPage: 1, totalPages: 1, totalUsers: 0, limit: 20 });
   const [loading, setLoading] = useState(true);
@@ -233,6 +234,7 @@ export default function AdminUsersPage() {
   const getRoleLabel = (code: string) => ROLE_OPTIONS.find(r => r.code === code)?.label || code;
 
   const openRoleEditor = (u: User) => {
+    if (!canManageAdminScopes) return;
     setEditingRoles(u);
     setSelectedRoles(u.admin_roles || []);
   };
@@ -249,9 +251,11 @@ export default function AdminUsersPage() {
   };
 
   const toggleRole = (code: string) => {
-    setSelectedRoles(prev =>
-      prev.includes(code) ? prev.filter(r => r !== code) : [...prev, code]
-    );
+    setSelectedRoles(prev => {
+      if (prev.includes(code)) return prev.filter(r => r !== code);
+      if (code === 'super_admin') return ['super_admin'];
+      return [...prev.filter(r => r !== 'super_admin'), code];
+    });
   };
 
   return (
@@ -347,10 +351,12 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openRoleEditor(u)} title="Sửa vai trò"
-                        className="p-2 rounded-lg hover:bg-violet-100 text-gray-500 hover:text-violet-600 transition-colors">
-                        <FiEdit2 size={14} />
-                      </button>
+                      {canManageAdminScopes && (
+                        <button onClick={() => openRoleEditor(u)} title="Sửa vai trò"
+                          className="p-2 rounded-lg hover:bg-violet-100 text-gray-500 hover:text-violet-600 transition-colors">
+                          <FiEdit2 size={14} />
+                        </button>
+                      )}
                       <button onClick={() => handleViewActivity(u)} title="Xem hoạt động"
                         className="p-2 rounded-lg hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors">
                         <FiActivity size={14} />
@@ -393,7 +399,7 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Role Editor Modal */}
-      {editingRoles && (
+      {editingRoles && canManageAdminScopes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">

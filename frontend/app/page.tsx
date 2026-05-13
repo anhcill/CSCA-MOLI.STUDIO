@@ -5,18 +5,21 @@ import HomeContent from '@/components/layout/HomeContent';
 import DailyQuestBanner from '@/components/layout/DailyQuestBanner';
 
 export const metadata: Metadata = {
-  title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK Online & Ôn Thi CSCA',
-  description: 'Nền tảng giáo dục trực tuyến CSCA MOLI.STUDIO cung cấp 500+ đề thi thử chuẩn hoá HSK/HSKK, lộ trình ôn thi cá nhân hoá bằng AI cho du học sinh chinh phục học bổng Đại học Trung Quốc.',
+  title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
+  description: 'Ôn thi CSCA và học bổng du học Trung Quốc với đề mô phỏng, từ vựng tiếng Trung, lộ trình học cá nhân hóa và lời giải chi tiết.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
-    description: 'Nền tảng luyện thi CSCA cung cấp 500+ đề thi, hỗ trợ du học sinh chinh phục học bổng Đại học Trung Quốc.',
+    title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
+    description: 'Nền tảng luyện thi CSCA, học bổng CSC và du học Trung Quốc cho học sinh Việt Nam.',
     url: '/',
     images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'CSCA MOLI.STUDIO - Luyện thi HSK/HSKK & CSCA' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CSCA MOLI.STUDIO | Luyện Thi HSK/HSKK & CSCA',
-    description: 'Nền tảng luyện thi CSCA cung cấp 500+ đề thi, hỗ trợ du học sinh chinh phục học bổng Đại học Trung Quốc.',
+    title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
+    description: 'Ôn thi CSCA, học bổng CSC và du học Trung Quốc.',
     images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
 };

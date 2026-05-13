@@ -22,10 +22,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: post.title,
     description: post.excerpt,
     authors: [{ name: post.author }],
+    alternates: {
+      canonical: `/blog/${post.slug}`,
+    },
     openGraph: {
       title: post.title,
       description: post.excerpt,
       type: 'article',
+      url: `/blog/${post.slug}`,
       publishedTime: post.publishedAt,
       modifiedTime: post.updatedAt,
       tags: post.tags,
@@ -154,7 +158,7 @@ export default async function BlogPostPage({ params }: PageProps) {
                 <FiShare2 size={14} />
                 Chia sẻ:
               </span>
-              <a href={`https://www.facebook.com/sharer/sharer.php?u=https://moly-studio.io.vn/blog/${post.slug}`}
+              <a href={`https://www.facebook.com/sharer/sharer.php?u=https://www.molystudio.online/blog/${post.slug}`}
                  target="_blank"
                  rel="noopener noreferrer"
                  className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors">

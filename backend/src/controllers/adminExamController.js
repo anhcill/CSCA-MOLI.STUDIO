@@ -8,6 +8,11 @@ function sanitize(str) {
   return str.replace(/<[^>]*>/g, "").trim();
 }
 
+function sanitizeExplanation(str) {
+  if (typeof str !== "string") return str;
+  return str.replace(/\0/g, "").trim();
+}
+
 // ─── P1: Validate question points ──────────────────────────────────────────────
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
@@ -403,8 +408,8 @@ const AdminExamController = {
             sanitize(normQ?.en || ''),
             sanitize(normQ?.cn || ''),
             parsedPoints,
-            explanation ? sanitize(explanation) : null,
-            explanationCn ? sanitize(explanationCn) : null,
+            explanation ? sanitizeExplanation(explanation) : null,
+            explanationCn ? sanitizeExplanation(explanationCn) : null,
             imageUrl ? sanitize(imageUrl) : null,
             passageText ? sanitize(passageText) : null,
             passageImageUrl ? sanitize(passageImageUrl) : null,
@@ -553,11 +558,11 @@ const AdminExamController = {
         }
         if (explanation !== undefined) {
           fields.push(`explanation = $${idx++}`);
-          vals.push(explanation ? sanitize(explanation) : null);
+          vals.push(explanation ? sanitizeExplanation(explanation) : null);
         }
         if (explanationCn !== undefined) {
           fields.push(`explanation_cn = $${idx++}`);
-          vals.push(explanationCn ? sanitize(explanationCn) : null);
+          vals.push(explanationCn ? sanitizeExplanation(explanationCn) : null);
         }
         if (passageText !== undefined) {
           fields.push(`passage_text = $${idx++}`);
@@ -836,8 +841,8 @@ const AdminExamController = {
                         examId, targetPosition, qType,
                         sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
                         parsedPoints,
-                        explanation ? sanitize(explanation) : null,
-                        explanationCn ? sanitize(explanationCn) : null,
+                        explanation ? sanitizeExplanation(explanation) : null,
+                        explanationCn ? sanitizeExplanation(explanationCn) : null,
                         imageUrl ? sanitize(imageUrl) : null,
                         passageText ? sanitize(passageText) : null,
                         passageImageUrl ? sanitize(passageImageUrl) : null,
@@ -1559,8 +1564,8 @@ const AdminExamController = {
               examId, questionNumber, QUESTION_TYPES.READING_ITEM,
               sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
               parsedPoints,
-              q.explanation ? sanitize(q.explanation) : null,
-              q.explanationCn ? sanitize(q.explanationCn) : null,
+              q.explanation ? sanitizeExplanation(q.explanation) : null,
+              q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
               QUESTION_TYPES.READING_ITEM,
               q.difficulty || 'medium',
               q.subQuestionNumber || questionNumber,
@@ -1729,8 +1734,8 @@ const AdminExamController = {
                 examId, questionNumber, QUESTION_TYPES.READING_ITEM,
                 sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
                 parsedPoints,
-                q.explanation ? sanitize(q.explanation) : null,
-                q.explanationCn ? sanitize(q.explanationCn) : null,
+                q.explanation ? sanitizeExplanation(q.explanation) : null,
+                q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
                 QUESTION_TYPES.READING_ITEM,
                 q.difficulty || 'medium',
                 q.subQuestionNumber || questionNumber,

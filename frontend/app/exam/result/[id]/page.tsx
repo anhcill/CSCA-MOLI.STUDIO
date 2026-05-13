@@ -9,9 +9,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
-import { renderMathDisplay } from '@/components/admin/MathInput';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
+import RichMathText from '@/components/common/RichMathText';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -538,10 +538,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         {(q.explanation || q.explanation_cn) && (
                                             <div className="mt-4 ml-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                                 <p className="text-sm font-semibold text-blue-900 mb-1">💡 Giải thích:</p>
-                                                <div
-                                                  className="text-sm text-blue-800 math-preview"
-                                                  dangerouslySetInnerHTML={{ __html: renderMathDisplay(q.explanation || q.explanation_cn || '') }}
-                                                />
+                                                <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-blue-800" />
                                             </div>
                                         )}
 
@@ -672,10 +669,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                             {(question.explanation || question.explanation_cn) && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                     <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
-                                    <div
-                                      className="text-sm text-blue-800 math-preview"
-                                      dangerouslySetInnerHTML={{ __html: renderMathDisplay(question.explanation || question.explanation_cn || '') }}
-                                    />
+                                    <RichMathText value={question.explanation || question.explanation_cn || ''} className="text-blue-800" />
                                 </div>
                             )}
                         </div>

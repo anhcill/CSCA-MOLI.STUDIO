@@ -19,6 +19,11 @@ function sanitize(str) {
   return str.replace(/<[^>]*>/g, "").trim();
 }
 
+function sanitizeExplanation(str) {
+  if (typeof str !== "string") return str;
+  return str.replace(/\0/g, "").trim();
+}
+
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -184,8 +189,8 @@ async function insertSubItems(client, { examId, groupId, startQuestionNumber, su
         sanitize(normQ?.en || fallbackQuestionText),
         sanitize(normQ?.cn || fallbackQuestionText),
         parsedPoints,
-        item.explanation ? sanitize(item.explanation) : null,
-        item.explanationCn ? sanitize(item.explanationCn) : null,
+        item.explanation ? sanitizeExplanation(item.explanation) : null,
+        item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
         QUESTION_TYPES.FILL_BLANK_ITEM,
         item.difficulty || "medium",
         item.subQuestionNumber || questionNumber,

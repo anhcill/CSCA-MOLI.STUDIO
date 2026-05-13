@@ -16,9 +16,79 @@ const ROLE_OPTIONS = [
   { code: 'roadmap_admin', label: 'Roadmap Admin', color: 'bg-cyan-100 text-cyan-700 border-cyan-200', desc: 'Quản lý các trạng thái lộ trình' },
 ];
 
+type AdminAccessOption = {
+  code: string;
+  label: string;
+  color: string;
+  desc: string;
+  pages: string[];
+  permissions: string[];
+};
+
+const ACCESS_OPTIONS: AdminAccessOption[] = [
+  {
+    code: 'super_admin',
+    label: 'Toàn quyền Admin',
+    color: 'bg-red-100 text-red-700 border-red-200',
+    desc: 'Vào và chỉnh sửa toàn bộ khu vực admin, bao gồm phân quyền admin khác.',
+    pages: ['Tất cả trang admin'],
+    permissions: ['admin.super', 'system.manage', 'users.manage', 'exams.manage', 'content.manage', 'forum.manage', 'forum.post_as_admin', 'roadmap.manage', 'admin.dashboard.view'],
+  },
+  {
+    code: 'user_admin',
+    label: 'Users, VIP, mã giảm giá',
+    color: 'bg-blue-100 text-blue-700 border-blue-200',
+    desc: 'Quản lý tài khoản, VIP, doanh thu và coupon. Không được phân quyền admin khác.',
+    pages: ['Users', 'VIP & Doanh thu', 'Mã giảm giá'],
+    permissions: ['users.manage', 'admin.dashboard.view'],
+  },
+  {
+    code: 'exam_admin',
+    label: 'Đề thi, câu hỏi',
+    color: 'bg-purple-100 text-purple-700 border-purple-200',
+    desc: 'Quản lý đề thi, tạo/sửa đề, câu hỏi, lịch thi và dữ liệu thi.',
+    pages: ['Đề thi', 'Tạo đề', 'Câu hỏi', 'Lịch thi'],
+    permissions: ['exams.manage', 'admin.dashboard.view'],
+  },
+  {
+    code: 'content_admin',
+    label: 'Nội dung học',
+    color: 'bg-green-100 text-green-700 border-green-200',
+    desc: 'Quản lý tài liệu, từ vựng và kho hình ảnh/media nội dung.',
+    pages: ['Tài liệu', 'Từ vựng', 'Hình ảnh'],
+    permissions: ['content.manage', 'admin.dashboard.view'],
+  },
+  {
+    code: 'forum_admin',
+    label: 'Cộng đồng, báo cáo',
+    color: 'bg-orange-100 text-orange-700 border-orange-200',
+    desc: 'Kiểm duyệt forum, báo cáo, hỏi đáp VIP và đăng bài dưới danh nghĩa admin.',
+    pages: ['Forum', 'Báo cáo', 'Hỏi-Đáp VIP'],
+    permissions: ['forum.manage', 'forum.post_as_admin', 'admin.dashboard.view'],
+  },
+  {
+    code: 'roadmap_admin',
+    label: 'Lộ trình học',
+    color: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+    desc: 'Quản lý các trạng thái, mốc và nội dung lộ trình học.',
+    pages: ['Lộ trình'],
+    permissions: ['roadmap.manage', 'admin.dashboard.view'],
+  },
+];
+
 const getRoleBadge = (code: string) => {
-  const opt = ROLE_OPTIONS.find(r => r.code === code);
+  const opt = ACCESS_OPTIONS.find(r => r.code === code) || ROLE_OPTIONS.find(r => r.code === code);
   return opt || { code, label: code, color: 'bg-gray-100 text-gray-600 border-gray-200', desc: '' };
+};
+
+const getPermissionsForRoles = (roleCodes: string[]) => {
+  const permissionSet = new Set<string>();
+  roleCodes.forEach((code) => {
+    ACCESS_OPTIONS.find((option) => option.code === code)?.permissions.forEach((permission) => {
+      permissionSet.add(permission);
+    });
+  });
+  return Array.from(permissionSet);
 };
 
 interface Props {
@@ -77,8 +147,9 @@ export default function AdminListTab({ onViewLog }: Props) {
     setSavingRoles(true);
     try {
       await adminApi.updateUserAdminRoles(editingAdmin.id, selectedRoles);
+      const nextPermissions = getPermissionsForRoles(selectedRoles);
       setAdmins(prev => prev.map(a => a.id === editingAdmin.id
-        ? { ...a, admin_roles: selectedRoles, primary_admin_role: selectedRoles[0] || null }
+        ? { ...a, admin_roles: selectedRoles, primary_admin_role: selectedRoles[0] || null, permissions: nextPermissions }
         : a
       ));
       setEditingAdmin(null);
@@ -87,7 +158,11 @@ export default function AdminListTab({ onViewLog }: Props) {
   };
 
   const toggleRole = (code: string) => {
-    setSelectedRoles(prev => prev.includes(code) ? prev.filter(r => r !== code) : [...prev, code]);
+    setSelectedRoles(prev => {
+      if (prev.includes(code)) return prev.filter(r => r !== code);
+      if (code === 'super_admin') return ['super_admin'];
+      return [...prev.filter(r => r !== 'super_admin'), code];
+    });
   };
 
   const timeAgo = (dateStr: string | null) => {
@@ -237,19 +312,26 @@ export default function AdminListTab({ onViewLog }: Props) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
-                <h2 className="font-bold text-gray-900">Sửa vai trò Admin</h2>
+                <h2 className="font-bold text-gray-900">Chọn trang admin được truy cập</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{editingAdmin.full_name} · {editingAdmin.email}</p>
               </div>
               <button onClick={() => setEditingAdmin(null)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500"><FiX size={18} /></button>
             </div>
             <div className="px-6 py-5 space-y-3">
-              {ROLE_OPTIONS.map(opt => (
+              {ACCESS_OPTIONS.map(opt => (
                 <label key={opt.code} className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-violet-50 transition-colors has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50">
                   <input type="checkbox" checked={selectedRoles.includes(opt.code)} onChange={() => toggleRole(opt.code)}
                     className="w-4 h-4 mt-0.5 rounded accent-violet-600" />
                   <div className="flex-1">
                     <span className={`inline-block px-2 py-0.5 mb-1 rounded-md text-xs font-semibold border ${opt.color}`}>{opt.label}</span>
                     <p className="text-xs text-gray-500">{opt.desc}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {opt.pages.map(page => (
+                        <span key={page} className="px-2 py-0.5 rounded-md bg-white border border-gray-200 text-[11px] font-medium text-gray-600">
+                          {page}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </label>
               ))}

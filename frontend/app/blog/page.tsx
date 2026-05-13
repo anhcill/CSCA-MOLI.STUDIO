@@ -5,11 +5,14 @@ import { BLOG_POSTS, formatDate } from './blogData';
 import { FiCalendar, FiClock, FiTag } from 'react-icons/fi';
 
 export const metadata: Metadata = {
-  title: 'Blog | MOLI.STUDIO - Tin Tức & Hướng Dẫn Thi HSK',
-  description: 'Tin tức, hướng dẫn và mẹo luyện thi HSK/HSKK. Cập nhật lịch thi, từ vựng, chiến thuật làm bài và kinh nghiệm từ người đạt điểm cao.',
+  title: 'Blog Ôn Thi CSCA & Du Học Trung Quốc',
+  description: 'Hướng dẫn ôn thi CSCA, học bổng CSC, du học Trung Quốc, cấu trúc đề thi, mẫu đề và kinh nghiệm chuẩn bị hồ sơ học bổng.',
+  alternates: {
+    canonical: '/blog',
+  },
   openGraph: {
-    title: 'Blog | MOLI.STUDIO',
-    description: 'Tin tức & hướng dẫn luyện thi HSK/HSKK',
+    title: 'Blog Ôn Thi CSCA & Du Học Trung Quốc',
+    description: 'Hướng dẫn ôn thi CSCA, học bổng CSC và du học Trung Quốc.',
     type: 'website',
   },
 };

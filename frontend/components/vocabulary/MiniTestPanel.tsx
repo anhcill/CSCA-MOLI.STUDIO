@@ -51,15 +51,15 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
 
   return (
     <section className="bg-white rounded-2xl border border-cyan-100 p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-lg font-black text-gray-900">Mini test tu vung</h2>
           <p className="text-sm text-gray-500">Chọn nghĩa đúng, kết quả sẽ cập nhật lịch ôn</p>
         </div>
         <button
           onClick={startTest}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-60 sm:w-auto"
         >
           <FiPlay /> Tao de
         </button>
@@ -90,7 +90,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
           <div className="space-y-4">
             {questions.map((question, index) => (
               <div key={question.vocabulary_id} className="rounded-xl border border-gray-100 p-4">
-                <div className="flex items-baseline gap-3">
+                <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
                   <span className="text-xs font-black text-cyan-700">#{index + 1}</span>
                   <span className="text-2xl font-black text-gray-900">{question.word_cn}</span>
                   <span className="text-sm italic text-cyan-700">{question.pinyin}</span>

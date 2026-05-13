@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { FiDivide, FiHash } from 'react-icons/fi';
+import RichMathText from '@/components/common/RichMathText';
 
 interface MathInputProps {
   value: string;
@@ -258,10 +259,7 @@ export default function MathInput({
       {currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
-          <div
-            className="math-preview text-sm text-gray-800"
-            dangerouslySetInnerHTML={{ __html: renderMathDisplay(currentValue) }}
-          />
+          <RichMathText value={currentValue} className="text-gray-800" />
         </div>
       )}
 

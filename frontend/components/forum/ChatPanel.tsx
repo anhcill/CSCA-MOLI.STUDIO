@@ -439,7 +439,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   return (
     <>
       {/* ── Header ── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100/60 bg-white/90 backdrop-blur-xl shrink-0 shadow-sm relative z-50">
+      <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 border-b border-gray-100/60 bg-white/90 backdrop-blur-xl shrink-0 shadow-sm relative z-50">
         <button
           onClick={onBack}
           className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100 active:scale-95 transition-all bg-gray-50 border border-gray-200 shadow-sm"
@@ -509,7 +509,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] pointer-events-none" />
         )}
 
-        <div ref={messagesScrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto py-4 px-3">
+        <div ref={messagesScrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <div className="w-8 h-8 border-[2.5px] border-violet-200/50 border-t-violet-600 rounded-full animate-spin" />
@@ -567,7 +567,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                         className={`flex mb-1.5 ${isOwn(msg) ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-1 duration-200`}
                       >
                         <div
-                          className={`max-w-[78%] flex items-end gap-2 ${
+                          className={`max-w-[88%] sm:max-w-[78%] flex items-end gap-1.5 sm:gap-2 ${
                             isOwn(msg) ? 'flex-row-reverse' : 'flex-row'
                           }`}
                           onContextMenu={(e) => handleMsgContextMenu(e, msg.id)}
@@ -630,7 +630,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
                             {/* Chat bubble */}
                             <div
-                              className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words shadow-sm cursor-pointer ${
+                              className={`px-3.5 py-2.5 sm:px-4 rounded-2xl text-sm leading-relaxed break-words shadow-sm cursor-pointer ${
                                 msg.is_deleted 
                                   ? 'bg-gray-100 italic text-gray-500 border border-gray-200' 
                                   : isOwn(msg)
@@ -695,7 +695,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       </div>
 
       {/* ── Input Area ── */}
-      <div className="shrink-0 px-3 py-3 border-t border-violet-100/50 bg-white/95 backdrop-blur-xl shadow-[0_-4px_20px_rgba(139,92,246,0.05)]">
+      <div className="shrink-0 border-t border-violet-100/50 bg-white/95 px-2 py-2 backdrop-blur-xl shadow-[0_-4px_20px_rgba(139,92,246,0.05)] sm:px-3 sm:py-3" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
         {blocked && (
           <div className="mb-2 p-2.5 bg-red-50 rounded-2xl text-center text-xs text-red-500 font-bold border border-red-100">
             Bạn đã chặn hoặc bị chặn bởi người dùng này.
@@ -728,7 +728,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           </div>
         )}
 
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-1.5 sm:gap-2">
           <button
             onClick={() => { setShowEmoji(v => !v); }}
             disabled={blocked}

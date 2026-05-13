@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { FiCheck, FiRefreshCw, FiRotateCcw, FiX } from 'react-icons/fi';
+import { useRef, useState, type PointerEvent } from 'react';
+import { FiCheck, FiChevronLeft, FiChevronRight, FiRefreshCw, FiRotateCcw, FiX } from 'react-icons/fi';
 import { vocabularyReviewApi, type VocabularyReviewFilters } from '@/lib/api/vocabulary';
 import type { VocabularyReviewCard } from '@/lib/types/vocabulary';
 
@@ -23,8 +23,63 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartX = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
+  const suppressNextClick = useRef(false);
 
   const current = cards[index];
+
+  const goToCard = (nextIndex: number) => {
+    const boundedIndex = Math.max(0, Math.min(nextIndex, cards.length - 1));
+    if (boundedIndex === index) return;
+    setIndex(boundedIndex);
+    setFlipped(false);
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!current || saving) return;
+    dragStartX.current = event.clientX;
+    dragOffsetRef.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    if (dragStartX.current === null) return;
+    const nextOffset = event.clientX - dragStartX.current;
+    dragOffsetRef.current = nextOffset;
+    setDragOffset(nextOffset);
+    if (Math.abs(nextOffset) > 8) {
+      suppressNextClick.current = true;
+    }
+  };
+
+  const finishDrag = () => {
+    if (dragStartX.current === null) return;
+
+    const threshold = 80;
+    const finalOffset = dragOffsetRef.current;
+    if (finalOffset <= -threshold && index < cards.length - 1) {
+      goToCard(index + 1);
+    } else if (finalOffset >= threshold && index > 0) {
+      goToCard(index - 1);
+    }
+
+    dragStartX.current = null;
+    dragOffsetRef.current = 0;
+    setIsDragging(false);
+    setDragOffset(0);
+  };
+
+  const handleCardClick = () => {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
+      return;
+    }
+    setFlipped((value) => !value);
+  };
 
   const startSession = async () => {
     try {
@@ -83,19 +138,30 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       {current ? (
         <>
           <button
-            onClick={() => setFlipped((value) => !value)}
-            className="w-full min-h-[260px] rounded-2xl border-2 border-cyan-100 bg-gradient-to-br from-cyan-50 to-blue-50 p-6 text-center hover:border-cyan-300 transition-colors"
+            onClick={handleCardClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={finishDrag}
+            onPointerCancel={finishDrag}
+            onPointerLeave={finishDrag}
+            style={{
+              transform: `translateX(${dragOffset}px) rotate(${dragOffset / 28}deg)`,
+              touchAction: 'pan-y',
+            }}
+            className={`w-full min-h-[240px] sm:min-h-[260px] rounded-2xl border-2 border-cyan-100 bg-gradient-to-br from-cyan-50 to-blue-50 p-4 sm:p-6 text-center hover:border-cyan-300 select-none ${
+              isDragging ? 'cursor-grabbing transition-none' : 'cursor-pointer transition-all'
+            }`}
           >
             {!flipped ? (
-              <div className="flex min-h-[210px] flex-col items-center justify-center">
+              <div className="flex min-h-[200px] sm:min-h-[210px] flex-col items-center justify-center">
                 <p className="text-sm font-bold text-cyan-700 mb-3">{current.topic}</p>
-                <p className="text-6xl font-black text-gray-950 leading-tight">{current.word_cn}</p>
+                <p className="text-5xl font-black text-gray-950 leading-tight sm:text-6xl">{current.word_cn}</p>
                 <p className="mt-5 text-sm text-gray-500">Nhấn để lật thẻ</p>
               </div>
             ) : (
-              <div className="flex min-h-[210px] flex-col items-center justify-center">
-                <p className="text-2xl font-black text-cyan-700 italic">{current.pinyin}</p>
-                <p className="mt-4 text-2xl font-bold text-gray-900">{current.word_vn}</p>
+              <div className="flex min-h-[200px] sm:min-h-[210px] flex-col items-center justify-center">
+                <p className="text-xl font-black text-cyan-700 italic sm:text-2xl">{current.pinyin}</p>
+                <p className="mt-4 text-xl font-bold text-gray-900 sm:text-2xl">{current.word_vn}</p>
                 {current.word_en && <p className="mt-1 text-sm text-gray-500">{current.word_en}</p>}
                 {current.example_cn && (
                   <div className="mt-5 max-w-xl border-t border-cyan-100 pt-4">
@@ -111,6 +177,26 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
             <p className="text-sm font-semibold text-gray-500">
               {index + 1}/{cards.length} - {current.review_state === 'new' ? 'Từ mới' : 'Đến lịch ôn'}
             </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => goToCard(index - 1)}
+                disabled={index === 0 || saving}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-100 text-cyan-700 hover:bg-cyan-50 disabled:opacity-35"
+                title="The truoc"
+              >
+                <FiChevronLeft />
+              </button>
+              <button
+                type="button"
+                onClick={() => goToCard(index + 1)}
+                disabled={index >= cards.length - 1 || saving}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-100 text-cyan-700 hover:bg-cyan-50 disabled:opacity-35"
+                title="The tiep theo"
+              >
+                <FiChevronRight />
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {QUALITY_BUTTONS.map(({ quality, label, icon: Icon, className }) => (
                 <button

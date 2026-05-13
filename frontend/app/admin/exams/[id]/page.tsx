@@ -10,6 +10,7 @@ import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
+import RichMathText from '@/components/common/RichMathText';
 
 interface Answer {
     id: number;
@@ -1520,7 +1521,7 @@ export default function AdminExamDetailPage() {
                                             {q.explanation && (
                                                 <div className="mt-3 pt-3 border-t border-gray-100">
                                                     <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Giải thích:</p>
-                                                    <p className="text-sm text-gray-600">{q.explanation}</p>
+                                                    <RichMathText value={q.explanation} className="text-gray-600" />
                                                 </div>
                                             )}
 

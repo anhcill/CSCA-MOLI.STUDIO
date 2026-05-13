@@ -152,10 +152,10 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: 'linear-gradient(160deg, #f5f3ff 0%, #ede9fe 50%, #ddd6fe 100%)' }}>
+    <div className="flex h-[100dvh] flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, #f5f3ff 0%, #ede9fe 50%, #ddd6fe 100%)' }}>
 
       {/* ── Top Glass Header ── */}
-      <div className="shrink-0 px-6 py-4 flex items-center gap-4 bg-white/70 backdrop-blur-xl border-b border-violet-100/50 shadow-sm">
+      <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white/70 backdrop-blur-xl border-b border-violet-100/50 shadow-sm">
         <button
           onClick={() => router.push('/forum')}
           className="w-10 h-10 rounded-2xl bg-white/80 border border-violet-100 flex items-center justify-center text-violet-500 hover:bg-violet-50 hover:border-violet-200 transition-all active:scale-95 shadow-sm"
@@ -163,11 +163,11 @@ export default function MessagesPage() {
           <FiChevronRight size={18} className="rotate-180" />
         </button>
 
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex min-w-0 items-center gap-3 flex-1">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-200">
             <FiMessageSquare size={18} className="text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="font-black text-gray-900 text-lg leading-tight">Tin nhắn</h1>
             <p className="text-[11px] text-violet-400 font-semibold">Nhắn tin riêng tư</p>
           </div>
@@ -234,7 +234,7 @@ export default function MessagesPage() {
                     <button
                       key={conv.partner_id}
                       onClick={() => handleSelect(conv.partner_id)}
-                      className={`w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/60 active:bg-violet-50/40 transition-all border-b border-violet-50/50 text-left group ${
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/60 active:bg-violet-50/40 transition-all border-b border-violet-50/50 text-left group sm:px-5 ${
                         selectedPartner === conv.partner_id
                           ? 'bg-white/80 border-l-4 border-l-violet-500'
                           : ''
