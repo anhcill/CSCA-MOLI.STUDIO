@@ -2,8 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Header from '@/components/layout/Header';
+import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
 import axios from '@/lib/utils/axios';
+import {
+  SUBJECT_OPTIONS,
+  normalizeContentSubject,
+  subjectMatches,
+} from '@/lib/utils/subjectScope';
 import { FiFileText, FiExternalLink, FiDownload, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 interface Material {
@@ -16,48 +21,47 @@ interface Material {
   created_at: string;
 }
 
-let materialsCache: Material[] | null = null;
-let materialsRequest: Promise<Material[]> | null = null;
+const materialsCache = new Map<string, Material[]>();
+const materialsRequest = new Map<string, Promise<Material[]>>();
 
 const extractMaterials = (payload: unknown): Material[] => {
   const rows = (payload as { data?: Material[] } | undefined)?.data;
   return Array.isArray(rows) ? rows : [];
 };
 
-const fetchCauTrucDeMaterials = async (): Promise<Material[]> => {
-  if (materialsCache) return materialsCache;
-  if (materialsRequest) return materialsRequest;
+const fetchCauTrucDeMaterials = async (subject = ''): Promise<Material[]> => {
+  const normalizedSubject = normalizeContentSubject(subject);
+  const cacheKey = normalizedSubject || '__all__';
+  const cached = materialsCache.get(cacheKey);
+  if (cached) return cached;
 
-  materialsRequest = axios.get('/materials?category=cau-truc-de', {
+  const pending = materialsRequest.get(cacheKey);
+  if (pending) return pending;
+
+  const params = new URLSearchParams({ category: 'cau-truc-de' });
+  if (normalizedSubject) params.set('subject', normalizedSubject);
+
+  const request = axios.get(`/materials?${params.toString()}`, {
     validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
   })
     .then((response) => {
-      if (response.status === 304) return materialsCache || [];
+      if (response.status === 304) return materialsCache.get(cacheKey) || [];
       const rows = extractMaterials(response.data);
-      materialsCache = rows;
+      materialsCache.set(cacheKey, rows);
       return rows;
     })
     .catch((error) => {
-      if (error?.response?.status === 304) return materialsCache || [];
+      if (error?.response?.status === 304) return materialsCache.get(cacheKey) || [];
       throw error;
     })
     .finally(() => {
-      materialsRequest = null;
+      materialsRequest.delete(cacheKey);
     });
 
-  return materialsRequest;
+  materialsRequest.set(cacheKey, request);
+  return request;
 };
 
-const SUBJECTS = [
-  { value: '', label: 'Tất cả', emoji: '📋' },
-  { value: 'toan', label: 'Toán', emoji: '📐' },
-  { value: 'vat-ly', label: 'Vật Lý', emoji: '⚡' },
-  { value: 'hoa-hoc', label: 'Hóa Học', emoji: '🧪' },
-  { value: 'tieng-trung-xh', label: 'Tiếng Trung XH', emoji: '📖' },
-  { value: 'tieng-trung-tn', label: 'Tiếng Trung TN', emoji: '🔬' },
-];
-
-// ── PDF Viewer Modal ──────────────────────────────────────────────────
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true`;
@@ -157,21 +161,27 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 // ── Main Page ─────────────────────────────────────────────────────────
 export default function CauTrucDePage() {
   const searchParams = useSearchParams() as unknown as URLSearchParams;
-  const initialSubject = searchParams.get('subject') ?? '';
+  const subjectParam = normalizeContentSubject(searchParams.get('subject'));
+  const isStrictSubject = !!subjectParam;
   const [allMaterials, setAllMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
-  const [activeSubject, setActiveSubject] = useState(initialSubject);
+  const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [viewing, setViewing] = useState<Material | null>(null);
+
+  useEffect(() => {
+    setActiveSubject(subjectParam);
+  }, [subjectParam]);
 
   // Sync activeSubject to URL when it changes
   const handleSubjectChange = (subject: string) => {
-    setActiveSubject(subject);
+    const normalizedSubject = normalizeContentSubject(subject);
+    setActiveSubject(normalizedSubject);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      if (subject) {
-        url.searchParams.set('subject', subject);
+      if (normalizedSubject) {
+        url.searchParams.set('subject', normalizedSubject);
       } else {
         url.searchParams.delete('subject');
       }
@@ -183,22 +193,22 @@ export default function CauTrucDePage() {
     setLoading(true);
     setLoadError('');
     try {
-      const rows = await fetchCauTrucDeMaterials();
+      const rows = await fetchCauTrucDeMaterials(activeSubject);
       setAllMaterials(rows);
     } catch {
       setLoadError('Tải tài liệu chưa thành công. Bạn thử lại giúp mình nhé.');
-      setAllMaterials(materialsCache || []);
+      setAllMaterials(materialsCache.get(activeSubject || '__all__') || []);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeSubject]);
 
   useEffect(() => {
     loadMaterials();
   }, [loadMaterials]);
 
   const filtered = useMemo(() => allMaterials.filter(m => {
-    const matchSubject = !activeSubject || m.subject === activeSubject;
+    const matchSubject = subjectMatches(m.subject, activeSubject);
     const q = search.toLowerCase();
     const matchSearch = !q || m.title.toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q) || (m.topic || '').toLowerCase().includes(q);
     return matchSubject && matchSearch;
@@ -217,7 +227,7 @@ export default function CauTrucDePage() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <Header />
+        <ScopedStudyTopBar title="Cấu Trúc Đề" subject={activeSubject} fallbackIcon="📚" />
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           {/* Page header */}
           <div className="mb-6">
@@ -231,8 +241,9 @@ export default function CauTrucDePage() {
           </div>
 
           {/* Subject tabs */}
+          {!isStrictSubject && (
           <div className="flex items-center gap-2 flex-wrap mb-5">
-            {SUBJECTS.map(s => (
+            {SUBJECT_OPTIONS.map(s => (
               <button key={s.value} onClick={() => handleSubjectChange(s.value)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                   activeSubject === s.value
@@ -243,6 +254,7 @@ export default function CauTrucDePage() {
               </button>
             ))}
           </div>
+          )}
 
           {/* Search */}
           <div className="relative mb-7">

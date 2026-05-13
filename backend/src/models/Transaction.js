@@ -79,6 +79,22 @@ class Transaction {
   }
 
   /**
+   * Atomically claim a pending transaction before processing a webhook.
+   * Prevents duplicated provider retries from granting VIP multiple times.
+   */
+  static async claimPending(id) {
+    try {
+      const result = await db.query(
+        "UPDATE transactions SET status = 'processing', updated_at = NOW() WHERE id = $1 AND status = 'pending' RETURNING *",
+        [id]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Update a specific field
    */
   static async updateField(id, field, value) {

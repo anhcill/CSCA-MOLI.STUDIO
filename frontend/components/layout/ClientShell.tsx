@@ -29,7 +29,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/reset');
   const isExam = pathname?.startsWith('/exam/');
   const isChat = pathname?.startsWith('/hoi-dap');
-  const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
+  const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const noFooter = isAdmin || isAuth || isExam || isChat || isSubjectPage;
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isSubjectPage;
 

@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
+const db = require('../config/database');
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
 const rateLimitMap = new Map();
@@ -65,6 +66,52 @@ function getClientIp(req) {
     req.socket?.remoteAddress ||
     '127.0.0.1'
   );
+}
+
+function timingSafeEqualString(a = '', b = '') {
+  const aBuf = Buffer.from(String(a));
+  const bBuf = Buffer.from(String(b));
+  return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function verifySePayApiKey(authHeader) {
+  const expectedKey = process.env.SEPAY_API_KEY;
+  if (!expectedKey) {
+    return { ok: false, status: 503, message: 'SePay webhook is not configured' };
+  }
+
+  const prefix = 'Apikey ';
+  const header = String(authHeader || '');
+  if (!header.startsWith(prefix)) {
+    return { ok: false, status: 401, message: 'Unauthorized' };
+  }
+
+  const providedKey = header.slice(prefix.length);
+  if (!timingSafeEqualString(providedKey, expectedKey)) {
+    return { ok: false, status: 401, message: 'Unauthorized' };
+  }
+
+  return { ok: true };
+}
+
+function normalizeBankAccount(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizePaymentCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getBankConfig() {
+  const bankCode = process.env.BANK_CODE;
+  const accountNumber = process.env.BANK_ACCOUNT_NUMBER;
+  const accountName = process.env.BANK_ACCOUNT_NAME;
+
+  if (!bankCode || !accountNumber || !accountName) {
+    return null;
+  }
+
+  return { bankCode, accountNumber, accountName };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,17 +381,26 @@ router.post('/create', authenticate, async (req, res) => {
 
     // Nếu payment_method là bank_transfer → trả về thông tin QR
     if (payment_method === 'bank_transfer') {
+      const bankConfig = getBankConfig();
+      if (!bankConfig) {
+        console.error('[Payment] Missing BANK_CODE, BANK_ACCOUNT_NUMBER, or BANK_ACCOUNT_NAME');
+        return res.status(500).json({
+          success: false,
+          message: 'Thanh toĂ¡n chuyá»ƒn khoáº£n chÆ°a Ä‘Æ°á»£c cáº¥u hĂ¬nh.',
+        });
+      }
+
       return res.json({
         success: true,
         payment_method: 'bank_transfer',
         orderId,
         bank: {
-          bankCode: process.env.BANK_CODE || 'MSB',
-          accountNumber: process.env.BANK_ACCOUNT_NUMBER || '80003018784',
-          accountName: process.env.BANK_ACCOUNT_NAME || 'LE DUC ANH',
+          bankCode: bankConfig.bankCode,
+          accountNumber: bankConfig.accountNumber,
+          accountName: bankConfig.accountName,
           amount: finalAmount,
           content: orderId,
-          qrUrl: `https://img.vietqr.io/image/${process.env.BANK_CODE || 'MSB'}-${process.env.BANK_ACCOUNT_NUMBER || '80003018784'}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(process.env.BANK_ACCOUNT_NAME || 'LE DUC ANH')}`,
+          qrUrl: `https://img.vietqr.io/image/${bankConfig.bankCode}-${bankConfig.accountNumber}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(bankConfig.accountName)}`,
         },
         appliedCoupon: appliedCoupon ? {
           code: appliedCoupon.code,
@@ -363,11 +419,11 @@ router.post('/create', authenticate, async (req, res) => {
         result = await createMoMoPayment(userId, pkg.duration_days, finalAmount, tier, pkg.name);
       } catch (momoErr) {
         console.error('MoMo API error:', momoErr.message);
-        result = {
-          orderId,
-          payUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/checkout/success?orderId=${orderId}&resultCode=0&simulated=true`,
-          transId: null,
-        };
+        await Transaction.updateStatus(transaction.id, 'failed');
+        return res.status(502).json({
+          success: false,
+          message: 'KhĂ´ng káº¿t ná»‘i Ä‘Æ°á»£c cá»•ng thanh toĂ¡n. Vui lĂ²ng thá»­ láº¡i sau.',
+        });
       }
     }
 
@@ -653,8 +709,6 @@ router.post('/verify-return', authenticate, async (req, res) => {
     // Frontend sẽ poll API này để chờ trạng thái chuyển từ pending sang completed.
     
     return res.json({ success: true, status: transaction.status });
-
-    return res.json({ success: true, status: transaction.status });
   } catch (err) {
     console.error('Verify return error:', err);
     res.status(500).json({ success: false });
@@ -668,20 +722,39 @@ router.post('/verify-return', authenticate, async (req, res) => {
  */
 router.post('/sepay-webhook', async (req, res) => {
   try {
-    const apiKey = req.headers['authorization'];
-    const expectedKey = `Apikey ${process.env.SEPAY_API_KEY || ''}`;
-
-    if (process.env.SEPAY_API_KEY && apiKey !== expectedKey) {
-      console.warn('[SePay] Webhook: Invalid API key');
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const authResult = verifySePayApiKey(req.headers.authorization);
+    if (!authResult.ok) {
+      console.warn(`[SePay] Webhook rejected: ${authResult.message}`);
+      return res.status(authResult.status).json({ success: false, message: authResult.message });
     }
 
-    const { transferAmount, content, transferType, accountNumber } = req.body;
+    const { transferAmount, content, transferType, accountNumber, code, id, referenceCode } = req.body;
 
-    console.log('[SePay] Webhook received:', JSON.stringify(req.body));
+    console.log('[SePay] Webhook received:', {
+      id,
+      referenceCode,
+      accountNumber,
+      transferType,
+      transferAmount,
+      code,
+      contentLength: String(content || '').length,
+    });
 
     if (transferType !== 'in') {
       return res.json({ success: true, message: 'Ignored - not incoming transfer' });
+    }
+
+    const bankConfig = getBankConfig();
+    if (!bankConfig) {
+      console.error('[SePay] Missing BANK_CODE, BANK_ACCOUNT_NUMBER, or BANK_ACCOUNT_NAME');
+      return res.status(503).json({ success: false, message: 'Bank transfer is not configured' });
+    }
+
+    const expectedAccount = normalizeBankAccount(bankConfig.accountNumber);
+    const receivedAccount = normalizeBankAccount(accountNumber);
+    if (!receivedAccount || receivedAccount !== expectedAccount) {
+      console.warn('[SePay] Webhook: accountNumber mismatch');
+      return res.json({ success: true, message: 'Ignored - account mismatch' });
     }
 
     const receivedAmount = parseInt(transferAmount, 10);
@@ -690,10 +763,28 @@ router.post('/sepay-webhook', async (req, res) => {
       return res.json({ success: true, message: 'Invalid amount' });
     }
 
-    const contentStr = (content || '').toUpperCase().trim();
+    const contentStr = normalizePaymentCode(content);
+    const paymentCode = normalizePaymentCode(code);
     if (!contentStr || contentStr.length < 5) {
       console.warn('[SePay] Webhook: Empty or too short content');
       return res.json({ success: true, message: 'Invalid content' });
+    }
+
+    if (id || referenceCode) {
+      const duplicateRes = await db.query(
+        `SELECT id FROM transactions
+         WHERE payment_channel = 'bank_transfer'
+           AND status = 'completed'
+           AND (
+             ($1::text IS NOT NULL AND raw_response->>'id' = $1::text)
+             OR ($2::text IS NOT NULL AND raw_response->>'referenceCode' = $2::text)
+           )
+         LIMIT 1`,
+        [id ? String(id) : null, referenceCode ? String(referenceCode) : null]
+      );
+      if (duplicateRes.rows[0]) {
+        return res.json({ success: true, message: 'Duplicate webhook ignored' });
+      }
     }
 
     // Tìm transaction khớp chính xác
@@ -703,7 +794,7 @@ router.post('/sepay-webhook', async (req, res) => {
          AND status = 'pending'
          AND payment_method = 'bank_transfer'
        LIMIT 1`,
-      [contentStr]
+      [paymentCode || contentStr]
     );
 
     let transaction = txRes.rows[0];
@@ -727,32 +818,41 @@ router.post('/sepay-webhook', async (req, res) => {
 
     // Kiểm tra số tiền — reject nếu sai lệch
     const expectedAmount = Number(transaction.amount);
-    if (Math.abs(receivedAmount - expectedAmount) > 1000) {
+    if (receivedAmount !== expectedAmount) {
       console.warn(`[SePay] Amount mismatch: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
       return res.json({ success: true, message: 'Amount mismatch' });
     }
 
-    if (transaction.status === 'completed') {
-      return res.json({ success: true, message: 'Already completed' });
+    const claimedTransaction = await Transaction.claimPending(transaction.id);
+    if (!claimedTransaction) {
+      return res.json({ success: true, message: 'Already processing or completed' });
     }
+    transaction = claimedTransaction;
 
     // Increment coupon usage CHỉ khi thành công
-    await incrementCouponUsage(transaction);
+    let updatedUser;
+    let tier = 'vip';
+    try {
+      await incrementCouponUsage(transaction);
 
-    const tier = transaction.package_id
-      ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-      : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-    await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
-    const updatedUser = await User.findById(transaction.user_id);
+      tier = transaction.package_id
+        ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+        : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
+      await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
+      updatedUser = await User.findById(transaction.user_id);
 
-    await Transaction.updateComplete(transaction.id, {
+      await Transaction.updateComplete(transaction.id, {
       status: 'completed',
       payment_channel: 'bank_transfer',
-      trans_id: req.body.referenceCode || req.body.id?.toString() || `SEPAY_${Date.now()}`,
+      trans_id: referenceCode || id?.toString() || `SEPAY_${Date.now()}`,
       raw_response: req.body,
       paid_at: new Date(),
       vip_expires_at: updatedUser?.vip_expires_at || null,
-    });
+      });
+    } catch (processErr) {
+      await Transaction.updateStatus(transaction.id, 'pending');
+      throw processErr;
+    }
 
     // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
     Promise.all([

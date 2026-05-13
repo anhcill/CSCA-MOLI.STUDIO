@@ -72,8 +72,11 @@ export const SUBJECT_SLUG_TO_CODE: Record<string, string> = {
   toan: 'MATH',
   'vat-ly': 'PHYSICS',
   hoa: 'CHEMISTRY',
+  'hoa-hoc': 'CHEMISTRY',
   'tiengtrung-xahoi': 'CHINESE_SOC',
   'tiengtrung-tunhien': 'CHINESE_SCI',
+  'tieng-trung-xh': 'CHINESE_SOC',
+  'tieng-trung-tn': 'CHINESE_SCI',
 };
 
 // Reverse map
