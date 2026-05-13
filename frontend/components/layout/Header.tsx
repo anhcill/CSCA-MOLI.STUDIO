@@ -37,6 +37,7 @@ const MAIN_NAV_BOTTOM = [
   { id: 'docs', name: 'Tài liệu', href: '/tailieu', icon: FiFileText },
   { id: 'forum', name: 'Diễn đàn', href: '/forum', icon: FiMessageSquare },
   { id: 'qa', name: 'Hỏi đáp VIP', href: '/hoi-dap', icon: FiHelpCircle },
+  { id: 'blog', name: 'Blog', href: '/blog', icon: FiBookOpen },
 ];
 
 export default function Header() {

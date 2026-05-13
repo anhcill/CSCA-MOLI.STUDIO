@@ -23,7 +23,7 @@ const QUEST_LABELS: Record<string, string> = {
 export default function DailyQuestBanner() {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [dismissed, setDismissed] = useState(false);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -44,6 +44,7 @@ export default function DailyQuestBanner() {
   if (quests.length === 0 || allDone) return null;
 
   const totalCoins = canClaim.reduce((s, q) => s + q.reward_coins, 0);
+  const currentCoins = user?.coins || 0;
 
   const dismiss = () => {
     setDismissed(true);
@@ -57,8 +58,11 @@ export default function DailyQuestBanner() {
           <FiGift size={18} className="shrink-0" />
           <span className="text-sm font-semibold">
             {canClaim.length > 0
-              ? `Bạn có ${canClaim.length} nhiệm vụ chờ nhận thưởng — tổng ${totalCoins} xu!`
+              ? `Bạn có ${canClaim.length} nhiệm vụ chờ nhận — tổng ${totalCoins} xu!`
               : 'Nhiệm vụ hằng ngày đang chờ — vào nhận thưởng ngay!'}
+          </span>
+          <span className="ml-1.5 text-xs font-bold text-amber-200 bg-white/10 px-1.5 py-0.5 rounded-full">
+            {currentCoins.toLocaleString()} xu
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
