@@ -213,5 +213,79 @@ export default function sitemap(): MetadataRoute.Sitemap {
         },
     ];
 
-    return [...staticRoutes, ...faqRoutes, ...blogRoutes, ...subjectRoutes, ...toanExtra];
+    // Landing pages (SEO)
+    const landingPages: MetadataRoute.Sitemap = [
+        {
+            url: `${BASE_URL}/on-thi-csca`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/de-thi-csca`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/hoc-bong-du-hoc-trung-quoc`,
+            lastModified: now,
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/tu-vung-csca`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/lo-trinh-on-thi-csca`,
+            lastModified: now,
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+    ];
+
+    // New blog posts
+    const newBlogRoutes: MetadataRoute.Sitemap = [
+        {
+            url: `${BASE_URL}/blog/huong-dan-hoc-tu-vung-tieng-trung-thi-csca`,
+            lastModified: new Date('2026-05-10'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/cach-dat-diem-cao-phan-toan-csca`,
+            lastModified: new Date('2026-05-11'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/loi-it-sai-thuong-gap-khi-thi-csca`,
+            lastModified: new Date('2026-05-12'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/lich-su-van-hoa-dia-ly-trung-quoc-thi-csca`,
+            lastModified: new Date('2026-05-12'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/tai-lieu-luyen-thi-csca-hieu-qua`,
+            lastModified: new Date('2026-05-13'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/cau-hoi-thuong-gap-ve-thi-csca`,
+            lastModified: new Date('2026-05-13'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+    ];
+
+    return [...staticRoutes, ...faqRoutes, ...landingPages, ...blogRoutes, ...newBlogRoutes, ...subjectRoutes, ...toanExtra];
 }

@@ -1503,6 +1503,1018 @@ Hãy làm đề thật nhiều và ôn luyện chăm chỉ để đạt kết qu
     tags: ['mẫu đề thi CSCA', 'đề thi CSCA có lời giải', 'luyện thi CSCA', 'thi thử CSCA', 'CSCA 2026'],
     readTime: 12,
   },
+  {
+    slug: 'huong-dan-hoc-tu-vung-tieng-trung-thi-csca',
+    title: 'Hướng Dẫn Học Từ Vựng Tiếng Trung Thi CSCA Hiệu Quả Nhất',
+    excerpt: 'Từ vựng chiếm 40% điểm thi CSCA. Hướng dẫn cách học từ vựng tiếng Trung hiệu quả nhất cho kỳ thi CSCA: phương pháp ghi nhớ, từ vựng theo chủ đề và mẹo ôn tập.',
+    content: `
+# Hướng Dẫn Học Từ Vựng Tiếng Trung Thi CSCA Hiệu Quả Nhất
+
+Từ vựng tiếng Trung chiếm **40% điểm thi CSCA** — là phần quan trọng nhất và cũng là phần nhiều người bỏ qua nhất. Bài viết này sẽ hướng dẫn bạn cách học từ vựng tiếng Trung cho CSCA một cách hiệu quả nhất.
+
+## Tại Sao Từ Vựng Quan Trọng Trong Thi CSCA?
+
+Phần tiếng Trung của CSCA gồm **3 phần**: nghe (12 điểm), đọc hiểu (12 điểm) và viết (16 điểm). Cả 3 phần đều yêu cầu bạn có vốn từ vựng tiếng Trung nhất định. Nếu không biết từ, bạn không thể nghe hiểu, đọc hiểu hay viết được.
+
+### Yêu Cầu Từ Vựng Theo Bậc
+
+| Bậc thi | Yêu cầu HSK | Từ vựng cần biết |
+|---------|-------------|-------------------|
+| CSCA cơ bản | HSK 4 | 1.200 từ |
+| CSCA khá | HSK 4+ | 1.500+ từ |
+| CSCA cao (80+) | HSK 5 | 2.000+ từ |
+
+---
+
+## Phương Pháp Học Từ Vựng Hiệu Quả
+
+### 1. Học Theo Chủ Đề
+
+Thay vì học từ vựng ngẫu nhiên, hãy học theo **chủ đề** phù hợp với nội dung thi CSCA:
+
+- **Chủ đề toán học**: 方程 (fāngchéng - phương trình), 函数 (hánshù - hàm số), 三角形 (sānjiǎoxíng - tam giác)
+- **Chủ đề lịch sử**: 秦始皇 (Qínshǐhuáng - Tần Thủy Hoàng), 长城 (Chángchéng - Vạn Lý Trường Thành)
+- **Chủ đề văn hóa**: 春节 (Chūnjié - Tết Nguyên Đán), 中秋节 (Zhōngqiūjié - Trung Thu)
+- **Chủ đề giao tiếp**: 学习 (xuéxí - học tập), 考试 (kǎoshì - kỳ thi), 大学 (dàxué - đại học)
+
+### 2. Dùng Flashcard Spaced Repetition
+
+Phương pháp **spaced repetition** (lặp lại ngắn quãng) là cách học từ vựng hiệu quả nhất:
+
+1. **Ngày 1**: Học 20 từ mới bằng flashcard
+2. **Ngày 2**: Ôn lại 20 từ đó
+3. **Ngày 4**: Ôn lại lần 2
+4. **Ngày 7**: Ôn lại lần 3
+5. **Ngày 14**: Ôn lại lần 4
+
+Hệ thống spaced repetition sẽ tự động nhắc bạn ôn tập đúng lúc, trước khi bạn quên.
+
+### 3. Học Từ Trong Ngữ Cảnh
+
+Đừng chỉ học từ đơn lẻ. Học từ trong **câu** và **đoạn văn** để hiểu cách dùng. Ví dụ:
+
+- 单 (dān) = đơn, một → 单元 (dānyuán) = đơn vị, bài học
+- 学 (xué) = học → 大学 (dàxué) = đại học
+- 考试 (kǎoshì) = kỳ thi → 参加考试 (cānjiā kǎoshì) = tham gia kỳ thi
+
+### 4. Luyện Nghe Để Ghi Nhớ Từ Vựng
+
+Khi nghe, bạn vừa học từ vựng vừa luyện phản xạ. Nguồn luyện nghe:
+
+- Podcast tiếng Trung cho người mới
+- Video ngắn trên YouTube về chủ đề thi CSCA
+- Đề nghe của HSK
+
+---
+
+## Từ Vựng Quan Trọng Nhất Cần Biết
+
+### Từ Vựng Toán Học
+
+| Tiếng Trung | Pinyin | Nghĩa |
+|------------|--------|-------|
+| 数学 | shùxué | Toán học |
+| 加 | jiā | Cộng |
+| 减 | jiǎn | Trừ |
+| 乘 | chéng | Nhân |
+| 除 | chú | Chia |
+| 等于 | děngyú | Bằng |
+| 方程 | fāngchéng | Phương trình |
+| 解 | jiě | Giải |
+| 已知 | yǐzhī | Biết rằng |
+| 求 | qiú | Tìm |
+
+### Từ Vựng Cấu Trúc Câu
+
+| Tiếng Trung | Pinyin | Nghĩa |
+|------------|--------|-------|
+| 如果 | rúguǒ | Nếu |
+| 因为 | yīnwèi | Bởi vì |
+| 所以 | suǒyǐ | Vì vậy |
+| 但是 | dànshì | Nhưng |
+| 并且 | bìngqiě | Và |
+| 或者 | huòzhě | Hoặc |
+
+---
+
+## Mẹo Ôn Tập Từ Vựng Hàng Ngày
+
+1. **Học 20-30 từ mới mỗi ngày** — không quá nhiều để nhớ, không quá ít để tiến bộ
+2. **Ôn tập ngay sáng hôm sau** — không để l间隔 quá 24 giờ
+3. **Viết câu với từ mới** — giúp ghi nhớ sâu hơn
+4. **Dán nhãn đồ vật** — ghi tên tiếng Trung lên đồ vật trong nhà
+5. **Nói chuyện với bản thân** — đặt câu hỏi và trả lời bằng tiếng Trung
+
+---
+
+## Checklist Học Từ Vựng CSCA
+
+- [ ] Nắm vững 1.200 từ HSK 4
+- [ ] Học 100+ từ vựng toán tiếng Trung
+- [ ] Học từ vựng lịch sử, văn hóa Trung Quốc
+- [ ] Luyện nghe 30 phút/ngày
+- [ ] Sử dụng flashcard spaced repetition
+- [ ] Viết ít nhất 2 câu với mỗi từ mới học
+
+Hãy bắt đầu học từ vựng ngay hôm nay — đây là khoản đầu tư mang lại lợi ích lâu dài cho cả kỳ thi CSCA và khả năng tiếng Trung của bạn!
+    `,
+    coverImage: '/images/blog/huong-dan-hoc-tu-vung-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-10',
+    updatedAt: '2026-05-10',
+    category: 'Từ vựng & Tiếng Trung',
+    tags: ['học từ vựng tiếng Trung', 'từ vựng CSCA', 'HSK 4', 'phương pháp học tiếng Trung', 'spaced repetition'],
+    readTime: 8,
+    featured: true,
+  },
+  {
+    slug: 'cach-dat-diem-cao-phan-toan-csca',
+    title: 'Cách Đạt Điểm Cao Phần Toán CSCA: Chiến Thuật & Công Thức Quan Trọng',
+    excerpt: 'Phần toán chiếm 30/100 điểm CSCA — phần dễ lấy điểm nhất nếu bạn biết cách ôn đúng. Chiến thuật làm bài, công thức quan trọng và mẹo đạt 25-30 điểm phần toán.',
+    content: `
+# Cách Đạt Điểm Cao Phần Toán CSCA: Chiến Thuật & Công Thức Quan Trọng
+
+Phần toán là **phần dễ lấy điểm nhất** trong kỳ thi CSCA — nếu bạn biết cách ôn luyện đúng trọng tâm. Với 20 câu hỏi và 30 điểm trong 35 phút, bạn có trung bình 1.75 phút cho mỗi câu. Bài viết này sẽ giúp bạn nắm vững chiến thuật và công thức để đạt **25-30 điểm** phần toán.
+
+## Tổng Quan Phần Toán CSCA
+
+| Thông tin | Chi tiết |
+|-----------|----------|
+| Số câu | 20 câu |
+| Điểm | 30 điểm |
+| Thời gian | 35 phút |
+| Loại câu hỏi | Trắc nghiệm (4 đáp án) |
+| Ngôn ngữ | Toàn bộ bằng tiếng Trung |
+
+### Phân Bổ Câu Hỏi
+
+| Chủ đề | Số câu | Điểm |
+|--------|--------|-------|
+| Đại số & Số học | 10 câu | 15 điểm |
+| Hình học | 5 câu | 7.5 điểm |
+| Tổ hợp & Xác suất | 5 câu | 7.5 điểm |
+
+---
+
+## Chiến Thuật Làm Bài Phần Toán
+
+### Bước 1: Đọc Kỹ Đề Bài (30 giây đầu)
+
+Đề thi CSCA hoàn toàn bằng tiếng Trung. Trước khi giải, hãy **đọc đề bài thật kỹ** để hiểu yêu cầu. Các từ quan trọng cần nhớ:
+
+| Tiếng Trung | Pinyin | Nghĩa |
+|------------|--------|-------|
+| 已知 | yǐzhī | Biết rằng |
+| 求 | qiú | Tìm (yêu cầu tìm gì?) |
+| 则 |zé | Vậy thì |
+| 等于 | děngyú | Bằng |
+| 不等于 | bùděngyú | Không bằng |
+| 大于 | dàyú | Lớn hơn |
+| 小于 | xiǎoyú | Nhỏ hơn |
+| 解方程 | jiě fāngchéng | Giải phương trình |
+
+### Bước 2: Làm Câu Dễ Trước (1 phút/câu)
+
+Đừng dồn thời gian vào một câu khó. Làm **những câu chắc điểm trước**:
+
+1. Câu nào biết cách làm → làm ngay
+2. Câu nào không biết → đánh dấu, làm cuối
+3. Câu nào mất > 2 phút → bỏ qua tạm
+
+### Bước 3: Loại Trừ Đáp Án
+
+Nếu không biết cách làm, hãy **loại trừ đáp án**:
+
+- Loại đáp án vô lý (số âm khi đề bài yêu cầu số dương)
+- Loại đáp án không thỏa mãn điều kiện
+- Thử lại từng đáp án vào phương trình
+
+---
+
+## Công Thức Quan Trọng Cần Nhớ
+
+### Đại Số
+
+**1. Phương trình bậc 2**
+
+\`\`\`
+ax² + bx + c = 0
+Δ = b² - 4ac
+- Δ > 0: 2 nghiệm phân biệt
+- Δ = 0: nghiệm kép
+- Δ < 0: vô nghiệm
+
+x = (-b ± √Δ) / 2a
+\`\`\`
+
+**2. Hệ phương trình bậc 1**
+
+\`\`\`
+ax + by = c
+dx + ey = f
+
+Cách giải: Nhân để khử ẩn
+\`\`\`
+
+**3. Logarit**
+
+\`\`\`
+logₐ b = c  ⟺  a^c = b
+log(ab) = log a + log b
+log(a/b) = log a - log b
+\`\`\`
+
+### Hình Học
+
+**1. Tam giác**
+
+\`\`\`
+- Tổng 3 góc = 180°
+- Diện tích = ½ × đáy × chiều cao
+- Định lý Pitago: a² + b² = c² (vuông góc)
+\`\`\`
+
+**2. Hình tròn**
+
+\`\`\`
+- Diện tích = πr²
+- Chu vi = 2πr
+\`\`\`
+
+**3. Hình hộp chữ nhật**
+
+\`\`\`
+- Thể tích = dài × rộng × cao
+- Diện tích toàn phần = 2(dài×rộng + rộng×cao + cao×dài)
+\`\`\`
+
+### Tổ Hợp & Xác Suất
+
+**1. Hoán vị - Chỉnh hợp - Tổ hợp**
+
+\`\`\`
+- Pₙ = n! = n × (n-1) × ... × 1
+- C(n, k) = n! / (k!(n-k)!)  ← Dùng khi CHỌN
+- A(n, k) = n! / (n-k)!       ← Dùng khi CHỌN + SẮP XẾP
+\`\`\`
+
+**2. Xác suất**
+
+\`\`\`
+P(A) = số kết quả thuận lợi / tổng số kết quả
+\`\`\`
+
+---
+
+## Mẹo Làm Bài Cụ Thể
+
+### Câu Đại Số - Phương Trình
+
+> **Câu 1.** 若 x + y = 10, x - y = 4, 则 x = ?
+> - A. 3  B. 6  C. 7  D. 8
+
+**Cách làm:** Cộng 2 phương trình: 2x = 14 → x = 7
+**Đáp án: C**
+
+### Câu Hình Học - Tam Giác
+
+> **Câu 2.** 直角三角形两直角边长分别为 3 和 4，斜边长是？
+> (Tam giác vuông có 2 cạnh góc vuông lần lượt là 3 và 4, cạnh huyền dài bao nhiêu?)
+
+**Cách làm:** Định lý Pitago: c = √(3² + 4²) = √(9 + 16) = √25 = 5
+**Đáp án: B**
+
+---
+
+## Checklist Ôn Tập Phần Toán
+
+- [ ] Nắm vững công thức đại số (phương trình, hàm số, log)
+- [ ] Thuộc công thức hình học cơ bản (tam giác, hình tròn, hình hộp)
+- [ ] Biết cách giải bài toán tổ hợp và xác suất
+- [ ] Học thuộc từ vựng toán tiếng Trung
+- [ ] Làm ít nhất 15 đề thi phần toán có thời gian
+- [ ] Tập đọc hiểu đề bài tiếng Trung
+
+Hãy ôn luyện phần toán ngay hôm nay — đây là cơ hội lấy điểm dễ nhất trong kỳ thi CSCA!
+    `,
+    coverImage: '/images/blog/cach-dat-diem-cao-phan-toan-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-11',
+    updatedAt: '2026-05-11',
+    category: 'Phương pháp thi CSCA',
+    tags: ['phần toán CSCA', 'công thức toán', 'thi CSCA toán', 'đạt điểm cao CSCA', 'chiến thuật thi CSCA'],
+    readTime: 9,
+    featured: false,
+  },
+  {
+    slug: 'loi-it-sai-thuong-gap-khi-thi-csca',
+    title: '10 Lỗi Sai Thường Gặp Khi Thi CSCA & Cách Tránh',
+    excerpt: 'Tổng hợp 10 lỗi sai phổ biến nhất của thí sinh khi thi CSCA: đọc sai đề, quản lý thời gian kém, hiểu sai từ vựng. Cách tránh mỗi lỗi để không mất điểm oan.',
+    content: `
+# 10 Lỗi Sai Thường Gặp Khi Thi CSCA & Cách Tránh
+
+Hàng năm, hàng nghìn thí sinh thi CSCA nhưng chỉ một số ít đạt điểm cao. Lý do? Không phải vì kiến thức kém — mà vì **mắc những lỗi sai có thể tránh được**. Bài viết này tổng hợp 10 lỗi sai phổ biến nhất và cách khắc phục.
+
+## Lỗi 1: Đọc Sai Đề Bài
+
+**Mô tả:** Thí sinh vội vàng đọc đề, hiểu sai yêu cầu và chọn đáp án sai.
+
+**Ví dụ thực tế:**
+> **Đề:** 已知 x > 0, 则下列哪个不等式成立？
+> (Biết x > 0, chọn bất phương trình nào đúng?)
+>
+> **Lỗi sai:** Chọn đáp án không xét điều kiện x > 0
+
+**Cách tránh:**
+- Đọc đề **2 lần** trước khi làm
+- Gạch chân từ khóa quan trọng: 已知 (biết), 求 (tìm), 下列 (nào), 成立 (đúng)
+- Kiểm tra lại điều kiện trước khi chọn đáp án
+
+---
+
+## Lỗi 2: Quản Lý Thời Gian Kém
+
+**Mô tả:** Dành quá nhiều thời gian cho một câu, dẫn đến không kịp làm những câu còn lại.
+
+**Thống kê:** 15% thí sinh không hoàn thành bài thi CSCA vì lý do này.
+
+**Cách tránh:**
+- Đặt giới hạn thời gian cho mỗi câu (1-2 phút)
+- Đánh dấu câu khó, quay lại sau
+- Không dùng quá 35 phút cho phần toán
+
+---
+
+## Lỗi 3: Hiểu Sai Từ Vựng Toán
+
+**Mô tả:** Không hiểu từ vựng toán tiếng Trung → đọc sai đề.
+
+**Từ dễ nhầm:**
+
+| Từ | Hiểu sai | Nghĩa đúng |
+|----|----------|------------|
+| 大于 | Nhỏ hơn | **Lớn hơn** |
+| 小于 | Lớn hơn | **Nhỏ hơn** |
+| 等于 | Không bằng | **Bằng** |
+| 不等于 | Bằng | **Không bằng** |
+
+**Cách tránh:** Học thuộc danh sách 50+ từ vựng toán tiếng Trung trước khi thi.
+
+---
+
+## Lỗi 4: Bỏ Qua Câu Dễ
+
+**Mô tả:** Thấy câu dễ nhưng nghĩ "câu này chắc có bẫy" nên bỏ qua, cuối cùng quên làm.
+
+**Cách tránh:**
+- Làm **lần lượt từ đầu đến cuối**
+- Không bỏ qua câu nào trừ khi đã thử và không ra
+- Đánh dấu bằng ký hiệu riêng: ✓ (chắc), ? (không chắc), ✗ (bỏ)
+
+---
+
+## Lỗi 5: Điền Sai Thông Tin Cá Nhân
+
+**Mô tả:** Điền sai số báo danh, ngày sinh hoặc ký tên vào phiếu trả lời.
+
+**Hậu quả:** Bài thi có thể bị **hủy** nếu thông tin không khớp.
+
+**Cách tránh:**
+- Kiểm tra thông tin **3 lần** trước khi bắt đầu làm bài
+- Viết số báo danh rõ ràng, từng chữ số
+
+---
+
+## Lỗi 6: Tô Sai Đáp Án
+
+**Mô tả:** Tô đáp án đúng nhưng tô sai ô → máy chấm không nhận.
+
+**Cách tránh:**
+- Tô đáp án **đậm và đầy** ô tròn
+- Không tô lệch ra ngoài
+- Dùng bút chì 2B (đậm nhất)
+- Kiểm tra lại đáp án sau khi tô
+
+---
+
+## Lỗi 7: Không Làm Phần Viết
+
+**Mô tả:** Bỏ qua phần viết vì không tự tin, mất 16 điểm (phần viết = 16 điểm).
+
+**Cách tránh:**
+- Phần viết có **2 câu**: 1 câu ngắn (6 điểm), 1 bài văn ngắn (10 điểm)
+- Câu ngắn: Viết theo khuôn mẫu, không cần hay, chỉ cần đúng ngữ pháp
+- Bài văn: Dùng khuôn mẫu 3 phần (mở bài - thân bài - kết luận)
+
+**Khuôn mẫu bài viết CSCA:**
+
+\`\`\`
+我的学习方法
+
+在我看来，学习汉语非常重要。首先，我每天听中文广播...然后，我在学校上课...最后，我练习写汉字...
+
+总的来说...
+\`\`\`
+
+---
+
+## Lỗi 8: Không Ôn Phần Tổng Hợp
+
+**Mô tả:** Tập trung ôn toán và tiếng Trung, bỏ qua phần tổng hợp (văn hóa, lịch sử, địa lý).
+
+**Sự thật:** Phần tổng hợp chiếm **30 điểm** — gần bằng phần toán.
+
+**Cách tránh:**
+- Dành ít nhất 20% thời gian ôn cho phần tổng hợp
+- Học theo timeline lịch sử Trung Quốc
+- Đọc sách về văn hóa Trung Quốc
+
+---
+
+## Lỗi 9: Thiếu Ngủ Trước Ngày Thi
+
+**Mô tả:** Thức khuya ôn bài vào đêm trước khi thi, dẫn đến mệt mỏi, thiếu tập trung.
+
+**Nghiên cứu:** Người thiếu ngủ có điểm thi thấp hơn **15-20%** so với người ngủ đủ.
+
+**Cách tránh:**
+- Ngủ đủ **7-8 tiếng** trước ngày thi
+- Không ôn bài sau **22:00**
+- Chuẩn bị đồ dùng từ **tối hôm trước**
+
+---
+
+## Lỗi 10: Không Mang Đủ Dụng Cụ Thi
+
+**Mô tả:** Quên mang bút chì 2B, tẩy, CMND → không được vào phòng thi hoặc làm bài không đầy đủ.
+
+**Danh sách đồ cần mang:**
+- CMND hoặc CCCD (bản gốc)
+- Phiếu báo thi
+- Bút chì 2B (2-3 cây)
+- Tẩy
+- Gọt bút chì
+- Đồng hồ (để theo dõi thời gian)
+- Nước uống nhỏ
+
+---
+
+## Tóm Tắt Checklist Trước Khi Thi
+
+- [ ] Ngủ đủ 7-8 tiếng đêm trước thi
+- [ ] Mang đủ giấy tờ: CMND, phiếu báo thi
+- [ ] Chuẩn bị dụng cụ: bút chì 2B, tẩy, gọt bút
+- [ ] Đến phòng thi **sớm 30 phút**
+- [ ] Đọc đề 2 lần trước khi làm
+- [ ] Làm câu dễ trước, đánh dấu câu khó
+- [ ] Quản lý thời gian: 35 phút (toán), 45 phút (tổng hợp), 70 phút (tiếng Trung)
+- [ ] Tô đáp án đậm và đầy ô tròn
+- [ ] Làm hết phần viết dù không tự tin
+
+Hãy ghi nhớ những lỗi sai này và tránh chúng để đạt điểm CSCA cao nhất!
+    `,
+    coverImage: '/images/blog/loi-sai-thuong-gap-thi-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-12',
+    updatedAt: '2026-05-12',
+    category: 'Kinh nghiệm thi CSCA',
+    tags: ['lỗi sai thi CSCA', 'kinh nghiệm thi CSCA', 'tránh lỗi thi', 'mẹo thi CSCA', 'chiến thuật thi'],
+    readTime: 7,
+    featured: false,
+  },
+  {
+    slug: 'lich-su-van-hoa-dia-ly-trung-quoc-thi-csca',
+    title: 'Lịch Sử, Văn Hóa & Địa Lý Trung Quốc Trong Thi CSCA: Tổng Hợp Kiến Thức',
+    excerpt: 'Phần tổng hợp chiếm 30/100 điểm CSCA gồm lịch sử, văn hóa và địa lý Trung Quốc. Tổng hợp kiến thức trọng tâm, sự kiện quan trọng và mốc thời gian cần nhớ.',
+    content: `
+# Lịch Sử, Văn Hóa & Địa Lý Trung Quốc Trong Thi CSCA
+
+Phần tổng hợp kiến thức (综合知识) là phần khiến nhiều thí sinh **lo lắng nhất** vì kiến thức quá rộng. Tuy nhiên, với danh sách trọng tâm rõ ràng, bạn hoàn toàn có thể đạt **25-30/30 điểm**. Bài viết này tổng hợp kiến thức cần nhớ.
+
+## Tổng Quan Phần Tổng Hợp
+
+| Chủ đề | Số câu | Tỷ lệ |
+|--------|--------|--------|
+| Văn hóa Trung Quốc | 9 câu | 30% |
+| Lịch sử Trung Quốc | 8 câu | 25% |
+| Địa lý Trung Quốc | 6 câu | 20% |
+| Kiến thức thời sự | 4 câu | 15% |
+| Khoa học cơ bản | 3 câu | 10% |
+
+---
+
+## Văn Hóa Trung Quốc (9 Câu)
+
+### Nhân Vật Lịch Sử Quan Trọng
+
+| Nhân vật | Pinyin | Thời kỳ | Đóng góp |
+|---------|--------|--------|----------|
+| 孔子 (Khổng Tử) | Kǒngzǐ | Xuân Thu | Nhà giáo dục, triết học |
+| 秦始皇 (Tần Thủy Hoàng) | Qínshǐhuáng | Tần | Thống nhất Trung Quốc |
+| 老子 (Lão Tử) | Lǎozǐ | Xuân Thu | Triết học Đạo Đức |
+| 孟子 (Mạnh Tử) | Mèngzǐ | Chiến Quốc | Triết học Nhân
+ 
+### 四 大 发 明 (Tứ Đại Phát Minh)
+
+1. 造纸术 (Zàozhǐshù) — Nghề làm giấy
+2. 指南针 (Zhǐnánzhēn) — La bàn
+3. 火药 (Huǒyào) — Thuốc súng
+4. 活字印刷 (Huózì yìnshuā) — In ấn
+
+### Lễ Hội Truyền Thống
+
+| Tiếng Trung | Pinyin | Tên |
+|------------|--------|-----|
+| 春节 | Chūnjié | Tết Nguyên Đán |
+| 元宵节 | Yuánxiāojié | Tết Nguyên Tiêu |
+| 端午节 | Duānwǔjié | Tết Đoan Ngọ |
+| 中秋节 | Zhōngqiūjié | Tết Trung Thu |
+| 重阳节 | Chóngyángjié | Tết Trùng Cửu |
+
+### Di Sản Văn Hóa Thế Giới
+
+- 万里长城 (Chángchéng) — Vạn Lý Trường Thành
+- 故宫 (Gùgōng) — Tử Cấm Thành
+- 兵马俑 (Bīngmǎyǒng) — Quân đội đất nung
+- 莫高窟 (Mògāokū) — Hang động Mạc Cốc
+
+---
+
+## Lịch Sử Trung Quốc (8 Câu)
+
+### Các Triều Đại Chính
+
+| Triều đại | Thời gian | Sự kiện quan trọng |
+|----------|-----------|--------------------|
+| 夏朝 (Hạ) | ~2070-1600 TCN | Nhà nước đầu tiên |
+| 商朝 (Thương) | ~1600-1046 TCN | Chữ viết, đồ đồng |
+| 周朝 (Chu) | ~1046-256 TCN | Khổng Tử, Mạnh Tử |
+| 秦朝 (Tần) | 221-207 TCN | **Thống nhất**, xây Vạn Lý Trường Thành |
+| 汉朝 (Hán) | 206 TCN - 220 SCN | Con đường Tơ lụa, giấy |
+| 唐朝 (Đường) | 618-907 SCN | Thịnh vượng nhất lịch sử |
+| 宋朝 (Tống) | 960-1279 | Kinh tế phát triển |
+| 元朝 (Nguyên) | 1271-1368 | Mông Cổ统治 |
+| 明朝 (Minh) | 1368-1644 | Vạn Lý Trường Thành hoàn thiện |
+| 清朝 (Thanh) | 1644-1912 | Cuối cùng |
+
+### Sự Kiện Quan Trọng Cần Nhớ
+
+- **221 TCN**: Tần Thủy Hoàng thống nhất Trung Quốc lần đầu tiên
+- **206 TCN**: Khởi đầu nhà Hán
+- **618**: Khởi đầu nhà Đường
+- **1271**: Nhà Nguyên thành lập (Mông Cổ)
+- **1368**: Nhà Minh thành lập
+- **1911**: Cách mạng Tân Hợi (推翻清朝)
+- **1949**: Nhân dân Trung Hoa thành lập (PRC - 10/1)
+
+---
+
+## Địa Lý Trung Quốc (6 Câu)
+
+### Tỉnh Thành Quan Trọng
+
+| Tỉnh | Thủ phủ | Đặc điểm |
+|------|---------|-----------|
+| 北京 (Bắc Kinh) | — | Thủ đô |
+| 上海 (Thượng Hải) | — | Kinh tế lớn nhất |
+| 广东 (Quảng Đông) | 广州 (Quảng Châu) | Công nghiệp |
+| 四川 (Tứ Xuyên) | 成都 (Trì Độ) | Nhiều núi |
+| 陕西 (Thiểm Tây) | 西安 (Tây An) | Lịch sử |
+
+### Sông Ngòi Lớn
+
+| Tiếng Trung | Pinyin | Nghĩa |
+|------------|--------|-------|
+| 长江 | Chángjiāng | Trường Giang (dài nhất: 6.300 km) |
+| 黄河 | Huánghé | Hoàng Hà |
+| 珠江 | Zhūjiāng | Châu Giang |
+| 松花江 | Sōnghuājiāng | Tùng Hoa Giang |
+
+### Núi Non Nổi Tiếng
+
+- 泰山 (Tài Sơn) — Nổi tiếng nhất Trung Quốc
+- 长城 (Tuyết Sơn) — ở Vân Nam
+- 珠穆朗玛峰 (Chu Mộc Lang Mã Phong) — Đỉnh cao nhất Everest (8.848m)
+
+---
+
+## Kiến Thức Thời Sự & Khoa Học (7 Câu)
+
+### Các Sáng Kiến Quan Trọng
+
+- **一带一路** (Yí dài yí lù) — BRI (Vành đai Con đường)
+- **改革开放** (Gǎi gé kāifàng) — Cải cách Mở cửa (1978)
+- **中国梦** (Zhōngguó mèng) — Giấc mơ Trung Hoa
+
+### Phát Minh Khoa Học
+
+| Phát minh | Người phát minh | Ý nghĩa |
+|----------|-----------------|---------|
+| 造纸术 | 蔡伦 (Thái Luân) | Nghề làm giấy |
+| 指南针 | Chưa rõ | La bàn |
+| 火药 | Chưa rõ | Thuốc súng |
+| 活字印刷 | 毕升 (Tất Thăng) | In ấn |
+
+---
+
+## Checklist Ôn Tập Phần Tổng Hợp
+
+- [ ] Học thuộc 10 triều đại chính và thời gian
+- [ ] Nhớ 4 phát minh lớn của Trung Quốc
+- [ ] Thuộc 5 lễ hội truyền thống
+- [ ] Nắm vững 10 sự kiện lịch sử quan trọng
+- [ ] Biết 5 tỉnh thành lớn và 3 con sông chính
+- [ ] Đọc sách lịch sử Trung Quốc (tối thiểu 1 quyển)
+
+Hãy bắt đầu ôn tập phần tổng hợp ngay hôm nay — đây là phần dễ lấy điểm nhất!
+    `,
+    coverImage: '/images/blog/lich-su-van-hoa-dia-ly-trung-quoc-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-12',
+    updatedAt: '2026-05-12',
+    category: 'Kiến thức tổng hợp CSCA',
+    tags: ['lịch sử Trung Quốc', 'văn hóa Trung Quốc', 'địa lý Trung Quốc', 'tổng hợp CSCA', 'thi CSCA'],
+    readTime: 10,
+    featured: false,
+  },
+  {
+    slug: 'tai-lieu-luyen-thi-csca-hieu-qua',
+    title: 'Tài Liệu Luyện Thi CSCA Hiệu Quả: Sách, App & Nguồn Online Tốt Nhất',
+    excerpt: 'Tổng hợp tài liệu luyện thi CSCA hiệu quả nhất: sách ôn thi, ứng dụng học tiếng Trung, kênh YouTube và website bổ trợ. Lộ trình sử dụng tài liệu từng giai đoạn.',
+    content: `
+# Tài Liệu Luyện Thi CSCA Hiệu Quả: Sách, App & Nguồn Online Tốt Nhất
+
+Có quá nhiều tài liệu ôn thi CSCA ngoài kia — làm sao chọn được những nguồn **chất lượng nhất**? Bài viết này tổng hợp và đánh giá các tài liệu ôn thi CSCA tốt nhất, giúp bạn tập trung vào nguồn đúng thay vì ôm đồm quá nhiều.
+
+## Tài Liệu Chính Thức (Bắt Buộc)
+
+### 1. Đề Cương Chính Thức CSCA
+
+**《CSCA考试大纲》**
+
+Đây là **tài liệu quan trọng nhất** — đề cương chính thức do CIC phát hành, nêu rõ:
+
+- Cấu trúc đề thi chi tiết
+- Số câu hỏi và thời gian mỗi phần
+- Tỷ lệ kiến thức từng chủ đề
+- Ví dụ mẫu cho từng phần
+
+**Nguồn:** Website CIC hoặc trung tâm thi
+
+### 2. Đề Thi Các Năm Trước
+
+**《CSCA历年真题》**
+
+Bộ đề thi thật từ 2022-2025 là tài liệu **quan trọng thứ 2**. Đề thi thật giúp bạn:
+
+- Làm quen với format đề
+- Đánh giá năng lực thực tế
+- Xác định điểm yếu cần cải thiện
+
+**Lưu ý:** Đề thi thật chỉ có bản tiếng Trung — hãy dùng làm bài tập đọc hiểu song song với ôn từ vựng.
+
+---
+
+## Sách Ôn Thi CSCA
+
+### Toán Học
+
+| Sách | Đặc điểm | Đánh giá |
+|------|----------|----------|
+| 《数学考点精讲》 | Giải thích chi tiết từng chủ đề toán | ⭐⭐⭐⭐⭐ |
+| 《CSCA数学真题汇编》 | Tổng hợp đề thi toán các năm | ⭐⭐⭐⭐ |
+| 《高中数学复习指南》 | Ôn toán THPT, phù hợp người quên kiến thức | ⭐⭐⭐⭐ |
+
+### Tiếng Trung
+
+| Sách | Đặc điểm | Đánh giá |
+|------|----------|----------|
+| 《HSK标准教程4》 | Sách HSK 4 chuẩn, có audio | ⭐⭐⭐⭐⭐ |
+| 《成功通过CSCA汉语》 | Ôn tiếng Trung chuyên cho CSCA | ⭐⭐⭐⭐ |
+| 《HSK4真题集》 | Đề thi HSK 4 các năm, luyện nghe | ⭐⭐⭐⭐ |
+
+### Lịch Sử & Văn Hóa
+
+| Sách | Đặc điểm | Đánh giá |
+|------|----------|----------|
+| 《中国历史通俗读本》 | Lịch sử Trung Quốc viết dễ hiểu | ⭐⭐⭐⭐⭐ |
+| 《中华文化概论》 | Tổng hợp văn hóa Trung Quốc | ⭐⭐⭐⭐ |
+| 《中国地理常识》 | Kiến thức địa lý cơ bản | ⭐⭐⭐ |
+
+---
+
+## Ứng Dụng & Công Cụ Học Tập
+
+### Học Từ Vựng
+
+| App | Tính năng | Giá |
+|-----|-----------|-----|
+| **Anki** | Flashcard spaced repetition, tự tạo deck | Miễn phí |
+| **Pleco** | Từ điển tiếng Trung tốt nhất, có flashcard | Miễn phí + trả phí |
+| **HelloChinese** | Học tiếng Trung từ đầu, có HSK 4 | Miễn phí + trả phí |
+| **MOLI.STUDIO** | Từ vựng CSCA chuyên biệt, flashcard thông minh | Miễn phí |
+
+### Luyện Nghe
+
+| App | Nội dung | Đánh giá |
+|-----|----------|----------|
+| **YouTube** | Channel: ChinesePod, Popup Chinese | Miễn phí |
+| **喜马拉雅 (Ximalaya)** | Podcast tiếng Trung đa dạng | Miễn phí |
+| **每日汉语听力** | Luyện nghe HSK, CSCA | Miễn phí |
+
+### Thi Thử
+
+| Nền tảng | Đặc điểm |
+|----------|----------|
+| **MOLI.STUDIO** | Đề CSCA chuẩn format, AI phân tích kết quả |
+| **CIC Online** | Thi thử chính thức |
+| **HSK Online** | Luyện thi HSK các bậc |
+
+---
+
+## Kênh YouTube Hữu Ích
+
+### Học Tiếng Trung
+
+| Kênh | Nội dung | Người hướng dẫn |
+|-------|----------|-----------------|
+| **ChinesePod** | Bài học tiếng Trung từ cơ bản đến nâng cao | Giáo viên bản ngữ |
+| **Yoyo Chinese** | HSK 1-6, ngữ pháp chi tiết | YoYo |
+| **Popup Chinese** | Podcast học tiếng Trung | Native speakers |
+
+### Ôn Thi CSCA
+
+| Kênh | Nội dung |
+|-------|----------|
+| **CIC Official** | Thông tin chính thức về CSCA |
+| **Học bổng Trung Quốc** | Hướng dẫn đăng ký học bổng, ôn thi |
+| **Du học Trung Quốc** | Kinh nghiệm du học, ôn thi CSCA |
+
+---
+
+## Website Hữu Ích
+
+| Website | Mục đích |
+|--------|----------|
+| **www.csc.edu.cn** | Website chính thức CSC, đăng ký học bổng |
+| **www.cic.org.cn** | CIC - đăng ký thi CSCA |
+| **www.molystudio.online** | Luyện thi CSCA online |
+| **www.hsbc.org** | HSK - thi thử |
+
+---
+
+## Lộ Trình Sử Dụng Tài Liệu
+
+### Giai Đoạn 1: Nền Tảng (4-6 tuần)
+
+| Tuần | Tài liệu | Hoạt động |
+|------|-----------|-----------|
+| 1-2 | Đề cương CSCA | Đọc và nắm cấu trúc đề thi |
+| 1-2 | HSK标准教程4 | Học 20 từ/ngày |
+| 3-4 | 数学考点精讲 | Ôn lại kiến thức toán |
+| 3-4 | 中国历史通俗读本 | Đọc sách lịch sử |
+| 5-6 | 喜马拉雅 | Luyện nghe 30 phút/ngày |
+
+### Giai Đoạn 2: Luyện Đề (4 tuần)
+
+| Tuần | Tài liệu | Hoạt động |
+|------|-----------|-----------|
+| 7-8 | CSCA历年真题 | Làm đề thi thật có thời gian |
+| 7-8 | Anki | Tạo flashcard từ lỗi sai |
+| 9-10 | MOLI.STUDIO | Luyện đề online, phân tích kết quả |
+
+### Giai Đoạn 3: Tổng Ôn (2 tuần)
+
+| Hoạt động | Mục đích |
+|-----------|----------|
+| Ôn lại đề cương | Đảm bảo không bỏ sót kiến thức |
+| Xem lại lỗi sai | Ghi nhớ và tránh lặp lại |
+| Làm 2-3 đề cuối | Đánh giá mức độ sẵn sàng |
+
+---
+
+## Checklist Chuẩn Bị Tài Liệu
+
+- [ ] Đề cương CSCA chính thức
+- [ ] Sách HSK 4 (标准教程)
+- [ ] Sách toán ôn tập
+- [ ] App Anki hoặc Pleco
+- [ ] Tài khoản MOLI.STUDIO (miễn phí)
+- [ ] Kênh YouTube học tiếng Trung đã follow
+- [ ] Đề thi các năm (2022-2025)
+
+Hãy chuẩn bị đầy đủ tài liệu ngay hôm nay và bắt đầu ôn luyện có kế hoạch!
+    `,
+    coverImage: '/images/blog/tai-lieu-luyen-thi-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-13',
+    updatedAt: '2026-05-13',
+    category: 'Tài liệu ôn thi CSCA',
+    tags: ['tài liệu ôn thi CSCA', 'sách CSCA', 'app học tiếng Trung', 'luyện thi CSCA', 'nguồn online CSCA'],
+    readTime: 8,
+    featured: false,
+  },
+  {
+    slug: 'cau-hoi-thuong-gap-ve-thi-csca',
+    title: 'Câu Hỏi Thường Gặp Về Thi CSCA: Giải Đáp Toàn Diện',
+    excerpt: 'Tổng hợp 20 câu hỏi thường gặp nhất về kỳ thi CSCA: điều kiện dự thi, cách đăng ký, thời gian thi, kết quả, thi lại và học bổng. Giải đáp chi tiết từ A đến Z.',
+    content: `
+# Câu Hỏi Thường Gặp Về Thi CSCA: Giải Đáp Toàn Diện
+
+Đây là tổng hợp **20 câu hỏi thường gặp nhất** về kỳ thi CSCA, được giải đáp chi tiết dựa trên thông tin chính thức từ CIC và kinh nghiệm của những người đã thi thành công.
+
+---
+
+## 1. CSCA là gì?
+
+**CSCA** (Chinese Scholarship Council Assessment) là kỳ thi đánh giá năng lực do Cục Hợp tác Quốc tế Trung Quốc (CIC) tổ chức, dành cho sinh viên quốc tế muốn nhận học bổng du học Trung Quốc.
+
+---
+
+## 2. Ai cần thi CSCA?
+
+Bạn cần thi CSCA nếu:
+- Muốn nhận **học bổng CSC** (Chính phủ Trung Quốc)
+- Muốn nhận **học bổng trường** đại học Trung Quốc
+- Trường bạn đăng ký yêu cầu điểm CSCA
+
+---
+
+## 3. Điều kiện dự thi CSCA?
+
+- Công dân Việt Nam (hoặc quốc gia được phép)
+- Đang học hoặc đã tốt nghiệp đại học
+- Có hộ chiếu còn hạn
+- Đủ sức khỏe
+- Không có tiền án, tiền sự
+
+---
+
+## 4. Thi CSCA ở đâu?
+
+Tại Việt Nam, có **3 điểm thi chính**:
+- **Hà Nội**: Đại học Hà Nội, ĐH Ngoại ngữ ĐHQGHN
+- **TP.HCM**: ĐH Khoa học Xã hội & Nhân văn
+- **Đà Nẵng**: Đại học Ngoại ngữ, ĐH Đà Nẵng
+
+---
+
+## 5. Lịch thi CSCA 2026?
+
+| Đợt | Ngày thi | Hạn đăng ký |
+|-----|----------|-------------|
+| Đợt 1 | 15/03/2026 | 01/01 - 28/02/2026 |
+| Đợt 2 | 17/05/2026 | 01/03 - 30/04/2026 |
+| Đợt 3 | 12/07/2026 | 01/05 - 15/06/2026 |
+
+---
+
+## 6. Đăng ký thi CSCA như thế nào?
+
+**Bước 1:** Truy cập website CIC hoặc trung tâm thi
+**Bước 2:** Điền thông tin đăng ký online
+**Bước 3:** Upload ảnh chân dung
+**Bước 4:** Nộp lệ phí thi (500.000 - 600.000 VNĐ)
+**Bước 5:** Nhận phiếu báo thi qua email
+
+---
+
+## 7. Lệ phí thi CSCA là bao nhiêu?
+
+Lệ phí thi CSCA khoảng **500.000 - 600.000 VNĐ/đợt**. Lệ phí có thể thay đổi theo từng năm.
+
+---
+
+## 8. Cấu trúc đề thi CSCA?
+
+| Phần | Nội dung | Số câu | Thời gian |
+|------|---------|--------|-----------|
+| Phần 1 | Toán | 20 câu | 35 phút |
+| Phần 2 | Tổng hợp | 30 câu | 45 phút |
+| Phần 3 | Tiếng Trung | 40 câu | 70 phút |
+
+---
+
+## 9. Điểm đạt CSCA là bao nhiêu?
+
+- **Điểm đạt tối thiểu**: 60/100
+- **Học bổng CSC**: 60-70 điểm
+- **Học bổng trường top**: 75-90 điểm
+- **Ngành Y, Dược**: 70-80 điểm
+
+---
+
+## 10. Kết quả thi CSCA có được giữ trong bao lâu?
+
+Kết quả CSCA có giá trị trong **2 năm** kể từ ngày thi. Sau 2 năm, bạn cần thi lại.
+
+---
+
+## 11. Có thể thi lại CSCA không?
+
+**Có**, bạn có thể thi CSCA nhiều lần trong năm. Mỗi đợt thi đều cần đóng lệ phí.
+
+---
+
+## 12. CSCA có thay thế HSK không?
+
+Trong nhiều trường hợp xin học bổng, CSCA được chấp nhận thay HSK. Tuy nhiên, nhiều trường vẫn yêu cầu **HSK riêng** cho thủ tục nhập học sau khi nhận học bổng.
+
+---
+
+## 13. Nên thi CSCA hay HSK trước?
+
+**Nên thi HSK trước** vì:
+- HSK là nền tảng cho phần tiếng Trung trong CSCA
+- HSK dễ đạt điểm cao hơn
+- Có HSK rồi thì phần tiếng Trung CSCA sẽ dễ hơn nhiều
+
+**Lộ trình khuyến nghị:**
+1. Thi HSK 4 (2-3 tháng)
+2. Thi CSCA (sau khi có HSK 4)
+3. Nộp hồ sơ học bổng
+
+---
+
+## 14. Thi CSCA có khó không?
+
+CSCA ở mức **trung bình**, không quá khó nhưng đòi hỏi kiến thức rộng. Người có HSK 4 + kiến thức THPT có thể đạt **70-80 điểm** với việc ôn luyện nghiêm túc 2-3 tháng.
+
+---
+
+## 15. Nên ôn thi CSCA trong bao lâu?
+
+**Khuyến nghị:**
+- **Người có HSK 4+**: 2-3 tháng ôn luyện
+- **Người có HSK 3**: 3-4 tháng
+- **Người mới bắt đầu**: 4-6 tháng
+
+---
+
+## 16. Cần mang gì khi đi thi CSCA?
+
+| Giấy tờ | Số lượng |
+|---------|---------|
+| CMND/CCCD | Bản gốc |
+| Phiếu báo thi | 1 bản in |
+| Bút chì 2B | 2-3 cây |
+| Tẩy | 1 cái |
+| Gọt bút | 1 cái |
+| Nước uống | 1 chai nhỏ |
+
+---
+
+## 17. Có thể mang máy tính vào phòng thi không?
+
+**Không.** Máy tính, điện thoại, tài liệu và mọi thiết bị điện tử đều **không được mang** vào phòng thi CSCA.
+
+---
+
+## 18. Kết quả thi CSCA được công bố khi nào?
+
+Kết quả CSCA thường được công bố trong vòng **2-4 tuần** sau ngày thi, qua email và website của trung tâm thi.
+
+---
+
+## 19. CSCA có phí bảo lưu kết quả không?
+
+Không có phí bảo lưu. Kết quả CSCA tự động có giá trị trong 2 năm. Sau 2 năm, bạn cần thi lại.
+
+---
+
+## 20. Có cần học thêm ở trung tâm không?
+
+**Không bắt buộc**, nhưng có thể hữu ích nếu:
+- Bạn cần hệ thống hóa kiến thức
+- Bạn thi lần đầu và chưa quen format
+- Bạn muốn luyện đề với giáo viên hướng dẫn
+
+Tuy nhiên, với tài liệu chất lượng và tự discipline, bạn hoàn toàn có thể tự ôn thi CSCA tại nhà.
+
+---
+
+## Tóm Tắt
+
+| Thông tin | Chi tiết |
+|-----------|----------|
+| Lệ phí | 500.000 - 600.000 VNĐ |
+| Điểm đạt | 60/100 |
+| Thời gian | 150 phút |
+| Số câu | 90 câu |
+| Giá trị kết quả | 2 năm |
+| Số lần thi | Không giới hạn |
+
+Nếu bạn có câu hỏi khác về CSCA, hãy liên hệ với chúng tôi để được giải đáp!
+    `,
+    coverImage: '/images/blog/cau-hoi-thuong-gap-ve-csca.jpg',
+    author: 'MOLI.STUDIO',
+    publishedAt: '2026-05-13',
+    updatedAt: '2026-05-13',
+    category: 'Hướng dẫn CSCA',
+    tags: ['câu hỏi thường gặp CSCA', 'FAQ CSCA', 'thi CSCA', 'học bổng Trung Quốc', 'du học Trung Quốc'],
+    readTime: 9,
+    featured: false,
+  },
 ];
 
 export function getBlogPost(slug: string): BlogPost | undefined {
