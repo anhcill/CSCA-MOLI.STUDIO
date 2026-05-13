@@ -285,6 +285,42 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'monthly' as const,
             priority: 0.8,
         },
+        {
+            url: `${BASE_URL}/blog/cach-chuan-bi-ho-so-du-hoc-trung-quoc`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/cach-phan-bo-thoi-gian-on-thi-csca`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/so-sanh-hsk-csca-cho-nguoi-muon-du-hoc-trung-quoc`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/meo-luyen-nghe-tieng-trung-cho-csca`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/kinh-nghiem-du-hoc-trung-quoc-tu-hoc-sinh-viet-nam`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.8,
+        },
+        {
+            url: `${BASE_URL}/blog/cach-dang-ky-tai-khoan-moli-studio-on-thi-csca`,
+            lastModified: new Date('2026-05-14'),
+            changeFrequency: 'monthly' as const,
+            priority: 0.7,
+        },
     ];
 
     return [...staticRoutes, ...faqRoutes, ...landingPages, ...blogRoutes, ...newBlogRoutes, ...subjectRoutes, ...toanExtra];
