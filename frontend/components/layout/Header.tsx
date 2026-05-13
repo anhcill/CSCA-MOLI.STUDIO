@@ -219,9 +219,7 @@ export default function Header() {
             </div>
 
             {/* Daily Quests */}
-            <div className="hidden sm:block">
-              <DailyQuestsBtn />
-            </div>
+            <DailyQuestsBtn />
 
             {/* User Avatar / Profile Dropdown */}
             {mounted && isAuthenticated && user ? (

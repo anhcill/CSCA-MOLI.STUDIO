@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { FiGift, FiCheck, FiStar } from 'react-icons/fi';
+import { FiGift, FiCheck, FiStar, FiX } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import confetti from 'canvas-confetti';
 
@@ -24,6 +24,7 @@ export default function DailyQuestsBtn() {
   const [show, setShow] = useState(false);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; coins: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { isAuthenticated, token } = useAuthStore();
 
@@ -56,6 +57,13 @@ export default function DailyQuestsBtn() {
   };
 
   useEffect(() => {
+    if (isAuthenticated) {
+      fetchQuests();
+    }
+  }, [isAuthenticated]);
+
+  // Also re-fetch when popup opens (to get latest progress)
+  useEffect(() => {
     if (isAuthenticated && show) {
       fetchQuests();
     }
@@ -63,6 +71,7 @@ export default function DailyQuestsBtn() {
 
   const claimReward = async (id: number) => {
     if (!token) return;
+    const quest = quests.find(q => q.id === id);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/users/quests/${id}/claim`, {
         method: 'POST',
@@ -70,18 +79,15 @@ export default function DailyQuestsBtn() {
       });
       const data = await res.json();
       if (data.success) {
-        // Trigger confetti
         confetti({
           particleCount: 100,
           spread: 70,
           origin: { y: 0.6 },
           colors: ['#f43f5e', '#fbbf24', '#34d399', '#60a5fa']
         });
-        
-        // Update local state
         setQuests(prev => prev.map(q => q.id === id ? { ...q, is_completed: true } : q));
-        // Don't show annoying alert if successful, or maybe a toast later. 
-        // For now, let the confetti do the talking!
+        setToast({ message: `Đã nhận thưởng thành công!`, coins: quest?.reward_coins || 0 });
+        setTimeout(() => setToast(null), 4000);
       } else {
         alert(data.message);
       }
@@ -174,6 +180,26 @@ export default function DailyQuestsBtn() {
         </div>
       )}
     </div>
+
+    {/* Toast Notification */}
+    {toast && (
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-sm">
+          <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shrink-0">
+            <FiStar size={14} className="text-amber-900" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold">{toast.message}</p>
+            <p className="text-xs text-amber-300 flex items-center gap-1">
+              +{toast.coins} <FiStar size={10} />
+            </p>
+          </div>
+          <button onClick={() => setToast(null)} className="p-1 rounded-full hover:bg-white/20 shrink-0">
+            <FiX size={14} />
+          </button>
+        </div>
+      </div>
+    )}
     </>
   );
 }
