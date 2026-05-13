@@ -614,10 +614,8 @@ async function recommendNextExam(req, res) {
 async function analyzeUserPerformance(req, res) {
   try {
     const userId = req.user.id;
-
-    if (!canUseAIFeatures(req.user)) {
-      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
-    }
+    const isVip = canUseAIFeatures(req.user);
+    const useCoins = req.query.useCoins === 'true';
 
     const memKey = `ai:full_analysis:${userId}`;
 
@@ -638,8 +636,27 @@ async function analyzeUserPerformance(req, res) {
     );
     if (cached.rows.length > 0) {
       const age = Math.floor((Date.now() - new Date(cached.rows[0].created_at)) / 60000);
-      cache.set(memKey, { data: cached.rows[0].data, cacheAge }, TTL.VERY_LONG);
+      cache.set(memKey, { data: cached.rows[0].data, cacheAge: age }, TTL.VERY_LONG);
       return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: cached.rows[0].data });
+    }
+
+    // Nếu không có cache, user phải là VIP hoặc trả 50 Xu
+    if (!isVip) {
+      if (!useCoins) {
+        if (req._resolveInflight) req._resolveInflight(null);
+        return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium/VIP hoặc dùng 50 Xu để phân tích.', code: 'PREMIUM_REQUIRED', cost: 50 });
+      }
+
+      // Kiểm tra và trừ 50 Xu
+      const userRes = await db.query('SELECT coins FROM users WHERE id = $1', [userId]);
+      const currentCoins = userRes.rows[0]?.coins || 0;
+      if (currentCoins < 50) {
+        if (req._resolveInflight) req._resolveInflight(null);
+        return res.status(403).json({ success: false, message: 'Bạn không đủ 50 Xu.', code: 'INSUFFICIENT_COINS', cost: 50 });
+      }
+
+      // Trừ Xu
+      await db.query('UPDATE users SET coins = coins - 50 WHERE id = $1', [userId]);
     }
 
     if (inFlightRequests.has(userId)) {

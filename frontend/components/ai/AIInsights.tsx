@@ -72,7 +72,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
 
   const isFetchingRef = useRef(false);
 
-  const fetchAnalysis = async (forceRefresh = false) => {
+  const fetchAnalysis = async (forceRefresh = false, useCoins = false) => {
     if (isFetchingRef.current) return;
     if (!userId) {
       setHasEnoughData(false);
@@ -89,14 +89,33 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
 
       const endpoint = forceRefresh ? '/ai/refresh' : '/ai/analyze';
       const method = forceRefresh ? 'post' : 'get';
+      const url = useCoins ? `${endpoint}?useCoins=true` : endpoint;
 
-      const response = await axios[method](endpoint);
+      const response = await axios[method](url);
       const d = response.data;
 
       // Check if user needs premium access
       if (d.code === 'PREMIUM_REQUIRED') {
         setIsPremiumRequired(true);
         setHasEnoughData(true);
+        setLoading(false);
+        return;
+      }
+      
+      // Nếu thành công sau khi trả bằng xu, tắt bảng requires premium
+      if (useCoins && d.success) {
+         setIsPremiumRequired(false);
+         // Update local authStore coins (optimistic UI)
+         useAuthStore.setState((state) => {
+           if (state.user) {
+             return { user: { ...state.user, coins: Math.max(0, (state.user.coins || 0) - 50) } };
+           }
+           return state;
+         });
+      }
+
+      if (d.code === 'INSUFFICIENT_COINS') {
+        setError('Bạn không có đủ 50 Xu để thực hiện phân tích này. Hãy làm thêm nhiệm vụ nhé!');
         setLoading(false);
         return;
       }
@@ -143,6 +162,8 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       if (err.response?.data?.code === 'PREMIUM_REQUIRED') {
         setIsPremiumRequired(true);
         setHasEnoughData(true);
+      } else if (err.response?.data?.code === 'INSUFFICIENT_COINS') {
+        setError('Bạn không có đủ 50 Xu để thực hiện phân tích này. Hãy làm thêm nhiệm vụ nhé!');
       } else {
         setError(err.response?.data?.message || 'Không thể tải phân tích AI');
       }
@@ -222,13 +243,21 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
           <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <span className="text-3xl">✨</span>
           </div>
-          <h3 className="text-lg font-bold text-amber-900 mb-2">Nâng cấp VIP hoặc Premium</h3>
+          <h3 className="text-lg font-bold text-amber-900 mb-2">Trải nghiệm Lộ trình AI</h3>
           <p className="text-amber-700 text-sm mb-4 max-w-sm mx-auto">
-            Để nhận phân tích AI chi tiết về điểm mạnh, điểm yếu và lộ trình học tập cá nhân hoá riêng cho bạn.
+            Hệ thống AI sẽ phân tích lịch sử làm bài để đưa ra lộ trình cá nhân hoá riêng biệt. Bạn có thể dùng 50 Xu để mở khoá 1 lần, hoặc nâng cấp VIP để dùng miễn phí mãi mãi.
           </p>
-          <a href="/vip" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm">
-            Xem các gói nâng cấp
-          </a>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button 
+              onClick={() => fetchAnalysis(false, true)}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-amber-600 border-2 border-amber-400 font-bold rounded-xl hover:bg-amber-50 hover:-translate-y-0.5 transition-all text-sm w-full sm:w-auto justify-center shadow-sm"
+            >
+              <span className="text-lg">⭐</span> Dùng 50 Xu
+            </button>
+            <a href="/vip" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm w-full sm:w-auto justify-center">
+              👑 Xem gói VIP
+            </a>
+          </div>
         </div>
 
         {/* Roadmap template cho free user */}
@@ -266,9 +295,15 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
               </div>
             ))}
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button 
+              onClick={() => fetchAnalysis(false, true)}
+              className="block w-full text-center px-4 py-2.5 bg-yellow-50 text-yellow-700 border border-yellow-200 font-bold rounded-xl hover:bg-yellow-100 transition-all text-sm"
+            >
+              ⭐ Dùng 50 Xu để trải nghiệm
+            </button>
             <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
-              ✨ Nâng cấp VIP/Pre để có lộ trình AI cá nhân hoá
+              ✨ Nâng cấp VIP (Miễn phí AI)
             </a>
           </div>
         </div>
@@ -509,9 +544,15 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
               </div>
             ))}
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button 
+              onClick={() => fetchAnalysis(false, true)}
+              className="block w-full text-center px-4 py-2.5 bg-yellow-50 text-yellow-700 border border-yellow-200 font-bold rounded-xl hover:bg-yellow-100 transition-all text-sm"
+            >
+              ⭐ Dùng 50 Xu để trải nghiệm
+            </button>
             <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
-              ✨ Nâng cấp VIP/Pre để có lộ trình AI cá nhân hoá
+              ✨ Nâng cấp VIP (Miễn phí AI)
             </a>
           </div>
         </div>

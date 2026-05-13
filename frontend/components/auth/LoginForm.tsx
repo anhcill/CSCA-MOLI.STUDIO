@@ -288,13 +288,13 @@ export default function LoginForm() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Chào mừng trở lại!</h1>
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Chào mừng trở lại!</h1>
         <p className="text-gray-600">Đăng nhập để tiếp tục học tập</p>
       </div>
 
       {/* Social Login Buttons */}
-      <div className="mb-6 space-y-3">
+      <div className="mb-4 sm:mb-6 space-y-3">
         <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
@@ -312,7 +312,7 @@ export default function LoginForm() {
             type="button"
             onClick={handleFacebookLogin}
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1877F2] text-[#1877F2] py-2.5 font-semibold hover:bg-[#1877F2] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-[#1877F2] text-[#1877F2] py-2.5 sm:py-3 text-sm sm:text-base font-semibold hover:bg-[#1877F2] hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FiFacebook className="text-lg" />
             Đăng nhập với Facebook
@@ -365,7 +365,7 @@ export default function LoginForm() {
                 onChange={e => handleOtpChange(i, e.target.value)}
                 onKeyDown={e => handleOtpKeyDown(i, e)}
                 disabled={isSubmitting}
-                className={`w-12 h-12 text-center text-2xl font-bold border rounded-xl transition-all outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${digit ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'} ${isSubmitting ? 'opacity-50' : ''}`}
+                className={`w-10 h-10 sm:w-12 sm:h-12 text-center text-xl sm:text-2xl font-bold border rounded-xl transition-all outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${digit ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'} ${isSubmitting ? 'opacity-50' : ''}`}
               />
             ))}
           </div>
@@ -407,7 +407,7 @@ export default function LoginForm() {
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {errors.general && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
             {errors.general}
@@ -446,7 +446,7 @@ export default function LoginForm() {
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
             <span className="ml-2 text-sm text-gray-600">Ghi nhớ đăng nhập</span>

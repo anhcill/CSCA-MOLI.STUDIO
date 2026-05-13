@@ -11,6 +11,9 @@ export interface User {
   bio?: string;
   target_score?: number;
   created_at: string;
+  coins?: number;
+  current_streak?: number;
+  longest_streak?: number;
 }
 
 export interface UpdateProfileData {

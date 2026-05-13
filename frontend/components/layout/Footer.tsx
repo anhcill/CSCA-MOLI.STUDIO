@@ -22,8 +22,8 @@ export default function Footer() {
   ];
 
   const POLICIES = [
-    { name: 'Chính sách bảo mật', href: '/chinh-sach-bao-mat' },
-    { name: 'Điều khoản sử dụng', href: '/dieu-khoan-su-dung' },
+    { name: 'Chính sách bảo mật', href: '/privacy' },
+    { name: 'Điều khoản sử dụng', href: '/terms' },
     { name: 'Câu hỏi thường gặp', href: '/cau-hoi-thuong-gap' },
     { name: 'Liên hệ', href: '/lien-he' },
   ];

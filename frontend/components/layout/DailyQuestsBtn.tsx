@@ -97,15 +97,16 @@ export default function DailyQuestsBtn() {
   const uncompleted = quests.filter(q => !q.is_completed && q.progress >= q.target).length;
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button 
+    <>
+      <div className="relative" ref={menuRef}>
+        <button
         onClick={() => setShow(!show)}
         className="relative p-2 text-gray-600 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all duration-200"
         title="Nhiệm vụ hằng ngày"
       >
-        <FiGift size={20} className={uncompleted > 0 ? 'text-rose-500 animate-pulse' : ''} />
+        <FiGift size={20} className={uncompleted > 0 ? "text-rose-500 animate-pulse" : ""} />
         {uncompleted > 0 && (
-          <span className="absolute 1 top-1 right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
+          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
         )}
       </button>
 
@@ -152,8 +153,8 @@ export default function DailyQuestsBtn() {
 
                     <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2 overflow-hidden">
                       <div 
-                        className={\`h-1.5 rounded-full \${canClaim ? 'bg-green-500' : 'bg-rose-400'}\`} 
-                        style={{ width: \`\${progressPercent}%\` }}
+                        className={`h-1.5 rounded-full ${canClaim ? 'bg-green-500' : 'bg-rose-400'}`} 
+                        style={{ width: `${progressPercent}%` }}
                       ></div>
                     </div>
 
@@ -173,5 +174,6 @@ export default function DailyQuestsBtn() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -428,10 +428,10 @@ exports.claimQuest = async (req, res) => {
     );
     await db.query('COMMIT');
 
-    return res.json({ 
-      success: true, 
-      message: \`Nhận thành công \${quest.reward_coins} xu!\`,
-      data: { reward_coins: quest.reward_coins } 
+    return res.json({
+      success: true,
+      message: `Nhận thành công ${quest.reward_coins} xu!`,
+      data: { reward_coins: quest.reward_coins }
     });
   } catch (error) {
     await db.query('ROLLBACK');

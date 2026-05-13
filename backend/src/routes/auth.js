@@ -13,7 +13,6 @@ router.post("/refresh", authController.refreshToken);
 router.post("/google", authController.googleAuth);
 router.get("/facebook", authController.facebookAuthStart);
 router.get("/facebook/callback", authController.facebookAuthCallback);
-router.post("/facebook", authController.facebookAuth);
 
 // Password reset (public - no auth needed)
 router.post("/forgot-password", authController.forgotPassword);

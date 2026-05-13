@@ -920,127 +920,6 @@ const googleAuth = async (req, res) => {
   }
 };
 
-// ─── Facebook OAuth (Access Token Flow) ─────────────────────────────────────
-const facebookAuth = async (req, res) => {
-  try {
-    const { accessToken } = req.body;
-
-    if (!accessToken) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Facebook access token không được để trống" });
-    }
-
-    const facebookAppId = process.env.FACEBOOK_APP_ID;
-    const facebookAppSecret = process.env.FACEBOOK_APP_SECRET;
-
-    if (!facebookAppId || !facebookAppSecret) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Thiếu cấu hình Facebook App" });
-    }
-
-    // Validate token
-    const debugUrl = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${facebookAppId}|${facebookAppSecret}`;
-    const debugRes = await fetch(debugUrl);
-    const debugData = await debugRes.json();
-
-    if (!debugRes.ok || !debugData?.data?.is_valid || String(debugData?.data?.app_id) !== String(facebookAppId)) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Facebook token không hợp lệ" });
-    }
-
-    // Fetch profile info
-    const profileUrl = `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}`;
-    const profileRes = await fetch(profileUrl);
-    const profileData = await profileRes.json();
-
-    if (!profileRes.ok || !profileData?.id) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Không thể xác thực Facebook" });
-    }
-
-    const { id: facebookId, email, name, picture } = profileData;
-    const avatarUrl = picture?.data?.url || null;
-    const displayName = name || email;
-
-    if (!email) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Facebook không cung cấp email. Vui lòng cho phép quyền email." });
-    }
-
-    let user = await User.findByFacebookId(facebookId);
-
-    if (!user) {
-      const existingUser = await User.findByEmail(email);
-
-      if (existingUser) {
-        user = await User.linkFacebookAccount(existingUser.id, facebookId, avatarUrl);
-      } else {
-        user = await User.createFromFacebook({ facebookId, email, name: displayName, picture: avatarUrl });
-        emailService.sendWelcomeEmail(email, displayName).catch(() => {});
-      }
-    }
-
-    if (!user.is_active) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
-    }
-
-    const facebookJti = crypto.randomBytes(16).toString("hex");
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti: facebookJti,
-      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Facebook OAuth',
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      expiresAt: new Date(Date.now() + 604800000),
-    });
-
-    UserActivity.log(user.id, 'facebook_login', {
-      ip: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-    });
-
-    const token = generateToken(buildTokenPayload({ ...user, jti: facebookJti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
-
-    const authz = await resolveAuthorizationContext(user);
-
-    return res.json({
-      success: true,
-      message: "Đăng nhập Facebook thành công",
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          full_name: user.full_name,
-          avatar: user.avatar || user.avatar_url || avatarUrl,
-          avatar_url: user.avatar_url || avatarUrl,
-          role: user.role || "student",
-          is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || 'basic',
-          vip_expires_at: user.vip_expires_at || null,
-          roles: authz.roles,
-          permissions: authz.permissions,
-          created_at: user.created_at,
-        },
-        token,
-        refreshToken,
-      },
-    });
-  } catch (error) {
-    console.error("Facebook auth error:", error.message);
-    return res
-      .status(500)
-      .json({ success: false, message: "Đăng nhập Facebook thất bại, vui lòng thử lại" });
-  }
-};
 
 // ─── Forgot Password ──────────────────────────────────────────────────────────
 const forgotPassword = async (req, res) => {
@@ -1327,7 +1206,6 @@ module.exports = {
   googleAuth,
   facebookAuthStart,
   facebookAuthCallback,
-  facebookAuth,
   forgotPassword,
   resetPassword,
   verifyEmail,

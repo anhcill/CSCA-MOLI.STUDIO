@@ -31,6 +31,9 @@ export interface User {
   created_at?: string;
   is_verified?: boolean;
   is_active?: boolean;
+  coins?: number;
+  current_streak?: number;
+  longest_streak?: number;
 }
 
 export interface AuthResponse {
@@ -90,14 +93,6 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
  */
 export const googleAuth = async (credential: string): Promise<AuthResponse> => {
   const response = await axios.post('/auth/google', { credential });
-  return response.data;
-};
-
-/**
- * Facebook OAuth authentication
- */
-export const facebookAuth = async (accessToken: string): Promise<AuthResponse> => {
-  const response = await axios.post('/auth/facebook', { accessToken });
   return response.data;
 };
 

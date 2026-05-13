@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4 sm:p-6 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-start sm:items-center justify-center p-4 sm:p-6 md:p-8 pt-8 sm:pt-0">
       <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
         {/* Left Side - Branding - Hidden on mobile */}
         <div className="hidden xl:flex flex-col flex-1 space-y-6 max-w-lg">
