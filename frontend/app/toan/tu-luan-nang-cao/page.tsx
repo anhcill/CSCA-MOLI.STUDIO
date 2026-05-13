@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function ToanTuLuanNangCaoPage() {
-  redirect('/giai-de-chi-tiet');
+  redirect('/giai-de-chi-tiet?subject=toan');
 }

@@ -8,6 +8,7 @@ import {
   BsStars,
   BsGraphUp,
 } from 'react-icons/bs';
+import { buildSubjectScopedHref } from '@/lib/utils/subjectScope';
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -51,9 +52,7 @@ export default function SubjectNavigation({
 
   // Build full href with subject param
   const buildSubjectHref = (href: string) => {
-    if (!subjectSlug) return href;
-    const base = `${href}?subject=${subjectSlug}`;
-    return base;
+    return buildSubjectScopedHref(href, subjectSlug);
   };
 
   const isActiveHref = (href: string) => {

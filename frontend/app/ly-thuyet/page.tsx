@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Header from '@/components/layout/Header';
+import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
 import axios from '@/lib/utils/axios';
+import {
+  normalizeContentSubject,
+  subjectMatches,
+} from '@/lib/utils/subjectScope';
 import { FiBook, FiDownload, FiExternalLink, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 interface Material {
@@ -121,32 +125,42 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 
 export default function LyThuyetPage() {
   const searchParams = useSearchParams() as unknown as URLSearchParams;
-  const initialSubject = searchParams.get('subject') || '';
+  const subjectParam = normalizeContentSubject(searchParams.get('subject'));
+  const isStrictSubject = !!subjectParam;
   const [allMaterials, setAllMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeSubject, setActiveSubject] = useState(initialSubject);
+  const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [viewing, setViewing] = useState<Material | null>(null);
 
+  useEffect(() => {
+    setActiveSubject(subjectParam);
+  }, [subjectParam]);
+
   const handleSubjectChange = (subject: string) => {
-    setActiveSubject(subject);
+    const normalizedSubject = normalizeContentSubject(subject);
+    setActiveSubject(normalizedSubject);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      if (subject) url.searchParams.set('subject', subject);
+      if (normalizedSubject) url.searchParams.set('subject', normalizedSubject);
       else url.searchParams.delete('subject');
       window.history.replaceState({}, '', url.toString());
     }
   };
 
   useEffect(() => {
-    axios.get('/materials?category=ly-thuyet')
+    const params = new URLSearchParams({ category: 'ly-thuyet' });
+    if (activeSubject) params.set('subject', activeSubject);
+
+    setLoading(true);
+    axios.get(`/materials?${params.toString()}`)
       .then(r => setAllMaterials(r.data.data || []))
       .catch(() => setAllMaterials([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeSubject]);
 
   const filtered = useMemo(() => allMaterials.filter(m => {
-    const matchSubject = !activeSubject || m.subject === activeSubject;
+    const matchSubject = subjectMatches(m.subject, activeSubject);
     const q = search.toLowerCase();
     const matchSearch = !q || m.title.toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q) || (m.topic || '').toLowerCase().includes(q);
     return matchSubject && matchSearch;
@@ -165,7 +179,7 @@ export default function LyThuyetPage() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <Header />
+        <ScopedStudyTopBar title="Lý Thuyết" subject={activeSubject} fallbackIcon="📖" />
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-1">
@@ -177,6 +191,7 @@ export default function LyThuyetPage() {
             </div>
           </div>
 
+          {!isStrictSubject && (
           <div className="flex items-center gap-2 flex-wrap mb-5">
             {SUBJECTS.map(s => (
               <button key={s.value} onClick={() => handleSubjectChange(s.value)}
@@ -189,6 +204,7 @@ export default function LyThuyetPage() {
               </button>
             ))}
           </div>
+          )}
 
           <div className="relative mb-7">
             <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />

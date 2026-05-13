@@ -23,7 +23,7 @@ export default function LoTrinhPage({ params }: { params: { subject: string } })
             <main className="container mx-auto px-6 py-8 max-w-[1600px]">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     <div className="lg:col-span-3">
-                        <SubjectNavigation subject={subjectInfo.name} subjectCode={subjectInfo.code} colorScheme={subjectInfo.colorScheme} />
+                        <SubjectNavigation subject={subjectInfo.name} subjectCode={subjectInfo.code} subjectSlug={params.subject} colorScheme={subjectInfo.colorScheme} />
                     </div>
                     <div className="lg:col-span-9 space-y-8">
                         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/50 p-8">

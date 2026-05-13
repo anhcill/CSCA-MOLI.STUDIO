@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Header from '@/components/layout/Header';
+import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
 import {
   FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch,
   FiClock, FiAward, FiLock, FiMessageSquare, FiStar, FiZap
@@ -13,6 +13,7 @@ import { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import { isPremiumActive } from '@/lib/utils/permissions';
+import { getExamSubjectCode, getExamSubjectSlug, normalizeContentSubject } from '@/lib/utils/subjectScope';
 import Link from 'next/link';
 
 // ── Video Modal ────────────────────────────────────────────────────────────────
@@ -228,20 +229,26 @@ export default function GiaiDeChiTietPage() {
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
   const searchParams = useSearchParams() as unknown as URLSearchParams;
-  const initialSubject = searchParams.get('subject') || '';
+  const subjectParam = normalizeContentSubject(searchParams.get('subject'));
+  const isStrictSubject = !!subjectParam;
   const [exams, setExams] = useState<(Exam & { vip_tier?: string })[]>([]);
   const [subjects, setSubjects] = useState<{ id: number; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubject, setActiveSubject] = useState(initialSubject);
+  const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [search, setSearch] = useState('');
   const [playing, setPlaying] = useState<Exam | null>(null);
   const [upsellTier, setUpsellTier] = useState<'vip' | 'premium' | null>(null);
 
+  useEffect(() => {
+    setActiveSubject(subjectParam);
+  }, [subjectParam]);
+
   const handleSubjectChange = (subject: string) => {
-    setActiveSubject(subject);
+    const normalizedSubject = normalizeContentSubject(subject);
+    setActiveSubject(normalizedSubject);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      if (subject) url.searchParams.set('subject', subject);
+      if (normalizedSubject) url.searchParams.set('subject', normalizedSubject);
       else url.searchParams.delete('subject');
       window.history.replaceState({}, '', url.toString());
     }
@@ -249,16 +256,24 @@ export default function GiaiDeChiTietPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
+        const examRequest = activeSubject
+          ? axios.get(`/subjects/${getExamSubjectCode(activeSubject)}/exams`, {
+              params: { subjectSlug: getExamSubjectSlug(activeSubject) },
+            })
+          : axios.get('/exams/lobby');
         const [examsRes, subjectsRes] = await Promise.all([
-          axios.get('/exams/lobby'),
+          examRequest,
           axios.get('/subjects'),
         ]);
-        const all = [
-          ...(examsRes.data.data?.live || []),
-          ...(examsRes.data.data?.upcoming || []),
-          ...(examsRes.data.data?.public || []),
-        ];
+        const all = activeSubject
+          ? (examsRes.data.data || [])
+          : [
+              ...(examsRes.data.data?.live || []),
+              ...(examsRes.data.data?.upcoming || []),
+              ...(examsRes.data.data?.public || []),
+            ];
         setExams(all);
         setSubjects(subjectsRes.data || []);
       } catch (err) {
@@ -270,11 +285,15 @@ export default function GiaiDeChiTietPage() {
       }
     };
     fetchData();
-  }, []);
+  }, [activeSubject]);
 
   const filtered = useMemo(() => {
     return exams.filter(e => {
-      const matchSubject = !activeSubject || (e.subject_code || '') === activeSubject;
+      const examSubjectCode = (e.subject_code || '').toUpperCase();
+      const activeSubjectCode = getExamSubjectCode(activeSubject);
+      const matchSubject = !activeSubject
+        || examSubjectCode === activeSubjectCode
+        || (activeSubjectCode.startsWith('CHINESE_') && examSubjectCode === 'CHINESE');
       const q = search.toLowerCase();
       const matchSearch = !q ||
         (e.title || '').toLowerCase().includes(q) ||
@@ -295,7 +314,7 @@ export default function GiaiDeChiTietPage() {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20">
-        <Header />
+        <ScopedStudyTopBar title="Giải Đề Chi Tiết" subject={activeSubject} fallbackIcon="🎥" />
 
         {/* ── Hero ──────────────────────────────────────────────────── */}
         <div className="relative bg-gradient-to-r from-purple-700 via-indigo-700 to-violet-700 overflow-hidden">
@@ -355,6 +374,7 @@ export default function GiaiDeChiTietPage() {
 
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            {!isStrictSubject && (
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => handleSubjectChange('')}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
@@ -367,7 +387,7 @@ export default function GiaiDeChiTietPage() {
               {subjects.map(s => (
                 <button key={s.code} onClick={() => handleSubjectChange(s.code)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                    activeSubject === s.code
+                  getExamSubjectCode(activeSubject) === s.code
                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
                   }`}>
@@ -375,6 +395,7 @@ export default function GiaiDeChiTietPage() {
                 </button>
               ))}
             </div>
+            )}
 
             <div className="relative sm:ml-auto sm:w-64">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
