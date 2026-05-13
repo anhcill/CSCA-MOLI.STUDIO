@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const examController = require("../controllers/examController");
+const officialExamController = require("../controllers/officialExamController");
 const {
   authenticate,
   authorizePermission,
@@ -13,10 +14,30 @@ router.get("/exams/:examId", examController.getExamDetail);
 
 // Protected routes - Require authentication
 router.post("/exams/:examId/start", authenticate, examController.startExam);
+router.get(
+  "/exams/:examId/registration",
+  authenticate,
+  officialExamController.getMyRegistration,
+);
+router.post(
+  "/exams/:examId/register",
+  authenticate,
+  officialExamController.register,
+);
+router.delete(
+  "/exams/:examId/register",
+  authenticate,
+  officialExamController.cancelRegistration,
+);
 router.post(
   "/attempts/:attemptId/answers",
   authenticate,
   examController.saveAnswer
+);
+router.post(
+  "/attempts/:attemptId/violations",
+  authenticate,
+  officialExamController.logViolation,
 );
 router.post(
   "/attempts/:attemptId/submit",
@@ -28,6 +49,15 @@ router.get(
   "/attempts/:attemptId",
   authenticate,
   examController.getAttemptDetail
+);
+router.get(
+  "/certificates/me",
+  authenticate,
+  officialExamController.getMyCertificates,
+);
+router.get(
+  "/certificates/verify/:code",
+  officialExamController.verifyCertificate,
 );
 router.get(
   "/subjects/:subjectCode/stats",

@@ -1,0 +1,421 @@
+const db = require("../config/database");
+
+const toLimit = (value, fallback = 20, max = 50) => {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+};
+
+const normalizeEntityType = (type) => {
+  if (["question", "material", "vocabulary", "exam"].includes(type)) return type;
+  const error = new Error("Invalid bookmark type");
+  error.statusCode = 400;
+  throw error;
+};
+
+async function getWeakTopics(userId, limit = 5) {
+  const result = await db.query(
+    `
+      SELECT
+        uts.topic_id,
+        qt.name AS topic_name,
+        qt.name_cn AS topic_name_cn,
+        s.id AS subject_id,
+        s.code AS subject_code,
+        s.name AS subject_name,
+        uts.total_questions,
+        uts.correct_answers,
+        uts.incorrect_answers,
+        uts.error_percentage
+      FROM user_topic_stats uts
+      JOIN question_topics qt ON qt.id = uts.topic_id
+      JOIN subjects s ON s.id = uts.subject_id
+      WHERE uts.user_id = $1
+        AND uts.total_questions >= 2
+        AND uts.error_percentage >= 35
+      ORDER BY uts.error_percentage DESC, uts.incorrect_answers DESC
+      LIMIT $2
+    `,
+    [userId, limit],
+  );
+  return result.rows;
+}
+
+async function getWrongQuestionIds(userId, limit = 20) {
+  const result = await db.query(
+    `
+      SELECT DISTINCT ON (q.id)
+        q.id,
+        MAX(ea.submit_time) OVER (PARTITION BY q.id) AS last_seen_at
+      FROM user_answers ua
+      JOIN exam_attempts ea ON ea.id = ua.attempt_id
+      JOIN questions q ON q.id = ua.question_id
+      WHERE ea.user_id = $1
+        AND ea.status = 'completed'
+        AND ua.is_correct = FALSE
+      ORDER BY q.id, last_seen_at DESC
+      LIMIT $2
+    `,
+    [userId, limit],
+  );
+  return result.rows.map((row) => Number(row.id));
+}
+
+async function getWrongQuestions(userId, limit = 20) {
+  const result = await db.query(
+    `
+      WITH latest_wrong AS (
+        SELECT DISTINCT ON (q.id)
+          q.id AS question_id,
+          ua.attempt_id,
+          ua.selected_answer_key,
+          ua.time_spent_seconds,
+          ea.exam_id,
+          ea.submit_time,
+          e.title AS exam_title,
+          s.name AS subject_name,
+          s.code AS subject_code
+        FROM user_answers ua
+        JOIN exam_attempts ea ON ea.id = ua.attempt_id
+        JOIN questions q ON q.id = ua.question_id
+        JOIN exams e ON e.id = ea.exam_id
+        JOIN subjects s ON s.id = e.subject_id
+        WHERE ea.user_id = $1
+          AND ea.status = 'completed'
+          AND ua.is_correct = FALSE
+        ORDER BY q.id, ea.submit_time DESC
+      )
+      SELECT
+        lw.*,
+        q.question_number,
+        q.question_text,
+        q.question_text_cn,
+        q.difficulty,
+        q.question_category,
+        q.explanation,
+        ca.answer_key AS correct_answer_key,
+        ca.answer_text AS correct_answer_text,
+        n.note,
+        (b.id IS NOT NULL) AS is_bookmarked
+      FROM latest_wrong lw
+      JOIN questions q ON q.id = lw.question_id
+      LEFT JOIN answers ca ON ca.question_id = q.id AND ca.is_correct = TRUE
+      LEFT JOIN user_question_notes n ON n.user_id = $1 AND n.question_id = q.id
+      LEFT JOIN user_bookmarks b ON b.user_id = $1 AND b.entity_type = 'question' AND b.entity_id = q.id
+      ORDER BY lw.submit_time DESC
+      LIMIT $2
+    `,
+    [userId, toLimit(limit)],
+  );
+  return result.rows;
+}
+
+async function getQuestionDetails(userId, questionIds) {
+  if (!questionIds.length) return [];
+
+  const result = await db.query(
+    `
+      SELECT
+        q.id,
+        q.exam_id,
+        q.question_number,
+        q.question_text,
+        q.question_text_cn,
+        q.question_type,
+        q.question_category,
+        q.points,
+        q.difficulty,
+        q.image_url,
+        q.explanation,
+        e.title AS exam_title,
+        s.name AS subject_name,
+        s.code AS subject_code,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', a.id,
+              'answer_key', a.answer_key,
+              'answer_text', a.answer_text,
+              'answer_text_cn', a.answer_text_cn,
+              'is_correct', a.is_correct
+            )
+            ORDER BY a.answer_key
+          ) FILTER (WHERE a.id IS NOT NULL),
+          '[]'
+        ) AS answers,
+        n.note,
+        (b.id IS NOT NULL) AS is_bookmarked
+      FROM questions q
+      JOIN exams e ON e.id = q.exam_id
+      JOIN subjects s ON s.id = e.subject_id
+      LEFT JOIN answers a ON a.question_id = q.id
+      LEFT JOIN user_question_notes n ON n.user_id = $1 AND n.question_id = q.id
+      LEFT JOIN user_bookmarks b ON b.user_id = $1 AND b.entity_type = 'question' AND b.entity_id = q.id
+      WHERE q.id = ANY($2::int[])
+      GROUP BY q.id, e.id, s.id, n.note, b.id
+      ORDER BY array_position($2::int[], q.id)
+    `,
+    [userId, questionIds],
+  );
+  return result.rows;
+}
+
+async function createWrongQuestionPractice(userId, limit = 20) {
+  const ids = await getWrongQuestionIds(userId, toLimit(limit));
+  if (!ids.length) {
+    const error = new Error("No wrong questions found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      INSERT INTO user_practice_sets (user_id, set_type, title, description, question_ids)
+      VALUES ($1, 'wrong_questions', $2, $3, $4::int[])
+      RETURNING *
+    `,
+    [
+      userId,
+      `Luyen lai ${ids.length} cau sai`,
+      "Bo luyen tap gom cac cau ban tung tra loi sai gan day.",
+      ids,
+    ],
+  );
+  return result.rows[0];
+}
+
+async function createWeakTopicPractice(userId, topicId, limit = 20) {
+  const weakTopics = await getWeakTopics(userId, 20);
+  const target = weakTopics.find((topic) => Number(topic.topic_id) === Number(topicId)) || weakTopics[0];
+  if (!target) {
+    const error = new Error("No weak topic found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const questions = await db.query(
+    `
+      SELECT q.id
+      FROM questions q
+      JOIN question_topic_mapping qtm ON qtm.question_id = q.id
+      LEFT JOIN user_answers ua ON ua.question_id = q.id
+      LEFT JOIN exam_attempts ea ON ea.id = ua.attempt_id AND ea.user_id = $1
+      WHERE qtm.topic_id = $2
+      GROUP BY q.id
+      ORDER BY
+        COUNT(*) FILTER (WHERE ua.is_correct = FALSE) DESC,
+        random()
+      LIMIT $3
+    `,
+    [userId, target.topic_id, toLimit(limit)],
+  );
+  const ids = questions.rows.map((row) => Number(row.id));
+  if (!ids.length) {
+    const error = new Error("No questions for weak topic");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      INSERT INTO user_practice_sets (
+        user_id, set_type, title, description, subject_id, source_topic_id, question_ids
+      )
+      VALUES ($1, 'weak_topic', $2, $3, $4, $5, $6::int[])
+      RETURNING *
+    `,
+    [
+      userId,
+      `De luyen chu de yeu: ${target.topic_name}`,
+      `Tap trung chu de ${target.topic_name} (${Number(target.error_percentage).toFixed(1)}% ti le sai).`,
+      target.subject_id,
+      target.topic_id,
+      ids,
+    ],
+  );
+  return result.rows[0];
+}
+
+async function getPracticeSet(userId, setId) {
+  const setResult = await db.query(
+    `SELECT * FROM user_practice_sets WHERE id = $1 AND user_id = $2`,
+    [setId, userId],
+  );
+  if (!setResult.rows.length) {
+    const error = new Error("Practice set not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const set = setResult.rows[0];
+  const questions = await getQuestionDetails(userId, set.question_ids.map(Number));
+  return { ...set, questions };
+}
+
+async function upsertBookmark(userId, payload) {
+  const entityType = normalizeEntityType(payload.entity_type);
+  const entityId = Number(payload.entity_id);
+  if (!entityId) {
+    const error = new Error("Invalid bookmark entity");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      INSERT INTO user_bookmarks (user_id, entity_type, entity_id, title, metadata)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id, entity_type, entity_id)
+      DO UPDATE SET title = COALESCE(EXCLUDED.title, user_bookmarks.title),
+                    metadata = EXCLUDED.metadata,
+                    created_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `,
+    [userId, entityType, entityId, payload.title || null, payload.metadata || {}],
+  );
+  return result.rows[0];
+}
+
+async function deleteBookmark(userId, entityType, entityId) {
+  normalizeEntityType(entityType);
+  await db.query(
+    `DELETE FROM user_bookmarks WHERE user_id = $1 AND entity_type = $2 AND entity_id = $3`,
+    [userId, entityType, Number(entityId)],
+  );
+}
+
+async function listBookmarks(userId, type) {
+  const params = [userId];
+  let where = "WHERE b.user_id = $1";
+  if (type) {
+    normalizeEntityType(type);
+    params.push(type);
+    where += ` AND b.entity_type = $${params.length}`;
+  }
+
+  const result = await db.query(
+    `
+      SELECT b.*
+      FROM user_bookmarks b
+      ${where}
+      ORDER BY b.created_at DESC
+      LIMIT 100
+    `,
+    params,
+  );
+  return result.rows;
+}
+
+async function upsertQuestionNote(userId, questionId, note, sourceAttemptId = null) {
+  const text = String(note || "").trim();
+  const result = await db.query(
+    `
+      INSERT INTO user_question_notes (user_id, question_id, source_attempt_id, note)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id, question_id)
+      DO UPDATE SET note = EXCLUDED.note,
+                    source_attempt_id = COALESCE(EXCLUDED.source_attempt_id, user_question_notes.source_attempt_id),
+                    updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `,
+    [userId, Number(questionId), sourceAttemptId ? Number(sourceAttemptId) : null, text],
+  );
+  return result.rows[0];
+}
+
+async function listQuestionNotes(userId) {
+  const result = await db.query(
+    `
+      SELECT n.*, q.question_number, q.question_text, e.id AS exam_id, e.title AS exam_title
+      FROM user_question_notes n
+      JOIN questions q ON q.id = n.question_id
+      JOIN exams e ON e.id = q.exam_id
+      WHERE n.user_id = $1
+      ORDER BY n.updated_at DESC
+      LIMIT 100
+    `,
+    [userId],
+  );
+  return result.rows;
+}
+
+async function getNextLessons(userId) {
+  const weakTopics = await getWeakTopics(userId, 5);
+  if (!weakTopics.length) return [];
+
+  const params = [weakTopics.map((topic) => topic.subject_code), weakTopics.map((topic) => topic.topic_name)];
+  const materials = await db.query(
+    `
+      SELECT id, title, description, category, subject, topic, file_type, is_premium
+      FROM materials
+      WHERE is_active = TRUE
+        AND (subject = ANY($1::text[]) OR topic = ANY($2::text[]))
+      ORDER BY created_at DESC
+      LIMIT 12
+    `,
+    params,
+  );
+
+  const vocabulary = await db.query(
+    `
+      SELECT subject, topic, COUNT(*)::int AS word_count
+      FROM vocabulary_items
+      WHERE is_active = TRUE
+        AND topic = ANY($1::text[])
+      GROUP BY subject, topic
+      ORDER BY word_count DESC
+      LIMIT 8
+    `,
+    [weakTopics.map((topic) => topic.topic_name)],
+  );
+
+  return weakTopics.map((topic) => ({
+    topicId: topic.topic_id,
+    topicName: topic.topic_name,
+    subjectCode: topic.subject_code,
+    subjectName: topic.subject_name,
+    errorPercentage: Number(topic.error_percentage),
+    materials: materials.rows.filter((m) => m.topic === topic.topic_name || m.subject === topic.subject_code).slice(0, 3),
+    vocabulary: vocabulary.rows.filter((v) => v.topic === topic.topic_name).slice(0, 2),
+  }));
+}
+
+async function getActionSummary(userId) {
+  const [weakTopics, wrongCount, bookmarks, notes, nextLessons] = await Promise.all([
+    getWeakTopics(userId, 5),
+    db.query(
+      `
+        SELECT COUNT(DISTINCT ua.question_id)::int AS count
+        FROM user_answers ua
+        JOIN exam_attempts ea ON ea.id = ua.attempt_id
+        WHERE ea.user_id = $1 AND ea.status = 'completed' AND ua.is_correct = FALSE
+      `,
+      [userId],
+    ),
+    db.query(`SELECT COUNT(*)::int AS count FROM user_bookmarks WHERE user_id = $1`, [userId]),
+    db.query(`SELECT COUNT(*)::int AS count FROM user_question_notes WHERE user_id = $1`, [userId]),
+    getNextLessons(userId),
+  ]);
+
+  return {
+    wrongQuestionCount: wrongCount.rows[0]?.count || 0,
+    weakTopics,
+    bookmarkCount: bookmarks.rows[0]?.count || 0,
+    noteCount: notes.rows[0]?.count || 0,
+    nextLessons,
+  };
+}
+
+module.exports = {
+  getActionSummary,
+  getWrongQuestions,
+  createWrongQuestionPractice,
+  createWeakTopicPractice,
+  getPracticeSet,
+  upsertBookmark,
+  deleteBookmark,
+  listBookmarks,
+  upsertQuestionNote,
+  listQuestionNotes,
+  getNextLessons,
+};
+

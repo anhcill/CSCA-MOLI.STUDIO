@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Exam {
@@ -427,6 +427,13 @@ export default function ExamsPage() {
                                                 title="Quản lý lịch thi"
                                             >
                                                 <FiCalendar size={17} />
+                                            </Link>
+                                            <Link
+                                                href={`/admin/exams/${exam.id}/official`}
+                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"
+                                                title="Quan ly thi chinh thuc"
+                                            >
+                                                <FiMonitor size={17} />
                                             </Link>
                                             <button
                                                 onClick={() => router.push(`/admin/exams/${exam.id}`)}

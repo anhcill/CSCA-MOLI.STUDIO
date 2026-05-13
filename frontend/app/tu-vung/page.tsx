@@ -3,10 +3,12 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
-import { FiBook, FiSearch, FiChevronRight, FiChevronLeft, FiX } from 'react-icons/fi';
+import { FiBook, FiBookmark, FiSearch, FiChevronRight, FiChevronLeft, FiX } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
+import VocabularyLearningPanel from '@/components/vocabulary/VocabularyLearningPanel';
+import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
 
 interface VocabItem {
   id: number;
@@ -40,6 +42,7 @@ function VocabularyContent() {
   const [selectedTopic, setSelectedTopic] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [bookmarkedWords, setBookmarkedWords] = useState<Set<number>>(new Set());
 
   useEffect(() => { loadTopics(); }, [selectedSubject]);
 
@@ -84,6 +87,30 @@ function VocabularyContent() {
     if (selectedSubject) params.set('subject', selectedSubject);
     if (selectedTopic) params.set('topic', selectedTopic);
     window.open(`/tu-vung/print?${params.toString()}`, '_blank');
+  };
+
+  const toggleWordBookmark = async (word: VocabItem) => {
+    const next = new Set(bookmarkedWords);
+    const shouldBookmark = !next.has(word.id);
+    if (shouldBookmark) next.add(word.id);
+    else next.delete(word.id);
+    setBookmarkedWords(next);
+
+    try {
+      if (shouldBookmark) {
+        await saveBookmark({
+          entity_type: 'vocabulary',
+          entity_id: word.id,
+          title: `${word.word_cn} - ${word.word_vn}`,
+          metadata: { pinyin: word.pinyin, subject: word.subject, topic: word.topic },
+        });
+      } else {
+        await deleteBookmark('vocabulary', word.id);
+      }
+    } catch {
+      const rollback = new Set(bookmarkedWords);
+      setBookmarkedWords(rollback);
+    }
   };
 
   // Group topics by subject
@@ -135,6 +162,7 @@ function VocabularyContent() {
                 📄 Xuất PDF
               </button>
             </div>
+            <VocabularyLearningPanel subject={selectedSubject} topic={selectedTopic} />
             {loading ? (
               <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
             ) : words.length === 0 ? (
@@ -170,6 +198,13 @@ function VocabularyContent() {
                               <FaCrown size={10} className="text-white" />
                             </span>
                           )}
+                          <button
+                            onClick={() => toggleWordBookmark(word)}
+                            className={`ml-auto p-2 rounded-lg ${bookmarkedWords.has(word.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-600'}`}
+                            title="Bookmark tu vung"
+                          >
+                            <FiBookmark size={15} />
+                          </button>
                         </div>
                         {/* Pinyin */}
                         <div className="px-5 py-4 flex items-center border-l border-gray-100">
@@ -196,6 +231,13 @@ function VocabularyContent() {
                         <div className="flex items-baseline gap-2">
                           <span className="text-2xl font-black text-gray-900">{word.word_cn}</span>
                           <span className="text-sm text-cyan-600 italic">{word.pinyin}</span>
+                          <button
+                            onClick={() => toggleWordBookmark(word)}
+                            className={`ml-auto p-2 rounded-lg ${bookmarkedWords.has(word.id) ? 'bg-blue-50 text-blue-700' : 'text-gray-300'}`}
+                            title="Bookmark tu vung"
+                          >
+                            <FiBookmark size={15} />
+                          </button>
                         </div>
                         {word.word_en && (
                           <div className="text-xs text-gray-500"><span className="font-semibold text-gray-400 uppercase">EN:</span> {word.word_en}</div>

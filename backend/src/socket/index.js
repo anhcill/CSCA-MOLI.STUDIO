@@ -88,6 +88,36 @@ function initSocket(httpServer) {
     // Join personal room for receiving private messages
     socket.join(`user:${userId}`);
 
+    socket.on('join_exam_monitor', async (examId) => {
+      const parsedExamId = parseInt(examId, 10);
+      if (!Number.isFinite(parsedExamId) || parsedExamId <= 0) return;
+
+      try {
+        const { rows } = await db.query(
+          `SELECT 1
+           FROM exam_rooms room
+           JOIN exam_proctor_assignments epa ON epa.room_id = room.id
+           WHERE room.exam_id = $1 AND epa.proctor_id = $2
+           LIMIT 1`,
+          [parsedExamId, userId],
+        );
+        const canJoin = socket.user.role === 'admin' || rows.length > 0;
+        if (canJoin) {
+          socket.join(`exam-monitor:${parsedExamId}`);
+          socket.emit('exam_monitor_joined', { examId: parsedExamId });
+        }
+      } catch (error) {
+        socket.emit('exam_monitor_error', { message: 'Unable to join exam monitor' });
+      }
+    });
+
+    socket.on('leave_exam_monitor', (examId) => {
+      const parsedExamId = parseInt(examId, 10);
+      if (Number.isFinite(parsedExamId) && parsedExamId > 0) {
+        socket.leave(`exam-monitor:${parsedExamId}`);
+      }
+    });
+
     // Join conversation rooms
     socket.on('join_conversation', async (partnerId) => {
       const roomName = getConversationRoom(userId, parseInt(partnerId));

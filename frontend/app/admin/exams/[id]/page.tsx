@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle } from 'react-icons/fi';
+import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
@@ -607,6 +607,12 @@ export default function AdminExamDetailPage() {
                                 </>
                             ) : (
                                 <>
+                                    <button
+                                        onClick={() => router.push(`/admin/exams/${exam.id}/official`)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium"
+                                    >
+                                        <FiMonitor size={16} /> Thi chinh thuc
+                                    </button>
                                     <button
                                         onClick={enterEditMode}
                                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"

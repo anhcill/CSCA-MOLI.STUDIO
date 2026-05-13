@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
-import { FiDownload, FiExternalLink, FiSearch, FiChevronDown, FiChevronUp, FiLock } from 'react-icons/fi';
+import { FiBookmark, FiDownload, FiExternalLink, FiSearch, FiChevronDown, FiChevronUp, FiLock } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
+import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
 
 interface Material {
   id: number;
@@ -45,6 +46,7 @@ function PDFCard({ m }: { m: Material }) {
   const isVip = isVipActive(user);
   const [expanded, setExpanded] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
   const queryString = token ? `?token=${token}` : '';
   const pdfUrl = `${API_URL}/materials/pdf/${m.id}${queryString}`;
@@ -64,6 +66,25 @@ function PDFCard({ m }: { m: Material }) {
     if (locked) {
       e.preventDefault();
       setShowVipModal(true);
+    }
+  };
+
+  const toggleBookmark = async () => {
+    const next = !bookmarked;
+    setBookmarked(next);
+    try {
+      if (next) {
+        await saveBookmark({
+          entity_type: 'material',
+          entity_id: m.id,
+          title: m.title,
+          metadata: { category: m.category, subject: m.subject, file_type: m.file_type },
+        });
+      } else {
+        await deleteBookmark('material', m.id);
+      }
+    } catch {
+      setBookmarked(!next);
     }
   };
 
@@ -109,6 +130,13 @@ function PDFCard({ m }: { m: Material }) {
 
           {/* Actions */}
           <div className="flex gap-2 shrink-0">
+            <button
+              onClick={toggleBookmark}
+              className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${bookmarked ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              title="Bookmark tai lieu"
+            >
+              <FiBookmark size={16} />
+            </button>
             {locked ? (
               <button
                 onClick={() => setShowVipModal(true)}

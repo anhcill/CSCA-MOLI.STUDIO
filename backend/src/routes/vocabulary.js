@@ -7,6 +7,7 @@ const {
   checkVipAccess,
 } = require("../middleware/authMiddleware");
 const vocabularyController = require("../controllers/vocabularyController");
+const vocabularyReviewController = require("../controllers/vocabularyReviewController");
 const db = require("../config/database");
 
 // Auto-create vocabulary_items table + columns if not exists
@@ -39,6 +40,28 @@ const db = require("../config/database");
     await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_subject ON vocabulary_items(subject)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_topic ON vocabulary_items(subject, topic)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_is_premium ON vocabulary_items(is_premium) WHERE is_premium = TRUE`);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS vocabulary_user_reviews (
+        id BIGSERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        vocabulary_id INTEGER NOT NULL REFERENCES vocabulary_items(id) ON DELETE CASCADE,
+        easiness NUMERIC(4,2) NOT NULL DEFAULT 2.50,
+        interval_days INTEGER NOT NULL DEFAULT 0,
+        repetitions INTEGER NOT NULL DEFAULT 0,
+        lapses INTEGER NOT NULL DEFAULT 0,
+        last_quality INTEGER,
+        correct_count INTEGER NOT NULL DEFAULT 0,
+        wrong_count INTEGER NOT NULL DEFAULT 0,
+        last_reviewed_at TIMESTAMP,
+        due_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, vocabulary_id)
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_reviews_user_due ON vocabulary_user_reviews(user_id, due_at)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_reviews_vocab ON vocabulary_user_reviews(vocabulary_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_vocab_reviews_weak ON vocabulary_user_reviews(user_id, last_quality, lapses)`);
   } catch (err) {
     console.error("❌ Vocabulary table init error:", err.message);
   }
@@ -120,6 +143,43 @@ router.post(
 );
 
 // ── Admin routes ──────────────────────────────────────────────────
+router.get(
+  "/review/dashboard",
+  authenticate,
+  vocabularyReviewController.getDashboard,
+);
+
+router.get(
+  "/review/queue",
+  authenticate,
+  vocabularyReviewController.getQueue,
+);
+
+router.post(
+  "/review/:id",
+  authenticate,
+  vocabularyReviewController.recordReview,
+);
+
+router.get(
+  "/mini-test",
+  authenticate,
+  vocabularyReviewController.getMiniTest,
+);
+
+router.post(
+  "/mini-test/submit",
+  authenticate,
+  vocabularyReviewController.submitMiniTest,
+);
+
+router.get(
+  "/admin/review-stats",
+  authenticate,
+  authorizePermission("content.manage"),
+  vocabularyReviewController.getAdminReviewStats,
+);
+
 router.post(
   "/",
   authenticate,

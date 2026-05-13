@@ -8,6 +8,7 @@ import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
+import { officialExamApi } from '@/lib/api/officialExams';
 
 export default function ExamPage() {
   const params = useParams();
@@ -48,6 +49,18 @@ export default function ExamPage() {
         const next = v + 1;
         setLastViolation(type);
         if (next > 0) setShowViolation(true);
+        if (attemptId) {
+          officialExamApi.logViolation(attemptId, {
+            type,
+            count: next,
+            severity: next >= 3 ? 'critical' : 'warning',
+            metadata: {
+              questionIndex: currentQuestionIndex,
+              timeLeft,
+              href: typeof window !== 'undefined' ? window.location.href : '',
+            },
+          }).catch(() => {});
+        }
         return next;
       });
       // Show capture shield briefly on visibility-related violations
@@ -69,7 +82,7 @@ export default function ExamPage() {
     if (violations >= maxViolations) {
       // Optional: auto-submit or report to admin
       alert('Bạn đã vi phạm quá nhiều lần. Bài thi sẽ được gửi và báo cáo cho quản trị viên.');
-      handleSubmit();
+      handleSubmit({ force: true });
     }
   }, [violations, maxViolations]);
 
@@ -90,7 +103,7 @@ export default function ExamPage() {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          handleSubmit(); // Auto-submit when time runs out
+          handleSubmit({ force: true }); // Auto-submit when time runs out
           return 0;
         }
         return prev - 1;
@@ -154,11 +167,13 @@ export default function ExamPage() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (options: { force?: boolean } = {}) => {
     if (!attemptId || submitting) return;
 
-    const confirmed = confirm('Chắc chắn nộp bài chứ? Bạn không thể thay đổi sau khi nộp.');
-    if (!confirmed) return;
+    if (!options.force) {
+      const confirmed = confirm('Chắc chắn nộp bài chứ? Bạn không thể thay đổi sau khi nộp.');
+      if (!confirmed) return;
+    }
 
     try {
       setSubmitting(true);
@@ -326,7 +341,7 @@ export default function ExamPage() {
           </div>
 
           <button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={submitting}
             className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 sm:px-8 py-2 sm:py-2.5 rounded-xl font-bold shadow-md hover:shadow-xl hover:shadow-teal-500/20 active:scale-95 transition-all outline-none disabled:opacity-60"
           >

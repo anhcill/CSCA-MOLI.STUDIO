@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const insightsController = require("../controllers/insightsController");
+const learningActionController = require("../controllers/learningActionController");
 const { authenticate } = require("../middleware/authMiddleware");
 
 // All routes require authentication
@@ -87,6 +88,18 @@ router.get("/hardest-exams", insightsController.getHardestExams);
  * Thống kê chi tiết cho trang lịch sử thi
  */
 router.get("/history-stats", insightsController.getHistoryStats);
+
+router.get("/actions/summary", learningActionController.getSummary);
+router.get("/actions/wrong-questions", learningActionController.getWrongQuestions);
+router.post("/actions/practice/wrong", learningActionController.createWrongPractice);
+router.post("/actions/practice/weak-topic", learningActionController.createWeakTopicPractice);
+router.get("/actions/practice/:id", learningActionController.getPracticeSet);
+router.get("/actions/bookmarks", learningActionController.listBookmarks);
+router.post("/actions/bookmarks", learningActionController.saveBookmark);
+router.delete("/actions/bookmarks/:type/:id", learningActionController.deleteBookmark);
+router.get("/actions/notes", learningActionController.listNotes);
+router.put("/actions/questions/:questionId/note", learningActionController.saveQuestionNote);
+router.get("/actions/next-lessons", learningActionController.getNextLessons);
 
 /**
  * PUT /api/insights/read/:id

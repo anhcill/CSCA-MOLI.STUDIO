@@ -8,6 +8,7 @@ import axios from '@/lib/utils/axios';
 import { FiPlus, FiTrash2, FiEdit2, FiSearch, FiX, FiCheck, FiUpload, FiChevronLeft } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import Link from 'next/link';
+import VocabularyReviewStats from '@/components/admin/vocabulary/VocabularyReviewStats';
 
 interface VocabItem {
   id: number;
@@ -252,6 +253,8 @@ export default function AdminVocabularyPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
+        <VocabularyReviewStats />
+
         {/* Filters */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">

@@ -35,6 +35,7 @@ import {
   type DifficultyBreakdown,
 } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
+import LearningActionsPanel from './LearningActionsPanel';
 
 interface LoadingState {
   overview: boolean;
@@ -192,6 +193,8 @@ export default function InsightsDashboard() {
         )}
 
         {/* ─── ROW 1: Overview Cards ─── */}
+        <LearningActionsPanel />
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             loading={loading.overview}

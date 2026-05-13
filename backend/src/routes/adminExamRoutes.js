@@ -5,6 +5,7 @@ const {
 	authorizePermission,
 } = require("../middleware/authMiddleware");
 const AdminExamController = require("../controllers/adminExamController");
+const officialExamController = require("../controllers/officialExamController");
 const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
 
 // All routes require authentication and exam management permission
@@ -34,6 +35,25 @@ router.delete("/questions/:questionId", examWriteLimiter, AdminExamController.de
 router.get("/:examId/schedule", AdminExamController.getSchedule);
 router.put("/:examId/schedule", scheduleLimiter, AdminExamController.setSchedule);
 router.delete("/:examId/schedule", scheduleLimiter, AdminExamController.clearSchedule);
+
+// Official exam workflow
+router.get("/:examId/official/monitor", officialExamController.getMonitor);
+router.get("/:examId/registrations", officialExamController.listRegistrations);
+router.put("/:examId/registrations/:registrationId", examWriteLimiter, officialExamController.updateRegistrationStatus);
+
+router.get("/:examId/rooms", officialExamController.listRooms);
+router.post("/:examId/rooms", examWriteLimiter, officialExamController.createRoom);
+router.put("/:examId/rooms/:roomId", examWriteLimiter, officialExamController.updateRoom);
+router.delete("/:examId/rooms/:roomId", examDeleteLimiter, officialExamController.deleteRoom);
+router.post("/:examId/rooms/auto-assign", examWriteLimiter, officialExamController.autoAssignRooms);
+router.post("/:examId/rooms/:roomId/students", examWriteLimiter, officialExamController.assignStudentToRoom);
+router.delete("/:examId/rooms/:roomId/students/:registrationId", examWriteLimiter, officialExamController.removeStudentFromRoom);
+router.post("/:examId/rooms/:roomId/proctors", examWriteLimiter, officialExamController.assignProctor);
+router.delete("/:examId/rooms/:roomId/proctors/:assignmentId", examWriteLimiter, officialExamController.removeProctor);
+
+router.get("/:examId/violations", officialExamController.listViolations);
+router.get("/:examId/certificates", officialExamController.listCertificates);
+router.post("/:examId/certificates/generate", examWriteLimiter, officialExamController.generateCertificates);
 
 // ── Question reordering ──────────────────────────────────────────────────────
 router.put("/:examId/questions/reorder", examWriteLimiter, AdminExamController.reorderQuestions);

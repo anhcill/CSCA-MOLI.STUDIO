@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
+const adminAnalyticsController = require("../controllers/adminAnalyticsController");
 const {
 	authenticate,
 	authorizePermission,
@@ -21,6 +22,24 @@ router.get(
 	"/online-users",
 	authorizePermission("admin.dashboard.view"),
 	adminController.getOnlineUsers,
+);
+
+router.get(
+	"/analytics",
+	authorizePermission("admin.dashboard.view"),
+	adminAnalyticsController.getAnalytics,
+);
+
+router.get(
+	"/analytics/exams/:examId",
+	authorizePermission("admin.dashboard.view"),
+	adminAnalyticsController.getExamReport,
+);
+
+router.get(
+	"/analytics/export/:dataset",
+	authorizePermission("admin.dashboard.view"),
+	adminAnalyticsController.exportDataset,
 );
 
 // User management

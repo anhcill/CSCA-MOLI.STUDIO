@@ -487,3 +487,141 @@ export async function getHistoryStats(subject?: string): Promise<HistoryStatsDat
   });
   return res.data.data;
 }
+
+export interface WeakTopicAction {
+  topic_id: number;
+  topic_name: string;
+  topic_name_cn?: string;
+  subject_id: number;
+  subject_code: string;
+  subject_name: string;
+  total_questions: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  error_percentage: number;
+}
+
+export interface NextLessonItem {
+  topicId: number;
+  topicName: string;
+  subjectCode: string;
+  subjectName: string;
+  errorPercentage: number;
+  materials: Array<{
+    id: number;
+    title: string;
+    description?: string;
+    category: string;
+    subject: string;
+    topic?: string;
+    file_type?: string;
+    is_premium?: boolean;
+  }>;
+  vocabulary: Array<{
+    subject: string;
+    topic: string;
+    word_count: number;
+  }>;
+}
+
+export interface LearningActionSummary {
+  wrongQuestionCount: number;
+  weakTopics: WeakTopicAction[];
+  bookmarkCount: number;
+  noteCount: number;
+  nextLessons: NextLessonItem[];
+}
+
+export interface PracticeSetSummary {
+  id: number;
+  user_id: number;
+  set_type: 'wrong_questions' | 'weak_topic';
+  title: string;
+  description?: string;
+  subject_id?: number;
+  source_topic_id?: number;
+  question_ids: number[];
+  status: string;
+  created_at: string;
+}
+
+export interface PracticeQuestion {
+  id: number;
+  exam_id: number;
+  question_number: number;
+  question_text: string;
+  question_text_cn?: string;
+  question_type: string;
+  question_category?: string;
+  points: number;
+  difficulty?: string;
+  image_url?: string;
+  explanation?: string;
+  exam_title: string;
+  subject_name: string;
+  subject_code: string;
+  answers: Array<{
+    id: number;
+    answer_key: string;
+    answer_text: string;
+    answer_text_cn?: string;
+    is_correct: boolean;
+  }>;
+  note?: string;
+  is_bookmarked: boolean;
+}
+
+export interface PracticeSetDetail extends PracticeSetSummary {
+  questions: PracticeQuestion[];
+}
+
+export interface UserBookmark {
+  id: number;
+  entity_type: 'question' | 'material' | 'vocabulary' | 'exam';
+  entity_id: number;
+  title?: string;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export async function getLearningActionSummary(): Promise<LearningActionSummary> {
+  const res = await axios.get(`${BASE}/actions/summary`);
+  return res.data.data;
+}
+
+export async function createWrongQuestionPractice(limit = 20): Promise<PracticeSetSummary> {
+  const res = await axios.post(`${BASE}/actions/practice/wrong`, { limit });
+  return res.data.data;
+}
+
+export async function createWeakTopicPractice(topicId?: number, limit = 20): Promise<PracticeSetSummary> {
+  const res = await axios.post(`${BASE}/actions/practice/weak-topic`, { topic_id: topicId, limit });
+  return res.data.data;
+}
+
+export async function getPracticeSet(id: number | string): Promise<PracticeSetDetail> {
+  const res = await axios.get(`${BASE}/actions/practice/${id}`);
+  return res.data.data;
+}
+
+export async function saveBookmark(payload: {
+  entity_type: UserBookmark['entity_type'];
+  entity_id: number;
+  title?: string;
+  metadata?: Record<string, any>;
+}): Promise<UserBookmark> {
+  const res = await axios.post(`${BASE}/actions/bookmarks`, payload);
+  return res.data.data;
+}
+
+export async function deleteBookmark(type: UserBookmark['entity_type'], id: number): Promise<void> {
+  await axios.delete(`${BASE}/actions/bookmarks/${type}/${id}`);
+}
+
+export async function saveQuestionNote(questionId: number, note: string, sourceAttemptId?: number) {
+  const res = await axios.put(`${BASE}/actions/questions/${questionId}/note`, {
+    note,
+    source_attempt_id: sourceAttemptId,
+  });
+  return res.data.data;
+}

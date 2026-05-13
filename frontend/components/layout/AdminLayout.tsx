@@ -8,7 +8,8 @@ import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
-  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift
+  FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
+  FiBarChart2
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -43,6 +44,13 @@ const NAV_SECTIONS = [
         icon: FaCrown,
         href: '/admin/vip',
         permission: 'users.manage',
+        roles: [],
+      },
+      {
+        label: 'Analytics',
+        icon: FiBarChart2,
+        href: '/admin/analytics',
+        permission: 'admin.dashboard.view',
         roles: [],
       },
       {
