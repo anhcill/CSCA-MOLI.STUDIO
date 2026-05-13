@@ -4,14 +4,22 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
+import { useAuthStore } from '@/lib/store/authStore';
+import axios from '@/lib/utils/axios';
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted || !isAuthenticated) return;
+    axios.post('/users/record-activity').catch(() => {});
+  }, [mounted, isAuthenticated, pathname]);
 
   // Suppress footer on admin/auth/exam/chat/subject pages
   const isAdmin = pathname?.startsWith('/admin');

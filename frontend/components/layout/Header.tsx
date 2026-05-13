@@ -17,6 +17,7 @@ import NotificationBell from './NotificationBell';
 import MessageBadge from './MessageBadge';
 import DailyQuestsBtn from './DailyQuestsBtn';
 import ThemeToggle from './ThemeToggle';
+import axios from '@/lib/utils/axios';
 
 const COURSES = [
   { id: 'toan',          name: 'Toán',           href: '/mon/toan' },
@@ -48,7 +49,7 @@ export default function Header() {
   
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
-  const { user, isAuthenticated, logout, token } = useAuthStore();
+  const { user, isAuthenticated, logout } = useAuthStore();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -73,22 +74,16 @@ export default function Header() {
 
   // Record daily activity and get streak
   useEffect(() => {
-    if (mounted && isAuthenticated && user && token) {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/users/record-activity`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      .then(res => res.json())
-      .then(data => {
+    if (mounted && isAuthenticated && user) {
+      axios.post('/users/record-activity')
+      .then(({ data }) => {
         if (data.success && data.data) {
           setStreak(data.data.streak);
         }
       })
       .catch(err => console.error("Streak error", err));
     }
-  }, [mounted, isAuthenticated, user, token]);
+  }, [mounted, isAuthenticated, user]);
 
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
 

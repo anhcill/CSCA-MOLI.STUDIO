@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FiGift, FiCheck, FiStar, FiX } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import confetti from 'canvas-confetti';
+import axios from '@/lib/utils/axios';
 
 interface Quest {
   id: number;
@@ -26,7 +27,7 @@ export default function DailyQuestsBtn() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; coins: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated, token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -39,13 +40,10 @@ export default function DailyQuestsBtn() {
   }, []);
 
   const fetchQuests = async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/users/quests`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
+      const { data } = await axios.get('/users/quests');
       if (data.success) {
         setQuests(data.data.quests);
       }
@@ -70,14 +68,10 @@ export default function DailyQuestsBtn() {
   }, [isAuthenticated, show]);
 
   const claimReward = async (id: number) => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     const quest = quests.find(q => q.id === id);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/users/quests/${id}/claim`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
+      const { data } = await axios.post(`/users/quests/${id}/claim`);
       if (data.success) {
         confetti({
           particleCount: 100,
@@ -107,10 +101,11 @@ export default function DailyQuestsBtn() {
       <div className="relative" ref={menuRef}>
         <button
         onClick={() => setShow(!show)}
-        className="relative p-2 text-gray-600 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all duration-200"
+        className="relative flex items-center gap-1.5 p-2 text-gray-600 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all duration-200"
         title="Nhiệm vụ hằng ngày"
       >
         <FiGift size={20} className={uncompleted > 0 ? "text-rose-500 animate-pulse" : ""} />
+        <span className="hidden lg:inline text-xs font-bold">Nhiệm vụ</span>
         {uncompleted > 0 && (
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
         )}

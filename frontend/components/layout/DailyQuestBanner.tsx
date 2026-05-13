@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiGift, FiX, FiCheck } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
+import axios from '@/lib/utils/axios';
 
 interface Quest {
   id: number;
@@ -22,25 +23,19 @@ const QUEST_LABELS: Record<string, string> = {
 export default function DailyQuestBanner() {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [dismissed, setDismissed] = useState(false);
-  const { isAuthenticated, token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    if (!isAuthenticated || !token) return;
+    if (!isAuthenticated) return;
     const dismissedKey = 'daily_quest_banner_dismissed_' + new Date().toDateString();
     if (localStorage.getItem(dismissedKey)) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-    fetch(`${apiUrl}/api/users/quests`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(json => {
-        if (json?.success) {
-          setQuests(json.data.quests || []);
-        }
+    axios.get('/users/quests')
+      .then((res) => {
+        setQuests(res.data?.data?.quests || []);
       })
       .catch(() => {});
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated]);
 
   if (!isAuthenticated || dismissed) return null;
 
