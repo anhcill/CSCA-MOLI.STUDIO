@@ -214,7 +214,9 @@ const examController = {
       });
 
       // Shuffle questions if exam has shuffle_mode enabled
-      let questions = exam.questions || [];
+      let questions = (exam.questions || []).filter(
+        (q) => q.question_type !== 'reading_passage' && q.question_type !== 'fill_blank_pool'
+      );
       if (exam.shuffle_mode) {
         // Fisher-Yates shuffle
         questions = [...questions];

@@ -44,7 +44,7 @@ const Exam = {
         e.*,
         s.name as subject_name,
         s.code as subject_code,
-        (SELECT COUNT(*) FROM questions WHERE exam_id = e.id) as question_count
+        (SELECT COUNT(*) FROM questions WHERE exam_id = e.id AND question_number > 0) as question_count
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.status = 'published'
@@ -78,7 +78,7 @@ const Exam = {
           s.name as subject_name,
           s.code as subject_code,
           u.full_name as created_by_name,
-          COUNT(DISTINCT q.id) as question_count,
+          COUNT(DISTINCT CASE WHEN q.question_number > 0 THEN q.id END) as question_count,
           COALESCE(
             (SELECT COUNT(*) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -135,7 +135,7 @@ const Exam = {
           s.name as subject_name,
           s.code as subject_code,
           u.full_name as created_by_name,
-          COUNT(DISTINCT q.id) as question_count,
+          COUNT(DISTINCT CASE WHEN q.question_number > 0 THEN q.id END) as question_count,
           COALESCE(
             (SELECT COUNT(*) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -209,7 +209,23 @@ const Exam = {
 
     // Get questions
     const questionsQuery = `
-      SELECT q.*, 
+      SELECT q.*,
+        COALESCE(
+          q.passage_text,
+          parent.passage_text
+        ) as effective_passage_text,
+        COALESCE(
+          q.passage_image_url,
+          parent.passage_image_url
+        ) as effective_passage_image_url,
+        COALESCE(
+          q.linked_options,
+          parent.linked_options
+        ) as effective_linked_options,
+        COALESCE(
+          q.cloze_mode,
+          parent.cloze_mode
+        ) as effective_cloze_mode,
         ARRAY_AGG(
           json_build_object(
             'id', a.id,
@@ -221,9 +237,10 @@ const Exam = {
           ) ORDER BY a.answer_key
         ) as answers
       FROM questions q
+      LEFT JOIN questions parent ON parent.id = q.passage_group_id
       LEFT JOIN answers a ON q.id = a.question_id
       WHERE q.exam_id = $1
-      GROUP BY q.id
+      GROUP BY q.id, parent.id
       ORDER BY q.question_number
     `;
 

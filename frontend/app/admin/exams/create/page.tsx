@@ -51,11 +51,11 @@ export default function CreateExamPage() {
     };
 
     // Questions with unique IDs
-    const [questions, setQuestions] = useState<(QuestionFormData & { _id: string })[]>([]);
+    const [questions, setQuestions] = useState<(QuestionFormData & { _id: string; _order?: number })[]>([]);
     // Reading passage groups (đoạn văn + nhiều câu con gom chung 1 card)
-    const [readingPassageGroups, setReadingPassageGroups] = useState<(ReadingPassageGroupData & { _id: string })[]>([]);
+    const [readingPassageGroups, setReadingPassageGroups] = useState<(ReadingPassageGroupData & { _id: string; _order?: number })[]>([]);
     // Fill blank groups (điền từ + nhiều chỗ trống gom chung 1 card)
-    const [fillBlankGroups, setFillBlankGroups] = useState<(FillBlankGroupData & { _id: string })[]>([]);
+    const [fillBlankGroups, setFillBlankGroups] = useState<(FillBlankGroupData & { _id: string; _order?: number })[]>([]);
     // Số câu tiếp theo cho đoạn đọc hiểu (VD: đề đã có 72 câu → startNumber = 73)
     const [nextPassageStartNumber, setNextPassageStartNumber] = useState(1);
     // Số câu tiếp theo cho điền từ (VD: đã có 10 câu → startNumber = 11)
@@ -72,9 +72,9 @@ export default function CreateExamPage() {
 
     // ── Computed: interleave all question types in display order with question numbers ──
     type AllQuestionItem =
-        | { type: 'single'; question: QuestionFormData & { _id: string }; index: number; displayNumber: number }
-        | { type: 'reading'; group: ReadingPassageGroupData & { _id: string }; index: number; displayNumber: number }
-        | { type: 'fill'; group: FillBlankGroupData & { _id: string }; index: number; displayNumber: number };
+        | { type: 'single'; question: QuestionFormData & { _id: string; _order?: number }; index: number; displayNumber: number }
+        | { type: 'reading'; group: ReadingPassageGroupData & { _id: string; _order?: number }; index: number; displayNumber: number }
+        | { type: 'fill'; group: FillBlankGroupData & { _id: string; _order?: number }; index: number; displayNumber: number };
 
     // Build ordered list preserving insertion order, assigning running question numbers
     // NOTE: reading/fill groups with N sub-questions consume N numbers in the sequence
@@ -83,13 +83,14 @@ export default function CreateExamPage() {
         let runningNumber = 1;
 
         // Collect all items in insertion order with their index in respective arrays
-        const allItems: { kind: 'single' | 'reading' | 'fill'; index: number }[] = [];
+        const allItems: { kind: 'single' | 'reading' | 'fill'; index: number; order: number }[] = [];
         const maxLen = Math.max(questions.length, readingPassageGroups.length, fillBlankGroups.length);
         for (let i = 0; i < maxLen; i++) {
-            if (i < questions.length) allItems.push({ kind: 'single', index: i });
-            if (i < readingPassageGroups.length) allItems.push({ kind: 'reading', index: i });
-            if (i < fillBlankGroups.length) allItems.push({ kind: 'fill', index: i });
+            if (i < questions.length) allItems.push({ kind: 'single', index: i, order: questions[i]._order || i * 3 + 1 });
+            if (i < readingPassageGroups.length) allItems.push({ kind: 'reading', index: i, order: readingPassageGroups[i]._order || i * 3 + 2 });
+            if (i < fillBlankGroups.length) allItems.push({ kind: 'fill', index: i, order: fillBlankGroups[i]._order || i * 3 + 3 });
         }
+        allItems.sort((a, b) => a.order - b.order);
 
         for (const item of allItems) {
             if (item.kind === 'single') {
@@ -228,39 +229,20 @@ export default function CreateExamPage() {
                 setReadingPassageGroups(prev => [...prev, {
                     _id: String(res.groupId),
                     _localId: `rpg-${Date.now()}`,
+                    _order: Date.now(),
                     passageText: data.passageText || '',
                     passageImageUrl: data.passageImageUrl || '',
                     subQuestions: [],
                 }]);
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                const res = await examAdminApi.insertFillBlankGroup(currentExamId, {
-                    _localId: `fbg-${Date.now()}`,
-                    passageText: data.passageText || '',
-                    passageImageUrl: data.passageImageUrl || '',
-                    linkedOptions: data.linkedOptions || [
-                        { key: 'A', text: '', textCn: '' },
-                        { key: 'B', text: '', textCn: '' },
-                        { key: 'C', text: '', textCn: '' },
-                        { key: 'D', text: '', textCn: '' },
-                        { key: 'E', text: '', textCn: '' },
-                        { key: 'F', text: '', textCn: '' },
-                    ],
-                    subItems: [],
-                });
-                setFillBlankGroups(prev => [...prev, {
-                    _id: String(res.groupId),
-                    _localId: `fbg-${Date.now()}`,
-                    passageText: data.passageText || '',
-                    passageImageUrl: data.passageImageUrl || '',
-                    linkedOptions: data.linkedOptions || [],
-                    subItems: [],
-                }]);
-                alert('Đã thêm nhóm điền từ!');
+                alert('Hay dung nut "Them Dien Tu" de tao nhom cau roi/doan van co dap an con.');
+                return;
             } else {
                 await examAdminApi.addQuestion(currentExamId, data as any);
                 const newQ = {
                     _id: `q-${Date.now()}`,
+                    _order: Date.now(),
                     ...data,
                 };
                 setQuestions(prev => [...prev, newQ]);
@@ -276,7 +258,7 @@ export default function CreateExamPage() {
         }
     };
 
-    const saveQuestion = async (index: number, data: QuestionFormData) => {
+    const saveQuestion = async (index: number, data: QuestionFormData, displayNumber: number) => {
         if (!currentExamId) {
             alert('Vui lòng tạo đề thi trước');
             return;
@@ -284,7 +266,7 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            const res = await examAdminApi.addQuestion(currentExamId, data as any);
+            const res = await examAdminApi.insertQuestion(currentExamId, data as any, undefined, displayNumber);
 
             // Update local state với thông tin từ backend
             const newQuestions = [...questions];
@@ -325,13 +307,14 @@ export default function CreateExamPage() {
         setReadingPassageGroups([...readingPassageGroups, {
             _id: `rpg-${Date.now()}`,
             _localId: `rg-${Date.now()}`,
+            _order: Date.now(),
             passageText: '',
             passageImageUrl: '',
             subQuestions: [],
         }]);
     };
 
-    const saveReadingPassageGroup = async (index: number, data: ReadingPassageGroupData) => {
+    const saveReadingPassageGroup = async (index: number, data: ReadingPassageGroupData, displayNumber: number) => {
         if (!currentExamId) {
             alert('Vui lòng tạo đề thi trước');
             return;
@@ -347,6 +330,7 @@ export default function CreateExamPage() {
                     passageText: data.passageText,
                     passageImageUrl: data.passageImageUrl,
                     subQuestions: data.subQuestions,
+                    insertPosition: displayNumber,
                 });
                 realId = String(res.groupId || res.passageGroupId || res.id || res.data?.id || Date.now());
             } else {
@@ -359,7 +343,7 @@ export default function CreateExamPage() {
             }
 
             const updated = [...readingPassageGroups];
-            updated[index] = { ...data, _id: realId };
+            updated[index] = { ...updated[index], ...data, _id: realId };
             setReadingPassageGroups(updated);
 
             if (data.subQuestions.length > 0) {
@@ -402,6 +386,8 @@ export default function CreateExamPage() {
         setFillBlankGroups([...fillBlankGroups, {
             _id: `fbg-${Date.now()}`,
             _localId: `fbg-${Date.now()}`,
+            _order: Date.now(),
+            clozeMode: 'sentences',
             passageText: '',
             passageImageUrl: '',
             linkedOptions: [
@@ -416,7 +402,7 @@ export default function CreateExamPage() {
         }]);
     };
 
-    const saveFillBlankGroup = async (index: number, data: FillBlankGroupData) => {
+    const saveFillBlankGroup = async (index: number, data: FillBlankGroupData, displayNumber: number) => {
         if (!currentExamId) {
             alert('Vui lòng tạo đề thi trước');
             return;
@@ -429,15 +415,18 @@ export default function CreateExamPage() {
 
             if (isNew) {
                 const res = await examAdminApi.insertFillBlankGroup(currentExamId, {
+                    clozeMode: data.clozeMode,
                     passageText: data.passageText,
                     passageImageUrl: data.passageImageUrl,
                     linkedOptions: data.linkedOptions,
                     subItems: data.subItems,
+                    insertPosition: displayNumber,
                 });
                 realId = String(res.groupId || res.passageGroupId || res.id || res.data?.id || Date.now());
             } else {
                 const numericGroupId = Number(String(data._id).replace(/[^0-9]/g, ''));
                 await examAdminApi.updateFillBlankGroup(currentExamId, numericGroupId, {
+                    clozeMode: data.clozeMode,
                     passageText: data.passageText,
                     passageImageUrl: data.passageImageUrl,
                     linkedOptions: data.linkedOptions,
@@ -446,7 +435,7 @@ export default function CreateExamPage() {
             }
 
             const updated = [...fillBlankGroups];
-            updated[index] = { ...data, _id: realId };
+            updated[index] = { ...updated[index], ...data, _id: realId };
             setFillBlankGroups(updated);
 
             if (data.subItems.length > 0) {
@@ -932,7 +921,7 @@ export default function CreateExamPage() {
                                                 key={item.question._id}
                                                 questionNumber={item.displayNumber}
                                                 initialData={item.question}
-                                                onSave={(data) => saveQuestion(item.index, data)}
+                                                onSave={(data) => saveQuestion(item.index, data, item.displayNumber)}
                                                 onDelete={() => deleteQuestion(item.index)}
                                             />
                                         );
@@ -943,7 +932,7 @@ export default function CreateExamPage() {
                                                 key={item.group._id}
                                                 startNumber={item.displayNumber}
                                                 initialData={item.group}
-                                                onSave={(data) => saveReadingPassageGroup(item.index, data)}
+                                                onSave={(data) => saveReadingPassageGroup(item.index, data, item.displayNumber)}
                                                 onDelete={() => deleteReadingPassageGroup(item.index)}
                                             />
                                         );
@@ -954,7 +943,7 @@ export default function CreateExamPage() {
                                                 key={item.group._id}
                                                 startNumber={item.displayNumber}
                                                 initialData={item.group}
-                                                onSave={(data) => saveFillBlankGroup(item.index, data)}
+                                                onSave={(data) => saveFillBlankGroup(item.index, data, item.displayNumber)}
                                                 onDelete={() => deleteFillBlankGroup(item.index)}
                                             />
                                         );

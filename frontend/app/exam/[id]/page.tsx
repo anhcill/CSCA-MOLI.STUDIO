@@ -197,6 +197,17 @@ export default function ExamPage() {
   const processedQuestions = useMemo(() => {
     let currentGroup: any = null;
     return questions.map((q: any) => {
+       if (q.effective_passage_text && (q.question_type === 'reading_item' || q.question_type === 'fill_blank_item')) {
+          return {
+            ...q,
+            groupContext: {
+              text: q.effective_passage_text || '',
+              image: q.effective_passage_image_url || '',
+              type: q.question_type === 'reading_item' ? 'reading_passage' : 'fill_blank_pool'
+            }
+          };
+       }
+
        if (q.question_group_type === 'reading_passage' || q.question_group_type === 'reading_passage_start' ||
            q.question_group_type === 'fill_blank_pool' || q.question_group_type === 'fill_in_the_blank_pool_start') {
           currentGroup = {

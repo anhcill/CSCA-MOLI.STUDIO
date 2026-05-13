@@ -1,27 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { FiTrash2, FiSave, FiPlus, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiChevronDown, FiChevronUp, FiPlus, FiSave, FiTrash2 } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
 import MathInput from './MathInput';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+export type ClozeMode = 'sentences' | 'passage';
 
 export interface BlankSubItem {
   _localId: string;
-  questionText: string;      // câu hỏi (có thể trống nếu chỉ cần điền từ)
-  questionTextCn: string;   // 中文问题
+  questionText: string;
+  questionTextCn: string;
   points: number;
   explanation: string;
   explanationCn: string;
-  correctAnswerKey: string;  // 'A', 'B', 'C', 'D', 'E'... — đáp án đúng
+  correctAnswerKey: string;
   difficulty: string;
-  subQuestionNumber: number; // 44, 45, 46, 47, 48...
+  subQuestionNumber: number;
 }
 
 export interface FillBlankGroupData {
   _id: string;
   _localId: string;
+  insertPosition?: number;
+  clozeMode: ClozeMode;
   passageText: string;
   passageImageUrl: string;
   linkedOptions: {
@@ -33,14 +35,11 @@ export interface FillBlankGroupData {
 }
 
 interface FillBlankGroupProps {
-  /** Số bắt đầu (VD: 44) */
   startNumber: number;
   initialData?: FillBlankGroupData;
   onSave: (data: FillBlankGroupData) => void;
   onDelete?: () => void;
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeSubItem(startNum: number, index: number): BlankSubItem {
   return {
@@ -67,7 +66,30 @@ function getDefaultLinkedOptions() {
   ];
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function countBlanks(text: string) {
+  return (text.match(/_{2,}|＿+/g) || []).length;
+}
+
+function normalizeInitialData(data: FillBlankGroupData | undefined, startNumber: number): FillBlankGroupData {
+  if (!data) {
+    return {
+      _id: `fbg-${Date.now()}`,
+      _localId: `fbg-${Date.now()}`,
+      clozeMode: 'sentences',
+      passageText: '',
+      passageImageUrl: '',
+      linkedOptions: getDefaultLinkedOptions(),
+      subItems: [makeSubItem(startNumber, 0)],
+    };
+  }
+
+  return {
+    ...data,
+    clozeMode: data.clozeMode || 'sentences',
+    linkedOptions: data.linkedOptions?.length ? data.linkedOptions : getDefaultLinkedOptions(),
+    subItems: data.subItems?.length ? data.subItems : [makeSubItem(startNumber, 0)],
+  };
+}
 
 export default function FillBlankGroup({
   startNumber,
@@ -75,125 +97,110 @@ export default function FillBlankGroup({
   onSave,
   onDelete,
 }: FillBlankGroupProps) {
-  const [group, setGroup] = useState<FillBlankGroupData>(() =>
-    initialData
-      ? { ...initialData }
-      : {
-          _id: `fbg-${Date.now()}`,
-          _localId: `fbg-${Date.now()}`,
-          passageText: '',
-          passageImageUrl: '',
-          linkedOptions: getDefaultLinkedOptions(),
-          subItems: [makeSubItem(startNumber, 0)],
-        }
-  );
-
+  const [group, setGroup] = useState<FillBlankGroupData>(() => normalizeInitialData(initialData, startNumber));
   const [saving, setSaving] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
-  const toggleItem = (id: string) =>
-    setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  const blankCount = countBlanks(group.passageText);
+  const filledOptionCount = group.linkedOptions.filter((o) => o.text.trim() || o.textCn.trim()).length;
 
-  // ── Passage ──────────────────────────────────────────────────────────────
-  const setPassage = (key: 'passageText' | 'passageImageUrl', value: string) =>
-    setGroup(prev => ({ ...prev, [key]: value }));
+  const getItemLabel = (index: number) => `Cau ${startNumber + index}`;
 
-  // ── Linked options (pool A-F) ─────────────────────────────────────────────
-  const setLinkedOption = (index: number, field: 'text' | 'textCn', value: string) =>
-    setGroup(prev => ({
-      ...prev,
-      linkedOptions: prev.linkedOptions.map((opt, i) =>
-        i === index ? { ...opt, [field]: value } : opt
-      ),
-    }));
-
-  const addLinkedOption = () => {
-    const nextKey = String.fromCharCode(65 + group.linkedOptions.length);
-    if (group.linkedOptions.length < 12) {
-      setGroup(prev => ({
-        ...prev,
-        linkedOptions: [...prev.linkedOptions, { key: nextKey, text: '', textCn: '' }],
-      }));
-    }
+  const setPassage = (key: 'passageText' | 'passageImageUrl', value: string) => {
+    setGroup((prev) => ({ ...prev, [key]: value }));
   };
 
-  const removeLinkedOption = (index: number) =>
-    setGroup(prev => ({
+  const setLinkedOption = (index: number, field: 'text' | 'textCn', value: string) => {
+    setGroup((prev) => ({
+      ...prev,
+      linkedOptions: prev.linkedOptions.map((opt, i) => (i === index ? { ...opt, [field]: value } : opt)),
+    }));
+  };
+
+  const setSubItem = <K extends keyof BlankSubItem>(localId: string, key: K, value: BlankSubItem[K]) => {
+    setGroup((prev) => ({
+      ...prev,
+      subItems: prev.subItems.map((item) => (item._localId === localId ? { ...item, [key]: value } : item)),
+    }));
+  };
+
+  const addLinkedOption = () => {
+    if (group.linkedOptions.length >= 12) return;
+    const nextKey = String.fromCharCode(65 + group.linkedOptions.length);
+    setGroup((prev) => ({
+      ...prev,
+      linkedOptions: [...prev.linkedOptions, { key: nextKey, text: '', textCn: '' }],
+    }));
+  };
+
+  const removeLinkedOption = (index: number) => {
+    setGroup((prev) => ({
       ...prev,
       linkedOptions: prev.linkedOptions.filter((_, i) => i !== index),
+      subItems: prev.subItems.map((item) => {
+        const removedKey = prev.linkedOptions[index]?.key;
+        const firstRemainingKey = prev.linkedOptions.find((_, i) => i !== index)?.key || 'A';
+        return item.correctAnswerKey === removedKey ? { ...item, correctAnswerKey: firstRemainingKey } : item;
+      }),
     }));
+  };
 
-  // ── Sub items ───────────────────────────────────────────────────────────
-  const setSubItem = <K extends keyof BlankSubItem>(
-    localId: string,
-    key: K,
-    value: BlankSubItem[K]
-  ) =>
-    setGroup(prev => ({
-      ...prev,
-      subItems: prev.subItems.map(item =>
-        item._localId === localId ? { ...item, [key]: value } : item
-      ),
-    }));
-
-  const addSubItem = () =>
-    setGroup(prev => ({
+  const addSubItem = () => {
+    setGroup((prev) => ({
       ...prev,
       subItems: [...prev.subItems, makeSubItem(startNumber, prev.subItems.length)],
     }));
+  };
 
-  const removeSubItem = (localId: string) =>
-    setGroup(prev => ({
+  const removeSubItem = (localId: string) => {
+    setGroup((prev) => ({
       ...prev,
-      subItems: prev.subItems.filter(item => item._localId !== localId),
+      subItems: prev.subItems.length > 1 ? prev.subItems.filter((item) => item._localId !== localId) : prev.subItems,
     }));
+  };
 
-  // ── Save ────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    if (!group.passageText.trim()) {
-      alert('Vui lòng nhập đoạn văn điền từ');
+    if (group.clozeMode === 'passage' && !group.passageText.trim()) {
+      alert('Dang doan van can co noi dung doan van.');
       return;
     }
 
-    const filledOpts = group.linkedOptions.filter(
-      o => o.text.trim() || o.textCn.trim()
-    );
+    if (group.clozeMode === 'sentences') {
+      const missingSentence = group.subItems.some((item) => !item.questionText.trim() && !item.questionTextCn.trim());
+      if (missingSentence) {
+        alert('Dang cau roi can nhap noi dung cho tung cau.');
+        return;
+      }
+    }
+
+    if (group.clozeMode === 'passage' && blankCount > 0 && blankCount !== group.subItems.length) {
+      alert(`So cho trong trong doan (${blankCount}) khong khop so dap an (${group.subItems.length}).`);
+      return;
+    }
+
+    const filledOpts = group.linkedOptions.filter((o) => o.text.trim() || o.textCn.trim());
     if (filledOpts.length < 2) {
-      alert('Cần ít nhất 2 từ chọn có nội dung (A-F)');
+      alert('Can it nhat 2 tu chon co noi dung.');
       return;
     }
 
     setSaving(true);
     onSave(group);
-    setTimeout(() => setSaving(false), 1500);
+    setTimeout(() => setSaving(false), 1000);
   };
 
-  const getItemLabel = (index: number) => {
-    const num = startNumber + index;
-    return `Câu ${num}`;
-  };
-
-  const filledOptionCount = group.linkedOptions.filter(
-    o => o.text.trim() || o.textCn.trim()
-  ).length;
-
-  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="bg-white rounded-xl shadow-lg border border-green-300 overflow-hidden">
-      {/* Header */}
       <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📝</span>
-          <div>
-            <h3 className="text-white font-bold">
-              Điền từ — {getItemLabel(0)}
-              {group.subItems.length > 1 && ` → ${getItemLabel(group.subItems.length - 1)}`}
-            </h3>
-            <p className="text-white/70 text-xs">
-              {group.subItems.length} chỗ trống · Pool {String.fromCharCode(65)}-
-              {String.fromCharCode(65 + Math.max(0, filledOptionCount - 1))}
-            </p>
-          </div>
+        <div>
+          <h3 className="text-white font-bold">
+            Dien tu - {getItemLabel(0)}
+            {group.subItems.length > 1 && ` -> ${getItemLabel(group.subItems.length - 1)}`}
+          </h3>
+          <p className="text-white/75 text-xs">
+            {group.clozeMode === 'passage' ? 'Doan van' : 'Cau roi'} - {group.subItems.length} cho trong - Pool A-
+            {String.fromCharCode(65 + Math.max(0, filledOptionCount - 1))}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -203,7 +210,7 @@ export default function FillBlankGroup({
             className="flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-lg font-semibold text-sm hover:bg-green-50 disabled:opacity-60"
           >
             <FiSave size={15} />
-            {saving ? 'Đang lưu...' : 'Lưu nhóm'}
+            {saving ? 'Dang luu...' : 'Luu nhom'}
           </button>
           {onDelete && (
             <button
@@ -218,34 +225,57 @@ export default function FillBlankGroup({
       </div>
 
       <div className="p-6 space-y-5">
+        <div className="bg-white border border-green-200 rounded-xl p-3">
+          <label className="block text-xs font-bold text-green-800 mb-2">Dang dien tu</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(['sentences', 'passage'] as ClozeMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setGroup((prev) => ({ ...prev, clozeMode: mode }))}
+                className={`px-3 py-2 rounded-lg border text-sm font-semibold ${
+                  group.clozeMode === mode
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-white text-green-700 border-green-200 hover:bg-green-50'
+                }`}
+              >
+                {mode === 'sentences' ? 'Cau roi' : 'Doan van'}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* Passage + Pool */}
         <div className="bg-green-50/60 border border-green-200 rounded-xl p-4">
           <label className="block text-sm font-bold text-green-800 mb-2">
-            📝 Đoạn văn điền từ + Từ chọn A-F
+            {group.clozeMode === 'passage' ? 'Doan van dien tu' : 'Ghi chu nhom'}
           </label>
           <textarea
             value={group.passageText}
-            onChange={e => setPassage('passageText', e.target.value)}
-            rows={5}
+            onChange={(e) => setPassage('passageText', e.target.value)}
+            rows={group.clozeMode === 'passage' ? 5 : 3}
             className="w-full px-4 py-2 border border-green-200 rounded-lg bg-white text-sm leading-relaxed"
-            placeholder="粘贴中文短文，有空格的地方写____。例如：水在4°C时____最大。物体的____越大，惯性越大。"
+            placeholder={
+              group.clozeMode === 'passage'
+                ? '我们周围世界的物质处在不断___中。...'
+                : 'VD: 第一组 备选词：A.符号 B.体积 C.直线...'
+            }
           />
           <p className="text-xs text-green-600 mt-1 mb-3">
-            💡 Dùng <code className="bg-green-100 px-1 rounded">____</code> làm chỗ trống trong đoạn văn
+            {group.clozeMode === 'passage'
+              ? `Dung ___ lam cho trong. Hien co ${blankCount} cho trong.`
+              : 'Moi cho trong se co mot cau rieng ben duoi.'}
           </p>
 
           <ImageUpload
-            label="Ảnh đính kèm đoạn văn (tùy chọn)"
+            label="Anh dinh kem nhom dien tu"
             currentImage={group.passageImageUrl}
-            onImageUploaded={url => setPassage('passageImageUrl', url)}
+            onImageUploaded={(url) => setPassage('passageImageUrl', url)}
           />
 
-          {/* Pool A-F */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-green-700">
-                Từ chọn ({String.fromCharCode(65)}-{String.fromCharCode(65 + group.linkedOptions.length - 1)})
+                Tu chon A-{String.fromCharCode(65 + group.linkedOptions.length - 1)}
               </span>
               {group.linkedOptions.length < 12 && (
                 <button
@@ -253,7 +283,7 @@ export default function FillBlankGroup({
                   onClick={addLinkedOption}
                   className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded border border-green-200 hover:bg-green-200"
                 >
-                  + Thêm từ
+                  + Them tu
                 </button>
               )}
             </div>
@@ -266,23 +296,19 @@ export default function FillBlankGroup({
                   <input
                     type="text"
                     value={opt.text}
-                    onChange={e => setLinkedOption(i, 'text', e.target.value)}
+                    onChange={(e) => setLinkedOption(i, 'text', e.target.value)}
                     className="flex-1 px-2 py-1 border rounded text-sm bg-white"
-                    placeholder="Từ (Tiếng Việt)"
+                    placeholder="Nghia/Viet"
                   />
                   <input
                     type="text"
                     value={opt.textCn}
-                    onChange={e => setLinkedOption(i, 'textCn', e.target.value)}
+                    onChange={(e) => setLinkedOption(i, 'textCn', e.target.value)}
                     className="flex-1 px-2 py-1 border rounded text-sm bg-white"
-                    placeholder="词语 (中文)"
+                    placeholder="词语"
                   />
                   {group.linkedOptions.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={() => removeLinkedOption(i)}
-                      className="text-red-400 hover:text-red-600"
-                    >
+                    <button type="button" onClick={() => removeLinkedOption(i)} className="text-red-400 hover:text-red-600">
                       <FiTrash2 size={14} />
                     </button>
                   )}
@@ -292,62 +318,63 @@ export default function FillBlankGroup({
           </div>
         </div>
 
-        {/* Sub-items: từng chỗ trống */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-gray-800 text-sm">
-              🔤 Chỗ trống ({group.subItems.length})
-            </h4>
+            <h4 className="font-bold text-gray-800 text-sm">Cho trong ({group.subItems.length})</h4>
             <button
               type="button"
               onClick={addSubItem}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 hover:bg-emerald-200 font-semibold"
             >
               <FiPlus size={13} />
-              Thêm chỗ trống
+              Them cho trong
             </button>
           </div>
 
           {group.subItems.map((item, index) => {
             const isExpanded = expandedItems[item._localId] ?? true;
+            const currentAnswer = group.linkedOptions.find((o) => o.key === item.correctAnswerKey);
             return (
               <div key={item._localId} className="border border-emerald-200 rounded-xl overflow-hidden bg-emerald-50/30">
-                {/* Item header */}
                 <button
                   type="button"
-                  onClick={() => toggleItem(item._localId)}
+                  onClick={() => setExpandedItems((prev) => ({ ...prev, [item._localId]: !prev[item._localId] }))}
                   className="w-full flex items-center justify-between px-4 py-3 bg-emerald-100/60 hover:bg-emerald-200/60 transition-colors text-left"
                 >
-                  <span className="font-bold text-emerald-800 text-sm">
-                    {getItemLabel(index)}
-                  </span>
+                  <span className="font-bold text-emerald-800 text-sm">{getItemLabel(index)}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-emerald-600">
-                      Đáp án: {item.correctAnswerKey} · {item.correctAnswerKey &&
-                        (group.linkedOptions.find(o => o.key === item.correctAnswerKey)?.textCn ||
-                         group.linkedOptions.find(o => o.key === item.correctAnswerKey)?.text ||
-                         '— chưa chọn')}
+                      Dap an: {item.correctAnswerKey} - {currentAnswer?.textCn || currentAnswer?.text || 'chua chon'}
                     </span>
-                    {isExpanded ? (
-                      <FiChevronUp size={14} className="text-emerald-500 flex-shrink-0" />
-                    ) : (
-                      <FiChevronDown size={14} className="text-emerald-500 flex-shrink-0" />
-                    )}
+                    {isExpanded ? <FiChevronUp size={14} className="text-emerald-500" /> : <FiChevronDown size={14} className="text-emerald-500" />}
                   </div>
                 </button>
 
                 {isExpanded && (
                   <div className="p-4 space-y-3">
-                    {/* Đáp án đúng */}
+                    {group.clozeMode === 'sentences' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Noi dung cau</label>
+                        <MathInput
+                          value={item.questionText}
+                          onChange={(v) => setSubItem(item._localId, 'questionText', v)}
+                          placeholder="VD: 冰___后变成水。"
+                          cnValue={item.questionTextCn}
+                          onCnChange={(v) => setSubItem(item._localId, 'questionTextCn', v)}
+                          cnPlaceholder="中文题目..."
+                        />
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Dap an dung</label>
                         <select
                           value={item.correctAnswerKey}
-                          onChange={e => setSubItem(item._localId, 'correctAnswerKey', e.target.value)}
+                          onChange={(e) => setSubItem(item._localId, 'correctAnswerKey', e.target.value)}
                           className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
                         >
-                          {group.linkedOptions.map(opt => (
+                          {group.linkedOptions.map((opt) => (
                             <option key={opt.key} value={opt.key}>
                               {opt.key}. {opt.textCn || opt.text || '...'}
                             </option>
@@ -355,13 +382,11 @@ export default function FillBlankGroup({
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Diem</label>
                         <input
                           type="number"
                           value={item.points}
-                          onChange={e =>
-                            setSubItem(item._localId, 'points', Math.max(0.1, parseFloat(e.target.value) || 1))
-                          }
+                          onChange={(e) => setSubItem(item._localId, 'points', Math.max(0.1, parseFloat(e.target.value) || 1))}
                           min={0.1}
                           max={100}
                           step={0.1}
@@ -369,46 +394,44 @@ export default function FillBlankGroup({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Do kho</label>
                         <select
                           value={item.difficulty}
-                          onChange={e => setSubItem(item._localId, 'difficulty', e.target.value)}
+                          onChange={(e) => setSubItem(item._localId, 'difficulty', e.target.value)}
                           className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
                         >
-                          <option value="easy">Dễ</option>
-                          <option value="medium">Trung bình</option>
-                          <option value="hard">Khó</option>
+                          <option value="easy">De</option>
+                          <option value="medium">Trung binh</option>
+                          <option value="hard">Kho</option>
                         </select>
                       </div>
                     </div>
 
-                    {/* Explanation */}
                     <details className="bg-gray-50 rounded-lg border">
                       <summary className="px-3 py-1.5 cursor-pointer text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">
-                        💡 Giải thích (tùy chọn)
+                        Giai thich
                       </summary>
                       <div className="px-3 pb-2">
                         <MathInput
                           value={item.explanation}
-                          onChange={v => setSubItem(item._localId, 'explanation', v)}
-                          placeholder="VD: Vì f'(x) = 2x + 1, nên \(f'(0) = 1\) → đáp án A"
+                          onChange={(v) => setSubItem(item._localId, 'explanation', v)}
+                          placeholder="Giai thich dap an..."
                           cnValue={item.explanationCn}
-                          onCnChange={v => setSubItem(item._localId, 'explanationCn', v)}
+                          onCnChange={(v) => setSubItem(item._localId, 'explanationCn', v)}
                           cnPlaceholder="解释正确答案..."
                         />
                       </div>
                     </details>
 
-                    {/* Remove */}
                     {group.subItems.length > 1 && (
                       <div className="flex justify-end">
                         <button
                           type="button"
                           onClick={() => removeSubItem(item._localId)}
-                          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded border border-red-200 hover:bg-red-50"
+                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50"
                         >
                           <FiTrash2 size={12} />
-                          Xóa chỗ trống này
+                          Xoa cho trong nay
                         </button>
                       </div>
                     )}

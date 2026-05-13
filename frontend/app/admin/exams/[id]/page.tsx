@@ -34,12 +34,30 @@ interface SavedQuestion {
     explanation_cn?: string;
     difficulty?: string;
     linked_options?: any;
+    cloze_mode?: 'sentences' | 'passage';
     sub_question_number?: number;
+    passage_group_id?: number;
     passage_group_localId?: number;
     answers?: Answer[];
     effective_linked_options?: any;
     effective_passage_text?: string;
+    effective_cloze_mode?: 'sentences' | 'passage';
 }
+
+interface SavedQuestionGroup {
+    _group: true;
+    id: number;
+    question_number: number;
+    question_type: 'reading_passage' | 'fill_blank_pool';
+    passage_text?: string;
+    passage_image_url?: string;
+    linked_options?: any;
+    cloze_mode?: 'sentences' | 'passage';
+    children: SavedQuestion[];
+}
+
+type PendingQuestion = { _pending: true; _localId: string; _questionNumber: number; _questionType: string };
+type QuestionListItem = SavedQuestion | SavedQuestionGroup | PendingQuestion;
 
 interface Exam {
     id: number;
@@ -61,6 +79,129 @@ interface Exam {
 }
 
 type EditMode = 'view' | 'edit';
+
+function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
+    return '_group' in item;
+}
+
+function isPendingQuestion(item: QuestionListItem): item is PendingQuestion {
+    return '_pending' in item;
+}
+
+function buildQuestionList(rawQuestions: SavedQuestion[]): QuestionListItem[] {
+    const parentTypes = new Set(['reading_passage', 'fill_blank_pool']);
+    const childTypes = new Set(['reading_item', 'fill_blank_item']);
+    const parents = new Map<number, SavedQuestionGroup>();
+    const childIds = new Set<number>();
+
+    for (const q of rawQuestions) {
+        if (!parentTypes.has(q.question_type)) continue;
+        parents.set(q.id, {
+            _group: true,
+            id: q.id,
+            question_number: q.question_number,
+            question_type: q.question_type as SavedQuestionGroup['question_type'],
+            passage_text: q.passage_text,
+            passage_image_url: q.passage_image_url,
+            linked_options: q.linked_options,
+            cloze_mode: q.cloze_mode,
+            children: [],
+        });
+    }
+
+    for (const q of rawQuestions) {
+        if (!childTypes.has(q.question_type) || !q.passage_group_id) continue;
+        const parent = parents.get(q.passage_group_id);
+        if (!parent) continue;
+        parent.children.push(q);
+        childIds.add(q.id);
+    }
+
+    const list: QuestionListItem[] = [];
+    for (const q of rawQuestions) {
+        if (parentTypes.has(q.question_type)) {
+            const group = parents.get(q.id);
+            if (!group) continue;
+            group.children.sort((a, b) => a.question_number - b.question_number || a.id - b.id);
+            group.question_number = group.children[0]?.question_number || q.question_number;
+            list.push(group);
+            continue;
+        }
+
+        if (childIds.has(q.id)) continue;
+        list.push(q);
+    }
+
+    return list.sort((a, b) => {
+        const aNum = isPendingQuestion(a) ? a._questionNumber : a.question_number;
+        const bNum = isPendingQuestion(b) ? b._questionNumber : b.question_number;
+        return aNum - bNum;
+    });
+}
+
+function groupToReadingData(group: SavedQuestionGroup): ReadingPassageGroupData {
+    return {
+        _id: String(group.id),
+        _localId: `saved-reading-${group.id}`,
+        insertPosition: group.question_number,
+        passageText: group.passage_text || '',
+        passageImageUrl: group.passage_image_url || '',
+        subQuestions: group.children.map((q, index) => {
+            const answers = (q.answers || []).map(a => ({
+                text: a.answer_text || '',
+                textCn: a.answer_text_cn || '',
+                imageUrl: a.image_url || '',
+            }));
+            return {
+                _localId: `saved-reading-${q.id}`,
+                questionText: q.question_text || '',
+                questionTextCn: q.question_text_cn || '',
+                imageUrl: q.image_url || '',
+                points: q.points || 1,
+                explanation: q.explanation || '',
+                explanationCn: q.explanation_cn || '',
+                answers: answers.length ? answers : [
+                    { text: '', textCn: '', imageUrl: '' },
+                    { text: '', textCn: '', imageUrl: '' },
+                    { text: '', textCn: '', imageUrl: '' },
+                    { text: '', textCn: '', imageUrl: '' },
+                ],
+                correctAnswer: (q.answers || []).find(a => a.is_correct)?.answer_key || 'A',
+                difficulty: q.difficulty || 'medium',
+                subQuestionNumber: q.sub_question_number || q.question_number || group.question_number + index,
+            };
+        }),
+    };
+}
+
+function groupToFillBlankData(group: SavedQuestionGroup): FillBlankGroupData {
+    const linkedOptions = (group.linked_options || group.children[0]?.effective_linked_options || []).map((o: any) => ({
+        key: o.key || 'A',
+        text: o.text || '',
+        textCn: o.textCn || '',
+    }));
+
+    return {
+        _id: String(group.id),
+        _localId: `saved-fill-${group.id}`,
+        insertPosition: group.question_number,
+        clozeMode: group.cloze_mode || group.children[0]?.effective_cloze_mode || 'sentences',
+        passageText: group.passage_text || '',
+        passageImageUrl: group.passage_image_url || '',
+        linkedOptions,
+        subItems: group.children.map((q, index) => ({
+            _localId: `saved-fill-item-${q.id}`,
+            questionText: q.question_text || '',
+            questionTextCn: q.question_text_cn || '',
+            points: q.points || 1,
+            explanation: q.explanation || '',
+            explanationCn: q.explanation_cn || '',
+            correctAnswerKey: (q.answers || []).find(a => a.is_correct)?.answer_key || 'A',
+            difficulty: q.difficulty || 'medium',
+            subQuestionNumber: q.sub_question_number || q.question_number || group.question_number + index,
+        })),
+    };
+}
 
 // Convert saved DB question → QuestionFormData
 function dbToFormData(q: SavedQuestion): QuestionFormData {
@@ -102,12 +243,12 @@ export default function AdminExamDetailPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     const [exam, setExam] = useState<Exam | null>(null);
-    const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([]);
+    const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<EditMode>('view');
 
     // Editing state (local question list while in edit mode)
-    const [localQuestions, setLocalQuestions] = useState<(SavedQuestion | { _pending: true; _localId: string; _questionNumber: number; _questionType: string })[]>([]);
+    const [localQuestions, setLocalQuestions] = useState<QuestionListItem[]>([]);
     const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
     const [addingAfterId, setAddingAfterId] = useState<number | null>(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -157,9 +298,10 @@ export default function AdminExamDetailPage() {
         try {
             setLoading(true);
             const data = await examAdminApi.getExamForEdit(Number(id));
+            const visibleQuestions = buildQuestionList(data.questions || []);
             setExam(data.exam);
-            setSavedQuestions(data.questions || []);
-            setLocalQuestions(data.questions || []);
+            setSavedQuestions(visibleQuestions);
+            setLocalQuestions(visibleQuestions);
             if (data.exam) {
                 setVideoUrl(data.exam.solution_video_url || '');
                 setSolutionDesc(data.exam.solution_description || '');
@@ -248,7 +390,7 @@ export default function AdminExamDetailPage() {
 
             // Update local state
             const updated = savedQuestions.map(q =>
-                q.id === savedQuestionId
+                !isPendingQuestion(q) && !isSavedGroup(q) && q.id === savedQuestionId
                     ? {
                         ...q,
                         question_text: data.questionText,
@@ -324,19 +466,8 @@ export default function AdminExamDetailPage() {
                 await loadExam();
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                // Fill blank pool: save via the group API
-                await examAdminApi.addQuestion(exam.id, {
-                    questionType: 'fill_blank_pool',
-                    questionText: '',
-                    questionTextCn: '',
-                    passageText: data.passageText,
-                    passageImageUrl: data.passageImageUrl,
-                    linkedOptions: data.linkedOptions,
-                    points: 0,
-                    difficulty: 'medium',
-                });
-                await loadExam();
-                alert('Đã thêm nhóm điền từ!');
+                alert('Hay dung nut "Dien Tu" de tao nhom cau roi/doan van co dap an con.');
+                return;
             } else {
                 // Single choice / trắc nghiệm: insert at correct position
                 const afterId = addingAfterId;
@@ -360,7 +491,10 @@ export default function AdminExamDetailPage() {
         if (!exam) return;
         try {
             setSavingQuestionId(-1);
-            await examAdminApi.insertFillBlankGroup(exam.id, data as any);
+            await examAdminApi.insertFillBlankGroup(exam.id, {
+                ...data,
+                insertPosition: data.insertPosition || quickAddPosition || undefined,
+            } as any);
             await loadExam();
             setPendingFillBlankGroups(prev => prev.filter(g => g._localId !== data._localId));
             if (pendingFillBlankGroups.length === 1) setShowAddFillBlank(false);
@@ -377,7 +511,10 @@ export default function AdminExamDetailPage() {
         if (!exam) return;
         try {
             setSavingQuestionId(-1);
-            await examAdminApi.insertReadingPassageGroup(exam.id, data as any);
+            await examAdminApi.insertReadingPassageGroup(exam.id, {
+                ...data,
+                insertPosition: data.insertPosition || quickAddPosition || undefined,
+            } as any);
             await loadExam();
             setPendingReadingGroups(prev => prev.filter(g => g._localId !== data._localId));
             if (pendingReadingGroups.length === 1) setShowAddReadingPassage(false);
@@ -390,12 +527,59 @@ export default function AdminExamDetailPage() {
     };
 
     // ── Delete question ────────────────────────────────────────────────────────
+    const handleUpdateFillBlankGroup = async (groupId: number, data: FillBlankGroupData) => {
+        if (!exam) return;
+        try {
+            setSavingQuestionId(groupId);
+            await examAdminApi.updateFillBlankGroup(exam.id, groupId, data as any);
+            await loadExam();
+            alert('Da cap nhat nhom dien tu!');
+        } catch (error: any) {
+            alert('Loi cap nhat nhom dien tu: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSavingQuestionId(null);
+        }
+    };
+
+    const handleUpdateReadingPassageGroup = async (groupId: number, data: ReadingPassageGroupData) => {
+        if (!exam) return;
+        try {
+            setSavingQuestionId(groupId);
+            await examAdminApi.updateReadingPassageGroup(exam.id, groupId, data as any);
+            await loadExam();
+            alert('Da cap nhat nhom doc hieu!');
+        } catch (error: any) {
+            alert('Loi cap nhat nhom doc hieu: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setSavingQuestionId(null);
+        }
+    };
+
+    const handleDeleteGroup = async (group: SavedQuestionGroup) => {
+        if (!exam) return;
+        if (!confirm('Xoa toan bo nhom cau hoi nay?')) return;
+
+        try {
+            setDeletingId(group.id);
+            if (group.question_type === 'fill_blank_pool') {
+                await examAdminApi.deleteFillBlankGroup(exam.id, group.id);
+            } else {
+                await examAdminApi.deleteReadingPassageGroup(exam.id, group.id);
+            }
+            await loadExam();
+        } catch (error: any) {
+            alert('Loi xoa nhom cau hoi: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     const handleDeleteQuestion = async (questionId: number) => {
         if (!confirm('Xóa câu hỏi này?')) return;
         try {
             setDeletingId(questionId);
             await examAdminApi.deleteQuestion(questionId);
-            const updated = savedQuestions.filter(q => q.id !== questionId);
+            const updated = savedQuestions.filter(q => isPendingQuestion(q) || q.id !== questionId);
             setSavedQuestions(updated);
             setLocalQuestions(updated);
             if (exam) setExam({ ...exam, total_questions: exam.total_questions - 1 });
@@ -551,10 +735,12 @@ export default function AdminExamDetailPage() {
         for (const q of localQuestions) {
             if ('_pending' in q) {
                 if (q._questionType === 'reading_passage' || q._questionType === 'fill_blank_pool') {
-                    max = Math.max(max, q._questionNumber + 10); // generous placeholder for group sub-questions
+                    max = Math.max(max, q._questionNumber);
                 } else {
                     max = Math.max(max, q._questionNumber);
                 }
+            } else if (isSavedGroup(q)) {
+                max = Math.max(max, q.children[q.children.length - 1]?.question_number || q.question_number);
             } else {
                 max = Math.max(max, q.question_number);
             }
@@ -1027,6 +1213,8 @@ export default function AdminExamDetailPage() {
                                         setPendingFillBlankGroups(prev => [...prev, {
                                             _id: `fbg-${Date.now()}`,
                                             _localId: `fbg-${Date.now()}`,
+                                            insertPosition: 1,
+                                            clozeMode: 'sentences',
                                             passageText: '',
                                             passageImageUrl: '',
                                             linkedOptions: [
@@ -1050,6 +1238,7 @@ export default function AdminExamDetailPage() {
                                         setPendingReadingGroups(prev => [...prev, {
                                             _id: `rpg-${Date.now()}`,
                                             _localId: `rpg-${Date.now()}`,
+                                            insertPosition: 1,
                                             passageText: '',
                                             passageImageUrl: '',
                                             subQuestions: [],
@@ -1124,27 +1313,12 @@ export default function AdminExamDetailPage() {
                                                     initialData={{
                                                         _id: q._localId,
                                                         _localId: q._localId,
+                                                        insertPosition: q._questionNumber,
                                                         passageText: '',
                                                         passageImageUrl: '',
                                                         subQuestions: [],
                                                     }}
-                                                    onSave={(data) => handleQuickAddSave({
-                                                        questionType: 'reading_passage',
-                                                        questionText: '',
-                                                        questionTextCn: '',
-                                                        imageUrl: '',
-                                                        passageText: data.passageText,
-                                                        passageImageUrl: data.passageImageUrl,
-                                                        points: 0,
-                                                        explanation: '',
-                                                        explanationCn: '',
-                                                        answers: [],
-                                                        correctAnswer: 'A',
-                                                        linkedOptions: [],
-                                                        correctAnswerKey: 'A',
-                                                        subQuestionNumber: 0,
-                                                        difficulty: 'medium',
-                                                    })}
+                                                    onSave={(data) => handleAddReadingPassageGroup(data)}
                                                     onDelete={() => {
                                                         setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
                                                     }}
@@ -1156,6 +1330,8 @@ export default function AdminExamDetailPage() {
                                                     initialData={{
                                                         _id: q._localId,
                                                         _localId: q._localId,
+                                                        insertPosition: q._questionNumber,
+                                                        clozeMode: 'sentences',
                                                         passageText: '',
                                                         passageImageUrl: '',
                                                         linkedOptions: [
@@ -1168,23 +1344,7 @@ export default function AdminExamDetailPage() {
                                                         ],
                                                         subItems: [],
                                                     }}
-                                                    onSave={(data) => handleQuickAddSave({
-                                                        questionType: 'fill_blank_pool',
-                                                        questionText: '',
-                                                        questionTextCn: '',
-                                                        imageUrl: '',
-                                                        passageText: data.passageText,
-                                                        passageImageUrl: data.passageImageUrl,
-                                                        points: 0,
-                                                        explanation: '',
-                                                        explanationCn: '',
-                                                        answers: [],
-                                                        correctAnswer: 'A',
-                                                        linkedOptions: data.linkedOptions,
-                                                        correctAnswerKey: 'A',
-                                                        subQuestionNumber: 0,
-                                                        difficulty: 'medium',
-                                                    })}
+                                                    onSave={(data) => handleAddFillBlankGroup(data)}
                                                     onDelete={() => {
                                                         setLocalQuestions(prev => prev.filter((_, i) => i !== idx));
                                                     }}
@@ -1205,6 +1365,68 @@ export default function AdminExamDetailPage() {
                                                 }}
                                             />
                                         )}
+                                    </div>
+                                );
+                            }
+
+                            if (isSavedGroup(q)) {
+                                const startNumber = q.children[0]?.question_number || q.question_number;
+                                if (editMode !== 'edit') {
+                                    const endNumber = q.children[q.children.length - 1]?.question_number || startNumber;
+                                    const isReadingGroup = q.question_type === 'reading_passage';
+                                    return (
+                                        <div key={`group-view-${q.id}`} className={`bg-white rounded-xl border ${isReadingGroup ? 'border-purple-200' : 'border-green-200'} p-6`}>
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex items-start gap-3">
+                                                    <span className={`flex-shrink-0 px-3 py-1 rounded-full text-sm font-bold ${isReadingGroup ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {startNumber}{endNumber !== startNumber ? `-${endNumber}` : ''}
+                                                    </span>
+                                                    <div>
+                                                        <p className="font-bold text-gray-900">
+                                                            {isReadingGroup ? 'Nhom doc hieu' : 'Nhom dien tu'}
+                                                        </p>
+                                                        <p className="text-sm text-gray-500">{q.children.length} cau hoi</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs text-gray-400">{q.question_type}</span>
+                                            </div>
+                                            {q.passage_text && (
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{q.passage_text}</p>
+                                            )}
+                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {q.children.map(child => (
+                                                    <div key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
+                                                        <span className="font-semibold">Cau {child.question_number}:</span> {child.question_text_cn || child.question_text}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                if (q.question_type === 'reading_passage') {
+                                    const initialData = groupToReadingData(q);
+                                    return (
+                                        <div key={`reading-group-${q.id}`} className="bg-white rounded-xl border border-purple-200 p-6">
+                                            <ReadingPassageGroup
+                                                startNumber={startNumber}
+                                                initialData={initialData}
+                                                onSave={(data) => handleUpdateReadingPassageGroup(q.id, data)}
+                                                onDelete={editMode ? () => handleDeleteGroup(q) : undefined}
+                                            />
+                                        </div>
+                                    );
+                                }
+
+                                const initialData = groupToFillBlankData(q);
+                                return (
+                                    <div key={`fill-group-${q.id}`} className="bg-white rounded-xl border border-green-200 p-6">
+                                        <FillBlankGroup
+                                            startNumber={startNumber}
+                                            initialData={initialData}
+                                            onSave={(data) => handleUpdateFillBlankGroup(q.id, data)}
+                                            onDelete={editMode ? () => handleDeleteGroup(q) : undefined}
+                                        />
                                     </div>
                                 );
                             }
@@ -1307,7 +1529,7 @@ export default function AdminExamDetailPage() {
                                                     <div className="flex items-center justify-center gap-2 flex-wrap">
                                                         <button
                                                             onClick={() => {
-                                                                const nextNum = getNextQuestionNum();
+                                                                const nextNum = q.question_number + 1;
                                                                 setAddingAfterId('_pending' in q ? null : q.id);
                                                                 setQuickAddPosition(nextNum);
                                                                 const newQ = {
@@ -1329,7 +1551,7 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const nextNum = getNextQuestionNum();
+                                                                const nextNum = q.question_number + 1;
                                                                 const newQ = {
                                                                     _pending: true as const,
                                                                     _localId: `pending-rpg-${Date.now()}`,
@@ -1341,6 +1563,8 @@ export default function AdminExamDetailPage() {
                                                                     arr.splice(idx + 1, 0, newQ);
                                                                     return arr;
                                                                 });
+                                                                setAddingAfterId(q.id);
+                                                                setQuickAddPosition(nextNum);
                                                             }}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors text-xs font-medium"
                                                         >
@@ -1348,7 +1572,7 @@ export default function AdminExamDetailPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => {
-                                                                const nextNum = getNextQuestionNum();
+                                                                const nextNum = q.question_number + 1;
                                                                 const newQ = {
                                                                     _pending: true as const,
                                                                     _localId: `pending-fbg-${Date.now()}`,
@@ -1360,6 +1584,8 @@ export default function AdminExamDetailPage() {
                                                                     arr.splice(idx + 1, 0, newQ);
                                                                     return arr;
                                                                 });
+                                                                setAddingAfterId(q.id);
+                                                                setQuickAddPosition(nextNum);
                                                             }}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 border border-green-200 rounded-lg transition-colors text-xs font-medium"
                                                         >

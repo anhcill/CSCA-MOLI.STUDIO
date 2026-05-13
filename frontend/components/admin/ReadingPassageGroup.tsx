@@ -24,6 +24,7 @@ export interface ReadingSubQuestion {
 export interface ReadingPassageGroupData {
   _id: string;
   _localId: string;
+  insertPosition?: number;
   passageText: string;
   passageImageUrl: string;
   subQuestions: ReadingSubQuestion[];
@@ -72,7 +73,12 @@ export default function ReadingPassageGroup({
 }: ReadingPassageGroupProps) {
   const [group, setGroup] = useState<ReadingPassageGroupData>(() =>
     initialData
-      ? { ...initialData }
+      ? {
+          ...initialData,
+          subQuestions: initialData.subQuestions?.length
+            ? initialData.subQuestions
+            : [makeSubQuestion(startNumber, 0)],
+        }
       : {
           _id: `rg-${Date.now()}`,
           _localId: `rg-${Date.now()}`,

@@ -56,8 +56,9 @@ async function getLatestPassageGroupId(client, examId) {
 // Frontend convention: text = Tiếng Việt, textCn = Tiếng Trung
 // Backend: nếu text rỗng thì dùng textCn làm fallback cho cả hai
 function normalizeLinkedOptions(rawOptions) {
-  if (!Array.isArray(rawOptions) || rawOptions.length < 2) return null;
-  return rawOptions.map((opt, i) => {
+  if (!Array.isArray(rawOptions)) return null;
+  const normalized = rawOptions
+    .map((opt, i) => {
     const text = (opt.text || '').trim();
     const textCn = (opt.textCn || opt.text || '').trim();
     return {
@@ -65,7 +66,43 @@ function normalizeLinkedOptions(rawOptions) {
       text:  text || textCn,
       textCn: textCn || text,
     };
-  });
+  })
+    .filter((opt) => opt.text || opt.textCn);
+
+  return normalized.length >= 2 ? normalized : null;
+}
+
+async function getAppendQuestionPosition(client, examId) {
+  const result = await client.query(
+    "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0",
+    [examId],
+  );
+  return result.rows[0].position || 1;
+}
+
+async function getNextContainerQuestionNumber(client, examId) {
+  const result = await client.query(
+    "SELECT COALESCE(MIN(question_number), 0)::int - 1 AS question_number FROM questions WHERE exam_id = $1 AND question_number < 0",
+    [examId],
+  );
+  return result.rows[0].question_number || -1;
+}
+
+async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
+  if (!delta) return;
+  const offset = 10000;
+  await client.query(
+    `UPDATE questions
+     SET question_number = question_number + $3
+     WHERE exam_id = $1 AND question_number >= $2 AND question_number > 0`,
+    [examId, fromPosition, offset],
+  );
+  await client.query(
+    `UPDATE questions
+     SET question_number = question_number - $3 + $4
+     WHERE exam_id = $1 AND question_number >= ($2 + $3)`,
+    [examId, fromPosition, offset, delta],
+  );
 }
 
 const AdminExamController = {
@@ -612,7 +649,7 @@ const AdminExamController = {
         await client.query("BEGIN");
 
         const examResult = await client.query(
-          "SELECT exam_id FROM questions WHERE id = $1",
+          "SELECT exam_id, question_number, question_type FROM questions WHERE id = $1",
           [questionId],
         );
 
@@ -625,10 +662,17 @@ const AdminExamController = {
 
         await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
+        const deletedQuestionNumber = examResult.rows[0].question_number;
+        const isAnswerableQuestion = deletedQuestionNumber > 0
+          && ![QUESTION_TYPES.FILL_BLANK_POOL, QUESTION_TYPES.READING_PASSAGE].includes(examResult.rows[0].question_type);
+
         await client.query("DELETE FROM questions WHERE id = $1", [questionId]);
+        if (isAnswerableQuestion) {
+          await shiftQuestionNumbers(client, examId, deletedQuestionNumber + 1, -1);
+        }
         await client.query(
-          "UPDATE exams SET total_questions = total_questions - 1, updated_at = NOW() WHERE id = $1",
-          [examId],
+          "UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2",
+          [isAnswerableQuestion ? 1 : 0, examId],
         );
 
         await client.query("COMMIT");
@@ -697,11 +741,7 @@ const AdminExamController = {
                     targetPosition = afterRes.rows[0].question_number + 1;
                 } else {
                     // Default: append at end
-                    const countRes = await client.query(
-                        "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1",
-                        [examId],
-                    );
-                    targetPosition = countRes.rows[0].count + 1;
+                    targetPosition = await getAppendQuestionPosition(client, examId);
                 }
 
                 // ── Shift all questions at or after targetPosition by +1 ──
@@ -1197,6 +1237,7 @@ const AdminExamController = {
            q.passage_text,
            q.passage_image_url,
            q.question_group_type,
+           q.cloze_mode,
            q.difficulty,
            q.linked_options,
            q.sub_question_number,
@@ -1216,6 +1257,12 @@ const AdminExamController = {
                 AND parent.passage_text IS NOT NULL
               ORDER BY parent.id LIMIT 1)
            ) as effective_passage_text,
+           COALESCE(
+             q.cloze_mode,
+             (SELECT cloze_mode FROM questions parent
+              WHERE parent.id = q.passage_group_id
+                AND parent.question_type = 'fill_blank_pool')
+           ) as effective_cloze_mode,
            json_agg(
              json_build_object(
                'id', a.id,
@@ -1432,318 +1479,6 @@ const AdminExamController = {
     }
   },
 
-  // ── FILL BLANK GROUP (pool + sub-items) ────────────────────────────────────
-  // POST /api/admin/exams/:examId/fill-blank-group
-  async insertFillBlankGroup(req, res) {
-    try {
-      const { examId } = req.params;
-      const {
-        passageText,
-        passageImageUrl,
-        linkedOptions,
-        subItems,
-      } = req.body;
-
-      if (!passageText || !passageText.trim()) {
-        return res.status(400).json({ message: 'Điền từ cần có đoạn văn (passageText)' });
-      }
-
-      const normalizedOpts = normalizeLinkedOptions(linkedOptions || []);
-      if (!normalizedOpts || normalizedOpts.length < 2) {
-        return res.status(400).json({ message: 'Cần ít nhất 2 từ chọn A-F có nội dung' });
-      }
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
-
-        // Count existing questions
-        const countRes = await client.query(
-          'SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1',
-          [examId]
-        );
-        let questionNumber = countRes.rows[0].count + 1;
-        const startNumber = questionNumber;
-
-        // Insert the FILL_BLANK_POOL question (passage + pool)
-        const poolResult = await client.query(
-          `INSERT INTO questions (
-             exam_id, question_number, question_type,
-             question_text, question_text_cn,
-             points, passage_text, passage_image_url,
-             question_group_type, difficulty,
-             linked_options, sub_question_number, passage_group_id
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-           RETURNING id`,
-          [
-            examId, questionNumber, QUESTION_TYPES.FILL_BLANK_POOL,
-            'Điền từ', '填空',
-            0,  // pool không tính điểm
-            sanitize(passageText),
-            passageImageUrl ? sanitize(passageImageUrl) : null,
-            QUESTION_TYPES.FILL_BLANK_POOL, 'medium',
-            JSON.stringify(normalizedOpts), null, null,
-          ]
-        );
-        const poolId = poolResult.rows[0].id;
-
-        // Self-assign passage_group_id
-        await client.query(
-          'UPDATE questions SET passage_group_id = id WHERE id = $1',
-          [poolId]
-        );
-
-        // Insert sub-items (fill_blank_items)
-        const insertedSubQuestions = [];
-        const validSubItems = Array.isArray(subItems) ? subItems.filter(
-          item => item.correctAnswerKey && normalizedOpts.some(o => o.key === item.correctAnswerKey)
-        ) : [];
-
-        for (const item of validSubItems) {
-          questionNumber++;
-          const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-          const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
-          const subResult = await client.query(
-            `INSERT INTO questions (
-               exam_id, question_number, question_type,
-               question_text, question_text_cn,
-               points, explanation, explanation_cn,
-               question_group_type, difficulty,
-               sub_question_number, passage_group_id
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             RETURNING id`,
-            [
-              examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
-              sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
-              parsedPoints,
-              item.explanation ? sanitize(item.explanation) : null,
-              item.explanationCn ? sanitize(item.explanationCn) : null,
-              QUESTION_TYPES.FILL_BLANK_ITEM,
-              item.difficulty || 'medium',
-              item.subQuestionNumber || questionNumber,
-              poolId,
-            ]
-          );
-          insertedSubQuestions.push({
-            id: subResult.rows[0].id,
-            questionNumber,
-            correctAnswerKey: item.correctAnswerKey,
-          });
-        }
-
-        // Update exam total_questions
-        await client.query(
-          'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-          [1 + insertedSubQuestions.length, examId]
-        );
-
-        await client.query('COMMIT');
-        cache.delByPrefix('exams:');
-        cache.del('exams:lobby');
-
-        UserActivity.log(req.user.id, 'admin.insert_fill_blank_group', {
-          examId, poolId, subQuestions: insertedSubQuestions.length,
-          ip: req.ip, userAgent: req.headers['user-agent'],
-        });
-
-        res.status(201).json({
-          message: 'Nhóm điền từ đã được tạo',
-          groupId: poolId,
-          questionNumber: startNumber,
-          subQuestions: insertedSubQuestions,
-          totalItems: 1 + insertedSubQuestions.length,
-        });
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error('Insert fill blank group error:', error);
-      res.status(500).json({ message: 'Failed to create fill blank group' });
-    }
-  },
-
-  // PUT /api/admin/exams/:examId/fill-blank-group/:groupId
-  async updateFillBlankGroup(req, res) {
-    try {
-      const { examId, groupId } = req.params;
-      const {
-        passageText,
-        passageImageUrl,
-        linkedOptions,
-        subItems,
-      } = req.body;
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
-
-        // Update pool question
-        const updates = [];
-        const vals = [];
-        let idx = 1;
-
-        if (passageText !== undefined) {
-          updates.push(`passage_text = $${idx++}`);
-          vals.push(passageText ? sanitize(passageText) : null);
-        }
-        if (passageImageUrl !== undefined) {
-          updates.push(`passage_image_url = $${idx++}`);
-          vals.push(passageImageUrl ? sanitize(passageImageUrl) : null);
-        }
-        if (linkedOptions !== undefined) {
-          const normalizedOpts = normalizeLinkedOptions(linkedOptions || []);
-          updates.push(`linked_options = $${idx++}`);
-          vals.push(normalizedOpts ? JSON.stringify(normalizedOpts) : null);
-        }
-
-        if (updates.length > 0) {
-          vals.push(groupId);
-          await client.query(
-            `UPDATE questions SET ${updates.join(', ')} WHERE id = $${idx}`,
-            vals
-          );
-        }
-
-        // Update sub-items
-        if (Array.isArray(subItems)) {
-          // Delete existing sub-items
-          await client.query(
-            'DELETE FROM questions WHERE passage_group_id = $1 AND question_type = $2',
-            [groupId, QUESTION_TYPES.FILL_BLANK_ITEM]
-          );
-
-          // Get current max question_number for this exam
-          const countRes = await client.query(
-            'SELECT COALESCE(MAX(question_number), 0)::int as max_num FROM questions WHERE exam_id = $1',
-            [examId]
-          );
-          let questionNumber = countRes.rows[0].max_num;
-
-          const normalizedOpts = normalizeLinkedOptions(linkedOptions || []) || [];
-          const insertedSubs = [];
-
-          for (const item of subItems) {
-            if (!item.correctAnswerKey) continue;
-            if (normalizedOpts.length > 0 && !normalizedOpts.some(o => o.key === item.correctAnswerKey)) continue;
-
-            questionNumber++;
-            const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-            const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
-
-            const subResult = await client.query(
-              `INSERT INTO questions (
-                 exam_id, question_number, question_type,
-                 question_text, question_text_cn,
-                 points, explanation, explanation_cn,
-                 question_group_type, difficulty,
-                 sub_question_number, passage_group_id
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-               RETURNING id`,
-              [
-                examId, questionNumber, QUESTION_TYPES.FILL_BLANK_ITEM,
-                sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
-                parsedPoints,
-                item.explanation ? sanitize(item.explanation) : null,
-                item.explanationCn ? sanitize(item.explanationCn) : null,
-                QUESTION_TYPES.FILL_BLANK_ITEM,
-                item.difficulty || 'medium',
-                item.subQuestionNumber || questionNumber,
-                groupId,
-              ]
-            );
-            insertedSubs.push({ id: subResult.rows[0].id, questionNumber });
-          }
-
-          // Update exam total_questions
-          const netChange = 1 + insertedSubs.length;
-          await client.query(
-            'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-            [netChange, examId]
-          );
-        }
-
-        await client.query('COMMIT');
-        cache.delByPrefix('exams:');
-        cache.del('exams:lobby');
-
-        UserActivity.log(req.user.id, 'admin.update_fill_blank_group', {
-          examId, groupId,
-          ip: req.ip, userAgent: req.headers['user-agent'],
-        });
-
-        res.json({ message: 'Nhóm điền từ đã được cập nhật' });
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error('Update fill blank group error:', error);
-      res.status(500).json({ message: 'Failed to update fill blank group' });
-    }
-  },
-
-  // DELETE /api/admin/exams/:examId/fill-blank-group/:groupId
-  async deleteFillBlankGroup(req, res) {
-    try {
-      const { examId, groupId } = req.params;
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
-
-        // Count sub-questions to update total
-        const countRes = await client.query(
-          `SELECT COUNT(*)::int as count FROM questions
-           WHERE passage_group_id = $1 AND question_type = $2`,
-          [groupId, QUESTION_TYPES.FILL_BLANK_ITEM]
-        );
-        const subCount = countRes.rows[0].count;
-        const totalDelete = 1 + subCount;
-
-        // Delete sub-questions first
-        await client.query(
-          'DELETE FROM questions WHERE passage_group_id = $1',
-          [groupId]
-        );
-        // Delete pool question
-        await client.query('DELETE FROM questions WHERE id = $1', [groupId]);
-
-        // Update exam total
-        await client.query(
-          'UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2',
-          [totalDelete, examId]
-        );
-
-        await client.query('COMMIT');
-        cache.delByPrefix('exams:');
-        cache.del('exams:lobby');
-
-        UserActivity.log(req.user.id, 'admin.delete_fill_blank_group', {
-          examId, groupId,
-          ip: req.ip, userAgent: req.headers['user-agent'],
-        });
-
-        res.json({ message: 'Nhóm điền từ đã được xóa' });
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
-    } catch (error) {
-      console.error('Delete fill blank group error:', error);
-      res.status(500).json({ message: 'Failed to delete fill blank group' });
-    }
-  },
-
   // ── READING PASSAGE GROUP (passage + sub-questions) ──────────────────────────
   // POST /api/admin/exams/:examId/reading-passage-group
   async insertReadingPassageGroup(req, res) {
@@ -1753,6 +1488,7 @@ const AdminExamController = {
         passageText,
         passageImageUrl,
         subQuestions,
+        insertPosition,
       } = req.body;
 
       if (!passageText || !passageText.trim()) {
@@ -1764,12 +1500,20 @@ const AdminExamController = {
         await client.query('BEGIN');
         await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
-        const countRes = await client.query(
-          'SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1',
-          [examId]
-        );
-        let questionNumber = countRes.rows[0].count + 1;
-        const startNumber = questionNumber;
+        const validSubQs = Array.isArray(subQuestions) ? subQuestions.filter(
+          q => q.correctAnswer && Array.isArray(q.answers) && q.answers.length >= 2
+        ) : [];
+        if (validSubQs.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Đọc hiểu cần ít nhất 1 câu con hợp lệ' });
+        }
+
+        const startNumber = Number.isFinite(Number(insertPosition)) && Number(insertPosition) > 0
+          ? Number(insertPosition)
+          : await getAppendQuestionPosition(client, examId);
+        await shiftQuestionNumbers(client, examId, startNumber, validSubQs.length);
+        let questionNumber = startNumber - 1;
+        const containerNumber = await getNextContainerQuestionNumber(client, examId);
 
         // Insert READING_PASSAGE question
         const passageResult = await client.query(
@@ -1781,7 +1525,7 @@ const AdminExamController = {
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
-            examId, questionNumber, QUESTION_TYPES.READING_PASSAGE,
+            examId, containerNumber, QUESTION_TYPES.READING_PASSAGE,
             'Đoạn văn đọc hiểu', '阅读理解',
             0, sanitize(passageText),
             passageImageUrl ? sanitize(passageImageUrl) : null,
@@ -1796,9 +1540,6 @@ const AdminExamController = {
 
         // Insert sub-questions
         const insertedSubs = [];
-        const validSubQs = Array.isArray(subQuestions) ? subQuestions.filter(
-          q => q.correctAnswer && Array.isArray(q.answers) && q.answers.length >= 2
-        ) : [];
 
         for (const q of validSubQs) {
           questionNumber++;
@@ -1850,7 +1591,7 @@ const AdminExamController = {
 
         await client.query(
           'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-          [1 + insertedSubs.length, examId]
+          [insertedSubs.length, examId]
         );
 
         await client.query('COMMIT');
@@ -1867,7 +1608,7 @@ const AdminExamController = {
           groupId: passageId,
           questionNumber: startNumber,
           subQuestions: insertedSubs,
-          totalItems: 1 + insertedSubs.length,
+          totalItems: insertedSubs.length,
         });
       } catch (error) {
         await client.query('ROLLBACK');
@@ -1912,14 +1653,48 @@ const AdminExamController = {
 
         if (updates.length > 0) {
           vals.push(groupId);
-          await client.query(
-            `UPDATE questions SET ${updates.join(', ')} WHERE id = $${idx}`,
-            vals
+          vals.push(examId);
+          const updateResult = await client.query(
+            `UPDATE questions SET ${updates.join(', ')} WHERE id = $${idx} AND exam_id = $${idx + 1} AND question_type = $${idx + 2}`,
+            [...vals, QUESTION_TYPES.READING_PASSAGE]
           );
+          if (updateResult.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Reading passage group not found' });
+          }
+        } else {
+          const existsResult = await client.query(
+            `SELECT id FROM questions WHERE id = $1 AND exam_id = $2 AND question_type = $3`,
+            [groupId, examId, QUESTION_TYPES.READING_PASSAGE],
+          );
+          if (existsResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Reading passage group not found' });
+          }
         }
 
         // Update sub-questions
         if (Array.isArray(subQuestions)) {
+          const validSubQs = subQuestions.filter(
+            q => q.correctAnswer && Array.isArray(q.answers) && q.answers.length >= 2
+          );
+          if (validSubQs.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Doc hieu can it nhat 1 cau con hop le' });
+          }
+
+          const oldCountRes = await client.query(
+            `SELECT COUNT(*)::int as count,
+                    COALESCE(MIN(question_number), 0)::int as start_num,
+                    COALESCE(MAX(question_number), 0)::int as end_num
+             FROM questions
+             WHERE passage_group_id = $1 AND question_type = $2 AND question_number > 0`,
+            [groupId, QUESTION_TYPES.READING_ITEM]
+          );
+          const oldSubCount = oldCountRes.rows[0].count || 0;
+          const oldStart = oldCountRes.rows[0].start_num || await getAppendQuestionPosition(client, examId);
+          const oldEnd = oldCountRes.rows[0].end_num || (oldStart - 1);
+
           await client.query(
             'DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1 AND question_type = $2)',
             [groupId, QUESTION_TYPES.READING_ITEM]
@@ -1929,17 +1704,14 @@ const AdminExamController = {
             [groupId, QUESTION_TYPES.READING_ITEM]
           );
 
-          const countRes = await client.query(
-            'SELECT COALESCE(MAX(question_number), 0)::int as max_num FROM questions WHERE exam_id = $1',
-            [examId]
-          );
-          let questionNumber = countRes.rows[0].max_num;
+          const delta = validSubQs.length - oldSubCount;
+          await shiftQuestionNumbers(client, examId, oldEnd + 1, delta);
+
+          let questionNumber = oldStart - 1;
           const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
           const insertedSubs = [];
 
-          for (const q of subQuestions) {
-            if (!q.correctAnswer || !Array.isArray(q.answers)) continue;
-
+          for (const q of validSubQs) {
             questionNumber++;
             const parsedPoints = clamp(parsePositiveNumber(q.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
             const normQ = normalizeBilingualText(q.questionText, q.questionTextCn);
@@ -1984,10 +1756,9 @@ const AdminExamController = {
             insertedSubs.push({ id: subId, questionNumber });
           }
 
-          const netChange = 1 + insertedSubs.length;
           await client.query(
             'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-            [netChange, examId]
+            [delta, examId]
           );
         }
 
@@ -2024,11 +1795,14 @@ const AdminExamController = {
         await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
         const countRes = await client.query(
-          `SELECT COUNT(*)::int as count FROM questions
-           WHERE passage_group_id = $1`,
-          [groupId]
+          `SELECT COUNT(*)::int as count,
+                  COALESCE(MAX(question_number), 0)::int as end_num
+           FROM questions
+           WHERE passage_group_id = $1 AND question_type = $2 AND question_number > 0`,
+          [groupId, QUESTION_TYPES.READING_ITEM]
         );
-        const totalCount = countRes.rows[0].count;
+        const totalCount = countRes.rows[0].count || 0;
+        const oldEnd = countRes.rows[0].end_num || 0;
 
         await client.query(
           'DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1)',
@@ -2036,6 +1810,9 @@ const AdminExamController = {
         );
         await client.query('DELETE FROM questions WHERE passage_group_id = $1', [groupId]);
         await client.query('DELETE FROM questions WHERE id = $1', [groupId]);
+        if (totalCount > 0) {
+          await shiftQuestionNumbers(client, examId, oldEnd + 1, -totalCount);
+        }
 
         await client.query(
           'UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2',

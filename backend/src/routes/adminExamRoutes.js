@@ -5,6 +5,7 @@ const {
 	authorizePermission,
 } = require("../middleware/authMiddleware");
 const AdminExamController = require("../controllers/adminExamController");
+const adminFillBlankGroupController = require("../controllers/adminFillBlankGroupController");
 const officialExamController = require("../controllers/officialExamController");
 const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
 
@@ -59,9 +60,9 @@ router.post("/:examId/certificates/generate", examWriteLimiter, officialExamCont
 router.put("/:examId/questions/reorder", examWriteLimiter, AdminExamController.reorderQuestions);
 
 // ── Fill blank group (pool + sub-items) ───────────────────────────────────
-router.post("/:examId/fill-blank-group", examWriteLimiter, AdminExamController.insertFillBlankGroup);
-router.put("/:examId/fill-blank-group/:groupId", examWriteLimiter, AdminExamController.updateFillBlankGroup);
-router.delete("/:examId/fill-blank-group/:groupId", examWriteLimiter, AdminExamController.deleteFillBlankGroup);
+router.post("/:examId/fill-blank-group", examWriteLimiter, adminFillBlankGroupController.insertFillBlankGroup);
+router.put("/:examId/fill-blank-group/:groupId", examWriteLimiter, adminFillBlankGroupController.updateFillBlankGroup);
+router.delete("/:examId/fill-blank-group/:groupId", examWriteLimiter, adminFillBlankGroupController.deleteFillBlankGroup);
 
 // ── Reading passage group (passage + sub-questions) ─────────────────────────
 router.post("/:examId/reading-passage-group", examWriteLimiter, AdminExamController.insertReadingPassageGroup);
