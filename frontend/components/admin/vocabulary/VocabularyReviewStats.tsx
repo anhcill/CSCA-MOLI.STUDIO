@@ -29,10 +29,10 @@ export default function VocabularyReviewStats() {
 
   const summary = stats?.summary;
   const cards = [
-    { label: 'Nguoi hoc', value: summary?.active_learners, icon: FiUsers, tone: 'bg-blue-50 text-blue-700' },
-    { label: 'Tu da track', value: summary?.tracked_words, icon: FiActivity, tone: 'bg-violet-50 text-violet-700' },
+    { label: 'Người học', value: summary?.active_learners, icon: FiUsers, tone: 'bg-blue-50 text-blue-700' },
+    { label: 'Từ đã track', value: summary?.tracked_words, icon: FiActivity, tone: 'bg-violet-50 text-violet-700' },
     { label: 'Luot on', value: summary?.total_reviews, icon: FiBarChart2, tone: 'bg-gray-50 text-gray-700' },
-    { label: 'Tu yeu', value: summary?.weak_reviews, icon: FiTarget, tone: 'bg-rose-50 text-rose-700' },
+    { label: 'Từ yếu', value: summary?.weak_reviews, icon: FiTarget, tone: 'bg-rose-50 text-rose-700' },
     { label: 'Da nho', value: summary?.mastered_reviews, icon: FiCheckCircle, tone: 'bg-emerald-50 text-emerald-700' },
   ];
 
@@ -40,8 +40,8 @@ export default function VocabularyReviewStats() {
     <section className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Thong ke flashcard</h2>
-          <p className="text-sm text-gray-500">Theo doi SM-2, tu yeu va lich on cua hoc vien</p>
+          <h2 className="text-lg font-bold text-gray-900">Thống kê flashcard</h2>
+          <p className="text-sm text-gray-500">Theo dõi SM-2, từ yếu và lịch ôn của học viên</p>
         </div>
         <button onClick={loadStats} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
           <FiRefreshCw className={loading ? 'animate-spin' : ''} />
@@ -67,9 +67,9 @@ export default function VocabularyReviewStats() {
               <tr className="text-left text-gray-600">
                 <th className="px-3 py-2">Mon</th>
                 <th className="px-3 py-2">Chu de</th>
-                <th className="px-3 py-2 text-right">Nguoi hoc</th>
-                <th className="px-3 py-2 text-right">Can on</th>
-                <th className="px-3 py-2 text-right">Tu yeu</th>
+                <th className="px-3 py-2 text-right">Người học</th>
+                <th className="px-3 py-2 text-right">Cần ôn</th>
+                <th className="px-3 py-2 text-right">Từ yếu</th>
                 <th className="px-3 py-2 text-right">Da nho</th>
               </tr>
             </thead>

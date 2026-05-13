@@ -26,7 +26,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       const data = await vocabularyReviewApi.getMiniTest({ ...filters, limit: 10 });
       setQuestions(data);
     } catch (err: any) {
-      setError(err.response?.status === 401 ? 'Dang nhap de lam mini test.' : 'Khong tai duoc mini test.');
+      setError(err.response?.status === 401 ? 'Đăng nhập để làm mini test.' : 'Không tải được mini test.');
     } finally {
       setLoading(false);
     }
@@ -43,7 +43,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       setResult(data);
       onSubmitted?.();
     } catch (err) {
-      setError('Khong nop duoc mini test.');
+      setError('Không nộp được mini test.');
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-black text-gray-900">Mini test tu vung</h2>
-          <p className="text-sm text-gray-500">Chon nghia dung, ket qua se cap nhat lich on</p>
+          <p className="text-sm text-gray-500">Chọn nghĩa đúng, kết quả sẽ cập nhật lịch ôn</p>
         </div>
         <button
           onClick={startTest}
@@ -123,7 +123,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-gray-200 py-10 text-center text-gray-500">
-          Bam Tao de de lam bai test nhanh.
+          Bấm Tạo đề để làm bài test nhanh.
         </div>
       )}
     </section>

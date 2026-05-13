@@ -29,7 +29,7 @@ export default function LearningActionsPanel() {
       const data = await getLearningActionSummary();
       setSummary(data);
     } catch {
-      setError('Khong tai duoc luong hanh dong hoc tap.');
+      setError('Không tải được luồng hành động học tập.');
     } finally {
       setLoading(false);
     }
@@ -47,15 +47,15 @@ export default function LearningActionsPanel() {
         : await createWeakTopicPractice(topic?.topic_id, 20);
       router.push(`/practice-sets/${set.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Chua tao duoc bo luyen tap.');
+      setError(err.response?.data?.message || 'Chưa tạo được bộ luyện tập.');
     } finally {
       setCreating(null);
     }
   };
 
   const cards = [
-    { label: 'Cau sai co the luyen lai', value: summary?.wrongQuestionCount, icon: FiTarget, tone: 'text-rose-700 bg-rose-50' },
-    { label: 'Chu de yeu', value: summary?.weakTopics?.length, icon: FiZap, tone: 'text-amber-700 bg-amber-50' },
+    { label: 'Câu sai có thể luyện lại', value: summary?.wrongQuestionCount, icon: FiTarget, tone: 'text-rose-700 bg-rose-50' },
+    { label: 'Chủ đề yếu', value: summary?.weakTopics?.length, icon: FiZap, tone: 'text-amber-700 bg-amber-50' },
     { label: 'Bookmark', value: summary?.bookmarkCount, icon: FiBookmark, tone: 'text-blue-700 bg-blue-50' },
     { label: 'Ghi chu notebook', value: summary?.noteCount, icon: FiEdit3, tone: 'text-emerald-700 bg-emerald-50' },
   ];
@@ -65,9 +65,9 @@ export default function LearningActionsPanel() {
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
-            <FiZap className="text-amber-500" /> Hanh dong tiep theo
+            <FiZap className="text-amber-500" /> Hành động tiếp theo
           </h2>
-          <p className="text-sm text-gray-500 mt-1">Bien phan tich thanh bai luyen, bookmark va notebook ca nhan.</p>
+          <p className="text-sm text-gray-500 mt-1">Biến phân tích thành bài luyện, bookmark và notebook cá nhân.</p>
         </div>
         <button onClick={loadSummary} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
           <FiRefreshCw className={loading ? 'animate-spin' : ''} />
@@ -90,20 +90,20 @@ export default function LearningActionsPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border border-gray-100 p-4">
-          <h3 className="font-bold text-gray-900">Luyen lai cau sai</h3>
-          <p className="text-sm text-gray-500 mt-1">Gom cac cau ban sai gan day thanh mot bo luyen tap rieng.</p>
+          <h3 className="font-bold text-gray-900">Luyện lại câu sai</h3>
+          <p className="text-sm text-gray-500 mt-1">Gom các câu bạn sai gần đây thành một bộ luyện tập riêng.</p>
           <button
             onClick={() => openPractice('wrong')}
             disabled={creating === 'wrong' || !summary?.wrongQuestionCount}
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
           >
-            <FiTarget /> Tao bo cau sai
+            <FiTarget /> Tạo bộ câu sai
           </button>
         </div>
 
         <div className="rounded-xl border border-gray-100 p-4">
-          <h3 className="font-bold text-gray-900">Tao de tu chu de yeu</h3>
-          <p className="text-sm text-gray-500 mt-1">Chon chu de co ti le sai cao de tao bo cau tap trung.</p>
+          <h3 className="font-bold text-gray-900">Tạo đề từ chủ đề yếu</h3>
+          <p className="text-sm text-gray-500 mt-1">Chọn chủ đề có tỉ lệ sai cao để tạo bộ câu tập trung.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {summary?.weakTopics?.slice(0, 4).map((topic) => (
               <button
@@ -117,7 +117,7 @@ export default function LearningActionsPanel() {
               </button>
             ))}
             {!summary?.weakTopics?.length && (
-              <span className="text-sm text-gray-400">Chua co chu de yeu du ro.</span>
+              <span className="text-sm text-gray-400">Chưa có chủ đề yếu dù rõ.</span>
             )}
           </div>
         </div>
@@ -126,19 +126,19 @@ export default function LearningActionsPanel() {
       {summary?.nextLessons?.length ? (
         <div className="mt-5 rounded-xl border border-gray-100 p-4">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <FiBookOpen /> Goi y bai hoc tiep theo
+            <FiBookOpen /> Gợi ý bài học tiếp theo
           </h3>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             {summary.nextLessons.slice(0, 4).map((lesson) => (
               <div key={`${lesson.subjectCode}-${lesson.topicId}`} className="rounded-lg bg-gray-50 p-3">
                 <p className="font-bold text-gray-900">{lesson.topicName}</p>
-                <p className="text-xs text-rose-600 mt-0.5">Ti le sai {lesson.errorPercentage.toFixed(1)}%</p>
+                <p className="text-xs text-rose-600 mt-0.5">Tỉ lệ sai {lesson.errorPercentage.toFixed(1)}%</p>
                 {lesson.materials.slice(0, 2).map((m) => (
-                  <p key={m.id} className="mt-2 text-sm text-gray-600">Tai lieu: {m.title}</p>
+                  <p key={m.id} className="mt-2 text-sm text-gray-600">Tài liệu: {m.title}</p>
                 ))}
                 {lesson.vocabulary.slice(0, 1).map((v) => (
                   <p key={`${v.subject}-${v.topic}`} className="mt-1 text-sm text-gray-600">
-                    Tu vung: {num(v.word_count)} tu trong chu de
+                    Từ vựng: {num(v.word_count)} từ trong chủ đề
                   </p>
                 ))}
               </div>

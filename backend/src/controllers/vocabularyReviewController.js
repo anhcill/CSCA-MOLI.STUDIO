@@ -13,7 +13,7 @@ const handleError = (res, error, label) => {
   console.error(`${label} error:`, error);
   res.status(error.statusCode || 500).json({
     success: false,
-    message: error.statusCode === 404 ? "Khong tim thay tu vung" : "Loi server",
+    message: error.statusCode === 404 ? "Không tìm thấy từ vựng" : "Lỗi server",
   });
 };
 

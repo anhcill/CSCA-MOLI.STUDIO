@@ -12,7 +12,7 @@ interface Props {
 
 const QUALITY_BUTTONS = [
   { quality: 1, label: 'Sai', icon: FiX, className: 'border-rose-200 text-rose-700 hover:bg-rose-50' },
-  { quality: 3, label: 'Kho nho', icon: FiRotateCcw, className: 'border-amber-200 text-amber-700 hover:bg-amber-50' },
+  { quality: 3, label: 'Khó nhớ', icon: FiRotateCcw, className: 'border-amber-200 text-amber-700 hover:bg-amber-50' },
   { quality: 5, label: 'Da nho', icon: FiCheck, className: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
 ];
 
@@ -35,7 +35,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       setIndex(0);
       setFlipped(false);
     } catch (err: any) {
-      setError(err.response?.status === 401 ? 'Dang nhap de dung flashcard.' : 'Khong tai duoc flashcard.');
+      setError(err.response?.status === 401 ? 'Đăng nhập để dùng flashcard.' : 'Không tải được flashcard.');
     } finally {
       setLoading(false);
     }
@@ -55,7 +55,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       }
       setFlipped(false);
     } catch (err) {
-      setError('Khong luu duoc ket qua on tap.');
+      setError('Không lưu được kết quả ôn tập.');
     } finally {
       setSaving(false);
     }
@@ -66,7 +66,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-black text-gray-900">Flashcard</h2>
-          <p className="text-sm text-gray-500">Lat the Han tu, pinyin, nghia</p>
+          <p className="text-sm text-gray-500">Lật thẻ Hán tự, pinyin, nghĩa</p>
         </div>
         <button
           onClick={startSession}
@@ -74,7 +74,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
           className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-xl font-bold text-sm hover:bg-cyan-700 disabled:opacity-60"
         >
           <FiRefreshCw className={loading ? 'animate-spin' : ''} />
-          Bat dau
+          Bắt đầu
         </button>
       </div>
 
@@ -90,7 +90,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
               <div className="flex min-h-[210px] flex-col items-center justify-center">
                 <p className="text-sm font-bold text-cyan-700 mb-3">{current.topic}</p>
                 <p className="text-6xl font-black text-gray-950 leading-tight">{current.word_cn}</p>
-                <p className="mt-5 text-sm text-gray-500">Nhan de lat the</p>
+                <p className="mt-5 text-sm text-gray-500">Nhấn để lật thẻ</p>
               </div>
             ) : (
               <div className="flex min-h-[210px] flex-col items-center justify-center">
@@ -109,7 +109,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-500">
-              {index + 1}/{cards.length} - {current.review_state === 'new' ? 'Tu moi' : 'Den lich on'}
+              {index + 1}/{cards.length} - {current.review_state === 'new' ? 'Từ mới' : 'Đến lịch ôn'}
             </p>
             <div className="flex flex-wrap gap-2">
               {QUALITY_BUTTONS.map(({ quality, label, icon: Icon, className }) => (
@@ -127,8 +127,8 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/50 py-12 text-center">
-          <p className="font-bold text-gray-800">Chua co phien flashcard</p>
-          <p className="text-sm text-gray-500 mt-1">Bam Bat dau de lay tu moi va tu den lich on.</p>
+          <p className="font-bold text-gray-800">Chưa có phiên flashcard</p>
+          <p className="text-sm text-gray-500 mt-1">Bấm Bắt đầu để lấy từ mới và từ đến lịch ôn.</p>
         </div>
       )}
     </section>

@@ -14,8 +14,8 @@ const numberValue = (value?: number) => Number(value || 0).toLocaleString('vi-VN
 export default function ReviewStatsPanel({ data, loading, onRefresh }: Props) {
   const summary = data?.summary;
   const stats = [
-    { label: 'Can on hom nay', value: summary?.due_today, icon: FiCalendar, tone: 'text-blue-700 bg-blue-50' },
-    { label: 'Tu yeu', value: summary?.weak_words, icon: FiTarget, tone: 'text-rose-700 bg-rose-50' },
+    { label: 'Cần ôn hôm nay', value: summary?.due_today, icon: FiCalendar, tone: 'text-blue-700 bg-blue-50' },
+    { label: 'Từ yếu', value: summary?.weak_words, icon: FiTarget, tone: 'text-rose-700 bg-rose-50' },
     { label: 'Da nho', value: summary?.mastered_words, icon: FiCheckCircle, tone: 'text-emerald-700 bg-emerald-50' },
     { label: 'Da hoc', value: summary?.started_words, icon: FiActivity, tone: 'text-violet-700 bg-violet-50' },
   ];
@@ -24,13 +24,13 @@ export default function ReviewStatsPanel({ data, loading, onRefresh }: Props) {
     <section className="bg-white rounded-2xl border border-cyan-100 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-black text-gray-900">Lich on thong minh</h2>
-          <p className="text-sm text-gray-500">SM-2 tu dong day tu kho ve gan hon</p>
+          <h2 className="text-lg font-black text-gray-900">Lịch ôn thông minh</h2>
+          <p className="text-sm text-gray-500">SM-2 tự động đẩy từ khó về gần hơn</p>
         </div>
         <button
           onClick={onRefresh}
           className="p-2 text-cyan-700 hover:bg-cyan-50 rounded-lg"
-          title="Tai lai thong ke"
+          title="Tải lại thống kê"
         >
           <FiRefreshCw className={loading ? 'animate-spin' : ''} />
         </button>
@@ -54,8 +54,8 @@ export default function ReviewStatsPanel({ data, loading, onRefresh }: Props) {
             <thead>
               <tr className="text-left text-gray-500 border-b">
                 <th className="py-2 pr-3">Chu de</th>
-                <th className="py-2 px-3 text-right">Can on</th>
-                <th className="py-2 px-3 text-right">Yeu</th>
+                <th className="py-2 px-3 text-right">Cần ôn</th>
+                <th className="py-2 px-3 text-right">Yếu</th>
                 <th className="py-2 pl-3 text-right">Da nho</th>
               </tr>
             </thead>
