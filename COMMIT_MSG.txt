@@ -1,5 +1,1 @@
-fix: remove default correctAnswer 'A' — require explicit selection
-
-- correctAnswer defaults to '' instead of 'A'
-- Add validation: cannot save single_choice/reading_item without selecting correct answer
-- Prevents accidental save with wrong default answer
+fix: add diacritics to Vietnamese text in vocabulary learning UI

@@ -27,11 +27,13 @@ const COURSES = [
   { id: 'tiengtrung-tn', name: 'Tiếng Trung TN', href: '/tiengtrung-tunhien' },
 ];
 
-const MAIN_NAV = [
+const MAIN_NAV_TOP = [
   { id: 'home', name: 'Trang chủ', href: '/' },
-  // Khóa học is handled specially
   { id: 'roadmap', name: 'Lộ trình', href: '/lo-trinh', icon: FiMap },
   { id: 'exam', name: 'Phòng thi', href: '/exam-room', icon: FiMonitor },
+];
+
+const MAIN_NAV_BOTTOM = [
   { id: 'docs', name: 'Tài liệu', href: '/tailieu', icon: FiFileText },
   { id: 'forum', name: 'Diễn đàn', href: '/forum', icon: FiMessageSquare },
   { id: 'qa', name: 'Hỏi đáp VIP', href: '/hoi-dap', icon: FiHelpCircle },
@@ -105,76 +107,97 @@ export default function Header() {
 
           {/* ── DESKTOP NAVIGATION ── */}
           <div className="hidden xl:flex flex-col flex-1 gap-2 ml-4">
+            {/* Row 1: Main nav */}
             <nav className="flex items-center gap-1">
-            {/* Trang chủ */}
-             <Link
-                href={MAIN_NAV[0].href}
+              {/* Trang chủ */}
+              <Link
+                href={MAIN_NAV_TOP[0].href}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  isActive(MAIN_NAV[0].href)
+                  isActive(MAIN_NAV_TOP[0].href)
                     ? 'text-violet-700 bg-violet-50'
                     : 'text-gray-600 hover:text-violet-700 hover:bg-gray-50'
                 }`}
               >
-                {MAIN_NAV[0].name}
+                {MAIN_NAV_TOP[0].name}
               </Link>
 
-            {/* Khóa Học Dropdown */}
-            <div
-              className="relative"
-              ref={courseMenuRef}
-            >
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowCourseMenu(v => !v); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  pathname.includes('/mon/') || pathname.includes('tiengtrung')
-                  ? 'text-violet-700 bg-violet-50'
-                  : 'text-gray-600 hover:text-violet-700 hover:bg-gray-50'
-                }`}
-              >
-                <FiBookOpen className="text-lg" /> Khóa học
-                <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
-              </button>
-
-              {/* Mega Menu popup */}
-              {showCourseMenu && (
-                <div className="absolute top-full left-0 pt-3 z-50"
-                  onMouseLeave={() => setShowCourseMenu(false)}>
-                  <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden"
-                    onClick={(e) => e.stopPropagation()}>
-                    <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
-                    {COURSES.map(course => (
-                      <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
-                        {course.name}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Other static links */}
-            {MAIN_NAV.slice(1).map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
+              {/* Khóa Học Dropdown */}
+              <div className="relative" ref={courseMenuRef}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowCourseMenu(v => !v); }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                    isActive(item.href)
-                      ? 'text-violet-700 bg-violet-50'
-                      : 'text-gray-600 hover:text-violet-700 hover:bg-gray-50'
+                    pathname.includes('/mon/') || pathname.includes('tiengtrung')
+                    ? 'text-violet-700 bg-violet-50'
+                    : 'text-gray-600 hover:text-violet-700 hover:bg-gray-50'
                   }`}
                 >
-                  {Icon && <Icon className="text-lg" />} {item.name}
-                </Link>
-              );
-            })}
-          </nav>
+                  <FiBookOpen className="text-lg" /> Khóa học
+                  <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
+                </button>
 
-            {/* Desktop Search Bar Below Nav */}
-            <div className="w-full max-w-md hidden lg:block mx-auto">
-              <SearchBar />
-            </div>
+                {showCourseMenu && (
+                  <div className="absolute top-full left-0 pt-3 z-50"
+                    onMouseLeave={() => setShowCourseMenu(false)}>
+                    <div className="w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 overflow-hidden"
+                      onClick={(e) => e.stopPropagation()}>
+                      <div className="text-xs font-bold text-gray-400 px-3 pt-2 pb-1 uppercase tracking-wider">Chọn môn học</div>
+                      {COURSES.map(course => (
+                        <Link key={course.id} href={course.href} className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
+                          {course.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Other static links (Row 1) */}
+              {MAIN_NAV_TOP.slice(1).map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                      isActive(item.href)
+                        ? 'text-violet-700 bg-violet-50'
+                        : 'text-gray-600 hover:text-violet-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {Icon && <Icon className="text-lg" />} {item.name}
+                  </Link>
+                );
+              })}
+
+              {/* Search bar inline after Row 1 */}
+              <div className="ml-2 flex-1 max-w-xs">
+                <SearchBar />
+              </div>
+            </nav>
+
+            {/* Row 2: Secondary nav */}
+            <nav className="flex items-center gap-1 pl-2 border-t border-gray-100 dark:border-gray-800 pt-1.5">
+              <span className="text-xs font-semibold text-gray-400 mr-1">Khác:</span>
+              {MAIN_NAV_BOTTOM.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      isActive(item.href)
+                        ? 'text-violet-700 bg-violet-50'
+                        : 'text-gray-500 hover:text-violet-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {Icon && <Icon className="text-sm" />} {item.name}
+                  </Link>
+                );
+              })}
+              <Link href="/bang-xep-hang" className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${isActive('/bang-xep-hang') ? 'text-violet-700 bg-violet-50' : 'text-gray-500 hover:text-violet-700 hover:bg-gray-50'}`}>
+                <FiAward className="text-sm" /> Bảng xếp hạng
+              </Link>
+            </nav>
           </div>
 
           {/* ── RIGHT ACTIONS ── */}
@@ -339,36 +362,36 @@ export default function Header() {
            )}
 
            <nav className="space-y-1">
-             <Link href={MAIN_NAV[0].href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
-               Trang chủ
-             </Link>
-             
-             {/* Mobile Course Menu */}
-             <div className="rounded-2xl border border-gray-100 overflow-hidden">
-                <button onClick={() => setMobileCourseOpen(!mobileCourseOpen)} className="flex items-center justify-between w-full p-4 text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
-                   <div className="flex items-center gap-3"><FiBookOpen/> Môn học / Khóa học</div>
-                   <FiChevronDown className={`transition-transform duration-300 ${mobileCourseOpen ? 'rotate-180': ''}`} />
-                </button>
-                <div className={`transition-all duration-300 bg-white dark:bg-gray-900 ${mobileCourseOpen ? 'max-h-[400px] opacity-100 visible py-2' : 'max-h-0 opacity-0 invisible'}`}>
-                   {COURSES.map(course => (
-                     <Link key={course.id} href={course.href} onClick={() => setMobileOpen(false)} className="block px-10 py-3 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20">
-                       • {course.name}
-                     </Link>
-                   ))}
-                </div>
-             </div>
+            <Link href={MAIN_NAV_TOP[0].href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
+              Trang chủ
+            </Link>
+            
+            {/* Mobile Course Menu */}
+            <div className="rounded-2xl border border-gray-100 overflow-hidden">
+               <button onClick={() => setMobileCourseOpen(!mobileCourseOpen)} className="flex items-center justify-between w-full p-4 text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800 bg-gray-50/50 dark:bg-gray-800/50">
+                  <div className="flex items-center gap-3"><FiBookOpen/> Môn học / Khóa học</div>
+                  <FiChevronDown className={`transition-transform duration-300 ${mobileCourseOpen ? 'rotate-180': ''}`} />
+               </button>
+               <div className={`transition-all duration-300 bg-white dark:bg-gray-900 ${mobileCourseOpen ? 'max-h-[400px] opacity-100 visible py-2' : 'max-h-0 opacity-0 invisible'}`}>
+                  {COURSES.map(course => (
+                    <Link key={course.id} href={course.href} onClick={() => setMobileOpen(false)} className="block px-10 py-3 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20">
+                      • {course.name}
+                    </Link>
+                  ))}
+               </div>
+            </div>
 
-             {/* Other Navs */}
-             {MAIN_NAV.slice(1).map(item => {
-               const Icon = item.icon;
-               return (
-                 <Link key={item.id} href={item.href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
-                   {Icon && <Icon className="text-gray-400 dark:text-gray-500" />} {item.name}
-                 </Link>
-               )
-             })}
+            {/* Other Navs */}
+            {MAIN_NAV_BOTTOM.map(item => {
+              const Icon = item.icon;
+              return (
+                <Link key={item.id} href={item.href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
+                  {Icon && <Icon className="text-gray-400 dark:text-gray-500" />} {item.name}
+                </Link>
+              );
+            })}
 
-             {/* Bảng Xếp Hạng */}
+            {/* Bảng Xếp Hạng */}
              <Link href="/bang-xep-hang" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 p-4 rounded-2xl text-gray-800 dark:text-gray-200 font-bold hover:bg-gray-50 dark:hover:bg-gray-800">
                <FiAward className="text-gray-400 dark:text-gray-500" /> Bảng xếp hạng
              </Link>
