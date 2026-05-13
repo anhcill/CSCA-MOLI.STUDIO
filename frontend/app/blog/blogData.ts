@@ -2516,7 +2516,7 @@ Nếu bạn có câu hỏi khác về CSCA, hãy liên hệ với chúng tôi đ
     featured: false,
   },
   {
-    slug: 'cach-chuan-bi-hồ-sơ-du-hoc-trung-quoc',
+    slug: 'cach-chuan-bi-ho-so-du-hoc-trung-quoc',
     title: 'Cách Chuẩn Bị Hồ Sơ Du Học Trung Quốc: Checklist Đầy Đủ Nhất 2026',
     excerpt: 'Hướng dẫn chi tiết cách chuẩn bị hồ sơ du học Trung Quốc: danh sách giấy tờ cần thiết, mẫu đơn, thư giới thiệu, kế hoạch học tập và mẹo để hồ sơ nổi bật hơn.',
     content: `
@@ -2735,7 +2735,7 @@ Hãy bắt đầu chuẩn bị hồ sơ ngay hôm nay — đây là bước quan
     featured: true,
   },
   {
-    slug: 'cach-phan-bo-thoi-gian-ôn-thi-csca',
+    slug: 'cach-phan-bo-thoi-gian-on-thi-csca',
     title: 'Cách Phân Bổ Thời Gian Ôn Thi CSCA Hiệu Quả Nhất',
     excerpt: 'Làm sao ôn thi CSCA hiệu quả trong 3 tháng? Hướng dẫn phân bổ thời gian giữa các phần thi, số giờ học mỗi ngày và cách cân bằng giữa ôn luyện và nghỉ ngơi.',
     content: `
@@ -3559,7 +3559,7 @@ Hãy bắt đầu hành trình du học Trung Quốc ngay hôm nay — đây s�
     featured: false,
   },
   {
-    slug: 'cách-đăng-ký-tài-khoản-moli-studio-ôn-thi-csca',
+    slug: 'cach-dang-ky-tai-khoan-moli-studio-on-thi-csca',
     title: 'Cách Đăng Ký Tài Khoản MOLI.STUDIO: Bắt Đầu Ôn Thi CSCA Ngay Hôm Nay',
     excerpt: 'Hướng dẫn đăng ký tài khoản MOLI.STUDIO miễn phí: đăng ký bằng email, Google, Facebook. Cách bắt đầu luyện thi CSCA, thi thử và theo dõi tiến độ học tập.',
     content: `

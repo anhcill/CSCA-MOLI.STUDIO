@@ -245,6 +245,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
             changeFrequency: 'monthly' as const,
             priority: 0.8,
         },
+        {
+            url: `${BASE_URL}/luyen-thi-csca`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/thi-csca`,
+            lastModified: now,
+            changeFrequency: 'weekly' as const,
+            priority: 0.9,
+        },
+        {
+            url: `${BASE_URL}/du-hoc-trung-quoc`,
+            lastModified: now,
+            changeFrequency: 'monthly' as const,
+            priority: 0.9,
+        },
     ];
 
     // New blog posts
