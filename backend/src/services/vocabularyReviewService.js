@@ -243,7 +243,7 @@ const getMiniTest = async (userId, filters) => {
 
   const words = await db.query(
     `
-      SELECT v.id, v.word_cn, v.pinyin, v.word_vn, v.subject, v.topic
+      SELECT v.id, v.word_cn, v.pinyin, v.word_vn, v.word_en, v.subject, v.topic
       FROM vocabulary_items v
       LEFT JOIN vocabulary_user_reviews r
         ON r.vocabulary_id = v.id AND r.user_id = $1
@@ -283,6 +283,7 @@ const getMiniTest = async (userId, filters) => {
       vocabulary_id: word.id,
       word_cn: word.word_cn,
       pinyin: word.pinyin,
+      word_en: word.word_en || null,
       subject: word.subject,
       topic: word.topic,
       choices,

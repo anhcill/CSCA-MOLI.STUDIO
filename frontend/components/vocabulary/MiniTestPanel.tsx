@@ -94,6 +94,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
                   <span className="text-xs font-black text-cyan-700">#{index + 1}</span>
                   <span className="text-2xl font-black text-gray-900">{question.word_cn}</span>
                   <span className="text-sm italic text-cyan-700">{question.pinyin}</span>
+                  {question.word_en && <span className="text-sm text-gray-500">/ {question.word_en}</span>}
                 </div>
                 <div className="mt-3 grid sm:grid-cols-2 gap-2">
                   {question.choices.map((choice) => (

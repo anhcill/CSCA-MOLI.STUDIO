@@ -73,6 +73,7 @@ export default function AdminVocabularyPage() {
   const [bulkText, setBulkText] = useState('');
   const [bulkSubject, setBulkSubject] = useState('tieng-trung-tn');
   const [bulkTopic, setBulkTopic] = useState('');
+  const [bulkVipTier, setBulkVipTier] = useState('basic');
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -199,6 +200,8 @@ export default function AdminVocabularyPage() {
           word_en: parts[3] || '',
           subject: bulkSubject,
           topic: bulkTopic,
+          is_premium: bulkVipTier !== 'basic',
+          vip_tier: bulkVipTier,
         };
       }).filter(w => w.word_cn && w.pinyin && w.word_vn);
 
@@ -396,11 +399,136 @@ export default function AdminVocabularyPage() {
               </div>
             </div>
           </>
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 font-medium disabled:opacity-50"
-              >
-                {saving ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <FiUpload size={16} />}
-                Import
-              </button>
+        )}
+      </div>
+
+      {/* Bulk Import Modal */}
+      {showBulk && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Import hàng loạt</h2>
+              <button onClick={() => setShowBulk(false)} className="text-gray-400 hover:text-gray-600"><FiX size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
+                  <select value={bulkSubject} onChange={e => setBulkSubject(e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                    {SUBJECTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chủ đề</label>
+                  <input type="text" placeholder="VD: Bài 1" value={bulkTopic} onChange={e => setBulkTopic(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phân quyền VIP</label>
+                <div className="flex gap-4">
+                  {VIP_TIERS.map(tier => (
+                    <label key={tier.value} className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" checked={bulkVipTier === tier.value}
+                        onChange={() => setBulkVipTier(tier.value)}
+                        className="accent-purple-600" />
+                      <span className="text-sm font-medium">{tier.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <textarea placeholder={'Format mỗi dòng:\n汉字|pīnyīn|nghĩa Việt|meaning EN'} value={bulkText} onChange={e => setBulkText(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 h-48 font-mono text-sm" />
+              <div className="flex gap-3">
+                <button onClick={() => setShowBulk(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Hủy</button>
+                <button onClick={handleBulkImport} disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50">
+                  {saving ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <FiUpload size={16} />}
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">{editingId ? 'Sửa từ' : 'Thêm từ mới'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><FiX size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Từ Hán</label>
+                  <input value={formData.word_cn} onChange={e => setFormData({ ...formData, word_cn: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-lg" placeholder="汉字" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pinyin</label>
+                  <input value={formData.pinyin} onChange={e => setFormData({ ...formData, pinyin: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2" placeholder="hanzi" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tiếng Việt</label>
+                  <input value={formData.word_vn} onChange={e => setFormData({ ...formData, word_vn: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2" placeholder="nghĩa" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tiếng Anh</label>
+                <input value={formData.word_en} onChange={e => setFormData({ ...formData, word_en: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2" placeholder="meaning" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Môn</label>
+                  <select value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+                    {SUBJECTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chủ đề</label>
+                  <input value={formData.topic} onChange={e => setFormData({ ...formData, topic: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2" placeholder="Bài 1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ví dụ Hán</label>
+                  <input value={formData.example_cn} onChange={e => setFormData({ ...formData, example_cn: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ví dụ Việt</label>
+                  <input value={formData.example_vn} onChange={e => setFormData({ ...formData, example_vn: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phân quyền</label>
+                <div className="flex gap-3">
+                  {VIP_TIERS.map(tier => (
+                    <label key={tier.value} className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" checked={formData.vip_tier === tier.value}
+                        onChange={() => setFormData({ ...formData, vip_tier: tier.value, is_premium: tier.value !== 'basic' })}
+                        className="accent-purple-600" />
+                      <span className="text-sm font-medium">{tier.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Hủy</button>
+                <button onClick={handleSave} disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50">
+                  {saving ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <FiCheck size={16} />}
+                  {editingId ? 'Cập nhật' : 'Thêm'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

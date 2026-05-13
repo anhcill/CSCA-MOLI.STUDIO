@@ -190,10 +190,11 @@ exports.bulkCreate = async (req, res) => {
       for (const w of words) {
         if (!w.word_cn || !w.pinyin || !w.word_vn || !w.subject || !w.topic)
           continue;
-        await client.query(
-          `INSERT INTO vocabulary_items (word_cn, pinyin, word_vn, word_en, subject, topic, example_cn, example_vn, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-           ON CONFLICT (word_cn, subject) DO NOTHING`,
+        const result = await client.query(
+          `INSERT INTO vocabulary_items (word_cn, pinyin, word_vn, word_en, subject, topic, example_cn, example_vn, is_premium, vip_tier, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           ON CONFLICT (word_cn, subject) DO NOTHING
+           RETURNING id`,
           [
             w.word_cn,
             w.pinyin,
@@ -203,10 +204,12 @@ exports.bulkCreate = async (req, res) => {
             w.topic,
             w.example_cn || null,
             w.example_vn || null,
+            w.is_premium || false,
+            w.vip_tier || 'basic',
             req.user.id,
           ],
         );
-        inserted++;
+        if (result.rows.length > 0) inserted++;
       }
       await client.query("COMMIT");
       UserActivity.log(req.user.id, 'admin.bulk_create_vocabulary', { count: inserted, ip: req.ip, userAgent: req.headers['user-agent'] });

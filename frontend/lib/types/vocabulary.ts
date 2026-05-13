@@ -53,6 +53,7 @@ export interface MiniTestQuestion {
   vocabulary_id: number;
   word_cn: string;
   pinyin: string;
+  word_en: string | null;
   subject: string;
   topic: string;
   choices: string[];
