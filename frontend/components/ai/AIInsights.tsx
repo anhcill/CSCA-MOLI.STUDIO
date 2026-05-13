@@ -381,33 +381,33 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
             <FiTrendingDown className="text-red-500" size={16} />
             <span className="text-xs text-gray-500">Điểm yếu</span>
           </div>
-          <p className="text-2xl font-bold text-red-600">{analysis.weaknesses.length}</p>
+          <p className="text-2xl font-bold text-red-600">{(analysis.weaknesses || []).length}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <FiTrendingUp className="text-green-500" size={16} />
             <span className="text-xs text-gray-500">Điểm mạnh</span>
           </div>
-          <p className="text-2xl font-bold text-green-600">{analysis.strengths.length}</p>
+          <p className="text-2xl font-bold text-green-600">{(analysis.strengths || []).length}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <FiTarget className="text-purple-500" size={16} />
             <span className="text-xs text-gray-500">Gợi ý</span>
           </div>
-          <p className="text-2xl font-bold text-purple-600">{analysis.suggestions.length}</p>
+          <p className="text-2xl font-bold text-purple-600">{(analysis.suggestions || []).length}</p>
         </div>
       </div>
 
       {/* Weaknesses */}
-      {analysis.weaknesses.length > 0 && (
+      {(analysis.weaknesses || []).length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
             <FiAlertCircle className="text-red-500" />
             Điểm Yếu Cần Cải Thiện
           </h3>
           <div className="space-y-4">
-            {analysis.weaknesses.map((w, i) => (
+            {(analysis.weaknesses || []).map((w, i) => (
               <div key={i} className="border-l-4 border-red-400 pl-4 py-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-gray-900">{w.subject}</span>
@@ -427,14 +427,14 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       )}
 
       {/* Strengths */}
-      {analysis.strengths.length > 0 && (
+      {(analysis.strengths || []).length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
             <FiCheckCircle className="text-green-500" />
             Điểm Mạnh Của Bạn
           </h3>
           <div className="space-y-4">
-            {analysis.strengths.map((s, i) => (
+            {(analysis.strengths || []).map((s, i) => (
               <div key={i} className="border-l-4 border-green-400 pl-4 py-2">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-gray-900">{s.subject}</span>
@@ -454,13 +454,13 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       )}
 
       {/* Suggestions */}
-      {analysis.suggestions.length > 0 && (
+      {(analysis.suggestions || []).length > 0 && (
         <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6">
           <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
             💡 Gợi Ý Từ AI
           </h3>
           <ul className="space-y-3">
-            {analysis.suggestions.map((sug, i) => (
+            {(analysis.suggestions || []).map((sug, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">
                   {i + 1}
@@ -473,7 +473,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       )}
 
       {/* Roadmap — VIP/Pre: AI roadmap | Free: template roadmap */}
-      {analysis.roadmap.length > 0 && (
+      {(analysis.roadmap || []).length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
@@ -485,7 +485,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
             </span>
           </div>
           <div className="space-y-4">
-            {analysis.roadmap.map((phase, i) => (
+            {(analysis.roadmap || []).map((phase, i) => (
               <div key={i} className="border-l-4 border-blue-400 pl-4 py-3">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold">
@@ -495,7 +495,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
                 </div>
                 <p className="text-sm text-gray-600 mb-3">{phase.description}</p>
                 <ul className="space-y-1">
-                  {phase.tasks.map((task, j) => (
+                  {(phase.tasks || []).map((task, j) => (
                     <li key={j} className="flex items-start gap-2 text-sm text-gray-700">
                       <span className="text-blue-500 mt-0.5">▸</span>
                       <span>{task}</span>
@@ -509,7 +509,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       )}
 
       {/* Free user: hiện roadmap template */}
-      {!hasAI && !analysis.roadmap.length && (
+      {!hasAI && !(analysis.roadmap || []).length && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
@@ -559,14 +559,14 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       )}
 
       {/* Recommended Materials */}
-      {analysis.recommendedMaterials.length > 0 && (
+      {(analysis.recommendedMaterials || []).length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
             <FiBook className="text-orange-500" />
             Tài Liệu Gợi Ý
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {analysis.recommendedMaterials.map((mat) => (
+            {(analysis.recommendedMaterials || []).map((mat) => (
               <a
                 key={mat.id}
                 href={mat.file_url}

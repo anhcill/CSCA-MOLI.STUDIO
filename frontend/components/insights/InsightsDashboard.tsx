@@ -255,7 +255,7 @@ export default function InsightsDashboard() {
 
             {loading.trend ? (
               <TrendChartSkeleton />
-            ) : trend && trend.hasEnoughData && trend.chartData.length >= 2 ? (
+            ) : trend && trend.hasEnoughData && trend.chartData?.length >= 2 ? (
               <TrendChart data={trend.chartData} trend={trend.trend} change={trend.change} />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-gray-400">
@@ -272,7 +272,7 @@ export default function InsightsDashboard() {
             </h2>
             {loading.difficulty ? (
               <DifficultySkeleton />
-            ) : difficulty && difficulty.breakdown.length > 0 ? (
+            ) : difficulty && difficulty.breakdown?.length > 0 ? (
               <DifficultyChart data={difficulty.breakdown} />
             ) : (
               <p className="text-sm text-gray-400 text-center py-8">
@@ -280,7 +280,7 @@ export default function InsightsDashboard() {
               </p>
             )}
 
-            {difficulty && difficulty.breakdown.length > 0 && (
+            {difficulty && difficulty.breakdown?.length > 0 && (
               <p className="text-sm text-gray-600 mt-4 italic">
                 💡 {difficulty.suggestion}
               </p>
@@ -303,7 +303,7 @@ export default function InsightsDashboard() {
 
             {loading.topics ? (
               <TopicSkeleton />
-            ) : topics && topics.analyzedTopics.length > 0 ? (
+            ) : topics && topics.analyzedTopics?.length > 0 ? (
               <TopicChart
                 weaknesses={topics.weaknesses}
                 strengths={topics.strengths}
@@ -325,7 +325,7 @@ export default function InsightsDashboard() {
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
               </div>
-            ) : suggestions.length > 0 ? (
+            ) : suggestions?.length > 0 ? (
               <div className="space-y-3">
                 {suggestions.slice(0, 5).map((s, i) => (
                   <div
@@ -390,7 +390,7 @@ export default function InsightsDashboard() {
                 <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
               ))}
             </div>
-          ) : studyPlan && studyPlan.days.length > 0 ? (
+          ) : studyPlan && studyPlan.days?.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {studyPlan.days.map((day) => (
                 <StudyDayCard key={day.day} day={day} />
@@ -418,7 +418,7 @@ export default function InsightsDashboard() {
                 <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />
               ))}
             </div>
-          ) : history.length > 0 ? (
+          ) : history?.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -666,7 +666,7 @@ export default function InsightsDashboard() {
             <div className="space-y-3">
               {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
             </div>
-          ) : hardest && hardest.hasEnoughData && hardest.hardestExams.length > 0 ? (
+          ) : hardest && hardest.hasEnoughData && hardest.hardestExams?.length > 0 ? (
             <div className="space-y-3">
               {hardest.hardestExams.map((exam, idx) => {
                 const difficultyMap: Record<string, { label: string; cls: string }> = {
@@ -916,11 +916,11 @@ function TopicChart({
   const labelMap = { rose: 'text-rose-600', amber: 'text-amber-600', emerald: 'text-emerald-600' };
 
   const all = [
-    ...weaknesses.slice(0, 5).map((w) => ({ ...w, type: 'weak' as const })),
-    ...strengths.slice(0, 3).map((s) => ({ ...s, type: 'strong' as const })),
+    ...(weaknesses || []).slice(0, 5).map((w) => ({ ...w, type: 'weak' as const })),
+    ...(strengths || []).slice(0, 3).map((s) => ({ ...s, type: 'strong' as const })),
   ].slice(0, 7);
 
-  if (all.length === 0) {
+  if (!all || all.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-gray-400">
         <FiBookOpen size={40} className="mb-2 opacity-50" />
@@ -996,12 +996,12 @@ function StudyDayCard({ day }: { day: StudyPlanData['days'][0] }) {
       </p>
 
       {/* Tasks count */}
-      <p className="text-xs text-gray-400">{day.tasks.length} nhiệm vụ</p>
+      <p className="text-xs text-gray-400">{(day.tasks || []).length} nhiệm vụ</p>
 
       {/* Focus topics */}
-      {day.focusTopics.length > 0 && (
+      {(day.focusTopics || []).length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {day.focusTopics.slice(0, 2).map((t) => (
+          {(day.focusTopics || []).slice(0, 2).map((t) => (
             <span key={t} className="text-xs px-1.5 py-0.5 bg-gray-100 rounded text-gray-500 truncate max-w-full">
               {t}
             </span>
