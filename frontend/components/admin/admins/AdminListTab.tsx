@@ -180,105 +180,122 @@ export default function AdminListTab({ onViewLog }: Props) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
-          <input type="text" placeholder="Tìm admin theo tên, email..."
-            value={search} onChange={e => handleSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
-        </div>
-        <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-          className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400">
-          <option value="">Tất cả vai trò</option>
-          {ROLE_OPTIONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
-        </select>
-        <div className="flex items-center gap-3 text-sm text-gray-500 ml-auto">
-          <span>Tổng: <strong className="text-gray-900">{pagination.totalAdmins}</strong> admin</span>
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1 max-w-md">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+            <input type="text" placeholder="Tìm admin theo tên, email..."
+              value={search} onChange={e => handleSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-colors" />
+          </div>
+          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
+            className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:bg-white transition-colors">
+            <option value="">Tất cả vai trò</option>
+            {ROLE_OPTIONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
+          </select>
+          <div className="flex items-center gap-3 text-sm text-gray-500 ml-auto">
+            <span className="px-3 py-2 bg-violet-50 text-violet-700 rounded-xl font-semibold">
+              {pagination.totalAdmins} admin
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[1000px]">
+          <table className="w-full text-left min-w-[900px]">
             <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                <th className="px-5 py-3.5">Admin</th>
-                <th className="px-5 py-3.5">Vai trò</th>
-                <th className="px-5 py-3.5">Quyền hạn</th>
-                <th className="px-5 py-3.5">Trạng thái</th>
-                <th className="px-5 py-3.5">Hoạt động gần đây</th>
-                <th className="px-5 py-3.5">Thao tác (30d)</th>
-                <th className="px-5 py-3.5">Hành động</th>
+              <tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-bold">
+                <th className="px-6 py-4"><span className="flex items-center gap-2"><span className="w-2 h-2 bg-violet-500 rounded-full" />Admin</span></th>
+                <th className="px-6 py-4">Vai trò</th>
+                <th className="px-6 py-4">Quyền hạn</th>
+                <th className="px-6 py-4">Trạng thái</th>
+                <th className="px-6 py-4">Hoạt động</th>
+                <th className="px-6 py-4">Thao tác</th>
+                <th className="px-6 py-4 text-right">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 [...Array(5)].map((_, i) => (
-                  <tr key={i}><td className="px-5 py-4" colSpan={7}>
-                    <div className="h-6 bg-gray-100 rounded-lg animate-pulse w-2/3" />
+                  <tr key={i}><td className="px-6 py-5" colSpan={7}>
+                    <div className="h-6 bg-gray-100 rounded animate-pulse w-2/3" />
                   </td></tr>
                 ))
               ) : admins.length === 0 ? (
-                <tr><td className="px-5 py-12 text-center text-gray-400" colSpan={7}>Không tìm thấy admin nào</td></tr>
+                <tr><td className="px-6 py-16 text-center text-gray-400" colSpan={7}>
+                  <div className="flex flex-col items-center gap-2">
+                    <FiShield size={32} className="opacity-30" />
+                    <span>Không tìm thấy admin nào</span>
+                  </div>
+                </td></tr>
               ) : admins.map(admin => (
-                <tr key={admin.id} className="hover:bg-violet-50/30 transition-colors group">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                <tr key={admin.id} className="hover:bg-violet-50/40 transition-all duration-200">
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-violet-200 shrink-0">
                         {admin.full_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm truncate">{admin.full_name}</p>
-                        <p className="text-xs text-gray-400 truncate">{admin.email}</p>
+                        <p className="font-bold text-gray-900 text-sm">{admin.full_name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{admin.email}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-6 py-5">
+                    <div className="flex flex-wrap gap-1.5">
                       {(admin.admin_roles || []).map(code => {
                         const badge = getRoleBadge(code);
-                        return <span key={code} className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${badge.color}`}>{badge.label}</span>;
+                        return <span key={code} className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${badge.color}`}>{badge.label}</span>;
                       })}
-                      {(!admin.admin_roles?.length) && <span className="text-xs text-gray-400">—</span>}
+                      {(!admin.admin_roles?.length) && <span className="text-xs text-gray-400 italic">Chưa phân vai trò</span>}
                     </div>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-6 py-5">
                     <button onClick={() => setPermissionsModal(admin)}
-                      className="inline-flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 font-medium">
-                      <FiEye size={12} /> {(admin.permissions || []).length} quyền
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-600 hover:text-violet-800 rounded-lg text-xs font-semibold transition-colors">
+                      <FiEye size={13} /> {(admin.permissions || []).length} quyền
                     </button>
                   </td>
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      admin.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  <td className="px-6 py-5">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${
+                      admin.is_active !== false
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-red-50 text-red-700 border border-red-200'
                     }`}>
+                      <span className={`w-2 h-2 rounded-full ${admin.is_active !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
                       {admin.is_active !== false ? 'Hoạt động' : 'Bị khóa'}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
-                    <p className="text-sm text-gray-600">{timeAgo(admin.last_active_at)}</p>
+                  <td className="px-6 py-5">
+                    <p className="text-sm text-gray-600 font-medium">{timeAgo(admin.last_active_at)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                      <FiActivity size={11} /> {admin.total_actions} thao tác
+                    </p>
                   </td>
-                  <td className="px-5 py-4">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 text-violet-700 rounded-lg text-xs font-bold">
-                      <FiActivity size={12} /> {admin.total_actions}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <td className="px-6 py-5">
+                    <div className="flex items-center gap-1.5">
                       <button onClick={() => openRoleEditor(admin)} title="Sửa vai trò"
-                        className="p-2 rounded-lg hover:bg-violet-100 text-gray-500 hover:text-violet-600 transition-colors">
-                        <FiEdit2 size={14} />
+                        className="p-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-600 hover:text-violet-800 transition-all shadow-sm hover:shadow">
+                        <FiEdit2 size={15} />
                       </button>
                       <button onClick={() => onViewLog(admin)} title="Xem nhật ký"
-                        className="p-2 rounded-lg hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors">
-                        <FiActivity size={14} />
+                        className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 transition-all shadow-sm hover:shadow">
+                        <FiActivity size={15} />
                       </button>
                       <button onClick={() => handleToggleStatus(admin)} title={admin.is_active !== false ? 'Khóa' : 'Mở khóa'}
-                        className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-amber-600 transition-colors">
-                        {admin.is_active !== false ? <FiLock size={14} /> : <FiUnlock size={14} />}
+                        className={`p-2 rounded-xl transition-all shadow-sm hover:shadow ${
+                          admin.is_active !== false
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-800'
+                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-800'
+                        }`}>
+                        {admin.is_active !== false ? <FiLock size={15} /> : <FiUnlock size={15} />}
                       </button>
                     </div>
+                  </td>
+                  <td className="px-6 py-5 text-right">
+                    <span className="text-xs text-gray-400 font-mono">#{admin.id}</span>
                   </td>
                 </tr>
               ))}
@@ -287,19 +304,19 @@ export default function AdminListTab({ onViewLog }: Props) {
         </div>
 
         {pagination.totalPages > 1 && (
-          <div className="px-5 py-3 border-t bg-gray-50/50 flex items-center justify-between">
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
             <p className="text-xs text-gray-500">
-              {((pagination.currentPage - 1) * pagination.limit) + 1}–{Math.min(pagination.currentPage * pagination.limit, pagination.totalAdmins)} / {pagination.totalAdmins}
+              Hiển thị <span className="font-semibold text-gray-700">{((pagination.currentPage - 1) * pagination.limit) + 1}–{Math.min(pagination.currentPage * pagination.limit, pagination.totalAdmins)}</span> trong <span className="font-semibold text-gray-700">{pagination.totalAdmins}</span>
             </p>
-            <div className="flex gap-1.5">
+            <div className="flex items-center gap-2">
               <button onClick={() => loadAdmins(pagination.currentPage - 1)} disabled={pagination.currentPage === 1}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-white disabled:opacity-40 transition-colors">
-                <FiChevronLeft size={14} />
+                className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-violet-50 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-gray-200 disabled:hover:text-gray-400 transition-all shadow-sm">
+                <FiChevronLeft size={16} />
               </button>
-              <span className="px-3 py-1.5 text-sm font-medium text-gray-700">{pagination.currentPage}/{pagination.totalPages}</span>
+              <span className="px-4 py-1.5 bg-violet-600 text-white rounded-lg text-sm font-bold shadow-sm">{pagination.currentPage} / {pagination.totalPages}</span>
               <button onClick={() => loadAdmins(pagination.currentPage + 1)} disabled={pagination.currentPage === pagination.totalPages}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm hover:bg-white disabled:opacity-40 transition-colors">
-                <FiChevronRight size={14} />
+                className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm hover:bg-violet-50 hover:border-violet-300 hover:text-violet-600 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-gray-200 disabled:hover:text-gray-400 transition-all shadow-sm">
+                <FiChevronRight size={16} />
               </button>
             </div>
           </div>
@@ -309,25 +326,33 @@ export default function AdminListTab({ onViewLog }: Props) {
       {/* Role Editor Modal */}
       {editingAdmin && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="font-bold text-gray-900">Chọn trang admin được truy cập</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{editingAdmin.full_name} · {editingAdmin.email}</p>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-violet-200">
+                  {editingAdmin.full_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-900">Phân quyền Admin</h2>
+                  <p className="text-xs text-gray-400">{editingAdmin.full_name}</p>
+                </div>
               </div>
-              <button onClick={() => setEditingAdmin(null)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500"><FiX size={18} /></button>
+              <button onClick={() => setEditingAdmin(null)} className="p-2.5 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors">
+                <FiX size={18} />
+              </button>
             </div>
             <div className="px-6 py-5 space-y-3">
+              <p className="text-xs text-gray-400 mb-4">Chọn các trang admin mà người dùng này được phép truy cập:</p>
               {ACCESS_OPTIONS.map(opt => (
-                <label key={opt.code} className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-violet-50 transition-colors has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50">
+                <label key={opt.code} className="flex items-start gap-4 p-4 rounded-2xl border-2 border-gray-100 cursor-pointer hover:border-violet-200 hover:bg-violet-50/30 transition-all has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50/50">
                   <input type="checkbox" checked={selectedRoles.includes(opt.code)} onChange={() => toggleRole(opt.code)}
-                    className="w-4 h-4 mt-0.5 rounded accent-violet-600" />
+                    className="w-5 h-5 mt-0.5 rounded accent-violet-600" />
                   <div className="flex-1">
-                    <span className={`inline-block px-2 py-0.5 mb-1 rounded-md text-xs font-semibold border ${opt.color}`}>{opt.label}</span>
-                    <p className="text-xs text-gray-500">{opt.desc}</p>
-                    <div className="mt-2 flex flex-wrap gap-1">
+                    <span className={`inline-block px-2.5 py-1 mb-2 rounded-lg text-xs font-bold border ${opt.color}`}>{opt.label}</span>
+                    <p className="text-xs text-gray-500 leading-relaxed">{opt.desc}</p>
+                    <div className="mt-2.5 flex flex-wrap gap-1">
                       {opt.pages.map(page => (
-                        <span key={page} className="px-2 py-0.5 rounded-md bg-white border border-gray-200 text-[11px] font-medium text-gray-600">
+                        <span key={page} className="px-2 py-1 rounded-md bg-white border border-gray-200 text-[11px] font-medium text-gray-600">
                           {page}
                         </span>
                       ))}
@@ -336,10 +361,10 @@ export default function AdminListTab({ onViewLog }: Props) {
                 </label>
               ))}
             </div>
-            <div className="flex gap-3 px-6 pb-5">
-              <button onClick={() => setEditingAdmin(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Hủy</button>
+            <div className="flex gap-3 px-6 pb-6">
+              <button onClick={() => setEditingAdmin(null)} className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Hủy bỏ</button>
               <button onClick={handleSaveRoles} disabled={savingRoles}
-                className="flex-1 px-4 py-2.5 bg-violet-600 rounded-xl text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50">
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 rounded-xl text-sm font-bold text-white hover:shadow-lg hover:shadow-violet-200 disabled:opacity-50 transition-all">
                 {savingRoles ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </div>
@@ -350,35 +375,40 @@ export default function AdminListTab({ onViewLog }: Props) {
       {/* Permissions Detail Modal */}
       {permissionsModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-              <div>
-                <h2 className="font-bold text-gray-900 flex items-center gap-2"><FiShield size={16} /> Chi tiết quyền hạn & Truy cập</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{permissionsModal.full_name}</p>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-violet-200">
+                  {permissionsModal.full_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-900 flex items-center gap-2"><FiShield size={16} className="text-violet-500" /> Chi tiết quyền hạn</h2>
+                  <p className="text-xs text-gray-400">{permissionsModal.full_name}</p>
+                </div>
               </div>
-              <button onClick={() => setPermissionsModal(null)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-500"><FiX size={18} /></button>
+              <button onClick={() => setPermissionsModal(null)} className="p-2.5 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors">
+                <FiX size={18} />
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Vai trò</p>
-                <div className="flex flex-wrap gap-1.5">
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="mb-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Vai trò</p>
+                <div className="flex flex-wrap gap-2">
                   {(permissionsModal.admin_roles || []).map(code => {
                     const badge = getRoleBadge(code);
-                    return <span key={code} className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${badge.color}`}>{badge.label}</span>;
+                    return <span key={code} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${badge.color}`}>{badge.label}</span>;
                   })}
                 </div>
               </div>
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                  Trang được phép truy cập
-                </p>
-                <div className="space-y-2">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Trang được phép truy cập</p>
+                <div className="space-y-2.5">
                   {(() => {
                     const perms = permissionsModal.permissions || [];
-                    if (perms.length === 0) return <p className="text-sm text-gray-400">Chưa được phân công quyền truy cập nào</p>;
-                    
+                    if (perms.length === 0) return <p className="text-sm text-gray-400 italic">Chưa được phân công quyền truy cập nào</p>;
+
                     const isSuperAdmin = perms.includes('*') || perms.includes('system.manage');
-                    
+
                     const accessMap: Record<string, { label: string, desc: string }> = {
                       'users.manage': { label: 'Người dùng & VIP', desc: 'Quản lý tài khoản, nâng cấp VIP' },
                       'exams.manage': { label: 'Đề thi & Câu hỏi', desc: 'Quản lý đề, câu hỏi, điểm thi' },
@@ -388,21 +418,20 @@ export default function AdminListTab({ onViewLog }: Props) {
                       'admin.dashboard.view': { label: 'Trang chủ Admin', desc: 'Xem thống kê trên Dashboard' }
                     };
 
-                    const allowedPages = isSuperAdmin 
+                    const allowedPages = isSuperAdmin
                       ? [{ label: 'Toàn quyền hệ thống', desc: 'Truy cập và sửa đổi tất cả các trang' }]
-                      : perms.map(p => accessMap[p]).filter(Boolean); // Filter known access mapping
+                      : perms.map(p => accessMap[p]).filter(Boolean);
 
-                    // Deduplicate
                     const uniquePages = Array.from(new Set(allowedPages.map(p => p.label)))
                       .map(label => allowedPages.find(p => p.label === label)!);
 
                     if (uniquePages.length === 0) {
-                      return <p className="text-sm text-gray-400">Chỉ có quyền hệ thống hạn chế chưa map giao diện.</p>;
+                      return <p className="text-sm text-gray-400 italic">Chỉ có quyền hệ thống hạn chế chưa map giao diện.</p>;
                     }
 
                     return uniquePages.map((page, idx) => (
-                      <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                        <div className="mt-1 w-2 h-2 bg-violet-500 rounded-full shrink-0" />
+                      <div key={idx} className="flex items-start gap-3 p-3 bg-gradient-to-r from-violet-50 to-fuchsia-50 rounded-xl border border-violet-100">
+                        <div className="mt-1 w-2.5 h-2.5 bg-violet-500 rounded-full shrink-0 shadow-sm" />
                         <div>
                           <p className="text-sm font-bold text-gray-800">{page.label}</p>
                           <p className="text-xs text-gray-500 mt-0.5">{page.desc}</p>
@@ -412,14 +441,12 @@ export default function AdminListTab({ onViewLog }: Props) {
                   })()}
                 </div>
               </div>
-              
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                  Danh sách quyền (System Codes)
-                </p>
-                <div className="flex flex-wrap gap-1.5">
+
+              <div className="mt-6 pt-5 border-t border-gray-100">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Danh sách quyền</p>
+                <div className="flex flex-wrap gap-2">
                   {(permissionsModal.permissions || []).map(perm => (
-                    <span key={perm} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-[11px] font-mono">
+                    <span key={perm} className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-mono font-medium">
                       {perm}
                     </span>
                   ))}

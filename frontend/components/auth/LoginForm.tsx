@@ -295,7 +295,7 @@ export default function LoginForm() {
 
       {/* Social Login Buttons */}
       <div className="mb-4 sm:mb-6 space-y-3 max-w-[400px] mx-auto">
-        <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
+        <div className="w-full">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={handleGoogleError}
@@ -312,9 +312,9 @@ export default function LoginForm() {
             type="button"
             onClick={handleFacebookLogin}
             disabled={isSubmitting}
-            className="w-full h-[40px] flex items-center justify-center gap-2 rounded bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] shadow-sm hover:shadow-md hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-[#1877F2] text-white text-sm font-semibold rounded-md hover:bg-[#166FE5] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shadow-sm"
           >
-            <FaFacebook className="text-[18px]" />
+            <FaFacebook className="text-base shrink-0" />
             Đăng nhập với Facebook
           </button>
         )}
