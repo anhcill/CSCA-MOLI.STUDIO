@@ -7,12 +7,9 @@ const User = require('../models/User');
 const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
 const db = require('../config/database');
-<<<<<<< HEAD
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
-=======
->>>>>>> 095e9817e9e92a691a344ab57e64b298a9c6216e
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
 const rateLimitMap = new Map();
@@ -920,15 +917,11 @@ router.post('/sepay-webhook', async (req, res) => {
     transaction = claimedTransaction;
 
     // Increment coupon usage CHỉ khi thành công
-<<<<<<< HEAD
-    await incrementCouponUsage(transaction);
-    await applyCoinSpend(transaction);
-=======
     let updatedUser;
     let tier = 'vip';
     try {
       await incrementCouponUsage(transaction);
->>>>>>> 095e9817e9e92a691a344ab57e64b298a9c6216e
+      await applyCoinSpend(transaction);
 
       tier = transaction.package_id
         ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
