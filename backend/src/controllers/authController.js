@@ -585,15 +585,41 @@ const getFacebookRedirectUri = (req) => {
 };
 
 const getFrontendCallbackUrl = () => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000')
+    .split(',')
+    .map(url => url.trim())
+    .filter(Boolean)[0] || 'http://localhost:3000';
   return `${frontendUrl.replace(/\/$/, '')}/auth/facebook/callback`;
+};
+
+const getAllowedFacebookRedirectOrigins = () => {
+  const configured = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(url => url.trim())
+    .filter(Boolean);
+
+  return new Set([
+    'http://localhost:3000',
+    'https://molystudio.online',
+    'https://www.molystudio.online',
+    'https://moli.studio',
+    'https://www.moli.studio',
+    ...configured,
+  ].map(url => {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  }).filter(Boolean));
 };
 
 const isSafeRedirectUrl = (redirectUrl, fallbackUrl) => {
   try {
     const requested = new URL(redirectUrl);
     const fallback = new URL(fallbackUrl);
-    return requested.origin === fallback.origin;
+    return requested.pathname === '/auth/facebook/callback'
+      && (requested.origin === fallback.origin || getAllowedFacebookRedirectOrigins().has(requested.origin));
   } catch {
     return false;
   }

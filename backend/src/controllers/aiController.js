@@ -6,23 +6,32 @@ const { canUseAIFeatures } = require('../middleware/authMiddleware');
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
 const REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
+const INSIGHT_TYPES = {
+  fullAnalysis: 'full_analysis',
+  examAnalysis: 'exam_analysis',
+  wrongAnswerExplanations: 'wrong_answer_explanations',
+};
 
 // ─── In-flight deduplication ────────────────────────────────────────────────────
 const inFlightRequests = new Map();
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────────
-async function getStaleCache(userId, insightType = 'full_analysis') {
+async function getStaleCache(userId, insightType = INSIGHT_TYPES.fullAnalysis, attemptId = null) {
+  const params = [userId, insightType];
+  const attemptClause = attemptId ? 'AND attempt_id = $3' : '';
+  if (attemptId) params.push(String(attemptId));
   const r = await db.query(
     `SELECT data, created_at FROM ai_insights
      WHERE user_id = $1 AND insight_type = $2
+     ${attemptClause}
      ORDER BY created_at DESC LIMIT 1`,
-    [userId, insightType],
+    params,
   );
   return r.rows[0] || null;
 }
 
-async function handleRateLimit(res, userId, retryAfter, message) {
-  const stale = await getStaleCache(userId);
+async function handleRateLimit(res, userId, retryAfter, message, insightType = INSIGHT_TYPES.fullAnalysis, attemptId = null) {
+  const stale = await getStaleCache(userId, insightType, attemptId);
   if (stale) {
     const age = Math.floor((Date.now() - new Date(stale.created_at)) / 60000);
     return res.json({
@@ -180,10 +189,10 @@ async function analyzeExamResult(req, res) {
     // Check cache trong DB trước
     const cacheResult = await db.query(
       `SELECT data, created_at FROM ai_insights
-       WHERE user_id = $1 AND insight_type = 'full_analysis'
+       WHERE user_id = $1 AND insight_type IN ($3, 'full_analysis')
        AND attempt_id = $2
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId, String(attemptId)],
+       ORDER BY CASE WHEN insight_type = $3 THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+      [userId, String(attemptId), INSIGHT_TYPES.examAnalysis],
     );
     if (cacheResult.rows[0]) {
       const age = Math.floor((Date.now() - new Date(cacheResult.rows[0].created_at)) / 60000);
@@ -209,22 +218,71 @@ async function analyzeExamResult(req, res) {
     // Gọi AI
     if (aiService.isRateLimited()) {
       const retryAfter = aiService.getRateLimitRemaining();
+      const stale = await getStaleCache(userId, INSIGHT_TYPES.examAnalysis, attemptId);
+      if (stale) {
+        const age = Math.floor((Date.now() - new Date(stale.created_at)) / 60000);
+        return res.json({
+          success: true,
+          cached: true,
+          cacheSource: 'stale',
+          cacheAge: age,
+          rateLimited: true,
+          retryAfter,
+          attempt: {
+            id: attempt.id,
+            examTitle: attempt.exam_title,
+            subjectName: attempt.subject_name,
+            totalScore: attempt.total_score,
+            totalQuestions: attempt.total_questions,
+            correctCount: attempt.total_correct,
+            duration,
+            submittedAt: attempt.submit_time,
+          },
+          previousAttempt,
+          aiAnalysis: stale.data,
+          message: 'AI đang bận, đang hiển thị phân tích đã lưu.',
+        });
+      }
       return res.json({
         success: true, rateLimited: true, retryAfter,
-        data: { ...attemptData, aiAnalysis: { score: Math.round((attempt.total_correct / attempt.total_questions) * 100) } },
+        attempt: {
+          id: attempt.id,
+          examTitle: attempt.exam_title,
+          subjectName: attempt.subject_name,
+          totalScore: attempt.total_score,
+          totalQuestions: attempt.total_questions,
+          correctCount: attempt.total_correct,
+          duration,
+          submittedAt: attempt.submit_time,
+        },
+        previousAttempt,
+        aiAnalysis: { score: Math.round((attempt.total_correct / attempt.total_questions) * 100) },
         message: 'AI đang bận, hiển thị kết quả cơ bản.',
       });
     }
 
-    const aiAnalysis = await aiService.analyzeExamResult(attemptData);
+    const inflightKey = `${INSIGHT_TYPES.examAnalysis}:${userId}:${attemptId}`;
+    let aiAnalysis;
+    let fromInflight = false;
+    if (inFlightRequests.has(inflightKey)) {
+      fromInflight = true;
+      aiAnalysis = await inFlightRequests.get(inflightKey);
+    } else {
+      const analysisPromise = aiService.analyzeExamResult(attemptData)
+        .finally(() => inFlightRequests.delete(inflightKey));
+      inFlightRequests.set(inflightKey, analysisPromise);
+      aiAnalysis = await analysisPromise;
+    }
 
     // Lưu vào DB cache để lần sau không phải gọi AI lại
     try {
-      await db.query(
-        `INSERT INTO ai_insights (user_id, insight_type, data, attempt_id)
-         VALUES ($1, 'full_analysis', $2, $3)`,
-        [userId, JSON.stringify(aiAnalysis), attemptId],
-      );
+      if (!fromInflight) {
+        await db.query(
+          `INSERT INTO ai_insights (user_id, insight_type, data, attempt_id)
+           VALUES ($1, $2, $3, $4)`,
+          [userId, INSIGHT_TYPES.examAnalysis, JSON.stringify(aiAnalysis), attemptId],
+        );
+      }
     } catch (e) {
       console.error('Failed to save AI insight:', e);
     }
@@ -318,6 +376,19 @@ async function explainWrongAnswers(req, res) {
 
     const wrongCount = questions.filter(q => !q.is_correct && q.selected_answer_key).length;
 
+    const cached = await getStaleCache(userId, INSIGHT_TYPES.wrongAnswerExplanations, attemptId);
+    if (cached) {
+      const age = Math.floor((Date.now() - new Date(cached.created_at)) / 60000);
+      return res.json({
+        success: true,
+        cached: true,
+        cacheAge: age,
+        wrongCount,
+        questions,
+        explanations: cached.data,
+      });
+    }
+
     if (aiService.isRateLimited()) {
       return res.json({
         success: true, rateLimited: true,
@@ -328,6 +399,16 @@ async function explainWrongAnswers(req, res) {
     }
 
     const explanations = await aiService.explainWrongAnswers(questions);
+
+    try {
+      await db.query(
+        `INSERT INTO ai_insights (user_id, insight_type, data, attempt_id)
+         VALUES ($1, $2, $3, $4)`,
+        [userId, INSIGHT_TYPES.wrongAnswerExplanations, JSON.stringify(explanations), attemptId],
+      );
+    } catch (e) {
+      console.error('Failed to save AI explanations:', e);
+    }
 
     res.json({
       success: true,
@@ -453,7 +534,7 @@ async function askAI(req, res) {
     if (attemptId) {
       const attemptResult = await db.query(
         `SELECT e.title as exam_title, s.name as subject_name,
-                ea.total_score, ea.total_correct, ea.total_incorrect
+                ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
          FROM exam_attempts ea
          JOIN exams e ON ea.exam_id = e.id
          LEFT JOIN subjects s ON e.subject_id = s.id
@@ -689,6 +770,7 @@ async function analyzeUserPerformance(req, res) {
 
     if (attempts.rows.length === 0) {
       if (req._resolveInflight) req._resolveInflight(null);
+      inFlightRequests.delete(userId);
       return res.json({ success: true, hasEnoughData: false, message: 'Chưa có bài thi nào.' });
     }
 
@@ -699,9 +781,11 @@ async function analyzeUserPerformance(req, res) {
 
     cache.set(memKey, { data: fullAnalysis, cacheAge: 0 }, TTL.VERY_LONG);
     if (req._resolveInflight) req._resolveInflight(fullAnalysis);
+    inFlightRequests.delete(userId);
     res.json({ success: true, cached: false, cacheSource: 'none', data: fullAnalysis });
   } catch (error) {
     if (req._resolveInflight) req._resolveInflight(null);
+    inFlightRequests.delete(req.user?.id);
     console.error('analyzeUserPerformance error:', error);
     res.status(500).json({ success: false, message: 'Lỗi phân tích.' });
   }
@@ -745,7 +829,7 @@ async function askAIStream(req, res) {
       const db = require('../config/database');
       const attemptResult = await db.query(
         `SELECT e.title as exam_title, s.name as subject_name,
-                ea.total_score, ea.total_correct, ea.total_incorrect
+                ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
          FROM exam_attempts ea
          JOIN exams e ON ea.exam_id = e.id
          LEFT JOIN subjects s ON e.subject_id = s.id
@@ -762,9 +846,11 @@ async function askAIStream(req, res) {
       }
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
 
     await aiService.askAIStream(question, context, res);
   } catch (error) {

@@ -7,6 +7,11 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    {
+      pattern: /^(bg|text|border|from|to)-(emerald|blue|amber|red|green|purple|indigo|gray)-(50|100|200|300|400|500|600|700|800|900)$/,
+    },
+  ],
   theme: {
     screens: {
       '2xs': '280px',

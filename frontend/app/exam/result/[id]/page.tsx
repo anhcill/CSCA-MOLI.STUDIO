@@ -10,6 +10,8 @@ import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 import { renderMathDisplay } from '@/components/admin/MathInput';
+import { useAuthStore } from '@/lib/store/authStore';
+import { canUseAI } from '@/lib/utils/permissions';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -142,6 +144,8 @@ interface AttemptResult {
 
 export default function ExamResultPage({ params }: { params: { id: string } }) {
     const router = useRouter();
+    const user = useAuthStore((s) => s.user);
+    const hasAIAccess = canUseAI(user);
     const [result, setResult] = useState<AttemptResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
@@ -154,6 +158,12 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     useEffect(() => {
         loadResult();
     }, [params.id]);
+
+    useEffect(() => {
+        if (result?.id && hasAIAccess && !aiAnalysis && !aiLoading) {
+            loadAIAnalysis(result.id);
+        }
+    }, [result?.id, hasAIAccess]);
 
     // Cảnh báo thoát khi AI đang phân tích
     useEffect(() => {
@@ -173,7 +183,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
             setLoading(true);
             const data = await examApi.getAttemptDetails(params.id);
             setResult(data);
-            if (data.id) {
+            if (data.id && hasAIAccess) {
                 loadAIAnalysis(data.id);
             }
         } catch (error) {

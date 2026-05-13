@@ -1,3 +1,6 @@
+const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
+const backendApiUrl = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -8,11 +11,11 @@ const nextConfig = {
       {
         // Exclude streaming endpoint (handled by its own route)
         source: "/api/ai/ask-stream",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/ai/ask-stream`,
+        destination: `${backendApiUrl}/ai/ask-stream`,
       },
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/:path*`,
+        destination: `${backendApiUrl}/:path*`,
       },
     ];
   },

@@ -37,9 +37,10 @@ let currentKeyIndex = 0;
 function getNextKey() {
   const keys = BEE.apiKeys.filter(Boolean);
   if (keys.length === 0) return null;
+  const keyNumber = (currentKeyIndex % keys.length) + 1;
   const key = keys[currentKeyIndex % keys.length];
   currentKeyIndex++;
-  console.log(`🔑 Dùng API key #${(currentKeyIndex % keys.length) + 1}/${keys.length}`);
+  console.log(`AI request using Beeknoee key #${keyNumber}/${keys.length}`);
   return key;
 }
 
@@ -55,7 +56,7 @@ async function waitBetweenRequests() {
 
 // Global concurrency: max 3 concurrent AI requests
 let concurrentCount = 0;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = BEE.maxConcurrent || 3;
 
 async function withConcurrency(fn) {
   while (concurrentCount >= MAX_CONCURRENT) {
@@ -117,7 +118,8 @@ async function callBeeknoee(prompt, options = {}) {
       }
       if (err.response?.status === 429) {
         // Key bị rate limit → chuyển sang key khác ngay
-        console.warn(`⚠️ Key #${(currentKeyIndex % BEE.apiKeys.length)} bị rate limit, thử key khác...`);
+        const keyCount = BEE.apiKeys.filter(Boolean).length || 1;
+        console.warn(`Beeknoee key #${currentKeyIndex % keyCount} hit rate limit, backing off...`);
         currentKeyIndex++;
         setRateLimit(aiConfig.general.globalBackoffMs);
         const e = new Error('RATE_LIMITED');
@@ -142,7 +144,105 @@ function parseAIMaybeJSON(text) {
   if (match) {
     try { return JSON.parse(match[1].trim()); } catch {}
   }
+  if (text) {
+    console.warn('AI JSON parse failed. Preview:', String(text).slice(0, 500));
+  }
   return null;
+}
+
+function asString(value, fallback = '') {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function asArray(value, fallback = []) {
+  return Array.isArray(value) ? value.filter(item => item !== null && item !== undefined) : fallback;
+}
+
+function asNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeGradeColor(value, fallback = 'blue') {
+  return ['emerald', 'blue', 'amber', 'red'].includes(value) ? value : fallback;
+}
+
+function normalizeExamAnalysis(ai, fallback, percentage) {
+  const source = ai && typeof ai === 'object' ? ai : {};
+  return {
+    ...fallback,
+    ...source,
+    score: percentage,
+    grade: asString(source.grade, fallback.grade),
+    gradeColor: normalizeGradeColor(source.gradeColor, fallback.gradeColor),
+    summary: asString(source.summary, fallback.summary),
+    strengths: asArray(source.strengths, fallback.strengths).map(v => asString(v)).filter(Boolean),
+    weaknesses: asArray(source.weaknesses, fallback.weaknesses).map(v => asString(v)).filter(Boolean),
+    analysis: asString(source.analysis, fallback.analysis),
+    overallAdvice: asString(source.overallAdvice, fallback.overallAdvice),
+    priorityTopics: asArray(source.priorityTopics, fallback.priorityTopics).map(v => asString(v)).filter(Boolean),
+    studyPlan: asString(source.studyPlan, fallback.studyPlan),
+    examTips: asArray(source.examTips, fallback.examTips).map(v => asString(v)).filter(Boolean),
+    commonMistakes: asArray(source.commonMistakes, fallback.commonMistakes).map(v => asString(v)).filter(Boolean),
+    nextExamSuggestion: asString(source.nextExamSuggestion, fallback.nextExamSuggestion),
+  };
+}
+
+function normalizeExplanationResult(ai, wrongQuestions) {
+  const explanations = asArray(ai?.explanations).map((item, index) => ({
+    questionNumber: asNumber(item?.questionNumber, wrongQuestions[index]?.question_number || index + 1),
+    yourAnswer: asString(item?.yourAnswer),
+    correctAnswer: asString(item?.correctAnswer),
+    whyWrong: asString(item?.whyWrong),
+    knowledgeNote: asString(item?.knowledgeNote),
+    tip: asString(item?.tip),
+    vocabulary: asArray(item?.vocabulary).map(v => ({
+      word: asString(v?.word),
+      pinyin: asString(v?.pinyin),
+      meaning: asString(v?.meaning),
+    })).filter(v => v.word || v.meaning),
+  })).filter(item => item.whyWrong || item.knowledgeNote || item.tip);
+
+  return { explanations };
+}
+
+function normalizeEssayGrade(ai) {
+  return {
+    success: true,
+    totalScore: Math.max(0, Math.min(10, asNumber(ai?.totalScore, 0))),
+    gradingCriteria: asArray(ai?.gradingCriteria).map(item => ({
+      criterion: asString(item?.criterion, 'Tiêu chí'),
+      score: Math.max(0, Math.min(10, asNumber(item?.score, 0))),
+      maxScore: Math.max(1, asNumber(item?.maxScore, 10)),
+      comment: asString(item?.comment),
+    })),
+    errors: asArray(ai?.errors).map(item => ({
+      original: asString(item?.original),
+      correct: asString(item?.correct),
+      reason: asString(item?.reason),
+      type: asString(item?.type, 'grammar'),
+    })),
+    modelAnswer: asString(ai?.modelAnswer),
+    feedback: asString(ai?.feedback),
+    suggestions: asArray(ai?.suggestions).map(v => asString(v)).filter(Boolean),
+  };
+}
+
+function normalizeGrammarLesson(ai) {
+  return {
+    success: true,
+    title: asString(ai?.title, 'Bài học ngữ pháp'),
+    grammarRule: asString(ai?.grammarRule),
+    examples: asArray(ai?.examples).map(item => ({
+      chinese: asString(item?.chinese),
+      pinyin: asString(item?.pinyin),
+      vietnamese: asString(item?.vietnamese),
+      usage: asString(item?.usage),
+    })).filter(item => item.chinese || item.vietnamese),
+    memoryTips: asArray(ai?.memoryTips).map(v => asString(v)).filter(Boolean),
+    commonMistakes: asArray(ai?.commonMistakes).map(v => asString(v)).filter(Boolean),
+    relatedTopics: asArray(ai?.relatedTopics).map(v => asString(v)).filter(Boolean),
+  };
 }
 
 // ─── Fallback rule-based analysis ─────────────────────────────────────────────
@@ -270,6 +370,8 @@ HƯỚNG DẪN:
 - Đưa ra ví dụ cụ thể từ bài thi
 - Nhận xét thật, gợi ý thực tế
 - Dùng ngôn ngữ tự nhiên, thân thiện
+- Chỉ kết luận dựa trên dữ liệu bài thi được cung cấp, không bịa chủ đề hoặc câu hỏi không có trong dữ liệu
+- Khi nêu điểm yếu, phải chỉ rõ số câu hoặc nhóm câu làm căn cứ nếu dữ liệu có đủ
 
 THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
@@ -309,14 +411,14 @@ TRẢ VỀ JSON. QUY TẮC QUAN TRỌNG: Mỗi trường text phải xuống dò
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 4000 });
-    const ai = parseAIMaybeJSON(raw) || ruleBasedExamAnalysis(attemptData);
+    const fallback = ruleBasedExamAnalysis(attemptData);
+    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: BEE.examAnalysisMaxTokens || 6000 });
+    const ai = parseAIMaybeJSON(raw);
 
     return {
-      score: percentage,
+      ...normalizeExamAnalysis(ai, fallback, percentage),
       difficultyBreakdown,
       wrongCount: wrongQuestions.length,
-      ...ai,
     };
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
@@ -336,28 +438,42 @@ async function explainWrongAnswers(questions) {
   const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
   if (!wrongQuestions.length) return { explanations: [], message: 'Bạn không có câu sai!' };
 
-  const questionsText = wrongQuestions.map((q, i) => {
+  const fallbackExplanations = () => ({
+    explanations: wrongQuestions.map((q, i) => ({
+      questionNumber: q.question_number || i + 1,
+      yourAnswer: `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`,
+      correctAnswer: `${q.correct_answer_key}. ${getAnswerText(q.options, q.correct_answer_key)}`,
+      whyWrong: 'Hãy ôn lại phần này và làm lại bài.',
+      knowledgeNote: q.explanation || q.explanation_cn || '',
+      tip: 'Đọc kỹ đề bài, so sánh từng lựa chọn và ghi lại kiến thức liên quan.',
+      vocabulary: [],
+    })),
+  });
+
+  async function explainBatch(batch, offset) {
+    const questionsText = batch.map((q, i) => {
     const optionsText = (q.options || [])
       .slice(0, 8)
       .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
       .join(' | ');
-    return `[Câu ${i + 1}]
+    return `[Câu ${offset + i + 1}]
 Đề bài: ${q.question_text || q.question_text_cn || ''}
 Lựa chọn: ${optionsText}
 Bạn chọn: ${q.selected_answer_key || '?'}. ${getAnswerText(q.options, q.selected_answer_key)}
 Đúng: ${q.correct_answer_key || '?'}. ${getAnswerText(q.options, q.correct_answer_key)}
 Giải thích admin: ${q.explanation || q.explanation_cn || 'Không có'}
 Loại câu: ${q.question_type || 'single_choice'}`;
-  }).join('\n\n');
+    }).join('\n\n');
 
-  const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT.
+    const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT.
 
 YÊU CẦU:
-- Viết plain text thuần túy, không dùng **bold**, không dùng ##, không dùng bullet, không dùng bất kỳ ký hiệu markdown nào
-- Mỗi phần: 1-3 câu ngắn gọn
+- Viết plain text thuần túy, không dùng **bold**, không dùng ##, không dùng bất kỳ ký hiệu markdown phức tạp nào
+- Mỗi phần phải đủ ý: vì sao đáp án học sinh sai, vì sao đáp án đúng đúng, kiến thức cần ôn
 - Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 电脑 (diàn nǎo)
 - Đi thẳng vào vấn đề, không lặp đề bài
 - Viết tự nhiên như đang giảng cho học sinh
+- Chỉ dựa trên dữ liệu câu hỏi, đáp án và giải thích admin được cung cấp
 
 CÁC CÂU SAI:
 ${questionsText}
@@ -379,32 +495,23 @@ TRẢ VỀ JSON:
   ]
 }`;
 
-  try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 1000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800 });
     const ai = parseAIMaybeJSON(raw);
-    if (ai && ai.explanations) return ai;
-    return { explanations: wrongQuestions.map((q, i) => ({
-      questionNumber: q.question_number || i + 1,
-      yourAnswer: `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`,
-      correctAnswer: `${q.correct_answer_key}. ${getAnswerText(q.options, q.correct_answer_key)}`,
-      whyWrong: 'Hãy ôn lại phần này và làm lại bài.',
-      knowledgeNote: q.explanation || q.explanation_cn || '',
-      tip: 'Đọc kỹ đề bài và học thuộc từ vựng liên quan.',
-      vocabulary: [],
-    }))};
+    return normalizeExplanationResult(ai, batch).explanations;
+  }
+
+  try {
+    const batchSize = 6;
+    const explanations = [];
+    for (let i = 0; i < wrongQuestions.length; i += batchSize) {
+      const batch = wrongQuestions.slice(i, i + batchSize);
+      explanations.push(...await explainBatch(batch, i));
+    }
+    return explanations.length ? { explanations } : fallbackExplanations();
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
-    return {
-      explanations: wrongQuestions.map((q, i) => ({
-        questionNumber: q.question_number || i + 1,
-        yourAnswer: `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`,
-        correctAnswer: `${q.correct_answer_key}. ${getAnswerText(q.options, q.correct_answer_key)}`,
-        whyWrong: 'Hãy ôn lại phần này.',
-        knowledgeNote: q.explanation || '',
-        tip: 'Học thuộc từ vựng và ngữ pháp liên quan.',
-        vocabulary: [],
-      })),
-    };
+    console.error('AI wrong-answer explanation failed, using fallback:', err.message);
+    return fallbackExplanations();
   }
 }
 
@@ -608,7 +715,7 @@ ${recentWrong || '(không có)'}
 Câu hỏi: ${question}`;
 
   try {
-    const response = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: 2000 });
+    const response = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
     return {
       answer: response,
       timestamp: new Date().toISOString(),
@@ -687,7 +794,7 @@ Câu hỏi: ${question}`;
   const payload = {
     model: BEE.model,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: 2000,
+    max_tokens: BEE.chatMaxTokens || 2200,
     temperature: 0.5,
     stream: true
   };
@@ -706,15 +813,33 @@ Câu hỏi: ${question}`;
       }
     );
 
-    // Truyền trực tiếp chunk SSE sang response của Express
-    response.data.pipe(res);
+    let buffer = '';
+    let sentDone = false;
+
+    response.data.on('data', chunk => {
+      buffer += chunk.toString('utf8');
+      const parts = buffer.split(/\r?\n/);
+      buffer = parts.pop() || '';
+
+      for (const line of parts) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (!data) continue;
+        if (data === '[DONE]') sentDone = true;
+        res.write(`data: ${data}\n\n`);
+      }
+    });
 
     response.data.on('end', () => {
-      // response stream đã kết thúc
+      if (!sentDone) {
+        res.write('data: [DONE]\n\n');
+      }
+      res.end();
     });
 
     response.data.on('error', err => {
       console.error('AI Stream Error:', err);
+      res.write(`data: ${JSON.stringify({ error: 'Lỗi stream AI' })}\n\n`);
       res.end();
     });
 
@@ -963,6 +1088,8 @@ YÊU CẦU:
 - Tìm lỗi sai cụ thể, gạch chân từ/phrase bị sai trong câu trả lời
 - Đề xuất câu trả lời chuẩn, đúng ngữ pháp
 - Cho điểm từng phần và tổng điểm (thang 10)
+- Không cho điểm cao nếu câu trả lời quá ngắn, lạc đề, bỏ ý chính hoặc chỉ sao chép một phần đáp án
+- Nhận xét phải nêu rõ lỗi ngữ pháp/từ vựng/diễn đạt và cách sửa thực tế
 
 CÂU HỎI:
 ${questionText || ''}
@@ -990,20 +1117,12 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 2000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: BEE.essayMaxTokens || 3000 });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
 
-    return {
-      success: true,
-      totalScore: ai.totalScore ?? 0,
-      gradingCriteria: ai.gradingCriteria || [],
-      errors: ai.errors || [],
-      modelAnswer: ai.modelAnswer || '',
-      feedback: ai.feedback || '',
-      suggestions: ai.suggestions || [],
-    };
+    return normalizeEssayGrade(ai);
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
     return {
@@ -1046,6 +1165,7 @@ NGỮ CẢNH:
 YÊU CẦU:
 - Viết plain text, có thể dùng bullet (-)
 - Mỗi phần 2-5 câu, đi thẳng vào vấn đề
+- Ví dụ tiếng Trung bắt buộc có pinyin và nghĩa tiếng Việt
 - Từ tiếng Trung gắn kèm pinyin ngay sau
 - Không dùng markdown phức tạp (không **, ##)
 
@@ -1062,20 +1182,12 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: 2500 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.45, maxTokens: BEE.lessonMaxTokens || 3000 });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
 
-    return {
-      success: true,
-      title: ai.title || 'Bài học ngữ pháp',
-      grammarRule: ai.grammarRule || '',
-      examples: ai.examples || [],
-      memoryTips: ai.memoryTips || [],
-      commonMistakes: ai.commonMistakes || [],
-      relatedTopics: ai.relatedTopics || [],
-    };
+    return normalizeGrammarLesson(ai);
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
     return {

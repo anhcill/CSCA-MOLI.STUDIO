@@ -9,6 +9,8 @@ import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 import { PremiumGate } from '@/components/common/PremiumGate';
+import { useAuthStore } from '@/lib/store/authStore';
+import { canUseAI } from '@/lib/utils/permissions';
 
 interface AnswerOption {
   key: string;
@@ -55,6 +57,8 @@ function ExamResultContent() {
   const searchParams = useSearchParams();
   const examId = parseInt(params.id as string);
   const attemptId = searchParams.get('attemptId');
+  const user = useAuthStore((s) => s.user);
+  const hasAIAccess = canUseAI(user);
 
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +76,12 @@ function ExamResultContent() {
       fetchResult();
     }
   }, [attemptId]);
+
+  useEffect(() => {
+    if (result?.id && hasAIAccess && !aiAnalysis && !aiLoading) {
+      loadAIAnalysis(result.id);
+    }
+  }, [result?.id, hasAIAccess]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -91,7 +101,7 @@ function ExamResultContent() {
       setLoading(true);
       const data = await examApi.getAttemptDetail(Number(attemptId));
       setResult(data);
-      if (data.id) {
+      if (data.id && hasAIAccess) {
         loadAIAnalysis(data.id);
       }
     } catch (error: any) {

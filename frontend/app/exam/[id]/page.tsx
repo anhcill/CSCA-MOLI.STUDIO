@@ -33,6 +33,8 @@ export default function ExamPage() {
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
+  // fill_blank_pool: track selected answer keys per group (groupId → Set of used answer keys)
+  const [poolUsedKeys, setPoolUsedKeys] = useState<Record<number, Set<string>>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -154,11 +156,25 @@ export default function ExamPage() {
     if (!attemptId || submitting) return;
 
     const questionId = questions[currentQuestionIndex].id;
+    const q = questions[currentQuestionIndex] as any;
 
     setSelectedAnswers({
       ...selectedAnswers,
       [questionId]: essayText !== undefined ? essayText : answerId,
     });
+
+    // Track pool answer keys for fill_blank_item
+    if (q.question_type === 'fill_blank_item' && q.passage_group_id) {
+      const groupId = q.passage_group_id;
+      setPoolUsedKeys(prev => {
+        const current = prev[groupId] || new Set();
+        // Only add if not already selected (allow re-selecting to change)
+        if (!current.has(answerKey)) {
+          return { ...prev, [groupId]: new Set([...current, answerKey]) };
+        }
+        return prev;
+      });
+    }
 
     try {
       await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText);
@@ -464,46 +480,67 @@ export default function ExamPage() {
                  </div>
                ) : (
                 /* ─── Multiple-choice options ─── */
-                currentQuestion.answers?.map((answer: any, index: number) => {
-                  const isSelected = currentQuestionAnswer === answer.id;
-                  const labelLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
-                  const letter = labelLetters[index] || answer.answer_key || '?';
+                (() => {
+                  const q = currentQuestion as any;
+                  const isFillBlank = q.question_type === 'fill_blank_item';
+                  const groupId = isFillBlank ? q.passage_group_id : null;
+                  const usedKeys = groupId ? (poolUsedKeys[groupId] || new Set()) : new Set<string>();
+                  const rawAnswers = q.answers || [];
 
-                  return (
-                    <button
-                      key={answer.id}
-                      onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
-                      className={`relative w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-4 outline-none ${
-                          isSelected
-                          ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20'
-                          : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
-                        }`}
-                    >
-                      <div className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
-                          isSelected
-                          ? 'border-indigo-600 bg-indigo-600 text-white'
-                          : 'border-slate-300 text-slate-500 group-hover:border-indigo-300 group-hover:text-indigo-500 bg-white'
-                        }`}>
-                        {isSelected ? <FiCheck strokeWidth={3} /> : letter}
+                  // For fill_blank_item: filter out options already selected by other items in this group
+                  const visibleAnswers = isFillBlank
+                    ? rawAnswers.filter((a: any) => !usedKeys.has(a.answer_key))
+                    : rawAnswers;
+
+                  // If all options are used up, show a message
+                  if (isFillBlank && visibleAnswers.length === 0) {
+                    return (
+                      <div className="col-span-1 md:col-span-2 p-4 rounded-2xl border-2 border-amber-200 bg-amber-50 text-sm text-amber-700 text-center">
+                        Tất cả các lựa chọn đã được sử dụng.
                       </div>
-                      <div className="flex-1 mt-0.5">
-                        <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                           {answer.answer_text}
-                        </span>
-                        {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
-                          <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
-                             {answer.answer_text_cn}
-                          </div>
-                        )}
-                        {answer.image_url && (
-                          <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
-                            <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
+                    );
+                  }
+
+                  return visibleAnswers.map((answer: any, index: number) => {
+                    const isSelected = currentQuestionAnswer === answer.id;
+                    const letter = answer.answer_key || String.fromCharCode(65 + index);
+
+                    return (
+                      <button
+                        key={answer.id}
+                        onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
+                        className={`relative w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-4 outline-none ${
+                            isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20'
+                            : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
+                          }`}
+                      >
+                        <div className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
+                            isSelected
+                            ? 'border-indigo-600 bg-indigo-600 text-white'
+                            : 'border-slate-300 text-slate-500 group-hover:border-indigo-300 group-hover:text-indigo-500 bg-white'
+                          }`}>
+                          {isSelected ? <FiCheck strokeWidth={3} /> : letter}
+                        </div>
+                        <div className="flex-1 mt-0.5">
+                          <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                             {answer.answer_text}
+                          </span>
+                          {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
+                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
+                               {answer.answer_text_cn}
+                            </div>
+                          )}
+                          {answer.image_url && (
+                            <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
+                              <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  });
+                })()
                )}
              </div>
 

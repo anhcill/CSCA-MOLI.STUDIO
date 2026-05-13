@@ -157,6 +157,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             let done = false;
             let fullContent = '';
             let charCount = 0;
+            let pending = '';
 
             setIsStreaming(true);
 
@@ -164,8 +165,9 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
                 if (value) {
-                    const chunk = decoder.decode(value, { stream: !done });
-                    const lines = chunk.split('\n');
+                    pending += decoder.decode(value, { stream: !done });
+                    const lines = pending.split('\n');
+                    pending = lines.pop() || '';
 
                     for (const line of lines) {
                         if (!line.startsWith('data: ')) continue;
@@ -182,7 +184,12 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                 ));
                             }
                             if (parsed?.error) {
-                                fullContent = parsed.error;
+                                fullContent = typeof parsed.error === 'string'
+                                    ? parsed.error
+                                    : parsed.text || 'AI stream đang gặp lỗi. Vui lòng thử lại.';
+                                setMessages(prev => prev.map(m =>
+                                    m.id === tempAiId ? { ...m, content: fullContent } : m
+                                ));
                                 done = true;
                                 break;
                             }

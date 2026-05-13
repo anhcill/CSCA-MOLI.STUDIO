@@ -1,58 +1,59 @@
 /**
- * AI Config — Cấu hình tập trung cho tất cả AI models
+ * Central AI configuration.
  *
- * Muốn đổi model/API? Chỉ cần sửa file này!
- *
- * Providers:
- *   - beeknoee  : Beeknoee proxy → DeepSeek R1 (mặc định)
- *   - gemini    : Google Gemini (fallback)
- *   - openai    : OpenAI compatible (ChatGPT, etc.)
+ * The production provider is Beeknoee, using OpenAI-compatible endpoints.
+ * Keep real API keys in environment variables only.
  */
 
+function intEnv(name, fallback) {
+  const value = Number.parseInt(process.env[name], 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function floatEnv(name, fallback) {
+  const value = Number.parseFloat(process.env[name]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function parseApiKeys() {
+  const combined = process.env.BEEKNOEE_API_KEYS || '';
+  const fromCombined = combined
+    .split(',')
+    .map(key => key.trim())
+    .filter(Boolean);
+
+  const legacy = [
+    process.env.BEEKNOEE_API_KEY,
+    process.env.BEEKNOEE_API_KEY_1,
+    process.env.BEEKNOEE_API_KEY_2,
+  ].filter(Boolean);
+
+  return [...new Set([...fromCombined, ...legacy])];
+}
+
 const config = {
-  // ── Provider mặc định ─────────────────────────────────────────────
   provider: process.env.AI_PROVIDER || 'beeknoee',
 
-  // ── Beeknoee (OpenAI-compatible) ───────────────────────────────────────────
-  // Endpoint: https://platform.beeknoee.com/api/v1/v1/chat/completions
   beeknoee: {
-    apiKeys: [
-      process.env.BEEKNOEE_API_KEY    || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff82f3ca9a6bb1c42fd8c2dc4ef5e7a2e9a',
-      process.env.BEEKNOEE_API_KEY_1 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff87f8ef41543cb46d19a7552bb9b00e01c',
-      process.env.BEEKNOEE_API_KEY_2 || 'sk-bee-d32a3f4bc08544b4945bee85e9bb3ff835601c6fd9904ddfa85a9b3f377943e2',
-    ],
-    model:       process.env.BEEKNOEE_MODEL     || 'gpt-5.4-mini',
-    baseUrl:     'https://platform.beeknoee.com/api/v1',
-    timeout:     60000,
-    maxTokens:   4000,
-    temperature: 0.3,
-    // Round-robin: đợi bao lâu giữa 2 request (ms) để tránh rate limit
-    delayBetweenRequests: 500,
+    apiKeys: parseApiKeys(),
+    model: process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
+    baseUrl: (process.env.BEEKNOEE_BASE_URL || 'https://platform.beeknoee.com/api/v1').replace(/\/+$/, ''),
+    timeout: intEnv('BEEKNOEE_TIMEOUT_MS', 90000),
+    maxTokens: intEnv('BEEKNOEE_MAX_TOKENS', 4000),
+    examAnalysisMaxTokens: intEnv('AI_EXAM_ANALYSIS_MAX_TOKENS', 6000),
+    explanationMaxTokens: intEnv('AI_EXPLANATION_MAX_TOKENS', 1800),
+    essayMaxTokens: intEnv('AI_ESSAY_MAX_TOKENS', 3000),
+    lessonMaxTokens: intEnv('AI_LESSON_MAX_TOKENS', 3000),
+    chatMaxTokens: intEnv('AI_CHAT_MAX_TOKENS', 2200),
+    temperature: floatEnv('BEEKNOEE_TEMPERATURE', 0.3),
+    delayBetweenRequests: intEnv('AI_REQUEST_SPACING_MS', 300),
+    maxConcurrent: intEnv('AI_MAX_CONCURRENT', 3),
   },
 
-  // ── Gemini (Google) ───────────────────────────────────────────────
-  gemini: {
-    apiKey:   process.env.GEMINI_API_KEY  || '',
-    model:    process.env.GEMINI_MODEL     || 'gpt-5.4-mini',
-    timeout:  30000,
-  },
-
-  // ── OpenAI compatible ─────────────────────────────────────────────
-  openai: {
-    apiKey:   process.env.OPENAI_API_KEY  || '',
-    model:    process.env.OPENAI_MODEL     || 'gpt-5.4-mini',
-    baseUrl:  process.env.OPENAI_BASE_URL  || 'https://api.openai.com/v1',
-    timeout:  30000,
-  },
-
-  // ── Cài đặt chung ───────────────────────────────────────────────
   general: {
-    // Fallback: dùng khi không có API key
     fallbackToRules: true,
-    // Cache AI response trong DB (24h)
-    cacheTTLHours: 24,
-    // Rate limit global (ms)
-    globalBackoffMs: 90_000,
+    cacheTTLHours: intEnv('AI_CACHE_TTL_HOURS', 24),
+    globalBackoffMs: intEnv('AI_GLOBAL_BACKOFF_MS', 90000),
   },
 };
 
