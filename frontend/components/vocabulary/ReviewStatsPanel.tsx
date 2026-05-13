@@ -16,8 +16,8 @@ export default function ReviewStatsPanel({ data, loading, onRefresh }: Props) {
   const stats = [
     { label: 'Cần ôn hôm nay', value: summary?.due_today, icon: FiCalendar, tone: 'text-blue-700 bg-blue-50' },
     { label: 'Từ yếu', value: summary?.weak_words, icon: FiTarget, tone: 'text-rose-700 bg-rose-50' },
-    { label: 'Da nho', value: summary?.mastered_words, icon: FiCheckCircle, tone: 'text-emerald-700 bg-emerald-50' },
-    { label: 'Da hoc', value: summary?.started_words, icon: FiActivity, tone: 'text-violet-700 bg-violet-50' },
+    { label: 'Đã nhớ', value: summary?.mastered_words, icon: FiCheckCircle, tone: 'text-emerald-700 bg-emerald-50' },
+    { label: 'Đã học', value: summary?.started_words, icon: FiActivity, tone: 'text-violet-700 bg-violet-50' },
   ];
 
   return (
@@ -53,10 +53,10 @@ export default function ReviewStatsPanel({ data, loading, onRefresh }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b">
-                <th className="py-2 pr-3">Chu de</th>
+                <th className="py-2 pr-3">Chủ đề</th>
                 <th className="py-2 px-3 text-right">Cần ôn</th>
                 <th className="py-2 px-3 text-right">Yếu</th>
-                <th className="py-2 pl-3 text-right">Da nho</th>
+                <th className="py-2 pl-3 text-right">Đã nhớ</th>
               </tr>
             </thead>
             <tbody>

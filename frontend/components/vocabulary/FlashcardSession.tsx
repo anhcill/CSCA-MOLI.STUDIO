@@ -13,7 +13,7 @@ interface Props {
 const QUALITY_BUTTONS = [
   { quality: 1, label: 'Sai', icon: FiX, className: 'border-rose-200 text-rose-700 hover:bg-rose-50' },
   { quality: 3, label: 'Khó nhớ', icon: FiRotateCcw, className: 'border-amber-200 text-amber-700 hover:bg-amber-50' },
-  { quality: 5, label: 'Da nho', icon: FiCheck, className: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
+  { quality: 5, label: 'Đã nhớ', icon: FiCheck, className: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
 ];
 
 export default function FlashcardSession({ filters, onReviewed }: Props) {
