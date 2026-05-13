@@ -157,7 +157,7 @@ export default function RegisterForm() {
       </div>
 
       {/* Social Login Buttons */}
-      <div className="mb-6 space-y-3">
+      <div className="mb-6 space-y-3 max-w-[400px] mx-auto">
         <div className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full [&>div>div]:flex [&>div>div]:justify-center">
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
@@ -175,9 +175,9 @@ export default function RegisterForm() {
             type="button"
             onClick={handleFacebookLogin}
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#1877F2] text-white py-2.5 sm:py-3 text-sm sm:text-base font-bold hover:bg-[#166FE5] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="w-full h-[40px] flex items-center justify-center gap-2 rounded bg-[#1877F2] text-white text-sm font-medium hover:bg-[#166FE5] shadow-sm hover:shadow-md hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            <FaFacebook className="text-xl" />
+            <FaFacebook className="text-[18px]" />
             Đăng ký với Facebook
           </button>
         )}
