@@ -69,7 +69,12 @@ function BankTransferScreen({
 
     const check = async () => {
       try {
-        const res = await axios.get(`/payments/check-status?orderId=${orderId}`);
+        const res = await axios.get(`/payments/check-status?orderId=${orderId}&t=${Date.now()}`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
         if (res.data.status === 'completed') {
           setPolling(false);
           if (intervalRef.current) clearInterval(intervalRef.current);

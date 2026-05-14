@@ -1029,6 +1029,13 @@ router.post('/sepay-webhook', async (req, res) => {
  */
 router.get('/check-status', authenticate, async (req, res) => {
   try {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+      'Surrogate-Control': 'no-store',
+    });
+
     const { orderId } = req.query;
     if (!orderId) return res.status(400).json({ success: false });
 
