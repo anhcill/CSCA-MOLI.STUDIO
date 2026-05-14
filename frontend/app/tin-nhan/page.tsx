@@ -2,33 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FiMessageSquare, FiSearch, FiChevronRight, FiUsers } from 'react-icons/fi';
+import { FiArrowLeft, FiCheck, FiInbox, FiMessageCircle, FiMessageSquare, FiSearch, FiSend } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
-import axios from '@/lib/utils/axios';
 import ChatPanel from '@/components/forum/ChatPanel';
+import { getConversations, Conversation, ForumMessage } from '@/lib/api/messages';
 import {
-  initSocket, onNewMessage, onUnreadCountUpdate,
+  initSocket, onNewMessage, onMessageDeleted, onUnreadCountUpdate,
   joinConversation, leaveConversation
 } from '@/lib/socket';
 
-interface Conversation {
-  partner_id: number;
-  username: string;
-  full_name: string;
-  avatar: string | null;
-  avatar_url: string | null;
-  role: string;
-  is_vip: boolean;
-  subscription_tier: string | null;
-  last_message_id: number;
-  last_message_content: string;
-  is_read: boolean;
-  sender_id: number;
-  last_message_at: string;
-  unread_count: number;
-}
-
 const LIMIT = 20;
+type InboxFilter = 'all' | 'unread' | 'sent';
 
 export default function MessagesPage() {
   const router = useRouter();
@@ -44,14 +28,13 @@ export default function MessagesPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [filter, setFilter] = useState<InboxFilter>('all');
 
   const loadConversations = useCallback(async (pageNum: number) => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
-      const res = await axios.get('/messages', {
-        params: { page: pageNum, limit: LIMIT }
-      });
-      const data = res.data.data;
+      const res = await getConversations(pageNum, LIMIT);
+      const data = res.data;
       const convs: Conversation[] = data?.conversations || [];
       setConversations(prev => pageNum === 1 ? convs : [...prev, ...convs]);
       setHasMore(pageNum < (data?.pagination?.totalPages || 1));
@@ -74,24 +57,35 @@ export default function MessagesPage() {
 
     initSocket();
 
-    const unsubMessage = onNewMessage((msg: any) => {
-      setConversations(prev => {
-        const senderId = msg.sender_id;
-        const myId = user?.id;
+    const unsubMessage = onNewMessage((msg: unknown) => {
+      const message = msg as ForumMessage;
+      if (!message?.id || !user?.id) return;
 
-        if (senderId === myId) {
-          return prev.map(c =>
-            c.partner_id === msg.receiver_id
-              ? { ...c, last_message_content: msg.content, last_message_at: msg.created_at, last_message_id: msg.id, is_read: true }
-              : c
-          );
-        } else {
-          return prev.map(c =>
-            c.partner_id === senderId
-              ? { ...c, last_message_content: msg.content, last_message_at: msg.created_at, last_message_id: msg.id, is_read: false, unread_count: c.unread_count + 1 }
-              : c
-          );
+      setConversations(prev => {
+        const partnerId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
+        const existing = prev.find(c => c.partner_id === partnerId);
+
+        if (!existing) {
+          void loadConversations(1);
+          return prev;
         }
+
+        if (existing.last_message_id === message.id) return prev;
+
+        const isOpen = selectedPartner === partnerId;
+        const isMine = message.sender_id === user.id;
+        const updated: Conversation = {
+          ...existing,
+          last_message_id: message.id,
+          last_message_content: message.content,
+          last_message_at: message.created_at,
+          last_message_is_deleted: message.is_deleted,
+          is_read: isMine || isOpen ? true : message.is_read,
+          sender_id: message.sender_id,
+          unread_count: isMine || isOpen ? 0 : existing.unread_count + 1,
+        };
+
+        return [updated, ...prev.filter(c => c.partner_id !== partnerId)];
       });
     });
 
@@ -105,11 +99,21 @@ export default function MessagesPage() {
       }
     });
 
+    const unsubDeleted = onMessageDeleted(({ messageId }) => {
+      setConversations(prev => prev.map(c =>
+        c.last_message_id === messageId
+          ? { ...c, last_message_content: 'Tin nhắn đã được thu hồi', last_message_is_deleted: true, unread_count: 0, is_read: true }
+          : c
+      ));
+      void loadConversations(1);
+    });
+
     return () => {
       unsubMessage();
       unsubUnread();
+      unsubDeleted();
     };
-  }, [isAuthenticated, user?.id, selectedPartner]);
+  }, [isAuthenticated, user?.id, selectedPartner, loadConversations]);
 
   useEffect(() => {
     if (selectedPartner) {
@@ -126,7 +130,16 @@ export default function MessagesPage() {
   }, [selectedPartner]);
 
   const getAvatar = (c: Conversation) =>
-    c.avatar_url || c.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.full_name)}&background=random&size=80`;
+    c.avatar_url || c.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.full_name || c.username || 'User')}&background=random&size=80`;
+
+  const getFallbackAvatar = (name: string) =>
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=7c3aed&color=fff&size=80`;
+
+  const getLastMessage = (conv: Conversation) => {
+    if (conv.last_message_is_deleted) return 'Tin nhắn đã được thu hồi';
+    if (conv.sender_id === user?.id) return `Bạn: ${conv.last_message_content}`;
+    return conv.last_message_content;
+  };
 
   const formatTime = (ts: string) => {
     const d = new Date(ts);
@@ -139,68 +152,130 @@ export default function MessagesPage() {
     return d.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' });
   };
 
-  const filtered = conversations.filter(c =>
-    c.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    c.username.toLowerCase().includes(search.toLowerCase())
-  );
+  const unreadTotal = conversations.reduce((total, c) => total + (c.unread_count || 0), 0);
+  const sentCount = conversations.filter(c => c.sender_id === user?.id).length;
+
+  const filtered = conversations.filter(c => {
+    const keyword = search.trim().toLowerCase();
+    const matchesSearch = !keyword ||
+      c.full_name.toLowerCase().includes(keyword) ||
+      c.username.toLowerCase().includes(keyword);
+    const hasUnread = c.unread_count > 0 && c.sender_id !== user?.id;
+    if (filter === 'unread') return matchesSearch && hasUnread;
+    if (filter === 'sent') return matchesSearch && c.sender_id === user?.id;
+    return matchesSearch;
+  });
 
   const selectedConv = conversations.find(c => c.partner_id === selectedPartner);
 
   const handleSelect = (partnerId: number) => {
     setSelectedPartner(partnerId);
-    router.replace(`/tin-nhan?to=${partnerId}`, undefined);
+    router.replace(`/tin-nhan?to=${partnerId}`);
+  };
+
+  const handleConversationActivity = (message?: ForumMessage) => {
+    if (!selectedPartner) return;
+
+    setConversations(prev => {
+      const existing = prev.find(c => c.partner_id === selectedPartner);
+      if (!existing) {
+        void loadConversations(1);
+        return prev;
+      }
+
+      const updated: Conversation = {
+        ...existing,
+        is_read: true,
+        unread_count: 0,
+        last_message_id: message?.id ?? existing.last_message_id,
+        last_message_content: message?.content ?? existing.last_message_content,
+        last_message_at: message?.created_at ?? new Date().toISOString(),
+        sender_id: message?.sender_id ?? existing.sender_id,
+        last_message_is_deleted: message?.is_deleted ?? existing.last_message_is_deleted,
+      };
+
+      return [updated, ...prev.filter(c => c.partner_id !== selectedPartner)];
+    });
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden" style={{ background: 'linear-gradient(160deg, #f5f3ff 0%, #ede9fe 50%, #ddd6fe 100%)' }}>
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50">
 
-      {/* ── Top Glass Header ── */}
-      <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white/70 backdrop-blur-xl border-b border-violet-100/50 shadow-sm">
+      {/* ── Top Header ── */}
+      <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white border-b border-slate-200">
         <button
           onClick={() => router.push('/forum')}
-          className="w-10 h-10 rounded-2xl bg-white/80 border border-violet-100 flex items-center justify-center text-violet-500 hover:bg-violet-50 hover:border-violet-200 transition-all active:scale-95 shadow-sm"
+          className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-all active:scale-95"
         >
-          <FiChevronRight size={18} className="rotate-180" />
+          <FiArrowLeft size={18} />
         </button>
 
         <div className="flex min-w-0 items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-200">
+          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center shadow-sm">
             <FiMessageSquare size={18} className="text-white" />
           </div>
           <div className="min-w-0">
             <h1 className="font-black text-gray-900 text-lg leading-tight">Tin nhắn</h1>
-            <p className="text-[11px] text-violet-400 font-semibold">Nhắn tin riêng tư</p>
+            <p className="text-[11px] text-slate-500 font-semibold">
+              {unreadTotal > 0 ? `${unreadTotal} tin chưa đọc` : 'Nhắn tin riêng tư giữa học viên'}
+            </p>
           </div>
         </div>
 
-        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-          <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse" />
+        <div className="hidden sm:flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+          Đang hoạt động
         </div>
       </div>
 
       <div className="flex flex-1 min-h-0">
 
         {/* ── Conversation List ── */}
-        <div className={`${selectedPartner ? 'hidden xl:flex' : 'flex'} flex-col w-full xl:w-[340px] shrink-0 bg-white/40 backdrop-blur-xl min-h-0 border-r border-violet-100/40`}>
+        <div className={`${selectedPartner ? 'hidden xl:flex' : 'flex'} flex-col w-full xl:w-[380px] shrink-0 bg-white min-h-0 border-r border-slate-200`}>
 
           {/* Search */}
-          <div className="px-4 pt-4 pb-2">
+          <div className="px-4 pt-4 pb-3 space-y-3">
             <div className="relative">
-              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-violet-300" size={15} />
+              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Tìm cuộc trò chuyện..."
-                className="w-full pl-11 pr-4 py-3 text-sm rounded-2xl bg-white/80 border border-violet-100 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-violet-300 shadow-sm"
+                className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-slate-400"
               />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { key: 'all' as const, label: 'Tất cả', count: conversations.length, icon: FiInbox },
+                { key: 'unread' as const, label: 'Chưa đọc', count: unreadTotal, icon: FiMessageCircle },
+                { key: 'sent' as const, label: 'Đã gửi', count: sentCount, icon: FiSend },
+              ].map(item => {
+                const Icon = item.icon;
+                const active = filter === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setFilter(item.key)}
+                    className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-extrabold transition-all ${
+                      active
+                        ? 'border-violet-500 bg-violet-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span className="truncate">{item.label}</span>
+                    <span className={active ? 'text-white/80' : 'text-slate-400'}>{item.count}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Label */}
           <div className="px-5 pb-2">
-            <span className="text-[11px] font-extrabold text-violet-400 uppercase tracking-widest">
-              Tất cả cuộc trò chuyện
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">
+              {filter === 'unread' ? 'Tin cần trả lời' : filter === 'sent' ? 'Tin bạn vừa gửi' : 'Cuộc trò chuyện gần đây'}
             </span>
           </div>
 
@@ -210,21 +285,23 @@ export default function MessagesPage() {
               <div className="p-4 space-y-2">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 rounded-2xl animate-pulse">
-                    <div className="w-12 h-12 rounded-2xl bg-violet-100 shrink-0" />
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3.5 bg-violet-100 rounded-xl w-3/4" />
-                      <div className="h-3 bg-violet-50 rounded-xl w-full" />
+                      <div className="h-3.5 bg-slate-100 rounded-xl w-3/4" />
+                      <div className="h-3 bg-slate-100 rounded-xl w-full" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center px-6">
-                <div className="w-16 h-16 rounded-3xl bg-violet-50 flex items-center justify-center mb-4 shadow-inner">
-                  <FiMessageSquare size={26} className="text-violet-300" />
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <FiMessageSquare size={26} className="text-slate-400" />
                 </div>
-                <p className="font-bold text-gray-500 text-sm mb-1">Chưa có cuộc trò chuyện nào</p>
-                <p className="text-xs text-gray-400 leading-relaxed">Bắt đầu nhắn tin với mọi người trên forum</p>
+                <p className="font-bold text-gray-600 text-sm mb-1">
+                  {search ? 'Không tìm thấy cuộc trò chuyện' : 'Chưa có cuộc trò chuyện nào'}
+                </p>
+                <p className="text-xs text-gray-400 leading-relaxed">Vào hồ sơ học viên trên forum để bắt đầu nhắn tin riêng.</p>
               </div>
             ) : (
               <>
@@ -234,9 +311,9 @@ export default function MessagesPage() {
                     <button
                       key={conv.partner_id}
                       onClick={() => handleSelect(conv.partner_id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/60 active:bg-violet-50/40 transition-all border-b border-violet-50/50 text-left group sm:px-5 ${
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 active:bg-violet-50 transition-all border-b border-slate-100 text-left group sm:px-5 ${
                         selectedPartner === conv.partner_id
-                          ? 'bg-white/80 border-l-4 border-l-violet-500'
+                          ? 'bg-violet-50 border-l-4 border-l-violet-500'
                           : ''
                       }`}
                       style={{ animationDelay: `${idx * 25}ms` }}
@@ -246,10 +323,10 @@ export default function MessagesPage() {
                         <img
                           src={getAvatar(conv)}
                           alt={conv.full_name}
-                          className={`w-12 h-12 rounded-2xl object-cover transition-all shadow-sm group-hover:shadow-md ${
+                          className={`w-12 h-12 rounded-xl object-cover transition-all shadow-sm group-hover:shadow-md ${
                             selectedPartner === conv.partner_id
                               ? 'ring-2 ring-violet-400 shadow-md'
-                              : 'ring-2 ring-white group-hover:ring-violet-200'
+                              : 'ring-2 ring-white group-hover:ring-slate-200'
                           }`}
                         />
                         {conv.is_vip && (
@@ -281,12 +358,8 @@ export default function MessagesPage() {
                                 ? 'text-violet-500 font-medium'
                                 : 'text-gray-400'
                           }`}>
-                            {conv.sender_id === user?.id && (
-                              <span className="inline-flex items-center mr-1">
-                                <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="inline"><path d="M1 5L3 7L6 4L13 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              </span>
-                            )}
-                            {conv.last_message_content}
+                            {conv.sender_id === user?.id && <FiCheck size={12} className="inline mr-1" />}
+                            {getLastMessage(conv)}
                           </p>
                           {hasUnread && (
                             <span className="w-5 h-5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center shadow-md shrink-0 animate-in zoom-in-75">
@@ -303,7 +376,7 @@ export default function MessagesPage() {
                   <button
                     onClick={() => loadConversations(page + 1)}
                     disabled={loadingMore}
-                    className="w-full py-4 text-center text-xs font-bold text-violet-500 hover:text-violet-700 hover:bg-violet-50/50 transition-colors active:bg-violet-100/50"
+                    className="w-full py-4 text-center text-xs font-bold text-violet-600 hover:text-violet-700 hover:bg-violet-50 transition-colors active:bg-violet-100"
                   >
                     {loadingMore ? 'Đang tải...' : 'Tải thêm cuộc trò chuyện ↓'}
                   </button>
@@ -319,27 +392,14 @@ export default function MessagesPage() {
             <ChatPanel
               partnerId={selectedPartner}
               partnerName={selectedConv?.full_name || 'User'}
-              partnerAvatar={selectedConv ? getAvatar(selectedConv) : ''}
-              onBack={() => { setSelectedPartner(null); router.replace('/tin-nhan', undefined); }}
-              onNewMessageReceived={() => {
-                setConversations(prev => {
-                  const updated = prev.map(c =>
-                    c.partner_id === selectedPartner
-                      ? { ...c, is_read: true, last_message_at: new Date().toISOString() }
-                      : c
-                  );
-                  const conv = updated.find(c => c.partner_id === selectedPartner);
-                  if (conv) {
-                    return [conv, ...updated.filter(c => c.partner_id !== selectedPartner)];
-                  }
-                  return updated;
-                });
-              }}
+              partnerAvatar={selectedConv ? getAvatar(selectedConv) : getFallbackAvatar(selectedPartner.toString())}
+              onBack={() => { setSelectedPartner(null); router.replace('/tin-nhan'); }}
+              onNewMessageReceived={handleConversationActivity}
             />
           ) : (
             /* Empty state */
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="w-24 h-24 rounded-3xl bg-white/80 backdrop-blur-xl flex items-center justify-center mb-6 shadow-2xl shadow-violet-100/50 border border-violet-100/50">
+              <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center mb-6 shadow-sm border border-slate-200">
                 <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
                   <path d="M8 12C8 9.79086 9.79086 8 12 8H32C34.2091 8 36 9.79086 36 12V28C36 30.2091 34.2091 32 32 32H20L12 38V32H12C9.79086 32 8 30.2091 8 28V12Z" fill="url(#grad)" fillOpacity="0.15"/>
                   <path d="M8 12C8 9.79086 9.79086 8 12 8H32C34.2091 8 36 9.79086 36 12V28C36 30.2091 34.2091 32 32 32H20L12 38V32H12C9.79086 32 8 30.2091 8 28V12Z" stroke="url(#grad)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -354,9 +414,9 @@ export default function MessagesPage() {
                   </defs>
                 </svg>
               </div>
-              <h2 className="text-xl font-black text-gray-800 mb-2">Gen Z Chat</h2>
+              <h2 className="text-xl font-black text-gray-800 mb-2">Hộp thư học viên</h2>
               <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
-                Chọn một cuộc trò chuyện để bắt đầu nhắn tin riêng tư với mọi người
+                Chọn một cuộc trò chuyện để trao đổi riêng, theo dõi tin chưa đọc và tiếp tục học cùng bạn bè.
               </p>
               <div className="mt-8 flex items-center gap-3">
                 <div className="h-px w-8 bg-gradient-to-r from-transparent to-violet-200" />

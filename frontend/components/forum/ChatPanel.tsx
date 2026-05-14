@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiArrowLeft, FiSend, FiSmile, FiMoreVertical,
-  FiUserX, FiFlag, FiCheck, FiCheckCircle, FiImage, FiX, FiSliders, FiUpload, FiTrash2
+  FiUserX, FiFlag, FiCheck, FiX, FiSliders, FiUpload, FiTrash2
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useChatBgStore, CHAT_BG_PRESETS } from '@/lib/store/chatBgStore';
@@ -12,7 +12,6 @@ import {
   initSocket, joinConversation, leaveConversation,
   startTyping, stopTyping,
   onNewMessage, onMessageDeleted, onTyping, onStoppedTyping,
-  disconnectSocket
 } from '@/lib/socket';
 
 const QUICK_EMOJIS = ['😀', '👍', '🙏', '❤️', '😊', '🎉', '💯', '🔥', '😍', '🤔', '😅', '😂'];
@@ -26,7 +25,7 @@ interface Props {
   partnerName: string;
   partnerAvatar: string;
   onBack: () => void;
-  onNewMessageReceived?: () => void;
+  onNewMessageReceived?: (message?: ForumMessage) => void;
 }
 
 export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBack, onNewMessageReceived }: Props) {
@@ -52,7 +51,6 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [blocked, setBlocked] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const touchStartRef = useRef<number>(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -157,7 +155,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           if (prev.some(x => x.id === m.id)) return prev;
           return [...prev, m];
         });
-        onNewMessageReceived?.();
+        onNewMessageReceived?.(m);
       }
     });
 
@@ -226,7 +224,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       const res = await sendMessage(partnerId, content, replyId);
       if (res.success && res.data?.message) {
         setMessages(prev => [...prev, res.data.message]);
-        onNewMessageReceived?.();
+        onNewMessageReceived?.(res.data.message);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.message || 'Không thể gửi tin nhắn';
@@ -275,24 +273,31 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     /^https?:\/\/.*\.(jpg|jpeg|png|gif|webp|mp4|webm)/i.test(content.trim());
 
   const handleReportMessage = async () => {
-    const msgId = selectedMsgId ?? messages[messages.length - 1]?.id;
-    if (!msgId) {
-      alert('Vui lòng chọn một tin nhắn để report (nhấn giữ hoặc bấm chuột phải vào tin nhắn).');
+    const selectedMessage = selectedMsgId
+      ? messages.find(msg => msg.id === selectedMsgId)
+      : [...messages].reverse().find(msg => !isOwn(msg) && !msg.is_deleted);
+
+    if (!selectedMessage) {
+      alert('Vui lòng chọn một tin nhắn của người khác để báo cáo.');
+      return;
+    }
+    if (isOwn(selectedMessage)) {
+      alert('Không thể báo cáo tin nhắn của chính bạn.');
       return;
     }
     if (!reportReason.trim() || reportReason.length < 5) {
-      alert('Lý do report phải từ 5 ký tự trở lên.');
+      alert('Lý do báo cáo phải từ 5 ký tự trở lên.');
       return;
     }
     setReporting(true);
     try {
-      await reportMessage(msgId, reportReason);
+      await reportMessage(selectedMessage.id, reportReason);
       setShowReport(false);
       setReportReason('');
       setSelectedMsgId(null);
-      alert('Đã gửi report. Cảm ơn bạn!');
+      alert('Đã gửi báo cáo. Cảm ơn bạn!');
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Lỗi khi gửi report');
+      alert(err?.response?.data?.message || 'Lỗi khi gửi báo cáo');
     } finally {
       setReporting(false);
     }
@@ -329,11 +334,9 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   };
 
   const handleMsgTouchStart = (msgId: number) => {
-    touchStartRef.current = Date.now();
     longPressTimerRef.current = setTimeout(() => {
       setSelectedMsgId(msgId);
       setShowMenu(false);
-      setShowReport(true);
     }, 500);
   };
 
@@ -348,7 +351,6 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     e.preventDefault();
     setSelectedMsgId(msgId);
     setShowMenu(false);
-    setShowReport(true);
   };
 
   // ── Background picker handlers ───────────────────────────────────────────────
@@ -601,8 +603,19 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                                   onClick={() => handleReplyMessage(msg)}
                                   className="px-2 py-1 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded"
                                 >
-                                  Reply
+                                  Trả lời
                                 </button>
+                                {!isOwn(msg) && !msg.is_deleted && (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedMsgId(msg.id);
+                                      setShowReport(true);
+                                    }}
+                                    className="px-2 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-50 rounded"
+                                  >
+                                    Báo cáo
+                                  </button>
+                                )}
                                 {isOwn(msg) && !msg.is_deleted && (
                                   <button
                                     onClick={() => handleRecallMessage(msg.id)}

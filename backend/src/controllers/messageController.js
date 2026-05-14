@@ -24,6 +24,7 @@ exports.getConversations = async (req, res) => {
           id,
           content,
           is_read,
+          is_deleted,
           sender_id,
           created_at,
           ROW_NUMBER() OVER (
@@ -44,13 +45,17 @@ exports.getConversations = async (req, res) => {
         u.is_vip,
         u.subscription_tier,
         l.id as last_message_id,
-        l.content as last_message_content,
+        CASE
+          WHEN l.is_deleted = TRUE THEN 'Tin nhắn đã được thu hồi'
+          ELSE l.content
+        END as last_message_content,
+        l.is_deleted as last_message_is_deleted,
         l.is_read,
         l.sender_id,
         l.created_at as last_message_at,
         COALESCE(
           (SELECT COUNT(*) FROM forum_messages
-           WHERE sender_id = l.partner_id AND receiver_id = $1 AND is_read = FALSE),
+           WHERE sender_id = l.partner_id AND receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE),
           0
         )::INTEGER as unread_count
       FROM latest l
@@ -140,8 +145,19 @@ exports.getMessages = async (req, res) => {
     await db.query(`
       UPDATE forum_messages
       SET is_read = TRUE
-      WHERE sender_id = $2 AND receiver_id = $1 AND is_read = FALSE
+      WHERE sender_id = $2 AND receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
     `, [userId, partnerId]);
+
+    try {
+      const unreadRes = await db.query(`
+        SELECT COUNT(*)::INTEGER as cnt
+        FROM forum_messages
+        WHERE receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
+      `, [userId]);
+      emitUnreadCount(getIO(), userId, parseInt(unreadRes.rows[0].cnt));
+    } catch (socketErr) {
+      console.warn('[Socket] Failed to emit unread count after open:', socketErr.message);
+    }
 
     // Total count
     const countRes = await db.query(`
@@ -220,11 +236,34 @@ exports.sendMessage = async (req, res) => {
       return res.status(429).json({ success: false, message: "Bạn gửi tin nhắn quá nhanh. Vui lòng chờ một chút." });
     }
 
+    let replyToId = null;
+    if (reply_to_id) {
+      replyToId = parseInt(reply_to_id);
+      if (!Number.isInteger(replyToId)) {
+        return res.status(400).json({ success: false, message: "Tin nhắn trả lời không hợp lệ" });
+      }
+
+      const replyCheck = await db.query(`
+        SELECT id
+        FROM forum_messages
+        WHERE id = $1
+          AND (
+            (sender_id = $2 AND receiver_id = $3)
+            OR (sender_id = $3 AND receiver_id = $2)
+          )
+        LIMIT 1
+      `, [replyToId, senderId, receiverId]);
+
+      if (replyCheck.rows.length === 0) {
+        return res.status(400).json({ success: false, message: "Không thể trả lời tin nhắn không thuộc cuộc trò chuyện này" });
+      }
+    }
+
     const result = await db.query(`
       INSERT INTO forum_messages (sender_id, receiver_id, content, reply_to_id)
       VALUES ($1, $2, $3, $4)
       RETURNING id, sender_id, receiver_id, content, is_read, created_at, is_deleted, reply_to_id
-    `, [senderId, receiverId, content.trim(), reply_to_id || null]);
+    `, [senderId, receiverId, content.trim(), replyToId]);
 
     const msg = result.rows[0];
 
@@ -256,7 +295,7 @@ exports.sendMessage = async (req, res) => {
       // Update unread count for receiver
       const countRes = await db.query(`
         SELECT COUNT(*)::INTEGER as cnt FROM forum_messages
-        WHERE receiver_id = $1 AND is_read = FALSE
+        WHERE receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
       `, [receiverId]);
       emitUnreadCount(getIO(), receiverId, parseInt(countRes.rows[0].cnt));
     } catch (socketErr) {
@@ -294,7 +333,7 @@ exports.markAsRead = async (req, res) => {
     // Emit unread count update to receiver
     const countRes = await db.query(`
       SELECT COUNT(*)::INTEGER as cnt FROM forum_messages
-      WHERE receiver_id = $1 AND is_read = FALSE
+      WHERE receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
     `, [userId]);
     try {
       emitUnreadCount(getIO(), userId, parseInt(countRes.rows[0].cnt));
@@ -321,7 +360,7 @@ exports.getUnreadCount = async (req, res) => {
     const result = await db.query(`
       SELECT COUNT(*)::INTEGER as count
       FROM forum_messages
-      WHERE receiver_id = $1 AND is_read = FALSE
+      WHERE receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
     `, [userId]);
 
     res.json({ success: true, data: { count: parseInt(result.rows[0].count) } });
@@ -354,10 +393,17 @@ exports.deleteMessage = async (req, res) => {
 
     const msg = result.rows[0];
 
+    const receiverUnreadRes = await db.query(`
+      SELECT COUNT(*)::INTEGER as cnt
+      FROM forum_messages
+      WHERE receiver_id = $1 AND is_read = FALSE AND is_deleted = FALSE
+    `, [msg.receiver_id]);
+
     // Emit event back to sender and receiver
     try {
-      getIO().to(`user_${msg.receiver_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
-      getIO().to(`user_${msg.sender_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
+      getIO().to(`user:${msg.receiver_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
+      getIO().to(`user:${msg.sender_id}`).emit("message_deleted", { messageId: msg.id, senderId: msg.sender_id });
+      emitUnreadCount(getIO(), msg.receiver_id, parseInt(receiverUnreadRes.rows[0].cnt));
     } catch (socketErr) {
       console.warn('[Socket] Failed to emit delete message event:', socketErr.message);
     }

@@ -31,6 +31,7 @@ export interface Conversation {
   sender_id: number;
   last_message_at: string;
   unread_count: number;
+  last_message_is_deleted?: boolean;
 }
 
 export interface MessagePagination {

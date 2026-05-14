@@ -156,16 +156,21 @@ exports.reportMessage = async (req, res) => {
       return res.status(400).json({ success: false, message: "Lý do report phải từ 5-500 ký tự" });
     }
 
-    // Verify message exists and belongs to sender (we report the sender)
+    // Verify the message exists in a conversation with this reporter.
     const msgRes = await db.query(`
-      SELECT id, sender_id FROM forum_messages WHERE id = $1
-    `, [messageId]);
+      SELECT id, sender_id, receiver_id
+      FROM forum_messages
+      WHERE id = $1 AND (sender_id = $2 OR receiver_id = $2)
+    `, [messageId, reporterId]);
 
     if (!msgRes.rows[0]) {
       return res.status(404).json({ success: false, message: "Tin nhắn không tồn tại" });
     }
 
     const reportedId = msgRes.rows[0].sender_id;
+    if (reportedId === reporterId) {
+      return res.status(400).json({ success: false, message: "Không thể report tin nhắn của chính mình" });
+    }
 
     const result = await db.query(`
       INSERT INTO forum_reports (reporter_id, reported_user_id, reason)
