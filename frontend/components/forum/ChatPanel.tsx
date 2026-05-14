@@ -49,6 +49,8 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<ForumMessage | null>(null);
   const [blocked, setBlocked] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockedByOther, setBlockedByOther] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -110,14 +112,20 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         setMessages(prev => pageNum === 1 ? msgs : [...prev, ...msgs]);
         setHasMore(pageNum < (res.data.pagination?.totalPages || 1));
         setPage(pageNum);
+        setBlocked(false);
+        setBlockedByMe(false);
+        setBlockedByOther(false);
       }
     } catch (err: any) {
       const status = err?.response?.status;
       const msg = err?.response?.data?.message || err?.message || 'Không thể tải tin nhắn';
       if (pageNum === 1) {
         if (status === 403 && msg.includes('chặn')) {
+          const blockData = err?.response?.data?.data;
           setBlocked(true);
-          setError('Bạn đã chặn hoặc bị chặn bởi người dùng này.');
+          setBlockedByMe(Boolean(blockData?.blockedByMe));
+          setBlockedByOther(Boolean(blockData?.blockedMe));
+          setError(null);
         } else {
           setError(msg);
         }
@@ -143,6 +151,16 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     setMessages([]);
     setPage(1);
     setHasMore(true);
+    setBlocked(false);
+    setBlockedByMe(false);
+    setBlockedByOther(false);
+    setError(null);
+    setText('');
+    setReplyingTo(null);
+    setSelectedMsgId(null);
+    setShowEmoji(false);
+    setShowMenu(false);
+    setShowReport(false);
     setIsOnline(true);
     loadMessages(1);
     initSocket();
@@ -304,14 +322,33 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   };
 
   const handleBlockUser = async () => {
+    if (blocked && blockedByOther && !blockedByMe) {
+      alert('Người này đã chặn bạn nên bạn không thể mở chặn từ phía mình.');
+      return;
+    }
+
+    const isUnblocking = blocked && blockedByMe;
+    if (!isUnblocking && !confirm(`Chặn ${partnerName}? Hai bên sẽ không thể nhắn tin cho nhau cho tới khi bạn bỏ chặn.`)) {
+      return;
+    }
+
     setBlocking(true);
     setShowMenu(false);
     try {
-      await blockUser(partnerId);
-      alert('Đã chặn người dùng.');
-      onBack();
+      const res = await blockUser(partnerId);
+      const isBlocked = res.blocked ?? res.data?.blocked ?? false;
+      setBlocked(isBlocked);
+      setBlockedByMe(isBlocked);
+      setBlockedByOther(false);
+      setError(null);
+      if (isBlocked) {
+        alert('Đã chặn người dùng.');
+      } else {
+        alert('Đã bỏ chặn người dùng.');
+        loadMessages(1);
+      }
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Lỗi khi chặn');
+      alert(err?.response?.data?.message || (isUnblocking ? 'Lỗi khi bỏ chặn' : 'Lỗi khi chặn'));
     } finally {
       setBlocking(false);
     }
@@ -494,10 +531,14 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               </button>
               <button
                 onClick={handleBlockUser}
-                disabled={blocking}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                disabled={blocking || (blocked && blockedByOther && !blockedByMe)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+                  blockedByMe
+                    ? 'text-emerald-600 hover:bg-emerald-50'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
               >
-                <FiUserX size={14} /> {blocking ? 'Đang chặn...' : 'Chặn người dùng'}
+                <FiUserX size={14} /> {blocking ? 'Đang xử lý...' : blockedByMe ? 'Bỏ chặn người dùng' : 'Chặn người dùng'}
               </button>
             </div>
           )}
@@ -710,8 +751,21 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       {/* ── Input Area ── */}
       <div className="shrink-0 border-t border-violet-100/50 bg-white/95 px-2 py-2 backdrop-blur-xl shadow-[0_-4px_20px_rgba(139,92,246,0.05)] sm:px-3 sm:py-3" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
         {blocked && (
-          <div className="mb-2 p-2.5 bg-red-50 rounded-2xl text-center text-xs text-red-500 font-bold border border-red-100">
-            Bạn đã chặn hoặc bị chặn bởi người dùng này.
+          <div className="mb-2 flex flex-col gap-2 rounded-2xl border border-red-100 bg-red-50 p-2.5 text-center text-xs font-bold text-red-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
+            <span>
+              {blockedByMe
+                ? 'Bạn đã chặn người dùng này. Bỏ chặn để nhắn tin lại.'
+                : 'Người dùng này đã chặn bạn nên hiện không thể nhắn tin.'}
+            </span>
+            {blockedByMe && (
+              <button
+                onClick={handleBlockUser}
+                disabled={blocking}
+                className="rounded-xl bg-white px-3 py-1.5 text-xs font-black text-emerald-600 shadow-sm ring-1 ring-emerald-100 disabled:opacity-50"
+              >
+                {blocking ? 'Đang xử lý...' : 'Bỏ chặn'}
+              </button>
+            )}
           </div>
         )}
 

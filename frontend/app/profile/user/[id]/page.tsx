@@ -37,6 +37,8 @@ interface PublicProfile {
   total_posts: number;
   total_likes_received: number;
   badges: Badge[];
+  isBlocked?: boolean;
+  isBlockedBy?: boolean;
 }
 
 interface Props {
@@ -74,13 +76,15 @@ export default function UserProfilePage({ params }: Props) {
 
   const handleBlock = async () => {
     if (!isAuthenticated) return;
-    if (!confirm(profile?.is_vip ? 'Chặn người dùng này?' : 'Chặn người dùng này?')) return;
+    const isUnblocking = Boolean(profile?.isBlocked);
+    if (!isUnblocking && !confirm('Chặn người dùng này? Hai bên sẽ không thể nhắn tin cho nhau cho tới khi bạn bỏ chặn.')) return;
     setBlocking(true);
     try {
-      await axios.post(`/users/${userId}/block`);
-      router.push('/forum');
+      const res = await axios.post(`/users/${userId}/block`);
+      const blocked = res.data?.blocked ?? res.data?.data?.blocked ?? false;
+      setProfile(prev => prev ? { ...prev, isBlocked: blocked, isBlockedBy: false } : prev);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Lỗi khi chặn');
+      alert(err?.response?.data?.message || (isUnblocking ? 'Lỗi khi bỏ chặn' : 'Lỗi khi chặn'));
     } finally {
       setBlocking(false);
     }
@@ -250,12 +254,14 @@ export default function UserProfilePage({ params }: Props) {
               <div className="flex items-center gap-3 mt-5">
                 <button
                   onClick={handleMessage}
+                  disabled={profile.isBlocked || profile.isBlockedBy}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30 hover:-translate-y-0.5 transition-all"
                 >
-                  <FiMessageSquare size={15} /> Nhắn tin
+                  <FiMessageSquare size={15} /> {profile.isBlocked || profile.isBlockedBy ? 'Không thể nhắn tin' : 'Nhắn tin'}
                 </button>
                 <button
                   onClick={() => setShowReport(true)}
+                  disabled={profile.isBlocked}
                   className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
                   title="Báo cáo"
                 >
@@ -263,11 +269,15 @@ export default function UserProfilePage({ params }: Props) {
                 </button>
                 <button
                   onClick={handleBlock}
-                  disabled={blocking}
-                  className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center disabled:opacity-50"
-                  title="Chặn"
+                  disabled={blocking || profile.isBlockedBy}
+                  className={`h-10 rounded-xl px-3 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                    profile.isBlocked
+                      ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                      : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500'
+                  }`}
+                  title={profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
                 >
-                  <FiUserX size={15} />
+                  <FiUserX size={15} /> {blocking ? 'Đang xử lý...' : profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
                 </button>
               </div>
             )}

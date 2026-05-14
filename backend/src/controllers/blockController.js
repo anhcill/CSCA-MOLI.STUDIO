@@ -28,7 +28,12 @@ exports.blockUser = async (req, res) => {
     if (existing.rows.length > 0) {
       // Unblock
       await db.query(`DELETE FROM forum_blocks WHERE blocker_id = $1 AND blocked_id = $2`, [blockerId, blockedId]);
-      return res.json({ success: true, message: "Đã bỏ chặn người dùng", blocked: false });
+      return res.json({
+        success: true,
+        message: "Đã bỏ chặn người dùng",
+        blocked: false,
+        data: { blocked: false, userId: blockedId },
+      });
     }
 
     // Block
@@ -37,7 +42,12 @@ exports.blockUser = async (req, res) => {
       ON CONFLICT (blocker_id, blocked_id) DO NOTHING
     `, [blockerId, blockedId]);
 
-    res.json({ success: true, message: "Đã chặn người dùng", blocked: true });
+    res.json({
+      success: true,
+      message: "Đã chặn người dùng",
+      blocked: true,
+      data: { blocked: true, userId: blockedId },
+    });
   } catch (error) {
     console.error("Block user error:", error);
     res.status(500).json({ success: false, message: "Lỗi server" });

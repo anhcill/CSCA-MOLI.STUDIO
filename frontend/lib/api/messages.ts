@@ -118,5 +118,5 @@ export const reportMessage = async (messageId: number, reason: string) => {
  */
 export const blockUser = async (userId: number) => {
   const res = await axios.post(`/users/${userId}/block`);
-  return res.data as { success: boolean; message: string; blocked: boolean };
+  return res.data as { success: boolean; message: string; blocked: boolean; data?: { blocked: boolean; userId: number } };
 };

@@ -83,12 +83,15 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
 
   const handleBlock = async () => {
     if (!isAuthenticated) return;
+    const isUnblocking = Boolean(profile?.isBlocked);
+    if (!isUnblocking && !confirm(`Chặn ${profile?.full_name || 'người dùng này'}? Hai bên sẽ không thể nhắn tin cho nhau cho tới khi bạn bỏ chặn.`)) return;
     setBlocking(true);
     try {
       const res = await axios.post(`/users/${userId}/block`);
-      setProfile(prev => prev ? { ...prev, isBlocked: res.data.data?.blocked } : prev);
+      const blocked = res.data?.blocked ?? res.data?.data?.blocked ?? false;
+      setProfile(prev => prev ? { ...prev, isBlocked: blocked, isBlockedBy: false } : prev);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Lỗi khi chặn');
+      alert(err?.response?.data?.message || (isUnblocking ? 'Lỗi khi bỏ chặn' : 'Lỗi khi chặn'));
     } finally { setBlocking(false); }
   };
 
@@ -229,26 +232,30 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
                 <>
                   <button
                     onClick={handleMessage}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100"
+                    disabled={profile.isBlocked || profile.isBlockedBy}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-violet-700 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-violet-100 disabled:opacity-50 disabled:hover:translate-y-0"
                   >
-                    <FiMessageSquare size={12} /> Nhắn tin
+                    <FiMessageSquare size={12} /> {profile.isBlocked || profile.isBlockedBy ? 'Không thể nhắn' : 'Nhắn tin'}
                   </button>
-                  {!profile.isBlocked ? (
+                  {!profile.isBlocked && (
                     <button
                       onClick={() => setShowReportModal(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-red-500 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-red-100 hover:bg-red-50"
                     >
                       <FiFlag size={12} /> Report
                     </button>
-                  ) : (
-                    <button
-                      onClick={handleBlock}
-                      disabled={blocking}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-gray-500 text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border border-gray-100 disabled:opacity-50"
-                    >
-                      <FiUserX size={12} /> {blocking ? 'Đang bỏ chặn...' : 'Bỏ chặn'}
-                    </button>
                   )}
+                  <button
+                    onClick={handleBlock}
+                    disabled={blocking || profile.isBlockedBy}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all border disabled:opacity-50 ${
+                      profile.isBlocked
+                        ? 'text-emerald-600 border-emerald-100 hover:bg-emerald-50'
+                        : 'text-gray-500 border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <FiUserX size={12} /> {blocking ? 'Đang xử lý...' : profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
+                  </button>
                 </>
               )}
             </div>

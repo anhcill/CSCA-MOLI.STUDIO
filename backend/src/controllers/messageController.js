@@ -108,14 +108,19 @@ exports.getMessages = async (req, res) => {
 
     // Check if either has blocked the other
     const blockCheck = await db.query(`
-      SELECT 1 FROM forum_blocks
+      SELECT blocker_id, blocked_id FROM forum_blocks
       WHERE (blocker_id = $1 AND blocked_id = $2)
          OR (blocker_id = $2 AND blocked_id = $1)
-      LIMIT 1
     `, [userId, partnerId]);
 
     if (blockCheck.rows.length > 0) {
-      return res.status(403).json({ success: false, message: "Không thể nhắn tin: đã bị chặn" });
+      const blockedByMe = blockCheck.rows.some(row => row.blocker_id === userId && row.blocked_id === partnerId);
+      const blockedMe = blockCheck.rows.some(row => row.blocker_id === partnerId && row.blocked_id === userId);
+      return res.status(403).json({
+        success: false,
+        message: blockedByMe ? "Bạn đã chặn người dùng này" : "Không thể nhắn tin: bạn đã bị chặn",
+        data: { blockedByMe, blockedMe },
+      });
     }
 
     // Get messages
