@@ -306,6 +306,27 @@ async function applyCoinSpend(transaction) {
   );
 }
 
+async function getPaymentUser(userId) {
+  const userRes = await db.query(
+    `SELECT id, email, username, full_name, vip_expires_at, subscription_tier
+     FROM users
+     WHERE id = $1`,
+    [userId]
+  );
+  return userRes.rows[0] || null;
+}
+
+async function markTransactionCompletedFallback(transaction, payload) {
+  await db.query(
+    `UPDATE transactions
+     SET status = 'completed',
+         raw_response = COALESCE($1, raw_response),
+         updated_at = NOW()
+     WHERE id = $2`,
+    [JSON.stringify(payload || {}), transaction.id]
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -978,16 +999,25 @@ router.post('/sepay-webhook', async (req, res) => {
         ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
         : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
       await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
-      updatedUser = await User.findById(transaction.user_id);
+      updatedUser = await getPaymentUser(transaction.user_id);
+      if (!updatedUser) {
+        throw new Error(`Payment user not found: ${transaction.user_id}`);
+      }
 
-      await Transaction.updateComplete(transaction.id, {
-      status: 'completed',
-      payment_channel: 'bank_transfer',
-      trans_id: referenceCode || id?.toString() || `SEPAY_${Date.now()}`,
-      raw_response: req.body,
-      paid_at: new Date(),
-      vip_expires_at: updatedUser?.vip_expires_at || null,
-      });
+      const sepayTransId = referenceCode || id?.toString() || `SEPAY_${Date.now()}`;
+      try {
+        await Transaction.updateComplete(transaction.id, {
+          status: 'completed',
+          payment_channel: 'bank_transfer',
+          trans_id: sepayTransId,
+          raw_response: req.body,
+          paid_at: new Date(),
+          vip_expires_at: updatedUser?.vip_expires_at || null,
+        });
+      } catch (completeErr) {
+        console.error('[SePay] Full transaction completion failed, using fallback:', completeErr.message);
+        await markTransactionCompletedFallback(transaction, req.body);
+      }
     } catch (processErr) {
       await Transaction.updateStatus(transaction.id, 'pending');
       throw processErr;
