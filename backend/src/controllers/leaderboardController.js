@@ -1,7 +1,6 @@
 const db = require("../config/database");
 const { cache } = require("../config/cache");
 
-const CACHE_KEY = "leaderboard:top20";
 const CACHE_TTL = 10 * 60; // 10 phút
 
 /**
@@ -11,10 +10,15 @@ const CACHE_TTL = 10 * 60; // 10 phút
  */
 async function getLeaderboard(req, res) {
     try {
-        const cached = cache.get(CACHE_KEY);
+        const period = req.query.period === "week" ? "week" : "all";
+        const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+        const cacheKey = `leaderboard:${period}:${limit}`;
+        const cached = cache.get(cacheKey);
         if (cached) return res.json({ success: true, data: cached, fromCache: true });
 
-        const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+        const periodFilter = period === "week"
+            ? "AND a.submit_time >= date_trunc('week', CURRENT_DATE)"
+            : "";
 
         const { rows } = await db.query(
             `SELECT
@@ -29,6 +33,7 @@ async function getLeaderboard(req, res) {
       JOIN exam_attempts a ON a.user_id = u.id
       WHERE a.status = 'completed'
         AND u.role = 'student'
+        ${periodFilter}
       GROUP BY u.id, u.full_name, u.avatar_url
       HAVING COUNT(a.id) >= 1
       ORDER BY avg_score DESC, total_attempts DESC
@@ -39,7 +44,7 @@ async function getLeaderboard(req, res) {
         // Thêm rank
         const data = rows.map((row, i) => ({ rank: i + 1, ...row }));
 
-        cache.set(CACHE_KEY, data, CACHE_TTL);
+        cache.set(cacheKey, data, CACHE_TTL);
         res.json({ success: true, data });
     } catch (error) {
         console.error("Leaderboard error:", error);

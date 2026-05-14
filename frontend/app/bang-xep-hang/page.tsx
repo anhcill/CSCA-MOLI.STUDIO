@@ -6,6 +6,8 @@ import Link from 'next/link';
 import Header from '@/components/layout/Header';
 import { FiAward, FiTrendingUp, FiTarget, FiRefreshCw } from 'react-icons/fi';
 
+type LeaderboardPeriod = 'week' | 'all';
+
 interface LeaderboardEntry {
     rank: number;
     id: number;
@@ -38,13 +40,14 @@ export default function LeaderboardPage() {
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [period, setPeriod] = useState<LeaderboardPeriod>('week');
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
     const loadLeaderboard = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${apiUrl}/leaderboard?limit=20`);
+            const res = await fetch(`${apiUrl}/leaderboard?limit=20&period=${period}`);
             const json = await res.json();
             if (json.success) {
                 setEntries(json.data);
@@ -59,7 +62,7 @@ export default function LeaderboardPage() {
 
     useEffect(() => {
         loadLeaderboard();
-    }, []);
+    }, [period]);
 
     const myEntry = isAuthenticated ? entries.find((e) => e.id === user?.id) : null;
 
@@ -75,6 +78,22 @@ export default function LeaderboardPage() {
                         Bảng Xếp Hạng
                     </h1>
                     <p className="text-gray-500 mt-2 text-sm">Top học viên CSCA theo điểm trung bình</p>
+                    <div className="mt-4 inline-flex rounded-xl border border-violet-100 bg-violet-50 p-1">
+                        {([
+                            { value: 'week', label: 'Tuần này' },
+                            { value: 'all', label: 'Tất cả' },
+                        ] as { value: LeaderboardPeriod; label: string }[]).map((item) => (
+                            <button
+                                key={item.value}
+                                onClick={() => setPeriod(item.value)}
+                                className={`rounded-lg px-4 py-1.5 text-sm font-bold transition-colors ${
+                                    period === item.value ? 'bg-white text-violet-700 shadow-sm' : 'text-violet-400 hover:text-violet-700'
+                                }`}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                    </div>
                     <div className="flex items-center justify-center gap-2 mt-3">
                         {lastUpdated && (
                             <span className="text-xs text-gray-400">

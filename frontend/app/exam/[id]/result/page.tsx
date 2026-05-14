@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiBook, FiArrowLeft } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiBook, FiArrowLeft, FiArrowRight, FiTarget, FiVideo } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -10,10 +10,11 @@ import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
-import { canUseAI } from '@/lib/utils/permissions';
+import { canUseAI, canWatchVideo } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import { createWrongQuestionPractice, getRecommendations, type ExamRecommendation } from '@/lib/api/insights';
 
 interface AnswerOption {
   key: string;
@@ -46,6 +47,7 @@ interface QuestionResult {
   explanation_cn?: string;
   options: AnswerOption[];
   difficulty?: string;
+  question_category?: string;
 }
 
 interface ExamResult {
@@ -58,6 +60,8 @@ interface ExamResult {
   total_correct: number;
   submit_time: string;
   total_questions: number;
+  solution_video_url?: string | null;
+  solution_description?: string | null;
   answers: QuestionResult[];
 }
 
@@ -70,6 +74,7 @@ function ExamResultContent() {
   const attemptId = searchParams.get('attemptId');
   const user = useAuthStore((s) => s.user);
   const hasAIAccess = canUseAI(user);
+  const hasVideoAccess = canWatchVideo(user);
 
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +86,9 @@ function ExamResultContent() {
   const [aiLoading, setAiLoading] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState<any>(null);
   const [aiLoaded, setAiLoaded] = useState(false);
+  const [nextExam, setNextExam] = useState<ExamRecommendation | null>(null);
+  const [actionLoading, setActionLoading] = useState<'wrong' | 'next' | null>(null);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (attemptId) {
@@ -93,6 +101,12 @@ function ExamResultContent() {
       loadAIAnalysis(result.id);
     }
   }, [result?.id, hasAIAccess]);
+
+  useEffect(() => {
+    if (result?.id) {
+      loadNextExam();
+    }
+  }, [result?.id]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -145,6 +159,39 @@ function ExamResultContent() {
     }
   };
 
+  const loadNextExam = async () => {
+    try {
+      const data = await getRecommendations();
+      const recommendation = data.recommendations.find((exam) => exam.examId !== result?.exam_id)
+        || data.recommendations[0]
+        || null;
+      setNextExam(recommendation);
+    } catch (error) {
+      console.error('Load recommendation error:', error);
+    }
+  };
+
+  const handleWrongPractice = async () => {
+    try {
+      setActionError('');
+      setActionLoading('wrong');
+      const practiceSet = await createWrongQuestionPractice(20);
+      router.push(`/practice-sets/${practiceSet.id}`);
+    } catch (error: any) {
+      setActionError(error?.response?.data?.message || 'Chưa tạo được bộ ôn câu sai.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleNextExam = () => {
+    if (nextExam?.examId) {
+      router.push(`/exam/${nextExam.examId}`);
+      return;
+    }
+    router.push('/exam-room');
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -183,6 +230,28 @@ function ExamResultContent() {
   const total = answers.length || result.total_questions || 1;
   const accuracy = Math.round((totalCorrect / total) * 100);
   const score = Number(result.total_score) || 0;
+  const wrongAnswers = answers.filter(a => a.selected_answer_key && !a.is_correct);
+  const skippedAnswers = answers.filter(a => !a.selected_answer_key);
+
+  const labelDifficulty = (difficulty?: string) => {
+    if (difficulty === 'easy') return 'Câu dễ';
+    if (difficulty === 'hard') return 'Câu khó';
+    if (difficulty === 'medium') return 'Câu trung bình';
+    return '';
+  };
+
+  const masteryRows = Array.from(answers.reduce((map, answer) => {
+    const key = answer.question_category || labelDifficulty(answer.difficulty) || 'Tổng hợp';
+    const current = map.get(key) || { label: key, total: 0, correct: 0 };
+    current.total += 1;
+    if (answer.is_correct) current.correct += 1;
+    map.set(key, current);
+    return map;
+  }, new Map<string, { label: string; total: number; correct: number }>()).values())
+    .map(row => ({ ...row, accuracy: Math.round((row.correct / Math.max(row.total, 1)) * 100) }))
+    .sort((a, b) => a.accuracy - b.accuracy);
+  const weakestArea = masteryRows[0] || null;
+  const strongestArea = [...masteryRows].sort((a, b) => b.accuracy - a.accuracy)[0] || null;
 
   const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
   const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
@@ -373,6 +442,69 @@ function ExamResultContent() {
             </div>
 
             {/* AI Analysis — chỉ VIP/Pre */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 no-print">
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Điểm mạnh / yếu</p>
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                    <p className="text-xs font-bold text-emerald-700">Mạnh nhất</p>
+                    <p className="mt-1 font-black text-gray-900">{strongestArea?.label || 'Chưa đủ dữ liệu'}</p>
+                    <p className="text-xs text-emerald-700 mt-0.5">{strongestArea ? `${strongestArea.correct}/${strongestArea.total} câu đúng (${strongestArea.accuracy}%)` : 'Làm thêm đề để phân tích rõ hơn'}</p>
+                  </div>
+                  <div className="rounded-xl bg-rose-50 border border-rose-100 p-3">
+                    <p className="text-xs font-bold text-rose-700">Cần ôn lại</p>
+                    <p className="mt-1 font-black text-gray-900">{weakestArea?.label || 'Chưa đủ dữ liệu'}</p>
+                    <p className="text-xs text-rose-700 mt-0.5">{weakestArea ? `${weakestArea.correct}/${weakestArea.total} câu đúng (${weakestArea.accuracy}%)` : 'Không có nhóm yếu rõ ràng'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Ôn câu sai</p>
+                <p className="text-sm text-gray-600">
+                  Bạn có <strong className="text-rose-600">{wrongAnswers.length}</strong> câu sai và <strong>{skippedAnswers.length}</strong> câu bỏ qua trong lần làm này.
+                </p>
+                <button
+                  onClick={handleWrongPractice}
+                  disabled={wrongAnswers.length === 0 || actionLoading === 'wrong'}
+                  className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FiTarget size={16} />
+                  {actionLoading === 'wrong' ? 'Đang tạo bộ ôn...' : 'Ôn lại câu sai'}
+                </button>
+                {actionError && <p className="mt-2 text-xs font-semibold text-rose-600">{actionError}</p>}
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Học tiếp</p>
+                {nextExam ? (
+                  <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 mb-3">
+                    <p className="font-black text-gray-900 line-clamp-1">{nextExam.examTitle}</p>
+                    <p className="text-xs text-indigo-700 mt-1">{nextExam.reason?.text || 'Đề phù hợp để luyện tiếp'}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 mb-3">Chưa có đề gợi ý riêng, bạn có thể vào phòng thi để chọn đề tiếp theo.</p>
+                )}
+                <div className="grid gap-2">
+                  <button
+                    onClick={handleNextExam}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
+                  >
+                    Làm đề tương tự <FiArrowRight size={16} />
+                  </button>
+                  {result.solution_video_url && (
+                    <button
+                      onClick={() => hasVideoAccess ? window.open(result.solution_video_url || '', '_blank', 'noopener,noreferrer') : router.push('/vip')}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 hover:bg-amber-100"
+                    >
+                      <FiVideo size={16} />
+                      {hasVideoAccess ? 'Xem video giải đề' : 'Mở Pre để xem video'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <PremiumGate type="ai">
               <AIExamAnalysis
                 attemptId={result.id}

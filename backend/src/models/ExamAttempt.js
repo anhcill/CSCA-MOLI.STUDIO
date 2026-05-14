@@ -570,6 +570,8 @@ const ExamAttempt = {
         q.question_text_cn,
         q.question_text_en,
         q.question_type,
+        q.difficulty,
+        q.question_category,
         q.points,
         q.explanation,
         ua.selected_answer_key as user_answer,
@@ -648,6 +650,8 @@ const ExamAttempt = {
         question_text_cn: question.question_text_cn,
         question_text_en: question.question_text_en,
         question_type: question.question_type,
+        difficulty: question.difficulty,
+        question_category: question.question_category,
         selected_answer_key: userAnswerKey,
         selected_answer_text: userAnswerKey
           ? `${userAnswerKey}. ${optionMap[userAnswerKey] || ""}`

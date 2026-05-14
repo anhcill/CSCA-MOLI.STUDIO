@@ -390,6 +390,22 @@ export default function ProfilePage() {
   const vipDaysLeft = profileUser?.is_vip && profileUser?.vip_expires_at
     ? Math.max(0, Math.ceil((new Date(profileUser.vip_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null;
+  const completedExams = Number(stats?.total_exams || 0);
+  const averageScore = Number(stats?.avg_score || 0);
+  const currentStreak = Number(profileUser?.current_streak || 0);
+  const learnerLevel = completedExams >= 30 && averageScore >= 8
+    ? { label: 'Cao thủ luyện đề', progress: 100, next: 'Duy trì phong độ và giữ streak mỗi ngày' }
+    : completedExams >= 15 && averageScore >= 6
+      ? { label: 'Tăng tốc', progress: 72, next: 'Mục tiêu tiếp theo: 30 đề và điểm TB 8+' }
+      : completedExams >= 5
+        ? { label: 'Đang vào nhịp', progress: 45, next: 'Mục tiêu tiếp theo: 15 đề và điểm TB 6+' }
+        : { label: 'Khởi động', progress: Math.min(completedExams * 12, 35), next: 'Mục tiêu tiếp theo: hoàn thành 5 đề' };
+  const earnedBadges = [
+    { label: 'Làm đề đầu tiên', unlocked: completedExams >= 1 },
+    { label: '5 đề đã hoàn thành', unlocked: completedExams >= 5 },
+    { label: 'Điểm 8+', unlocked: Number(stats?.highest_score || 0) >= 8 },
+    { label: 'Streak 7 ngày', unlocked: currentStreak >= 7 },
+  ];
   const profileTabs = [
     { key: 'info', label: t('profile.info'), icon: FiUser },
     { key: 'stats', label: t('profile.stats'), icon: FiAward },
@@ -617,6 +633,40 @@ export default function ProfilePage() {
                       <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {!statsLoading && (
+                <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-indigo-500">Cấp độ học viên</p>
+                      <h3 className="mt-1 text-lg font-black text-gray-900">{learnerLevel.label}</h3>
+                      <p className="mt-1 text-sm text-gray-500">{learnerLevel.next}</p>
+                    </div>
+                    <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
+                      <p className="text-2xl font-black text-indigo-600">{learnerLevel.progress}%</p>
+                      <p className="text-[10px] font-bold text-gray-400">tiến độ</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+                    <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${learnerLevel.progress}%` }} />
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {earnedBadges.map((badge) => (
+                      <div
+                        key={badge.label}
+                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
+                          badge.unlocked
+                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                            : 'border-gray-100 bg-white text-gray-400'
+                        }`}
+                      >
+                        {badge.unlocked ? '✓ ' : '○ '}
+                        {badge.label}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

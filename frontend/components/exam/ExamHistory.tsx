@@ -151,7 +151,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
         ) : history.map((item, index) => (
           <button
             key={index}
-            onClick={() => router.push(`/exam/result/${item.id}`)}
+            onClick={() => router.push(`/exam/${item.exam_id}/result?attemptId=${item.id}`)}
             className="w-full border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left"
           >
             <div className="flex items-start justify-between mb-3">
