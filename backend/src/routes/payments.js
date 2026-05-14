@@ -366,6 +366,157 @@ async function updateVipStatusForPayment(userId, durationDays, tier) {
   }
 }
 
+async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
+  await incrementCouponUsage(transaction).catch(err => {
+    console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
+  });
+  await applyCoinSpend(transaction).catch(err => {
+    console.error('[Payment] Coin spend update failed, continuing payment completion:', err.message);
+  });
+
+  const tier = transaction.package_id
+    ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+    : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
+
+  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
+  const updatedUser = await getPaymentUser(transaction.user_id);
+  if (!updatedUser) {
+    throw new Error(`Payment user not found: ${transaction.user_id}`);
+  }
+
+  const sepayTransId = providerPayload.referenceCode || providerPayload.reference_number || providerPayload.id?.toString() || `SEPAY_${Date.now()}`;
+  try {
+    await Transaction.updateComplete(transaction.id, {
+      status: 'completed',
+      payment_channel: 'bank_transfer',
+      trans_id: sepayTransId,
+      raw_response: providerPayload,
+      paid_at: new Date(),
+      vip_expires_at: updatedUser?.vip_expires_at || null,
+    });
+  } catch (completeErr) {
+    console.error('[Payment] Full transaction completion failed, using fallback:', completeErr.message);
+    await markTransactionCompletedFallback(transaction, providerPayload);
+  }
+
+  Promise.all([
+    emailService.sendPaymentConfirmation({
+      email: updatedUser.email,
+      name: updatedUser.full_name || updatedUser.username,
+      packageName: transaction.package_name,
+      amount: transaction.amount,
+      durationDays: transaction.package_duration,
+      transactionCode: transaction.transaction_code,
+      method: 'bank_transfer',
+    }),
+    emailService.sendVipActivatedEmail({
+      email: updatedUser.email,
+      name: updatedUser.full_name || updatedUser.username,
+      packageName: transaction.package_name,
+      durationDays: transaction.package_duration,
+      expiresAt: updatedUser?.vip_expires_at || null,
+    }),
+  ]).catch(err => console.error('Payment email error:', err.message));
+
+  console.log(`[Payment] ✅ Bank transfer completed: user=${transaction.user_id}, tx=${transaction.transaction_code}, tier=${tier}`);
+  return { updatedUser, tier };
+}
+
+function getSePayApiToken() {
+  return process.env.SEPAY_API_TOKEN || process.env.SEPAY_API_KEY || '';
+}
+
+function mapSePayApiTransactionToWebhookPayload(row) {
+  return {
+    id: row.id,
+    referenceCode: row.reference_number,
+    transferType: row.transfer_type || 'in',
+    transferAmount: Number(row.amount_in || 0),
+    accountNumber: row.va || row.account_number,
+    content: row.transaction_content || row.code || row.reference_number,
+    description: row.transaction_content,
+    code: row.code,
+    bankBrandName: row.bank_brand_name,
+    bankAccountId: row.bank_account_id,
+    vaId: row.va_id,
+    source: 'sepay_api_reconcile',
+  };
+}
+
+function isMatchingSePayApiTransaction(row, transaction) {
+  const searchText = buildSePaySearchText({
+    content: row.transaction_content,
+    description: row.transaction_content,
+    code: row.code,
+    referenceCode: row.reference_number,
+  }).toUpperCase();
+  if (!searchText.includes(String(transaction.transaction_code || '').toUpperCase())) return false;
+
+  const amountIn = Number(row.amount_in || 0);
+  if (!Number.isFinite(amountIn) || amountIn < Number(transaction.amount)) return false;
+
+  const bankConfig = getBankConfig();
+  if (bankConfig) {
+    const expectedAccount = normalizeBankAccount(bankConfig.accountNumber);
+    const receivedAccount = normalizeBankAccount(row.va || row.account_number);
+    if (receivedAccount && expectedAccount && receivedAccount !== expectedAccount) return false;
+
+    const expectedBank = String(bankConfig.bankCode || '').toUpperCase();
+    const receivedBank = String(row.bank_brand_name || '').toUpperCase();
+    if (receivedBank && expectedBank && receivedBank !== expectedBank) return false;
+  }
+
+  return String(row.transfer_type || 'in').toLowerCase() === 'in';
+}
+
+async function findSePayApiTransaction(transaction) {
+  const token = getSePayApiToken();
+  if (!token) return null;
+
+  const response = await axios.get('https://userapi.sepay.vn/v2/transactions', {
+    params: {
+      q: transaction.transaction_code,
+      transfer_type: 'in',
+      amount_in_min: Number(transaction.amount),
+      amount_in_max: Number(transaction.amount),
+      per_page: 5,
+    },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout: 10000,
+  });
+
+  const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+  return rows.find(row => isMatchingSePayApiTransaction(row, transaction)) || null;
+}
+
+async function reconcilePendingBankTransfer(transaction) {
+  if (!transaction || transaction.status !== 'pending' || transaction.payment_method !== 'bank_transfer') {
+    return transaction;
+  }
+
+  try {
+    const sepayTransaction = await findSePayApiTransaction(transaction);
+    if (!sepayTransaction) return transaction;
+
+    const claimedTransaction = await Transaction.claimPending(transaction.id);
+    if (!claimedTransaction) {
+      return await Transaction.findByTransactionCode(transaction.transaction_code);
+    }
+
+    await completeClaimedBankTransfer(
+      claimedTransaction,
+      mapSePayApiTransactionToWebhookPayload(sepayTransaction)
+    );
+    return await Transaction.findByTransactionCode(transaction.transaction_code);
+  } catch (err) {
+    console.error('[SePay] API reconcile failed:', err.message);
+    return transaction;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1027,66 +1178,13 @@ router.post('/sepay-webhook', async (req, res) => {
     }
     transaction = claimedTransaction;
 
-    // Increment coupon usage CHỉ khi thành công
-    let updatedUser;
-    let tier = 'vip';
     try {
-      await incrementCouponUsage(transaction).catch(err => {
-        console.error('[SePay] Coupon usage update failed, continuing payment completion:', err.message);
-      });
-      await applyCoinSpend(transaction).catch(err => {
-        console.error('[SePay] Coin spend update failed, continuing payment completion:', err.message);
-      });
-
-      tier = transaction.package_id
-        ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-        : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-      await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
-      updatedUser = await getPaymentUser(transaction.user_id);
-      if (!updatedUser) {
-        throw new Error(`Payment user not found: ${transaction.user_id}`);
-      }
-
-      const sepayTransId = referenceCode || id?.toString() || `SEPAY_${Date.now()}`;
-      try {
-        await Transaction.updateComplete(transaction.id, {
-          status: 'completed',
-          payment_channel: 'bank_transfer',
-          trans_id: sepayTransId,
-          raw_response: req.body,
-          paid_at: new Date(),
-          vip_expires_at: updatedUser?.vip_expires_at || null,
-        });
-      } catch (completeErr) {
-        console.error('[SePay] Full transaction completion failed, using fallback:', completeErr.message);
-        await markTransactionCompletedFallback(transaction, req.body);
-      }
+      await completeClaimedBankTransfer(transaction, req.body);
     } catch (processErr) {
       await Transaction.updateStatus(transaction.id, 'pending');
       throw processErr;
     }
 
-    // ── Gửi email xác nhận thanh toán + kích hoạt VIP ───────────────
-    Promise.all([
-      emailService.sendPaymentConfirmation({
-        email: updatedUser.email,
-        name: updatedUser.full_name || updatedUser.username,
-        packageName: transaction.package_name,
-        amount: transaction.amount,
-        durationDays: transaction.package_duration,
-        transactionCode: transaction.transaction_code,
-        method: 'bank_transfer',
-      }),
-      emailService.sendVipActivatedEmail({
-        email: updatedUser.email,
-        name: updatedUser.full_name || updatedUser.username,
-        packageName: transaction.package_name,
-        durationDays: transaction.package_duration,
-        expiresAt: updatedUser?.vip_expires_at || null,
-      }),
-    ]).catch(err => console.error('SePay email error:', err.message));
-
-    console.log(`[SePay] ✅ VIP granted: user=${transaction.user_id}, pkg=${transaction.package_name}, tier=${tier}`);
     return res.json({ success: true });
 
   } catch (err) {
@@ -1112,9 +1210,13 @@ router.get('/check-status', authenticate, async (req, res) => {
     const { orderId } = req.query;
     if (!orderId) return res.status(400).json({ success: false });
 
-    const transaction = await Transaction.findByTransactionCode(orderId);
+    let transaction = await Transaction.findByTransactionCode(orderId);
     if (!transaction) return res.json({ success: false, status: 'not_found' });
     if (transaction.user_id !== req.user.id) return res.json({ success: false, status: 'unauthorized' });
+
+    if (transaction.status === 'pending' && transaction.payment_method === 'bank_transfer') {
+      transaction = await reconcilePendingBankTransfer(transaction);
+    }
 
     if (transaction.status === 'completed') {
       const freshUser = await User.findById(req.user.id);
