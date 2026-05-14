@@ -325,8 +325,8 @@ export default function AdminListTab({ onViewLog }: Props) {
 
       {/* Role Editor Modal */}
       {editingAdmin && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-stretch justify-center z-50 p-3 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg h-[calc(100dvh-1.5rem)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden self-center">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-fuchsia-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-violet-200">
