@@ -1,4 +1,119 @@
 const { pool } = require("../config/database");
+const aiService = require("../services/aiService");
+
+const AUTO_GRADED_TYPES = new Set(["essay", "translation"]);
+
+function clampScore(value, min, max) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function normalizeTextForGrade(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasCjk(value) {
+  return /[\u3400-\u9fff]/u.test(value || "");
+}
+
+function similarity(a, b) {
+  const left = normalizeTextForGrade(a);
+  const right = normalizeTextForGrade(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) {
+    return Math.min(left.length, right.length) / Math.max(left.length, right.length);
+  }
+
+  const tokenize = (text) => {
+    if (hasCjk(text)) return Array.from(text.replace(/\s+/g, ""));
+    return normalizeTextForGrade(text).split(" ").filter(Boolean);
+  };
+  const leftTokens = tokenize(a);
+  const rightTokens = tokenize(b);
+  if (leftTokens.length === 0 || rightTokens.length === 0) return 0;
+
+  const rightCounts = new Map();
+  for (const token of rightTokens) {
+    rightCounts.set(token, (rightCounts.get(token) || 0) + 1);
+  }
+
+  let overlap = 0;
+  for (const token of leftTokens) {
+    const count = rightCounts.get(token) || 0;
+    if (count > 0) {
+      overlap += 1;
+      rightCounts.set(token, count - 1);
+    }
+  }
+
+  return (2 * overlap) / (leftTokens.length + rightTokens.length);
+}
+
+function fallbackGradeTextAnswer(userAnswer, correctAnswers, maxPoints) {
+  const answer = String(userAnswer || "").trim();
+  const refs = (correctAnswers || []).map((v) => String(v || "").trim()).filter(Boolean);
+  const points = clampScore(maxPoints, 0, 100);
+
+  if (!answer) {
+    return {
+      score: 0,
+      isCorrect: false,
+      status: "graded",
+      feedback: "Chua co cau tra loi.",
+      result: { source: "fallback", totalScore: 0, feedback: "Chua co cau tra loi." },
+    };
+  }
+
+  if (refs.length === 0) {
+    return {
+      score: 0,
+      isCorrect: false,
+      status: "needs_review",
+      feedback: "Cau hoi chua co dap an mau de cham tu dong.",
+      result: {
+        source: "fallback",
+        totalScore: 0,
+        feedback: "Cau hoi chua co dap an mau de cham tu dong.",
+      },
+    };
+  }
+
+  const best = Math.max(...refs.map((ref) => similarity(answer, ref)));
+  let ratio = 0;
+  if (best >= 0.92) ratio = 1;
+  else if (best >= 0.75) ratio = 0.8;
+  else if (best >= 0.55) ratio = 0.55;
+
+  const score = Number((points * ratio).toFixed(2));
+  const totalScore = Number((ratio * 10).toFixed(1));
+  const feedback = ratio >= 1
+    ? "Khop dap an mau."
+    : ratio > 0
+      ? "Gan dung dap an mau, can doi chieu lai y/chinh xac ngon ngu."
+      : "Chua khop dap an mau.";
+
+  return {
+    score,
+    isCorrect: score >= points * 0.6,
+    status: "graded",
+    feedback,
+    result: {
+      source: "fallback",
+      totalScore,
+      similarity: Number(best.toFixed(3)),
+      feedback,
+      modelAnswer: refs[0],
+    },
+  };
+}
 
 const ExamAttempt = {
   // Bắt đầu làm bài thi
@@ -64,20 +179,27 @@ const ExamAttempt = {
         const upsertQuery = `
           INSERT INTO user_answers (
             attempt_id, question_id, selected_answer_key,
-            selected_answer_id, is_correct, time_spent_seconds, essay_answer
-          ) VALUES ($1, $2, $3, NULL, NULL, $4, $5)
+            selected_answer_id, is_correct, time_spent_seconds, essay_answer,
+            score_awarded, max_score, grading_status, grading_feedback, grading_result, graded_at
+          ) VALUES ($1, $2, $3, NULL, NULL, $4, $5, NULL, NULL, 'pending', NULL, NULL, NULL)
           ON CONFLICT (attempt_id, question_id)
           DO UPDATE SET
             selected_answer_key = $3,
             essay_answer = $5,
             time_spent_seconds = $4,
+            score_awarded = NULL,
+            max_score = NULL,
+            grading_status = 'pending',
+            grading_feedback = NULL,
+            grading_result = NULL,
+            graded_at = NULL,
             created_at = CURRENT_TIMESTAMP
           RETURNING *
         `;
         const result = await client.query(upsertQuery, [
           attemptId,
           questionId,
-          selectedAnswerKey || 'ESSAY_ANSWER',
+          selectedAnswerKey || 'ESSAY',
           timeSpent || 0,
           essayAnswer,
         ]);
@@ -113,6 +235,12 @@ const ExamAttempt = {
           selected_answer_key = $4,
           is_correct = $5,
           time_spent_seconds = $6,
+          score_awarded = NULL,
+          max_score = NULL,
+          grading_status = NULL,
+          grading_feedback = NULL,
+          grading_result = NULL,
+          graded_at = NULL,
           created_at = CURRENT_TIMESTAMP
         RETURNING *
       `;
@@ -137,19 +265,130 @@ const ExamAttempt = {
   },
 
   // Nộp bài và tính điểm
+  async autoGradeTextAnswers(client, attemptId) {
+    const answersResult = await client.query(
+      `SELECT
+         ua.id,
+         ua.question_id,
+         ua.essay_answer,
+         q.question_type,
+         q.question_text,
+         q.question_text_cn,
+         q.points,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'answer_text', a.answer_text,
+               'answer_text_cn', a.answer_text_cn,
+               'is_correct', a.is_correct
+             )
+             ORDER BY a.is_correct DESC, a.answer_key ASC
+           ) FILTER (WHERE a.id IS NOT NULL),
+           '[]'
+         ) AS correct_answers
+       FROM user_answers ua
+       INNER JOIN questions q ON q.id = ua.question_id
+       LEFT JOIN answers a
+         ON a.question_id = q.id
+        AND (a.is_correct = TRUE OR NOT EXISTS (
+          SELECT 1 FROM answers ca WHERE ca.question_id = q.id AND ca.is_correct = TRUE
+        ))
+       WHERE ua.attempt_id = $1
+         AND q.question_type = ANY($2::text[])
+       GROUP BY ua.id, ua.question_id, ua.essay_answer, q.question_type,
+                q.question_text, q.question_text_cn, q.points`,
+      [attemptId, Array.from(AUTO_GRADED_TYPES)]
+    );
+
+    for (const row of answersResult.rows) {
+      const maxPoints = clampScore(row.points, 0, 100);
+      const refs = (row.correct_answers || [])
+        .flatMap((answer) => [answer.answer_text, answer.answer_text_cn])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+
+      let grade = null;
+      const userAnswer = String(row.essay_answer || "").trim();
+      const correctAnswer = refs[0] || "";
+
+      if (userAnswer && correctAnswer && !aiService.isRateLimited()) {
+        try {
+          const aiGrade = await aiService.gradeEssay({
+            questionText: row.question_text,
+            questionTextCn: row.question_text_cn,
+            userAnswer,
+            correctAnswer: refs.join("\n---\n"),
+            questionType: row.question_type,
+          });
+
+          const hasUsefulAiResult =
+            aiGrade &&
+            (aiGrade.totalScore > 0 ||
+              (Array.isArray(aiGrade.gradingCriteria) && aiGrade.gradingCriteria.length > 0) ||
+              (Array.isArray(aiGrade.errors) && aiGrade.errors.length > 0) ||
+              (Array.isArray(aiGrade.suggestions) && aiGrade.suggestions.length > 0) ||
+              aiGrade.modelAnswer);
+
+          if (hasUsefulAiResult) {
+            const totalScore = clampScore(aiGrade.totalScore, 0, 10);
+            const score = Number(((maxPoints * totalScore) / 10).toFixed(2));
+            grade = {
+              score,
+              isCorrect: score >= maxPoints * 0.6,
+              status: "graded",
+              feedback: aiGrade.feedback || "",
+              result: { ...aiGrade, source: "ai" },
+            };
+          }
+        } catch (error) {
+          if (error.message !== "RATE_LIMITED") {
+            console.error("Auto grade text answer error:", error.message);
+          }
+        }
+      }
+
+      if (!grade) {
+        grade = fallbackGradeTextAnswer(userAnswer, refs, maxPoints);
+      }
+
+      await client.query(
+        `UPDATE user_answers
+         SET is_correct = $1,
+             score_awarded = $2,
+             max_score = $3,
+             grading_status = $4,
+             grading_feedback = $5,
+             grading_result = $6::jsonb,
+             graded_at = CURRENT_TIMESTAMP
+         WHERE id = $7`,
+        [
+          grade.isCorrect,
+          grade.score,
+          maxPoints,
+          grade.status,
+          grade.feedback,
+          JSON.stringify(grade.result || {}),
+          row.id,
+        ]
+      );
+    }
+  },
+
   async submit(attemptId) {
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
 
+      await this.autoGradeTextAnswers(client, attemptId);
+
       // Calculate scores
       const statsQuery = `
         SELECT 
           COALESCE(COUNT(*), 0) as total_answered,
           COALESCE(SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END), 0) as total_correct,
-          COALESCE(SUM(CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END), 0) as total_incorrect,
-          COALESCE(SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END), 0) as total_score
+          COALESCE(SUM(CASE WHEN ua.is_correct = FALSE THEN 1 ELSE 0 END), 0) as total_incorrect,
+          COALESCE(SUM(COALESCE(ua.score_awarded, CASE WHEN ua.is_correct THEN q.points ELSE 0 END)), 0) as total_score
         FROM user_answers ua
         INNER JOIN questions q ON ua.question_id = q.id
         WHERE ua.attempt_id = $1
@@ -327,10 +566,17 @@ const ExamAttempt = {
         q.question_number,
         q.question_text,
         q.question_text_cn,
+        q.question_type,
         q.points,
         q.explanation,
         ua.selected_answer_key as user_answer,
+        ua.essay_answer,
         ua.is_correct,
+        ua.score_awarded,
+        ua.max_score,
+        ua.grading_status,
+        ua.grading_feedback,
+        ua.grading_result,
         (SELECT answer_key FROM answers WHERE question_id = q.id AND is_correct = true LIMIT 1) as correct_answer
       FROM questions q
       LEFT JOIN user_answers ua ON q.id = ua.question_id AND ua.attempt_id = $1
@@ -376,11 +622,28 @@ const ExamAttempt = {
 
       const userAnswerKey = question.user_answer;
       const correctAnswerKey = question.correct_answer;
+      const isTextQuestion = AUTO_GRADED_TYPES.has(question.question_type);
+      const correctTextAnswer = questionAnswers
+        .filter((a) => a.is_correct || questionAnswers.every((candidate) => !candidate.is_correct))
+        .map((a) => a.answer_text_cn || a.answer_text)
+        .filter(Boolean)
+        .join("\n");
+      const selectedAnswerText = isTextQuestion
+        ? (question.essay_answer || "")
+        : userAnswerKey
+          ? `${userAnswerKey}. ${optionMap[userAnswerKey] || ""}`
+          : "Bo qua";
+      const correctAnswerText = isTextQuestion
+        ? correctTextAnswer
+        : correctAnswerKey
+          ? `${correctAnswerKey}. ${optionMap[correctAnswerKey] || ""}`
+          : "";
 
       formattedAnswers.push({
         question_number: question.question_number,
         question_text: question.question_text,
         question_text_cn: question.question_text_cn,
+        question_type: question.question_type,
         selected_answer_key: userAnswerKey,
         selected_answer_text: userAnswerKey
           ? `${userAnswerKey}. ${optionMap[userAnswerKey] || ""}`
@@ -389,8 +652,15 @@ const ExamAttempt = {
         correct_answer_text: correctAnswerKey
           ? `${correctAnswerKey}. ${optionMap[correctAnswerKey] || ""}`
           : "",
+        selected_answer_text: selectedAnswerText,
+        correct_answer_text: correctAnswerText,
         is_correct: question.is_correct || false,
         points: question.points,
+        score_awarded: question.score_awarded,
+        max_score: question.max_score,
+        grading_status: question.grading_status,
+        grading_feedback: question.grading_feedback,
+        grading_result: question.grading_result,
         explanation: question.explanation,
         options: questionAnswers.map((a) => ({
           key: a.answer_key,

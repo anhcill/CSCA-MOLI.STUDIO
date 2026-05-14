@@ -138,7 +138,7 @@ export default function AdminDashboard() {
         canManageContent && { label: 'Tài liệu', href: '/admin/materials', desc: 'Upload và quản lý tài liệu', color: 'cyan' },
         canManageContent && { label: 'Từ vựng', href: '/admin/vocabulary', desc: 'Quản lý từ vựng HSK', color: 'cyan' },
         canManageForum && { label: 'Forum', href: '/admin/posts', desc: 'Kiểm duyệt bài viết', color: 'orange' },
-        { label: 'Analytics & Export', href: '/admin/analytics', desc: 'Doanh thu, đề thi, top câu sai, CSV', color: 'violet' },
+        isSuperAdmin && { label: 'Analytics & Export', href: '/admin/analytics', desc: 'Doanh thu, đề thi, top câu sai, CSV', color: 'violet' },
         { label: 'Bảng xếp hạng', href: '/bang-xep-hang', desc: 'Xem top học viên', color: 'violet' },
     ].filter(Boolean) as { label: string; href: string; desc: string; color: string }[];
 

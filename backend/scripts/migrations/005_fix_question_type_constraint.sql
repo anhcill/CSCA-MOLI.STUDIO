@@ -15,8 +15,15 @@ BEGIN
     ) THEN
         ALTER TABLE questions DROP CONSTRAINT chk_question_type;
         RAISE NOTICE 'Dropped old chk_question_type constraint';
-    ELSE
-        RAISE NOTICE 'chk_question_type constraint not found, will create from scratch';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_question_type_v2'
+        AND conrelid = 'questions'::regclass
+    ) THEN
+        ALTER TABLE questions DROP CONSTRAINT chk_question_type_v2;
+        RAISE NOTICE 'Dropped old chk_question_type_v2 constraint';
     END IF;
 END $$;
 
@@ -28,7 +35,9 @@ ALTER TABLE questions ADD CONSTRAINT chk_question_type
         'fill_blank_item',
         'reading_passage',
         'reading_item',
-        'true_false'
+        'true_false',
+        'essay',
+        'translation'
     ));
 
 -- Verify the constraint
@@ -59,7 +68,9 @@ BEGIN
         'fill_blank_item',
         'reading_passage',
         'reading_item',
-        'true_false'
+        'true_false',
+        'essay',
+        'translation'
     );
 
     IF bad_count > 0 THEN

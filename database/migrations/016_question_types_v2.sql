@@ -20,7 +20,9 @@ ALTER TABLE questions ADD CONSTRAINT chk_question_type_v2
     'fill_blank_item',
     'reading_passage',
     'reading_item',
-    'true_false'
+    'true_false',
+    'essay',
+    'translation'
   ));
 
 -- 3. Chú thích

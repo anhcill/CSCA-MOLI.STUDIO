@@ -125,6 +125,17 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_user_answers_question_id ON user_answers(question_id)`,
     );
+    await pool.query(`
+      ALTER TABLE user_answers
+      ALTER COLUMN selected_answer_key TYPE VARCHAR(30)
+      USING selected_answer_key::VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS score_awarded NUMERIC(6,2),
+      ADD COLUMN IF NOT EXISTS max_score NUMERIC(6,2),
+      ADD COLUMN IF NOT EXISTS grading_status VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS grading_feedback TEXT,
+      ADD COLUMN IF NOT EXISTS grading_result JSONB,
+      ADD COLUMN IF NOT EXISTS graded_at TIMESTAMP
+    `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_vocab_subject_topic ON vocabulary_items(subject, topic) WHERE is_active = TRUE`,
     );
@@ -724,6 +735,13 @@ async function runOptimizations() {
           ) THEN
               ALTER TABLE questions DROP CONSTRAINT chk_question_type;
           END IF;
+          IF EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'chk_question_type_v2'
+              AND conrelid = 'questions'::regclass
+          ) THEN
+              ALTER TABLE questions DROP CONSTRAINT chk_question_type_v2;
+          END IF;
       EXCEPTION WHEN OTHERS THEN
           RAISE NOTICE 'Constraint drop skipped: %', SQLERRM;
       END $$;
@@ -736,7 +754,9 @@ async function runOptimizations() {
           'fill_blank_item',
           'reading_passage',
           'reading_item',
-          'true_false'
+          'true_false',
+          'essay',
+          'translation'
         ))
     `);
 

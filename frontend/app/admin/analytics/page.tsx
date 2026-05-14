@@ -59,7 +59,7 @@ export default function AdminAnalyticsPage() {
 
   const filters = useMemo<AdminAnalyticsFilters>(() => ({ from, to, granularity }), [from, to, granularity]);
 
-  const canView = hasPermission(user, 'admin.dashboard.view');
+  const canView = hasPermission(user, 'admin.super');
 
   const loadAnalytics = async (nextFilters = filters) => {
     try {

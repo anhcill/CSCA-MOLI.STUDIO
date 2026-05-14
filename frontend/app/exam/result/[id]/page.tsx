@@ -123,6 +123,11 @@ interface QuestionResult {
     correct_answer_text: string;
     is_correct: boolean;
     points: number;
+    score_awarded?: number | string | null;
+    max_score?: number | string | null;
+    grading_status?: string | null;
+    grading_feedback?: string | null;
+    grading_result?: any;
     explanation?: string;
     explanation_cn?: string;
     options: AnswerOption[];

@@ -50,7 +50,7 @@ const NAV_SECTIONS = [
         label: 'Analytics',
         icon: FiBarChart2,
         href: '/admin/analytics',
-        permission: 'admin.dashboard.view',
+        permission: 'admin.super',
         roles: [],
       },
       {

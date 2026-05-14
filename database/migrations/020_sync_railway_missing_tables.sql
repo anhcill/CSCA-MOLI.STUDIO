@@ -164,11 +164,17 @@ CREATE TABLE IF NOT EXISTS "user_answers" (
   "attempt_id" INTEGER,
   "question_id" INTEGER,
   "selected_answer_id" INTEGER,
-  "selected_answer_key" CHAR(1),
+  "selected_answer_key" VARCHAR(30),
   "is_correct" BOOLEAN,
   "time_spent_seconds" INTEGER,
   "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   "essay_answer" TEXT,
+  "score_awarded" NUMERIC(6,2),
+  "max_score" NUMERIC(6,2),
+  "grading_status" VARCHAR(20),
+  "grading_feedback" TEXT,
+  "grading_result" JSONB,
+  "graded_at" TIMESTAMP,
   CONSTRAINT "user_answers_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "user_answers_attempt_id_question_id_key" UNIQUE ("attempt_id", "question_id")
 );

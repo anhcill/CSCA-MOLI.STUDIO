@@ -26,19 +26,19 @@ router.get(
 
 router.get(
 	"/analytics",
-	authorizePermission("admin.dashboard.view"),
+	authorizePermission("admin.super"),
 	adminAnalyticsController.getAnalytics,
 );
 
 router.get(
 	"/analytics/exams/:examId",
-	authorizePermission("admin.dashboard.view"),
+	authorizePermission("admin.super"),
 	adminAnalyticsController.getExamReport,
 );
 
 router.get(
 	"/analytics/export/:dataset",
-	authorizePermission("admin.dashboard.view"),
+	authorizePermission("admin.super"),
 	adminAnalyticsController.exportDataset,
 );
 

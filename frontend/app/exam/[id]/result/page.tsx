@@ -33,6 +33,11 @@ interface QuestionResult {
   correct_answer_text: string;
   is_correct: boolean;
   points: number;
+  score_awarded?: number | string | null;
+  max_score?: number | string | null;
+  grading_status?: string | null;
+  grading_feedback?: string | null;
+  grading_result?: any;
   explanation?: string;
   explanation_cn?: string;
   options: AnswerOption[];
@@ -470,6 +475,21 @@ function ExamResultContent() {
                     {/* Essay/Translation answer display */}
                     {(q.question_type === 'essay' || q.question_type === 'translation') && (
                       <div className="mt-4 ml-8 space-y-3">
+                        {q.grading_status && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">Cham tu dong</p>
+                              <span className="text-sm font-black text-orange-700">
+                                {Number(q.score_awarded ?? 0).toFixed(1)}/{Number(q.max_score ?? q.points ?? 0).toFixed(1)} diem
+                              </span>
+                            </div>
+                            {(q.grading_feedback || q.grading_result?.feedback) && (
+                              <p className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">
+                                {q.grading_feedback || q.grading_result?.feedback}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                           <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
                           <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
