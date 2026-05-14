@@ -1,272 +1,456 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-import { qaApi, Ticket } from '@/lib/api/qaApi';
-import { FiMessageSquare, FiImage, FiSend, FiX, FiCheckCircle, FiInbox, FiTrash2 } from 'react-icons/fi';
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
+import { qaApi, Ticket } from '@/lib/api/qaApi';
+import {
+  FiArchive,
+  FiCheckCircle,
+  FiClock,
+  FiImage,
+  FiInbox,
+  FiRefreshCw,
+  FiSearch,
+  FiSend,
+  FiTrash2,
+  FiX,
+} from 'react-icons/fi';
+
+type StatusFilter = 'all' | 'pending' | 'answered' | 'closed';
+
+const statusMeta: Record<Ticket['status'], { label: string; className: string; icon: React.ElementType }> = {
+  pending: { label: 'Chờ trả lời', className: 'bg-amber-50 text-amber-700 border-amber-200', icon: FiClock },
+  answered: { label: 'Đã trả lời', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: FiCheckCircle },
+  closed: { label: 'Đã đóng', className: 'bg-gray-100 text-gray-600 border-gray-200', icon: FiArchive },
+};
+
+function StatusBadge({ status }: { status: Ticket['status'] }) {
+  const meta = statusMeta[status] || statusMeta.pending;
+  const Icon = meta.icon;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
+      <Icon size={12} />
+      {meta.label}
+    </span>
+  );
+}
+
+function formatTime(value?: string) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function authorInitial(ticket: Ticket) {
+  return (ticket.author_name || ticket.author_email || 'H').charAt(0).toUpperCase();
+}
 
 export default function AdminQADashboard() {
-    const [tickets, setTickets] = useState<Ticket[]>([]);
-    const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'answered' | 'closed'>('all');
-    const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-    const [content, setContent] = useState('');
-    const [image, setImage] = useState<File | null>(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [loadError, setLoadError] = useState('');
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [query, setQuery] = useState('');
+  const [content, setContent] = useState('');
+  const [image, setImage] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [toast, setToast] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        loadTickets();
-    }, [statusFilter]);
+  const counts = useMemo(() => ({
+    all: tickets.length,
+    pending: tickets.filter((ticket) => ticket.status === 'pending').length,
+    answered: tickets.filter((ticket) => ticket.status === 'answered').length,
+    closed: tickets.filter((ticket) => ticket.status === 'closed').length,
+  }), [tickets]);
 
-    const loadTickets = async () => {
-        setLoadError('');
-        try {
-            const data = await qaApi.adminGetAllTickets(statusFilter);
-            setTickets(data);
-            if (selectedTicket) {
-                try {
-                    const detail = await qaApi.adminGetTicketDetail(selectedTicket.id);
-                    setSelectedTicket(detail);
-                } catch {
-                    // ticket may have been deleted
-                }
-            }
-        } catch (error: any) {
-            console.error("Admin Get Tickets Error:", error);
-            setLoadError(error.response?.data?.message || "Lỗi lấy danh sách Tickets");
-        }
-    };
-
-    const handleSelectTicket = async (ticket: Ticket) => {
-        try {
-            const detail = await qaApi.adminGetTicketDetail(ticket.id);
-            setSelectedTicket(detail);
-            setContent('');
-            setImage(null);
-        } catch (error) {
-            alert("Lỗi xem chi tiết");
-        }
-    };
-
-    const chatEndRef = React.useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        // Cuộn xuống cuối mỗi khi selectedTicket.replies thay đổi
-        if (chatEndRef.current) {
-            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [selectedTicket?.replies]);
-
-    const handleReply = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedTicket) return;
-        if (!content.trim() && !image) return alert("Vui lòng nhập phản hồi");
-
-        // --- OPTIMISTIC UI UPDATE ---
-        const fakeId = Date.now();
-        const fakeImageUrl = image ? URL.createObjectURL(image) : null;
-        const currentContent = content;
-        const currentImage = image;
-        
-        const tempReply = {
-            id: fakeId,
-            ticket_id: selectedTicket.id,
-            sender_id: 0,
-            is_admin_reply: true,
-            content: currentContent,
-            image_url: fakeImageUrl,
-            created_at: new Date().toISOString()
-        };
-        
-        setSelectedTicket({ 
-            ...selectedTicket, 
-            replies: [...(selectedTicket.replies || []), tempReply] 
-        });
-
-        setContent('');
-        setImage(null);
-        setIsSubmitting(true);
-
-        try {
-            let imageUrl = '';
-            if (currentImage) {
-                const uploadRes = await qaApi.uploadImage(currentImage);
-                imageUrl = uploadRes.data?.url || uploadRes.url;
-            }
-
-            await qaApi.adminReplyTicket(selectedTicket.id, {
-                content: currentContent,
-                imageUrl
-            });
-
-            await loadTickets();
-        } catch (error) {
-            alert("Lỗi gửi phản hồi");
-            // Rollback UI
-            const detail = await qaApi.adminGetTicketDetail(selectedTicket.id);
-            setSelectedTicket(detail);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleChangeStatus = async (status: string) => {
-        if (!selectedTicket) return;
-        try {
-            await qaApi.adminChangeStatus(selectedTicket.id, status);
-            alert("Đã đổi trạng thái thành " + status);
-            loadTickets();
-        } catch (error) {
-            alert("Lỗi cập nhật trạng thái");
-        }
-    };
-
-    const handleDeleteTicket = async () => {
-        if (!selectedTicket) return;
-        if (!confirm("Bạn có chắc chắn muốn xóa vĩnh viễn cuộc hội thoại này? Dữ liệu không thể khôi phục.")) return;
-        
-        try {
-            await qaApi.adminDeleteTicket(selectedTicket.id);
-            alert("Đã xóa ticket thành công!");
-            setSelectedTicket(null);
-            loadTickets();
-        } catch (error) {
-            alert("Lỗi xóa ticket");
-        }
-    };
-
-    return (
-        <AdminLayout title="Hỏi-Đáp VIP" description="Quản lý hỗ trợ học viên 1:1">
-            <div className="flex h-[calc(100vh-120px)] bg-gray-50 dark:bg-slate-900 rounded-xl overflow-hidden border dark:border-slate-800">
-                {/* CỘT TRÁI: Danh sách Ticket */}
-                <div className="w-1/3 min-w-[300px] max-w-sm border-r bg-white dark:bg-slate-800 flex flex-col">
-                    <div className="p-4 border-b">
-                        <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
-                            <FiInbox /> Hỗ trợ Học viên
-                        </h2>
-                        <div className="flex bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
-                            <button onClick={()=>setStatusFilter('pending')} className={`flex-1 text-sm py-1.5 font-semibold rounded-md transition ${statusFilter==='pending'?'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-400':'text-gray-500'}`}>Tồn đọng</button>
-                            <button onClick={()=>setStatusFilter('all')} className={`flex-1 text-sm py-1.5 font-semibold rounded-md transition ${statusFilter==='all'?'bg-white dark:bg-slate-600 shadow text-gray-900 dark:text-white':'text-gray-500'}`}>Toàn bộ</button>
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {loadError ? (
-                            <div className="p-6 text-center text-red-400 text-sm">{loadError}</div>
-                        ) : tickets.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400 text-sm">Không có ticket nào.</div>
-                        ) : (
-                            tickets.map(ticket => (
-                                <button
-                                    key={ticket.id}
-                                    onClick={() => handleSelectTicket(ticket)}
-                                    className={`w-full text-left p-4 border-b hover:bg-gray-50 dark:hover:bg-slate-700 transition ${selectedTicket?.id === ticket.id ? 'bg-blue-50 dark:bg-slate-700' : ''}`}
-                                >
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{ticket.author_name || ticket.author_email || 'Học viên'}</div>
-                                        <span className="text-[10px] text-gray-400">{new Date(ticket.created_at).toLocaleDateString('vi-VN')}</span>
-                                    </div>
-                                    <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-1">{ticket.content}</div>
-                                    <div className="mt-2 flex justify-between items-center">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                            ticket.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                            ticket.status === 'answered' ? 'bg-green-100 text-green-700' :
-                                            'bg-gray-200 text-gray-600'
-                                        }`}>
-                                            {ticket.status === 'pending' ? '⏳ CHỜ' : ticket.status === 'answered' ? '✅ ĐÃ TRẢ LỜI' : 'ĐÓNG'}
-                                        </span>
-                                        {ticket.reply_count ? <span className="text-xs text-gray-400">{ticket.reply_count} tin nhắn</span> : null}
-                                    </div>
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
-
-                {/* CỘT PHẢI: Khung Chat */}
-                <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900">
-                    {!selectedTicket ? (
-                        <div className="m-auto flex flex-col items-center gap-4 text-gray-400">
-                            <FiMessageSquare size={64} className="opacity-20" />
-                            <p>Chọn một câu hỏi từ danh sách để trả lời</p>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Box Header */}
-                            <div className="p-4 bg-white dark:bg-slate-800 border-b flex justify-between items-center shadow-sm shrink-0">
-                                <div>
-                                    <h2 className="font-bold text-lg">{selectedTicket.author_name || 'Học viên'}</h2>
-                                    <p className="text-xs text-gray-500">{selectedTicket.author_email} • Hỏi lúc {new Date(selectedTicket.created_at).toLocaleString('vi-VN')}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={()=>handleChangeStatus('pending')} className="text-xs font-bold px-3 py-1.5 border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded transition" title="Đánh dấu chưa xử lý">Mark Unread</button>
-                                    <button onClick={()=>handleChangeStatus('closed')} className="text-xs font-bold px-3 py-1.5 border border-gray-200 text-gray-600 bg-gray-50 hover:bg-gray-100 rounded transition" title="Đóng Ticket">Đóng Ticket</button>
-                                    <button onClick={handleDeleteTicket} className="text-xs font-bold px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 rounded inline-flex items-center gap-1 transition" title="Xóa vĩnh viễn">
-                                        <FiTrash2 /> Xóa
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* List Messages */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                                {/* Original Question */}
-                                <div className="flex gap-4 items-start">
-                                    <img src={selectedTicket.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedTicket.author_name || 'H')}&background=eee`} alt="avatar" className="w-10 h-10 rounded-full" />
-                                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl rounded-tl-none shadow-sm border max-w-2xl">
-                                        <div className="text-sm font-bold text-blue-600 mb-1">Câu hỏi của học viên</div>
-                                        <p className="whitespace-pre-wrap">{selectedTicket.content}</p>
-                                        {selectedTicket.image_url && <img src={selectedTicket.image_url} onClick={()=>window.open(selectedTicket?.image_url as string, '_blank')} className="mt-3 rounded cursor-pointer border max-h-80" />}
-                                    </div>
-                                </div>
-                                
-                                {/* Replies */}
-                                {selectedTicket.replies?.map(reply => (
-                                    <div key={reply.id} className={`flex gap-4 ${reply.is_admin_reply ? 'flex-row-reverse' : ''}`}>
-                                        <img src={reply.is_admin_reply ? 'https://ui-avatars.com/api/?name=Admin&background=2563eb&color=fff' : (selectedTicket.author_avatar || 'https://ui-avatars.com/api/?name=U')} alt="avatar" className="w-10 h-10 rounded-full" />
-                                        <div className={`p-4 rounded-2xl shadow-sm border max-w-2xl ${
-                                            reply.is_admin_reply ? 'bg-blue-600 text-white rounded-tr-none border-blue-500' : 'bg-white dark:bg-slate-800 border-gray-100 rounded-tl-none'
-                                        }`}>
-                                            <p className="whitespace-pre-wrap">{reply.content}</p>
-                                            {reply.image_url && <img src={reply.image_url} onClick={()=>window.open(reply.image_url as string, '_blank')} className="mt-3 rounded cursor-pointer border border-black/10 max-h-80" />}
-                                        </div>
-                                    </div>
-                                ))}
-                                <div ref={chatEndRef} />
-                            </div>
-
-                            {/* Input Chat */}
-                            <div className="p-4 bg-white dark:bg-slate-800 border-t shrink-0">
-                                {image && (
-                                    <div className="mb-2 relative inline-block">
-                                        <img src={URL.createObjectURL(image)} alt="Preview" className="h-20 rounded border" />
-                                        <button onClick={() => setImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"><FiX size={12}/></button>
-                                    </div>
-                                )}
-                                <form onSubmit={handleReply} className="flex gap-2 items-end">
-                                    <label className="p-3 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-xl cursor-pointer transition">
-                                        <FiImage size={24} />
-                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files && setImage(e.target.files[0])} />
-                                    </label>
-                                    <textarea
-                                        value={content}
-                                        onChange={e => setContent(e.target.value)}
-                                        className="flex-1 p-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none resize-none min-h-[50px] max-h-[150px]"
-                                        placeholder="Viết câu trả lời cho học viên..."
-                                        rows={1}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault();
-                                                handleReply(e);
-                                            }
-                                        }}
-                                    />
-                                    <button disabled={isSubmitting || (!content && !image)} type="submit" className="p-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl font-bold flex items-center justify-center transition">
-                                        <FiSend size={20} />
-                                    </button>
-                                </form>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-        </AdminLayout>
+  const filteredTickets = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return tickets;
+    return tickets.filter((ticket) =>
+      [ticket.author_name, ticket.author_email, ticket.content, ticket.category]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(keyword)),
     );
+  }, [tickets, query]);
+
+  const messages = useMemo(() => {
+    if (!selectedTicket) return [];
+    return [
+      {
+        id: `ticket-${selectedTicket.id}`,
+        sender_id: selectedTicket.user_id,
+        is_admin_reply: false,
+        content: selectedTicket.content,
+        image_url: selectedTicket.image_url,
+        created_at: selectedTicket.created_at,
+        sender_name: selectedTicket.author_name || 'Học viên',
+        sender_avatar: selectedTicket.author_avatar,
+      },
+      ...(selectedTicket.replies || []),
+    ];
+  }, [selectedTicket]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(''), 2500);
+  };
+
+  const loadTickets = async (keepSelection = true) => {
+    setLoadError('');
+    setLoading(true);
+    try {
+      const data = await qaApi.adminGetAllTickets(statusFilter);
+      setTickets(data);
+
+      if (keepSelection && selectedTicket) {
+        const stillVisible = data.some((ticket) => ticket.id === selectedTicket.id);
+        if (stillVisible) {
+          const detail = await qaApi.adminGetTicketDetail(selectedTicket.id);
+          setSelectedTicket(detail);
+        } else {
+          setSelectedTicket(null);
+        }
+      }
+    } catch (error: any) {
+      setLoadError(error.response?.data?.message || 'Không tải được danh sách câu hỏi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTickets(false);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, selectedTicket?.id]);
+
+  const selectTicket = async (ticket: Ticket) => {
+    try {
+      const detail = await qaApi.adminGetTicketDetail(ticket.id);
+      setSelectedTicket(detail);
+      setContent('');
+      setImage(null);
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Không mở được hội thoại.');
+    }
+  };
+
+  const refreshSelectedTicket = async () => {
+    if (!selectedTicket) return;
+    const detail = await qaApi.adminGetTicketDetail(selectedTicket.id);
+    setSelectedTicket(detail);
+  };
+
+  const submitReply = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedTicket || selectedTicket.status === 'closed') return;
+    if (!content.trim() && !image) return;
+
+    const currentContent = content.trim();
+    const currentImage = image;
+    const previewUrl = currentImage ? URL.createObjectURL(currentImage) : null;
+
+    setSelectedTicket((ticket) => ticket ? {
+      ...ticket,
+      status: 'answered',
+      replies: [
+        ...(ticket.replies || []),
+        {
+          id: Date.now(),
+          ticket_id: ticket.id,
+          sender_id: 0,
+          is_admin_reply: true,
+          content: currentContent,
+          image_url: previewUrl,
+          created_at: new Date().toISOString(),
+          sender_name: 'Giảng viên',
+        },
+      ],
+    } : ticket);
+    setContent('');
+    setImage(null);
+    setIsSubmitting(true);
+
+    try {
+      let imageUrl = '';
+      if (currentImage) {
+        const uploadRes = await qaApi.uploadImage(currentImage);
+        imageUrl = uploadRes.data?.url || uploadRes.url;
+      }
+
+      await qaApi.adminReplyTicket(selectedTicket.id, { content: currentContent, imageUrl });
+      await Promise.all([loadTickets(true), refreshSelectedTicket()]);
+      showToast('Đã gửi trả lời cho học viên.');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Gửi trả lời thất bại.');
+      await refreshSelectedTicket().catch(() => {});
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const changeStatus = async (status: Ticket['status']) => {
+    if (!selectedTicket) return;
+    try {
+      await qaApi.adminChangeStatus(selectedTicket.id, status);
+      await loadTickets(true);
+      showToast(status === 'closed' ? 'Đã đóng hội thoại.' : 'Đã cập nhật trạng thái.');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Không cập nhật được trạng thái.');
+    }
+  };
+
+  const deleteTicket = async () => {
+    if (!selectedTicket) return;
+    if (!confirm('Xóa vĩnh viễn hội thoại này?')) return;
+    try {
+      await qaApi.adminDeleteTicket(selectedTicket.id);
+      setSelectedTicket(null);
+      await loadTickets(false);
+      showToast('Đã xóa hội thoại.');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Không xóa được hội thoại.');
+    }
+  };
+
+  return (
+    <AdminLayout title="Hỏi Giảng Viên" description="Quản lý hội thoại 1:1 của học viên Pre">
+      <div className="relative h-[calc(100vh-132px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
+        {toast && (
+          <div className="absolute right-4 top-4 z-30 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+            {toast}
+          </div>
+        )}
+
+        <div className="grid h-full grid-cols-[360px_1fr]">
+          <aside className="flex min-w-0 flex-col border-r border-gray-200 bg-gray-50">
+            <div className="border-b border-gray-200 bg-white p-4">
+              <div className="mb-3 grid grid-cols-4 gap-2">
+                {([
+                  { key: 'pending', label: 'Chờ', count: counts.pending },
+                  { key: 'answered', label: 'Đã đáp', count: counts.answered },
+                  { key: 'closed', label: 'Đóng', count: counts.closed },
+                  { key: 'all', label: 'Tất cả', count: counts.all },
+                ] as { key: StatusFilter; label: string; count: number }[]).map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setStatusFilter(item.key)}
+                    className={`rounded-lg px-2 py-2 text-xs font-bold transition-colors ${
+                      statusFilter === item.key
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    {item.label}
+                    <span className="ml-1 opacity-75">{item.count}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
+                  placeholder="Tìm học viên, email, nội dung..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                <FiInbox size={16} />
+                {filteredTickets.length} hội thoại
+              </div>
+              <button
+                onClick={() => loadTickets(true)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-white hover:text-indigo-600"
+                title="Làm mới"
+              >
+                <FiRefreshCw className={loading ? 'animate-spin' : ''} size={15} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {loadError ? (
+                <div className="p-6 text-center text-sm font-semibold text-rose-600">{loadError}</div>
+              ) : loading && tickets.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400">Đang tải...</div>
+              ) : filteredTickets.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-400">Không có hội thoại phù hợp.</div>
+              ) : (
+                filteredTickets.map((ticket) => (
+                  <button
+                    key={ticket.id}
+                    onClick={() => selectTicket(ticket)}
+                    className={`w-full border-b border-gray-100 p-4 text-left transition-colors ${
+                      selectedTicket?.id === ticket.id ? 'bg-white' : 'hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-black text-indigo-700">
+                        {authorInitial(ticket)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-bold text-gray-900">
+                            {ticket.author_name || ticket.author_email || 'Học viên'}
+                          </p>
+                          <span className="shrink-0 text-[11px] text-gray-400">{formatTime(ticket.updated_at || ticket.created_at)}</span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-sm text-gray-500">
+                          {ticket.content || '(Học viên gửi ảnh)'}
+                        </p>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <StatusBadge status={ticket.status} />
+                          <span className="text-xs text-gray-400">{ticket.reply_count || 0} tin</span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+
+          <main className="flex min-w-0 flex-col bg-slate-50">
+            {!selectedTicket ? (
+              <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
+                <FiInbox size={54} className="mb-3 opacity-40" />
+                <p className="text-sm font-semibold">Chọn một hội thoại để trả lời học viên.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h2 className="truncate text-base font-black text-gray-900">
+                        {selectedTicket.author_name || selectedTicket.author_email || 'Học viên'}
+                      </h2>
+                      <StatusBadge status={selectedTicket.status} />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {selectedTicket.author_email || 'Không có email'} · Tạo lúc {formatTime(selectedTicket.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {selectedTicket.status === 'closed' ? (
+                      <button
+                        onClick={() => changeStatus('pending')}
+                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                      >
+                        Mở lại
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => changeStatus('closed')}
+                        className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100"
+                      >
+                        Đóng
+                      </button>
+                    )}
+                    <button
+                      onClick={deleteTicket}
+                      className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                    >
+                      <span className="inline-flex items-center gap-1"><FiTrash2 size={13} /> Xóa</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-5 py-5">
+                  <div className="mx-auto max-w-4xl space-y-4">
+                    {messages.map((message) => {
+                      const isAdmin = message.is_admin_reply;
+                      return (
+                        <div key={message.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[76%] rounded-2xl px-4 py-3 shadow-sm ${
+                            isAdmin
+                              ? 'rounded-br-md bg-indigo-600 text-white'
+                              : 'rounded-bl-md border border-gray-200 bg-white text-gray-800'
+                          }`}>
+                            <div className={`mb-1 text-xs font-bold ${isAdmin ? 'text-indigo-100' : 'text-gray-500'}`}>
+                              {isAdmin ? 'Giảng viên' : selectedTicket.author_name || 'Học viên'}
+                            </div>
+                            {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
+                            {message.image_url && (
+                              <img
+                                src={message.image_url}
+                                alt="Đính kèm"
+                                className="mt-3 max-h-80 cursor-pointer rounded-xl border border-black/10 object-contain"
+                                onClick={() => window.open(message.image_url || '', '_blank', 'noopener,noreferrer')}
+                              />
+                            )}
+                            <div className={`mt-2 text-[11px] ${isAdmin ? 'text-indigo-100' : 'text-gray-400'}`}>
+                              {formatTime(message.created_at)}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatEndRef} />
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 bg-white p-4">
+                  {selectedTicket.status === 'closed' ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 py-3 text-center text-sm font-semibold text-gray-400">
+                      Hội thoại đã đóng. Mở lại để tiếp tục trả lời.
+                    </div>
+                  ) : (
+                    <form onSubmit={submitReply} className="mx-auto max-w-4xl">
+                      {image && (
+                        <div className="mb-3 inline-flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2">
+                          <img src={URL.createObjectURL(image)} alt="Preview" className="h-12 rounded-lg border border-indigo-200 object-cover" />
+                          <span className="max-w-[260px] truncate text-xs font-semibold text-indigo-700">{image.name}</span>
+                          <button type="button" onClick={() => setImage(null)} className="rounded-full bg-white p-1 text-rose-500">
+                            <FiX size={13} />
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex items-end gap-2">
+                        <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100">
+                          <FiImage size={18} />
+                          <input type="file" accept="image/*" className="hidden" onChange={(event) => setImage(event.target.files?.[0] || null)} />
+                        </label>
+                        <textarea
+                          value={content}
+                          onChange={(event) => setContent(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault();
+                              if (content.trim() || image) submitReply(event);
+                            }
+                          }}
+                          rows={1}
+                          className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-indigo-400 focus:bg-white"
+                          placeholder="Trả lời học viên... Enter để gửi, Shift+Enter để xuống dòng"
+                        />
+                        <button
+                          disabled={isSubmitting || (!content.trim() && !image)}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                          type="submit"
+                        >
+                          {isSubmitting ? <FiRefreshCw className="animate-spin" size={17} /> : <FiSend size={17} />}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </>
+            )}
+          </main>
+        </div>
+      </div>
+    </AdminLayout>
+  );
 }

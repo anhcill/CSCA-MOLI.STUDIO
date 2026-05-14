@@ -30,6 +30,7 @@ const Ticket = {
   },
 
   async create(data) {
+    const content = String(data.content || "").trim();
     const query = `
       INSERT INTO support_tickets (user_id, category, reference_url, content, image_url)
       VALUES ($1, $2, $3, $4, $5)
@@ -39,7 +40,7 @@ const Ticket = {
       data.userId,
       data.category || 'general',
       data.referenceUrl || null,
-      data.content,
+      content,
       data.imageUrl || null
     ]);
     return result.rows[0];
@@ -60,7 +61,7 @@ const Ticket = {
   async getById(ticketId, userId = null, isAdmin = false) {
     // If not admin, ensure user_id matches
     let query = `
-      SELECT t.*, u.full_name as author_name, u.avatar_url as author_avatar
+      SELECT t.*, u.full_name as author_name, u.avatar_url as author_avatar, u.email as author_email
       FROM support_tickets t
       JOIN users u ON t.user_id = u.id
       WHERE t.id = $1
@@ -90,12 +91,13 @@ const Ticket = {
   },
 
   async addReply(ticketId, senderId, isAdmin, content, imageUrl) {
+    const message = String(content || "").trim();
     const query = `
       INSERT INTO support_replies (ticket_id, sender_id, is_admin_reply, content, image_url)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const result = await pool.query(query, [ticketId, senderId, isAdmin, content, imageUrl]);
+    const result = await pool.query(query, [ticketId, senderId, isAdmin, message, imageUrl || null]);
 
     // Update ticket timestamp and status
     const newStatus = isAdmin ? 'answered' : 'pending';
