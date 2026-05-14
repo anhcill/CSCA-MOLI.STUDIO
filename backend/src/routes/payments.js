@@ -77,7 +77,7 @@ function timingSafeEqualString(a = '', b = '') {
   return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-function verifySePayApiKey(authHeader) {
+function verifySePayApiKey(authHeader, apiKeyHeader) {
   const expectedKey = process.env.SEPAY_API_KEY;
   if (!expectedKey) {
     return { ok: false, status: 503, message: 'SePay webhook is not configured' };
@@ -85,7 +85,12 @@ function verifySePayApiKey(authHeader) {
 
   const prefix = 'Apikey ';
   const header = String(authHeader || '');
-  if (!header.startsWith(prefix)) {
+  const directKey = String(apiKeyHeader || '');
+  if (directKey && timingSafeEqualString(directKey, expectedKey)) {
+    return { ok: true };
+  }
+
+  if (!header.toLowerCase().startsWith(prefix.toLowerCase())) {
     return { ok: false, status: 401, message: 'Unauthorized' };
   }
 
@@ -103,6 +108,26 @@ function normalizeBankAccount(value) {
 
 function normalizePaymentCode(value) {
   return String(value || '').trim().toUpperCase();
+}
+
+function buildSePaySearchText(payload) {
+  return [
+    payload?.content,
+    payload?.description,
+    payload?.code,
+    payload?.referenceCode,
+    payload?.transactionContent,
+    payload?.transactionCode,
+  ]
+    .filter(Boolean)
+    .map(value => String(value))
+    .join(' ')
+    .trim();
+}
+
+function extractBankTransferOrderCode(value) {
+  const match = String(value || '').toUpperCase().match(/CSCA\d+T\d{8,}/);
+  return match?.[0] || '';
 }
 
 function getBankConfig() {
@@ -809,13 +834,25 @@ router.post('/verify-return', authenticate, async (req, res) => {
  */
 router.post('/sepay-webhook', async (req, res) => {
   try {
-    const authResult = verifySePayApiKey(req.headers.authorization);
+    const authResult = verifySePayApiKey(
+      req.headers.authorization,
+      req.headers['x-api-key'] || req.headers['x-sepay-api-key']
+    );
     if (!authResult.ok) {
       console.warn(`[SePay] Webhook rejected: ${authResult.message}`);
       return res.status(authResult.status).json({ success: false, message: authResult.message });
     }
 
-    const { transferAmount, content, transferType, accountNumber, code, id, referenceCode } = req.body;
+    const {
+      transferAmount,
+      content,
+      description,
+      transferType,
+      accountNumber,
+      code,
+      id,
+      referenceCode,
+    } = req.body;
 
     console.log('[SePay] Webhook received:', {
       id,
@@ -824,10 +861,12 @@ router.post('/sepay-webhook', async (req, res) => {
       transferType,
       transferAmount,
       code,
+      descriptionLength: String(description || '').length,
       contentLength: String(content || '').length,
     });
 
-    if (transferType !== 'in') {
+    const normalizedTransferType = String(transferType || '').toLowerCase();
+    if (normalizedTransferType && !['in', 'credit'].includes(normalizedTransferType)) {
       return res.json({ success: true, message: 'Ignored - not incoming transfer' });
     }
 
@@ -839,9 +878,12 @@ router.post('/sepay-webhook', async (req, res) => {
 
     const expectedAccount = normalizeBankAccount(bankConfig.accountNumber);
     const receivedAccount = normalizeBankAccount(accountNumber);
-    if (!receivedAccount || receivedAccount !== expectedAccount) {
+    if (receivedAccount && receivedAccount !== expectedAccount) {
       console.warn('[SePay] Webhook: accountNumber mismatch');
       return res.json({ success: true, message: 'Ignored - account mismatch' });
+    }
+    if (!receivedAccount) {
+      console.warn('[SePay] Webhook: accountNumber missing, continuing with API key + order code + amount verification');
     }
 
     const receivedAmount = parseInt(transferAmount, 10);
@@ -850,10 +892,11 @@ router.post('/sepay-webhook', async (req, res) => {
       return res.json({ success: true, message: 'Invalid amount' });
     }
 
-    const contentStr = normalizePaymentCode(content);
-    const paymentCode = normalizePaymentCode(code);
-    if (!contentStr || contentStr.length < 5) {
-      console.warn('[SePay] Webhook: Empty or too short content');
+    const searchText = buildSePaySearchText(req.body);
+    const normalizedSearchText = normalizePaymentCode(searchText);
+    const extractedOrderCode = extractBankTransferOrderCode(searchText);
+    if (!normalizedSearchText || normalizedSearchText.length < 5) {
+      console.warn('[SePay] Webhook: Empty or too short payment content');
       return res.json({ success: true, message: 'Invalid content' });
     }
 
@@ -874,40 +917,48 @@ router.post('/sepay-webhook', async (req, res) => {
       }
     }
 
-    // Tìm transaction khớp chính xác
-    const txRes = await require('../config/database').query(
-      `SELECT * FROM transactions
-       WHERE UPPER(transaction_code) = $1
-         AND status = 'pending'
-         AND payment_method = 'bank_transfer'
-       LIMIT 1`,
-      [paymentCode || contentStr]
-    );
+    let transaction = null;
+    if (extractedOrderCode) {
+      const txRes = await db.query(
+        `SELECT * FROM transactions
+         WHERE UPPER(transaction_code) = $1
+           AND status = 'pending'
+           AND payment_method = 'bank_transfer'
+         LIMIT 1`,
+        [extractedOrderCode]
+      );
+      transaction = txRes.rows[0] || null;
+    }
 
-    let transaction = txRes.rows[0];
     if (!transaction) {
-      const likeRes = await require('../config/database').query(
+      const likeRes = await db.query(
         `SELECT * FROM transactions
          WHERE $1 ILIKE '%' || transaction_code || '%'
            AND status = 'pending'
            AND payment_method = 'bank_transfer'
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [content || '']
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [searchText]
       );
       transaction = likeRes.rows[0];
     }
 
     if (!transaction) {
-      console.warn('[SePay] Webhook: No matching transaction for content:', content);
+      console.warn('[SePay] Webhook: No matching transaction', {
+        extractedOrderCode,
+        searchText: searchText.slice(0, 200),
+      });
       return res.json({ success: true, message: 'No matching transaction' });
     }
 
-    // Kiểm tra số tiền — reject nếu sai lệch
+    // Kiểm tra số tiền: thiếu tiền thì reject; chuyển thừa vẫn kích hoạt theo đơn pending.
     const expectedAmount = Number(transaction.amount);
-    if (receivedAmount !== expectedAmount) {
+    if (receivedAmount < expectedAmount) {
       console.warn(`[SePay] Amount mismatch: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
       return res.json({ success: true, message: 'Amount mismatch' });
+    }
+    if (receivedAmount > expectedAmount) {
+      console.warn(`[SePay] Overpaid: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
     }
 
     const claimedTransaction = await Transaction.claimPending(transaction.id);
