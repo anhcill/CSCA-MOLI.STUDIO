@@ -678,7 +678,11 @@ export default function CreateExamPage() {
                                     <input
                                         type="checkbox"
                                         checked={examData.is_premium}
-                                        onChange={(e) => { setExamData({ ...examData, is_premium: e.target.checked }); setExamMetadataDirty(true); }}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setExamData({ ...examData, is_premium: checked, vip_tier: checked ? 'vip' : 'basic' });
+                                            setExamMetadataDirty(true);
+                                        }}
                                         className="sr-only"
                                     />
                                     <div className={`w-11 h-6 rounded-full transition-colors ${examData.is_premium ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gray-300'}`} />
@@ -686,10 +690,10 @@ export default function CreateExamPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <FaCrown className="text-amber-500" />
-                                    <span className="text-sm font-semibold text-gray-700">Đánh dấu là đề thi VIP / PRO</span>
+                                    <span className="text-sm font-semibold text-gray-700">Đánh dấu là đề VIP (VIP/Pre)</span>
                                 </div>
                             </label>
-                            <p className="text-xs text-gray-400 mt-1 ml-14">Chỉ thành viên PRO mới được làm bài thi này</p>
+                            <p className="text-xs text-gray-400 mt-1 ml-14">Chỉ thành viên VIP hoặc Pre mới được làm bài thi này</p>
                         </div>
 
                         <div className="md:col-span-2">
@@ -773,7 +777,10 @@ export default function CreateExamPage() {
                                     { value: 'vip', label: 'VIP', desc: 'Gói VIP & Premium', color: 'amber' },
                                 ].map(tier => (
                                     <button key={tier.value}
-                                        onClick={() => setExamData({ ...examData, vip_tier: tier.value })}
+                                        onClick={() => {
+                                            setExamData({ ...examData, vip_tier: tier.value, is_premium: tier.value !== 'basic' });
+                                            setExamMetadataDirty(true);
+                                        }}
                                         className={`relative p-3 rounded-xl border-2 text-left transition-all ${
                                             examData.vip_tier === tier.value
                                                 ? tier.color === 'amber' ? 'border-amber-500 bg-amber-50' :

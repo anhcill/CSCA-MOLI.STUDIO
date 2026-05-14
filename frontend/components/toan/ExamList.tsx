@@ -17,6 +17,19 @@ interface ExamListProps {
 type FilterType = 'all' | 'done' | 'not-done';
 type SortType = 'newest' | 'oldest' | 'name';
 
+const isVipExam = (exam: Exam) =>
+  exam.is_premium === true || (!!exam.vip_tier && exam.vip_tier !== 'basic');
+
+const groupExamsByYear = (items: Exam[]) => {
+  const map = new Map<number, Exam[]>();
+  items.forEach(exam => {
+    const year = exam.publish_date ? new Date(exam.publish_date).getFullYear() : 0;
+    if (!map.has(year)) map.set(year, []);
+    map.get(year)!.push(exam);
+  });
+  return new Map([...map.entries()].sort((a, b) => b[0] - a[0]));
+};
+
 export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -31,13 +44,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('[ExamList] mount, props:', { subjectCode, subjectSlug });
     loadExams();
   }, [subjectCode, subjectSlug]);
-
-  useEffect(() => {
-    console.log('[ExamList] exams state changed:', exams.length, exams.map(e => ({ id: e.id, title: e.title, premium: e.is_premium })));
-  }, [exams]);
 
   // Keyboard shortcut: focus search on /
   useEffect(() => {
@@ -52,11 +60,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   }, []);
 
   const loadExams = async () => {
-    console.log('[ExamList] loadExams called:', { subjectCode, subjectSlug });
     try {
       setLoading(true);
       const response = await examApi.getExamsBySubject(subjectCode, subjectSlug);
-      console.log('[ExamList] API response type:', typeof response, Array.isArray(response) ? `array(${response.length})` : response);
       // Validate: ensure data is an array
       if (!Array.isArray(response)) {
         console.error('[ExamList] API returned non-array data:', response);
@@ -64,7 +70,6 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         return;
       }
       setExams(response);
-      console.log('[ExamList] Set exams count:', response.length);
     } catch (error: any) {
       console.error('[ExamList] Error loading exams:', error?.response?.data || error?.message || error);
       setExams([]);
@@ -74,7 +79,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   };
 
   const handleExamClick = (exam: Exam) => {
-    if (exam.is_premium && !isVip) {
+    if (isVipExam(exam) && !isVip) {
       setVipModalExam({ title: exam.title, id: exam.id });
       return;
     }
@@ -83,7 +88,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   const handleMakeExam = (exam: Exam, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (exam.is_premium && !isVip) {
+    if (isVipExam(exam) && !isVip) {
       setVipModalExam({ title: exam.title, id: exam.id });
       return;
     }
@@ -130,35 +135,27 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     return filteredExams.filter(e => (e.user_attempt_count || 0) === 0);
   }, [filteredExams, showDone]);
 
-  // Group by year
-  const groupedByYear = useMemo(() => {
-    const map = new Map<number, Exam[]>();
-    visibleExams.forEach(exam => {
-      const year = exam.publish_date ? new Date(exam.publish_date).getFullYear() : 0;
-      if (!map.has(year)) map.set(year, []);
-      map.get(year)!.push(exam);
-    });
-    return new Map([...map.entries()].sort((a, b) => b[0] - a[0]));
-  }, [visibleExams]);
+  const regularExams = useMemo(
+    () => visibleExams.filter(exam => !isVipExam(exam)),
+    [visibleExams]
+  );
+
+  const vipExams = useMemo(
+    () => visibleExams.filter(exam => isVipExam(exam)),
+    [visibleExams]
+  );
+
+  const regularByYear = useMemo(() => groupExamsByYear(regularExams), [regularExams]);
+  const vipByYear = useMemo(() => groupExamsByYear(vipExams), [vipExams]);
 
   // Stats
   const stats = useMemo(() => ({
     total: exams.length,
     done: exams.filter(e => (e.user_attempt_count || 0) > 0).length,
     notDone: exams.filter(e => (e.user_attempt_count || 0) === 0).length,
+    regular: exams.filter(e => !isVipExam(e)).length,
+    vip: exams.filter(e => isVipExam(e)).length,
   }), [exams]);
-
-  const years = [...groupedByYear.keys()].filter(y => y > 0);
-
-  // Scroll to year section
-  const scrollToYear = (year: number) => {
-    const el = document.getElementById(`year-${year}`);
-    if (el) {
-      const offset = 80;
-      const top = el.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top, behavior: 'smooth' });
-    }
-  };
 
   // Difficulty badge
   const DiffBadge = ({ level }: { level?: string }) => {
@@ -207,7 +204,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   // Exam card
   const ExamCard = ({ exam }: { exam: Exam }) => {
     const done = (exam.user_attempt_count || 0) > 0;
-    const isLocked = exam.is_premium && !isVip;
+    const vipOnly = isVipExam(exam);
+    const isLocked = vipOnly && !isVip;
     const accentColor = isLocked ? 'from-amber-500 to-orange-500' : done ? 'from-gray-400 to-gray-500' : 'from-indigo-500 to-purple-600';
     const textColor = isLocked ? 'text-amber-800' : done ? 'text-gray-700' : 'text-gray-900';
     const hoverBorder = isLocked ? 'hover:border-amber-300 hover:shadow-amber-200' : done ? 'hover:border-gray-300 hover:shadow-gray-200' : 'hover:border-indigo-300 hover:shadow-indigo-200';
@@ -244,7 +242,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <h3 className={`font-bold text-sm sm:text-base group-hover:transition-colors truncate ${textColor} ${!isLocked && !done ? 'group-hover:text-indigo-700' : ''}`}>
               {exam.title}
             </h3>
-            {exam.is_premium && (
+            {vipOnly && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-900 text-xs font-bold rounded-md shadow-sm shrink-0">
                 <FaCrown size={10} /> VIP
               </span>
@@ -316,6 +314,78 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   };
 
   // ─── LOADING ───────────────────────────────────────────────────────
+  const ExamSection = ({
+    title,
+    description,
+    count,
+    grouped,
+    variant,
+  }: {
+    title: string;
+    description: string;
+    count: number;
+    grouped: Map<number, Exam[]>;
+    variant: 'regular' | 'vip';
+  }) => {
+    const isVipSection = variant === 'vip';
+
+    return (
+      <section className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${
+        isVipSection ? 'border-amber-200' : 'border-indigo-100'
+      }`}>
+        <div className={`px-4 sm:px-5 py-4 border-b ${
+          isVipSection ? 'bg-amber-50/80 border-amber-100' : 'bg-indigo-50/70 border-indigo-100'
+        }`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                isVipSection ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+              }`}>
+                {isVipSection ? <FaCrown size={16} /> : <FiPlayCircle size={17} />}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-gray-900 truncate">{title}</h3>
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">{description}</p>
+              </div>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
+              isVipSection ? 'bg-white text-amber-700 border border-amber-200' : 'bg-white text-indigo-700 border border-indigo-200'
+            }`}>
+              {count} đề
+            </span>
+          </div>
+        </div>
+
+        {count === 0 ? (
+          <div className="px-5 py-6 text-sm text-gray-400">
+            Chưa có đề phù hợp trong nhóm này.
+          </div>
+        ) : (
+          <div className="p-3 sm:p-4 space-y-6">
+            {[...grouped.entries()].map(([year, yearExams]) => (
+              <div key={`${variant}-${year}`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className={`text-lg font-black ${isVipSection ? 'text-amber-700' : 'text-indigo-700'}`}>
+                    {year === 0 ? '?' : year}
+                  </span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                    isVipSection ? 'text-amber-700 bg-amber-50 border-amber-100' : 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                  }`}>
+                    {yearExams.length} đề
+                  </span>
+                  <div className={`flex-1 h-px ${isVipSection ? 'bg-amber-100' : 'bg-indigo-100'}`} />
+                </div>
+                <div className="space-y-2">
+                  {yearExams.map(exam => <ExamCard key={exam.id} exam={exam} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -444,62 +514,34 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       <div className="flex items-center gap-2 text-sm text-gray-400">
         <span>Tìm thấy <strong className="text-gray-600">{visibleExams.length}</strong> đề thi</span>
         {search && <span>cho "<strong className="text-gray-600">{search}</strong>"</span>}
-        {groupedByYear.size > 1 && (
-          <span>trong <strong className="text-gray-600">{groupedByYear.size}</strong> năm</span>
-        )}
+        <span className="text-gray-300">|</span>
+        <span><strong className="text-indigo-600">{regularExams.length}</strong> đề thường</span>
+        <span><strong className="text-amber-600">{vipExams.length}</strong> đề VIP</span>
         {showDone && <span className="text-emerald-500">(đã ẩn đề đã làm)</span>}
       </div>
 
-      {/* ── Year Jump Nav (sticky) ────────────────────────────────── */}
-      {years.length > 1 && (
-        <div className="sticky top-20 z-30 bg-indigo-50/90 backdrop-blur-sm border border-indigo-100 rounded-xl px-4 py-2 flex items-center gap-2 shadow-sm">
-          <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider shrink-0">Nhảy nhanh:</span>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {years.map(year => (
-              <button
-                key={year}
-                onClick={() => scrollToYear(year)}
-                className="px-3 py-1 bg-white border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm"
-              >
-                {year}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Exam Groups by Year ───────────────────────────────────── */}
-      <div className="space-y-8">
-        {[...groupedByYear.entries()].map(([year, yearExams]) => (
-          <div key={year} id={`year-${year}`}>
-            {/* Year header */}
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-2xl font-black text-indigo-600">{year === 0 ? '?' : year}</span>
-                {year !== 0 && (
-                  <span className="text-xs text-indigo-400 font-medium bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                    {yearExams.length} đề
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 h-px bg-gradient-to-r from-indigo-200 to-transparent" />
-            </div>
-
-            {/* Exam cards */}
-            <div className="space-y-2">
-              {yearExams.map(exam => {
-                return <ExamCard key={exam.id} exam={exam} />;
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <ExamSection
+          title="Đề thường"
+          description="Tất cả tài khoản đều có thể làm"
+          count={regularExams.length}
+          grouped={regularByYear}
+          variant="regular"
+        />
+        <ExamSection
+          title="Đề VIP"
+          description="Tài khoản VIP và Pre dùng chung bộ đề này"
+          count={vipExams.length}
+          grouped={vipByYear}
+          variant="vip"
+        />
       </div>
 
       {vipModalExam && (
         <ProUpgradeModal
           isOpen={true}
           onClose={() => setVipModalExam(null)}
-          title={`Đề "${vipModalExam.title}" chỉ dành cho VIP`}
+          title={`Đề "${vipModalExam.title}" chỉ dành cho VIP/Pre`}
         />
       )}
     </div>

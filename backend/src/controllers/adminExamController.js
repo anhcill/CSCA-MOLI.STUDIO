@@ -37,6 +37,17 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
+function normalizeExamAccess(isPremium, vipTier) {
+  const normalizedTier = vipTier && vipTier !== "basic" ? "vip" : "basic";
+  const normalizedPremium =
+    normalizedTier !== "basic" || isPremium === true;
+
+  return {
+    isPremium: normalizedPremium,
+    vipTier: normalizedPremium ? "vip" : "basic",
+  };
+}
+
 // ─── Question types cho đề tiếng Trung ────────────────────────────────────────────
 const QUESTION_TYPES = {
   SINGLE_CHOICE:     'single_choice',       // Trắc nghiệm A-B-C-D (câu 1-10, 26-33, 49-70)
@@ -147,6 +158,7 @@ const AdminExamController = {
       const safeTitle = sanitize(title);
       const safeTitleCn = titleCn ? sanitize(titleCn) : null;
       const safeDescription = description ? sanitize(description) : "";
+      const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
         `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated)
@@ -161,11 +173,11 @@ const AdminExamController = {
           parsedTotalPoints,
           safeDescription,
           difficulty_level || 'medium',
-          is_premium === true,
+          access.isPremium,
           solution_video_url ? sanitize(solution_video_url) : null,
           solution_description ? sanitize(solution_description) : null,
           shuffle_mode === true,
-          vip_tier || 'basic',
+          access.vipTier,
           is_simulated === true,
         ],
       );
@@ -207,12 +219,17 @@ const AdminExamController = {
       if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description ? sanitize(description) : null); }
       if (difficulty_level !== undefined) { updates.push(`difficulty_level = $${idx++}`); params.push(difficulty_level); }
       if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
-      if (is_premium !== undefined) { updates.push(`is_premium = $${idx++}`); params.push(is_premium === true); }
+      if (is_premium !== undefined || vip_tier !== undefined) {
+        const access = normalizeExamAccess(is_premium, vip_tier);
+        updates.push(`is_premium = $${idx++}`);
+        params.push(access.isPremium);
+        updates.push(`vip_tier = $${idx++}`);
+        params.push(access.vipTier);
+      }
       if (allow_download !== undefined) { updates.push(`allow_download = $${idx++}`); params.push(allow_download === true); }
       if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url ? sanitize(solution_video_url) : null); }
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description ? sanitize(solution_description) : null); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
-      if (vip_tier !== undefined) { updates.push(`vip_tier = $${idx++}`); params.push(vip_tier); }
       if (is_simulated !== undefined) { updates.push(`is_simulated = $${idx++}`); params.push(is_simulated === true); }
       updates.push(`updated_at = NOW()`);
       params.push(examId);
@@ -226,11 +243,8 @@ const AdminExamController = {
         return res.status(404).json({ message: "Exam not found" });
       }
 
-      // Clear exam list caches when exam data changes (especially on publish/unpublish)
-      if (status !== undefined) {
-        cache.delByPrefix("exams:");
-        cache.del("exams:lobby");
-      }
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
 
       UserActivity.log(req.user.id, 'admin.update_exam', { examId, updates: req.body, ip: req.ip, userAgent: req.headers['user-agent'] });
 

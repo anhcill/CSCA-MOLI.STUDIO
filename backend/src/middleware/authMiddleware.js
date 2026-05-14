@@ -239,7 +239,10 @@ const optionalAuth = (req, res, next) => {
  */
 const checkVipAccess = (user) => {
   if (!user) return false;
-  const isVip = user.is_vip === true || user.subscription_tier === 'vip';
+  const isVip =
+    user.is_vip === true ||
+    user.subscription_tier === 'vip' ||
+    user.subscription_tier === 'premium';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
   return isVip && notExpired;
 };

@@ -152,7 +152,9 @@ const generateRefreshToken = (payload) => {
 // VIP helper — checks both flag and expiry
 const isVipActive = (user) =>
   user &&
-  user.is_vip === true &&
+  (user.is_vip === true ||
+    user.subscription_tier === 'vip' ||
+    user.subscription_tier === 'premium') &&
   (!user.vip_expires_at || new Date(user.vip_expires_at) > new Date());
 
 const buildTokenPayload = (user) => ({

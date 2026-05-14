@@ -724,8 +724,9 @@ export default function AdminExamDetailPage() {
         if (!exam) return;
         try {
             const newVal = !exam.is_premium;
-            await examAdminApi.updateExam(Number(id), { is_premium: newVal });
-            setExam({ ...exam, is_premium: newVal });
+            const nextTier = newVal ? 'vip' : 'basic';
+            await examAdminApi.updateExam(Number(id), { is_premium: newVal, vip_tier: nextTier });
+            setExam({ ...exam, is_premium: newVal, vip_tier: nextTier });
         } catch {
             alert('Lỗi cập nhật trạng thái VIP');
         }
@@ -734,15 +735,17 @@ export default function AdminExamDetailPage() {
     const handleSetVipTier = async (tier: string) => {
         if (!exam) return;
         try {
-            await examAdminApi.updateExam(Number(id), { vip_tier: tier });
-            setExam({ ...exam, vip_tier: tier });
+            const nextPremium = tier !== 'basic';
+            await examAdminApi.updateExam(Number(id), { vip_tier: tier, is_premium: nextPremium });
+            setExam({ ...exam, vip_tier: tier, is_premium: nextPremium });
         } catch {
             alert('Lỗi cập nhật phân loại VIP');
         }
     };
 
     const handleSetVipTierMeta = (tier: string) => {
-        handleMetaChange('vip_tier', tier);
+        setMetaForm(prev => ({ ...prev, vip_tier: tier, is_premium: tier !== 'basic' }));
+        setMetaDirty(true);
     };
 
     useEffect(() => {
@@ -983,10 +986,14 @@ export default function AdminExamDetailPage() {
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" checked={metaForm.is_premium}
-                                                onChange={e => handleMetaChange('is_premium', e.target.checked)}
+                                                onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setMetaForm(prev => ({ ...prev, is_premium: checked, vip_tier: checked ? 'vip' : 'basic' }));
+                                                    setMetaDirty(true);
+                                                }}
                                                 className="w-4 h-4" />
                                             <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                                                <FaCrown size={12} className="text-amber-500" /> Nội dung Premium
+                                                <FaCrown size={12} className="text-amber-500" /> Đề VIP (VIP/Pre)
                                             </span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
@@ -1101,9 +1108,9 @@ export default function AdminExamDetailPage() {
                         <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-semibold flex items-center gap-2 text-gray-700">
-                                    <FaCrown size={14} className="text-amber-500" /> Nội dung Premium (VIP)
+                                    <FaCrown size={14} className="text-amber-500" /> Đề VIP (VIP/Pre)
                                 </p>
-                                <p className="text-xs text-gray-400">Chỉ thành viên VIP mới được truy cập đề thi này</p>
+                                <p className="text-xs text-gray-400">Chỉ thành viên VIP hoặc Pre mới được truy cập đề thi này</p>
                             </div>
                             <button
                                 onClick={handleTogglePremium}

@@ -45,9 +45,9 @@ export const TIER_META: Record<TierLevel, {
 export function isVipActive(user: User | null | undefined): boolean {
   if (!user) return false;
   const isVip = user.is_vip === true;
-  const hasTier = user.subscription_tier === 'vip';
+  const hasTier = user.subscription_tier === 'vip' || user.subscription_tier === 'premium';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
-  return isVip || (hasTier && notExpired);
+  return (isVip || hasTier) && notExpired;
 }
 
 // ─── Check Premium access (AI + Video + Chat) ─────────────────────────────────────
