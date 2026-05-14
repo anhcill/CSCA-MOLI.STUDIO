@@ -16,6 +16,7 @@ function sanitizeExplanation(str) {
 // ─── P1: Validate question points ──────────────────────────────────────────────
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
+const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
 
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -91,6 +92,18 @@ async function getNextContainerQuestionNumber(client, examId) {
     [examId],
   );
   return result.rows[0].question_number || -1;
+}
+
+async function ensureExamExists(client, examId) {
+  const result = await client.query(
+    "SELECT 1 FROM exams WHERE id = $1 LIMIT 1",
+    [examId],
+  );
+  return result.rows.length > 0;
+}
+
+function isMissingQuestionExamForeignKey(error) {
+  return error.code === "23503" && error.constraint === "questions_exam_id_fkey";
 }
 
 async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
@@ -321,6 +334,11 @@ const AdminExamController = {
       try {
         await client.query("BEGIN");
 
+        if (!(await ensureExamExists(client, examId))) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+        }
+
         // ── Kiểm tra max questions ──
         const countResult = await client.query(
           "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1",
@@ -483,6 +501,9 @@ const AdminExamController = {
       }
     } catch (error) {
       console.error("Add question error:", error);
+      if (isMissingQuestionExamForeignKey(error)) {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
       res.status(500).json({ message: "Failed to add question" });
     }
   },
@@ -730,6 +751,11 @@ const AdminExamController = {
                 // ── Serialize concurrent inserts to the same exam ──
                 await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId)]);
 
+                if (!(await ensureExamExists(client, examId))) {
+                    await client.query("ROLLBACK");
+                    return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+                }
+
                 // ── Determine target position ──
                 let targetPosition;
                 if (atPosition !== undefined && atPosition > 0) {
@@ -913,15 +939,21 @@ const AdminExamController = {
 
                 if (isDuplicateKey) {
                     console.warn(`[insertQuestion] Duplicate key on attempt ${attempt + 1}, retrying...`);
-                    client.release();
                     continue; // thử lại với vị trí mới
                 }
 
+                if (isMissingQuestionExamForeignKey(error)) {
+                    if (responseSent) return;
+                    responseSent = true;
+                    return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+                }
+
                 console.error("Insert question error:", error);
-                client.release();
                 if (responseSent) return;
                 responseSent = true;
                 return res.status(500).json({ message: "Failed to insert question" });
+            } finally {
+                client.release();
             }
         } // end for
 
