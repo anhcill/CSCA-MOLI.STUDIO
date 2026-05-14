@@ -338,10 +338,10 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     const isVipSection = variant === 'vip';
 
     return (
-      <section className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${
+      <section className={`rounded-2xl border bg-white shadow-sm overflow-hidden flex flex-col min-h-[220px] max-h-[72vh] ${
         isVipSection ? 'border-amber-200' : 'border-indigo-100'
       }`}>
-        <div className={`px-4 sm:px-5 py-4 border-b ${
+        <div className={`px-4 sm:px-5 py-4 border-b shrink-0 ${
           isVipSection ? 'bg-amber-50/80 border-amber-100' : 'bg-indigo-50/70 border-indigo-100'
         }`}>
           <div className="flex items-center justify-between gap-3">
@@ -369,7 +369,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             Chưa có đề phù hợp trong nhóm này.
           </div>
         ) : (
-          <div className="p-3 sm:p-4 space-y-6">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-6">
             {[...grouped.entries()].map(([year, yearExams]) => (
               <div key={`${variant}-${year}`}>
                 <div className="flex items-center gap-3 mb-3">
@@ -528,7 +528,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         {showDone && <span className="text-emerald-500">(đã ẩn đề đã làm)</span>}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <ExamSection
           title="Đề thường"
           description="Tất cả tài khoản đều có thể làm"
