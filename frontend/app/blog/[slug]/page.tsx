@@ -64,8 +64,24 @@ export default async function BlogPostPage({ params }: PageProps) {
 
         {/* Article */}
         <article className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Cover Image */}
+          <div className="relative h-72 overflow-hidden bg-gray-100">
+            <img
+              src={post.coverImage}
+              alt={post.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            <div className="hidden absolute inset-0 bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center">
+              <span className="text-amber-600 font-medium text-2xl">{post.category}</span>
+            </div>
+          </div>
+
           {/* Header */}
-          <header className="px-8 pt-10 pb-6 border-b border-gray-100">
+          <header className="px-8 pt-8 pb-6 border-b border-gray-100">
             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 mb-4">
               <span className="flex items-center gap-1.5">
                 <FiCalendar size={14} />
@@ -87,13 +103,6 @@ export default async function BlogPostPage({ params }: PageProps) {
               {post.excerpt}
             </p>
           </header>
-
-          {/* Cover */}
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 h-64 flex items-center justify-center">
-            <span className="text-amber-600 font-medium text-center px-8 text-xl leading-snug">
-              {post.category}
-            </span>
-          </div>
 
           {/* Content */}
           <div className="px-8 py-10">
@@ -187,8 +196,19 @@ export default async function BlogPostPage({ params }: PageProps) {
               {relatedPosts.map(rp => (
                 <Link key={rp.slug} href={`/blog/${rp.slug}`} className="group">
                   <div className="bg-white rounded-xl overflow-hidden border border-gray-100 hover:shadow-md transition-all h-full">
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 h-24 flex items-center justify-center p-4">
-                      <span className="text-xs font-medium text-indigo-600 text-center">{rp.category}</span>
+                    <div className="relative h-28 overflow-hidden">
+                      <img
+                        src={rp.coverImage}
+                        alt={rp.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                      <div className="hidden absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+                        <span className="text-xs font-medium text-indigo-600 text-center px-2">{rp.category}</span>
+                      </div>
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold text-gray-900 text-sm group-hover:text-amber-600 transition-colors line-clamp-2 mb-2">

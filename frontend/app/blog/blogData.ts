@@ -156,7 +156,7 @@ Tại Việt Nam: Hà Nội, TP.HCM, Đà Nẵng (theo đợt thi của CIC).
 
 Hãy bắt đầu ôn luyện ngay hôm nay để không bỏ lỡ cơ hội học bổng du học Trung Quốc!
     `,
-    coverImage: '/images/blog/csca-la-gi.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-01',
     updatedAt: '2026-05-01',
@@ -428,7 +428,7 @@ Hiểu rõ **cấu trúc đề thi CSCA** là bước đầu tiên để xây d�
 
 Hãy ôn luyện ngay hôm nay để đạt kết quả cao nhất!
     `,
-    coverImage: '/images/blog/cau-truc-de-thi-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-03',
     updatedAt: '2026-05-03',
@@ -639,7 +639,7 @@ Thường 2-3 tháng sau khi hạn nộp. Kết quả công bố vào tháng 6-7
 
 Đăng ký học bổng CSC là cả một hành trình dài. Hãy bắt đầu ôn thi CSCA và chuẩn bị hồ sơ ngay hôm nay!
     `,
-    coverImage: '/images/blog/hoc-bong-csc.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-05',
     updatedAt: '2026-05-05',
@@ -874,7 +874,7 @@ Sinh viên có **thành tích xuất sắc** muốn vào các trường top đ�
 
 Hãy xác định mục tiêu và ôn tập ngay hôm nay!
     `,
-    coverImage: '/images/blog/de-thi-dau-vao-dai-hoc-trung-quoc.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1513258496099-48168024aec0?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-07',
     updatedAt: '2026-05-07',
@@ -1142,7 +1142,7 @@ Có, 2 ảnh 4x6 nền trắng (dán lên phiếu đăng ký).
 
 Hãy đăng ký thi sớm và ôn luyện ngay hôm nay để đạt kết quả cao nhất!
     `,
-    coverImage: '/images/blog/trung-tam-thi-csca-viet-nam.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-08',
     updatedAt: '2026-05-08',
@@ -1495,7 +1495,7 @@ Hãy đăng ký thi sớm và ôn luyện ngay hôm nay để đạt kết quả
 
 Hãy làm đề thật nhiều và ôn luyện chăm chỉ để đạt kết quả cao trong kỳ thi CSCA!
     `,
-    coverImage: '/images/blog/mau-de-thi-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-09',
     updatedAt: '2026-05-09',
@@ -1618,7 +1618,7 @@ Khi nghe, bạn vừa học từ vựng vừa luyện phản xạ. Nguồn luy�
 
 Hãy bắt đầu học từ vựng ngay hôm nay — đây là khoản đầu tư mang lại lợi ích lâu dài cho cả kỳ thi CSCA và khả năng tiếng Trung của bạn!
     `,
-    coverImage: '/images/blog/huong-dan-hoc-tu-vung-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-10',
     updatedAt: '2026-05-10',
@@ -1797,7 +1797,7 @@ P(A) = số kết quả thuận lợi / tổng số kết quả
 
 Hãy ôn luyện phần toán ngay hôm nay — đây là cơ hội lấy điểm dễ nhất trong kỳ thi CSCA!
     `,
-    coverImage: '/images/blog/cach-dat-diem-cao-phan-toan-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-11',
     updatedAt: '2026-05-11',
@@ -1973,7 +1973,7 @@ Hàng năm, hàng nghìn thí sinh thi CSCA nhưng chỉ một số ít đạt �
 
 Hãy ghi nhớ những lỗi sai này và tránh chúng để đạt điểm CSCA cao nhất!
     `,
-    coverImage: '/images/blog/loi-sai-thuong-gap-thi-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-12',
     updatedAt: '2026-05-12',
@@ -2128,7 +2128,7 @@ Phần tổng hợp kiến thức (综合知识) là phần khiến nhiều thí
 
 Hãy bắt đầu ôn tập phần tổng hợp ngay hôm nay — đây là phần dễ lấy điểm nhất!
     `,
-    coverImage: '/images/blog/lich-su-van-hoa-dia-ly-trung-quoc-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1533750349088-cd871a92f312?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-12',
     updatedAt: '2026-05-12',
@@ -2305,7 +2305,7 @@ Bộ đề thi thật từ 2022-2025 là tài liệu **quan trọng thứ 2**. �
 
 Hãy chuẩn bị đầy đủ tài liệu ngay hôm nay và bắt đầu ôn luyện có kế hoạch!
     `,
-    coverImage: '/images/blog/tai-lieu-luyen-thi-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-13',
     updatedAt: '2026-05-13',
@@ -2506,7 +2506,7 @@ Tuy nhiên, với tài liệu chất lượng và tự discipline, bạn hoàn t
 
 Nếu bạn có câu hỏi khác về CSCA, hãy liên hệ với chúng tôi để được giải đáp!
     `,
-    coverImage: '/images/blog/cau-hoi-thuong-gap-ve-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1606761568499-6d2451b23c66?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-13',
     updatedAt: '2026-05-13',
@@ -2725,7 +2725,7 @@ Hồ sơ du học là **bộ mặt** của bạn trong mắt ban tuyển sinh. N
 
 Hãy bắt đầu chuẩn bị hồ sơ ngay hôm nay — đây là bước quan trọng nhất trong hành trình du học Trung Quốc của bạn!
     `,
-    coverImage: '/images/blog/ho-so-du-hoc-trung-quoc.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',
@@ -2893,7 +2893,7 @@ Mỗi ngày ghi lại:
 
 Hãy lập kế hoạch ôn thi CSCA ngay hôm nay và thực hiện nghiêm túc!
     `,
-    coverImage: '/images/blog/phan-bo-thoi-gian-on-thi-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',
@@ -3111,7 +3111,7 @@ Sau khi có HSK 4, có thể ôn thi CSCA song song:
 
 Hãy lập kế hoạch thi cả hai chứng chỉ ngay hôm nay để tối ưu cơ hội du học Trung Quốc!
     `,
-    coverImage: '/images/blog/so-sanh-hsk-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',
@@ -3313,7 +3313,7 @@ Tiếng Trung có **cấu trúc câu cố định**:
 
 Hãy bắt đầu luyện nghe ngay hôm nay — mỗi ngày 30 phút, sau 3 tháng bạn sẽ ngạc nhiên với sự tiến bộ của mình!
     `,
-    coverImage: '/images/blog/luyen-nghe-tieng-trung-csca.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1481833761820-0509d3217039?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',
@@ -3549,7 +3549,7 @@ Du học Trung Quốc là ước mơ của nhiều bạn trẻ Việt Nam. Nhưn
 
 Hãy bắt đầu hành trình du học Trung Quốc ngay hôm nay — đây sẽ là trải nghiệm thay đổi cuộc đời bạn!
     `,
-    coverImage: '/images/blog/kinh-nghiem-du-hoc-trung-quoc.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',
@@ -3737,7 +3737,7 @@ Bạn muốn bắt đầu ôn thi CSCA nhưng chưa biết cách đăng ký tài
 
 Chúc bạn ôn thi CSCA hiệu quả và đạt kết quả cao!
     `,
-    coverImage: '/images/blog/dang-ky-moli-studio.jpg',
+    coverImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80',
     author: 'MOLI.STUDIO',
     publishedAt: '2026-05-14',
     updatedAt: '2026-05-14',

@@ -39,14 +39,28 @@ export default function BlogPage() {
         {featured && (
           <Link href={`/blog/${featured.slug}`} className="block mb-12 group">
             <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 h-64 flex items-center justify-center">
-                <div className="text-center px-8">
-                  <span className="inline-block bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full mb-4">
-                    Bài viết nổi bật
-                  </span>
-                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 group-hover:text-amber-600 transition-colors leading-snug">
-                    {featured.title}
-                  </h2>
+              <div className="relative h-64 overflow-hidden">
+                <img
+                  src={featured.coverImage}
+                  alt={featured.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+                <div className="hidden absolute inset-0 bg-gradient-to-r from-amber-50 to-orange-50 flex items-center justify-center">
+                  <span className="text-amber-600 font-medium text-xl">{featured.category}</span>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end">
+                  <div className="p-6 w-full">
+                    <span className="inline-block bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full mb-3">
+                      Bài viết nổi bật
+                    </span>
+                    <h2 className="text-2xl md:text-3xl font-bold text-white group-hover:text-amber-200 transition-colors leading-snug drop-shadow">
+                      {featured.title}
+                    </h2>
+                  </div>
                 </div>
               </div>
               <div className="p-6">
@@ -75,8 +89,20 @@ export default function BlogPage() {
           {rest.map(post => (
             <Link key={post.slug} href={`/blog/${post.slug}`} className="group">
               <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 h-full flex flex-col">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 h-36 flex items-center justify-center p-6">
-                  <span className="text-sm font-medium text-indigo-600 text-center leading-snug">
+                <div className="relative h-44 overflow-hidden">
+                  <img
+                    src={post.coverImage}
+                    alt={post.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="hidden absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+                    <span className="text-sm font-medium text-indigo-600 text-center px-4">{post.category}</span>
+                  </div>
+                  <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm">
                     {post.category}
                   </span>
                 </div>
