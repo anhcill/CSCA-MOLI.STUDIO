@@ -114,6 +114,15 @@ export default function CreateExamPage() {
     const [metadataSaved, setMetadataSaved] = useState(false);
     const [mounted, setMounted] = useState(false);
 
+    const isMissingExamError = (error: any) => error?.response?.status === 404;
+    const handleMissingCurrentExam = () => {
+        setCurrentExamId(null);
+        setExamMetadataDirty(false);
+        sessionStorage.removeItem('currentExamId');
+        alert('De thi nay khong con ton tai hoac da bi xoa. Vui long tai lai danh sach de.');
+        router.push('/admin/exams');
+    };
+
     // Restore currentExamId from sessionStorage after mount (client-side only)
     useEffect(() => {
         setMounted(true);
@@ -205,6 +214,10 @@ export default function CreateExamPage() {
             setTimeout(() => setMetadataSaved(false), 2000);
         } catch (error) {
             console.error('Error saving metadata:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Lưu metadata thất bại');
         } finally {
             setSavingMetadata(false);
@@ -252,6 +265,10 @@ export default function CreateExamPage() {
             setShowAddForm(false);
         } catch (error) {
             console.error('Error saving question:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Lưu câu hỏi thất bại: ' + (error as any)?.response?.data?.message || '');
         } finally {
             setLoading(false);
@@ -289,6 +306,10 @@ export default function CreateExamPage() {
             alert(`${typeLabel[res.questionType] || 'Câu hỏi'} ${index + 1} đã được lưu!`);
         } catch (error) {
             console.error('Error saving question:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Lưu câu hỏi thất bại: ' + (error as any)?.response?.data?.message || '');
         } finally {
             setLoading(false);
@@ -353,6 +374,10 @@ export default function CreateExamPage() {
             alert(`Đoạn đọc hiểu đã lưu! (${data.subQuestions.length} câu)`);
         } catch (error) {
             console.error('Error saving reading passage group:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Lưu đoạn đọc hiểu thất bại: ' + (error as any)?.response?.data?.message || '');
         } finally {
             setLoading(false);
@@ -445,6 +470,10 @@ export default function CreateExamPage() {
             alert(`Điền từ đã lưu! (${data.subItems.length} chỗ trống)`);
         } catch (error) {
             console.error('Error saving fill blank group:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Lưu điền từ thất bại: ' + (error as any)?.response?.data?.message || '');
         } finally {
             setLoading(false);
@@ -512,6 +541,10 @@ export default function CreateExamPage() {
             router.push('/admin/exams');
         } catch (error) {
             console.error('Error publishing exam:', error);
+            if (isMissingExamError(error)) {
+                handleMissingCurrentExam();
+                return;
+            }
             alert('Xuất bản đề thi thất bại');
         } finally {
             setLoading(false);

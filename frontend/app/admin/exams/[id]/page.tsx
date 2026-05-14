@@ -282,6 +282,12 @@ export default function AdminExamDetailPage() {
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [quickAddPosition, setQuickAddPosition] = useState<number | null>(null);
 
+    const isMissingExamError = (error: any) => error?.response?.status === 404;
+    const handleMissingExam = () => {
+        alert('De thi nay khong con ton tai hoac da bi xoa. Vui long tai lai danh sach de.');
+        router.push('/admin/exams');
+    };
+
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
         if (!_token) {
@@ -322,6 +328,10 @@ export default function AdminExamDetailPage() {
                 });
             }
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Không thể tải đề thi: ' + (error.response?.data?.message || error.message));
             router.push('/admin/exams');
         } finally {
@@ -361,6 +371,10 @@ export default function AdminExamDetailPage() {
             setMetaDirty(false);
             setEditingMeta(false);
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi lưu metadata: ' + (error.response?.data?.message || ''));
         } finally {
             setSavingMeta(false);
@@ -420,6 +434,10 @@ export default function AdminExamDetailPage() {
             setEditingQuestionId(null);
             alert('Đã cập nhật câu hỏi!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi cập nhật: ' + (error.response?.data?.message || ''));
         } finally {
             setSavingQuestionId(null);
@@ -439,6 +457,10 @@ export default function AdminExamDetailPage() {
             setShowAddMenu(false);
             alert('Đã thêm câu hỏi!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi thêm câu hỏi: ' + (error.response?.data?.message || ''));
         } finally {
             setSavingQuestionId(null);
@@ -481,6 +503,10 @@ export default function AdminExamDetailPage() {
             setAddingAfterId(null);
             setQuickAddPosition(null);
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
@@ -501,6 +527,10 @@ export default function AdminExamDetailPage() {
             if (pendingFillBlankGroups.length === 1) setShowAddFillBlank(false);
             alert('Đã thêm nhóm điền từ!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi thêm nhóm điền từ: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
@@ -521,6 +551,10 @@ export default function AdminExamDetailPage() {
             if (pendingReadingGroups.length === 1) setShowAddReadingPassage(false);
             alert('Đã thêm nhóm đọc hiểu!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Lỗi thêm nhóm đọc hiểu: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
@@ -536,6 +570,10 @@ export default function AdminExamDetailPage() {
             await loadExam();
             alert('Da cap nhat nhom dien tu!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Loi cap nhat nhom dien tu: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
@@ -550,6 +588,10 @@ export default function AdminExamDetailPage() {
             await loadExam();
             alert('Da cap nhat nhom doc hieu!');
         } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
             alert('Loi cap nhat nhom doc hieu: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
