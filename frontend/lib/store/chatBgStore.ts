@@ -3,20 +3,68 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// Preset gradient backgrounds for the chat
+// Preset backgrounds for the chat. Keep them soft enough for message readability.
 export const CHAT_BG_PRESETS = [
-  { id: 'violet', label: 'Tím ngày', bg: 'linear-gradient(180deg, #f5f3ff 0%, #ede9fe 30%, #ddd6fe 60%, #c4b5fd 100%)' },
-  { id: 'blue', label: 'Xanh dương', bg: 'linear-gradient(180deg, #eff6ff 0%, #dbeafe 30%, #bfdbfe 60%, #93c5fd 100%)' },
-  { id: 'pink', label: 'Hồng nhạt', bg: 'linear-gradient(180deg, #fdf2f8 0%, #fce7f3 30%, #fbcfe8 60%, #f9a8d4 100%)' },
-  { id: 'mint', label: 'Bạc hà', bg: 'linear-gradient(180deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 60%, #6ee7b7 100%)' },
-  { id: 'amber', label: 'Cam nhạt', bg: 'linear-gradient(180deg, #fffbeb 0%, #fef3c7 30%, #fde68a 60%, #fcd34d 100%)' },
-  { id: 'slate', label: 'Xám lạnh', bg: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 30%, #e2e8f0 60%, #cbd5e1 100%)' },
-  { id: 'teal', label: 'Xanh teal', bg: 'linear-gradient(180deg, #f0fdfa 0%, #ccfbf1 30%, #99f6e4 60%, #5eead4 100%)' },
-  { id: 'rose', label: 'Hồng đậm', bg: 'linear-gradient(180deg, #fff1f2 0%, #ffe4e6 30%, #fecdd3 60%, #fda4af 100%)' },
-  { id: 'indigo', label: 'Chàm', bg: 'linear-gradient(180deg, #eef2ff 0%, #e0e7ff 30%, #c7d2fe 60%, #a5b4fc 100%)' },
-  { id: 'green', label: 'Xanh lá', bg: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' },
-  { id: 'dark', label: 'Đêm tím', bg: 'linear-gradient(180deg, #1e1b4b 0%, #312e81 30%, #4338ca 60%, #6366f1 100%)' },
-  { id: 'warm', label: 'Ấm áp', bg: 'linear-gradient(180deg, #fefce8 0%, #fef9c3 30%, #fef08a 60%, #fde047 100%)' },
+  {
+    id: 'messenger',
+    label: 'Messenger',
+    bg: 'radial-gradient(circle at 12% 10%, rgba(59, 130, 246, 0.28) 0 18%, transparent 38%), radial-gradient(circle at 88% 12%, rgba(168, 85, 247, 0.26) 0 18%, transparent 36%), linear-gradient(145deg, #f8fbff 0%, #eaf2ff 45%, #f5ecff 100%)',
+  },
+  {
+    id: 'aurora',
+    label: 'Cực quang',
+    bg: 'radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.28), transparent 32%), radial-gradient(circle at 80% 18%, rgba(129, 140, 248, 0.30), transparent 34%), radial-gradient(circle at 50% 92%, rgba(244, 114, 182, 0.20), transparent 38%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
+  },
+  {
+    id: 'skyline',
+    label: 'Bầu trời',
+    bg: 'linear-gradient(180deg, #eff6ff 0%, #dbeafe 38%, #f5f3ff 74%, #ffffff 100%)',
+  },
+  {
+    id: 'love',
+    label: 'Hồng tím',
+    bg: 'radial-gradient(circle at 18% 20%, rgba(251, 113, 133, 0.26), transparent 30%), radial-gradient(circle at 82% 18%, rgba(192, 132, 252, 0.30), transparent 34%), linear-gradient(160deg, #fff7fb 0%, #fdf2f8 42%, #f3e8ff 100%)',
+  },
+  {
+    id: 'ocean',
+    label: 'Đại dương',
+    bg: 'linear-gradient(160deg, #ecfeff 0%, #dbeafe 38%, #ccfbf1 72%, #f8fafc 100%)',
+  },
+  {
+    id: 'sunset',
+    label: 'Hoàng hôn',
+    bg: 'radial-gradient(circle at 20% 20%, rgba(251, 146, 60, 0.28), transparent 34%), radial-gradient(circle at 82% 18%, rgba(244, 114, 182, 0.24), transparent 34%), linear-gradient(180deg, #fff7ed 0%, #ffedd5 46%, #fce7f3 100%)',
+  },
+  {
+    id: 'paper',
+    label: 'Giấy sáng',
+    bg: 'linear-gradient(135deg, rgba(148, 163, 184, 0.10) 25%, transparent 25%), linear-gradient(225deg, rgba(148, 163, 184, 0.10) 25%, transparent 25%), linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+  },
+  {
+    id: 'mint',
+    label: 'Bạc hà',
+    bg: 'linear-gradient(180deg, #ecfdf5 0%, #d1fae5 38%, #ccfbf1 72%, #f8fafc 100%)',
+  },
+  {
+    id: 'lavender',
+    label: 'Oải hương',
+    bg: 'linear-gradient(180deg, #faf5ff 0%, #ede9fe 42%, #e0e7ff 100%)',
+  },
+  {
+    id: 'graphite',
+    label: 'Tối dịu',
+    bg: 'radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.30), transparent 30%), radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.18), transparent 32%), linear-gradient(180deg, #111827 0%, #1f2937 52%, #334155 100%)',
+  },
+  {
+    id: 'midnight',
+    label: 'Đêm xanh',
+    bg: 'radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), transparent 34%), radial-gradient(circle at 78% 14%, rgba(168, 85, 247, 0.22), transparent 32%), linear-gradient(180deg, #0f172a 0%, #1e1b4b 56%, #312e81 100%)',
+  },
+  {
+    id: 'classic',
+    label: 'Cổ điển',
+    bg: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
+  },
 ] as const;
 
 export type ChatBgPreset = typeof CHAT_BG_PRESETS[number]['id'] | 'custom';
@@ -24,8 +72,8 @@ export type ChatBgPreset = typeof CHAT_BG_PRESETS[number]['id'] | 'custom';
 interface ChatBgState {
   bgType: 'preset' | 'custom';
   bgPresetId: ChatBgPreset;
-  bgValue: string; // the actual CSS value: gradient or image URL
-  bgImageUrl: string; // custom image URL if bgType is 'custom'
+  bgValue: string;
+  bgImageUrl: string;
 
   setBgPreset: (presetId: ChatBgPreset) => void;
   setBgCustom: (imageUrl: string) => void;
