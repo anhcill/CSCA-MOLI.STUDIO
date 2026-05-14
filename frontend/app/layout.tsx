@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import Providers from "@/components/layout/Providers";
 import ClientShell from "@/components/layout/ClientShell";
+import GlobalFeedbackBridge from "@/components/common/GlobalFeedbackBridge";
 import { getCanonicalSiteUrl } from "@/lib/seo/site";
 import "katex/dist/katex.min.css";
 import "./globals.css";
@@ -150,6 +151,7 @@ export default function RootLayout({
           <Suspense fallback={<div className="min-h-screen" />}>
             <ClientShell>
               {children}
+              <GlobalFeedbackBridge />
             </ClientShell>
           </Suspense>
         </Providers>
