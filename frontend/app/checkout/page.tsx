@@ -409,6 +409,21 @@ function CheckoutContent() {
   // ── SELECT SCREEN ──
   return (
     <div className="space-y-8">
+      <button
+        type="button"
+        onClick={() => {
+          if (window.history.length > 1) {
+            router.back();
+          } else {
+            router.push('/vip');
+          }
+        }}
+        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-500 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+      >
+        <FiArrowLeft size={15} />
+        Quay về
+      </button>
+
       {/* Hero */}
       <div className="text-center space-y-3">
         <div className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-200 rounded-full text-amber-800 text-sm font-bold shadow-sm">
