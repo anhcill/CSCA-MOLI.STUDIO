@@ -214,7 +214,7 @@ const examController = {
           return res.status(403).json({
             success: false,
             code: "EXAM_NOT_STARTED",
-            message: "Ky thi chua bat dau. Vui long xem chi tiet dang ky trong phong thi.",
+            message: "Kỳ thi chưa bắt đầu. Vui lòng xem chi tiết đăng ký trong phòng thi.",
           });
         }
 
@@ -222,7 +222,7 @@ const examController = {
           return res.status(403).json({
             success: false,
             code: "EXAM_ENDED",
-            message: "Ky thi da ket thuc.",
+            message: "Kỳ thi đã kết thúc.",
           });
         }
 
@@ -240,7 +240,7 @@ const examController = {
           return res.status(403).json({
             success: false,
             code: "REGISTRATION_REQUIRED",
-            message: "Ban can dang ky ky thi va duoc duyet truoc khi vao thi.",
+            message: "Bạn cần đăng ký kỳ thi và được duyệt trước khi vào thi.",
           });
         }
 
@@ -248,7 +248,7 @@ const examController = {
           return res.status(403).json({
             success: false,
             code: "REGISTRATION_NOT_APPROVED",
-            message: "Dang ky cua ban chua duoc duyet de vao thi.",
+            message: "Đăng ký của bạn chưa được duyệt để vào thi.",
           });
         }
       }

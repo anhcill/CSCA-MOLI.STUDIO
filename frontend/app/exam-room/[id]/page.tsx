@@ -24,7 +24,7 @@ type ExamDetail = {
 };
 
 function formatDateTime(value?: string | null) {
-  if (!value) return 'Chua dat lich';
+  if (!value) return 'Chưa đặt lịch';
   return new Date(value).toLocaleString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
@@ -37,19 +37,19 @@ function formatDateTime(value?: string | null) {
 function registrationLabel(status?: string | null) {
   switch (status) {
     case 'registered':
-      return 'Da dang ky, dang cho duyet';
+      return 'Đã đăng ký, đang chờ duyệt';
     case 'approved':
-      return 'Da duyet';
+      return 'Đã duyệt';
     case 'checked_in':
-      return 'Da check-in';
+      return 'Đã check-in';
     case 'completed':
-      return 'Da hoan thanh';
+      return 'Đã hoàn thành';
     case 'cancelled':
-      return 'Da huy dang ky';
+      return 'Đã hủy đăng ký';
     case 'no_show':
-      return 'Vang thi';
+      return 'Vắng thi';
     default:
-      return 'Chua dang ky';
+      return 'Chưa đăng ký';
   }
 }
 
@@ -88,7 +88,7 @@ export default function ExamRoomDetailPage() {
         setRegistration(myRegistration);
       }
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Khong the tai chi tiet ky thi');
+      alert(error?.response?.data?.message || 'Không thể tải chi tiết kỳ thi');
       router.push('/exam-room');
     } finally {
       setLoading(false);
@@ -108,7 +108,7 @@ export default function ExamRoomDetailPage() {
     if (!examId) return;
     const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
     if (!token) {
-      alert('Vui long dang nhap de dang ky ky thi');
+      alert('Vui lòng đăng nhập để đăng ký kỳ thi');
       router.push('/login');
       return;
     }
@@ -116,23 +116,23 @@ export default function ExamRoomDetailPage() {
       setSaving(true);
       const data = await officialExamApi.register(examId);
       setRegistration(data);
-      alert('Da gui dang ky ky thi');
+      alert('Đã gửi đăng ký kỳ thi');
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Dang ky that bai');
+      alert(error?.response?.data?.message || 'Đăng ký thất bại');
     } finally {
       setSaving(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!examId || !confirm('Huy dang ky ky thi nay?')) return;
+    if (!examId || !confirm('Hủy đăng ký kỳ thi này?')) return;
     try {
       setSaving(true);
       const data = await officialExamApi.cancelRegistration(examId);
       setRegistration(data);
-      alert('Da huy dang ky');
+      alert('Đã hủy đăng ký');
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Huy dang ky that bai');
+      alert(error?.response?.data?.message || 'Hủy đăng ký thất bại');
     } finally {
       setSaving(false);
     }
@@ -159,14 +159,14 @@ export default function ExamRoomDetailPage() {
           onClick={() => router.push('/exam-room')}
           className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900"
         >
-          <FiArrowLeft /> Quay lai phong thi
+          <FiArrowLeft /> Quay lại phòng thi
         </button>
 
         <section className="rounded-3xl bg-white border border-slate-100 shadow-sm overflow-hidden">
           <div className="p-6 md:p-8 border-b border-slate-100">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <span className="px-3 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 text-xs font-black uppercase">
-                {exam.subject_name || exam.subject_code || 'Mon hoc'}
+                {exam.subject_name || exam.subject_code || 'Môn học'}
               </span>
               {exam.is_premium && (
                 <span className="px-3 py-1 rounded-lg bg-amber-100 text-amber-800 text-xs font-black uppercase">
@@ -180,23 +180,23 @@ export default function ExamRoomDetailPage() {
 
           <div className="grid md:grid-cols-2 gap-0">
             <div className="p-6 md:p-8 space-y-4 border-b md:border-b-0 md:border-r border-slate-100">
-              <InfoRow icon={FiCalendar} label="Bat dau" value={formatDateTime(exam.start_time)} />
-              <InfoRow icon={FiClock} label="Ket thuc" value={formatDateTime(exam.end_time)} />
-              <InfoRow icon={FiMonitor} label="Thoi luong" value={`${exam.duration || 0} phut`} />
-              <InfoRow icon={FiUsers} label="So cau" value={`${exam.total_questions || 0} cau`} />
+              <InfoRow icon={FiCalendar} label="Bắt đầu" value={formatDateTime(exam.start_time)} />
+              <InfoRow icon={FiClock} label="Kết thúc" value={formatDateTime(exam.end_time)} />
+              <InfoRow icon={FiMonitor} label="Thời lượng" value={`${exam.duration || 0} phút`} />
+              <InfoRow icon={FiUsers} label="Số câu" value={`${exam.total_questions || 0} câu`} />
             </div>
 
             <div className="p-6 md:p-8 space-y-4">
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-slate-500 mb-2">
-                  <FiUserCheck /> Trang thai dang ky
+                  <FiUserCheck /> Trạng thái đăng ký
                 </div>
                 <div className="text-lg font-black text-slate-950">{registrationLabel(registration?.status)}</div>
                 {registration?.room_name && (
                   <div className="mt-3 text-sm text-slate-600 space-y-1">
-                    <p className="flex items-center gap-2"><FiMapPin /> Phong: {registration.room_name}</p>
-                    {registration.location && <p>Dia diem: {registration.location}</p>}
-                    {registration.seat_number && <p>So ghe: {registration.seat_number}</p>}
+                    <p className="flex items-center gap-2"><FiMapPin /> Phòng: {registration.room_name}</p>
+                    {registration.location && <p>Địa điểm: {registration.location}</p>}
+                    {registration.seat_number && <p>Số ghế: {registration.seat_number}</p>}
                   </div>
                 )}
               </div>
@@ -204,14 +204,14 @@ export default function ExamRoomDetailPage() {
               {!hasStarted && (
                 <div className="flex items-start gap-2 rounded-2xl bg-orange-50 border border-orange-100 p-4 text-sm text-orange-800">
                   <FiClock className="mt-0.5 shrink-0" />
-                  Ky thi chua bat dau. Ban chi co the vao thi khi den gio va dang ky da duoc duyet.
+                  Kỳ thi chưa bắt đầu. Bạn chỉ có thể vào thi khi đến giờ và đăng ký đã được duyệt.
                 </div>
               )}
 
               {hasEnded && (
                 <div className="flex items-start gap-2 rounded-2xl bg-slate-100 border border-slate-200 p-4 text-sm text-slate-700">
                   <FiXCircle className="mt-0.5 shrink-0" />
-                  Ky thi da ket thuc.
+                  Kỳ thi đã kết thúc.
                 </div>
               )}
 
@@ -222,7 +222,7 @@ export default function ExamRoomDetailPage() {
                     disabled={saving}
                     className="flex-1 rounded-xl bg-orange-600 px-5 py-3 font-black text-white hover:bg-orange-700 disabled:opacity-60"
                   >
-                    Dang ky
+                    Đăng ký
                   </button>
                 )}
                 {canCancel && (
@@ -231,7 +231,7 @@ export default function ExamRoomDetailPage() {
                     disabled={saving}
                     className="flex-1 rounded-xl border-2 border-slate-200 bg-white px-5 py-3 font-black text-slate-800 hover:border-slate-900 disabled:opacity-60"
                   >
-                    Huy dang ky
+                    Hủy đăng ký
                   </button>
                 )}
                 <button
@@ -240,7 +240,7 @@ export default function ExamRoomDetailPage() {
                   className="flex-1 rounded-xl bg-slate-950 px-5 py-3 font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
-                    <FiCheckCircle /> Vao thi
+                    <FiCheckCircle /> Vào thi
                   </span>
                 </button>
               </div>
