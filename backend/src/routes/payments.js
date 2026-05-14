@@ -307,24 +307,63 @@ async function applyCoinSpend(transaction) {
 }
 
 async function getPaymentUser(userId) {
-  const userRes = await db.query(
-    `SELECT id, email, username, full_name, vip_expires_at, subscription_tier
-     FROM users
-     WHERE id = $1`,
-    [userId]
-  );
-  return userRes.rows[0] || null;
+  try {
+    const userRes = await db.query(
+      `SELECT id, email, username, full_name, vip_expires_at, subscription_tier
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+    return userRes.rows[0] || null;
+  } catch (err) {
+    console.error('[SePay] Full payment user lookup failed, using fallback:', err.message);
+    const fallbackRes = await db.query(
+      `SELECT id, email, username, full_name, vip_expires_at
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+    return fallbackRes.rows[0] ? { ...fallbackRes.rows[0], subscription_tier: 'vip' } : null;
+  }
 }
 
 async function markTransactionCompletedFallback(transaction, payload) {
-  await db.query(
-    `UPDATE transactions
-     SET status = 'completed',
-         raw_response = COALESCE($1, raw_response),
-         updated_at = NOW()
-     WHERE id = $2`,
-    [JSON.stringify(payload || {}), transaction.id]
-  );
+  try {
+    await db.query(
+      `UPDATE transactions
+       SET status = 'completed',
+           raw_response = COALESCE($1, raw_response),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [JSON.stringify(payload || {}), transaction.id]
+    );
+  } catch (err) {
+    console.error('[SePay] Fallback transaction completion failed, using status-only update:', err.message);
+    await Transaction.updateStatus(transaction.id, 'completed');
+  }
+}
+
+async function updateVipStatusForPayment(userId, durationDays, tier) {
+  try {
+    return await User.updateVipStatus(userId, durationDays, tier);
+  } catch (err) {
+    console.error('[SePay] User.updateVipStatus failed, using direct fallback:', err.message);
+    const days = Number.parseInt(durationDays, 10);
+    const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
+    const fallbackRes = await db.query(
+      `UPDATE users
+       SET is_vip = TRUE,
+           vip_expires_at = CASE
+             WHEN $2::int > 0 THEN GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + ($2::int * INTERVAL '1 day')
+             ELSE vip_expires_at
+           END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, is_vip, vip_expires_at`,
+      [userId, safeDays]
+    );
+    return fallbackRes.rows[0] || null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -992,13 +1031,17 @@ router.post('/sepay-webhook', async (req, res) => {
     let updatedUser;
     let tier = 'vip';
     try {
-      await incrementCouponUsage(transaction);
-      await applyCoinSpend(transaction);
+      await incrementCouponUsage(transaction).catch(err => {
+        console.error('[SePay] Coupon usage update failed, continuing payment completion:', err.message);
+      });
+      await applyCoinSpend(transaction).catch(err => {
+        console.error('[SePay] Coin spend update failed, continuing payment completion:', err.message);
+      });
 
       tier = transaction.package_id
         ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
         : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-      await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
+      await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
       updatedUser = await getPaymentUser(transaction.user_id);
       if (!updatedUser) {
         throw new Error(`Payment user not found: ${transaction.user_id}`);

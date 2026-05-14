@@ -372,24 +372,32 @@ class User {
       // durationDays === null or < 0 → VIP vĩnh viễn (vip_expires_at = NULL, is_vip = TRUE)
       // durationDays === 0     → giữ nguyên vip_expires_at, chỉ update tier
       // durationDays > 0      → cộng dồn
+      const params = [id, tier];
       let expiresAtExpr;
       if (durationDays === null || durationDays < 0) {
         expiresAtExpr = 'NULL';
       } else if (durationDays === 0) {
         expiresAtExpr = 'vip_expires_at';
       } else {
-        expiresAtExpr = `GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + INTERVAL '1 day' * ${parseInt(durationDays, 10)}`;
+        const safeDays = parseInt(durationDays, 10);
+        if (!Number.isFinite(safeDays) || safeDays <= 0) {
+          throw new Error('Invalid VIP duration');
+        }
+        params.unshift(safeDays);
+        expiresAtExpr = `GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + ($1::int * INTERVAL '1 day')`;
       }
 
+      const idParamIndex = params.length === 3 ? 2 : 1;
+      const tierParamIndex = params.length === 3 ? 3 : 2;
       const result = await db.query(
         `UPDATE users
          SET is_vip = TRUE,
-             subscription_tier = $3,
+             subscription_tier = $${tierParamIndex},
              vip_expires_at = ${expiresAtExpr},
              updated_at = NOW()
-         WHERE id = $2
+         WHERE id = $${idParamIndex}
          RETURNING id, is_vip, vip_expires_at, subscription_tier`,
-        [durationDays, id, tier]
+        params
       );
       return result.rows[0];
     } catch (error) {
