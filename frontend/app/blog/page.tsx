@@ -44,10 +44,6 @@ export default function BlogPage() {
                   src={featured.coverImage}
                   alt={featured.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                  }}
                 />
                 <div className="hidden absolute inset-0 bg-gradient-to-r from-amber-50 to-orange-50 flex items-center justify-center">
                   <span className="text-amber-600 font-medium text-xl">{featured.category}</span>
@@ -94,10 +90,6 @@ export default function BlogPage() {
                     src={post.coverImage}
                     alt={post.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                    }}
                   />
                   <div className="hidden absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
                     <span className="text-sm font-medium text-indigo-600 text-center px-4">{post.category}</span>

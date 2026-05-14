@@ -70,10 +70,6 @@ export default async function BlogPostPage({ params }: PageProps) {
               src={post.coverImage}
               alt={post.title}
               className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-              }}
             />
             <div className="hidden absolute inset-0 bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center">
               <span className="text-amber-600 font-medium text-2xl">{post.category}</span>
@@ -201,10 +197,6 @@ export default async function BlogPostPage({ params }: PageProps) {
                         src={rp.coverImage}
                         alt={rp.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                        }}
                       />
                       <div className="hidden absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
                         <span className="text-xs font-medium text-indigo-600 text-center px-2">{rp.category}</span>

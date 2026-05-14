@@ -58,8 +58,8 @@ export default function DailyQuestBanner() {
           <FiGift size={18} className="shrink-0" />
           <span className="text-sm font-semibold">
             {canClaim.length > 0
-              ? `Bạn có ${canClaim.length} nhiệm vụ chờ nhận — tổng ${totalCoins} xu!`
-              : 'Nhiệm vụ hằng ngày đang chờ — vào nhận thưởng ngay!'}
+              ? `Bạn có ${canClaim.length} nhiệm vụ chờ nhận — tổng ${totalCoins} xu, dùng giảm nhẹ khi nâng cấp!`
+              : 'Nhiệm vụ hằng ngày đang chờ — tích xu để giảm nhẹ khi mua gói!'}
           </span>
           <span className="ml-1.5 text-xs font-bold text-amber-200 bg-white/10 px-1.5 py-0.5 rounded-full">
             {currentCoins.toLocaleString()} xu

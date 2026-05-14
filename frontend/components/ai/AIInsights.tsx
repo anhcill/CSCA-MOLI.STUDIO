@@ -245,7 +245,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
           </div>
           <h3 className="text-lg font-bold text-amber-900 mb-2">Trải nghiệm Lộ trình AI</h3>
           <p className="text-amber-700 text-sm mb-4 max-w-sm mx-auto">
-            Hệ thống AI sẽ phân tích lịch sử làm bài để đưa ra lộ trình cá nhân hoá riêng biệt. Bạn có thể dùng 50 Xu để mở khoá 1 lần, hoặc nâng cấp VIP để dùng miễn phí mãi mãi.
+            Hệ thống AI sẽ phân tích lịch sử làm bài để đưa ra lộ trình cá nhân hoá riêng biệt. Bạn có thể dùng 50 Xu để mở 1 lượt trải nghiệm, hoặc nâng cấp VIP/Pre để dùng ổn định theo quyền gói.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button 
@@ -303,7 +303,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
               ⭐ Dùng 50 Xu để trải nghiệm
             </button>
             <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
-              ✨ Nâng cấp VIP (Miễn phí AI)
+              ✨ Nâng cấp VIP/Pre
             </a>
           </div>
         </div>

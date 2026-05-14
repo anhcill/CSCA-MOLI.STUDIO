@@ -543,7 +543,7 @@ function CheckoutContent() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">3</div>
-            <h2 className="text-lg font-black text-gray-900">Dùng xu tích lũy</h2>
+            <h2 className="text-lg font-black text-gray-900">Dùng xu giảm nhẹ đơn hàng</h2>
           </div>
           <button
             type="button"
@@ -559,9 +559,9 @@ function CheckoutContent() {
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-black text-gray-900">Dùng xu để giảm giá</p>
+                <p className="font-black text-gray-900">Dùng xu như ưu đãi phụ</p>
                 <p className="mt-1 text-xs text-gray-500">
-                  Bạn có {userCoins.toLocaleString('vi-VN')} xu. 1 xu = {COIN_VALUE_VND.toLocaleString('vi-VN')}đ, tối đa 20% đơn hàng.
+                  Bạn có {userCoins.toLocaleString('vi-VN')} xu. 1 xu = {COIN_VALUE_VND.toLocaleString('vi-VN')}đ, tối đa 20% đơn hàng; phần còn lại vẫn thanh toán để mở gói/khóa.
                 </p>
                 {maxCoinUse > 0 ? (
                   <p className="mt-2 text-sm font-bold text-amber-700">

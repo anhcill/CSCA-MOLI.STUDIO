@@ -22,10 +22,10 @@ const QUEST_LABELS: Record<string, string> = {
 };
 
 const COIN_USAGES = [
-  { icon: '👑', title: 'Nâng cấp VIP', desc: 'Mở khóa tất cả tính năng cao cấp' },
-  { icon: '📖', title: 'Xem lời giải chi tiết', desc: 'Xem giải thích từng câu trong đề thi' },
-  { icon: '🔓', title: 'Mở khóa đề thi VIP', desc: 'Truy cập bộ đề thi đặc biệt' },
-  { icon: '🤖', title: 'Chat AI không giới hạn', desc: 'Hỏi đáp với AI không giới hạn tin nhắn' },
+  { icon: '🎓', title: 'Giảm khi mua gói', desc: '1 xu = 100đ, tối đa 20% đơn' },
+  { icon: '🤖', title: 'Thử phân tích AI', desc: '50 xu/lượt nếu chưa VIP/Pre' },
+  { icon: '🔥', title: 'Giữ động lực học', desc: 'Nhận từ nhiệm vụ hằng ngày' },
+  { icon: '🎟️', title: 'Ưu đãi phụ', desc: 'Không thay thế khóa học chính' },
 ];
 
 function getSecondsUntilMidnight() {
@@ -194,6 +194,18 @@ export default function DailyQuestsBtn() {
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="mt-2 rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                  <p className="text-[10px] leading-relaxed text-amber-700">
+                    Xu chỉ là ưu đãi kích thích học tập: dùng để giảm nhẹ khi mua gói/khóa hoặc mở thử một vài lượt AI. Nội dung học đầy đủ vẫn nằm ở gói/khóa học.
+                  </p>
+                  <a
+                    href="/checkout"
+                    onClick={() => setShow(false)}
+                    className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-amber-600 transition-colors"
+                  >
+                    Dùng xu khi nâng cấp
+                  </a>
                 </div>
               </div>
             )}
