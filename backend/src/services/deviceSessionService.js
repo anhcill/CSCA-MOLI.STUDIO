@@ -129,7 +129,9 @@ class DeviceSessionService {
 
     // 3. Blacklist all associated JWTs immediately (tokens die right away)
     if (sessions.rows.length > 0) {
-      const values = sessions.rows.map((_, i) => `($1, $${i + 2}, $${sessions.rows.length + i + 2})`).join(', ');
+      const values = sessions.rows
+        .map((_, i) => `($${i + 2}, $1, $${sessions.rows.length + i + 2})`)
+        .join(', ');
       const jtiArr = sessions.rows.map(r => r.jti);
       const expArr = sessions.rows.map(r => r.expires_at);
       await db.query(
