@@ -6,6 +6,32 @@ import { useAuthStore } from '@/lib/store/authStore';
 import Link from 'next/link';
 import axios from '@/lib/utils/axios';
 
+const UNREAD_CACHE_TTL = 30_000;
+const UNREAD_POLL_INTERVAL = 60_000;
+let unreadCache: { count: number; cachedAt: number } | null = null;
+let unreadRequest: Promise<number> | null = null;
+
+async function fetchUnreadShared() {
+  const now = Date.now();
+  if (unreadCache && now - unreadCache.cachedAt < UNREAD_CACHE_TTL) {
+    return unreadCache.count;
+  }
+
+  if (!unreadRequest) {
+    unreadRequest = axios.get('/messages/unread-count')
+      .then((res) => {
+        const count = res.data.data?.count || 0;
+        unreadCache = { count, cachedAt: Date.now() };
+        return count;
+      })
+      .finally(() => {
+        unreadRequest = null;
+      });
+  }
+
+  return unreadRequest;
+}
+
 export default function MessageBadge() {
   const { user, isAuthenticated } = useAuthStore();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -18,15 +44,17 @@ export default function MessageBadge() {
 
     const fetchUnread = async () => {
       try {
-        const res = await axios.get('/messages/unread-count');
-        setUnreadCount(res.data.data?.count || 0);
+        const count = await fetchUnreadShared();
+        setUnreadCount(count);
       } catch {
         // ignore
       }
     };
 
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000); // poll every 15s
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchUnread();
+    }, UNREAD_POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [isAuthenticated, user]);
 

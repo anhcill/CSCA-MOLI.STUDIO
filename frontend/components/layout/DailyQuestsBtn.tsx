@@ -15,6 +15,10 @@ interface Quest {
   reward_coins: number;
 }
 
+const QUEST_CACHE_TTL = 60_000;
+let questCache: { quests: Quest[]; cachedAt: number } | null = null;
+let questRequest: Promise<Quest[]> | null = null;
+
 const QUEST_LABELS: Record<string, string> = {
   'login': 'Đăng nhập vào hệ thống',
   'do_exam': 'Hoàn thành 1 bài thi',
@@ -73,24 +77,33 @@ export default function DailyQuestsBtn() {
 
   const fetchQuests = async () => {
     if (!isAuthenticated) return;
+
+    const now = Date.now();
+    if (questCache && now - questCache.cachedAt < QUEST_CACHE_TTL) {
+      setQuests(questCache.quests);
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await axios.get('/users/quests');
-      if (data.success) {
-        setQuests(data.data.quests);
+      if (!questRequest) {
+        questRequest = axios.get('/users/quests')
+          .then(({ data }) => {
+            const quests = data.success ? data.data.quests : [];
+            questCache = { quests, cachedAt: Date.now() };
+            return quests;
+          })
+          .finally(() => {
+            questRequest = null;
+          });
       }
+      setQuests(await questRequest);
     } catch (err) {
       console.error('Lỗi khi lấy nhiệm vụ:', err);
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchQuests();
-    }
-  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated && show) {
@@ -112,6 +125,13 @@ export default function DailyQuestsBtn() {
           colors: ['#f43f5e', '#fbbf24', '#34d399', '#60a5fa']
         });
         setQuests(prev => prev.map(q => q.id === id ? { ...q, is_completed: true } : q));
+        if (questCache) {
+          questCache = {
+            ...questCache,
+            quests: questCache.quests.map(q => q.id === id ? { ...q, is_completed: true } : q),
+            cachedAt: Date.now(),
+          };
+        }
         if (rewardCoins > 0) {
           updateUser({ coins: (user?.coins || 0) + rewardCoins });
         }

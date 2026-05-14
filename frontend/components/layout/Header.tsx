@@ -28,7 +28,6 @@ import NotificationBell from './NotificationBell';
 import MessageBadge from './MessageBadge';
 import DailyQuestsBtn from './DailyQuestsBtn';
 import ThemeToggle from './ThemeToggle';
-import axios from '@/lib/utils/axios';
 
 const COURSE_ITEMS = [
   { id: 'math', labelKey: 'subject.math', href: '/mon/toan' },
@@ -61,7 +60,6 @@ export default function Header() {
   const [mobileCourseOpen, setMobileCourseOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [streak, setStreak] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
 
@@ -88,17 +86,9 @@ export default function Header() {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
-  useEffect(() => {
-    if (!mounted || !isAuthenticated || !user) return;
-    axios.post('/users/record-activity')
-      .then(({ data }) => {
-        if (data.success && data.data) setStreak(data.data.streak);
-      })
-      .catch(() => {});
-  }, [mounted, isAuthenticated, user]);
-
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
   const courseActive = pathname.includes('/mon/') || pathname.includes('tiengtrung') || pathname === '/vat-ly' || pathname === '/hoa';
+  const streak = user?.current_streak ?? 0;
 
   const navLinkClass = (active: boolean) =>
     `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
