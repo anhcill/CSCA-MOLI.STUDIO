@@ -33,6 +33,9 @@ export interface Question {
   question_number: number;
   question_text: string;
   question_text_cn?: string;
+  question_text_en?: string;
+  passage_text?: string;
+  effective_passage_text?: string;
   image_url?: string;
   points: number;
   answers?: Answer[];
@@ -43,6 +46,7 @@ export interface Answer {
   answer_key: string;
   answer_text: string;
   answer_text_cn?: string;
+  answer_text_en?: string;
   image_url?: string;
   is_correct?: boolean;
 }

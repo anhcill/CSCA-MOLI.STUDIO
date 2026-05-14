@@ -9,11 +9,14 @@ import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
 import { officialExamApi } from '@/lib/api/officialExams';
+import { useLanguage } from '@/context/LanguageContext';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuthStore();
+  const { pick } = useLanguage();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -299,6 +302,11 @@ export default function ExamPage() {
   const answeredCount = Object.keys(selectedAnswers).length;
   const progressPercent = (answeredCount / questions.length) * 100;
   const isTimeCritical = timeLeft < 300; // less than 5 min
+  const questionText = pick({
+    vi: currentQuestion.question_text,
+    en: currentQuestion.question_text_en,
+    zh: currentQuestion.question_text_cn,
+  });
 
   return (
     <div
@@ -368,6 +376,10 @@ export default function ExamPage() {
 
         {/* Right Side: Tools */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-6">
+          <div className="hidden md:block">
+            <LanguageSwitcher compact />
+          </div>
+
           <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-2xl font-bold tracking-tight shadow-inner border ${
               isTimeCritical 
                 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' 
@@ -436,19 +448,12 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
-                {(currentQuestion.question_text || '').split('\n').map((line: string, idx: number) => (
+                {(questionText || '').split('\n').map((line: string, idx: number) => (
                   <span key={idx}>
                     {line}
                     <br />
                   </span>
                 ))}
-                
-                {/* Chinese / Secondary Translation if exist */}
-                {currentQuestion.question_text_cn && currentQuestion.question_text_cn !== currentQuestion.question_text && (
-                  <div className="text-lg md:text-xl font-medium text-slate-500 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
-                    {currentQuestion.question_text_cn}
-                  </div>
-                )}
              </div>
 
              {/* Question Attachments */}
@@ -514,6 +519,11 @@ export default function ExamPage() {
                   return visibleAnswers.map((answer: any, index: number) => {
                     const isSelected = currentQuestionAnswer === answer.id;
                     const letter = answer.answer_key || String.fromCharCode(65 + index);
+                    const answerText = pick({
+                      vi: answer.answer_text,
+                      en: answer.answer_text_en,
+                      zh: answer.answer_text_cn,
+                    });
 
                     return (
                       <button
@@ -534,13 +544,8 @@ export default function ExamPage() {
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
                           <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                             {answer.answer_text}
+                             {answerText}
                           </span>
-                          {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
-                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
-                               {answer.answer_text_cn}
-                            </div>
-                          )}
                           {answer.image_url && (
                             <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
                               <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
@@ -698,6 +703,7 @@ export default function ExamPage() {
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-md sm:hidden">
         <div className="mx-auto flex max-w-md items-center gap-3">
+          <LanguageSwitcher compact />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiến độ</p>
             <p className="truncate text-sm font-black text-slate-900">

@@ -8,6 +8,8 @@ import axios from '@/lib/utils/axios';
 import { canAccessAdminPanel } from '@/lib/utils/permissions';
 import { getCurrentUser } from '@/lib/api/auth';
 import Header from '@/components/layout/Header';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   FiEdit2, FiSave, FiX, FiUser, FiMail, FiBook,
   FiAward, FiTarget, FiMessageSquare, FiUpload,
@@ -112,6 +114,7 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
 export default function ProfilePage() {
   const { user: authUser, updateUser, logout } = useAuthStore();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [mounted, setMounted] = useState(false);
   const [profileUser, setProfileUser] = useState<any>(null);
@@ -387,6 +390,13 @@ export default function ProfilePage() {
   const vipDaysLeft = profileUser?.is_vip && profileUser?.vip_expires_at
     ? Math.max(0, Math.ceil((new Date(profileUser.vip_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null;
+  const profileTabs = [
+    { key: 'info', label: t('profile.info'), icon: FiUser },
+    { key: 'stats', label: t('profile.stats'), icon: FiAward },
+    { key: 'vip', label: t('profile.vip'), icon: FaCrown },
+    { key: 'devices', label: t('profile.devices'), icon: FiMonitor },
+    { key: 'settings', label: t('profile.settings'), icon: FiShield },
+  ] as const;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -481,15 +491,19 @@ export default function ProfilePage() {
         </div>
 
         {/* ── Tabs ─────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">{t('profile.languageTitle')}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t('profile.languageDesc')}</p>
+            </div>
+            <LanguageSwitcher />
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex border-b border-gray-100">
-            {([
-              { key: 'info', label: 'Thông tin', icon: FiUser },
-              { key: 'stats', label: 'Thống kê', icon: FiAward },
-              { key: 'vip', label: 'VIP', icon: FaCrown },
-              { key: 'devices', label: 'Thiết bị', icon: FiMonitor },
-              { key: 'settings', label: 'Cài đặt', icon: FiShield },
-            ] as const).map(tab => {
+            {profileTabs.map(tab => {
               const I = tab.icon;
               return (
                 <button

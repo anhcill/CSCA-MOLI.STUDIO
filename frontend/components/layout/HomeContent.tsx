@@ -1,57 +1,239 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  FiArrowRight, FiBook, FiTarget, FiTrendingUp, FiUsers,
-  FiFileText, FiZap, FiAward, FiCheckCircle, FiStar,
-  FiCalendar, FiBell, FiCpu, FiBarChart2,
-  FiShield, FiPlay,
+  FiArrowRight,
+  FiAward,
+  FiBarChart2,
+  FiBell,
+  FiBook,
+  FiCalendar,
+  FiCheckCircle,
+  FiCpu,
+  FiFileText,
+  FiShield,
+  FiStar,
+  FiTarget,
+  FiTrendingUp,
+  FiUsers,
+  FiZap,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
+import { useLanguage } from '@/context/LanguageContext';
 
 type StatsData = { users: number; exams: number; materials: number; passRate: number };
+type Countdown = { days: number; hours: number; minutes: number; seconds: number };
+
 const STATS_DEFAULT: StatsData = { users: 10000, exams: 500, materials: 200, passRate: 95 };
+const EXAM_DATE_FALLBACK = new Date(process.env.NEXT_PUBLIC_EXAM_DATE || '2026-06-10T08:00:00');
 
 const SUBJECTS = [
-  { id: 'toan',           name: 'Toán',            name_cn: '数学',    href: '/mon/toan',          emoji: '📐', gradient: 'from-blue-500 to-indigo-600',   shadow: 'hover:shadow-blue-200',     desc: 'Đại số · Giải tích · Hình học' },
-  { id: 'vat-ly',        name: 'Vật Lý',          name_cn: '物理',    href: '/vat-ly',          emoji: '⚡', gradient: 'from-yellow-400 to-orange-500', shadow: 'hover:shadow-orange-200',    desc: 'Cơ học · Điện từ · Quang học' },
-  { id: 'hoa',           name: 'Hóa Học',         name_cn: '化学',    href: '/hoa',             emoji: '🧪', gradient: 'from-emerald-500 to-teal-600',   shadow: 'hover:shadow-emerald-200',  desc: 'Hóa vô cơ · Hóa hữu cơ' },
-  { id: 'tieng-trung-xh', name: 'Tiếng Trung XH', name_cn: '中文(文)', href: '/tiengtrung-xahoi', emoji: '📖', gradient: 'from-red-500 to-rose-600',      shadow: 'hover:shadow-red-200',       desc: 'Khối xã hội · Nhân văn' },
-  { id: 'tieng-trung-tn', name: 'Tiếng Trung TN', name_cn: '中文(理)', href: '/tiengtrung-tunhien', emoji: '🔬', gradient: 'from-violet-500 to-purple-600', shadow: 'hover:shadow-violet-200',   desc: 'Khối tự nhiên · Kỹ thuật' },
-  { id: 'forum',         name: 'Diễn Đàn',        name_cn: '论坛',    href: '/forum',           emoji: '💬', gradient: 'from-pink-500 to-fuchsia-600',  shadow: 'hover:shadow-pink-200',      desc: 'Trao đổi · Q&A cộng đồng' },
+  {
+    id: 'math',
+    labelKey: 'subject.math',
+    nameCn: '数学',
+    href: '/mon/toan',
+    gradient: 'from-blue-500 to-indigo-600',
+    desc: { vi: 'Đại số · Giải tích · Hình học', en: 'Algebra · Calculus · Geometry', zh: '代数 · 微积分 · 几何' },
+  },
+  {
+    id: 'physics',
+    labelKey: 'subject.physics',
+    nameCn: '物理',
+    href: '/vat-ly',
+    gradient: 'from-yellow-400 to-orange-500',
+    desc: { vi: 'Cơ học · Điện từ · Quang học', en: 'Mechanics · Electromagnetism · Optics', zh: '力学 · 电磁学 · 光学' },
+  },
+  {
+    id: 'chemistry',
+    labelKey: 'subject.chemistry',
+    nameCn: '化学',
+    href: '/hoa',
+    gradient: 'from-emerald-500 to-teal-600',
+    desc: { vi: 'Hóa vô cơ · Hóa hữu cơ', en: 'Inorganic · Organic chemistry', zh: '无机化学 · 有机化学' },
+  },
+  {
+    id: 'chinese-soc',
+    labelKey: 'subject.chineseSoc',
+    nameCn: '中文(文)',
+    href: '/tiengtrung-xahoi',
+    gradient: 'from-red-500 to-rose-600',
+    desc: { vi: 'Khối xã hội · Nhân văn', en: 'Social science · Humanities', zh: '文科 · 人文' },
+  },
+  {
+    id: 'chinese-sci',
+    labelKey: 'subject.chineseSci',
+    nameCn: '中文(理)',
+    href: '/tiengtrung-tunhien',
+    gradient: 'from-violet-500 to-purple-600',
+    desc: { vi: 'Khối tự nhiên · Kỹ thuật', en: 'Science · Engineering', zh: '理科 · 工科' },
+  },
+  {
+    id: 'forum',
+    labelKey: 'subject.forum',
+    nameCn: '论坛',
+    href: '/forum',
+    gradient: 'from-pink-500 to-fuchsia-600',
+    desc: { vi: 'Trao đổi · Hỏi đáp cộng đồng', en: 'Discussion · Community Q&A', zh: '交流 · 社区问答' },
+  },
 ];
 
 const HOT_EXAMS = [
-  { title: 'Đề Toán Tổng Hợp 2025',     subject: 'Toán',         emoji: '📐', attempts: 1240, difficulty: 'Khó',       diffColor: 'bg-red-100 text-red-600',       href: '/de-mo-phong', gradient: 'from-blue-500 to-indigo-600' },
-  { title: 'Tiếng Trung XH - Nhân văn',  subject: 'Tiếng Trung', emoji: '📖', attempts: 890,  difficulty: 'Trung bình', diffColor: 'bg-yellow-100 text-yellow-700', href: '/de-mo-phong', gradient: 'from-red-500 to-rose-600' },
-  { title: 'Vật Lý Điện Từ Nâng Cao',    subject: 'Vật Lý',     emoji: '⚡', attempts: 670,  difficulty: 'Khó',       diffColor: 'bg-red-100 text-red-600',       href: '/de-mo-phong', gradient: 'from-yellow-400 to-orange-500' },
+  {
+    title: { vi: 'Đề Toán Tổng Hợp 2025', en: 'General Math Exam 2025', zh: '2025数学综合试卷' },
+    subjectKey: 'subject.math',
+    attempts: 1240,
+    difficulty: { vi: 'Khó', en: 'Hard', zh: '难' },
+    diffColor: 'bg-red-100 text-red-600',
+    href: '/de-mo-phong',
+    gradient: 'from-blue-500 to-indigo-600',
+  },
+  {
+    title: { vi: 'Tiếng Trung XH - Nhân văn', en: 'Chinese Social - Humanities', zh: '中文文科 - 人文' },
+    subjectKey: 'subject.chineseSoc',
+    attempts: 890,
+    difficulty: { vi: 'Trung bình', en: 'Medium', zh: '中等' },
+    diffColor: 'bg-yellow-100 text-yellow-700',
+    href: '/de-mo-phong',
+    gradient: 'from-red-500 to-rose-600',
+  },
+  {
+    title: { vi: 'Vật Lý Điện Từ Nâng Cao', en: 'Advanced Electromagnetism', zh: '高级电磁学' },
+    subjectKey: 'subject.physics',
+    attempts: 670,
+    difficulty: { vi: 'Khó', en: 'Hard', zh: '难' },
+    diffColor: 'bg-red-100 text-red-600',
+    href: '/de-mo-phong',
+    gradient: 'from-yellow-400 to-orange-500',
+  },
 ];
 
 const AI_STEPS = [
-  { icon: FiBarChart2,   title: 'Phân tích điểm yếu',  desc: 'AI đọc lịch sử làm bài, xác định chủ đề bạn hay sai nhất' },
-  { icon: FiCpu,         title: 'Tạo lộ trình riêng', desc: 'Gemini AI lên kế hoạch ôn thi cá nhân hóa theo thời gian còn lại' },
-  { icon: FiTrendingUp,  title: 'Theo dõi tiến bộ',   desc: 'Biểu đồ tiến độ thực tế, nhắc nhở học đúng giờ mỗi ngày' },
+  {
+    icon: FiBarChart2,
+    title: { vi: 'Phân tích điểm yếu', en: 'Analyze weak points', zh: '分析薄弱点' },
+    desc: {
+      vi: 'AI đọc lịch sử làm bài, xác định chủ đề bạn hay sai nhất.',
+      en: 'AI reads your exam history and identifies your most common weak topics.',
+      zh: 'AI读取做题记录，找出你最容易出错的主题。',
+    },
+  },
+  {
+    icon: FiCpu,
+    title: { vi: 'Tạo lộ trình riêng', en: 'Build a personal roadmap', zh: '生成专属路径' },
+    desc: {
+      vi: 'Kế hoạch ôn thi được cá nhân hóa theo thời gian còn lại và mục tiêu điểm.',
+      en: 'Your plan is personalized by remaining time and target score.',
+      zh: '根据剩余时间和目标分数制定个性化复习计划。',
+    },
+  },
+  {
+    icon: FiTrendingUp,
+    title: { vi: 'Theo dõi tiến bộ', en: 'Track progress', zh: '跟踪进度' },
+    desc: {
+      vi: 'Biểu đồ tiến độ, lịch sử làm bài và nhắc học đúng thời điểm.',
+      en: 'Progress charts, exam history and timely study reminders.',
+      zh: '进度图表、做题历史和适时学习提醒。',
+    },
+  },
 ];
 
 const FEATURES = [
-  { icon: FiZap,         title: 'Đề thi chuẩn CSCA',    desc: 'Đề thi mô phỏng sát với kỳ thi thật, cập nhật liên tục.',                       color: 'bg-yellow-100 text-yellow-600',  ring: 'ring-yellow-200' },
-  { icon: FiTarget,      title: 'AI lộ trình cá nhân',  desc: 'Gemini AI phân tích điểm yếu và đề xuất lộ trình tối ưu.',                       color: 'bg-purple-100 text-purple-600',  ring: 'ring-purple-200' },
-  { icon: FiTrendingUp,  title: 'Theo dõi tiến độ',    desc: 'Dashboard trực quan: tốc độ tiến bộ, lịch sử và điểm theo chủ đề.',               color: 'bg-blue-100 text-blue-600',      ring: 'ring-blue-200' },
-  { icon: FiBook,        title: 'Từ vựng thông minh',   desc: 'Hệ thống flashcard tiếng Trung với spaced repetition tự động.',                    color: 'bg-emerald-100 text-emerald-600', ring: 'ring-emerald-200' },
-  { icon: FiShield,      title: 'Cấu trúc đề chi tiết',  desc: 'Phân tích cấu trúc đề thi CSCA từng năm, biết trước sẽ gặp gì.',              color: 'bg-rose-100 text-rose-600',      ring: 'ring-rose-200' },
-  { icon: FiUsers,       title: 'Cộng đồng học viên',   desc: 'Diễn đàn Q&A sôi nổi, chia sẻ kinh nghiệm cùng 10k+ bạn học.',                 color: 'bg-indigo-100 text-indigo-600',  ring: 'ring-indigo-200' },
+  {
+    icon: FiZap,
+    title: { vi: 'Đề thi chuẩn CSCA', en: 'CSCA-aligned exams', zh: '贴近CSCA的试卷' },
+    desc: { vi: 'Đề mô phỏng sát kỳ thi thật, phân tách rõ đề thường và đề VIP.', en: 'Realistic mock exams with clear Basic and VIP grouping.', zh: '高仿真模拟试卷，清楚区分普通题和VIP题。' },
+    color: 'bg-yellow-100 text-yellow-600',
+  },
+  {
+    icon: FiTarget,
+    title: { vi: 'Lộ trình cá nhân', en: 'Personal roadmap', zh: '个人学习路径' },
+    desc: { vi: 'AI đề xuất thứ tự ôn tập dựa trên điểm yếu thật của bạn.', en: 'AI recommends study order based on your real weak spots.', zh: 'AI根据真实薄弱点推荐复习顺序。' },
+    color: 'bg-purple-100 text-purple-600',
+  },
+  {
+    icon: FiTrendingUp,
+    title: { vi: 'Theo dõi tiến độ', en: 'Progress tracking', zh: '进度跟踪' },
+    desc: { vi: 'Xem điểm, độ chính xác, lịch sử và xu hướng theo từng môn.', en: 'View scores, accuracy, history and trends by subject.', zh: '按科目查看分数、正确率、历史和趋势。' },
+    color: 'bg-blue-100 text-blue-600',
+  },
+  {
+    icon: FiBook,
+    title: { vi: 'Từ vựng thông minh', en: 'Smart vocabulary', zh: '智能词汇' },
+    desc: { vi: 'Từ vựng có tiếng Trung, tiếng Anh và tiếng Việt rõ ràng.', en: 'Vocabulary includes Chinese, English and Vietnamese clearly.', zh: '词汇清晰包含中文、英文和越南文。' },
+    color: 'bg-emerald-100 text-emerald-600',
+  },
+  {
+    icon: FiShield,
+    title: { vi: 'Cấu trúc đề chi tiết', en: 'Detailed exam structure', zh: '详细考试结构' },
+    desc: { vi: 'Nắm rõ phần thi, thời lượng và dạng câu trước khi vào luyện.', en: 'Understand sections, timing and question types before practicing.', zh: '练习前了解考试部分、时间和题型。' },
+    color: 'bg-rose-100 text-rose-600',
+  },
+  {
+    icon: FiUsers,
+    title: { vi: 'Cộng đồng học viên', en: 'Student community', zh: '学员社区' },
+    desc: { vi: 'Diễn đàn, hỏi đáp và hỗ trợ cho thành viên VIP/Pre.', en: 'Forum, Q&A and support for VIP/Pre members.', zh: '为VIP/Pre会员提供论坛、问答和支持。' },
+    color: 'bg-indigo-100 text-indigo-600',
+  },
+];
+
+const STEPS = [
+  {
+    step: '01',
+    href: '/mon/toan',
+    title: { vi: 'Chọn môn học', en: 'Choose a subject', zh: '选择科目' },
+    desc: { vi: 'Toán, Vật Lý, Hóa Học hoặc Tiếng Trung theo khối thi của bạn.', en: 'Math, Physics, Chemistry or Chinese based on your track.', zh: '按你的考试方向选择数学、物理、化学或中文。' },
+  },
+  {
+    step: '02',
+    href: '/tailieu',
+    title: { vi: 'Ôn lý thuyết', en: 'Review theory', zh: '复习理论' },
+    desc: { vi: 'Đọc tài liệu, học từ vựng và nắm cấu trúc đề trước khi làm bài.', en: 'Read materials, learn vocabulary and understand the exam format.', zh: '阅读资料、学习词汇并掌握考试结构。' },
+  },
+  {
+    step: '03',
+    href: '/de-mo-phong',
+    title: { vi: 'Luyện đề thực chiến', en: 'Practice real exams', zh: '实战刷题' },
+    desc: { vi: 'Làm đề, xem kết quả chi tiết và học lại từng câu sai.', en: 'Take exams, review detailed results and revisit every mistake.', zh: '做试卷、查看详细结果并复盘错题。' },
+  },
 ];
 
 const TESTIMONIALS = [
-  { name: 'Minh Anh',   score: '9.5/10',            text: '"Hệ thống đề thi rất sát đề thật. Mình đã đậu học bổng toàn phần nhờ luyện thi ở đây suốt 3 tháng."',          subject: 'Toán',        avatar: 'M', emoji: '📐' },
-  { name: 'Thu Trang',  score: 'Học bổng toàn phần', text: '"AI phân tích điểm yếu cực kỳ chính xác, giúp mình tập trung đúng chỗ cần cải thiện thay vì học dàn trải."', subject: 'Tiếng Trung', avatar: 'T', emoji: '📖' },
-  { name: 'Quang Hưng', score: 'Top 5%',             text: '"Tài liệu được biên soạn chi tiết, có cả tiếng Trung lẫn tiếng Việt. Học rất nhanh và không bỡ ngỡ."',          subject: 'Vật Lý',     avatar: 'Q', emoji: '⚡' },
+  {
+    name: 'Minh Anh',
+    score: '9.5/10',
+    text: {
+      vi: 'Hệ thống đề thi rất sát đề thật. Mình đậu học bổng toàn phần sau 3 tháng luyện đều.',
+      en: 'The mock exams were close to the real test. I won a full scholarship after 3 months of steady practice.',
+      zh: '模拟试题非常贴近真实考试。我坚持练习3个月后拿到了全额奖学金。',
+    },
+    subjectKey: 'subject.math',
+    avatar: 'M',
+  },
+  {
+    name: 'Thu Trang',
+    score: { vi: 'Học bổng toàn phần', en: 'Full scholarship', zh: '全额奖学金' },
+    text: {
+      vi: 'AI phân tích đúng điểm yếu nên mình không còn học dàn trải, tập trung được vào phần cần cải thiện.',
+      en: 'AI found my weak points accurately, so I stopped studying randomly and focused on what mattered.',
+      zh: 'AI准确找出我的薄弱点，让我不再盲目学习，而是集中提升关键部分。',
+    },
+    subjectKey: 'subject.chineseSoc',
+    avatar: 'T',
+  },
+  {
+    name: 'Quang Hưng',
+    score: 'Top 5%',
+    text: {
+      vi: 'Tài liệu có tiếng Việt rõ ràng, kèm thuật ngữ tiếng Trung nên học nhanh và dễ nhớ hơn.',
+      en: 'The materials are clear in Vietnamese with Chinese terms, making them faster to learn and remember.',
+      zh: '资料有清楚的越南文说明和中文术语，学习和记忆都更快。',
+    },
+    subjectKey: 'subject.physics',
+    avatar: 'Q',
+  },
 ];
-
-const EXAM_DATE_FALLBACK = new Date(process.env.NEXT_PUBLIC_EXAM_DATE || '2026-06-10T08:00:00');
-
-type Countdown = { days: number; hours: number; minutes: number; seconds: number };
 
 function useCountdown(target: Date | null) {
   const calc = (): Countdown => {
@@ -59,20 +241,21 @@ function useCountdown(target: Date | null) {
     const diff = target.getTime() - Date.now();
     if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
     return {
-      days:    Math.floor(diff / 86400000),
-      hours:   Math.floor((diff % 86400000) / 3600000),
+      days: Math.floor(diff / 86400000),
+      hours: Math.floor((diff % 86400000) / 3600000),
       minutes: Math.floor((diff % 3600000) / 60000),
       seconds: Math.floor((diff % 60000) / 1000),
     };
   };
   const [time, setTime] = useState<Countdown | null>(null);
+
   useEffect(() => {
     if (!target) return;
     setTime(calc());
-    const t = setInterval(() => setTime(calc()), 1000);
-    return () => clearInterval(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timer = setInterval(() => setTime(calc()), 1000);
+    return () => clearInterval(timer);
   }, [target?.getTime()]);
+
   return time;
 }
 
@@ -80,23 +263,26 @@ function CountdownUnit({ value, label }: { value: number | null; label: string }
   return (
     <div className="flex flex-col items-center">
       <div className="relative">
-        <div className="absolute inset-0 bg-indigo-400/20 rounded-2xl blur-md" />
-        <div className="relative w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl font-black text-white shadow-lg" suppressHydrationWarning>
+        <div className="absolute inset-0 rounded-2xl bg-indigo-400/20 blur-md" />
+        <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-3xl font-black text-white shadow-lg backdrop-blur-sm sm:h-20 sm:w-20 sm:text-4xl md:h-24 md:w-24 md:text-5xl" suppressHydrationWarning>
           {value === null ? '--' : String(value).padStart(2, '0')}
         </div>
       </div>
-      <span className="text-white/70 text-xs font-medium mt-2 uppercase tracking-wider">{label}</span>
+      <span className="mt-2 text-xs font-medium uppercase tracking-wider text-white/70">{label}</span>
     </div>
   );
 }
 
 export default function HomeContent() {
+  const { t, pick } = useLanguage();
   const [examDate, setExamDate] = useState<Date | null>(null);
+  const [stats, setStats] = useState<StatsData>(STATS_DEFAULT);
+  const countdown = useCountdown(examDate);
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     fetch(`${apiUrl}/settings/public`)
-      .then((r) => r.ok ? r.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         const dateStr = json?.data?.exam_date;
         setExamDate(dateStr ? new Date(dateStr) : EXAM_DATE_FALLBACK);
@@ -104,87 +290,66 @@ export default function HomeContent() {
       .catch(() => setExamDate(EXAM_DATE_FALLBACK));
   }, []);
 
-  const countdown = useCountdown(examDate);
-
-  const [stats, setStats] = useState<StatsData>(STATS_DEFAULT);
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     fetch(`${apiUrl}/stats/overview`)
-      .then((r) => r.ok ? r.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((json) => { if (json?.success && json.data) setStats(json.data); })
-      .catch(() => { /* keep fallback */ });
+      .catch(() => {});
   }, []);
+
+  const statCards = [
+    { icon: FiUsers, value: stats.users >= 1000 ? `${(stats.users / 1000).toFixed(0)}k+` : `${stats.users}+`, label: t('home.stats.students'), color: 'from-violet-500 to-purple-600' },
+    { icon: FiFileText, value: `${stats.exams}+`, label: t('home.stats.exams'), color: 'from-blue-500 to-indigo-600' },
+    { icon: FiBook, value: `${stats.materials}+`, label: t('home.stats.materials'), color: 'from-emerald-500 to-teal-600' },
+    { icon: FiAward, value: `${stats.passRate}%`, label: t('home.stats.passRate'), color: 'from-orange-400 to-amber-500' },
+  ];
 
   return (
     <>
-      {/* ── STATS BAR ─────────────────────────────────────────── */}
-      <section className="w-full bg-white border-b border-gray-100 shadow-sm dark:bg-gray-900">
-        <div className="max-w-6xl mx-auto px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-sm">
-              <FiUsers size={20} />
+      <section className="w-full border-b border-gray-100 bg-white shadow-sm dark:bg-gray-900">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 px-6 py-5 sm:gap-6 md:grid-cols-4">
+          {statCards.map((item) => (
+            <div key={item.label} className="flex items-center gap-3">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} text-white shadow-sm`}>
+                <item.icon size={20} />
+              </div>
+              <div>
+                <p className="text-lg font-black leading-tight text-gray-900 dark:text-white sm:text-xl">{item.value}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-black text-gray-900 dark:text-white text-lg sm:text-xl leading-tight">
-                {stats.users >= 1000 ? `${(stats.users / 1000).toFixed(0)}k+` : `${stats.users}+`}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Học viên</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm">
-              <FiFileText size={20} />
-            </div>
-            <div>
-              <p className="font-black text-gray-900 dark:text-white text-lg sm:text-xl leading-tight">{stats.exams}+</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Đề thi</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-sm">
-              <FiBook size={20} />
-            </div>
-            <div>
-              <p className="font-black text-gray-900 dark:text-white text-lg sm:text-xl leading-tight">{stats.materials}+</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Tài liệu</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white shrink-0 shadow-sm">
-              <FiAward size={20} />
-            </div>
-            <div>
-              <p className="font-black text-gray-900 dark:text-white text-lg sm:text-xl leading-tight">{stats.passRate}%</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Tỷ lệ đậu</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* ── SUBJECTS GRID ─────────────────────────────────────── */}
-      <section className="w-full bg-gray-50/60 dark:bg-gray-800 py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="inline-block px-4 py-1.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-full uppercase tracking-widest mb-3">6 Môn Thi</span>
-            <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Chọn Môn Học Của Bạn</h2>
-            <p className="text-gray-500 dark:text-gray-400 mt-3 text-lg">Nội dung chuẩn đề thi CSCA, cập nhật liên tục</p>
+      <section className="w-full bg-gray-50/60 py-20 dark:bg-gray-800">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-12 text-center">
+            <span className="mb-3 inline-block rounded-full bg-indigo-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">{t('home.subjects.badge')}</span>
+            <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white">{t('home.subjects.title')}</h2>
+            <p className="mt-3 text-lg text-gray-500 dark:text-gray-400">{t('home.subjects.desc')}</p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-            {SUBJECTS.map(s => (
-              <Link key={s.id} href={s.href}
-                className={`group relative bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-2xl p-6 hover:border-transparent hover:shadow-xl hover:-translate-y-1.5 transition-all duration-200 overflow-hidden ${s.shadow}`}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3">
+            {SUBJECTS.map((subject) => (
+              <Link
+                key={subject.id}
+                href={subject.href}
+                className="group relative overflow-hidden rounded-2xl border-2 border-gray-100 bg-white p-6 transition-all duration-200 hover:-translate-y-1.5 hover:border-transparent hover:shadow-xl dark:border-gray-700 dark:bg-gray-900"
               >
-                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${s.gradient} opacity-0 group-hover:opacity-100 transition-opacity`} />
-                <div className={`absolute inset-0 bg-gradient-to-br ${s.gradient} opacity-0 group-hover:opacity-[0.04] transition-opacity`} />
-                <div className="flex items-start justify-between mb-4">
-                  <span className="text-4xl">{s.emoji}</span>
-                  <span className="text-xs font-bold text-gray-300 dark:text-gray-600 group-hover:text-gray-400 transition-colors">{s.name_cn}</span>
+                <div className={`absolute left-0 right-0 top-0 h-1 bg-gradient-to-r ${subject.gradient} opacity-0 transition-opacity group-hover:opacity-100`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${subject.gradient} opacity-0 transition-opacity group-hover:opacity-[0.04]`} />
+                <div className="mb-4 flex items-start justify-between">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                    <FiBook size={22} />
+                  </span>
+                  <span className="text-xs font-bold text-gray-300 transition-colors group-hover:text-gray-400 dark:text-gray-600">{subject.nameCn}</span>
                 </div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-1">{s.name}</h3>
-                <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">{s.desc}</p>
-                <div className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
-                  Học ngay <FiArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                <h3 className="mb-1 text-lg font-bold text-gray-900 dark:text-white">{t(subject.labelKey)}</h3>
+                <p className="mb-4 text-sm text-gray-400 dark:text-gray-500">{pick(subject.desc)}</p>
+                <div className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 dark:text-indigo-400">
+                  {t('home.subjects.studyNow')} <FiArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
                 </div>
               </Link>
             ))}
@@ -192,38 +357,36 @@ export default function HomeContent() {
         </div>
       </section>
 
-      {/* ── HOT EXAMS ─────────────────────────────────────────── */}
-      <section className="w-full bg-white dark:bg-gray-900 py-20 border-t border-gray-100 dark:border-gray-800">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-end justify-between mb-10">
+      <section className="w-full border-t border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-gray-900">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-10 flex items-end justify-between">
             <div>
-              <span className="inline-block px-4 py-1.5 bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300 text-xs font-bold rounded-full uppercase tracking-widest mb-3">🔥 Nổi Bật</span>
-              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Đề Thi Hot Tuần Này</h2>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">Được nhiều học viên luyện tập nhất</p>
+              <span className="mb-3 inline-block rounded-full bg-red-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-red-600 dark:bg-red-900 dark:text-red-300">{t('home.hot.badge')}</span>
+              <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white">{t('home.hot.title')}</h2>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">{t('home.hot.desc')}</p>
             </div>
-            <Link href="/de-mo-phong" className="hidden md:inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-semibold hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors">
-              Xem tất cả <FiArrowRight size={16} />
+            <Link href="/de-mo-phong" className="hidden items-center gap-2 font-semibold text-indigo-600 transition-colors hover:text-indigo-800 dark:text-indigo-400 md:inline-flex">
+              {t('home.hot.all')} <FiArrowRight size={16} />
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {HOT_EXAMS.map(e => (
-              <Link key={e.title} href={e.href}
-                className="group bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-200 overflow-hidden relative"
-              >
-                <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${e.gradient}`} />
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-3xl">{e.emoji}</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{e.subject}</span>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {HOT_EXAMS.map((exam) => (
+              <Link key={pick(exam.title)} href={exam.href} className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-6 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                <div className={`absolute left-0 right-0 top-0 h-1 bg-gradient-to-r ${exam.gradient}`} />
+                <div className="mb-4 flex items-center gap-3">
+                  <FiFileText className="text-gray-400" size={24} />
+                  <span className="text-xs font-medium text-gray-400 dark:text-gray-500">{t(exam.subjectKey)}</span>
                 </div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-base mb-3 leading-snug group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">{e.title}</h3>
+                <h3 className="mb-3 text-base font-bold leading-snug text-gray-900 transition-colors group-hover:text-indigo-700 dark:text-white dark:group-hover:text-indigo-300">{pick(exam.title)}</h3>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs">
-                    <FiUsers size={12} /> <span>{e.attempts.toLocaleString()} lượt làm</span>
+                  <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                    <FiUsers size={12} />
+                    <span>{exam.attempts.toLocaleString()} {t('home.hot.attempts')}</span>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${e.diffColor}`}>{e.difficulty}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${exam.diffColor}`}>{pick(exam.difficulty)}</span>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-800 dark:group-hover:text-indigo-300">
-                  <FiPlay size={14} /> Làm ngay
+                <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-indigo-600 group-hover:text-indigo-800 dark:text-indigo-400">
+                  <FiZap size={14} /> {t('home.hot.start')}
                 </div>
               </Link>
             ))}
@@ -231,158 +394,141 @@ export default function HomeContent() {
         </div>
       </section>
 
-      {/* ── COUNTDOWN TIMER ───────────────────────────────────── */}
-      <section className="w-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 py-20 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-10 left-20 w-72 h-72 bg-indigo-500 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 right-20 w-72 h-72 bg-purple-500 rounded-full blur-3xl" />
-        </div>
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-5 py-2 mb-6">
+      <section className="relative w-full overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 py-20">
+        <div className="relative mx-auto max-w-4xl px-6 text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2">
             <FiCalendar className="text-indigo-400" size={16} />
-            <span className="text-indigo-300 text-sm font-semibold">CSCA 2026</span>
+            <span className="text-sm font-semibold text-indigo-300">{t('home.countdown.label')}</span>
           </div>
-          <h2 className="text-4xl font-black text-white mb-3">Thời gian còn lại đến ngày thi</h2>
-          <p className="text-white/60 mb-10 text-lg">Đừng để thời gian trôi qua — bắt đầu ôn tập ngay hôm nay</p>
-
-          <div className="flex items-center justify-center gap-2 sm:gap-4 md:gap-8 mb-10">
-            <CountdownUnit value={countdown?.days ?? null} label="Ngày" />
-            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
-            <CountdownUnit value={countdown?.hours ?? null} label="Giờ" />
-            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
-            <CountdownUnit value={countdown?.minutes ?? null} label="Phút" />
-            <span className="text-white/40 text-2xl sm:text-4xl font-light mb-6">:</span>
-            <CountdownUnit value={countdown?.seconds ?? null} label="Giây" />
+          <h2 className="mb-3 text-4xl font-black text-white">{t('home.countdown.title')}</h2>
+          <p className="mb-10 text-lg text-white/60">{t('home.countdown.desc')}</p>
+          <div className="mb-10 flex items-center justify-center gap-2 sm:gap-4 md:gap-8">
+            <CountdownUnit value={countdown?.days ?? null} label={t('home.countdown.days')} />
+            <span className="mb-6 text-2xl font-light text-white/40 sm:text-4xl">:</span>
+            <CountdownUnit value={countdown?.hours ?? null} label={t('home.countdown.hours')} />
+            <span className="mb-6 text-2xl font-light text-white/40 sm:text-4xl">:</span>
+            <CountdownUnit value={countdown?.minutes ?? null} label={t('home.countdown.minutes')} />
+            <span className="mb-6 text-2xl font-light text-white/40 sm:text-4xl">:</span>
+            <CountdownUnit value={countdown?.seconds ?? null} label={t('home.countdown.seconds')} />
           </div>
-
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Link href="/de-mo-phong"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-white text-gray-900 font-bold rounded-xl hover:bg-gray-50 transition-all shadow-2xl hover:scale-105 active:scale-95">
-              <FiZap size={18} /> Làm ngay
+          <div className="flex flex-wrap justify-center gap-4">
+            <Link href="/de-mo-phong" className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 font-bold text-gray-900 shadow-2xl transition-all hover:scale-105 hover:bg-gray-50 active:scale-95">
+              <FiZap size={18} /> {t('home.countdown.start')}
             </Link>
-            <Link href="/lo-trinh"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-white/10 text-white font-semibold rounded-xl border border-white/30 hover:bg-white/20 transition-all">
-              <FiBell size={18} /> Lên lịch ôn thi
+            <Link href="/lo-trinh" className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-8 py-4 font-semibold text-white transition-all hover:bg-white/20">
+              <FiBell size={18} /> {t('home.countdown.plan')}
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── AI HIGHLIGHT ──────────────────────────────────────── */}
-      <section className="w-full bg-gradient-to-br from-indigo-950 via-slate-900 to-violet-950 py-20 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-400 to-transparent" />
-        </div>
-        <div className="relative max-w-6xl mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 items-center">
-            <div>
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold rounded-full uppercase tracking-widest mb-6">
-                <FiCpu size={13} /> Powered by Gemini AI
-              </span>
-              <h2 className="text-4xl font-black text-white mb-4 leading-tight">
-                Lộ Trình Học Tập<br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Cá Nhân Hóa</span>
-              </h2>
-              <p className="text-white/60 mb-10 text-lg leading-relaxed">
-                Không còn học dàn trải. AI phân tích hành vi làm bài của bạn và đưa ra kế hoạch chính xác nhất.
+      <section className="relative w-full overflow-hidden bg-gradient-to-br from-indigo-950 via-slate-900 to-violet-950 py-20">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-6 lg:grid-cols-2">
+          <div>
+            <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/20 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-indigo-300">
+              <FiCpu size={13} /> {t('home.ai.badge')}
+            </span>
+            <h2 className="mb-4 text-4xl font-black leading-tight text-white">
+              {t('home.ai.title')}<br />
+              <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">{t('home.ai.titleAccent')}</span>
+            </h2>
+            <p className="mb-10 text-lg leading-relaxed text-white/60">{t('home.ai.desc')}</p>
+            <div className="space-y-6">
+              {AI_STEPS.map((step, index) => (
+                <div key={pick(step.title)} className="flex gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-400/30 bg-indigo-500/20 text-indigo-400">
+                    <step.icon size={18} />
+                  </div>
+                  <div>
+                    <p className="mb-0.5 font-bold text-white">{index + 1}. {pick(step.title)}</p>
+                    <p className="text-sm leading-relaxed text-white/50">{pick(step.desc)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link href="/lo-trinh" className="mt-10 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-indigo-900/40 transition-all hover:scale-105 hover:bg-indigo-500">
+              {t('home.ai.try')} <FiArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-7 backdrop-blur-sm">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/30 text-indigo-300">
+                <FiCpu size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">{pick({ vi: 'Phân tích của AI', en: 'AI analysis', zh: 'AI分析' })}</p>
+                <p className="text-xs text-white/40">{pick({ vi: 'Dựa trên 30 ngày làm bài gần nhất', en: 'Based on the last 30 days of exams', zh: '基于最近30天的做题记录' })}</p>
+              </div>
+            </div>
+            <div className="mb-6 space-y-4">
+              {[
+                { label: { vi: 'Đại số tuyến tính', en: 'Linear algebra', zh: '线性代数' }, pct: 82, color: 'bg-emerald-400' },
+                { label: { vi: 'Hàm số và đạo hàm', en: 'Functions and derivatives', zh: '函数与导数' }, pct: 65, color: 'bg-yellow-400' },
+                { label: { vi: 'Hình học không gian', en: 'Solid geometry', zh: '立体几何' }, pct: 41, color: 'bg-red-400' },
+                { label: { vi: 'Phương trình vi phân', en: 'Differential equations', zh: '微分方程' }, pct: 55, color: 'bg-orange-400' },
+              ].map((row) => (
+                <div key={pick(row.label)}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="text-white/70">{pick(row.label)}</span>
+                    <span className="text-white/50">{row.pct}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-indigo-400/20 bg-indigo-500/10 p-4">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-indigo-300">{pick({ vi: 'Gợi ý hôm nay', en: 'Today suggestion', zh: '今日建议' })}</p>
+              <p className="text-sm leading-relaxed text-white/70">
+                {pick({
+                  vi: 'Tập trung ôn Hình học không gian. Chủ đề này xuất hiện nhiều trong đề và điểm hiện tại còn thấp.',
+                  en: 'Focus on solid geometry. This topic appears often and your current score is still low.',
+                  zh: '重点复习立体几何。该主题出现频率高，目前得分仍偏低。',
+                })}
               </p>
-              <div className="space-y-6">
-                {AI_STEPS.map((step, i) => (
-                  <div key={step.title} className="flex gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0 text-indigo-400">
-                      <step.icon size={18} />
-                    </div>
-                    <div>
-                      <p className="font-bold text-white mb-0.5">{i + 1}. {step.title}</p>
-                      <p className="text-white/50 text-sm leading-relaxed">{step.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Link href="/lo-trinh"
-                className="mt-10 inline-flex items-center gap-2 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all hover:scale-105 shadow-lg shadow-indigo-900/40">
-                Thử AI Lộ Trình <FiArrowRight size={16} />
-              </Link>
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-7 backdrop-blur-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-9 h-9 rounded-lg bg-indigo-500/30 flex items-center justify-center text-indigo-300">
-                  <FiCpu size={18} />
-                </div>
-                <div>
-                  <p className="font-bold text-white text-sm">Phân tích của AI</p>
-                  <p className="text-white/40 text-xs">Dựa trên 30 ngày làm bài gần nhất</p>
-                </div>
-              </div>
-              <div className="space-y-4 mb-6">
-                {[
-                  { label: 'Đại số tuyến tính',      pct: 82, color: 'bg-emerald-400' },
-                  { label: 'Hàm số & đạo hàm',       pct: 65, color: 'bg-yellow-400'  },
-                  { label: 'Hình học không gian',      pct: 41, color: 'bg-red-400'     },
-                  { label: 'Phương trình vi phân',    pct: 55, color: 'bg-orange-400' },
-                ].map(row => (
-                  <div key={row.label}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-white/70">{row.label}</span>
-                      <span className="text-white/50">{row.pct}%</span>
-                    </div>
-                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div className={`h-full ${row.color} rounded-full`} style={{ width: `${row.pct}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-indigo-500/10 border border-indigo-400/20 rounded-xl p-4">
-                <p className="text-indigo-300 text-xs font-bold uppercase tracking-wider mb-1">💡 Gợi ý hôm nay</p>
-                <p className="text-white/70 text-sm leading-relaxed">Tập trung ôn <span className="text-white font-semibold">Hình học không gian</span> — tỷ lệ xuất hiện trong đề thi là 22%. Làm 3 bài luyện tập ngay!</p>
-              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── FEATURES ──────────────────────────────────────────── */}
-      <section className="w-full bg-white dark:bg-gray-900 py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="inline-block px-4 py-1.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs font-bold rounded-full uppercase tracking-widest mb-3">Tại sao CSCA?</span>
-            <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Học Thông Minh, Đậu Chắc</h2>
+      <section className="w-full bg-white py-20 dark:bg-gray-900">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-12 text-center">
+            <span className="mb-3 inline-block rounded-full bg-purple-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-purple-700 dark:bg-purple-900 dark:text-purple-300">{t('home.features.badge')}</span>
+            <h2 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white">{t('home.features.title')}</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {FEATURES.map(f => (
-              <div key={f.title} className={`group p-8 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-transparent hover:shadow-xl hover:-translate-y-1 transition-all duration-200 hover:ring-4 ${f.ring}`}>
-                <div className={`w-14 h-14 rounded-2xl ${f.color} dark:${f.color} flex items-center justify-center mb-6`}>
-                  <f.icon size={26} />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
+            {FEATURES.map((feature) => (
+              <div key={pick(feature.title)} className="group rounded-2xl border-2 border-gray-100 p-8 transition-all duration-200 hover:-translate-y-1 hover:border-transparent hover:shadow-xl dark:border-gray-700">
+                <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl ${feature.color}`}>
+                  <feature.icon size={26} />
                 </div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-3">{f.title}</h3>
-                <p className="text-gray-500 dark:text-gray-400 leading-relaxed text-sm">{f.desc}</p>
+                <h3 className="mb-3 text-xl font-bold text-gray-900 dark:text-white">{pick(feature.title)}</h3>
+                <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">{pick(feature.desc)}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ──────────────────────────────────────── */}
-      <section className="w-full bg-gray-50 dark:bg-gray-800 py-20 border-y border-gray-100 dark:border-gray-700">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <span className="inline-block px-4 py-1.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-full uppercase tracking-widest mb-3">3 Bước Đơn Giản</span>
-            <h2 className="text-4xl font-black text-gray-900 dark:text-white">Bắt Đầu Ngay Hôm Nay</h2>
+      <section className="w-full border-y border-gray-100 bg-gray-50 py-20 dark:border-gray-700 dark:bg-gray-800">
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="mb-14 text-center">
+            <span className="mb-3 inline-block rounded-full bg-emerald-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">{t('home.steps.badge')}</span>
+            <h2 className="text-4xl font-black text-gray-900 dark:text-white">{t('home.steps.title')}</h2>
           </div>
           <div className="relative">
-            <div className="hidden md:block absolute top-11 left-[16%] right-[16%] h-px bg-gradient-to-r from-indigo-200 via-blue-200 to-emerald-200 dark:from-indigo-800 dark:via-blue-800 dark:to-emerald-800" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative z-10">
-              {[
-                { step: '01', title: 'Chọn môn học',   desc: 'Toán, Vật Lý, Hóa hay Tiếng Trung — chọn theo khối thi của bạn',          color: 'bg-indigo-600', href: '/mon/toan' },
-                { step: '02', title: 'Ôn lý thuyết',     desc: 'Đọc tài liệu PDF biên soạn bởi đội ngũ chuyên gia có kinh nghiệm thi CSCA', color: 'bg-blue-600',   href: '/tailieu' },
-                { step: '03', title: 'Luyện đề thực chiến', desc: 'Làm đề, xem kết quả chi tiết và phân tích từng câu ngay sau khi nộp bài', color: 'bg-emerald-600', href: '/de-mo-phong' },
-              ].map(s => (
-                <Link key={s.step} href={s.href} className="group text-center hover:-translate-y-1 transition-transform duration-200">
-                  <div className={`w-24 h-24 mx-auto ${s.color} rounded-2xl flex items-center justify-center mb-5 font-black text-3xl text-white shadow-lg group-hover:shadow-xl transition-shadow`}>
-                    {s.step}
+            <div className="absolute left-[16%] right-[16%] top-11 hidden h-px bg-gradient-to-r from-indigo-200 via-blue-200 to-emerald-200 dark:from-indigo-800 dark:via-blue-800 dark:to-emerald-800 md:block" />
+            <div className="relative z-10 grid grid-cols-1 gap-10 md:grid-cols-3">
+              {STEPS.map((step) => (
+                <Link key={step.step} href={step.href} className="group text-center transition-transform duration-200 hover:-translate-y-1">
+                  <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-2xl bg-indigo-600 text-3xl font-black text-white shadow-lg transition-shadow group-hover:shadow-xl">
+                    {step.step}
                   </div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-2">{s.title}</h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{s.desc}</p>
+                  <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">{pick(step.title)}</h3>
+                  <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">{pick(step.desc)}</p>
                 </Link>
               ))}
             </div>
@@ -390,28 +536,28 @@ export default function HomeContent() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ──────────────────────────────────────── */}
-      <section className="w-full bg-white dark:bg-gray-900 py-20">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <span className="inline-block px-4 py-1.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 text-xs font-bold rounded-full uppercase tracking-widest mb-3">Học Viên Nói Gì</span>
-            <h2 className="text-4xl font-black text-gray-900 dark:text-white">Câu Chuyện Thành Công</h2>
+      <section className="w-full bg-white py-20 dark:bg-gray-900">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-12 text-center">
+            <span className="mb-3 inline-block rounded-full bg-yellow-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300">{t('home.testimonials.badge')}</span>
+            <h2 className="text-4xl font-black text-gray-900 dark:text-white">{t('home.testimonials.title')}</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map(t => (
-              <div key={t.name} className="relative bg-gray-50 dark:bg-gray-800 rounded-2xl p-7 border border-gray-100 dark:border-gray-700 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 overflow-hidden">
-                <span className="absolute -bottom-2 -right-2 text-8xl opacity-5 select-none pointer-events-none">{t.emoji}</span>
-                <div className="flex gap-0.5 mb-4">
-                  {[...Array(5)].map((_, i) => <FiStar key={i} size={15} className="text-yellow-400 fill-yellow-400" />)}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {TESTIMONIALS.map((item) => (
+              <div key={item.name} className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 p-7 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                <div className="mb-4 flex gap-0.5">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <FiStar key={index} size={15} className="fill-yellow-400 text-yellow-400" />
+                  ))}
                 </div>
-                <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6 italic relative">{t.text}</p>
+                <p className="relative mb-6 italic leading-relaxed text-gray-600 dark:text-gray-300">"{pick(item.text)}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-base shrink-0">
-                    {t.avatar}
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 text-base font-bold text-white">
+                    {item.avatar}
                   </div>
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-white">{t.name}</p>
-                    <p className="text-xs text-gray-400">{t.subject} · <span className="text-emerald-600 font-semibold">{t.score}</span></p>
+                    <p className="font-bold text-gray-900 dark:text-white">{item.name}</p>
+                    <p className="text-xs text-gray-400">{t(item.subjectKey)} · <span className="font-semibold text-emerald-600">{typeof item.score === 'string' ? item.score : pick(item.score)}</span></p>
                   </div>
                 </div>
               </div>
@@ -420,65 +566,48 @@ export default function HomeContent() {
         </div>
       </section>
 
-      {/* ── VIP AD ───────────────────────────────────────────── */}
-      <section className="w-full bg-slate-50 dark:bg-slate-900 py-24 border-t border-gray-100 dark:border-gray-800 relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-amber-200 to-orange-400 rounded-full blur-[120px] opacity-20 pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-amber-100 to-orange-100 border border-orange-200 text-orange-700 text-xs font-bold rounded-full uppercase tracking-widest mb-6 shadow-sm">
-            👑 Premium Access
+      <section className="relative w-full overflow-hidden border-t border-gray-100 bg-slate-50 py-24 dark:border-gray-800 dark:bg-slate-900">
+        <div className="relative mx-auto max-w-6xl px-6 text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-gradient-to-r from-amber-100 to-orange-100 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-orange-700 shadow-sm">
+            <FaCrown /> {t('home.vip.badge')}
           </div>
-          <h2 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white mb-6 tracking-tight">
-            Nâng cấp CSCA PRO ngay hôm nay
-          </h2>
-          <p className="max-w-2xl mx-auto text-gray-600 dark:text-gray-400 mb-10 text-lg leading-relaxed">
-            Mở khoá toàn bộ đề thi, lời giải chi tiết và chữa bài tự luận bằng AI. Đừng bỏ lỡ cơ hội bứt phá điểm số với kho tàng tài liệu độc quyền dành riêng cho thành viên VIP.
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-4 mb-12">
+          <h2 className="mb-6 text-4xl font-black tracking-tight text-gray-900 dark:text-white md:text-5xl">{t('home.vip.title')}</h2>
+          <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-gray-600 dark:text-gray-400">{t('home.vip.desc')}</p>
+          <div className="mb-12 flex flex-wrap justify-center gap-4">
             {[
-              { icon: FiStar,        text: 'Truy cập đầy đủ kho đề thi' },
-              { icon: FiZap,         text: 'Chữa bài tự luận AI' },
-              { icon: FiTrendingUp,  text: 'Gia tăng 300% tỷ lệ đậu' },
-              { icon: FiUsers,       text: 'Hỗ trợ ưu tiên 24/7' },
-            ].map((f, i) => (
-              <div key={i} className="flex items-center gap-2 bg-white dark:bg-gray-800 px-5 py-3 rounded-2xl shadow-sm border border-orange-100 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold text-sm hover:-translate-y-1 transition-transform">
-                <f.icon className="text-orange-500 dark:text-orange-400" size={18} /> {f.text}
+              { icon: FiStar, text: { vi: 'Truy cập đầy đủ kho đề thi', en: 'Full exam bank access', zh: '完整题库权限' } },
+              { icon: FiZap, text: { vi: 'Chữa bài tự luận AI', en: 'AI essay grading', zh: 'AI作文批改' } },
+              { icon: FiTrendingUp, text: { vi: 'Theo dõi tiến bộ chi tiết', en: 'Detailed progress tracking', zh: '详细进度跟踪' } },
+              { icon: FiUsers, text: { vi: 'Pre có hỏi giảng viên', en: 'Pre includes instructor Q&A', zh: 'Pre包含教师问答' } },
+            ].map((feature) => (
+              <div key={pick(feature.text)} className="flex items-center gap-2 rounded-2xl border border-orange-100 bg-white px-5 py-3 text-sm font-bold text-gray-700 shadow-sm transition-transform hover:-translate-y-1 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                <feature.icon className="text-orange-500 dark:text-orange-400" size={18} />
+                {pick(feature.text)}
               </div>
             ))}
           </div>
-
-          <Link href="/vip"
-            className="inline-flex items-center justify-center gap-2 sm:gap-3 px-5 sm:px-8 md:px-10 py-4 sm:py-5 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:-translate-y-1 active:scale-95 text-base sm:text-lg md:text-xl"
-          >
-            <FaCrown className="text-yellow-200 animate-pulse" size={20} /> <span className="hidden xs:inline">Trở Thành</span> Viên PRO
+          <Link href="/vip" className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 px-8 py-5 text-lg font-black text-white shadow-xl shadow-orange-500/30 transition-all hover:-translate-y-1 hover:shadow-orange-500/50 active:scale-95">
+            <FaCrown className="text-yellow-200" size={20} />
+            {t('home.vip.join')}
           </Link>
         </div>
       </section>
 
-      {/* ── FINAL CTA ─────────────────────────────────────────── */}
-      <section className="w-full bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 py-24 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute -top-20 -left-20 w-96 h-96 bg-white rounded-full blur-3xl" />
-          <div className="absolute -bottom-20 -right-20 w-96 h-96 bg-white rounded-full blur-3xl" />
-        </div>
-        <div className="relative max-w-3xl mx-auto px-6 text-center">
-          <div className="text-6xl mb-6">🚀</div>
-          <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Sẵn sàng chinh phục CSCA?</h2>
-          <p className="text-indigo-200 mb-10 text-xl">Tham gia cùng hơn 10,000 học viên đang ôn thi mỗi ngày</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register"
-              className="flex items-center justify-center gap-2 px-10 py-4 bg-white text-indigo-700 font-black rounded-xl hover:bg-indigo-50 transition-all shadow-2xl hover:scale-105 active:scale-95 text-lg"
-            >
-              Đăng ký miễn phí <FiArrowRight size={20} />
+      <section className="relative w-full overflow-hidden bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 py-24">
+        <div className="relative mx-auto max-w-3xl px-6 text-center">
+          <FiAward className="mx-auto mb-6 text-white" size={56} />
+          <h2 className="mb-4 text-4xl font-black tracking-tight text-white md:text-5xl">{t('home.final.title')}</h2>
+          <p className="mb-10 text-xl text-indigo-200">{t('home.final.desc')}</p>
+          <div className="flex flex-col justify-center gap-4 sm:flex-row">
+            <Link href="/register" className="flex items-center justify-center gap-2 rounded-xl bg-white px-10 py-4 text-lg font-black text-indigo-700 shadow-2xl transition-all hover:scale-105 hover:bg-indigo-50 active:scale-95">
+              {t('home.hero.signup')} <FiArrowRight size={20} />
             </Link>
-            <Link href="/de-mo-phong"
-              className="flex items-center justify-center gap-2 px-10 py-4 bg-white/10 text-white font-semibold rounded-xl border border-white/30 hover:bg-white/20 transition-all text-lg"
-            >
-              Thử làm đề ngay
+            <Link href="/de-mo-phong" className="flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-10 py-4 text-lg font-semibold text-white transition-all hover:bg-white/20">
+              {t('home.final.tryExam')}
             </Link>
           </div>
-          <p className="text-indigo-300 text-sm mt-6 flex items-center justify-center gap-2">
-            <FiCheckCircle size={15} /> Miễn phí hoàn toàn · Không cần thẻ tín dụng
+          <p className="mt-6 flex items-center justify-center gap-2 text-sm text-indigo-300">
+            <FiCheckCircle size={15} /> {t('home.final.freeNote')}
           </p>
         </div>
       </section>

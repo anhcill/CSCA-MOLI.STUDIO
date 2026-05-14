@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { FiCheckCircle, FiXCircle, FiBookOpen, FiZap, FiAlertCircle, FiCpu } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
 import { useTypewriter } from '@/hooks/useTypewriter';
+import { useLanguage } from '@/context/LanguageContext';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -101,12 +102,13 @@ interface QuestionResult {
     sub_question_number?: number;
     question_text: string;
     question_text_cn?: string;
+    question_text_en?: string;
     selected_answer_key: string | null;
     correct_answer_key: string;
     correct_answer_text?: string;
     selected_answer_text?: string;
     is_correct: boolean;
-    options?: { key: string; text: string; text_cn?: string; is_correct: boolean }[];
+    options?: { key: string; text: string; text_cn?: string; text_en?: string; is_correct: boolean }[];
 }
 
 interface Explanation {
@@ -125,6 +127,7 @@ interface AIExplanationsProps {
 }
 
 export default function AIExplanations({ attemptId, questions }: AIExplanationsProps) {
+    const { pick } = useLanguage();
     const [explanations, setExplanations] = useState<Explanation[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
@@ -276,10 +279,7 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                                 </span>
                             </div>
                             <div className="flex-1">
-                                <p className="font-medium text-gray-900">{q.question_text || q.question_text_cn}</p>
-                                {q.question_text_cn && q.question_text && (
-                                    <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
-                                )}
+                                <p className="font-medium text-gray-900">{pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn })}</p>
                             </div>
                         </div>
 

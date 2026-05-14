@@ -12,11 +12,14 @@ import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
+import { useLanguage } from '@/context/LanguageContext';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 
 interface AnswerOption {
   key: string;
   text: string;
   text_cn?: string | null;
+  text_en?: string | null;
   is_correct: boolean;
 }
 
@@ -25,6 +28,7 @@ interface QuestionResult {
   sub_question_number?: number;
   question_text: string;
   question_text_cn?: string;
+  question_text_en?: string;
   question_type?: string;
   passage_text?: string;
   selected_answer_key: string | null;
@@ -61,6 +65,7 @@ function ExamResultContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { pick } = useLanguage();
   const examId = parseInt(params.id as string);
   const attemptId = searchParams.get('attemptId');
   const user = useAuthStore((s) => s.user);
@@ -207,6 +212,7 @@ function ExamResultContent() {
           <FiArrowLeft size={18} /> Quay lại
         </button>
         <div className="flex-1" />
+        <LanguageSwitcher compact />
         <button
           onClick={() => window.print()}
           className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 text-xs font-medium shadow-sm no-print"
@@ -434,10 +440,9 @@ function ExamResultContent() {
                           )}
                           <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                         </div>
-                        <p className="text-gray-900 font-medium leading-relaxed">{q.question_text || q.question_text_cn}</p>
-                        {q.question_text_cn && q.question_text_cn !== q.question_text && (
-                          <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
-                        )}
+                        <p className="text-gray-900 font-medium leading-relaxed">
+                          {pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn })}
+                        </p>
                       </div>
                     </div>
 
@@ -454,10 +459,9 @@ function ExamResultContent() {
                           <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
                             <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
                             <div className="flex-1">
-                              <span className={`text-sm ${text}`}>{opt.text}</span>
-                              {opt.text_cn && (
-                                <p className={`text-xs mt-0.5 ${isCorrect ? 'text-green-700' : 'text-gray-500'}`}>{opt.text_cn}</p>
-                              )}
+                              <span className={`text-sm ${text}`}>
+                                {pick({ vi: opt.text, en: opt.text_en, zh: opt.text_cn })}
+                              </span>
                             </div>
                             {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
                             {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0">✗ Bạn chọn</span>}
@@ -588,6 +592,7 @@ function ExamResultContent() {
 
 // ─── AI Explanation Modal ──────────────────────────────────────────────────────
 function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
+  const { pick } = useLanguage();
   const [explanation, setExplanation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -630,7 +635,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
         <div className="p-6">
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
             <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-            <p className="text-sm text-gray-800">{question.question_text || question.question_text_cn}</p>
+            <p className="text-sm text-gray-800">{pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn })}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -710,6 +715,7 @@ function GradeEssayModal({ question, attemptId, onClose }: {
         body: JSON.stringify({
           questionText: question.question_text,
           questionTextCn: question.question_text_cn,
+          questionTextEn: question.question_text_en,
           userAnswer: question.selected_answer_text,
           correctAnswer: question.correct_answer_text,
           questionType: question.question_type,
@@ -872,6 +878,7 @@ function GradeEssayModal({ question, attemptId, onClose }: {
 function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
   question: QuestionResult; attemptId: number; onClose: () => void; onAskAI: () => void;
 }) {
+  const { pick } = useLanguage();
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -882,7 +889,7 @@ function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
       const res = await authFetch('/api/ai/teach-grammar', {
         method: 'POST',
         body: JSON.stringify({
-          question: question.question_text || question.question_text_cn || '',
+          question: pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn }),
           topic: '',
           wrongAnswer: `${question.selected_answer_key}. ${question.selected_answer_text}`,
           correctAnswer: `${question.correct_answer_key}. ${question.correct_answer_text}`,

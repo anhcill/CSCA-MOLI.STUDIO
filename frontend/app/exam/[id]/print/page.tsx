@@ -1,71 +1,104 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
+import { useLanguage } from '@/context/LanguageContext';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+
+interface ExamAnswer {
+  id: number;
+  answer_key?: string;
+  content?: string;
+  answer_text?: string;
+  answer_text_cn?: string;
+  answer_text_en?: string;
+  is_correct?: boolean;
+}
 
 interface ExamQuestion {
   id: number;
-  content: string;
-  type: string;
+  content?: string;
+  question_text?: string;
+  question_text_cn?: string;
+  question_text_en?: string;
+  type?: string;
   points: number;
-  answers: { id: number; content: string; answer_key: boolean }[];
+  answers?: ExamAnswer[];
 }
 
 interface ExamData {
   id: number;
   title: string;
-  subject: string;
+  subject?: string;
+  subject_name?: string;
   description?: string;
-  duration_minutes: number;
+  duration_minutes?: number;
+  duration?: number;
   total_points: number;
   allow_download: boolean;
   questions: ExamQuestion[];
 }
 
 function ExamPrintContent({ examId }: { examId: string }) {
-  const [exam, setExam] = useState<ExamData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { t, pick } = useLanguage();
   const { isAuthenticated } = useAuthStore();
   const searchParams = useSearchParams();
   const showAnswers = searchParams.get('answers') === '1';
+  const [exam, setExam] = useState<ExamData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isAuthenticated) { setError('Vui lòng đăng nhập để xem tài liệu.'); setLoading(false); return; }
+    if (!isAuthenticated) {
+      setError(pick({ vi: 'Vui lòng đăng nhập để xem tài liệu.', en: 'Please log in to view this document.', zh: '请登录后查看资料。' }));
+      setLoading(false);
+      return;
+    }
+
     axios.get(`/exams/${examId}`)
-      .then(r => {
-        const data = r.data?.data || r.data;
-        if (!data?.allow_download) { setError('Đề thi này không cho phép tải xuống.'); setLoading(false); return; }
+      .then((res) => {
+        const data = res.data?.data || res.data;
+        if (!data?.allow_download) {
+          setError(pick({ vi: 'Đề thi này không cho phép tải xuống.', en: 'This exam cannot be downloaded.', zh: '该试卷不允许下载。' }));
+          setLoading(false);
+          return;
+        }
         setExam(data);
         setLoading(false);
       })
-      .catch(() => { setError('Không thể tải đề thi.'); setLoading(false); });
-  }, [examId, isAuthenticated]);
+      .catch(() => {
+        setError(pick({ vi: 'Không thể tải đề thi.', en: 'Cannot load this exam.', zh: '无法加载试卷。' }));
+        setLoading(false);
+      });
+  }, [examId, isAuthenticated, pick]);
 
   useEffect(() => {
     if (!loading && exam) setTimeout(() => window.print(), 600);
   }, [loading, exam]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mx-auto mb-3" />
-        <p className="text-gray-500">Đang tải đề thi...</p>
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-b-2 border-purple-500" />
+          <p className="text-gray-500">{t('common.loading')}</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (error) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <div className="text-5xl mb-4">🔒</div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">{error}</h2>
-        <button onClick={() => window.history.back()} className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg">← Quay lại</button>
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <h2 className="mb-2 text-xl font-bold text-gray-800">{error}</h2>
+          <button onClick={() => window.history.back()} className="mt-4 rounded-lg bg-purple-600 px-6 py-2 text-white">{t('common.back')}</button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if (!exam) return null;
 
@@ -81,62 +114,74 @@ function ExamPrintContent({ examId }: { examId: string }) {
         body { font-family: Arial, sans-serif; }
       `}</style>
 
-      {/* Screen bar */}
-      <div className="no-print bg-purple-700 text-white px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">Xem trước đề thi — {exam.questions?.length || 0} câu hỏi</span>
-        <div className="flex gap-3">
-          <button onClick={() => window.history.back()} className="px-4 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition">← Quay lại</button>
-          <button onClick={() => window.print()} className="px-4 py-1.5 bg-white text-purple-700 font-bold text-sm rounded-lg hover:bg-purple-50 transition">🖨️ In / Lưu PDF</button>
+      <div className="no-print flex items-center justify-between bg-purple-700 px-6 py-3 text-white">
+        <span className="font-semibold">{pick({ vi: 'Xem trước đề thi', en: 'Exam preview', zh: '试卷预览' })} - {exam.questions?.length || 0}</span>
+        <div className="flex items-center gap-3">
+          <LanguageSwitcher compact />
+          <button onClick={() => window.history.back()} className="rounded-lg bg-white/20 px-4 py-1.5 text-sm transition hover:bg-white/30">{t('common.back')}</button>
+          <button onClick={() => window.print()} className="rounded-lg bg-white px-4 py-1.5 text-sm font-bold text-purple-700 transition hover:bg-purple-50">
+            {pick({ vi: 'In / Lưu PDF', en: 'Print / Save PDF', zh: '打印 / 保存PDF' })}
+          </button>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-8">
-        {/* Header */}
-        <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-          <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">CSCA — Ôn thi học bổng Trung Quốc</p>
+      <div className="mx-auto max-w-4xl p-8">
+        <div className="mb-6 border-b-2 border-gray-800 pb-4 text-center">
+          <p className="mb-1 text-xs uppercase tracking-widest text-gray-500">CSCA - moly.study</p>
           <h1 className="text-2xl font-black text-gray-900">{exam.title}</h1>
-          <div className="flex items-center justify-center gap-6 mt-2 text-sm text-gray-600">
-            <span>Môn: <strong>{exam.subject}</strong></span>
-            <span>Thời gian: <strong>{exam.duration_minutes} phút</strong></span>
-            <span>Tổng điểm: <strong>{exam.total_points}</strong></span>
+          <div className="mt-2 flex items-center justify-center gap-6 text-sm text-gray-600">
+            <span>{pick({ vi: 'Môn', en: 'Subject', zh: '科目' })}: <strong>{exam.subject || exam.subject_name}</strong></span>
+            <span>{pick({ vi: 'Thời gian', en: 'Time', zh: '时间' })}: <strong>{exam.duration_minutes || exam.duration} {t('common.minutes')}</strong></span>
+            <span>{pick({ vi: 'Tổng điểm', en: 'Total points', zh: '总分' })}: <strong>{exam.total_points}</strong></span>
           </div>
-          {exam.description && <p className="mt-2 text-sm text-gray-500 italic">{exam.description}</p>}
+          {exam.description && <p className="mt-2 text-sm italic text-gray-500">{exam.description}</p>}
         </div>
 
-        {/* Họ tên box */}
-        <div className="flex gap-8 mb-6 text-sm">
-          <div className="flex-1 border-b border-gray-400 pb-1">Họ và tên: ___________________________</div>
-          <div className="w-48 border-b border-gray-400 pb-1">Điểm: ____________</div>
+        <div className="mb-6 flex gap-8 text-sm">
+          <div className="flex-1 border-b border-gray-400 pb-1">{pick({ vi: 'Họ và tên', en: 'Full name', zh: '姓名' })}: ___________________________</div>
+          <div className="w-48 border-b border-gray-400 pb-1">{pick({ vi: 'Điểm', en: 'Score', zh: '分数' })}: ____________</div>
         </div>
 
-        {/* Questions */}
-        {(exam.questions || []).map((q, qi) => (
-          <div key={q.id} className="question-block mb-5">
-            <p className="font-semibold text-gray-900 mb-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 bg-purple-600 text-white text-xs rounded-full mr-2 font-bold">{qi + 1}</span>
-              {q.content}
-              <span className="text-xs text-gray-400 ml-2">({q.points} điểm)</span>
-            </p>
-            {q.answers && q.answers.length > 0 && (
-              <div className="ml-8 grid grid-cols-2 gap-1">
-                {q.answers.map((a, ai) => {
-                  const letter = String.fromCharCode(65 + ai);
-                  const isCorrect = a.answer_key && showAnswers;
-                  return (
-                    <div key={a.id} className={`flex items-start gap-2 text-sm py-1 px-2 rounded ${isCorrect ? 'bg-green-50 border border-green-300' : ''}`}>
-                      <span className={`font-bold ${isCorrect ? 'text-green-600' : 'text-gray-500'}`}>{letter}.</span>
-                      <span className={isCorrect ? 'text-green-700 font-medium' : 'text-gray-700'}>{a.content}</span>
-                      {isCorrect && <span className="text-green-500 ml-auto">✓</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+        {(exam.questions || []).map((question, questionIndex) => {
+          const questionText = pick({
+            vi: question.content || question.question_text,
+            en: question.question_text_en,
+            zh: question.question_text_cn,
+          });
 
-        <div className="mt-8 border-t pt-3 text-center text-xs text-gray-400 no-print">
-          CSCA · csca.vn — Tài liệu nội bộ
+          return (
+            <div key={question.id} className="question-block mb-5">
+              <p className="mb-2 font-semibold text-gray-900">
+                <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white">{questionIndex + 1}</span>
+                {questionText}
+                <span className="ml-2 text-xs text-gray-400">({question.points} {t('common.points')})</span>
+              </p>
+              {question.answers && question.answers.length > 0 && (
+                <div className="ml-8 grid grid-cols-2 gap-1">
+                  {question.answers.map((answer, answerIndex) => {
+                    const letter = answer.answer_key || String.fromCharCode(65 + answerIndex);
+                    const isCorrect = !!answer.is_correct && showAnswers;
+                    const answerText = pick({
+                      vi: answer.content || answer.answer_text,
+                      en: answer.answer_text_en,
+                      zh: answer.answer_text_cn,
+                    });
+                    return (
+                      <div key={answer.id} className={`flex items-start gap-2 rounded px-2 py-1 text-sm ${isCorrect ? 'border border-green-300 bg-green-50' : ''}`}>
+                        <span className={`font-bold ${isCorrect ? 'text-green-600' : 'text-gray-500'}`}>{letter}.</span>
+                        <span className={isCorrect ? 'font-medium text-green-700' : 'text-gray-700'}>{answerText}</span>
+                        {isCorrect && <span className="ml-auto text-green-500">✓</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="no-print mt-8 border-t pt-3 text-center text-xs text-gray-400">
+          CSCA · moly.study
         </div>
       </div>
     </>
@@ -149,8 +194,8 @@ export default function ExamPrintPage() {
 
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-purple-500" />
       </div>
     }>
       <ExamPrintContent examId={examId} />

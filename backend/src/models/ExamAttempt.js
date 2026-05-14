@@ -274,12 +274,14 @@ const ExamAttempt = {
          q.question_type,
          q.question_text,
          q.question_text_cn,
+         q.question_text_en,
          q.points,
          COALESCE(
            json_agg(
              json_build_object(
                'answer_text', a.answer_text,
                'answer_text_cn', a.answer_text_cn,
+               'answer_text_en', a.answer_text_en,
                'is_correct', a.is_correct
              )
              ORDER BY a.is_correct DESC, a.answer_key ASC
@@ -295,15 +297,15 @@ const ExamAttempt = {
         ))
        WHERE ua.attempt_id = $1
          AND q.question_type = ANY($2::text[])
-       GROUP BY ua.id, ua.question_id, ua.essay_answer, q.question_type,
-                q.question_text, q.question_text_cn, q.points`,
+      GROUP BY ua.id, ua.question_id, ua.essay_answer, q.question_type,
+                q.question_text, q.question_text_cn, q.question_text_en, q.points`,
       [attemptId, Array.from(AUTO_GRADED_TYPES)]
     );
 
     for (const row of answersResult.rows) {
       const maxPoints = clampScore(row.points, 0, 100);
       const refs = (row.correct_answers || [])
-        .flatMap((answer) => [answer.answer_text, answer.answer_text_cn])
+        .flatMap((answer) => [answer.answer_text, answer.answer_text_cn, answer.answer_text_en])
         .map((value) => String(value || "").trim())
         .filter(Boolean);
 
@@ -566,6 +568,7 @@ const ExamAttempt = {
         q.question_number,
         q.question_text,
         q.question_text_cn,
+        q.question_text_en,
         q.question_type,
         q.points,
         q.explanation,
@@ -591,7 +594,7 @@ const ExamAttempt = {
 
     // FIX N+1: Fetch ALL answers for all questions in a single query
     const allAnswersResult = await pool.query(
-      `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.is_correct
+      `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.answer_text_en, a.is_correct
        FROM answers a
        INNER JOIN questions q ON a.question_id = q.id
        WHERE q.exam_id = $1
@@ -643,6 +646,7 @@ const ExamAttempt = {
         question_number: question.question_number,
         question_text: question.question_text,
         question_text_cn: question.question_text_cn,
+        question_text_en: question.question_text_en,
         question_type: question.question_type,
         selected_answer_key: userAnswerKey,
         selected_answer_text: userAnswerKey
@@ -668,6 +672,10 @@ const ExamAttempt = {
           text_cn:
             a.answer_text_cn && a.answer_text_cn !== a.answer_text
               ? a.answer_text_cn
+              : null,
+          text_en:
+            a.answer_text_en && a.answer_text_en !== a.answer_text
+              ? a.answer_text_en
               : null,
           is_correct: a.is_correct,
         })),
