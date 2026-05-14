@@ -276,13 +276,13 @@ export default function ExamRoomPage() {
                         <span className="font-semibold text-gray-900">{formatUpcomingTime(exam.start_time)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500 flex items-center gap-2"><FiUsers /> Đã thi</span>
+                        <span className="text-gray-500 flex items-center gap-2"><FiUsers /> Đã đăng ký</span>
                         <span className="font-semibold text-gray-900">{exam.registered || 0} người</span>
                       </div>
                     </div>
                     
                     <Link 
-                      href={`/exam/${exam.id}`}
+                      href={`/exam-room/${exam.id}`}
                       className="w-full py-3 bg-white border-2 border-gray-200 text-gray-800 font-bold rounded-xl hover:border-gray-900 transition-colors text-center block"
                     >
                       Chi tiết

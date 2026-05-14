@@ -3,6 +3,7 @@ const ExamAttempt = require("../models/ExamAttempt");
 const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
 const { checkVipAccess } = require("../middleware/authMiddleware");
+const { pool } = require("../config/database");
 
 const examController = {
   // Lấy dữ liệu sảnh thi (Lobby)
@@ -202,6 +203,54 @@ const examController = {
           code: "VIP_REQUIRED",
           is_vip_required: true,
         });
+      }
+
+      if (exam.start_time) {
+        const now = new Date();
+        const startTime = new Date(exam.start_time);
+        const endTime = exam.end_time ? new Date(exam.end_time) : null;
+
+        if (Number.isFinite(startTime.getTime()) && now < startTime) {
+          return res.status(403).json({
+            success: false,
+            code: "EXAM_NOT_STARTED",
+            message: "Ky thi chua bat dau. Vui long xem chi tiet dang ky trong phong thi.",
+          });
+        }
+
+        if (endTime && Number.isFinite(endTime.getTime()) && now > endTime) {
+          return res.status(403).json({
+            success: false,
+            code: "EXAM_ENDED",
+            message: "Ky thi da ket thuc.",
+          });
+        }
+
+        const registrationResult = await pool.query(
+          `SELECT status
+           FROM exam_registrations
+           WHERE exam_id = $1 AND user_id = $2
+           ORDER BY registered_at DESC
+           LIMIT 1`,
+          [parsedId, userId],
+        );
+        const registration = registrationResult.rows[0];
+
+        if (!registration || registration.status === "cancelled") {
+          return res.status(403).json({
+            success: false,
+            code: "REGISTRATION_REQUIRED",
+            message: "Ban can dang ky ky thi va duoc duyet truoc khi vao thi.",
+          });
+        }
+
+        if (!["approved", "checked_in"].includes(registration.status)) {
+          return res.status(403).json({
+            success: false,
+            code: "REGISTRATION_NOT_APPROVED",
+            message: "Dang ky cua ban chua duoc duyet de vao thi.",
+          });
+        }
       }
 
       const attempt = await ExamAttempt.start(userId, parsedId);

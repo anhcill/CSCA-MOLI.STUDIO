@@ -27,7 +27,9 @@ const Exam = {
         s.name as subject_name,
         s.code as subject_code,
         COALESCE(
-          (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
+          (SELECT COUNT(DISTINCT user_id)
+           FROM exam_registrations
+           WHERE exam_id = e.id AND status IN ('registered', 'approved', 'checked_in')),
           0
         ) as registered
       FROM exams e

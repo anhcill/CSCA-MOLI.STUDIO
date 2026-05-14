@@ -521,20 +521,17 @@ export default function CreateExamPage() {
         try {
             setLoading(true);
 
+            // For room exams, save schedule before publishing so a failed schedule
+            // cannot accidentally publish the exam into the free-practice list.
+            if (examData.start_time) {
+                await examAdminApi.setSchedule(currentExamId, {
+                    start_time: examData.start_time,
+                    end_time: examData.end_time || null,
+                });
+            }
+
             // Publish exam with current metadata to save any unsaved changes
             await examAdminApi.updateExam(currentExamId, { ...examData, status: 'published' } as any);
-
-            // Set schedule if start_time is provided
-            if (examData.start_time) {
-                try {
-                    await examAdminApi.setSchedule(currentExamId, {
-                        start_time: examData.start_time,
-                        end_time: examData.end_time || null,
-                    });
-                } catch (scheduleErr) {
-                    console.warn('Could not set schedule:', scheduleErr);
-                }
-            }
 
             alert('Xuất bản đề thi thành công!');
             sessionStorage.removeItem('currentExamId');

@@ -147,7 +147,13 @@ export default function ExamPage() {
         setVipError(errorMessage);
       } else {
         alert(errorMessage);
-        router.push('/login');
+        const roomDetailCodes = new Set([
+          'EXAM_NOT_STARTED',
+          'EXAM_ENDED',
+          'REGISTRATION_REQUIRED',
+          'REGISTRATION_NOT_APPROVED',
+        ]);
+        router.push(roomDetailCodes.has(errorCode) ? `/exam-room/${examId}` : '/exam-room');
       }
     } finally {
       setLoading(false);
