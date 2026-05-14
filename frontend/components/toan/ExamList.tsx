@@ -20,6 +20,13 @@ type SortType = 'newest' | 'oldest' | 'name';
 const isVipExam = (exam: Exam) =>
   exam.is_premium === true || (!!exam.vip_tier && exam.vip_tier !== 'basic');
 
+const getAttemptCount = (exam: Exam) => {
+  const count = Number(exam.user_attempt_count ?? 0);
+  return Number.isFinite(count) ? count : 0;
+};
+
+const isExamDone = (exam: Exam) => getAttemptCount(exam) > 0;
+
 const groupExamsByYear = (items: Exam[]) => {
   const map = new Map<number, Exam[]>();
   items.forEach(exam => {
@@ -101,9 +108,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
     // Filter
     if (filter === 'done') {
-      result = result.filter(e => (e.user_attempt_count || 0) > 0);
+      result = result.filter(isExamDone);
     } else if (filter === 'not-done') {
-      result = result.filter(e => (e.user_attempt_count || 0) === 0);
+      result = result.filter(e => !isExamDone(e));
     }
 
     // Search
@@ -132,7 +139,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   // Exclude done exams when showDone is active (for display + count)
   const visibleExams = useMemo(() => {
     if (!showDone) return filteredExams;
-    return filteredExams.filter(e => (e.user_attempt_count || 0) === 0);
+    return filteredExams.filter(e => !isExamDone(e));
   }, [filteredExams, showDone]);
 
   const regularExams = useMemo(
@@ -151,8 +158,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   // Stats
   const stats = useMemo(() => ({
     total: exams.length,
-    done: exams.filter(e => (e.user_attempt_count || 0) > 0).length,
-    notDone: exams.filter(e => (e.user_attempt_count || 0) === 0).length,
+    done: exams.filter(isExamDone).length,
+    notDone: exams.filter(e => !isExamDone(e)).length,
     regular: exams.filter(e => !isVipExam(e)).length,
     vip: exams.filter(e => isVipExam(e)).length,
   }), [exams]);
@@ -203,7 +210,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   // Exam card
   const ExamCard = ({ exam }: { exam: Exam }) => {
-    const done = (exam.user_attempt_count || 0) > 0;
+    const attemptCount = getAttemptCount(exam);
+    const done = attemptCount > 0;
     const vipOnly = isVipExam(exam);
     const isLocked = vipOnly && !isVip;
     const accentColor = isLocked ? 'from-amber-500 to-orange-500' : done ? 'from-gray-400 to-gray-500' : 'from-indigo-500 to-purple-600';
@@ -280,7 +288,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <div className="hidden md:flex flex-col items-end gap-1 mr-2">
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-medium">
-                  {exam.user_attempt_count} lần
+                  {attemptCount} lần
                 </span>
                 <span className={`px-2 py-0.5 rounded-md font-bold ${(exam.user_best_score || 0) >= 8 ? 'bg-emerald-100 text-emerald-700' : (exam.user_best_score || 0) >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                   {exam.user_best_score || 0} đ
