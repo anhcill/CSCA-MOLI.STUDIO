@@ -489,7 +489,7 @@ export default function AdminExamDetailPage() {
                 await loadExam();
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                alert('Hay dung nut "Dien Tu" de tao nhom cau roi/doan van co dap an con.');
+                alert('Hãy dùng nút "Điền từ" để tạo nhóm câu rời/đoạn văn có đáp án con.');
                 return;
             } else {
                 // Single choice / trắc nghiệm: insert at correct position
@@ -568,13 +568,13 @@ export default function AdminExamDetailPage() {
             setSavingQuestionId(groupId);
             await examAdminApi.updateFillBlankGroup(exam.id, groupId, data as any);
             await loadExam();
-            alert('Da cap nhat nhom dien tu!');
+            alert('Đã cập nhật nhóm điền từ!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
                 handleMissingExam();
                 return;
             }
-            alert('Loi cap nhat nhom dien tu: ' + (error.response?.data?.message || error.message));
+            alert('Lỗi cập nhật nhóm điền từ: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
         }
@@ -586,13 +586,13 @@ export default function AdminExamDetailPage() {
             setSavingQuestionId(groupId);
             await examAdminApi.updateReadingPassageGroup(exam.id, groupId, data as any);
             await loadExam();
-            alert('Da cap nhat nhom doc hieu!');
+            alert('Đã cập nhật nhóm đọc hiểu!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
                 handleMissingExam();
                 return;
             }
-            alert('Loi cap nhat nhom doc hieu: ' + (error.response?.data?.message || error.message));
+            alert('Lỗi cập nhật nhóm đọc hiểu: ' + (error.response?.data?.message || error.message));
         } finally {
             setSavingQuestionId(null);
         }
@@ -600,7 +600,7 @@ export default function AdminExamDetailPage() {
 
     const handleDeleteGroup = async (group: SavedQuestionGroup) => {
         if (!exam) return;
-        if (!confirm('Xoa toan bo nhom cau hoi nay?')) return;
+        if (!confirm('Xóa toàn bộ nhóm câu hỏi này?')) return;
 
         try {
             setDeletingId(group.id);
@@ -611,7 +611,7 @@ export default function AdminExamDetailPage() {
             }
             await loadExam();
         } catch (error: any) {
-            alert('Loi xoa nhom cau hoi: ' + (error.response?.data?.message || error.message));
+            alert('Lỗi xóa nhóm câu hỏi: ' + (error.response?.data?.message || error.message));
         } finally {
             setDeletingId(null);
         }
@@ -772,7 +772,8 @@ export default function AdminExamDetailPage() {
             ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
             : 'bg-gray-100 text-gray-700 border-gray-200';
 
-    const questions = editMode ? localQuestions : savedQuestions;
+    const isEditingExam = editMode === 'edit';
+    const questions = isEditingExam ? localQuestions : savedQuestions;
 
     // Compute the next question number by finding the max in localQuestions
     // (savedQuestions have real numbers from DB, pending groups track their own)
@@ -828,7 +829,7 @@ export default function AdminExamDetailPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            {editMode ? (
+                            {isEditingExam ? (
                                 <>
                                     <button
                                         onClick={exitEditMode}
@@ -843,7 +844,7 @@ export default function AdminExamDetailPage() {
                                         onClick={() => router.push(`/admin/exams/${exam.id}/official`)}
                                         className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium"
                                     >
-                                        <FiMonitor size={16} /> Thi chinh thuc
+                                        <FiMonitor size={16} /> Thi chính thức
                                     </button>
                                     <button
                                         onClick={enterEditMode}
@@ -876,7 +877,7 @@ export default function AdminExamDetailPage() {
             <main className="max-w-5xl mx-auto px-6 py-8">
 
                 {/* ── EDIT MODE: Metadata Form ── */}
-                {editMode && (
+                {isEditingExam && (
                     <div className="bg-white rounded-xl border border-blue-200 p-6 mb-6 shadow-md">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-bold text-gray-900">Chỉnh sửa thông tin đề thi</h2>
@@ -1029,7 +1030,7 @@ export default function AdminExamDetailPage() {
                 )}
 
                 {/* ── VIEW MODE: Exam Info ── */}
-                {!editMode && (
+                {!isEditingExam && (
                     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                             <div>
@@ -1187,7 +1188,7 @@ export default function AdminExamDetailPage() {
                 )}
 
                 {/* ── Questions Section ── */}
-                {editMode && (
+                {isEditingExam && (
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <p className="font-bold text-blue-900">Chế độ sửa đề</p>
@@ -1248,14 +1249,14 @@ export default function AdminExamDetailPage() {
 
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold text-gray-900">
-                        {editMode ? 'Danh sách câu hỏi (chế độ sửa)' : `Danh sách câu hỏi (${questions.length})`}
+                        {isEditingExam ? 'Danh sách câu hỏi (chế độ sửa)' : `Danh sách câu hỏi (${questions.length})`}
                     </h2>
                 </div>
 
                 {questions.length === 0 && pendingFillBlankGroups.length === 0 && pendingReadingGroups.length === 0 ? (
                     <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
                         <p className="text-lg mb-4">Chưa có câu hỏi nào</p>
-                        {editMode && (
+                        {isEditingExam && (
                             <div className="flex items-center justify-center gap-3 flex-wrap">
                                 <button
                                     onClick={() => {
@@ -1433,9 +1434,9 @@ export default function AdminExamDetailPage() {
                                                     </span>
                                                     <div>
                                                         <p className="font-bold text-gray-900">
-                                                            {isReadingGroup ? 'Nhom doc hieu' : 'Nhom dien tu'}
+                                                            {isReadingGroup ? 'Nhóm đọc hiểu' : 'Nhóm điền từ'}
                                                         </p>
-                                                        <p className="text-sm text-gray-500">{q.children.length} cau hoi</p>
+                                                        <p className="text-sm text-gray-500">{q.children.length} câu hỏi</p>
                                                     </div>
                                                 </div>
                                                 <span className="text-xs text-gray-400">{q.question_type}</span>
@@ -1446,7 +1447,7 @@ export default function AdminExamDetailPage() {
                                             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 {q.children.map(child => (
                                                     <div key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
-                                                        <span className="font-semibold">Cau {child.question_number}:</span> {child.question_text_cn || child.question_text}
+                                                        <span className="font-semibold">Câu {child.question_number}:</span> {child.question_text_cn || child.question_text}
                                                     </div>
                                                 ))}
                                             </div>
@@ -1462,7 +1463,7 @@ export default function AdminExamDetailPage() {
                                                 startNumber={startNumber}
                                                 initialData={initialData}
                                                 onSave={(data) => handleUpdateReadingPassageGroup(q.id, data)}
-                                                onDelete={editMode ? () => handleDeleteGroup(q) : undefined}
+                                                onDelete={isEditingExam ? () => handleDeleteGroup(q) : undefined}
                                             />
                                         </div>
                                     );
@@ -1475,7 +1476,7 @@ export default function AdminExamDetailPage() {
                                             startNumber={startNumber}
                                             initialData={initialData}
                                             onSave={(data) => handleUpdateFillBlankGroup(q.id, data)}
-                                            onDelete={editMode ? () => handleDeleteGroup(q) : undefined}
+                                            onDelete={isEditingExam ? () => handleDeleteGroup(q) : undefined}
                                         />
                                     </div>
                                 );
@@ -1514,7 +1515,7 @@ export default function AdminExamDetailPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2 ml-4">
                                                     <span className="text-xs text-gray-400">{q.points} điểm</span>
-                                                    {editMode && (
+                                                    {isEditingExam && (
                                                         <>
                                                             <button
                                                                 onClick={() => setEditingQuestionId(q.id)}
@@ -1574,7 +1575,7 @@ export default function AdminExamDetailPage() {
                                                 </div>
                                             )}
 
-                                            {editMode && (
+                                            {isEditingExam && (
                                                 <div className="mt-3 pt-3 border-t border-gray-100">
                                                     <div className="flex items-center justify-center gap-2 flex-wrap">
                                                         <button
@@ -1651,7 +1652,7 @@ export default function AdminExamDetailPage() {
                         })}
 
                         {/* Append buttons at bottom */}
-                        {editMode && (
+                        {isEditingExam && (
                             <div className="text-center py-4">
                                 <div className="flex items-center justify-center gap-3 flex-wrap">
                                     <button

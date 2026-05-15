@@ -104,7 +104,7 @@ export default function FillBlankGroup({
   const blankCount = countBlanks(group.passageText);
   const filledOptionCount = group.linkedOptions.filter((o) => o.text.trim() || o.textCn.trim()).length;
 
-  const getItemLabel = (index: number) => `Cau ${startNumber + index}`;
+  const getItemLabel = (index: number) => `Câu ${startNumber + index}`;
 
   const setPassage = (key: 'passageText' | 'passageImageUrl', value: string) => {
     setGroup((prev) => ({ ...prev, [key]: value }));
@@ -161,26 +161,26 @@ export default function FillBlankGroup({
 
   const handleSave = () => {
     if (group.clozeMode === 'passage' && !group.passageText.trim()) {
-      alert('Dang doan van can co noi dung doan van.');
+      alert('Dạng đoạn văn cần có nội dung đoạn văn.');
       return;
     }
 
     if (group.clozeMode === 'sentences') {
       const missingSentence = group.subItems.some((item) => !item.questionText.trim() && !item.questionTextCn.trim());
       if (missingSentence) {
-        alert('Dang cau roi can nhap noi dung cho tung cau.');
+        alert('Dạng câu rời cần nhập nội dung cho từng câu.');
         return;
       }
     }
 
     if (group.clozeMode === 'passage' && blankCount > 0 && blankCount !== group.subItems.length) {
-      alert(`So cho trong trong doan (${blankCount}) khong khop so dap an (${group.subItems.length}).`);
+      alert(`Số chỗ trống trong đoạn (${blankCount}) không khớp số đáp án (${group.subItems.length}).`);
       return;
     }
 
     const filledOpts = group.linkedOptions.filter((o) => o.text.trim() || o.textCn.trim());
     if (filledOpts.length < 2) {
-      alert('Can it nhat 2 tu chon co noi dung.');
+      alert('Cần ít nhất 2 từ chọn có nội dung.');
       return;
     }
 
@@ -194,11 +194,11 @@ export default function FillBlankGroup({
       <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4 flex items-center justify-between">
         <div>
           <h3 className="text-white font-bold">
-            Dien tu - {getItemLabel(0)}
+            Điền từ - {getItemLabel(0)}
             {group.subItems.length > 1 && ` -> ${getItemLabel(group.subItems.length - 1)}`}
           </h3>
           <p className="text-white/75 text-xs">
-            {group.clozeMode === 'passage' ? 'Doan van' : 'Cau roi'} - {group.subItems.length} cho trong - Pool A-
+            {group.clozeMode === 'passage' ? 'Đoạn văn' : 'Câu rời'} - {group.subItems.length} chỗ trống - Pool A-
             {String.fromCharCode(65 + Math.max(0, filledOptionCount - 1))}
           </p>
         </div>
@@ -210,7 +210,7 @@ export default function FillBlankGroup({
             className="flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-lg font-semibold text-sm hover:bg-green-50 disabled:opacity-60"
           >
             <FiSave size={15} />
-            {saving ? 'Dang luu...' : 'Luu nhom'}
+            {saving ? 'Đang lưu...' : 'Lưu nhóm'}
           </button>
           {onDelete && (
             <button
@@ -226,7 +226,7 @@ export default function FillBlankGroup({
 
       <div className="p-6 space-y-5">
         <div className="bg-white border border-green-200 rounded-xl p-3">
-          <label className="block text-xs font-bold text-green-800 mb-2">Dang dien tu</label>
+          <label className="block text-xs font-bold text-green-800 mb-2">Dạng điền từ</label>
           <div className="grid grid-cols-2 gap-2">
             {(['sentences', 'passage'] as ClozeMode[]).map((mode) => (
               <button
@@ -239,7 +239,7 @@ export default function FillBlankGroup({
                     : 'bg-white text-green-700 border-green-200 hover:bg-green-50'
                 }`}
               >
-                {mode === 'sentences' ? 'Cau roi' : 'Doan van'}
+                {mode === 'sentences' ? 'Câu rời' : 'Đoạn văn'}
               </button>
             ))}
           </div>
@@ -247,7 +247,7 @@ export default function FillBlankGroup({
 
         <div className="bg-green-50/60 border border-green-200 rounded-xl p-4">
           <label className="block text-sm font-bold text-green-800 mb-2">
-            {group.clozeMode === 'passage' ? 'Doan van dien tu' : 'Ghi chu nhom'}
+            {group.clozeMode === 'passage' ? 'Đoạn văn điền từ' : 'Ghi chú nhóm'}
           </label>
           <textarea
             value={group.passageText}
@@ -262,12 +262,12 @@ export default function FillBlankGroup({
           />
           <p className="text-xs text-green-600 mt-1 mb-3">
             {group.clozeMode === 'passage'
-              ? `Dung ___ lam cho trong. Hien co ${blankCount} cho trong.`
-              : 'Moi cho trong se co mot cau rieng ben duoi.'}
+              ? `Dùng ___ làm chỗ trống. Hiện có ${blankCount} chỗ trống.`
+              : 'Mỗi chỗ trống sẽ có một câu riêng bên dưới.'}
           </p>
 
           <ImageUpload
-            label="Anh dinh kem nhom dien tu"
+            label="Ảnh đính kèm nhóm điền từ"
             currentImage={group.passageImageUrl}
             onImageUploaded={(url) => setPassage('passageImageUrl', url)}
           />
@@ -275,7 +275,7 @@ export default function FillBlankGroup({
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-green-700">
-                Tu chon A-{String.fromCharCode(65 + group.linkedOptions.length - 1)}
+                Từ chọn A-{String.fromCharCode(65 + group.linkedOptions.length - 1)}
               </span>
               {group.linkedOptions.length < 12 && (
                 <button
@@ -283,7 +283,7 @@ export default function FillBlankGroup({
                   onClick={addLinkedOption}
                   className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded border border-green-200 hover:bg-green-200"
                 >
-                  + Them tu
+                  + Thêm từ
                 </button>
               )}
             </div>
@@ -298,7 +298,7 @@ export default function FillBlankGroup({
                     value={opt.text}
                     onChange={(e) => setLinkedOption(i, 'text', e.target.value)}
                     className="flex-1 px-2 py-1 border rounded text-sm bg-white"
-                    placeholder="Nghia/Viet"
+                    placeholder="Nghĩa/Việt"
                   />
                   <input
                     type="text"
@@ -320,14 +320,14 @@ export default function FillBlankGroup({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-gray-800 text-sm">Cho trong ({group.subItems.length})</h4>
+            <h4 className="font-bold text-gray-800 text-sm">Chỗ trống ({group.subItems.length})</h4>
             <button
               type="button"
               onClick={addSubItem}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 hover:bg-emerald-200 font-semibold"
             >
               <FiPlus size={13} />
-              Them cho trong
+              Thêm chỗ trống
             </button>
           </div>
 
@@ -344,7 +344,7 @@ export default function FillBlankGroup({
                   <span className="font-bold text-emerald-800 text-sm">{getItemLabel(index)}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-emerald-600">
-                      Dap an: {item.correctAnswerKey} - {currentAnswer?.textCn || currentAnswer?.text || 'chua chon'}
+                      Đáp án: {item.correctAnswerKey} - {currentAnswer?.textCn || currentAnswer?.text || 'chưa chọn'}
                     </span>
                     {isExpanded ? <FiChevronUp size={14} className="text-emerald-500" /> : <FiChevronDown size={14} className="text-emerald-500" />}
                   </div>
@@ -354,7 +354,7 @@ export default function FillBlankGroup({
                   <div className="p-4 space-y-3">
                     {group.clozeMode === 'sentences' && (
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Noi dung cau</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Nội dung câu</label>
                         <MathInput
                           value={item.questionText}
                           onChange={(v) => setSubItem(item._localId, 'questionText', v)}
@@ -368,7 +368,7 @@ export default function FillBlankGroup({
 
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Dap an dung</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
                         <select
                           value={item.correctAnswerKey}
                           onChange={(e) => setSubItem(item._localId, 'correctAnswerKey', e.target.value)}
@@ -382,7 +382,7 @@ export default function FillBlankGroup({
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Diem</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
                         <input
                           type="number"
                           value={item.points}
@@ -394,28 +394,28 @@ export default function FillBlankGroup({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Do kho</label>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
                         <select
                           value={item.difficulty}
                           onChange={(e) => setSubItem(item._localId, 'difficulty', e.target.value)}
                           className="w-full px-2 py-1.5 border rounded-lg text-sm bg-white"
                         >
-                          <option value="easy">De</option>
-                          <option value="medium">Trung binh</option>
-                          <option value="hard">Kho</option>
+                          <option value="easy">Dễ</option>
+                          <option value="medium">Trung bình</option>
+                          <option value="hard">Khó</option>
                         </select>
                       </div>
                     </div>
 
                     <details className="bg-gray-50 rounded-lg border">
                       <summary className="px-3 py-1.5 cursor-pointer text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">
-                        Giai thich
+                        Giải thích
                       </summary>
                       <div className="px-3 pb-2">
                         <MathInput
                           value={item.explanation}
                           onChange={(v) => setSubItem(item._localId, 'explanation', v)}
-                          placeholder="Giai thich dap an..."
+                          placeholder="Giải thích đáp án..."
                           cnValue={item.explanationCn}
                           onCnChange={(v) => setSubItem(item._localId, 'explanationCn', v)}
                           cnPlaceholder="解释正确答案..."
@@ -431,7 +431,7 @@ export default function FillBlankGroup({
                           className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded border border-red-200 hover:bg-red-50"
                         >
                           <FiTrash2 size={12} />
-                          Xoa cho trong nay
+                          Xóa chỗ trống này
                         </button>
                       </div>
                     )}

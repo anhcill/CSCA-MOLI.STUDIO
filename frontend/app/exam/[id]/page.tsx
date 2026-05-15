@@ -36,8 +36,6 @@ export default function ExamPage() {
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
-  // fill_blank_pool: track selected answer keys per group (groupId → Set of used answer keys)
-  const [poolUsedKeys, setPoolUsedKeys] = useState<Record<number, Set<string>>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -173,19 +171,6 @@ export default function ExamPage() {
       ...prev,
       [questionId]: essayText !== undefined ? essayText : answerId,
     }));
-
-    // Track pool answer keys for fill_blank_item
-    if (q.question_type === 'fill_blank_item' && q.passage_group_id) {
-      const groupId = q.passage_group_id;
-      setPoolUsedKeys(prev => {
-        const current = prev[groupId] || new Set();
-        // Only add if not already selected (allow re-selecting to change)
-        if (!current.has(answerKey)) {
-          return { ...prev, [groupId]: new Set([...current, answerKey]) };
-        }
-        return prev;
-      });
-    }
 
     try {
       await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText);
@@ -499,12 +484,36 @@ export default function ExamPage() {
                   const q = currentQuestion as any;
                   const isFillBlank = q.question_type === 'fill_blank_item';
                   const groupId = isFillBlank ? q.passage_group_id : null;
-                  const usedKeys = groupId ? (poolUsedKeys[groupId] || new Set()) : new Set<string>();
                   const rawAnswers = q.answers || [];
+                  const usedKeys = new Set<string>();
 
-                  // For fill_blank_item: filter out options already selected by other items in this group
+                  if (isFillBlank && groupId) {
+                    questions.forEach((otherQuestion: any) => {
+                      if (
+                        otherQuestion.id === currentQuestion.id ||
+                        otherQuestion.question_type !== 'fill_blank_item' ||
+                        otherQuestion.passage_group_id !== groupId
+                      ) {
+                        return;
+                      }
+
+                      const selected = selectedAnswers[otherQuestion.id];
+                      const selectedAnswer = (otherQuestion.answers || []).find((answer: any) =>
+                        answer.id === selected || answer.answer_key === selected
+                      );
+                      if (selectedAnswer?.answer_key) {
+                        usedKeys.add(selectedAnswer.answer_key);
+                      }
+                    });
+                  }
+
+                  // For fill_blank_item: hide options selected by other items, but keep this question's selected option visible.
                   const visibleAnswers = isFillBlank
-                    ? rawAnswers.filter((a: any) => !usedKeys.has(a.answer_key))
+                    ? rawAnswers.filter((a: any) =>
+                        !usedKeys.has(a.answer_key) ||
+                        currentQuestionAnswer === a.id ||
+                        currentQuestionAnswer === a.answer_key
+                      )
                     : rawAnswers;
 
                   // If all options are used up, show a message
@@ -517,7 +526,7 @@ export default function ExamPage() {
                   }
 
                   return visibleAnswers.map((answer: any, index: number) => {
-                    const isSelected = currentQuestionAnswer === answer.id;
+                    const isSelected = currentQuestionAnswer === answer.id || currentQuestionAnswer === answer.answer_key;
                     const letter = answer.answer_key || String.fromCharCode(65 + index);
                     const answerText = pick({
                       vi: answer.answer_text,

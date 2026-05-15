@@ -249,7 +249,7 @@ export default function CreateExamPage() {
                 }]);
                 alert('Đã thêm đoạn đọc hiểu!');
             } else if (data.questionType === 'fill_blank_pool') {
-                alert('Hay dung nut "Them Dien Tu" de tao nhom cau roi/doan van co dap an con.');
+                alert('Hãy dùng nút "Thêm Điền Từ" để tạo nhóm câu rời/đoạn văn có đáp án con.');
                 return;
             } else {
                 await examAdminApi.addQuestion(currentExamId, data as any);
