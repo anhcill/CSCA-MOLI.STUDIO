@@ -19,7 +19,7 @@ export default function DailyQuestBanner() {
   const { pick } = useLanguage();
   const [quests, setQuests] = useState<Quest[]>([]);
   const [dismissed, setDismissed] = useState(false);
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, updateUser } = useAuthStore();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -28,6 +28,13 @@ export default function DailyQuestBanner() {
 
     axios.get('/users/quests')
       .then((res) => setQuests(res.data?.data?.quests || []))
+      .catch(() => {});
+
+    axios.get('/auth/me')
+      .then((res) => {
+        const freshUser = res.data?.data?.user;
+        if (freshUser) updateUser(freshUser);
+      })
       .catch(() => {});
   }, [isAuthenticated]);
 

@@ -56,6 +56,19 @@ export default function DailyQuestsBtn() {
   const menuRef = useRef<HTMLDivElement>(null);
   const { isAuthenticated, user, updateUser } = useAuthStore();
 
+  const refreshUserCoins = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const { data } = await axios.get('/auth/me');
+      const freshUser = data?.data?.user;
+      if (freshUser) {
+        updateUser(freshUser);
+      }
+    } catch (err) {
+      console.error('Lỗi khi đồng bộ tổng xu:', err);
+    }
+  };
+
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -108,6 +121,7 @@ export default function DailyQuestsBtn() {
   useEffect(() => {
     if (isAuthenticated && show) {
       fetchQuests();
+      refreshUserCoins();
     }
   }, [isAuthenticated, show]);
 
@@ -132,9 +146,7 @@ export default function DailyQuestsBtn() {
             cachedAt: Date.now(),
           };
         }
-        if (rewardCoins > 0) {
-          updateUser({ coins: (user?.coins || 0) + rewardCoins });
-        }
+        await refreshUserCoins();
         setToast({ message: `Đã nhận thưởng thành công!`, coins: rewardCoins });
         setTimeout(() => setToast(null), 4000);
       } else {
