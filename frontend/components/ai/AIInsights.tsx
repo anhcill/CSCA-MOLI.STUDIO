@@ -53,10 +53,21 @@ interface AIInsightsProps {
   subjectCode?: string; // filter by subject
 }
 
+const AI_ANALYSIS_COST = 50;
+
 export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps = {}) {
   const { user } = useAuthStore();
   const userId = userIdProp || user?.id;
   const hasAI = user ? canUseAI(user) : false;
+  const currentCoins = Math.max(0, Number(user?.coins ?? 0));
+  const canSpendCoins = currentCoins >= AI_ANALYSIS_COST;
+  const missingCoins = Math.max(0, AI_ANALYSIS_COST - currentCoins);
+  const coinButtonLabel = canSpendCoins
+    ? `Dùng ${AI_ANALYSIS_COST} Xu`
+    : `Cần thêm ${missingCoins.toLocaleString('vi-VN')} Xu`;
+  const coinHelpText = canSpendCoins
+    ? `Bạn đang có ${currentCoins.toLocaleString('vi-VN')} Xu, đủ để mở 1 lượt phân tích.`
+    : `Bạn đang có ${currentCoins.toLocaleString('vi-VN')} Xu, cần thêm ${missingCoins.toLocaleString('vi-VN')} Xu để dùng phân tích AI.`;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +89,14 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       setHasEnoughData(false);
       setMessage('Vui lòng đăng nhập để xem phân tích AI');
       setLoading(false);
+      return;
+    }
+    if (useCoins && !canSpendCoins) {
+      setIsPremiumRequired(true);
+      setError(null);
+      setRateLimited(false);
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
     isFetchingRef.current = true;
@@ -115,7 +134,8 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       }
 
       if (d.code === 'INSUFFICIENT_COINS') {
-        setError('Bạn không có đủ 50 Xu để thực hiện phân tích này. Hãy làm thêm nhiệm vụ nhé!');
+        setIsPremiumRequired(true);
+        setError(null);
         setLoading(false);
         return;
       }
@@ -163,7 +183,8 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
         setIsPremiumRequired(true);
         setHasEnoughData(true);
       } else if (err.response?.data?.code === 'INSUFFICIENT_COINS') {
-        setError('Bạn không có đủ 50 Xu để thực hiện phân tích này. Hãy làm thêm nhiệm vụ nhé!');
+        setIsPremiumRequired(true);
+        setError(null);
       } else {
         setError(err.response?.data?.message || 'Không thể tải phân tích AI');
       }
@@ -247,12 +268,21 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
           <p className="text-amber-700 text-sm mb-4 max-w-sm mx-auto">
             Hệ thống AI sẽ phân tích lịch sử làm bài để đưa ra lộ trình cá nhân hoá riêng biệt. Bạn có thể dùng 50 Xu để mở 1 lượt trải nghiệm, hoặc nâng cấp VIP/Pre để dùng ổn định theo quyền gói.
           </p>
+          <p className={`text-sm font-semibold mb-4 ${canSpendCoins ? 'text-amber-700' : 'text-red-600'}`}>
+            {coinHelpText}
+          </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button 
+              type="button"
               onClick={() => fetchAnalysis(false, true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-amber-600 border-2 border-amber-400 font-bold rounded-xl hover:bg-amber-50 hover:-translate-y-0.5 transition-all text-sm w-full sm:w-auto justify-center shadow-sm"
+              disabled={!canSpendCoins || loading || refreshing}
+              className={`inline-flex items-center gap-2 px-6 py-3 border-2 font-bold rounded-xl transition-all text-sm w-full sm:w-auto justify-center shadow-sm ${
+                canSpendCoins
+                  ? 'bg-white text-amber-600 border-amber-400 hover:bg-amber-50 hover:-translate-y-0.5'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed shadow-none'
+              }`}
             >
-              <span className="text-lg">⭐</span> Dùng 50 Xu
+              <span className="text-lg">⭐</span> {coinButtonLabel}
             </button>
             <a href="/vip" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm w-full sm:w-auto justify-center">
               👑 Xem gói VIP
@@ -297,10 +327,16 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-3">
             <button 
+              type="button"
               onClick={() => fetchAnalysis(false, true)}
-              className="block w-full text-center px-4 py-2.5 bg-yellow-50 text-yellow-700 border border-yellow-200 font-bold rounded-xl hover:bg-yellow-100 transition-all text-sm"
+              disabled={!canSpendCoins || loading || refreshing}
+              className={`block w-full text-center px-4 py-2.5 border font-bold rounded-xl transition-all text-sm ${
+                canSpendCoins
+                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+              }`}
             >
-              ⭐ Dùng 50 Xu để trải nghiệm
+              ⭐ {coinButtonLabel}
             </button>
             <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
               ✨ Nâng cấp VIP/Pre
@@ -546,10 +582,16 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-3">
             <button 
+              type="button"
               onClick={() => fetchAnalysis(false, true)}
-              className="block w-full text-center px-4 py-2.5 bg-yellow-50 text-yellow-700 border border-yellow-200 font-bold rounded-xl hover:bg-yellow-100 transition-all text-sm"
+              disabled={!canSpendCoins || loading || refreshing}
+              className={`block w-full text-center px-4 py-2.5 border font-bold rounded-xl transition-all text-sm ${
+                canSpendCoins
+                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+              }`}
             >
-              ⭐ Dùng 50 Xu để trải nghiệm
+              ⭐ {coinButtonLabel}
             </button>
             <a href="/vip" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm">
               ✨ Nâng cấp VIP (Miễn phí AI)
