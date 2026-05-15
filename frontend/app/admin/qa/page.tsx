@@ -230,8 +230,8 @@ export default function AdminQADashboard() {
           </div>
         )}
 
-        <div className="grid h-full grid-cols-[360px_1fr]">
-          <aside className="flex min-w-0 flex-col border-r border-gray-200 bg-gray-50">
+        <div className="grid h-full min-h-0 grid-cols-[360px_1fr]">
+          <aside className="flex min-h-0 min-w-0 flex-col border-r border-gray-200 bg-gray-50">
             <div className="border-b border-gray-200 bg-white p-4">
               <div className="mb-3 grid grid-cols-4 gap-2">
                 {([
@@ -322,7 +322,7 @@ export default function AdminQADashboard() {
             </div>
           </aside>
 
-          <main className="flex min-w-0 flex-col bg-slate-50">
+          <main className="flex min-h-0 min-w-0 flex-col bg-slate-50">
             {!selectedTicket ? (
               <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
                 <FiInbox size={54} className="mb-3 opacity-40" />
@@ -367,7 +367,7 @@ export default function AdminQADashboard() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 py-5">
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
                   <div className="mx-auto max-w-4xl space-y-4">
                     {messages.map((message) => {
                       const isAdmin = message.is_admin_reply;

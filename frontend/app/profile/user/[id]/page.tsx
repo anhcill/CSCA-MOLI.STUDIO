@@ -167,7 +167,8 @@ export default function UserProfilePage({ params }: Props) {
     );
   }
 
-  const isOwnProfile = currentUser?.id === profile.id;
+  const currentUserId = currentUser?.id ? Number(currentUser.id) : null;
+  const isOwnProfile = currentUserId === Number(profile.id);
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -199,12 +200,47 @@ export default function UserProfilePage({ params }: Props) {
 
           {/* Avatar + Info */}
           <div className="px-8 pb-8 -mt-16 relative">
-            {/* Avatar */}
-            <img
-              src={getAvatar(profile)}
-              alt={profile.full_name}
-              className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-xl relative z-10"
-            />
+            <div className="flex items-start justify-between gap-4">
+              {/* Avatar */}
+              <img
+                src={getAvatar(profile)}
+                alt={profile.full_name}
+                className="w-24 h-24 rounded-2xl object-cover border-4 border-white shadow-xl relative z-10"
+              />
+
+              {/* Action buttons */}
+              {!isOwnProfile && (
+                <div className="mt-16 flex shrink-0 flex-wrap items-center justify-end gap-2 sm:mt-20">
+                  <button
+                    onClick={handleMessage}
+                    disabled={profile.isBlocked || profile.isBlockedBy}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-violet-600/20 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-600/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    <FiMessageSquare size={15} /> {profile.isBlocked || profile.isBlockedBy ? 'Không thể nhắn' : 'Nhắn tin'}
+                  </button>
+                  <button
+                    onClick={() => setShowReport(true)}
+                    disabled={profile.isBlocked}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Báo cáo"
+                  >
+                    <FiFlag size={15} />
+                  </button>
+                  <button
+                    onClick={handleBlock}
+                    disabled={blocking || profile.isBlockedBy}
+                    className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      profile.isBlocked
+                        ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                        : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500'
+                    }`}
+                    title={profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
+                  >
+                    <FiUserX size={15} /> {blocking ? 'Đang xử lý...' : profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Name + badges */}
             <div className="mt-4">
@@ -249,38 +285,6 @@ export default function UserProfilePage({ params }: Props) {
               </p>
             </div>
 
-            {/* Action buttons */}
-            {!isOwnProfile && (
-              <div className="flex items-center gap-3 mt-5">
-                <button
-                  onClick={handleMessage}
-                  disabled={profile.isBlocked || profile.isBlockedBy}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold shadow-lg shadow-violet-600/20 hover:shadow-xl hover:shadow-violet-600/30 hover:-translate-y-0.5 transition-all"
-                >
-                  <FiMessageSquare size={15} /> {profile.isBlocked || profile.isBlockedBy ? 'Không thể nhắn tin' : 'Nhắn tin'}
-                </button>
-                <button
-                  onClick={() => setShowReport(true)}
-                  disabled={profile.isBlocked}
-                  className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center"
-                  title="Báo cáo"
-                >
-                  <FiFlag size={15} />
-                </button>
-                <button
-                  onClick={handleBlock}
-                  disabled={blocking || profile.isBlockedBy}
-                  className={`h-10 rounded-xl px-3 text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
-                    profile.isBlocked
-                      ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                      : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500'
-                  }`}
-                  title={profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
-                >
-                  <FiUserX size={15} /> {blocking ? 'Đang xử lý...' : profile.isBlocked ? 'Bỏ chặn' : 'Chặn'}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Stats */}
