@@ -398,6 +398,120 @@ const AdminExamController = {
   },
 
   // ─── ADD QUESTION (hỗ trợ 6 loại câu hỏi) ──────────────────────────────
+  async approveDeleteRequest(req, res) {
+    try {
+      if (!isSuperAdmin(req)) {
+        return res.status(403).json({ message: "Chỉ admin tổng được duyệt yêu cầu xóa đề." });
+      }
+
+      const { examId } = req.params;
+      const reason = sanitize(req.body?.reason || req.query?.reason || "");
+      const examResult = await pool.query(
+        `SELECT id, title, deletion_status, delete_request_reason
+         FROM exams
+         WHERE id = $1`,
+        [examId],
+      );
+
+      if (examResult.rows.length === 0) {
+        return res.status(404).json({ message: "Exam not found" });
+      }
+
+      const exam = examResult.rows[0];
+      if (exam.deletion_status !== "requested") {
+        return res.status(400).json({ message: "Đề này không có yêu cầu xóa đang chờ duyệt." });
+      }
+
+      const result = await pool.query(
+        `UPDATE exams
+         SET status = 'archived',
+             deleted_at = NOW(),
+             deleted_by = $2,
+             delete_reason = COALESCE(NULLIF($3, ''), delete_request_reason),
+             deletion_status = 'soft_deleted',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, title, status, deleted_at, deletion_status`,
+        [examId, req.user.id, reason],
+      );
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+      UserActivity.log(req.user.id, "admin.approve_delete_exam", {
+        examId,
+        examTitle: exam.title,
+        reason,
+        requestReason: exam.delete_request_reason,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json({
+        message: "Đã duyệt yêu cầu xóa. Đề đã được chuyển vào thùng rác mềm.",
+        exam: result.rows[0],
+      });
+    } catch (error) {
+      console.error("Approve delete request error:", error);
+      res.status(500).json({ message: "Failed to approve delete request" });
+    }
+  },
+
+  async rejectDeleteRequest(req, res) {
+    try {
+      if (!isSuperAdmin(req)) {
+        return res.status(403).json({ message: "Chỉ admin tổng được từ chối yêu cầu xóa đề." });
+      }
+
+      const { examId } = req.params;
+      const reason = sanitize(req.body?.reason || req.query?.reason || "");
+      const examResult = await pool.query(
+        `SELECT id, title, deletion_status
+         FROM exams
+         WHERE id = $1`,
+        [examId],
+      );
+
+      if (examResult.rows.length === 0) {
+        return res.status(404).json({ message: "Exam not found" });
+      }
+
+      const exam = examResult.rows[0];
+      if (exam.deletion_status !== "requested") {
+        return res.status(400).json({ message: "Đề này không có yêu cầu xóa đang chờ duyệt." });
+      }
+
+      const result = await pool.query(
+        `UPDATE exams
+         SET delete_requested_at = NULL,
+             delete_requested_by = NULL,
+             delete_request_reason = NULL,
+             deletion_status = 'none',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, title, status, deletion_status`,
+        [examId],
+      );
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+      UserActivity.log(req.user.id, "admin.reject_delete_exam", {
+        examId,
+        examTitle: exam.title,
+        reason,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json({
+        message: "Đã từ chối yêu cầu xóa. Đề vẫn được giữ lại.",
+        exam: result.rows[0],
+      });
+    } catch (error) {
+      console.error("Reject delete request error:", error);
+      res.status(500).json({ message: "Failed to reject delete request" });
+    }
+  },
+
   async addQuestion(req, res) {
     try {
       const { examId } = req.params;
@@ -1135,7 +1249,7 @@ const AdminExamController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
-      const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | undefined (all)
+      const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash' | undefined (all)
 
       const conditions = ['e.deleted_at IS NULL'];
       if (type === 'phong-thi') {
@@ -1144,6 +1258,16 @@ const AdminExamController = {
         conditions.push('e.start_time IS NULL AND e.is_simulated = false');
       } else if (type === 'mo-phong') {
         conditions.push('e.start_time IS NULL AND e.is_simulated = true');
+      } else if (type === 'delete-requests') {
+        if (!isSuperAdmin(req)) {
+          return res.status(403).json({ message: "Chỉ admin tổng được xem danh sách yêu cầu xóa đề." });
+        }
+        conditions.push("e.deletion_status = 'requested'");
+      } else if (type === 'trash') {
+        if (!isSuperAdmin(req)) {
+          return res.status(403).json({ message: "Chỉ admin tổng được xem thùng rác mềm." });
+        }
+        conditions[0] = 'e.deleted_at IS NOT NULL';
       }
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -1170,6 +1294,15 @@ const AdminExamController = {
                     e.is_simulated,
                     e.start_time,
                     e.end_time,
+                    e.deleted_at,
+                    e.deleted_by,
+                    e.delete_reason,
+                    e.delete_requested_at,
+                    e.delete_requested_by,
+                    e.delete_request_reason,
+                    e.deletion_status,
+                    requester.full_name as delete_requested_by_name,
+                    deleter.full_name as deleted_by_name,
                     e.created_at,
                     s.name as subject_name,
                     s.code as subject_code,
@@ -1177,8 +1310,10 @@ const AdminExamController = {
                 FROM exams e
                 LEFT JOIN subjects s ON e.subject_id = s.id
                 LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+                LEFT JOIN users requester ON requester.id = e.delete_requested_by
+                LEFT JOIN users deleter ON deleter.id = e.deleted_by
                 ${whereClause}
-                GROUP BY e.id, s.name, s.code
+                GROUP BY e.id, s.name, s.code, requester.full_name, deleter.full_name
                 ORDER BY e.created_at DESC
                 LIMIT $1 OFFSET $2`,
         [limit, offset],
@@ -1343,17 +1478,21 @@ const AdminExamController = {
   // GET /api/admin/exams/counts - Get exam counts by type
   async getCounts(req, res) {
     try {
-      const [total, phongThi, tuDo, moPhong] = await Promise.all([
+      const [total, phongThi, tuDo, moPhong, deleteRequests, trash] = await Promise.all([
         pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL'),
         pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NOT NULL'),
         pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = false'),
         pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = true'),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND deletion_status = 'requested'"),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NOT NULL'),
       ]);
       res.json({
         all: parseInt(total.rows[0].count),
         phongThi: parseInt(phongThi.rows[0].count),
         tuDo: parseInt(tuDo.rows[0].count),
         moPhong: parseInt(moPhong.rows[0].count),
+        deleteRequests: parseInt(deleteRequests.rows[0].count),
+        trash: parseInt(trash.rows[0].count),
       });
     } catch (error) {
       console.error("Get exam counts error:", error);

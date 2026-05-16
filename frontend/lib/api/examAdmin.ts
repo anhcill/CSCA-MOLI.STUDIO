@@ -109,7 +109,7 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong') => {
+    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash') => {
         const response = await axios.get('/admin/exams', {
             params: { page, limit, ...(type ? { type } : {}) }
         });
@@ -124,6 +124,16 @@ export const examAdminApi = {
 
     restoreExam: async (examId: number) => {
         const response = await axios.post(`/admin/exams/${examId}/restore`);
+        return response.data;
+    },
+
+    approveDeleteRequest: async (examId: number, reason?: string) => {
+        const response = await axios.post(`/admin/exams/${examId}/delete-request/approve`, { reason });
+        return response.data;
+    },
+
+    rejectDeleteRequest: async (examId: number, reason?: string) => {
+        const response = await axios.post(`/admin/exams/${examId}/delete-request/reject`, { reason });
         return response.data;
     },
 

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Exam {
@@ -29,6 +29,15 @@ interface Exam {
     shuffle_mode?: boolean;
     start_time?: string | null;
     end_time?: string | null;
+    deleted_at?: string | null;
+    deleted_by?: number | null;
+    delete_reason?: string | null;
+    delete_requested_at?: string | null;
+    delete_requested_by?: number | null;
+    delete_request_reason?: string | null;
+    deletion_status?: 'none' | 'requested' | 'soft_deleted';
+    delete_requested_by_name?: string | null;
+    deleted_by_name?: string | null;
 }
 
 interface Pagination {
@@ -43,6 +52,8 @@ interface ExamCounts {
     phongThi: number;
     tuDo: number;
     moPhong: number;
+    deleteRequests: number;
+    trash: number;
 }
 
 interface ExamStats {
@@ -78,7 +89,7 @@ interface SubjectStat {
     avgPercentage: number;
 }
 
-type ExamFilter = 'all' | 'phong-thi' | 'tu-do' | 'mo-phong';
+type ExamFilter = 'all' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash';
 
 export default function ExamsPage() {
     const router = useRouter();
@@ -93,10 +104,11 @@ export default function ExamsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<ExamFilter>('all');
-    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0 });
+    const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, deleteRequests: 0, trash: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
     const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
+    const isSuperAdminUser = hasPermission(user, 'admin.super');
 
     const loadExamCounts = async () => {
         try {
@@ -150,6 +162,12 @@ export default function ExamsPage() {
         }
     };
 
+    const refreshExamData = () => {
+        loadExamCounts();
+        loadStats();
+        loadExams();
+    };
+
     const handleDeleteExam = async (examId: number) => {
         const reason = window.prompt(
             'Nhập lý do xóa/lưu trữ đề thi. Nếu đề đã public hoặc đã có lượt thi, hệ thống sẽ gửi yêu cầu xóa để admin tổng duyệt.'
@@ -159,9 +177,7 @@ export default function ExamsPage() {
         try {
             const result = await examAdminApi.deleteExam(examId, reason.trim());
             alert(result?.message || 'Đã xử lý yêu cầu xóa đề thi.');
-            loadExamCounts();
-            loadStats();
-            loadExams();
+            refreshExamData();
         } catch (error: any) {
             alert(error.response?.data?.message || 'Xóa đề thi thất bại');
         }
@@ -173,6 +189,41 @@ export default function ExamsPage() {
             loadExams();
         } catch (error: any) {
             alert(error.response?.data?.message || 'Đổi trạng thái thất bại');
+        }
+    };
+
+    const handleApproveDelete = async (examId: number) => {
+        const reason = window.prompt('Lý do admin tổng duyệt xóa đề này? Có thể để trống.');
+        if (reason === null) return;
+        try {
+            const result = await examAdminApi.approveDeleteRequest(examId, reason.trim());
+            alert(result?.message || 'Đã duyệt yêu cầu xóa đề.');
+            refreshExamData();
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Duyệt yêu cầu xóa thất bại');
+        }
+    };
+
+    const handleRejectDelete = async (examId: number) => {
+        const reason = window.prompt('Lý do từ chối xóa đề này? Có thể để trống.');
+        if (reason === null) return;
+        try {
+            const result = await examAdminApi.rejectDeleteRequest(examId, reason.trim());
+            alert(result?.message || 'Đã từ chối yêu cầu xóa đề.');
+            refreshExamData();
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Từ chối yêu cầu xóa thất bại');
+        }
+    };
+
+    const handleRestoreExam = async (examId: number) => {
+        if (!confirm('Khôi phục đề này khỏi thùng rác mềm?')) return;
+        try {
+            const result = await examAdminApi.restoreExam(examId);
+            alert(result?.message || 'Đã khôi phục đề thi.');
+            refreshExamData();
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Khôi phục đề thi thất bại');
         }
     };
 
@@ -295,6 +346,10 @@ export default function ExamsPage() {
                         { value: 'phong-thi', label: 'Phòng thi', emoji: '🏢', count: examCounts.phongThi },
                         { value: 'mo-phong', label: 'Đề mô phỏng', emoji: '🎯', count: examCounts.moPhong },
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
+                        ...(isSuperAdminUser ? [
+                            { value: 'delete-requests' as ExamFilter, label: 'Chờ duyệt xóa', emoji: '⚠', count: examCounts.deleteRequests },
+                            { value: 'trash' as ExamFilter, label: 'Thùng rác mềm', emoji: '↩', count: examCounts.trash },
+                        ] : []),
                     ] as { value: ExamFilter; label: string; emoji: string; count: number }[]).map(tab => (
                         <button
                             key={tab.value}
@@ -361,6 +416,15 @@ export default function ExamsPage() {
                                             >
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{exam.title}</div>
                                                 <div className="text-xs text-gray-500 dark:text-slate-400">{exam.duration} phút • {exam.total_points} điểm</div>
+                                                {exam.deletion_status === 'requested' && !exam.deleted_at && (
+                                                    <div className="mt-1 text-xs font-bold text-amber-700">Chờ admin tổng duyệt xóa{exam.delete_requested_by_name ? ` - ${exam.delete_requested_by_name}` : ''}</div>
+                                                )}
+                                                {exam.deleted_at && (
+                                                    <div className="mt-1 text-xs font-bold text-red-700">Đã xóa mềm{exam.deleted_by_name ? ` - ${exam.deleted_by_name}` : ''}</div>
+                                                )}
+                                                {(exam.delete_request_reason || exam.delete_reason) && (
+                                                    <div className="mt-1 max-w-md truncate text-xs text-gray-500">Lý do: {exam.delete_request_reason || exam.delete_reason}</div>
+                                                )}
                                             </button>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">
@@ -448,6 +512,34 @@ export default function ExamsPage() {
                                             >
                                                 <FiEye size={18} />
                                             </button>
+                                            {isSuperAdminUser && exam.deletion_status === 'requested' && !exam.deleted_at && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleApproveDelete(exam.id)}
+                                                        className="text-emerald-600 hover:text-emerald-800"
+                                                        title="Đồng ý xóa mềm đề"
+                                                    >
+                                                        <FiCheck size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRejectDelete(exam.id)}
+                                                        className="text-amber-600 hover:text-amber-800"
+                                                        title="Không đồng ý xóa đề"
+                                                    >
+                                                        <FiX size={18} />
+                                                    </button>
+                                                </>
+                                            )}
+                                            {isSuperAdminUser && exam.deleted_at && (
+                                                <button
+                                                    onClick={() => handleRestoreExam(exam.id)}
+                                                    className="text-emerald-600 hover:text-emerald-800"
+                                                    title="Khôi phục đề"
+                                                >
+                                                    <FiRotateCcw size={18} />
+                                                </button>
+                                            )}
+                                            {!exam.deleted_at && exam.deletion_status !== 'requested' && (
                                             <button
                                                 onClick={() => handleDeleteExam(exam.id)}
                                                 className="text-red-600 hover:text-red-800"
@@ -455,6 +547,7 @@ export default function ExamsPage() {
                                             >
                                                 <FiTrash2 size={18} />
                                             </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

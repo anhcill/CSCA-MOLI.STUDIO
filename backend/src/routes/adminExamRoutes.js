@@ -22,6 +22,8 @@ router.get("/", AdminExamController.getAllExams);
 router.post("/", examWriteLimiter, AdminExamController.createExam);
 router.put("/:examId", examWriteLimiter, AdminExamController.updateExam);
 router.delete("/:examId", examDeleteLimiter, AdminExamController.deleteExam);
+router.post("/:examId/delete-request/approve", examWriteLimiter, AdminExamController.approveDeleteRequest);
+router.post("/:examId/delete-request/reject", examWriteLimiter, AdminExamController.rejectDeleteRequest);
 router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 
