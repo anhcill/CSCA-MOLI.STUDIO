@@ -47,10 +47,17 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
-        label: 'Thống kê',
+        label: 'Hiệu suất Admin',
         icon: FiBarChart2,
         href: '/admin/analytics',
         permission: 'exams.manage',
+        roles: [],
+      },
+      {
+        label: 'Thống kê hệ thống',
+        icon: FiMonitor,
+        href: '/admin/analytics/system',
+        permission: 'admin.super',
         roles: [],
       },
       {
@@ -172,6 +179,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin';
+    if (href === '/admin/analytics') return pathname === href;
     return pathname.startsWith(href);
   };
 

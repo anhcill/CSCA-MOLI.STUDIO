@@ -59,6 +59,43 @@ function getSharedDateBounds(query = {}) {
   return { params, condition };
 }
 
+function getAdminAttributionCte() {
+  return `
+    admin_users AS (
+      SELECT
+        u.id,
+        u.full_name,
+        u.email,
+        ARRAY_AGG(DISTINCT r.code) FILTER (WHERE r.code IS NOT NULL) AS admin_roles
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON r.id = ur.role_id
+      LEFT JOIN role_permissions rp ON rp.role_id = r.id
+      LEFT JOIN permissions p ON p.id = rp.permission_id
+      WHERE r.code IN ('super_admin', 'exam_admin')
+         OR p.code IN ('*', 'exams.manage')
+      GROUP BY u.id
+    ),
+    activity_exam_owner AS (
+      SELECT DISTINCT ON (((ua.metadata::jsonb ->> 'examId')::int))
+        ((ua.metadata::jsonb ->> 'examId')::int) AS exam_id,
+        ua.user_id AS admin_id
+      FROM user_activities ua
+      WHERE ua.action = 'admin.create_exam'
+        AND ua.metadata IS NOT NULL
+        AND (ua.metadata::jsonb ->> 'examId') ~ '^[0-9]+$'
+      ORDER BY ((ua.metadata::jsonb ->> 'examId')::int), ua.created_at ASC
+    ),
+    exam_admin_map AS (
+      SELECT
+        e.id AS exam_id,
+        COALESCE(e.created_by, aeo.admin_id) AS admin_id
+      FROM exams e
+      LEFT JOIN activity_exam_owner aeo ON aeo.exam_id = e.id
+    )
+  `;
+}
+
 async function getRevenueSeries(query) {
   const granularity = getGranularity(query.granularity);
   const range = getRange(query);
@@ -297,54 +334,32 @@ async function getAdminPerformance(query = {}) {
   const deletedDateFilter = bounds.condition("e.deleted_at");
   const requestDateFilter = bounds.condition("e.delete_requested_at");
   const activityDateFilter = bounds.condition("ua.created_at");
+  const adminAttributionCte = getAdminAttributionCte();
 
-  const [overview, leaderboard, timeline, recentActivity, deletionRequests, topExams] = await Promise.all([
+  const [overview, leaderboard, timeline, recentActivity, deletionRequests, topExams, adminSubjects] = await Promise.all([
     db.query(
       `
-        WITH admin_users AS (
-          SELECT DISTINCT u.id
-          FROM users u
-          JOIN user_roles ur ON ur.user_id = u.id
-          JOIN roles r ON r.id = ur.role_id
-          LEFT JOIN role_permissions rp ON rp.role_id = r.id
-          LEFT JOIN permissions p ON p.id = rp.permission_id
-          WHERE r.code IN ('super_admin', 'exam_admin')
-             OR p.code IN ('*', 'exams.manage')
-        )
+        WITH ${adminAttributionCte}
         SELECT
-          COUNT(DISTINCT au.id)::int AS admins_count,
-          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter})::int AS exams_created,
-          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'published')::int AS published_exams,
-          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'draft')::int AS draft_exams,
-          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'archived')::int AS archived_exams,
-          COUNT(DISTINCT e.id) FILTER (WHERE e.deleted_at IS NOT NULL AND ${deletedDateFilter})::int AS soft_deleted_exams,
-          COUNT(DISTINCT e.id) FILTER (WHERE e.deletion_status = 'requested' AND ${requestDateFilter})::int AS delete_requests,
-          COUNT(DISTINCT e.id) FILTER (WHERE e.created_by IS NULL AND ${examDateFilter})::int AS unattributed_exams
-        FROM admin_users au
-        LEFT JOIN exams e ON e.created_by = au.id
+          (SELECT COUNT(DISTINCT id)::int FROM admin_users) AS admins_count,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND ${examDateFilter})::int AS exams_created,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND ${examDateFilter} AND e.status = 'published')::int AS published_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND ${examDateFilter} AND e.status = 'draft')::int AS draft_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND ${examDateFilter} AND e.status = 'archived')::int AS archived_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND e.deleted_at IS NOT NULL AND ${deletedDateFilter})::int AS soft_deleted_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NOT NULL AND e.deletion_status = 'requested' AND ${requestDateFilter})::int AS delete_requests,
+          COUNT(DISTINCT e.id) FILTER (WHERE eam.admin_id IS NULL AND ${examDateFilter})::int AS unattributed_exams
+        FROM exams e
+        LEFT JOIN exam_admin_map eam ON eam.exam_id = e.id
       `,
       bounds.params,
     ),
     db.query(
       `
-        WITH admin_users AS (
-          SELECT
-            u.id,
-            u.full_name,
-            u.email,
-            ARRAY_AGG(DISTINCT r.code) FILTER (WHERE r.code IS NOT NULL) AS admin_roles
-          FROM users u
-          JOIN user_roles ur ON ur.user_id = u.id
-          JOIN roles r ON r.id = ur.role_id
-          LEFT JOIN role_permissions rp ON rp.role_id = r.id
-          LEFT JOIN permissions p ON p.id = rp.permission_id
-          WHERE r.code IN ('super_admin', 'exam_admin')
-             OR p.code IN ('*', 'exams.manage')
-          GROUP BY u.id
-        ),
+        WITH ${adminAttributionCte},
         exam_metrics AS (
           SELECT
-            e.created_by AS admin_id,
+            eam.admin_id,
             COUNT(*)::int AS exams_created,
             COUNT(*) FILTER (WHERE e.status = 'published')::int AS published_exams,
             COUNT(*) FILTER (WHERE e.status = 'draft')::int AS draft_exams,
@@ -352,38 +367,41 @@ async function getAdminPerformance(query = {}) {
             COUNT(*) FILTER (WHERE e.deleted_at IS NOT NULL)::int AS soft_deleted_exams,
             COUNT(*) FILTER (WHERE e.deletion_status = 'requested')::int AS delete_requests
           FROM exams e
-          WHERE e.created_by IS NOT NULL
+          JOIN exam_admin_map eam ON eam.exam_id = e.id
+          WHERE eam.admin_id IS NOT NULL
             AND ${examDateFilter}
-          GROUP BY e.created_by
+          GROUP BY eam.admin_id
         ),
         question_metrics AS (
-          SELECT e.created_by AS admin_id, COUNT(DISTINCT q.id)::int AS questions_created
+          SELECT eam.admin_id, COUNT(DISTINCT q.id)::int AS questions_created
           FROM exams e
+          JOIN exam_admin_map eam ON eam.exam_id = e.id
           JOIN questions q ON q.exam_id = e.id AND q.question_number > 0
-          WHERE e.created_by IS NOT NULL
+          WHERE eam.admin_id IS NOT NULL
             AND ${questionExamDateFilter}
-          GROUP BY e.created_by
+          GROUP BY eam.admin_id
         ),
         attempt_metrics AS (
           SELECT
-            e.created_by AS admin_id,
+            eam.admin_id,
             COUNT(DISTINCT ea.id)::int AS total_attempts,
             COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
             COUNT(DISTINCT ea.user_id)::int AS unique_students,
             ROUND(COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::decimal / NULLIF(COUNT(DISTINCT ea.id), 0) * 100, 2) AS completion_rate,
             ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
           FROM exams e
+          JOIN exam_admin_map eam ON eam.exam_id = e.id
           JOIN exam_attempts ea ON ea.exam_id = e.id
-          WHERE e.created_by IS NOT NULL
+          WHERE eam.admin_id IS NOT NULL
             AND ${attemptDateFilter}
-          GROUP BY e.created_by
+          GROUP BY eam.admin_id
         ),
         activity_metrics AS (
           SELECT
             ua.user_id AS admin_id,
             COUNT(*) FILTER (WHERE ua.action = 'admin.create_exam')::int AS create_actions,
-            COUNT(*) FILTER (WHERE ua.action IN ('admin.update_exam', 'admin.update_question'))::int AS update_actions,
-            COUNT(*) FILTER (WHERE ua.action IN ('admin.soft_delete_exam', 'admin.request_delete_exam'))::int AS delete_actions
+            COUNT(*) FILTER (WHERE ua.action IN ('admin.update_exam', 'admin.update_question', 'admin.add_question', 'admin.insert_question', 'admin.insert_fill_blank_group', 'admin.insert_reading_passage_group'))::int AS update_actions,
+            COUNT(*) FILTER (WHERE ua.action IN ('admin.soft_delete_exam', 'admin.request_delete_exam', 'admin.delete_exam'))::int AS delete_actions
           FROM user_activities ua
           WHERE ${activityDateFilter}
           GROUP BY ua.user_id
@@ -426,6 +444,7 @@ async function getAdminPerformance(query = {}) {
     ),
     db.query(
       `
+        WITH ${adminAttributionCte}
         SELECT
           to_char(date_trunc('${granularity}', e.created_at), $${bounds.params.length + 1}) AS period,
           COUNT(*)::int AS exams_created,
@@ -433,7 +452,8 @@ async function getAdminPerformance(query = {}) {
           COUNT(*) FILTER (WHERE e.deleted_at IS NOT NULL)::int AS soft_deleted_exams,
           COUNT(*) FILTER (WHERE e.deletion_status = 'requested')::int AS delete_requests
         FROM exams e
-        WHERE e.created_by IS NOT NULL
+        JOIN exam_admin_map eam ON eam.exam_id = e.id
+        WHERE eam.admin_id IS NOT NULL
           AND ${examDateFilter}
         GROUP BY date_trunc('${granularity}', e.created_at)
         ORDER BY date_trunc('${granularity}', e.created_at)
@@ -490,6 +510,7 @@ async function getAdminPerformance(query = {}) {
     ),
     db.query(
       `
+        WITH ${adminAttributionCte}
         SELECT
           e.id AS exam_id,
           e.title AS exam_title,
@@ -500,15 +521,49 @@ async function getAdminPerformance(query = {}) {
           COUNT(DISTINCT ea.user_id)::int AS unique_students,
           ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
         FROM exams e
-        JOIN users u ON u.id = e.created_by
+        JOIN exam_admin_map eam ON eam.exam_id = e.id
+        JOIN users u ON u.id = eam.admin_id
         LEFT JOIN subjects s ON s.id = e.subject_id
         LEFT JOIN exam_attempts ea ON ea.exam_id = e.id AND ${attemptDateFilter}
-        WHERE e.created_by IS NOT NULL
+        WHERE eam.admin_id IS NOT NULL
           AND e.deleted_at IS NULL
         GROUP BY e.id, s.id, u.id
         HAVING COUNT(DISTINCT ea.id) > 0
         ORDER BY total_attempts DESC, completed_attempts DESC
         LIMIT 20
+      `,
+      bounds.params,
+    ),
+    db.query(
+      `
+        WITH ${adminAttributionCte}
+        SELECT
+          u.id AS admin_id,
+          u.full_name AS admin_name,
+          u.email,
+          s.id AS subject_id,
+          COALESCE(s.name, 'Chưa rõ môn') AS subject_name,
+          COUNT(DISTINCT e.id)::int AS exams_count,
+          COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'published')::int AS published_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'draft')::int AS draft_exams,
+          COALESCE(SUM(e.total_questions), 0)::int AS total_questions,
+          COALESCE(SUM(attempts.completed_attempts), 0)::int AS completed_attempts,
+          ARRAY_AGG(e.title ORDER BY e.created_at DESC) AS exam_titles
+        FROM exams e
+        JOIN exam_admin_map eam ON eam.exam_id = e.id
+        JOIN users u ON u.id = eam.admin_id
+        LEFT JOIN subjects s ON s.id = e.subject_id
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS completed_attempts
+          FROM exam_attempts ea
+          WHERE ea.exam_id = e.id
+            AND ea.status = 'completed'
+            AND ${attemptDateFilter}
+        ) attempts ON TRUE
+        WHERE eam.admin_id IS NOT NULL
+          AND ${examDateFilter}
+        GROUP BY u.id, s.id, s.name
+        ORDER BY u.full_name ASC, exams_count DESC, subject_name ASC
       `,
       bounds.params,
     ),
@@ -599,6 +654,19 @@ async function getAdminPerformance(query = {}) {
       completedAttempts: Number(row.completed_attempts || 0),
       uniqueStudents: Number(row.unique_students || 0),
       avgPercentage: Number(row.avg_percentage || 0),
+    })),
+    adminSubjects: adminSubjects.rows.map((row) => ({
+      adminId: row.admin_id,
+      adminName: row.admin_name || `Admin #${row.admin_id}`,
+      email: row.email,
+      subjectId: row.subject_id,
+      subjectName: row.subject_name,
+      examsCount: Number(row.exams_count || 0),
+      publishedExams: Number(row.published_exams || 0),
+      draftExams: Number(row.draft_exams || 0),
+      totalQuestions: Number(row.total_questions || 0),
+      completedAttempts: Number(row.completed_attempts || 0),
+      examTitles: row.exam_titles || [],
     })),
   };
 }

@@ -145,6 +145,19 @@ export interface AdminPerformanceData {
     uniqueStudents: number;
     avgPercentage: number;
   }>;
+  adminSubjects: Array<{
+    adminId: number;
+    adminName: string;
+    email: string;
+    subjectId: number | null;
+    subjectName: string;
+    examsCount: number;
+    publishedExams: number;
+    draftExams: number;
+    totalQuestions: number;
+    completedAttempts: number;
+    examTitles: string[];
+  }>;
 }
 
 const compact = (filters: AdminAnalyticsFilters = {}) =>
