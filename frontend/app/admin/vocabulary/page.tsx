@@ -265,6 +265,14 @@ export default function AdminVocabularyPage() {
           </div>
           <div className="flex gap-3">
             <button
+              onClick={handleDeleteTopic}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              <FiTrash2 size={16} />
+              Xóa chủ đề
+            </button>
+            <button
               onClick={() => setShowBulk(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
             >
@@ -322,17 +330,19 @@ export default function AdminVocabularyPage() {
               <FiX size={14} /> Xóa filter
             </button>
           )}
-          {filterSubject && filterTopic && (
-            <button
-              onClick={handleDeleteTopic}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              title="Xóa toàn bộ từ vựng trong chủ đề đang chọn"
-            >
-              <FiTrash2 size={14} />
-              Xóa cả chủ đề
-            </button>
-          )}
+          <button
+            onClick={handleDeleteTopic}
+            disabled={saving}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              filterSubject && filterTopic
+                ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+            }`}
+            title={filterSubject && filterTopic ? 'Xóa toàn bộ từ vựng trong chủ đề đang chọn' : 'Chọn môn và chủ đề trước khi xóa'}
+          >
+            <FiTrash2 size={14} />
+            Xóa cả chủ đề
+          </button>
           <select
             value={filterVip}
             onChange={e => { setFilterVip(e.target.value); }}
