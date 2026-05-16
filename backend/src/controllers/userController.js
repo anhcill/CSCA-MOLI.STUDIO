@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const db = require("../config/database");
+const coinService = require("../services/coinService");
 
 /**
  * @desc    Get user by ID
@@ -357,7 +358,10 @@ exports.getDailyQuests = async (req, res) => {
         `INSERT INTO user_quests (user_id, quest_type, target, reward_coins, date) VALUES
          ($1, 'login', 1, 10, CURRENT_DATE),
          ($1, 'do_exam', 1, 20, CURRENT_DATE),
-         ($1, 'learn_vocab', 10, 15, CURRENT_DATE)
+         ($1, 'learn_vocab', 10, 15, CURRENT_DATE),
+         ($1, 'game_play', 1, 12, CURRENT_DATE),
+         ($1, 'game_accuracy', 1, 18, CURRENT_DATE),
+         ($1, 'rank_win', 1, 30, CURRENT_DATE)
          ON CONFLICT (user_id, quest_type, date) DO NOTHING`,
         [userId]
       );
@@ -437,6 +441,65 @@ exports.claimQuest = async (req, res) => {
     await db.query('ROLLBACK');
     console.error("Claim quest error:", error);
     res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+// Override with an atomic ledger-backed implementation. Kept here instead of
+// mutating the legacy block above to avoid changing unrelated controller text.
+exports.claimQuest = async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    await client.query('BEGIN');
+    const questRes = await client.query(
+      `SELECT id, target, progress, is_completed, reward_coins
+       FROM user_quests
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
+      [id, userId],
+    );
+
+    if (questRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: "Không tìm thấy nhiệm vụ" });
+    }
+
+    const quest = questRes.rows[0];
+    if (quest.is_completed) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: "Nhiệm vụ này đã nhận thưởng rồi" });
+    }
+    if (quest.progress < quest.target) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: "Nhiệm vụ chưa hoàn thành" });
+    }
+
+    await client.query(`UPDATE user_quests SET is_completed = TRUE WHERE id = $1`, [id]);
+    const ledger = await coinService.credit(userId, quest.reward_coins, "daily_quest", {
+      description: "Nhận thưởng nhiệm vụ hằng ngày",
+      metadata: { questId: Number(id) },
+      idempotencyKey: `quest:${id}:claim`,
+      client,
+    });
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      message: `Nhận thành công ${quest.reward_coins} xu!`,
+      data: { reward_coins: quest.reward_coins, balance: ledger.balance_after },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error("Claim quest error:", error);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Lỗi server",
+      code: error.code,
+    });
+  } finally {
+    client.release();
   }
 };
 

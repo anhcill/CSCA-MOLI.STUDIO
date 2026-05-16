@@ -23,6 +23,9 @@ const QUEST_LABELS: Record<string, string> = {
   'login': 'Đăng nhập vào hệ thống',
   'do_exam': 'Hoàn thành 1 bài thi',
   'learn_vocab': 'Học từ vựng mới',
+  'game_play': 'Chơi 1 mini game học tập',
+  'game_accuracy': 'Đạt 80% chính xác trong mini game',
+  'rank_win': 'Thắng 1 trận rank',
 };
 
 const COIN_USAGES = [

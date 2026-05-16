@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const pool = require("../config/database");
 const Ticket = require("../models/Ticket");
 
@@ -804,6 +806,14 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_user_quests_user_date ON user_quests(user_id, date)`
     );
+
+    const gamificationSqlPath = path.resolve(
+      __dirname,
+      "../../../database/migrations/028_gamification_wallet_rank.sql",
+    );
+    if (fs.existsSync(gamificationSqlPath)) {
+      await pool.query(fs.readFileSync(gamificationSqlPath, "utf8"));
+    }
 
     console.log(
       `✅ Database ready (migrations + indexes + analyze in ${Date.now() - start}ms)`,

@@ -7,6 +7,7 @@ const User = require('../models/User');
 const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
 const db = require('../config/database');
+const coinService = require('../services/coinService');
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
@@ -297,13 +298,15 @@ async function applyCoinSpend(transaction) {
   const { coinsUsed } = getStoredCoinSpend(transaction);
   if (!coinsUsed) return;
 
-  await db.query(
-    `UPDATE users
-     SET coins = GREATEST(0, COALESCE(coins, 0) - $1)
-     WHERE id = $2
-     RETURNING coins`,
-    [coinsUsed, transaction.user_id]
-  );
+  await coinService.debit(transaction.user_id, coinsUsed, 'vip_discount', {
+    description: 'Dùng xu giảm giá VIP/khóa học',
+    metadata: {
+      transactionId: transaction.id,
+      transactionCode: transaction.transaction_code,
+      coinsUsed,
+    },
+    idempotencyKey: `payment:${transaction.id}:coins`,
+  });
 }
 
 async function getPaymentUser(userId) {

@@ -8,6 +8,7 @@ import {
   FiBookOpen,
   FiChevronDown,
   FiFileText,
+  FiGift,
   FiHelpCircle,
   FiLogOut,
   FiMap,
@@ -44,6 +45,7 @@ const MAIN_NAV_TOP = [
 ];
 
 const MAIN_NAV_BOTTOM = [
+  { id: 'games', labelKey: 'nav.games', href: '/games', icon: FiGift },
   { id: 'docs', labelKey: 'nav.docs', href: '/tailieu', icon: FiFileText },
   { id: 'forum', labelKey: 'nav.forum', href: '/forum', icon: FiMessageSquare },
   { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FiHelpCircle },

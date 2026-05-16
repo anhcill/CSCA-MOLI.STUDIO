@@ -119,6 +119,7 @@ export function getTierBadge(tier: TierLevel): { label: string; color: string } 
 
 const ADMIN_PANEL_PERMISSION_PRIORITY: Array<{ permission: string; route: string }> = [
   { permission: 'users.manage', route: '/admin/users' },
+  { permission: 'game.manage', route: '/admin/gamification' },
   { permission: 'exams.manage', route: '/admin/exams' },
   { permission: 'content.manage', route: '/admin/materials' },
   { permission: 'forum.manage', route: '/admin/posts' },
