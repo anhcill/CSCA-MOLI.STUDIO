@@ -47,10 +47,10 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
-        label: 'Analytics',
+        label: 'Thống kê',
         icon: FiBarChart2,
         href: '/admin/analytics',
-        permission: 'admin.super',
+        permission: 'exams.manage',
         roles: [],
       },
       {

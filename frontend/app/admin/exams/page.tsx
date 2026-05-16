@@ -151,10 +151,16 @@ export default function ExamsPage() {
     };
 
     const handleDeleteExam = async (examId: number) => {
-        if (!confirm('Bạn có chắc muốn xóa đề thi này?')) return;
+        const reason = window.prompt(
+            'Nhập lý do xóa/lưu trữ đề thi. Nếu đề đã public hoặc đã có lượt thi, hệ thống sẽ gửi yêu cầu xóa để admin tổng duyệt.'
+        );
+        if (reason === null) return;
 
         try {
-            await examAdminApi.deleteExam(examId);
+            const result = await examAdminApi.deleteExam(examId, reason.trim());
+            alert(result?.message || 'Đã xử lý yêu cầu xóa đề thi.');
+            loadExamCounts();
+            loadStats();
             loadExams();
         } catch (error: any) {
             alert(error.response?.data?.message || 'Xóa đề thi thất bại');
@@ -445,7 +451,7 @@ export default function ExamsPage() {
                                             <button
                                                 onClick={() => handleDeleteExam(exam.id)}
                                                 className="text-red-600 hover:text-red-800"
-                                                title="Xóa"
+                                                title="Xóa mềm hoặc gửi yêu cầu xóa"
                                             >
                                                 <FiTrash2 size={18} />
                                             </button>

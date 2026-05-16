@@ -70,12 +70,94 @@ export interface AdminAnalyticsData {
   examReports: ExamReportSummary[];
 }
 
+export interface AdminPerformanceRow {
+  adminId: number;
+  adminName: string;
+  email: string;
+  adminRoles: string[];
+  examsCreated: number;
+  publishedExams: number;
+  draftExams: number;
+  archivedExams: number;
+  softDeletedExams: number;
+  deleteRequests: number;
+  questionsCreated: number;
+  totalAttempts: number;
+  completedAttempts: number;
+  uniqueStudents: number;
+  completionRate: number;
+  avgPercentage: number;
+  createActions: number;
+  updateActions: number;
+  deleteActions: number;
+  impactScore: number;
+}
+
+export interface AdminPerformanceData {
+  overview: {
+    adminsCount: number;
+    examsCreated: number;
+    publishedExams: number;
+    draftExams: number;
+    archivedExams: number;
+    softDeletedExams: number;
+    deleteRequests: number;
+    unattributedExams: number;
+    questionsCreated: number;
+    completedAttempts: number;
+  };
+  leaderboard: AdminPerformanceRow[];
+  timeline: Array<{
+    period: string;
+    examsCreated: number;
+    publishedExams: number;
+    softDeletedExams: number;
+    deleteRequests: number;
+  }>;
+  recentActivity: Array<{
+    id: number;
+    adminId: number;
+    adminName: string;
+    action: string;
+    metadata?: Record<string, any>;
+    ipAddress?: string;
+    createdAt: string;
+  }>;
+  deletionRequests: Array<{
+    examId: number;
+    title: string;
+    status: string;
+    deletionStatus: string;
+    deletedAt?: string | null;
+    deleteReason?: string | null;
+    deleteRequestedAt?: string | null;
+    deleteRequestReason?: string | null;
+    requestedByName?: string | null;
+    deletedByName?: string | null;
+  }>;
+  topExams: Array<{
+    examId: number;
+    examTitle: string;
+    subjectName: string;
+    adminName: string;
+    totalAttempts: number;
+    completedAttempts: number;
+    uniqueStudents: number;
+    avgPercentage: number;
+  }>;
+}
+
 const compact = (filters: AdminAnalyticsFilters = {}) =>
   Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== undefined && value !== ''));
 
 export const adminAnalyticsApi = {
   getAnalytics: async (filters?: AdminAnalyticsFilters): Promise<AdminAnalyticsData> => {
     const response = await axios.get('/admin/analytics', { params: compact(filters) });
+    return response.data.data;
+  },
+
+  getAdminPerformance: async (filters?: AdminAnalyticsFilters): Promise<AdminPerformanceData> => {
+    const response = await axios.get('/admin/analytics/admin-performance', { params: compact(filters) });
     return response.data.data;
   },
 

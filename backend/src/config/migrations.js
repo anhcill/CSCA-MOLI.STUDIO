@@ -590,6 +590,22 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS allow_download BOOLEAN DEFAULT FALSE
     `);
     await pool.query(`
+      ALTER TABLE exams
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS delete_reason TEXT,
+      ADD COLUMN IF NOT EXISTS delete_requested_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS delete_requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS delete_request_reason TEXT,
+      ADD COLUMN IF NOT EXISTS deletion_status VARCHAR(30) DEFAULT 'none'
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_exams_deleted_at ON exams(deleted_at)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_exams_deletion_status ON exams(deletion_status)`,
+    );
+    await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'basic',
       ADD COLUMN IF NOT EXISTS full_name_edit VARCHAR(255)

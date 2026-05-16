@@ -117,8 +117,13 @@ export const examAdminApi = {
     },
 
     // Delete exam
-    deleteExam: async (examId: number) => {
-        const response = await axios.delete(`/admin/exams/${examId}`);
+    deleteExam: async (examId: number, reason?: string) => {
+        const response = await axios.delete(`/admin/exams/${examId}`, { data: { reason } });
+        return response.data;
+    },
+
+    restoreExam: async (examId: number) => {
+        const response = await axios.post(`/admin/exams/${examId}/restore`);
         return response.data;
     },
 

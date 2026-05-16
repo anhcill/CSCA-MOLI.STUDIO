@@ -31,6 +31,12 @@ router.get(
 );
 
 router.get(
+	"/analytics/admin-performance",
+	authorizePermission("exams.manage"),
+	adminAnalyticsController.getAdminPerformance,
+);
+
+router.get(
 	"/analytics/exams/:examId",
 	authorizePermission("admin.super"),
 	adminAnalyticsController.getExamReport,

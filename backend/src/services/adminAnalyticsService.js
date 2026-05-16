@@ -36,6 +36,29 @@ function getBucketExpression() {
   `;
 }
 
+function getSharedDateBounds(query = {}) {
+  const params = [];
+  let fromRef = null;
+  let toRef = null;
+  if (query.from) {
+    params.push(query.from);
+    fromRef = `$${params.length}`;
+  }
+  if (query.to) {
+    params.push(`${query.to}T23:59:59.999Z`);
+    toRef = `$${params.length}`;
+  }
+
+  const condition = (column) => {
+    const clauses = [];
+    if (fromRef) clauses.push(`${column} >= ${fromRef}`);
+    if (toRef) clauses.push(`${column} <= ${toRef}`);
+    return clauses.length ? clauses.join(" AND ") : "TRUE";
+  };
+
+  return { params, condition };
+}
+
 async function getRevenueSeries(query) {
   const granularity = getGranularity(query.granularity);
   const range = getRange(query);
@@ -98,7 +121,8 @@ async function getCompletionStats(query) {
       FROM exam_attempts ea
       JOIN exams e ON e.id = ea.exam_id
       JOIN subjects s ON s.id = e.subject_id
-      WHERE ${dateFilter}
+      WHERE e.deleted_at IS NULL
+        AND ${dateFilter}
       GROUP BY s.id
       ORDER BY total_attempts DESC
     `,
@@ -193,6 +217,7 @@ async function getTopWrongQuestions(query, limit = 20) {
       JOIN exams e ON e.id = q.exam_id
       JOIN subjects s ON s.id = e.subject_id
       WHERE ea.status = 'completed'
+        AND e.deleted_at IS NULL
         AND ${dateFilter}
         ${examFilter}
       GROUP BY q.id, e.id, s.id
@@ -238,6 +263,7 @@ async function getExamReports(query) {
       FROM exams e
       JOIN subjects s ON s.id = e.subject_id
       LEFT JOIN exam_attempts ea ON ea.exam_id = e.id AND ${dateFilter}
+      WHERE e.deleted_at IS NULL
       GROUP BY e.id, s.id
       HAVING COUNT(ea.id) > 0
       ORDER BY total_attempts DESC, avg_percentage ASC NULLS LAST
@@ -259,6 +285,322 @@ async function getExamReports(query) {
     maxPercentage: Number(row.max_percentage || 0),
     minPercentage: Number(row.min_percentage || 0),
   }));
+}
+
+async function getAdminPerformance(query = {}) {
+  const bounds = getSharedDateBounds(query);
+  const granularity = getGranularity(query.granularity);
+  const format = granularity === "month" ? "YYYY-MM" : "YYYY-MM-DD";
+  const examDateFilter = bounds.condition("e.created_at");
+  const questionExamDateFilter = bounds.condition("e.created_at");
+  const attemptDateFilter = bounds.condition("ea.created_at");
+  const deletedDateFilter = bounds.condition("e.deleted_at");
+  const requestDateFilter = bounds.condition("e.delete_requested_at");
+  const activityDateFilter = bounds.condition("ua.created_at");
+
+  const [overview, leaderboard, timeline, recentActivity, deletionRequests, topExams] = await Promise.all([
+    db.query(
+      `
+        WITH admin_users AS (
+          SELECT DISTINCT u.id
+          FROM users u
+          JOIN user_roles ur ON ur.user_id = u.id
+          JOIN roles r ON r.id = ur.role_id
+          LEFT JOIN role_permissions rp ON rp.role_id = r.id
+          LEFT JOIN permissions p ON p.id = rp.permission_id
+          WHERE r.code IN ('super_admin', 'exam_admin')
+             OR p.code IN ('*', 'exams.manage')
+        )
+        SELECT
+          COUNT(DISTINCT au.id)::int AS admins_count,
+          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter})::int AS exams_created,
+          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'published')::int AS published_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'draft')::int AS draft_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE ${examDateFilter} AND e.status = 'archived')::int AS archived_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE e.deleted_at IS NOT NULL AND ${deletedDateFilter})::int AS soft_deleted_exams,
+          COUNT(DISTINCT e.id) FILTER (WHERE e.deletion_status = 'requested' AND ${requestDateFilter})::int AS delete_requests,
+          COUNT(DISTINCT e.id) FILTER (WHERE e.created_by IS NULL AND ${examDateFilter})::int AS unattributed_exams
+        FROM admin_users au
+        LEFT JOIN exams e ON e.created_by = au.id
+      `,
+      bounds.params,
+    ),
+    db.query(
+      `
+        WITH admin_users AS (
+          SELECT
+            u.id,
+            u.full_name,
+            u.email,
+            ARRAY_AGG(DISTINCT r.code) FILTER (WHERE r.code IS NOT NULL) AS admin_roles
+          FROM users u
+          JOIN user_roles ur ON ur.user_id = u.id
+          JOIN roles r ON r.id = ur.role_id
+          LEFT JOIN role_permissions rp ON rp.role_id = r.id
+          LEFT JOIN permissions p ON p.id = rp.permission_id
+          WHERE r.code IN ('super_admin', 'exam_admin')
+             OR p.code IN ('*', 'exams.manage')
+          GROUP BY u.id
+        ),
+        exam_metrics AS (
+          SELECT
+            e.created_by AS admin_id,
+            COUNT(*)::int AS exams_created,
+            COUNT(*) FILTER (WHERE e.status = 'published')::int AS published_exams,
+            COUNT(*) FILTER (WHERE e.status = 'draft')::int AS draft_exams,
+            COUNT(*) FILTER (WHERE e.status = 'archived')::int AS archived_exams,
+            COUNT(*) FILTER (WHERE e.deleted_at IS NOT NULL)::int AS soft_deleted_exams,
+            COUNT(*) FILTER (WHERE e.deletion_status = 'requested')::int AS delete_requests
+          FROM exams e
+          WHERE e.created_by IS NOT NULL
+            AND ${examDateFilter}
+          GROUP BY e.created_by
+        ),
+        question_metrics AS (
+          SELECT e.created_by AS admin_id, COUNT(DISTINCT q.id)::int AS questions_created
+          FROM exams e
+          JOIN questions q ON q.exam_id = e.id AND q.question_number > 0
+          WHERE e.created_by IS NOT NULL
+            AND ${questionExamDateFilter}
+          GROUP BY e.created_by
+        ),
+        attempt_metrics AS (
+          SELECT
+            e.created_by AS admin_id,
+            COUNT(DISTINCT ea.id)::int AS total_attempts,
+            COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
+            COUNT(DISTINCT ea.user_id)::int AS unique_students,
+            ROUND(COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::decimal / NULLIF(COUNT(DISTINCT ea.id), 0) * 100, 2) AS completion_rate,
+            ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
+          FROM exams e
+          JOIN exam_attempts ea ON ea.exam_id = e.id
+          WHERE e.created_by IS NOT NULL
+            AND ${attemptDateFilter}
+          GROUP BY e.created_by
+        ),
+        activity_metrics AS (
+          SELECT
+            ua.user_id AS admin_id,
+            COUNT(*) FILTER (WHERE ua.action = 'admin.create_exam')::int AS create_actions,
+            COUNT(*) FILTER (WHERE ua.action IN ('admin.update_exam', 'admin.update_question'))::int AS update_actions,
+            COUNT(*) FILTER (WHERE ua.action IN ('admin.soft_delete_exam', 'admin.request_delete_exam'))::int AS delete_actions
+          FROM user_activities ua
+          WHERE ${activityDateFilter}
+          GROUP BY ua.user_id
+        )
+        SELECT
+          au.id AS admin_id,
+          au.full_name AS admin_name,
+          au.email,
+          COALESCE(au.admin_roles, ARRAY[]::varchar[]) AS admin_roles,
+          COALESCE(em.exams_created, 0)::int AS exams_created,
+          COALESCE(em.published_exams, 0)::int AS published_exams,
+          COALESCE(em.draft_exams, 0)::int AS draft_exams,
+          COALESCE(em.archived_exams, 0)::int AS archived_exams,
+          COALESCE(em.soft_deleted_exams, 0)::int AS soft_deleted_exams,
+          COALESCE(em.delete_requests, 0)::int AS delete_requests,
+          COALESCE(qm.questions_created, 0)::int AS questions_created,
+          COALESCE(am.total_attempts, 0)::int AS total_attempts,
+          COALESCE(am.completed_attempts, 0)::int AS completed_attempts,
+          COALESCE(am.unique_students, 0)::int AS unique_students,
+          COALESCE(am.completion_rate, 0)::decimal AS completion_rate,
+          COALESCE(am.avg_percentage, 0)::decimal AS avg_percentage,
+          COALESCE(act.create_actions, 0)::int AS create_actions,
+          COALESCE(act.update_actions, 0)::int AS update_actions,
+          COALESCE(act.delete_actions, 0)::int AS delete_actions
+        FROM admin_users au
+        LEFT JOIN exam_metrics em ON em.admin_id = au.id
+        LEFT JOIN question_metrics qm ON qm.admin_id = au.id
+        LEFT JOIN attempt_metrics am ON am.admin_id = au.id
+        LEFT JOIN activity_metrics act ON act.admin_id = au.id
+        ORDER BY
+          (COALESCE(em.published_exams, 0) * 15
+           + COALESCE(qm.questions_created, 0) * 0.3
+           + COALESCE(am.completed_attempts, 0) * 0.5
+           + COALESCE(am.unique_students, 0)
+           - COALESCE(em.delete_requests, 0) * 10
+           - COALESCE(em.soft_deleted_exams, 0) * 5) DESC,
+          COALESCE(em.exams_created, 0) DESC
+      `,
+      bounds.params,
+    ),
+    db.query(
+      `
+        SELECT
+          to_char(date_trunc('${granularity}', e.created_at), $${bounds.params.length + 1}) AS period,
+          COUNT(*)::int AS exams_created,
+          COUNT(*) FILTER (WHERE e.status = 'published')::int AS published_exams,
+          COUNT(*) FILTER (WHERE e.deleted_at IS NOT NULL)::int AS soft_deleted_exams,
+          COUNT(*) FILTER (WHERE e.deletion_status = 'requested')::int AS delete_requests
+        FROM exams e
+        WHERE e.created_by IS NOT NULL
+          AND ${examDateFilter}
+        GROUP BY date_trunc('${granularity}', e.created_at)
+        ORDER BY date_trunc('${granularity}', e.created_at)
+      `,
+      [...bounds.params, format],
+    ),
+    db.query(
+      `
+        SELECT
+          ua.id,
+          ua.user_id AS admin_id,
+          u.full_name AS admin_name,
+          ua.action,
+          ua.metadata,
+          ua.ip_address,
+          ua.created_at
+        FROM user_activities ua
+        JOIN users u ON u.id = ua.user_id
+        WHERE ua.action LIKE 'admin.%'
+          AND ${activityDateFilter}
+        ORDER BY ua.created_at DESC
+        LIMIT 30
+      `,
+      bounds.params,
+    ),
+    db.query(
+      `
+        SELECT
+          e.id,
+          e.title,
+          e.status,
+          e.deletion_status,
+          e.deleted_at,
+          e.delete_reason,
+          e.delete_requested_at,
+          e.delete_request_reason,
+          requester.full_name AS requested_by_name,
+          deleter.full_name AS deleted_by_name
+        FROM exams e
+        LEFT JOIN users requester ON requester.id = e.delete_requested_by
+        LEFT JOIN users deleter ON deleter.id = e.deleted_by
+        WHERE (
+            e.deletion_status = 'requested'
+            OR e.deleted_at IS NOT NULL
+          )
+          AND (
+            ${requestDateFilter}
+            OR ${deletedDateFilter}
+          )
+        ORDER BY COALESCE(e.delete_requested_at, e.deleted_at) DESC
+        LIMIT 50
+      `,
+      bounds.params,
+    ),
+    db.query(
+      `
+        SELECT
+          e.id AS exam_id,
+          e.title AS exam_title,
+          s.name AS subject_name,
+          u.full_name AS admin_name,
+          COUNT(DISTINCT ea.id)::int AS total_attempts,
+          COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
+          COUNT(DISTINCT ea.user_id)::int AS unique_students,
+          ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
+        FROM exams e
+        JOIN users u ON u.id = e.created_by
+        LEFT JOIN subjects s ON s.id = e.subject_id
+        LEFT JOIN exam_attempts ea ON ea.exam_id = e.id AND ${attemptDateFilter}
+        WHERE e.created_by IS NOT NULL
+          AND e.deleted_at IS NULL
+        GROUP BY e.id, s.id, u.id
+        HAVING COUNT(DISTINCT ea.id) > 0
+        ORDER BY total_attempts DESC, completed_attempts DESC
+        LIMIT 20
+      `,
+      bounds.params,
+    ),
+  ]);
+
+  const rows = leaderboard.rows.map((row) => {
+    const impactScore = Math.round(
+      Number(row.published_exams || 0) * 15
+      + Number(row.questions_created || 0) * 0.3
+      + Number(row.completed_attempts || 0) * 0.5
+      + Number(row.unique_students || 0)
+      - Number(row.delete_requests || 0) * 10
+      - Number(row.soft_deleted_exams || 0) * 5,
+    );
+    return {
+      adminId: row.admin_id,
+      adminName: row.admin_name || `Admin #${row.admin_id}`,
+      email: row.email,
+      adminRoles: row.admin_roles || [],
+      examsCreated: Number(row.exams_created || 0),
+      publishedExams: Number(row.published_exams || 0),
+      draftExams: Number(row.draft_exams || 0),
+      archivedExams: Number(row.archived_exams || 0),
+      softDeletedExams: Number(row.soft_deleted_exams || 0),
+      deleteRequests: Number(row.delete_requests || 0),
+      questionsCreated: Number(row.questions_created || 0),
+      totalAttempts: Number(row.total_attempts || 0),
+      completedAttempts: Number(row.completed_attempts || 0),
+      uniqueStudents: Number(row.unique_students || 0),
+      completionRate: Number(row.completion_rate || 0),
+      avgPercentage: Number(row.avg_percentage || 0),
+      createActions: Number(row.create_actions || 0),
+      updateActions: Number(row.update_actions || 0),
+      deleteActions: Number(row.delete_actions || 0),
+      impactScore,
+    };
+  });
+
+  const overviewRow = overview.rows[0] || {};
+  return {
+    overview: {
+      adminsCount: Number(overviewRow.admins_count || 0),
+      examsCreated: Number(overviewRow.exams_created || 0),
+      publishedExams: Number(overviewRow.published_exams || 0),
+      draftExams: Number(overviewRow.draft_exams || 0),
+      archivedExams: Number(overviewRow.archived_exams || 0),
+      softDeletedExams: Number(overviewRow.soft_deleted_exams || 0),
+      deleteRequests: Number(overviewRow.delete_requests || 0),
+      unattributedExams: Number(overviewRow.unattributed_exams || 0),
+      questionsCreated: rows.reduce((sum, row) => sum + row.questionsCreated, 0),
+      completedAttempts: rows.reduce((sum, row) => sum + row.completedAttempts, 0),
+    },
+    leaderboard: rows,
+    timeline: timeline.rows.map((row) => ({
+      period: row.period,
+      examsCreated: Number(row.exams_created || 0),
+      publishedExams: Number(row.published_exams || 0),
+      softDeletedExams: Number(row.soft_deleted_exams || 0),
+      deleteRequests: Number(row.delete_requests || 0),
+    })),
+    recentActivity: recentActivity.rows.map((row) => ({
+      id: row.id,
+      adminId: row.admin_id,
+      adminName: row.admin_name,
+      action: row.action,
+      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata,
+      ipAddress: row.ip_address,
+      createdAt: row.created_at,
+    })),
+    deletionRequests: deletionRequests.rows.map((row) => ({
+      examId: row.id,
+      title: row.title,
+      status: row.status,
+      deletionStatus: row.deletion_status,
+      deletedAt: row.deleted_at,
+      deleteReason: row.delete_reason,
+      deleteRequestedAt: row.delete_requested_at,
+      deleteRequestReason: row.delete_request_reason,
+      requestedByName: row.requested_by_name,
+      deletedByName: row.deleted_by_name,
+    })),
+    topExams: topExams.rows.map((row) => ({
+      examId: row.exam_id,
+      examTitle: row.exam_title,
+      subjectName: row.subject_name,
+      adminName: row.admin_name,
+      totalAttempts: Number(row.total_attempts || 0),
+      completedAttempts: Number(row.completed_attempts || 0),
+      uniqueStudents: Number(row.unique_students || 0),
+      avgPercentage: Number(row.avg_percentage || 0),
+    })),
+  };
 }
 
 async function getExamReport(examId, query) {
@@ -292,7 +634,7 @@ async function getExamReport(examId, query) {
       LEFT JOIN exam_attempts ea ON ea.exam_id = e.id
         ${query.from ? `AND ea.created_at >= $2` : ""}
         ${query.to ? `AND ea.created_at <= $${query.from ? 3 : 2}` : ""}
-      WHERE e.id = $1
+      WHERE e.id = $1 AND e.deleted_at IS NULL
       GROUP BY e.id, s.id
     `,
     params,
@@ -307,6 +649,7 @@ async function getExamReport(examId, query) {
         FROM exam_attempts ea
         JOIN exams e ON e.id = ea.exam_id
         WHERE ${attemptWhere}
+          AND e.deleted_at IS NULL
           AND ea.status = 'completed'
           AND ea.total_score IS NOT NULL
         GROUP BY bucket
@@ -530,6 +873,7 @@ async function exportDataset(dataset, query = {}) {
 
 module.exports = {
   getAnalytics,
+  getAdminPerformance,
   getExamReport,
   exportDataset,
 };

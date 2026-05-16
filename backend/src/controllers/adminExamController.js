@@ -48,6 +48,12 @@ function normalizeExamAccess(isPremium, vipTier) {
   };
 }
 
+function isSuperAdmin(req) {
+  const roles = req.user?.rbacRoles || [];
+  const permissions = req.user?.permissions || [];
+  return roles.includes("super_admin") || permissions.includes("*");
+}
+
 // ─── Question types cho đề tiếng Trung ────────────────────────────────────────────
 const QUESTION_TYPES = {
   SINGLE_CHOICE:     'single_choice',       // Trắc nghiệm A-B-C-D (câu 1-10, 26-33, 49-70)
@@ -161,8 +167,8 @@ const AdminExamController = {
       const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14, $15)
          RETURNING *`,
         [
           examCode,
@@ -179,6 +185,7 @@ const AdminExamController = {
           shuffle_mode === true,
           access.vipTier,
           is_simulated === true,
+          req.user.id,
         ],
       );
 
@@ -260,44 +267,133 @@ const AdminExamController = {
   async deleteExam(req, res) {
     try {
       const { examId } = req.params;
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        await client.query(
-          "DELETE FROM user_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = $1)",
-          [examId],
-        );
-        await client.query("DELETE FROM exam_attempts WHERE exam_id = $1", [
-          examId,
-        ]);
-        await client.query(
-          "DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE exam_id = $1)",
-          [examId],
-        );
-        await client.query("DELETE FROM questions WHERE exam_id = $1", [
-          examId,
-        ]);
-        const result = await client.query(
-          "DELETE FROM exams WHERE id = $1 RETURNING id",
-          [examId],
-        );
-        if (result.rows.length === 0) {
-          await client.query("ROLLBACK");
-          return res.status(404).json({ message: "Exam not found" });
-        }
-        await client.query("COMMIT");
-        UserActivity.log(req.user.id, 'admin.delete_exam', { examId, ip: req.ip, userAgent: req.headers['user-agent'] });
+      const reason = sanitize(req.body?.reason || req.query?.reason || "");
+      const examResult = await pool.query(
+        `SELECT e.id, e.title, e.status, e.deleted_at, e.deletion_status,
+                COUNT(ea.id)::int AS attempts_count
+         FROM exams e
+         LEFT JOIN exam_attempts ea ON ea.exam_id = e.id
+         WHERE e.id = $1
+         GROUP BY e.id`,
+        [examId],
+      );
 
-        res.json({ message: "Exam deleted successfully" });
-      } catch (e) {
-        await client.query("ROLLBACK");
-        throw e;
-      } finally {
-        client.release();
+      if (examResult.rows.length === 0) {
+        return res.status(404).json({ message: "Exam not found" });
       }
+
+      const exam = examResult.rows[0];
+      if (exam.deleted_at) {
+        return res.status(400).json({ message: "Đề thi này đã nằm trong thùng rác mềm." });
+      }
+
+      const hasAttempts = Number(exam.attempts_count || 0) > 0;
+      const needsApproval = !isSuperAdmin(req) && (hasAttempts || exam.status === "published");
+
+      if (needsApproval) {
+        const result = await pool.query(
+          `UPDATE exams
+           SET deletion_status = 'requested',
+               delete_requested_at = NOW(),
+               delete_requested_by = $2,
+               delete_request_reason = NULLIF($3, ''),
+               updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, title, deletion_status, delete_requested_at`,
+          [examId, req.user.id, reason],
+        );
+
+        cache.delByPrefix("exams:");
+        cache.del("exams:lobby");
+        UserActivity.log(req.user.id, 'admin.request_delete_exam', {
+          examId,
+          examTitle: exam.title,
+          attemptsCount: Number(exam.attempts_count || 0),
+          reason,
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+        });
+
+        return res.status(202).json({
+          message: "Đề đã có dữ liệu thật hoặc đang public nên đã chuyển thành yêu cầu xóa để admin tổng duyệt.",
+          exam: result.rows[0],
+          requiresApproval: true,
+        });
+      }
+
+      const result = await pool.query(
+        `UPDATE exams
+         SET status = 'archived',
+             deleted_at = NOW(),
+             deleted_by = $2,
+             delete_reason = NULLIF($3, ''),
+             deletion_status = 'soft_deleted',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, title, status, deleted_at, deletion_status`,
+        [examId, req.user.id, reason],
+      );
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+      UserActivity.log(req.user.id, 'admin.soft_delete_exam', {
+        examId,
+        examTitle: exam.title,
+        reason,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      res.json({
+        message: "Đề đã được chuyển vào thùng rác mềm. Dữ liệu câu hỏi, lượt thi và đáp án vẫn được giữ để có thể khôi phục.",
+        exam: result.rows[0],
+      });
     } catch (error) {
       console.error("Delete exam error:", error);
       res.status(500).json({ message: "Failed to delete exam" });
+    }
+  },
+
+  async restoreExam(req, res) {
+    try {
+      if (!isSuperAdmin(req)) {
+        return res.status(403).json({ message: "Chỉ admin tổng được khôi phục đề đã xóa mềm." });
+      }
+
+      const { examId } = req.params;
+      const result = await pool.query(
+        `UPDATE exams
+         SET deleted_at = NULL,
+             deleted_by = NULL,
+             delete_reason = NULL,
+             delete_requested_at = NULL,
+             delete_requested_by = NULL,
+             delete_request_reason = NULL,
+             deletion_status = 'none',
+             status = CASE WHEN status = 'archived' THEN 'draft' ELSE status END,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, title, status`,
+        [examId],
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Exam not found" });
+      }
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+      UserActivity.log(req.user.id, 'admin.restore_exam', {
+        examId,
+        examTitle: result.rows[0].title,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      res.json({ message: "Đã khôi phục đề thi.", exam: result.rows[0] });
+    } catch (error) {
+      console.error("Restore exam error:", error);
+      res.status(500).json({ message: "Failed to restore exam" });
     }
   },
 
@@ -1041,14 +1137,15 @@ const AdminExamController = {
       const offset = (page - 1) * limit;
       const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | undefined (all)
 
-      let whereClause = '';
+      const conditions = ['e.deleted_at IS NULL'];
       if (type === 'phong-thi') {
-        whereClause = 'WHERE e.start_time IS NOT NULL';
+        conditions.push('e.start_time IS NOT NULL');
       } else if (type === 'tu-do') {
-        whereClause = 'WHERE e.start_time IS NULL AND e.is_simulated = false';
+        conditions.push('e.start_time IS NULL AND e.is_simulated = false');
       } else if (type === 'mo-phong') {
-        whereClause = 'WHERE e.start_time IS NULL AND e.is_simulated = true';
+        conditions.push('e.start_time IS NULL AND e.is_simulated = true');
       }
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await pool.query(
@@ -1130,6 +1227,7 @@ const AdminExamController = {
           )::DECIMAL as avg_score_points
         FROM exams e
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
+        WHERE e.deleted_at IS NULL
       `;
       const overviewResult = await pool.query(overviewQuery);
       const overview = overviewResult.rows[0];
@@ -1162,6 +1260,7 @@ const AdminExamController = {
         FROM exams e
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
         LEFT JOIN subjects s ON e.subject_id = s.id
+        WHERE e.deleted_at IS NULL
         GROUP BY e.id, e.title, s.name, e.difficulty_level
         HAVING COUNT(DISTINCT ea.id) > 0
         ORDER BY attempts DESC
@@ -1192,7 +1291,7 @@ const AdminExamController = {
             END), 0
           )::DECIMAL as avg_percentage
         FROM subjects s
-        LEFT JOIN exams e ON e.subject_id = s.id AND e.status = 'published'
+        LEFT JOIN exams e ON e.subject_id = s.id AND e.status = 'published' AND e.deleted_at IS NULL
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
         GROUP BY s.id, s.name, s.code
         HAVING COUNT(DISTINCT ea.id) > 0
@@ -1245,10 +1344,10 @@ const AdminExamController = {
   async getCounts(req, res) {
     try {
       const [total, phongThi, tuDo, moPhong] = await Promise.all([
-        pool.query('SELECT COUNT(*)::int as count FROM exams'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NOT NULL'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL AND is_simulated = false'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE start_time IS NULL AND is_simulated = true'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NOT NULL'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = false'),
+        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = true'),
       ]);
       res.json({
         all: parseInt(total.rows[0].count),
@@ -1267,7 +1366,7 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
 
-      const examResult = await pool.query("SELECT * FROM exams WHERE id = $1", [examId]);
+      const examResult = await pool.query("SELECT * FROM exams WHERE id = $1 AND deleted_at IS NULL", [examId]);
       if (examResult.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
       }

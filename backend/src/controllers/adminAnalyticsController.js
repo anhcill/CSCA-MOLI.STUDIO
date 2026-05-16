@@ -17,6 +17,15 @@ exports.getAnalytics = async (req, res) => {
   }
 };
 
+exports.getAdminPerformance = async (req, res) => {
+  try {
+    const data = await adminAnalyticsService.getAdminPerformance(req.query);
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error, "Admin performance analytics");
+  }
+};
+
 exports.getExamReport = async (req, res) => {
   try {
     const data = await adminAnalyticsService.getExamReport(req.params.examId, req.query);

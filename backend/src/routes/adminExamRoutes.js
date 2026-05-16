@@ -22,6 +22,7 @@ router.get("/", AdminExamController.getAllExams);
 router.post("/", examWriteLimiter, AdminExamController.createExam);
 router.put("/:examId", examWriteLimiter, AdminExamController.updateExam);
 router.delete("/:examId", examDeleteLimiter, AdminExamController.deleteExam);
+router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 
 // Question insertion at specific position
