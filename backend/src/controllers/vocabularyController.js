@@ -173,6 +173,49 @@ exports.deleteVocabulary = async (req, res) => {
   }
 };
 
+// DELETE /api/vocabulary/topics (admin only) - soft delete a whole topic
+exports.deleteTopic = async (req, res) => {
+  try {
+    const subject = (req.body?.subject || req.query?.subject || "").trim();
+    const topic = (req.body?.topic || req.query?.topic || "").trim();
+
+    if (!subject || !topic) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng chọn đầy đủ môn và chủ đề cần xóa",
+      });
+    }
+
+    const result = await db.query(
+      `UPDATE vocabulary_items
+       SET is_active = FALSE, updated_at = NOW()
+       WHERE subject = $1 AND topic = $2 AND is_active = TRUE
+       RETURNING id`,
+      [subject, topic],
+    );
+
+    const deletedCount = result.rowCount || 0;
+    UserActivity.log(req.user.id, "admin.delete_vocabulary_topic", {
+      subject,
+      topic,
+      deletedCount,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    res.json({
+      success: true,
+      deletedCount,
+      message: deletedCount > 0
+        ? `Đã xóa ${deletedCount} từ trong chủ đề "${topic}"`
+        : "Không có từ nào cần xóa trong chủ đề này",
+    });
+  } catch (error) {
+    console.error("Delete vocabulary topic error:", error);
+    res.status(500).json({ success: false, message: "Lỗi xóa chủ đề từ vựng" });
+  }
+};
+
 // POST /api/vocabulary/bulk (admin only) - Import nhiều từ cùng lúc
 exports.bulkCreate = async (req, res) => {
   try {

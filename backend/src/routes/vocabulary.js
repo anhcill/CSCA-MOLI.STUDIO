@@ -192,6 +192,12 @@ router.post(
   authorizePermission("content.manage"),
   vocabularyController.bulkCreate,
 );
+router.delete(
+  "/topics",
+  authenticate,
+  authorizePermission("content.manage"),
+  vocabularyController.deleteTopic,
+);
 router.put(
   "/:id",
   authenticate,

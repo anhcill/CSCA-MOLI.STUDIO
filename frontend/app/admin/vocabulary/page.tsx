@@ -186,6 +186,33 @@ export default function AdminVocabularyPage() {
     }
   };
 
+  const handleDeleteTopic = async () => {
+    if (!filterSubject || !filterTopic) {
+      alert('Vui lòng chọn cả môn và chủ đề trước khi xóa cả chủ đề');
+      return;
+    }
+
+    const selectedSubject = subjectLabel(filterSubject);
+    const ok = confirm(
+      `Xóa toàn bộ từ vựng trong chủ đề "${filterTopic}" của môn ${selectedSubject}? Hành động này sẽ ẩn các từ khỏi người dùng.`,
+    );
+    if (!ok) return;
+
+    try {
+      setSaving(true);
+      const res = await axios.delete('/vocabulary/topics', {
+        data: { subject: filterSubject, topic: filterTopic },
+      });
+      alert(res.data?.message || 'Đã xóa chủ đề từ vựng');
+      setOffset(0);
+      setFilterTopic('');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Lỗi xóa chủ đề từ vựng');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleBulkImport = async () => {
     if (!bulkTopic.trim()) { alert('Nhập tên chủ đề'); return; }
     try {
@@ -293,6 +320,17 @@ export default function AdminVocabularyPage() {
               className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
             >
               <FiX size={14} /> Xóa filter
+            </button>
+          )}
+          {filterSubject && filterTopic && (
+            <button
+              onClick={handleDeleteTopic}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              title="Xóa toàn bộ từ vựng trong chủ đề đang chọn"
+            >
+              <FiTrash2 size={14} />
+              Xóa cả chủ đề
             </button>
           )}
           <select
