@@ -7,6 +7,7 @@ import { updateProfile, updateAvatar, getUserStats, changePassword, UserStats } 
 import axios from '@/lib/utils/axios';
 import { canAccessAdminPanel } from '@/lib/utils/permissions';
 import { getCurrentUser } from '@/lib/api/auth';
+import { getWalletLedger } from '@/lib/api/games';
 import Header from '@/components/layout/Header';
 import {
   FiEdit2, FiSave, FiX, FiUser, FiMail, FiBook,
@@ -117,7 +118,7 @@ export default function ProfilePage() {
   const [profileUser, setProfileUser] = useState<any>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'settings' | 'devices'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'stats' | 'vip' | 'wallet' | 'settings' | 'devices'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
@@ -134,6 +135,8 @@ export default function ProfilePage() {
   const [sessionsFetched, setSessionsFetched] = useState(false);
   const [sessionMaxDevices, setSessionMaxDevices] = useState(1);
   const [sessionCurrentJti, setSessionCurrentJti] = useState('');
+  const [wallet, setWallet] = useState<{ balance: number; entries: any[] } | null>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     full_name: authUser?.full_name || '',
@@ -256,6 +259,15 @@ export default function ProfilePage() {
       .catch(() => setSessionsError('Không thể tải danh sách thiết bị'))
       .finally(() => setSessionsLoading(false));
   }, [activeTab, mounted, sessionsFetched]);
+
+  useEffect(() => {
+    if (!mounted || activeTab !== 'wallet') return;
+    setWalletLoading(true);
+    getWalletLedger()
+      .then(setWallet)
+      .catch(() => setWallet({ balance: profileUser?.coins || 0, entries: [] }))
+      .finally(() => setWalletLoading(false));
+  }, [activeTab, mounted, profileUser?.coins]);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -486,6 +498,7 @@ export default function ProfilePage() {
             {([
               { key: 'info', label: 'Thông tin', icon: FiUser },
               { key: 'stats', label: 'Thống kê', icon: FiAward },
+              { key: 'wallet', label: 'Ví xu', icon: FiStar },
               { key: 'vip', label: 'VIP', icon: FaCrown },
               { key: 'devices', label: 'Thiết bị', icon: FiMonitor },
               { key: 'settings', label: 'Cài đặt', icon: FiShield },
@@ -632,6 +645,43 @@ export default function ProfilePage() {
           )}
 
           {/* ── Tab: VIP ─────────────────────────────────── */}
+          {activeTab === 'wallet' && (
+            <div className="p-6 space-y-5">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <p className="text-sm font-bold text-amber-700">Số dư ví xu</p>
+                <p className="mt-1 text-3xl font-black text-amber-900">
+                  {(wallet?.balance ?? profileUser?.coins ?? 0).toLocaleString('vi-VN')} xu
+                </p>
+                <p className="mt-2 text-sm text-amber-700">
+                  Xu dùng để mở lượt chơi, vật phẩm, phân tích AI và giảm một phần khóa học/VIP như hiện tại.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-base font-black text-gray-900">Lịch sử xu</h3>
+                {walletLoading ? (
+                  <div className="space-y-2">{[1, 2, 3].map(i => <Sk key={i} className="h-14" />)}</div>
+                ) : wallet?.entries?.length ? (
+                  <div className="space-y-2">
+                    {wallet.entries.map((entry: any) => (
+                      <div key={entry.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm">
+                        <div>
+                          <p className="font-bold text-gray-800">{entry.description || entry.source}</p>
+                          <p className="text-xs text-gray-400">{new Date(entry.created_at).toLocaleString('vi-VN')} · {entry.source}</p>
+                        </div>
+                        <div className={entry.amount >= 0 ? 'font-black text-emerald-600' : 'font-black text-red-600'}>
+                          {entry.amount >= 0 ? '+' : ''}{entry.amount} xu
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">Chưa có giao dịch xu nào.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'vip' && (
             <div className="p-6 space-y-6">
               <div className={`rounded-2xl border p-6 ${profileUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>

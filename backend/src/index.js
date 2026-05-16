@@ -209,11 +209,16 @@ app.use("/api/leaderboard", require("./routes/leaderboard")); // Leaderboard
 app.use("/api/settings", require("./routes/settings")); // Site settings (exam date)
 app.use("/api/ai", require("./routes/ai")); // AI Analysis
 app.use("/api/insights", require("./routes/insights")); // Learning Insights
+app.use("/api/games", require("./routes/games")); // Mini games
+app.use("/api/rank", require("./routes/rank")); // Ranked battles
+app.use("/api/wallet", require("./routes/wallet")); // Coin wallet
+app.use("/api/unlocks", require("./routes/unlocks")); // Coin unlocks
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
 app.use("/api/coupons", require("./routes/couponRoutes")); // Coupons (validate & apply)
 app.use("/api/admin/coupons", require("./routes/adminCouponRoutes")); // Admin Coupon Management
+app.use("/api/admin/gamification", require("./routes/adminGamificationRoutes")); // Admin game/rank/wallet control
 app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
 app.use("/api/messages", require("./routes/messages")); // Private messaging
 app.use("/api/users", require("./routes/userProfile")); // Public user profiles

@@ -15,7 +15,7 @@ class User {
   static async findById(id) {
     try {
       const result = await db.query(
-        "SELECT id, username, email, full_name, full_name as display_name, avatar, avatar_url, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, subscription_tier, vip_expires_at, created_at, updated_at FROM users WHERE id = $1",
+        "SELECT id, username, email, full_name, full_name as display_name, avatar, avatar_url, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, subscription_tier, vip_expires_at, COALESCE(coins, 0)::int AS coins, COALESCE(current_streak, 0)::int AS current_streak, COALESCE(longest_streak, 0)::int AS longest_streak, COALESCE(exp, 0)::int AS exp, created_at, updated_at FROM users WHERE id = $1",
         [id]
       );
       return result.rows[0] || null;

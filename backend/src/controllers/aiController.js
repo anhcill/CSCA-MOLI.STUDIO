@@ -2,6 +2,7 @@ const db = require('../config/database');
 const aiService = require('../services/aiService');
 const { cache, TTL } = require('../config/cache');
 const { canUseAIFeatures } = require('../middleware/authMiddleware');
+const coinService = require('../services/coinService');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -737,7 +738,10 @@ async function analyzeUserPerformance(req, res) {
       }
 
       // Trừ Xu
-      await db.query('UPDATE users SET coins = coins - 50 WHERE id = $1', [userId]);
+      await coinService.debit(userId, 50, 'ai_analysis', {
+        description: 'Dùng 50 xu để phân tích AI',
+        metadata: { insightType: 'full_analysis' },
+      });
     }
 
     if (inFlightRequests.has(userId)) {

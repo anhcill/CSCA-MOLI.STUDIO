@@ -9,7 +9,7 @@ import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
-  FiBarChart2
+  FiBarChart2, FiAward
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -58,6 +58,13 @@ const NAV_SECTIONS = [
         icon: FiGift,
         href: '/admin/coupons',
         permission: 'users.manage',
+        roles: [],
+      },
+      {
+        label: 'Game, Rank & Xu',
+        icon: FiAward,
+        href: '/admin/gamification',
+        permission: 'game.manage',
         roles: [],
       },
       {

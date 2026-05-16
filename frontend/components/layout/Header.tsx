@@ -34,6 +34,7 @@ const MAIN_NAV_TOP = [
 ];
 
 const MAIN_NAV_BOTTOM = [
+  { id: 'games', name: 'Game học tập', href: '/games', icon: FiGift },
   { id: 'docs', name: 'Tài liệu', href: '/tailieu', icon: FiFileText },
   { id: 'forum', name: 'Diễn đàn', href: '/forum', icon: FiMessageSquare },
   { id: 'qa', name: 'Hỏi đáp VIP', href: '/hoi-dap', icon: FiHelpCircle },

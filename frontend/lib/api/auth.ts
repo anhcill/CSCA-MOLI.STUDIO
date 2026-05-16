@@ -34,6 +34,7 @@ export interface User {
   coins?: number;
   current_streak?: number;
   longest_streak?: number;
+  exp?: number;
 }
 
 export interface AuthResponse {
