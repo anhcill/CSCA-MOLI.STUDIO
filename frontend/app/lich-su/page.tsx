@@ -23,7 +23,8 @@ interface HistoryItem {
   total_questions: number;
   time_spent: number;
   status: string;
-  submitted_at: string;
+  submitted_at?: string | null;
+  submit_time?: string | null;
   attempt_number: number;
 }
 
@@ -42,7 +43,12 @@ function scoreBadge(score: number): { label: string; cls: string } {
 }
 
 function timeAgo(ts: string) {
-  const s = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (!ts) return 'Chưa có thời gian';
+  const time = new Date(ts).getTime();
+  if (Number.isNaN(time)) return 'Chưa có thời gian';
+  const s = Math.max(0, (Date.now() - time) / 1000);
+  if (s < 60) return 'Vừa xong';
+  if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
   if (s < 86400) return `${Math.floor(s / 3600)}h trước`;
   const d = Math.floor(s / 86400);
   if (d < 30) return `${d} ngày trước`;
@@ -281,7 +287,7 @@ export default function LichSuPage() {
                             {meta.emoji} {item.subject_name || item.subject_code}
                           </span>
                           <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                            <FiClock size={10} /> {timeAgo(item.submitted_at)}
+                            <FiClock size={10} /> {timeAgo(item.submitted_at || item.submit_time || '')}
                           </span>
                         </div>
                       </div>

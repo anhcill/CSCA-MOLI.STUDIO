@@ -487,6 +487,7 @@ const ExamAttempt = {
     let query = `
       SELECT
         ea.*,
+        ea.submit_time AS submitted_at,
         e.code as exam_code,
         e.title as exam_title,
         e.total_questions,
