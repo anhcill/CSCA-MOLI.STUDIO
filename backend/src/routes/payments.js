@@ -816,7 +816,7 @@ router.post('/create', authenticate, async (req, res) => {
         console.error('[Payment] Missing BANK_CODE, BANK_ACCOUNT_NUMBER, or BANK_ACCOUNT_NAME');
         return res.status(500).json({
           success: false,
-          message: 'Thanh toĂ¡n chuyá»ƒn khoáº£n chÆ°a Ä‘Æ°á»£c cáº¥u hĂ¬nh.',
+          message: 'Thanh toán chuyển khoản chưa được cấu hình.',
         });
       }
 
@@ -857,7 +857,7 @@ router.post('/create', authenticate, async (req, res) => {
         await Transaction.updateStatus(transaction.id, 'failed');
         return res.status(502).json({
           success: false,
-          message: 'KhĂ´ng káº¿t ná»‘i Ä‘Æ°á»£c cá»•ng thanh toĂ¡n. Vui lĂ²ng thá»­ láº¡i sau.',
+          message: 'Không kết nối được cổng thanh toán. Vui lòng thử lại sau.',
         });
       }
     }
