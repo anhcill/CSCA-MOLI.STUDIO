@@ -15,7 +15,7 @@ export default function LichSuPage({ params }: { params: { subject: string } }) 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
             <Header />
-            <main className="container mx-auto px-6 py-8 max-w-[1400px]">
+            <main className="w-full mx-auto px-4 md:px-6 xl:px-10 py-8 max-w-none">
                 {/* Page Title */}
                 <div className="mb-8">
                     <h1 className="text-5xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">

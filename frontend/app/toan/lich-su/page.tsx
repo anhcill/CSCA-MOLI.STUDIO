@@ -9,7 +9,7 @@ export default function ToanLichSuPage() {
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
             <Header />
 
-            <main className="container mx-auto px-6 py-8 max-w-[1600px]">
+            <main className="w-full mx-auto px-4 md:px-6 xl:px-10 py-8 max-w-none">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* Subject Navigation Sidebar */}
                     <div className="lg:col-span-3">

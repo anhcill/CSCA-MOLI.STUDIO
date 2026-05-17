@@ -65,7 +65,7 @@ export default function DeMoPhongPage({ params }: { params: { subject: string } 
             
             <Header />
 
-            <main className="w-full mx-auto px-4 md:px-8 py-4 md:py-6 max-w-[1800px] relative z-10">
+            <main className="w-full mx-auto px-4 md:px-8 xl:px-10 py-4 md:py-6 max-w-none relative z-10">
                 {/* Hero Banner Component */}
                 <div className={`w-full rounded-2xl bg-gradient-to-r ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.via || ''} ${subjectInfo.colorScheme.to} p-5 lg:p-6 shadow-lg relative overflow-hidden text-white flex items-center justify-between gap-4 mb-5`}>
                     <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
