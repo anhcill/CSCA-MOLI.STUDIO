@@ -158,6 +158,131 @@ async function insertFillBlankAnswers(client, questionId, linkedOptions, correct
   }
 }
 
+function getExistingSubItemId(item) {
+  const directId = Number.parseInt(item.id || item.questionId || item.question_id, 10);
+  if (Number.isFinite(directId) && directId > 0) return directId;
+  const match = String(item._localId || "").match(/saved-fill-item-(\d+)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function conflictError(message) {
+  const error = new Error(message);
+  error.status = 409;
+  return error;
+}
+
+async function syncFillBlankAnswers(client, questionId, linkedOptions, correctAnswerKey) {
+  const existingRes = await client.query(
+    `SELECT a.*,
+            EXISTS (
+              SELECT 1 FROM user_answers ua WHERE ua.selected_answer_id = a.id
+            ) AS is_referenced
+     FROM answers a
+     WHERE a.question_id = $1
+     ORDER BY a.answer_key ASC, a.id ASC
+     FOR UPDATE`,
+    [questionId],
+  );
+
+  const existingByKey = new Map();
+  for (const answer of existingRes.rows) {
+    const key = String(answer.answer_key || "").trim();
+    if (!existingByKey.has(key)) existingByKey.set(key, []);
+    existingByKey.get(key).push(answer);
+  }
+
+  const activeKeys = new Set(linkedOptions.map((opt) => opt.key));
+  for (const opt of linkedOptions) {
+    const rows = existingByKey.get(opt.key) || [];
+    const primary = rows[0];
+    if (primary) {
+      await client.query(
+        `UPDATE answers
+         SET answer_text = $1,
+             answer_text_cn = $2,
+             is_correct = $3
+         WHERE id = $4`,
+        [
+          sanitize(opt.text),
+          sanitize(opt.textCn),
+          opt.key === correctAnswerKey,
+          primary.id,
+        ],
+      );
+
+      const duplicateIds = rows.slice(1).map((row) => row.id);
+      if (duplicateIds.length) {
+        const duplicateRefs = rows.slice(1).filter((row) => row.is_referenced);
+        if (duplicateRefs.length) {
+          throw conflictError("Không thể gộp lựa chọn vì đã có bài làm tham chiếu đáp án cũ.");
+        }
+        await client.query("DELETE FROM answers WHERE id = ANY($1::int[])", [duplicateIds]);
+      }
+    } else {
+      await client.query(
+        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          questionId,
+          opt.key,
+          sanitize(opt.text),
+          sanitize(opt.textCn),
+          opt.key === correctAnswerKey,
+        ],
+      );
+    }
+  }
+
+  const obsolete = existingRes.rows.filter((answer) => !activeKeys.has(String(answer.answer_key || "").trim()));
+  const referencedObsolete = obsolete.filter((answer) => answer.is_referenced);
+  if (referencedObsolete.length) {
+    const keys = referencedObsolete.map((answer) => String(answer.answer_key || "").trim()).join(", ");
+    throw conflictError(`Không thể xóa lựa chọn ${keys} vì đã có học viên chọn trong bài làm.`);
+  }
+
+  const obsoleteIds = obsolete.map((answer) => answer.id);
+  if (obsoleteIds.length) {
+    await client.query("DELETE FROM answers WHERE id = ANY($1::int[])", [obsoleteIds]);
+  }
+}
+
+async function insertFillBlankSubItem(client, { examId, groupId, questionNumber, item, linkedOptions, clozeMode }) {
+  const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+  const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
+  const fallbackQuestionText = clozeMode === CLOZE_MODES.PASSAGE
+    ? `Blank ${item.subQuestionNumber || questionNumber}`
+    : "";
+
+  const subResult = await client.query(
+    `INSERT INTO questions (
+       exam_id, question_number, question_type,
+       question_text, question_text_cn,
+       points, explanation, explanation_cn,
+       question_group_type, difficulty,
+       sub_question_number, passage_group_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING id`,
+    [
+      examId,
+      questionNumber,
+      QUESTION_TYPES.FILL_BLANK_ITEM,
+      sanitize(normQ?.en || fallbackQuestionText),
+      sanitize(normQ?.cn || fallbackQuestionText),
+      parsedPoints,
+      item.explanation ? sanitizeExplanation(item.explanation) : null,
+      item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
+      QUESTION_TYPES.FILL_BLANK_ITEM,
+      item.difficulty || "medium",
+      item.subQuestionNumber || questionNumber,
+      groupId,
+    ],
+  );
+
+  const questionId = subResult.rows[0].id;
+  await insertFillBlankAnswers(client, questionId, linkedOptions, item.correctAnswerKey);
+  return { id: questionId, questionNumber, correctAnswerKey: item.correctAnswerKey };
+}
+
 async function insertSubItems(client, { examId, groupId, startQuestionNumber, subItems, linkedOptions, clozeMode }) {
   let questionNumber = startQuestionNumber - 1;
   const inserted = [];
@@ -167,40 +292,14 @@ async function insertSubItems(client, { examId, groupId, startQuestionNumber, su
     if (!linkedOptions.some((o) => o.key === item.correctAnswerKey)) continue;
 
     questionNumber++;
-    const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-    const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
-    const fallbackQuestionText = clozeMode === CLOZE_MODES.PASSAGE
-      ? `Blank ${item.subQuestionNumber || questionNumber}`
-      : "";
-
-    const subResult = await client.query(
-      `INSERT INTO questions (
-         exam_id, question_number, question_type,
-         question_text, question_text_cn,
-         points, explanation, explanation_cn,
-         question_group_type, difficulty,
-         sub_question_number, passage_group_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING id`,
-      [
-        examId,
-        questionNumber,
-        QUESTION_TYPES.FILL_BLANK_ITEM,
-        sanitize(normQ?.en || fallbackQuestionText),
-        sanitize(normQ?.cn || fallbackQuestionText),
-        parsedPoints,
-        item.explanation ? sanitizeExplanation(item.explanation) : null,
-        item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
-        QUESTION_TYPES.FILL_BLANK_ITEM,
-        item.difficulty || "medium",
-        item.subQuestionNumber || questionNumber,
-        groupId,
-      ],
-    );
-
-    const questionId = subResult.rows[0].id;
-    await insertFillBlankAnswers(client, questionId, linkedOptions, item.correctAnswerKey);
-    inserted.push({ id: questionId, questionNumber, correctAnswerKey: item.correctAnswerKey });
+    inserted.push(await insertFillBlankSubItem(client, {
+      examId,
+      groupId,
+      questionNumber,
+      item,
+      linkedOptions,
+      clozeMode,
+    }));
   }
 
   return inserted;
@@ -335,38 +434,111 @@ const AdminFillBlankGroupController = {
           return res.status(404).json({ message: "Fill blank group not found" });
         }
 
-        const oldCountRes = await client.query(
-          `SELECT COUNT(*)::int as count,
-                  COALESCE(MIN(question_number), 0)::int as start_num,
-                  COALESCE(MAX(question_number), 0)::int as end_num
-           FROM questions
-           WHERE passage_group_id = $1 AND question_type = $2 AND question_number > 0`,
+        const oldItemsRes = await client.query(
+          `SELECT q.*,
+                  EXISTS (
+                    SELECT 1 FROM user_answers ua WHERE ua.question_id = q.id
+                  ) AS is_referenced
+           FROM questions q
+           WHERE q.passage_group_id = $1 AND q.question_type = $2 AND q.question_number > 0
+           ORDER BY q.question_number ASC, q.id ASC
+           FOR UPDATE`,
           [groupId, QUESTION_TYPES.FILL_BLANK_ITEM],
         );
-        const oldSubCount = oldCountRes.rows[0].count || 0;
-        const oldStart = oldCountRes.rows[0].start_num || await getAppendPosition(client, examId);
-        const oldEnd = oldCountRes.rows[0].end_num || (oldStart - 1);
-
-        await client.query(
-          "DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1 AND question_type = $2)",
-          [groupId, QUESTION_TYPES.FILL_BLANK_ITEM],
-        );
-        await client.query(
-          "DELETE FROM questions WHERE passage_group_id = $1 AND question_type = $2",
-          [groupId, QUESTION_TYPES.FILL_BLANK_ITEM],
-        );
-
+        const oldItems = oldItemsRes.rows;
+        const oldSubCount = oldItems.length;
+        const oldStart = oldItems[0]?.question_number || await getAppendPosition(client, examId);
+        const oldEnd = oldItems[oldItems.length - 1]?.question_number || (oldStart - 1);
         const delta = subItems.length - oldSubCount;
-        await shiftQuestionNumbers(client, examId, oldEnd + 1, delta);
 
-        const insertedSubQuestions = await insertSubItems(client, {
-          examId,
-          groupId,
-          startQuestionNumber: oldStart,
-          subItems,
-          linkedOptions: validation.normalizedOpts,
-          clozeMode: validation.normalizedClozeMode,
-        });
+        if (delta > 0) {
+          await shiftQuestionNumbers(client, examId, oldEnd + 1, delta);
+        }
+
+        const oldById = new Map(oldItems.map((item) => [Number(item.id), item]));
+        const usedOldIds = new Set();
+        const savedSubQuestions = [];
+
+        for (let index = 0; index < subItems.length; index++) {
+          const item = subItems[index];
+          const questionNumber = oldStart + index;
+          const requestedId = getExistingSubItemId(item);
+          let existing = requestedId && oldById.has(requestedId) && !usedOldIds.has(requestedId)
+            ? oldById.get(requestedId)
+            : null;
+
+          if (!existing) {
+            existing = oldItems.find((oldItem, oldIndex) => oldIndex === index && !usedOldIds.has(Number(oldItem.id))) || null;
+          }
+
+          if (existing) {
+            const questionId = Number(existing.id);
+            const parsedPoints = clamp(parsePositiveNumber(item.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+            const normQ = normalizeBilingualText(item.questionText, item.questionTextCn);
+            const fallbackQuestionText = validation.normalizedClozeMode === CLOZE_MODES.PASSAGE
+              ? `Blank ${item.subQuestionNumber || questionNumber}`
+              : "";
+
+            await client.query(
+              `UPDATE questions
+               SET question_number = $1,
+                   question_text = $2,
+                   question_text_cn = $3,
+                   points = $4,
+                   explanation = $5,
+                   explanation_cn = $6,
+                   difficulty = $7,
+                   sub_question_number = $8,
+                   passage_group_id = $9,
+                   question_group_type = $10
+               WHERE id = $11 AND exam_id = $12 AND question_type = $13`,
+              [
+                questionNumber,
+                sanitize(normQ?.en || fallbackQuestionText),
+                sanitize(normQ?.cn || fallbackQuestionText),
+                parsedPoints,
+                item.explanation ? sanitizeExplanation(item.explanation) : null,
+                item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
+                item.difficulty || "medium",
+                item.subQuestionNumber || questionNumber,
+                groupId,
+                QUESTION_TYPES.FILL_BLANK_ITEM,
+                questionId,
+                examId,
+                QUESTION_TYPES.FILL_BLANK_ITEM,
+              ],
+            );
+
+            await syncFillBlankAnswers(client, questionId, validation.normalizedOpts, item.correctAnswerKey);
+            usedOldIds.add(questionId);
+            savedSubQuestions.push({ id: questionId, questionNumber, correctAnswerKey: item.correctAnswerKey });
+          } else {
+            savedSubQuestions.push(await insertFillBlankSubItem(client, {
+              examId,
+              groupId,
+              questionNumber,
+              item,
+              linkedOptions: validation.normalizedOpts,
+              clozeMode: validation.normalizedClozeMode,
+            }));
+          }
+        }
+
+        const removedItems = oldItems.filter((item) => !usedOldIds.has(Number(item.id)));
+        const referencedRemoved = removedItems.filter((item) => item.is_referenced);
+        if (referencedRemoved.length) {
+          throw conflictError("Không thể xóa chỗ trống đã có học viên trả lời. Bạn có thể sửa nội dung hoặc đáp án, nhưng không nên giảm số chỗ trống đã có dữ liệu.");
+        }
+
+        const removedIds = removedItems.map((item) => Number(item.id));
+        if (removedIds.length) {
+          await client.query("DELETE FROM answers WHERE question_id = ANY($1::int[])", [removedIds]);
+          await client.query("DELETE FROM questions WHERE id = ANY($1::int[])", [removedIds]);
+        }
+
+        if (delta < 0) {
+          await shiftQuestionNumbers(client, examId, oldEnd + 1, delta);
+        }
 
         await client.query(
           "UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2",
@@ -384,7 +556,10 @@ const AdminFillBlankGroupController = {
           userAgent: req.headers["user-agent"],
         });
 
-        res.json({ message: "Nhom dien tu da duoc cap nhat" });
+        res.json({
+          message: "Nhóm điền trống đã được cập nhật",
+          subQuestions: savedSubQuestions,
+        });
       } catch (error) {
         await client.query("ROLLBACK");
         throw error;
@@ -393,7 +568,9 @@ const AdminFillBlankGroupController = {
       }
     } catch (error) {
       console.error("Update fill blank group error:", error);
-      res.status(500).json({ message: "Failed to update fill blank group" });
+      res.status(error.status || 500).json({
+        message: error.message || "Không thể cập nhật nhóm điền trống",
+      });
     }
   },
 
@@ -415,6 +592,30 @@ const AdminFillBlankGroupController = {
         );
         const totalDelete = countRes.rows[0].count || 0;
         const oldEnd = countRes.rows[0].end_num || 0;
+
+        const refsRes = await client.query(
+          `SELECT
+             EXISTS (
+               SELECT 1
+               FROM user_answers ua
+               JOIN questions q ON q.id = ua.question_id
+               WHERE q.passage_group_id = $1 OR q.id = $1
+             ) AS has_question_refs,
+             EXISTS (
+               SELECT 1
+               FROM user_answers ua
+               JOIN answers a ON a.id = ua.selected_answer_id
+               JOIN questions q ON q.id = a.question_id
+               WHERE q.passage_group_id = $1 OR q.id = $1
+             ) AS has_answer_refs`,
+          [groupId],
+        );
+        if (refsRes.rows[0]?.has_question_refs || refsRes.rows[0]?.has_answer_refs) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            message: "Không thể xóa nhóm điền trống vì đã có học viên làm bài. Hãy sửa nội dung/đáp án thay vì xóa để giữ lịch sử.",
+          });
+        }
 
         await client.query(
           "DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE passage_group_id = $1 OR id = $1)",
@@ -450,7 +651,9 @@ const AdminFillBlankGroupController = {
       }
     } catch (error) {
       console.error("Delete fill blank group error:", error);
-      res.status(500).json({ message: "Failed to delete fill blank group" });
+      res.status(error.status || 500).json({
+        message: error.message || "Không thể xóa nhóm điền trống",
+      });
     }
   },
 };
