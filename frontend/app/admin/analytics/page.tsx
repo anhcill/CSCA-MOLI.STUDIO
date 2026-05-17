@@ -145,7 +145,7 @@ export default function AdminPerformanceAnalyticsPage() {
   }
 
   return (
-    <AdminLayout title="Hiệu suất admin" description="Theo dõi admin đăng đề, chất lượng đề và cơ sở tính lương">
+    <AdminLayout title="Hiệu suất admin">
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <RangeToolbar

@@ -195,6 +195,10 @@ export default function AdminCouponsPage() {
       setFormError('Mã coupon và giá trị giảm là bắt buộc');
       return;
     }
+    if (form.discount_type === 'percentage' && (parseInt(form.discount_value) < 1 || parseInt(form.discount_value) > 100)) {
+      setFormError('Phần trăm giảm phải từ 1 đến 100');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {

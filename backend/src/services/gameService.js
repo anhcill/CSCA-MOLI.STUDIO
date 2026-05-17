@@ -14,6 +14,16 @@ function toModeSlug(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isExternalMode(mode) {
+  return mode?.mode_type === "external" || Boolean(mode?.config?.external_url);
+}
+
+function clampNumber(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(parsed, max));
+}
+
 async function listModes() {
   const result = await db.query(
     `SELECT id, slug, name, description, mode_type, is_active, entry_fee_coins,
@@ -148,6 +158,10 @@ async function startSession(userId, modeSlug) {
     throw error;
   }
 
+  if (isExternalMode(mode)) {
+    return startExternalSession(userId, mode);
+  }
+
   const questions = await buildQuestions(mode);
   if (questions.length === 0) {
     const error = new Error("Chưa có đủ dữ liệu câu hỏi cho mini game này");
@@ -189,6 +203,47 @@ async function startSession(userId, modeSlug) {
       mode,
       questions: sanitizeQuestions(questions),
     };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function startExternalSession(userId, mode) {
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    if (Number(mode.entry_fee_coins) > 0) {
+      await coinService.debit(userId, Number(mode.entry_fee_coins), "game_entry", {
+        description: `Vào chơi ${mode.name}`,
+        metadata: { mode: mode.slug, external: true },
+        client,
+      });
+    }
+
+    const session = await client.query(
+      `INSERT INTO game_sessions (
+         user_id, mode_id, total_questions, question_payload, metadata
+       )
+       VALUES ($1, $2, 0, '[]'::jsonb, $3::jsonb)
+       RETURNING id, user_id, mode_id, status, total_questions, started_at, metadata`,
+      [
+        userId,
+        mode.id,
+        JSON.stringify({
+          external: true,
+          external_url: mode.config?.external_url || null,
+          provider: mode.config?.provider || null,
+          min_play_seconds: clampNumber(mode.config?.min_play_seconds, 30, 5, 600),
+        }),
+      ],
+    );
+
+    await client.query("COMMIT");
+    return { session: session.rows[0], mode, questions: [] };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -282,6 +337,13 @@ async function finishSession(userId, sessionId) {
     if (!session) {
       const error = new Error("Không tìm thấy phiên chơi");
       error.status = 404;
+      throw error;
+    }
+
+    if (isExternalMode(session)) {
+      const error = new Error("Game nhúng cần hoàn thành bằng luồng xác nhận riêng");
+      error.status = 400;
+      error.code = "EXTERNAL_GAME_FINISH_REQUIRED";
       throw error;
     }
 
@@ -382,9 +444,121 @@ async function finishSession(userId, sessionId) {
   }
 }
 
+async function finishExternalSession(userId, sessionId, payload = {}) {
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const sessionResult = await client.query(
+      `SELECT gs.*, gm.slug, gm.name, gm.reward_coins, gm.daily_reward_cap,
+              gm.min_accuracy_reward, gm.time_limit_seconds, gm.mode_type, gm.config,
+              EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - gs.started_at))::int AS elapsed_seconds
+       FROM game_sessions gs
+       JOIN game_modes gm ON gm.id = gs.mode_id
+       WHERE gs.id = $1 AND gs.user_id = $2
+       FOR UPDATE`,
+      [sessionId, userId],
+    );
+    const session = sessionResult.rows[0];
+    if (!session) {
+      const error = new Error("Không tìm thấy phiên chơi");
+      error.status = 404;
+      throw error;
+    }
+    if (!isExternalMode(session)) {
+      const error = new Error("Phiên chơi này không phải game nhúng");
+      error.status = 400;
+      throw error;
+    }
+    if (session.status === "completed") {
+      await client.query("COMMIT");
+      return { session, alreadyCompleted: true };
+    }
+
+    const minPlaySeconds = clampNumber(session.config?.min_play_seconds, 30, 5, 600);
+    const elapsedSeconds = Math.max(Number(session.elapsed_seconds) || 0, 0);
+    if (elapsedSeconds < minPlaySeconds) {
+      const error = new Error(`Cần chơi tối thiểu ${minPlaySeconds} giây để ghi nhận phiên này`);
+      error.status = 409;
+      error.code = "MIN_PLAY_TIME_NOT_MET";
+      error.data = { minPlaySeconds, elapsedSeconds };
+      throw error;
+    }
+
+    const maxScore = clampNumber(session.config?.max_score, 1500, 100, 100000);
+    const submittedScore = Number.parseInt(payload.score, 10);
+    const score = Number.isFinite(submittedScore)
+      ? Math.max(0, Math.min(submittedScore, maxScore))
+      : Math.min(maxScore, 500 + elapsedSeconds * 3);
+    const accuracy = 100;
+
+    let coinsEarned = 0;
+    const capResult = await client.query(
+      `SELECT COALESCE(SUM(amount), 0)::int AS earned
+       FROM coin_ledger
+       WHERE user_id = $1
+         AND source = 'game_reward'
+         AND (metadata->>'mode') = $2
+         AND created_at::date = CURRENT_DATE`,
+      [userId, session.slug],
+    );
+    const earnedToday = Math.max(Number(capResult.rows[0]?.earned) || 0, 0);
+    const capLeft = Math.max(Number(session.daily_reward_cap || 0) - earnedToday, 0);
+    coinsEarned = Math.min(Number(session.reward_coins || 0), capLeft);
+    if (coinsEarned > 0) {
+      await coinService.credit(userId, coinsEarned, "game_reward", {
+        description: `Thưởng game nhúng ${session.name}`,
+        metadata: { mode: session.slug, sessionId, score, accuracy, external: true },
+        idempotencyKey: `game:${sessionId}:external-reward`,
+        client,
+      });
+    }
+
+    const updated = await client.query(
+      `UPDATE game_sessions
+       SET status = 'completed',
+           score = $1,
+           correct_count = 0,
+           wrong_count = 0,
+           time_spent_seconds = $2,
+           combo_max = 0,
+           coins_earned = $3,
+           completed_at = CURRENT_TIMESTAMP,
+           metadata = metadata || $4::jsonb
+       WHERE id = $5
+       RETURNING *`,
+      [
+        score,
+        elapsedSeconds,
+        coinsEarned,
+        JSON.stringify({
+          accuracy,
+          external: true,
+          provider_score: Number.isFinite(submittedScore) ? submittedScore : null,
+        }),
+        sessionId,
+      ],
+    );
+
+    await client.query(
+      `UPDATE user_quests
+       SET progress = LEAST(progress + 1, target)
+       WHERE user_id = $1 AND quest_type = 'game_play' AND date = CURRENT_DATE AND progress < target`,
+      [userId],
+    );
+
+    await client.query("COMMIT");
+    return { session: updated.rows[0], answers: [], accuracy };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function getMyRecentSessions(userId, limit = 10) {
   const result = await db.query(
-    `SELECT gs.id, gm.slug, gm.name, gs.status, gs.score, gs.correct_count,
+    `SELECT gs.id, gm.slug, gm.name, gm.mode_type, gs.status, gs.score, gs.correct_count,
             gs.total_questions, gs.combo_max, gs.coins_earned, gs.started_at, gs.completed_at
      FROM game_sessions gs
      JOIN game_modes gm ON gm.id = gs.mode_id
@@ -401,6 +575,7 @@ module.exports = {
   getModeBySlug,
   buildQuestions,
   startSession,
+  finishExternalSession,
   answerQuestion,
   finishSession,
   getMyRecentSessions,

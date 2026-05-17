@@ -16,7 +16,7 @@ const AdminCouponController = {
 
       let whereClauses = [];
       if (search) {
-        whereClauses.push(`(LOWER(c.code) LIKE LOWER($$1) OR LOWER(c.description) LIKE LOWER($$1))`);
+        whereClauses.push(`(LOWER(c.code) LIKE LOWER($1) OR LOWER(COALESCE(c.description, '')) LIKE LOWER($1))`);
       }
       if (active === 'active') {
         whereClauses.push(`c.is_active = TRUE`);
@@ -63,7 +63,7 @@ const AdminCouponController = {
   async getStats(req, res) {
     try {
       const [totalRes, activeRes, totalDiscountRes, usageRes] = await Promise.all([
-        db.query('SELECT COUNT(*)::int as count FROM coupons WHERE is_active = TRUE'),
+        db.query('SELECT COUNT(*)::int as count FROM coupons'),
         db.query(`SELECT COUNT(*)::int as count FROM coupons WHERE is_active = TRUE AND (valid_until IS NULL OR valid_until > NOW()) AND (max_uses IS NULL OR used_count < max_uses)`),
         db.query('SELECT COALESCE(SUM(discount_amount), 0)::int as total FROM coupon_usages'),
         db.query('SELECT COUNT(*)::int as count FROM coupon_usages'),

@@ -61,4 +61,14 @@ router.post("/sessions/:id/finish", authenticate, async (req, res) => {
   }
 });
 
+router.post("/sessions/:id/finish-external", authenticate, async (req, res) => {
+  try {
+    const data = await gameService.finishExternalSession(req.user.id, req.params.id, req.body || {});
+    const balance = await coinService.getBalance(req.user.id);
+    res.json({ success: true, data: { ...data, balance } });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
 module.exports = router;

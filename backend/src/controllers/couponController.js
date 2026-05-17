@@ -57,7 +57,7 @@ const CouponController = {
 
         // Check package applicability
         if (c.applicable_packages && c.applicable_packages.length > 0 && !c.applicable_packages.includes('all')) {
-          if (!c.applicable_packages.includes(package_id)) {
+          if (!c.applicable_packages.map(Number).includes(Number(package_id))) {
             return res.status(400).json({ success: false, message: 'Mã giảm giá không áp dụng cho gói này' });
           }
         }
@@ -84,7 +84,8 @@ const CouponController = {
         } else {
           discountAmount = Math.min(c.discount_value, originalAmount);
         }
-        finalAmount = originalAmount - discountAmount;
+        discountAmount = Math.min(Math.max(0, discountAmount), originalAmount);
+        finalAmount = Math.max(0, originalAmount - discountAmount);
       }
 
       res.json({
@@ -158,7 +159,7 @@ const CouponController = {
 
       // Check applicability
       if (c.applicable_packages && c.applicable_packages.length > 0 && !c.applicable_packages.includes('all')) {
-        if (!c.applicable_packages.includes(package_id)) {
+        if (!c.applicable_packages.map(Number).includes(Number(package_id))) {
           return res.status(400).json({ success: false, message: 'Mã giảm giá không áp dụng cho gói này' });
         }
       }
@@ -190,7 +191,8 @@ const CouponController = {
       } else {
         discountAmount = Math.min(c.discount_value, originalAmount);
       }
-      const finalAmount = originalAmount - discountAmount;
+      discountAmount = Math.min(Math.max(0, discountAmount), originalAmount);
+      const finalAmount = Math.max(0, originalAmount - discountAmount);
 
       res.json({
         success: true,

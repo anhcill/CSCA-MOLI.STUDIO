@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import {
   answerGameQuestion,
   finishGame,
+  finishExternalGame,
   getGameHub,
   getUnlockCatalog,
   purchaseUnlock,
@@ -14,13 +15,14 @@ import {
   type GameMode,
   type GameQuestion,
 } from '@/lib/api/games';
-import { FiAward, FiCheck, FiClock, FiGift, FiLock, FiPlay, FiRefreshCw, FiStar, FiZap } from 'react-icons/fi';
+import { FiAward, FiCheck, FiClock, FiExternalLink, FiGift, FiLock, FiPlay, FiRefreshCw, FiStar, FiZap } from 'react-icons/fi';
 
 const toneMap: Record<string, string> = {
   quiz: 'from-blue-500 to-cyan-500',
   vocabulary: 'from-emerald-500 to-teal-500',
   boss: 'from-rose-500 to-orange-500',
   mixed: 'from-amber-500 to-pink-500',
+  external: 'from-fuchsia-500 to-indigo-500',
 };
 
 export default function GamesPage() {
@@ -36,6 +38,7 @@ export default function GamesPage() {
   const [result, setResult] = useState<any>(null);
   const [unlockData, setUnlockData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   const load = async () => {
     if (!isAuthenticated) return;
@@ -57,12 +60,25 @@ export default function GamesPage() {
 
   useEffect(() => { load(); }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!active || active.mode.mode_type !== 'external') return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+
   const currentQuestion = useMemo(() => {
     if (!active) return null;
     return active.questions.find((question) => !answers[question.ref]) || active.questions[active.questions.length - 1];
   }, [active, answers]);
 
   const answeredCount = active ? Object.keys(answers).length : 0;
+  const isExternalActive = active?.mode.mode_type === 'external';
+  const externalConfig = active?.mode.config || {};
+  const minPlaySeconds = Number(externalConfig.min_play_seconds || 30);
+  const elapsedExternalSeconds = active?.session?.started_at
+    ? Math.max(0, Math.floor((now - new Date(active.session.started_at).getTime()) / 1000))
+    : 0;
+  const externalReady = Boolean(isExternalActive && elapsedExternalSeconds >= minPlaySeconds);
 
   const begin = async (mode: GameMode) => {
     setBusy(true);
@@ -73,6 +89,7 @@ export default function GamesPage() {
     try {
       const data = await startGame(mode.slug);
       setActive(data);
+      setNow(Date.now());
       if (mode.entry_fee_coins > 0) {
         const next = Math.max(0, balance - mode.entry_fee_coins);
         setBalance(next);
@@ -107,6 +124,23 @@ export default function GamesPage() {
       setRecent((prev) => [data.session, ...prev].slice(0, 8));
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không kết thúc được phiên chơi.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishExternal = async () => {
+    if (!active) return;
+    setBusy(true);
+    try {
+      const score = Math.min(Number(externalConfig.max_score || 1500), 500 + elapsedExternalSeconds * 3);
+      const data = await finishExternalGame(active.session.id, score);
+      setResult(data);
+      setBalance(data.balance);
+      updateUser({ coins: data.balance });
+      setRecent((prev) => [data.session, ...prev].slice(0, 8));
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Chưa thể ghi nhận phiên game này.');
     } finally {
       setBusy(false);
     }
@@ -173,7 +207,46 @@ export default function GamesPage() {
               <button onClick={() => { setActive(null); setResult(null); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600">Thoát</button>
             </div>
 
-            {currentQuestion && !result && (
+            {isExternalActive && !result && (
+              <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                  <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black">{active.mode.name}</p>
+                      <p className="text-xs text-slate-400">{externalConfig.provider || 'External game'} {externalConfig.license ? `- ${externalConfig.license}` : ''}</p>
+                    </div>
+                    {externalConfig.external_url && (
+                      <a href={externalConfig.external_url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Mở tab mới">
+                        <FiExternalLink />
+                      </a>
+                    )}
+                  </div>
+                  <iframe
+                    src={externalConfig.external_url}
+                    title={active.mode.name}
+                    className="h-[520px] w-full bg-white"
+                    allow="fullscreen; gamepad; autoplay"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
+                  />
+                </div>
+                <aside className="rounded-2xl border border-slate-200 p-5">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-500"><FiClock /> Thời gian ghi nhận</div>
+                  <p className="mt-2 text-3xl font-black text-slate-950">{elapsedExternalSeconds}s</p>
+                  <p className="mt-1 text-sm text-slate-500">Cần tối thiểu {minPlaySeconds}s để nhận thưởng, backend sẽ kiểm tra lại trước khi cộng xu.</p>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-fuchsia-500" style={{ width: `${Math.min(100, (elapsedExternalSeconds / minPlaySeconds) * 100)}%` }} />
+                  </div>
+                  {externalConfig.instructions && (
+                    <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{externalConfig.instructions}</p>
+                  )}
+                  <button onClick={finishExternal} disabled={busy || !externalReady} className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:bg-slate-300">
+                    {busy ? 'Đang ghi nhận...' : externalReady ? 'Hoàn thành và nhận thưởng' : `Chơi thêm ${Math.max(0, minPlaySeconds - elapsedExternalSeconds)}s`}
+                  </button>
+                </aside>
+              </div>
+            )}
+
+            {currentQuestion && !result && !isExternalActive && (
               <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
                 <div className="rounded-2xl bg-slate-50 p-5">
                   <p className="text-sm font-semibold text-slate-500">{currentQuestion.exam_title || currentQuestion.prompt_cn || 'Câu hỏi nhanh'}</p>
@@ -240,7 +313,7 @@ export default function GamesPage() {
                       {!mode.is_active && <FiLock className="text-slate-300" />}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
-                      <span className="rounded-lg bg-slate-50 px-2 py-1"><FiZap className="inline" /> {mode.question_count} câu</span>
+                      <span className="rounded-lg bg-slate-50 px-2 py-1"><FiZap className="inline" /> {mode.mode_type === 'external' ? 'Game nhúng' : `${mode.question_count} câu`}</span>
                       <span className="rounded-lg bg-slate-50 px-2 py-1"><FiGift className="inline" /> +{mode.reward_coins} xu</span>
                       <span className="rounded-lg bg-slate-50 px-2 py-1">Phí {mode.entry_fee_coins} xu</span>
                       <span className="rounded-lg bg-slate-50 px-2 py-1">Cap {mode.daily_reward_cap}/ngày</span>

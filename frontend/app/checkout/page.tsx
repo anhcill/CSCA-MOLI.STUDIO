@@ -359,7 +359,13 @@ function CheckoutContent() {
         if (res.data.appliedCoupon) {
           setAppliedCouponInfo(res.data.appliedCoupon);
         }
-        if (res.data.payment_method === 'bank_transfer') {
+        if (res.data.status === 'completed' || res.data.payment_method === 'coupon_free') {
+          setSuccessData(res.data.data || {
+            package_name: selectedPkg.name,
+            amount: 0,
+          });
+          setStep('success');
+        } else if (res.data.payment_method === 'bank_transfer') {
           setQrData({ orderId: res.data.orderId, bank: res.data.bank });
           setStep('qr');
         } else if (res.data.payUrl) {
@@ -687,7 +693,7 @@ function CheckoutContent() {
             <>
               <span>{`${payableAmount.toLocaleString('vi-VN')}đ`}</span>
               <span className="opacity-60">—</span>
-              <span>Tiến hành thanh toán</span>
+              <span>{payableAmount <= 0 ? 'Kích hoạt gói' : 'Tiến hành thanh toán'}</span>
               <FaArrowRight size={18} />
             </>
           ) : (

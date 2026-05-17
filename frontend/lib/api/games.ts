@@ -13,6 +13,7 @@ export interface GameMode {
   question_count: number;
   time_limit_seconds: number;
   min_accuracy_reward: number;
+  sort_order?: number;
   config?: Record<string, any>;
 }
 
@@ -48,6 +49,11 @@ export async function answerGameQuestion(sessionId: number, questionRef: string,
 
 export async function finishGame(sessionId: number) {
   const res = await axios.post(`/games/sessions/${sessionId}/finish`);
+  return res.data.data as { session: any; accuracy?: number; balance: number };
+}
+
+export async function finishExternalGame(sessionId: number, score?: number) {
+  const res = await axios.post(`/games/sessions/${sessionId}/finish-external`, { score });
   return res.data.data as { session: any; accuracy?: number; balance: number };
 }
 
@@ -97,8 +103,18 @@ export async function getAdminGamification() {
   return res.data.data;
 }
 
+export async function createGameMode(data: Partial<GameMode>) {
+  const res = await axios.post('/admin/gamification/modes', data);
+  return res.data.data as { mode: GameMode };
+}
+
 export async function updateGameMode(id: number, data: Partial<GameMode>) {
   const res = await axios.put(`/admin/gamification/modes/${id}`, data);
+  return res.data.data as { mode: GameMode };
+}
+
+export async function disableGameMode(id: number) {
+  const res = await axios.delete(`/admin/gamification/modes/${id}`);
   return res.data.data as { mode: GameMode };
 }
 

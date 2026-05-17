@@ -281,6 +281,18 @@ function getStoredCoinSpend(transaction) {
   };
 }
 
+function getStoredDiscountDetails(transaction) {
+  const raw = getStoredPaymentMeta(transaction);
+  const originalAmount = Number.parseInt(raw?.originalAmount, 10);
+  const couponDiscountAmount = Number.parseInt(raw?.couponDiscountAmount, 10);
+  const finalAmount = Number.parseInt(raw?.finalAmount ?? transaction?.amount, 10);
+  return {
+    originalAmount: Number.isFinite(originalAmount) && originalAmount >= 0 ? originalAmount : Number(transaction?.amount || 0),
+    couponDiscountAmount: Number.isFinite(couponDiscountAmount) && couponDiscountAmount >= 0 ? couponDiscountAmount : 0,
+    finalAmount: Number.isFinite(finalAmount) && finalAmount >= 0 ? finalAmount : Number(transaction?.amount || 0),
+  };
+}
+
 async function getReservedCoins(userId) {
   const reservedRes = await db.query(
     `SELECT COALESCE(SUM((raw_response->>'coinsUsed')::int), 0) AS reserved
@@ -422,6 +434,58 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
   ]).catch(err => console.error('Payment email error:', err.message));
 
   console.log(`[Payment] ✅ Bank transfer completed: user=${transaction.user_id}, tx=${transaction.transaction_code}, tier=${tier}`);
+  return { updatedUser, tier };
+}
+
+async function completeZeroAmountTransaction(transaction, providerPayload = {}) {
+  await incrementCouponUsage(transaction);
+  await applyCoinSpend(transaction);
+
+  const tier = transaction.package_id
+    ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
+    : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
+
+  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
+  const updatedUser = await getPaymentUser(transaction.user_id);
+  if (!updatedUser) {
+    throw new Error(`Payment user not found: ${transaction.user_id}`);
+  }
+
+  const payload = {
+    ...getStoredPaymentMeta(transaction),
+    ...(providerPayload || {}),
+    completedWithoutGateway: true,
+    completedReason: 'zero_amount_after_discount',
+  };
+
+  await Transaction.updateComplete(transaction.id, {
+    status: 'completed',
+    payment_channel: 'coupon_free',
+    trans_id: `FREE_${transaction.transaction_code}`,
+    raw_response: payload,
+    paid_at: new Date(),
+    vip_expires_at: updatedUser?.vip_expires_at || null,
+  });
+
+  Promise.all([
+    emailService.sendPaymentConfirmation({
+      email: updatedUser.email,
+      name: updatedUser.full_name || updatedUser.username,
+      packageName: transaction.package_name,
+      amount: 0,
+      durationDays: transaction.package_duration,
+      transactionCode: transaction.transaction_code,
+      method: 'coupon_free',
+    }),
+    emailService.sendVipActivatedEmail({
+      email: updatedUser.email,
+      name: updatedUser.full_name || updatedUser.username,
+      packageName: transaction.package_name,
+      durationDays: transaction.package_duration,
+      expiresAt: updatedUser?.vip_expires_at || null,
+    }),
+  ]).catch(err => console.error('Zero amount payment email error:', err.message));
+
   return { updatedUser, tier };
 }
 
@@ -641,6 +705,19 @@ router.post('/create', authenticate, async (req, res) => {
           }
 
           if (applicable) {
+            const userUsage = await db.query(
+              `SELECT COUNT(*)::int AS count
+               FROM coupon_usages
+               WHERE coupon_id = $1 AND user_id = $2`,
+              [c.id, userId]
+            );
+            if (Number(userUsage.rows[0]?.count || 0) >= Number(c.user_limit || 1)) {
+              return res.status(400).json({
+                success: false,
+                message: 'Bạn đã sử dụng mã giảm giá này đủ số lần cho phép.',
+              });
+            }
+
             if (c.discount_type === 'percentage') {
               discountAmount = Math.floor(pkg.price * c.discount_value / 100);
               if (c.max_discount_amount) {
@@ -649,6 +726,7 @@ router.post('/create', authenticate, async (req, res) => {
             } else {
               discountAmount = Math.min(Number(c.discount_value), pkg.price);
             }
+            discountAmount = Math.min(Math.max(0, discountAmount), Number(pkg.price));
             finalAmount = Math.max(0, Math.round(pkg.price - discountAmount));
             appliedCoupon = c;
           }
@@ -679,12 +757,14 @@ router.post('/create', authenticate, async (req, res) => {
       coinDiscountAmount,
       originalAmount: Number(pkg.price),
       couponDiscountAmount: discountAmount,
+      finalAmount,
+      paymentMethodRequested: payment_method,
     };
 
     const transaction = await Transaction.create({
       user_id: userId,
       amount: finalAmount,
-      payment_method,
+      payment_method: finalAmount <= 0 ? 'coupon_free' : payment_method,
       package_id: pkg.id,
       package_duration: pkg.duration_days,
       package_name: pkg.name,
@@ -694,6 +774,42 @@ router.post('/create', authenticate, async (req, res) => {
     });
 
     // Nếu payment_method là bank_transfer → trả về thông tin QR
+    if (finalAmount <= 0) {
+      const { updatedUser } = await completeZeroAmountTransaction(transaction, {
+        couponCode: appliedCoupon?.code || coupon_code?.trim() || null,
+        originalAmount: Number(pkg.price),
+        couponDiscountAmount: discountAmount,
+        coinDiscountAmount,
+        coinsUsed,
+      });
+
+      return res.json({
+        success: true,
+        status: 'completed',
+        payment_method: 'coupon_free',
+        orderId,
+        message: 'Đơn hàng đã được giảm về 0đ và kích hoạt thành công.',
+        data: {
+          package_name: pkg.name,
+          package_duration: pkg.duration_days,
+          amount: 0,
+          vip_expires_at: updatedUser?.vip_expires_at || null,
+          subscription_tier: updatedUser?.subscription_tier || tier,
+        },
+        appliedCoupon: appliedCoupon ? {
+          code: appliedCoupon.code,
+          discount_amount: discountAmount,
+          original_amount: pkg.price,
+          final_amount: 0,
+        } : null,
+        appliedCoins: coinsUsed > 0 ? {
+          coins_used: coinsUsed,
+          coin_value_vnd: COIN_VALUE_VND,
+          discount_amount: coinDiscountAmount,
+        } : null,
+      });
+    }
+
     if (payment_method === 'bank_transfer') {
       const bankConfig = getBankConfig();
       if (!bankConfig) {
@@ -1261,10 +1377,16 @@ async function incrementCouponUsage(transaction) {
   if (!couponRes.rows[0]) return;
 
   const c = couponRes.rows[0];
-  const discountAmt = c.discount_type === 'percentage'
-    ? Math.floor(transaction.amount * c.discount_value / 100)
-    : Math.min(Number(c.discount_value), transaction.amount);
-  const originalAmt = transaction.amount + discountAmt;
+  const stored = getStoredDiscountDetails(transaction);
+  let discountAmt = stored.couponDiscountAmount;
+  if (!discountAmt) {
+    discountAmt = c.discount_type === 'percentage'
+      ? Math.floor(stored.originalAmount * c.discount_value / 100)
+      : Math.min(Number(c.discount_value), stored.originalAmount);
+  }
+  discountAmt = Math.min(Math.max(0, discountAmt), stored.originalAmount);
+  const originalAmt = stored.originalAmount;
+  const finalAmt = Math.max(0, stored.finalAmount);
 
   await require('../config/database').query(
     `UPDATE coupons SET used_count = used_count + 1 WHERE id = $1`,
@@ -1273,7 +1395,7 @@ async function incrementCouponUsage(transaction) {
   await require('../config/database').query(
     `INSERT INTO coupon_usages (coupon_id, user_id, transaction_id, discount_amount, final_amount, original_amount)
      VALUES ($1, $2, $3, $4, $5, $6)`,
-    [c.id, transaction.user_id, transaction.id, discountAmt, transaction.amount, originalAmt]
+    [c.id, transaction.user_id, transaction.id, discountAmt, finalAmt, originalAmt]
   );
 }
 
