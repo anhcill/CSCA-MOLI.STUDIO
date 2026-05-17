@@ -138,6 +138,43 @@ interface QuestionResult {
     difficulty?: string;
 }
 
+function getReviewAIButtonLabel(status: string) {
+    if (status === 'correct') return 'Hỏi AI củng cố câu đúng';
+    if (status === 'unanswered') return 'Hỏi AI hướng dẫn câu bỏ qua';
+    return 'Hỏi AI giải thích thêm';
+}
+
+function getQuestionReviewStatus(question: QuestionResult) {
+    if (!question.selected_answer_key) return 'unanswered';
+    return question.is_correct ? 'correct' : 'incorrect';
+}
+
+function formatReviewAnswer(key?: string | null, text?: string | null, fallback = 'Bỏ qua') {
+    if (!key) return fallback;
+    const cleanText = (text || '').trim();
+    return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
+}
+
+function buildQuestionExplanationPrompt(question: QuestionResult, questionText: string) {
+    const questionNo = question.sub_question_number || question.question_number;
+    const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
+    const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
+    const base = [
+        `Câu ${questionNo}`,
+        questionText ? `Nội dung câu hỏi: ${questionText}` : '',
+        `Đáp án đúng: ${correctAnswer}`,
+    ].filter(Boolean).join('\n');
+
+    const status = getQuestionReviewStatus(question);
+    if (status === 'correct') {
+        return `${base}\nHọc sinh đã chọn đúng: ${selectedAnswer}.\nHãy giải thích vì sao đáp án này đúng, chỉ ra kiến thức cần nhớ, dấu hiệu nhận biết và bẫy dễ nhầm. Trả lời bằng tiếng Việt có dấu, ngắn gọn nhưng đủ ý.`;
+    }
+    if (status === 'unanswered') {
+        return `${base}\nHọc sinh đã bỏ qua câu này.\nHãy hướng dẫn cách suy luận từ đầu, vì sao đáp án đúng là phù hợp, mẹo nhận biết lần sau và kiến thức cần ôn lại. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
+    }
+    return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
+}
+
 interface AttemptResult {
     id: number;
     exam_id: number;
@@ -552,11 +589,11 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         )}
 
                                         {/* AI giải thích thêm */}
-                                        {status === 'incorrect' && (
+                                        {q.question_type !== 'essay' && q.question_type !== 'translation' && (
                                             <button
                                                 onClick={() => setShowExplanationModal(q)}
                                                 className="mt-3 ml-8 text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                                                <FiZap size={14} /> Hỏi AI giải thích thêm
+                                                <FiZap size={14} /> {getReviewAIButtonLabel(status)}
                                             </button>
                                         )}
                                     </div>
@@ -603,6 +640,23 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
     const { pick } = useLanguage();
     const [explanation, setExplanation] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const answerStatus = getQuestionReviewStatus(question);
+    const questionText = pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn }) || question.question_text || '';
+    const answerBoxClass = answerStatus === 'correct'
+        ? 'bg-green-50 border border-green-200 rounded-lg p-3'
+        : answerStatus === 'unanswered'
+            ? 'bg-amber-50 border border-amber-200 rounded-lg p-3'
+            : 'bg-red-50 border border-red-200 rounded-lg p-3';
+    const answerTextClass = answerStatus === 'correct'
+        ? 'text-green-800 font-semibold text-sm'
+        : answerStatus === 'unanswered'
+            ? 'text-amber-800 font-semibold text-sm'
+            : 'text-red-800 font-semibold text-sm';
+    const answerLabelClass = answerStatus === 'correct'
+        ? 'text-xs font-bold text-green-600 mb-1'
+        : answerStatus === 'unanswered'
+            ? 'text-xs font-bold text-amber-600 mb-1'
+            : 'text-xs font-bold text-red-600 mb-1';
 
     useEffect(() => {
         loadExplanation();
@@ -614,7 +668,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
             const res = await authFetch('/api/ai/ask', {
                 method: 'POST',
                 body: JSON.stringify({
-                    question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng? Hãy giải thích chi tiết kiến thức liên quan và mẹo ghi nhớ.`,
+                    question: buildQuestionExplanationPrompt(question, questionText),
                     attemptId,
                 }),
             });
@@ -628,35 +682,37 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={loading ? undefined : onClose}>
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                     <h3 className="font-bold text-lg text-gray-900">
                         Phân tích câu {question.question_number || question.sub_question_number}
                     </h3>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <span className="text-gray-400 text-xl">×</span>
-                    </button>
+                    {!loading && (
+                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                            <span className="text-gray-400 text-xl">×</span>
+                        </button>
+                    )}
                 </div>
                 <div className="p-6">
                     {/* Câu hỏi */}
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
                         <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-                        <p className="text-sm text-gray-800">{pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn })}</p>
+                        <p className="text-sm text-gray-800">{questionText}</p>
                     </div>
 
                     {/* Đáp án */}
                     <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                            <p className="text-xs font-bold text-red-600 mb-1">✗ Đáp án của bạn</p>
-                            <p className="text-red-800 font-semibold text-sm">
-                                {question.selected_answer_key || '?'}. {question.selected_answer_text || ''}
+                        <div className={answerBoxClass}>
+                            <p className={answerLabelClass}>{answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}</p>
+                            <p className={answerTextClass}>
+                                {formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
                             </p>
                         </div>
                         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                            <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
+                            <p className="text-xs font-bold text-green-600 mb-1">Đáp án đúng</p>
                             <p className="text-green-800 font-semibold text-sm">
-                                {question.correct_answer_key || '?'}. {question.correct_answer_text || ''}
+                                {formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
                             </p>
                         </div>
                     </div>
@@ -664,7 +720,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                     {loading ? (
                         <div className="flex flex-col items-center gap-3 py-8">
                             <div className="animate-spin rounded-full h-10 w-10 border-3 border-purple-200 border-t-purple-600" />
-                            <p className="text-gray-500 text-sm">AI đang phân tích câu này...</p>
+                            <p className="text-gray-500 text-sm text-center">AI đang đọc câu hỏi, đối chiếu đáp án và soạn giải thích...</p>
                         </div>
                     ) : explanation?.success ? (
                         <div className="space-y-3">
@@ -695,9 +751,11 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                     )}
                 </div>
                 <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
-                        Đóng
-                    </button>
+                    {!loading && (
+                        <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
+                            Đóng
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

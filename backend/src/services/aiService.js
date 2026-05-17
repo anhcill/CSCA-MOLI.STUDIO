@@ -678,23 +678,51 @@ TRẢ VỀ JSON:
  * @param {string} question - Câu hỏi của user
  * @param {Object} context  - Ngữ cảnh (attemptData, questions, etc.)
  */
+function getQuestionStatus(q) {
+  if (q.status) return q.status;
+  if (!q.selected_answer_key) return 'unanswered';
+  return q.is_correct ? 'correct' : 'incorrect';
+}
+
+function formatAIQuestionLine(q) {
+  const status = getQuestionStatus(q);
+  const statusLabel = status === 'correct' ? 'đúng' : status === 'unanswered' ? 'bỏ qua' : 'sai';
+  const selected = q.selected_answer_key
+    ? `${q.selected_answer_key}. ${q.selected_answer_text || ''}`.trim()
+    : 'bỏ qua';
+  const correct = q.correct_answer_key
+    ? `${q.correct_answer_key}. ${q.correct_answer_text || ''}`.trim()
+    : q.correct_answer_text || 'chưa có';
+  return `Câu ${q.question_number} (${statusLabel}): ${q.question_text || q.question_text_cn || ''}\n- Học sinh chọn: ${selected}\n- Đáp án đúng: ${correct}`;
+}
+
+function buildReviewQuestionContext(questions = []) {
+  if (!questions.length) return '(không có)';
+  const groups = [
+    ['Câu sai cần sửa', questions.filter((q) => getQuestionStatus(q) === 'incorrect').slice(0, 6)],
+    ['Câu bỏ qua cần hướng dẫn', questions.filter((q) => getQuestionStatus(q) === 'unanswered').slice(0, 6)],
+    ['Câu đúng có thể củng cố', questions.filter((q) => getQuestionStatus(q) === 'correct').slice(0, 4)],
+  ];
+  return groups
+    .filter(([, items]) => items.length > 0)
+    .map(([title, items]) => `${title}:\n${items.map(formatAIQuestionLine).join('\n')}`)
+    .join('\n\n') || '(không có)';
+}
+
 async function askAI(question, context = {}) {
-  const { examTitle, subjectName, questions = [], userScore } = context;
+  const { examTitle, subjectName, questions = [], userScore, questionStats } = context;
 
   const contextText = [
     examTitle && `Đề thi: ${examTitle}`,
     subjectName && `Môn: ${subjectName}`,
     userScore !== undefined && `Điểm của bạn: ${userScore}%`,
     questions.length > 0 && `Số câu: ${questions.length}`,
+    questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
   ].filter(Boolean).join('\n');
 
-  const recentWrong = questions
-    .filter(q => !q.is_correct)
-    .slice(0, 5)
-    .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
-    .join('\n');
+  const reviewQuestionContext = buildReviewQuestionContext(questions);
 
-  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT.
+  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT có dấu.
 
 YÊU CẦU:
 - CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
@@ -703,14 +731,17 @@ YÊU CẦU:
 - Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
 - Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
 - Đưa ví dụ cụ thể trong đời thường khi cần.
+- Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
+- Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
 
 TRÁNH:
 - KHÔNG lặp lại câu hỏi của user.
+- KHÔNG bịa dữ liệu ngoài ngữ cảnh bài thi. Nếu thiếu dữ liệu, nói rõ và hướng dẫn cách tự kiểm tra.
 
 Ngữ cảnh bài thi (nếu có):
 ${contextText || '(không có)'}
-Các câu sai gần đây (nếu có):
-${recentWrong || '(không có)'}
+Các câu trong bài để tham chiếu:
+${reviewQuestionContext}
 
 Câu hỏi: ${question}`;
 
@@ -740,22 +771,19 @@ Câu hỏi: ${question}`;
  * @param {Object} res - Express Response object (để pipe SSE)
  */
 async function askAIStream(question, context = {}, res) {
-  const { examTitle, subjectName, questions = [], userScore } = context;
+  const { examTitle, subjectName, questions = [], userScore, questionStats } = context;
 
   const contextText = [
     examTitle && `Đề thi: ${examTitle}`,
     subjectName && `Môn: ${subjectName}`,
     userScore !== undefined && `Điểm của bạn: ${userScore}%`,
     questions.length > 0 && `Số câu: ${questions.length}`,
+    questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
   ].filter(Boolean).join('\n');
 
-  const recentWrong = questions
-    .filter(q => !q.is_correct)
-    .slice(0, 5)
-    .map(q => `Câu ${q.question_number}: ${q.question_text || q.question_text_cn || ''} → Đúng: ${q.correct_answer_key}. ${q.correct_answer_text || ''}`)
-    .join('\n');
+  const reviewQuestionContext = buildReviewQuestionContext(questions);
 
-  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT.
+  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT có dấu.
 
 YÊU CẦU:
 - CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
@@ -764,14 +792,17 @@ YÊU CẦU:
 - Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
 - Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
 - Đưa ví dụ cụ thể trong đời thường khi cần.
+- Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
+- Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
 
 TRÁNH:
 - KHÔNG lặp lại câu hỏi của user.
+- KHÔNG bịa dữ liệu ngoài ngữ cảnh bài thi. Nếu thiếu dữ liệu, nói rõ và hướng dẫn cách tự kiểm tra.
 
 Ngữ cảnh bài thi (nếu có):
 ${contextText || '(không có)'}
-Các câu sai gần đây (nếu có):
-${recentWrong || '(không có)'}
+Các câu trong bài để tham chiếu:
+${reviewQuestionContext}
 
 Câu hỏi: ${question}`;
 

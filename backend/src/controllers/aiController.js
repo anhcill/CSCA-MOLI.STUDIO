@@ -44,6 +44,81 @@ async function handleRateLimit(res, userId, retryAfter, message, insightType = I
   return res.json({ success: false, rateLimited: true, retryAfter, message });
 }
 
+async function getAttemptAIContext(userId, attemptId) {
+  const attemptResult = await db.query(
+    `SELECT e.title as exam_title, s.name as subject_name,
+            ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
+     FROM exam_attempts ea
+     JOIN exams e ON ea.exam_id = e.id
+     LEFT JOIN subjects s ON e.subject_id = s.id
+     WHERE ea.id = $1 AND ea.user_id = $2`,
+    [attemptId, userId],
+  );
+
+  if (!attemptResult.rows[0]) return {};
+
+  const a = attemptResult.rows[0];
+  const questionsResult = await db.query(
+    `SELECT
+        q.question_number,
+        q.question_text,
+        q.question_text_cn,
+        q.question_text_en,
+        q.question_type,
+        ua.selected_answer_key,
+        ua.is_correct,
+        ca.answer_key AS correct_answer_key,
+        COALESCE(ca.answer_text_cn, ca.answer_text) AS correct_answer_text,
+        COALESCE(sa.answer_text_cn, sa.answer_text) AS selected_answer_text,
+        CASE
+          WHEN ua.id IS NULL OR ua.selected_answer_key IS NULL THEN 'unanswered'
+          WHEN ua.is_correct = true THEN 'correct'
+          ELSE 'incorrect'
+        END AS status
+     FROM exam_attempts ea
+     JOIN questions q ON q.exam_id = ea.exam_id
+     LEFT JOIN user_answers ua ON ua.attempt_id = ea.id AND ua.question_id = q.id
+     LEFT JOIN LATERAL (
+       SELECT answer_key, answer_text, answer_text_cn
+       FROM answers
+       WHERE question_id = q.id AND is_correct = true
+       ORDER BY answer_key
+       LIMIT 1
+     ) ca ON true
+     LEFT JOIN answers sa ON sa.question_id = q.id AND sa.answer_key = ua.selected_answer_key
+     WHERE ea.id = $1 AND ea.user_id = $2
+     ORDER BY q.question_number
+     LIMIT 80`,
+    [attemptId, userId],
+  );
+
+  const questions = questionsResult.rows.map((q) => ({
+    question_number: q.question_number,
+    question_text: q.question_text || q.question_text_cn || q.question_text_en || '',
+    question_type: q.question_type,
+    selected_answer_key: q.selected_answer_key,
+    selected_answer_text: q.selected_answer_text,
+    correct_answer_key: q.correct_answer_key,
+    correct_answer_text: q.correct_answer_text,
+    is_correct: q.status === 'correct',
+    status: q.status,
+  }));
+
+  return {
+    examTitle: a.exam_title,
+    subjectName: a.subject_name,
+    userScore: a.total_questions > 0
+      ? Math.round((a.total_correct / a.total_questions) * 100)
+      : parseFloat(a.total_score) || 0,
+    questions,
+    questionStats: {
+      correct: questions.filter((q) => q.status === 'correct').length,
+      incorrect: questions.filter((q) => q.status === 'incorrect').length,
+      unanswered: questions.filter((q) => q.status === 'unanswered').length,
+    },
+  };
+}
+
 // ─── FEATURE 1: Phân tích kết quả bài thi ───────────────────────────────────────
 /**
  * POST /api/ai/exam-result
@@ -530,26 +605,9 @@ async function askAI(req, res) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
     }
 
-    // Lấy context từ bài thi nếu có attemptId
     let context = {};
     if (attemptId) {
-      const attemptResult = await db.query(
-        `SELECT e.title as exam_title, s.name as subject_name,
-                ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
-         FROM exam_attempts ea
-         JOIN exams e ON ea.exam_id = e.id
-         LEFT JOIN subjects s ON e.subject_id = s.id
-         WHERE ea.id = $1 AND ea.user_id = $2`,
-        [attemptId, userId],
-      );
-      if (attemptResult.rows[0]) {
-        const a = attemptResult.rows[0];
-        context.examTitle = a.exam_title;
-        context.subjectName = a.subject_name;
-        context.userScore = a.total_questions > 0
-          ? Math.round((a.total_correct / a.total_questions) * 100)
-          : parseFloat(a.total_score) || 0;
-      }
+      context = await getAttemptAIContext(userId, attemptId);
     }
 
     if (aiService.isRateLimited()) {
@@ -856,27 +914,9 @@ async function askAIStream(req, res) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
     }
 
-    // Lấy context từ bài thi nếu có attemptId
     let context = {};
     if (attemptId) {
-      const db = require('../config/database');
-      const attemptResult = await db.query(
-        `SELECT e.title as exam_title, s.name as subject_name,
-                ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
-         FROM exam_attempts ea
-         JOIN exams e ON ea.exam_id = e.id
-         LEFT JOIN subjects s ON e.subject_id = s.id
-         WHERE ea.id = $1 AND ea.user_id = $2`,
-        [attemptId, userId],
-      );
-      if (attemptResult.rows[0]) {
-        const a = attemptResult.rows[0];
-        context.examTitle = a.exam_title;
-        context.subjectName = a.subject_name;
-        context.userScore = a.total_questions > 0
-          ? Math.round((a.total_correct / a.total_questions) * 100)
-          : parseFloat(a.total_score) || 0;
-      }
+      context = await getAttemptAIContext(userId, attemptId);
     }
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');

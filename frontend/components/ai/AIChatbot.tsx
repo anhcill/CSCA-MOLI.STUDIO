@@ -17,10 +17,10 @@ interface AIChatbotProps {
 }
 
 const QUICK_QUESTIONS = [
-    { label: 'Tại sao sai?', prompt: 'Tại sao câu tôi chọn lại sai?', emoji: '❓' },
-    { label: 'Giải thích từ vựng', prompt: 'Giải thích từ vựng khó trong bài này', emoji: '📖' },
-    { label: 'Mẹo làm bài', prompt: 'Cho tôi mẹo để làm bài tốt hơn', emoji: '💡' },
-    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện?', emoji: '🎯' },
+    { label: 'Câu sai', prompt: 'Hãy xem lại các câu tôi làm sai trong bài này và giải thích vì sao sai, vì sao đáp án đúng hợp lý.', emoji: '❓' },
+    { label: 'Câu bỏ qua', prompt: 'Hãy giúp tôi xem lại các câu tôi bỏ qua, hướng dẫn cách suy luận và mẹo nhận biết lần sau.', emoji: '⏳' },
+    { label: 'Câu đúng', prompt: 'Hãy chọn vài câu tôi làm đúng trong bài này và giải thích dấu hiệu nhận biết để tôi nhớ lâu hơn.', emoji: '✅' },
+    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện sau bài này?', emoji: '🎯' },
 ];
 
 // Format AI response into readable paragraphs
@@ -88,12 +88,25 @@ function formatMessage(text: string): React.ReactNode[] {
     return blocks;
 }
 
+function ThinkingDots({ label = 'AI đang đọc bài và chuẩn bị trả lời...' }: { label?: string }) {
+    return (
+        <div className="flex items-center gap-3 min-w-[220px]">
+            <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-sm text-gray-500">{label}</span>
+        </div>
+    );
+}
+
 export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
             role: 'ai',
-            content: 'Chào bạn! Tôi là trợ lý AI học tập. Bạn có thể hỏi tôi về bài thi, từ vựng, mẹo làm bài. Hãy đặt câu hỏi nhé!',
+            content: 'Chào bạn! Tôi là trợ lý AI học tập. Bạn có thể hỏi tôi về câu đúng, câu sai, câu bỏ qua, từ vựng và mẹo làm bài. Hãy đặt câu hỏi nhé!',
             timestamp: new Date().toISOString(),
         },
     ]);
@@ -130,6 +143,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setMessages(prev => [...prev, userMsg]);
         setInput('');
         setLoading(true);
+        setIsStreaming(true);
 
         const tempAiId = (Date.now() + 1).toString();
         const aiMsg: Message = {
@@ -159,8 +173,6 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             let charCount = 0;
             let pending = '';
 
-            setIsStreaming(true);
-
             while (!done) {
                 const { value, done: doneReading } = await reader.read();
                 done = doneReading;
@@ -186,7 +198,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             if (parsed?.error) {
                                 fullContent = typeof parsed.error === 'string'
                                     ? parsed.error
-                                    : parsed.text || 'AI stream đang gặp lỗi. Vui lòng thử lại.';
+                                    : parsed.text || 'AI đang gặp lỗi khi trả lời. Vui lòng thử lại.';
                                 setMessages(prev => prev.map(m =>
                                     m.id === tempAiId ? { ...m, content: fullContent } : m
                                 ));
@@ -286,19 +298,19 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
                                 }`}>
                                     {msg.role === 'ai'
-                                        ? formatMessage(msg.content)
+                                        ? (msg.content ? formatMessage(msg.content) : <ThinkingDots />)
                                         : msg.content.split('\n').map((line, i) => (
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))
                                     }
                                     {/* Typing cursor */}
-                                    {msg.role === 'ai' && isStreaming && messages[messages.length - 1]?.id === msg.id && (
+                                    {msg.role === 'ai' && msg.content && isStreaming && messages[messages.length - 1]?.id === msg.id && (
                                         <span className="inline-block w-0.5 h-4 bg-purple-500 ml-0.5 animate-pulse align-middle" />
                                     )}
                                 </div>
 
                                 {/* Copy + Time row for AI messages */}
-                                {msg.role === 'ai' && (
+                                {msg.role === 'ai' && msg.content && (
                                     <div className="flex items-center gap-2 mt-2">
                                         <button
                                             onClick={() => copyMessage(msg.content, msg.id)}
@@ -331,25 +343,6 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             </div>
                         </div>
                     ))}
-
-                    {/* Loading */}
-                    {loading && (
-                        <div className="flex gap-4">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-200">
-                                <FiCpu size={15} />
-                            </div>
-                            <div className="bg-white rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm border border-gray-100">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex gap-1.5">
-                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                        <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                    </div>
-                                    <span className="text-sm text-gray-500">AI đang suy nghĩ...</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     <div ref={messagesEndRef} />
                 </div>
