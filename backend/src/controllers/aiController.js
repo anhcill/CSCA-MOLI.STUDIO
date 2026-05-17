@@ -694,6 +694,8 @@ async function recommendNextExam(req, res) {
 
 // ─── FULL ANALYSIS (legacy endpoint - vẫn giữ) ─────────────────────────────────
 async function analyzeUserPerformance(req, res) {
+  let chargedLedger = null;
+  let chargeCommittedToInsight = false;
   try {
     const userId = req.user.id;
     const isVip = canUseAIFeatures(req.user);
@@ -737,11 +739,7 @@ async function analyzeUserPerformance(req, res) {
         return res.status(403).json({ success: false, message: 'Bạn không đủ 50 Xu.', code: 'INSUFFICIENT_COINS', cost: 50 });
       }
 
-      // Trừ Xu
-      await coinService.debit(userId, 50, 'ai_analysis', {
-        description: 'Dùng 50 xu để phân tích AI',
-        metadata: { insightType: 'full_analysis' },
-      });
+      // Coin charge happens after analysis succeeds.
     }
 
     if (inFlightRequests.has(userId)) {
@@ -780,17 +778,48 @@ async function analyzeUserPerformance(req, res) {
 
     const fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, []);
 
+    if (!isVip) {
+      chargedLedger = await coinService.debit(userId, 50, 'ai_analysis', {
+        description: 'Dùng 50 xu để phân tích AI',
+        metadata: { insightType: 'full_analysis' },
+      });
+    }
+
     await db.query(`INSERT INTO ai_insights (user_id, insight_type, data) VALUES ($1, $2, $3)`,
       [userId, 'full_analysis', JSON.stringify(fullAnalysis)]);
+    chargeCommittedToInsight = true;
 
     cache.set(memKey, { data: fullAnalysis, cacheAge: 0 }, TTL.VERY_LONG);
     if (req._resolveInflight) req._resolveInflight(fullAnalysis);
     inFlightRequests.delete(userId);
-    res.json({ success: true, cached: false, cacheSource: 'none', data: fullAnalysis });
+    res.json({
+      success: true,
+      cached: false,
+      cacheSource: 'none',
+      data: fullAnalysis,
+      coin_charged: Boolean(chargedLedger),
+      coin_balance: chargedLedger?.balance_after,
+    });
   } catch (error) {
+    if (chargedLedger && !chargeCommittedToInsight) {
+      await coinService.credit(req.user.id, Math.abs(Number(chargedLedger.amount) || 50), 'ai_analysis_refund', {
+        description: 'Hoàn xu do phân tích AI thất bại',
+        metadata: { originalLedgerId: chargedLedger.id, insightType: 'full_analysis' },
+        idempotencyKey: `ai_analysis_refund:${chargedLedger.id}`,
+      }).catch(refundError => {
+        console.error('AI coin refund failed:', refundError);
+      });
+    }
     if (req._resolveInflight) req._resolveInflight(null);
     inFlightRequests.delete(req.user?.id);
     console.error('analyzeUserPerformance error:', error);
+    if (error.status) {
+      return res.status(error.status).json({
+        success: false,
+        message: error.message || 'Loi phan tich.',
+        code: error.code,
+      });
+    }
     res.status(500).json({ success: false, message: 'Lỗi phân tích.' });
   }
 }

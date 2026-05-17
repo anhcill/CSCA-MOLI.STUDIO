@@ -124,10 +124,15 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
       // Nếu thành công sau khi trả bằng xu, tắt bảng requires premium
       if (useCoins && d.success) {
          setIsPremiumRequired(false);
-         // Update local authStore coins (optimistic UI)
+      }
+
+      if (useCoins && d.success && d.coin_charged) {
+         const nextCoins = Number.isFinite(Number(d.coin_balance))
+           ? Math.max(0, Number(d.coin_balance))
+           : Math.max(0, currentCoins - AI_ANALYSIS_COST);
          useAuthStore.setState((state) => {
            if (state.user) {
-             return { user: { ...state.user, coins: Math.max(0, (state.user.coins || 0) - 50) } };
+             return { user: { ...state.user, coins: nextCoins } };
            }
            return state;
          });

@@ -121,10 +121,9 @@ async function getAdminSummary() {
   const [totals, bySource, recent] = await Promise.all([
     db.query(
       `SELECT
-         COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)::int AS total_issued,
-         COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0)::int AS total_spent,
-         COALESCE(SUM(coins), 0)::int AS total_balance
-       FROM users`,
+         COALESCE((SELECT SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) FROM coin_ledger), 0)::int AS total_issued,
+         COALESCE((SELECT SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) FROM coin_ledger), 0)::int AS total_spent,
+         COALESCE((SELECT SUM(coins) FROM users), 0)::int AS total_balance`,
     ),
     db.query(
       `SELECT source,

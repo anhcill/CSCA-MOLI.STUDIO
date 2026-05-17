@@ -395,58 +395,6 @@ exports.getDailyQuests = async (req, res) => {
  * @access  Private
  */
 exports.claimQuest = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { id } = req.params;
-
-    const questRes = await db.query(
-      `SELECT id, target, progress, is_completed, reward_coins
-       FROM user_quests
-       WHERE id = $1 AND user_id = $2`,
-      [id, userId]
-    );
-
-    if (questRes.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy nhiệm vụ" });
-    }
-
-    const quest = questRes.rows[0];
-
-    if (quest.is_completed) {
-      return res.status(400).json({ success: false, message: "Nhiệm vụ này đã nhận thưởng rồi" });
-    }
-
-    if (quest.progress < quest.target) {
-      return res.status(400).json({ success: false, message: "Nhiệm vụ chưa hoàn thành" });
-    }
-
-    // Mark as completed and give coins
-    await db.query('BEGIN');
-    await db.query(
-      `UPDATE user_quests SET is_completed = TRUE WHERE id = $1`,
-      [id]
-    );
-    await db.query(
-      `UPDATE users SET coins = COALESCE(coins, 0) + $1 WHERE id = $2`,
-      [quest.reward_coins, userId]
-    );
-    await db.query('COMMIT');
-
-    return res.json({
-      success: true,
-      message: `Nhận thành công ${quest.reward_coins} xu!`,
-      data: { reward_coins: quest.reward_coins }
-    });
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error("Claim quest error:", error);
-    res.status(500).json({ success: false, message: "Lỗi server" });
-  }
-};
-
-// Override with an atomic ledger-backed implementation. Kept here instead of
-// mutating the legacy block above to avoid changing unrelated controller text.
-exports.claimQuest = async (req, res) => {
   const client = await db.pool.connect();
   try {
     const userId = req.user.id;

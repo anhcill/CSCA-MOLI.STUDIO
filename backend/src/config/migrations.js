@@ -807,12 +807,19 @@ async function runOptimizations() {
       `CREATE INDEX IF NOT EXISTS idx_user_quests_user_date ON user_quests(user_id, date)`
     );
 
-    const gamificationSqlPath = path.resolve(
-      __dirname,
-      "../../../database/migrations/028_gamification_wallet_rank.sql",
-    );
-    if (fs.existsSync(gamificationSqlPath)) {
-      await pool.query(fs.readFileSync(gamificationSqlPath, "utf8"));
+    const gamificationMigrationFiles = [
+      "028_gamification_wallet_rank.sql",
+      "029_external_arcade_games.sql",
+      "030_backfill_coin_ledger.sql",
+    ];
+    for (const filename of gamificationMigrationFiles) {
+      const migrationPath = path.resolve(
+        __dirname,
+        `../../../database/migrations/${filename}`,
+      );
+      if (fs.existsSync(migrationPath)) {
+        await pool.query(fs.readFileSync(migrationPath, "utf8"));
+      }
     }
 
     console.log(
