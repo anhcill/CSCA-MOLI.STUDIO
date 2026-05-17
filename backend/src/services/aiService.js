@@ -831,49 +831,54 @@ Câu hỏi: ${question}`;
   };
 
   try {
-    const response = await axios.post(
-      `${BEE.baseUrl}/chat/completions`,
-      payload,
-      {
-        timeout: BEE.timeout,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        responseType: 'stream'
-      }
-    );
+    await withConcurrency(async () => {
+      const response = await axios.post(
+        `${BEE.baseUrl}/chat/completions`,
+        payload,
+        {
+          timeout: BEE.timeout,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          responseType: 'stream'
+        }
+      );
 
-    let buffer = '';
-    let sentDone = false;
+      let buffer = '';
+      let sentDone = false;
 
-    response.data.on('data', chunk => {
-      buffer += chunk.toString('utf8');
-      const parts = buffer.split(/\r?\n/);
-      buffer = parts.pop() || '';
+      await new Promise((resolve) => {
+        response.data.on('data', chunk => {
+          buffer += chunk.toString('utf8');
+          const parts = buffer.split(/\r?\n/);
+          buffer = parts.pop() || '';
 
-      for (const line of parts) {
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (!data) continue;
-        if (data === '[DONE]') sentDone = true;
-        res.write(`data: ${data}\n\n`);
-      }
+          for (const line of parts) {
+            if (!line.startsWith('data:')) continue;
+            const data = line.slice(5).trim();
+            if (!data) continue;
+            if (data === '[DONE]') sentDone = true;
+            res.write(`data: ${data}\n\n`);
+          }
+        });
+
+        response.data.on('end', () => {
+          if (!sentDone) {
+            res.write('data: [DONE]\n\n');
+          }
+          res.end();
+          resolve();
+        });
+
+        response.data.on('error', err => {
+          console.error('AI Stream Error:', err);
+          res.write(`data: ${JSON.stringify({ error: 'Lỗi stream AI' })}\n\n`);
+          res.end();
+          resolve();
+        });
+      });
     });
-
-    response.data.on('end', () => {
-      if (!sentDone) {
-        res.write('data: [DONE]\n\n');
-      }
-      res.end();
-    });
-
-    response.data.on('error', err => {
-      console.error('AI Stream Error:', err);
-      res.write(`data: ${JSON.stringify({ error: 'Lỗi stream AI' })}\n\n`);
-      res.end();
-    });
-
   } catch (err) {
     console.error('Lỗi khi stream AI:', err.message);
     if (err.response?.status === 429) {

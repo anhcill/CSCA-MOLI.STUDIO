@@ -7,6 +7,12 @@ const coinService = require('../services/coinService');
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
 const REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
+const chatWindows = new Map();
+const chatInFlightUsers = new Set();
+const AI_CHAT_WINDOW_MS = 60 * 1000;
+const AI_CHAT_MAX_PER_WINDOW = 12;
+const AI_CHAT_MIN_INTERVAL_MS = 2500;
+const AI_CHAT_MAX_QUESTION_LENGTH = 3000;
 const INSIGHT_TYPES = {
   fullAnalysis: 'full_analysis',
   examAnalysis: 'exam_analysis',
@@ -42,6 +48,48 @@ async function handleRateLimit(res, userId, retryAfter, message, insightType = I
     });
   }
   return res.json({ success: false, rateLimited: true, retryAfter, message });
+}
+
+function tryStartAIChat(userId) {
+  if (chatInFlightUsers.has(userId)) return false;
+  chatInFlightUsers.add(userId);
+  return true;
+}
+
+function finishAIChat(userId) {
+  chatInFlightUsers.delete(userId);
+}
+
+function checkAIChatSpam(userId) {
+  const now = Date.now();
+  const current = chatWindows.get(userId) || { windowStart: now, count: 0, lastAt: 0 };
+  const state = now - current.windowStart >= AI_CHAT_WINDOW_MS
+    ? { windowStart: now, count: 0, lastAt: current.lastAt || 0 }
+    : current;
+
+  const nextAllowedAt = state.lastAt + AI_CHAT_MIN_INTERVAL_MS;
+  if (state.lastAt && now < nextAllowedAt) {
+    chatWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((nextAllowedAt - now) / 1000),
+      message: 'Bạn hỏi hơi nhanh. Đợi vài giây rồi gửi tiếp nhé.',
+    };
+  }
+
+  if (state.count >= AI_CHAT_MAX_PER_WINDOW) {
+    chatWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((state.windowStart + AI_CHAT_WINDOW_MS - now) / 1000),
+      message: `Bạn đã hỏi AI ${AI_CHAT_MAX_PER_WINDOW} lần trong 1 phút. Đợi một chút rồi hỏi tiếp nhé.`,
+    };
+  }
+
+  state.count += 1;
+  state.lastAt = now;
+  chatWindows.set(userId, state);
+  return { allowed: true };
 }
 
 async function getAttemptAIContext(userId, attemptId) {
@@ -592,6 +640,7 @@ async function getPracticeRecommendations(req, res) {
  * Chatbot AI trả lời câu hỏi của user về bài thi
  */
 async function askAI(req, res) {
+  let chatLockUserId = null;
   try {
     const userId = req.user.id;
 
@@ -603,6 +652,30 @@ async function askAI(req, res) {
 
     if (!question || question.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
+    }
+
+    if (question.trim().length > AI_CHAT_MAX_QUESTION_LENGTH) {
+      return res.status(400).json({ success: false, message: `Câu hỏi quá dài. Tối đa ${AI_CHAT_MAX_QUESTION_LENGTH} ký tự.` });
+    }
+
+    if (!tryStartAIChat(userId)) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: 3,
+        answer: 'AI đang trả lời câu trước của bạn. Đợi trả lời xong rồi hỏi tiếp nhé.',
+      });
+    }
+    chatLockUserId = userId;
+
+    const chatLimit = checkAIChatSpam(userId);
+    if (!chatLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: chatLimit.retryAfter,
+        answer: chatLimit.message,
+      });
     }
 
     let context = {};
@@ -628,7 +701,17 @@ async function askAI(req, res) {
     });
   } catch (error) {
     console.error('askAI error:', error);
+    if (error.message === 'RATE_LIMITED') {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: error.retryAfter || aiService.getRateLimitRemaining(),
+        answer: 'AI đang bận lúc này. Bạn hãy thử lại sau nhé.',
+      });
+    }
     res.status(500).json({ success: false, message: 'Lỗi chatbot AI' });
+  } finally {
+    if (chatLockUserId) finishAIChat(chatLockUserId);
   }
 }
 
@@ -901,6 +984,7 @@ async function refreshAnalysis(req, res) {
 }
 
 async function askAIStream(req, res) {
+  let chatLockUserId = null;
   try {
     const userId = req.user.id;
 
@@ -912,6 +996,30 @@ async function askAIStream(req, res) {
 
     if (!question || question.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
+    }
+
+    if (question.trim().length > AI_CHAT_MAX_QUESTION_LENGTH) {
+      return res.status(400).json({ success: false, message: `Câu hỏi quá dài. Tối đa ${AI_CHAT_MAX_QUESTION_LENGTH} ký tự.` });
+    }
+
+    if (!tryStartAIChat(userId)) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: 3,
+        message: 'AI đang trả lời câu trước của bạn. Đợi trả lời xong rồi hỏi tiếp nhé.',
+      });
+    }
+    chatLockUserId = userId;
+
+    const chatLimit = checkAIChatSpam(userId);
+    if (!chatLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: chatLimit.retryAfter,
+        message: chatLimit.message,
+      });
     }
 
     let context = {};
@@ -934,6 +1042,8 @@ async function askAIStream(req, res) {
       res.write(`data: ${JSON.stringify({ error: true, text: 'Lỗi server' })}\n\n`);
       res.end();
     }
+  } finally {
+    if (chatLockUserId) finishAIChat(chatLockUserId);
   }
 }
 

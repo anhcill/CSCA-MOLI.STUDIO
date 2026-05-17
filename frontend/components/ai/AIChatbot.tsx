@@ -164,7 +164,12 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 }),
             });
 
-            if (!res.body) throw new Error('No response body');
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => null);
+                throw new Error(errorData?.message || errorData?.answer || 'AI đang bận. Vui lòng thử lại sau.');
+            }
+
+            if (!res.body) throw new Error('Không nhận được phản hồi từ AI');
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -211,10 +216,13 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                     }
                 }
             }
-        } catch {
+        } catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!';
             setMessages(prev => prev.map(m =>
                 m.id === tempAiId
-                    ? { ...m, content: 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!' }
+                    ? { ...m, content: message }
                     : m
             ));
         } finally {
@@ -298,7 +306,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
                                 }`}>
                                     {msg.role === 'ai'
-                                        ? (msg.content ? formatMessage(msg.content) : <ThinkingDots />)
+                                        ? (msg.content ? formatMessage(msg.content) : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
                                         : msg.content.split('\n').map((line, i) => (
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))
@@ -398,6 +406,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             }
                         }}
                         placeholder="Nhập câu hỏi cho AI..."
+                        maxLength={3000}
                         rows={2}
                         className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder:text-gray-400"
                         style={{ maxHeight: '120px' }}
