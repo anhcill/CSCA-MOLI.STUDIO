@@ -48,11 +48,11 @@ function normalizeLinkedOptions(rawOptions) {
   const normalized = rawOptions
     .map((opt, i) => {
     const text = (opt.text || "").trim();
-    const textCn = (opt.textCn || opt.text || "").trim();
+    const textCn = (opt.textCn || "").trim();
     return {
       key: opt.key || String.fromCharCode(65 + i),
-      text: text || textCn,
-      textCn: textCn || text,
+      text,
+      textCn,
     };
   })
     .filter((opt) => opt.text || opt.textCn);
