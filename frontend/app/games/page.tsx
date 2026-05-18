@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import {
@@ -14,7 +14,7 @@ import {
   type GameMode,
   type GameQuestion,
 } from '@/lib/api/games';
-import { FiAward, FiCheck, FiChevronLeft, FiClock, FiExternalLink, FiGift, FiLock, FiPlay, FiStar, FiZap } from 'react-icons/fi';
+import { FiAward, FiCheck, FiChevronLeft, FiClock, FiExternalLink, FiGift, FiLock, FiMaximize2, FiMinimize2, FiPlay, FiStar, FiZap } from 'react-icons/fi';
 
 const toneMap: Record<string, string> = {
   quiz: 'from-blue-500 to-cyan-500',
@@ -38,6 +38,8 @@ export default function GamesPage() {
   const [unlockData, setUnlockData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const externalFrameRef = useRef<HTMLDivElement>(null);
+  const [isFrameFullscreen, setIsFrameFullscreen] = useState(false);
 
   const load = async () => {
     if (!isAuthenticated) return;
@@ -64,6 +66,14 @@ export default function GamesPage() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [active]);
+
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setIsFrameFullscreen(document.fullscreenElement === externalFrameRef.current);
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
 
   const currentQuestion = useMemo(() => {
     if (!active) return null;
@@ -145,6 +155,23 @@ export default function GamesPage() {
       setError(err.response?.data?.message || 'Chưa thể ghi nhận phiên game này.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleExternalFullscreen = async () => {
+    const frame = externalFrameRef.current;
+    if (!frame) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await frame.requestFullscreen();
+      }
+    } catch {
+      if (externalConfig.external_url) {
+        window.open(externalConfig.external_url, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -252,12 +279,20 @@ export default function GamesPage() {
 
             {isExternalActive && !result && (
               <div className="space-y-4">
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                <div ref={externalFrameRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
                   <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-black">{active.mode.name}</p>
                       <p className="text-xs text-slate-400">{externalConfig.provider || 'External game'} {externalConfig.license ? `- ${externalConfig.license}` : ''}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={toggleExternalFullscreen}
+                      className="rounded-lg bg-white/10 p-2 hover:bg-white/20"
+                      title={isFrameFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'}
+                    >
+                      {isFrameFullscreen ? <FiMinimize2 /> : <FiMaximize2 />}
+                    </button>
                     {externalConfig.external_url && (
                       <a href={externalConfig.external_url} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 p-2 hover:bg-white/20" title="Mở tab mới">
                         <FiExternalLink />
@@ -270,6 +305,7 @@ export default function GamesPage() {
                       title={active.mode.name}
                       className="h-[78vh] min-h-[680px] w-full bg-white"
                       allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope"
+                      allowFullScreen
                       referrerPolicy="no-referrer-when-downgrade"
                     />
                   ) : (
