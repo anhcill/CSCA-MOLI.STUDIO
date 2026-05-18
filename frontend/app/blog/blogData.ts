@@ -3121,7 +3121,7 @@ Hãy lập kế hoạch thi cả hai chứng chỉ ngay hôm nay để tối ưu
     featured: false,
   },
   {
-    slug: 'mẹo-luyện-nghe-tiếng-trung-cho-csca',
+    slug: 'meo-luyen-nghe-tieng-trung-cho-csca',
     title: 'Mẹo Luyện Nghe Tiếng Trung Cho CSCA: Từ Sơ Cấp Đến Thành Thạo',
     excerpt: 'Phần nghe chiếm 12/100 điểm CSCA. Hướng dẫn luyện nghe tiếng Trung hiệu quả: nguồn luyện nghe, phương pháp, mẹo cải thiện kỹ năng nghe từ cơ bản đến nâng cao.',
     content: `
@@ -3323,7 +3323,7 @@ Hãy bắt đầu luyện nghe ngay hôm nay — mỗi ngày 30 phút, sau 3 th�
     featured: false,
   },
   {
-    slug: 'kinh-nghiệm-du-hoc-trung-quoc-tu-hoc-sinh-viet-nam',
+    slug: 'kinh-nghiem-du-hoc-trung-quoc-tu-hoc-sinh-viet-nam',
     title: 'Kinh Nghiệm Du Học Trung Quốc Từ Học Sinh Việt Nam: Câu Chuyện Thật',
     excerpt: 'Chia sẻ kinh nghiệm du học Trung Quốc từ những sinh viên Việt Nam đã thành công: chuẩn bị hồ sơ, cuộc sống ở Trung Quốc, học tập, kết bạn và những bài học quý giá.',
     content: `

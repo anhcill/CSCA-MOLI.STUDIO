@@ -33,9 +33,6 @@ export const metadata: Metadata = {
   keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'đề thi CSCA', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
   authors: [{ name: 'CSCA MOLI.STUDIO' }],
   creator: 'CSCA MOLI.STUDIO',
-  alternates: {
-    canonical: '/',
-  },
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
