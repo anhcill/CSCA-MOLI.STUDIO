@@ -78,8 +78,9 @@ export default function GamesPage() {
     ? Math.max(0, Math.floor((now - new Date(active.session.started_at).getTime()) / 1000))
     : 0;
   const externalReady = Boolean(isExternalActive && elapsedExternalSeconds >= minPlaySeconds);
-  const learningModes = useMemo(() => modes.filter((mode) => mode.mode_type !== 'external'), [modes]);
-  const relaxingModes = useMemo(() => modes.filter((mode) => mode.mode_type === 'external'), [modes]);
+  const visibleModes = useMemo(() => modes.filter((mode) => mode.is_active), [modes]);
+  const learningModes = useMemo(() => visibleModes.filter((mode) => mode.mode_type !== 'external'), [visibleModes]);
+  const relaxingModes = useMemo(() => visibleModes.filter((mode) => mode.mode_type === 'external'), [visibleModes]);
 
   const begin = async (mode: GameMode) => {
     setBusy(true);
@@ -186,7 +187,7 @@ export default function GamesPage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 text-center sm:px-6 lg:px-10">
+        <main className="mx-auto w-full max-w-[1800px] px-4 py-6 text-center sm:px-6 lg:px-10">
           <Link href="/" className="mb-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
             <FiChevronLeft /> Quay về trang chủ
           </Link>
@@ -200,7 +201,7 @@ export default function GamesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-10">
+      <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6 lg:px-10">
         {active ? (
           <button
             type="button"
@@ -238,7 +239,7 @@ export default function GamesPage() {
         {error && <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{error}</div>}
 
         {active ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${isExternalActive ? 'p-3 sm:p-4' : 'p-5'}`}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{active.mode.name}</p>
@@ -250,7 +251,7 @@ export default function GamesPage() {
             </div>
 
             {isExternalActive && !result && (
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="space-y-4">
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
                   <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
                     <div className="min-w-0">
@@ -267,30 +268,34 @@ export default function GamesPage() {
                     <iframe
                       src={externalConfig.external_url}
                       title={active.mode.name}
-                      className="h-[70vh] min-h-[560px] w-full bg-white"
-                      allow="fullscreen; gamepad; autoplay"
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
+                      className="h-[78vh] min-h-[680px] w-full bg-white"
+                      allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope"
+                      referrerPolicy="no-referrer-when-downgrade"
                     />
                   ) : (
-                    <div className="flex h-[70vh] min-h-[560px] items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500">
+                    <div className="flex h-[78vh] min-h-[680px] items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500">
                       Game này chưa có nội dung hiển thị.
                     </div>
                   )}
                 </div>
-                <aside className="rounded-2xl border border-slate-200 p-5">
-                  <div className="flex items-center gap-2 text-sm font-bold text-slate-500"><FiClock /> Thời gian ghi nhận</div>
-                  <p className="mt-2 text-3xl font-black text-slate-950">{elapsedExternalSeconds}s</p>
-                  <p className="mt-1 text-sm text-slate-500">Cần tối thiểu {minPlaySeconds}s để nhận thưởng, backend sẽ kiểm tra lại trước khi cộng xu.</p>
-                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-fuchsia-500" style={{ width: `${Math.min(100, (elapsedExternalSeconds / minPlaySeconds) * 100)}%` }} />
+                <aside className="grid gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-500"><FiClock /> Thời gian ghi nhận</div>
+                    <div className="mt-2 flex flex-wrap items-end gap-3">
+                      <p className="text-3xl font-black text-slate-950">{elapsedExternalSeconds}s</p>
+                      <p className="pb-1 text-sm text-slate-500">Cần tối thiểu {minPlaySeconds}s để nhận thưởng, backend sẽ kiểm tra lại trước khi cộng xu.</p>
+                    </div>
+                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-fuchsia-500" style={{ width: `${Math.min(100, (elapsedExternalSeconds / minPlaySeconds) * 100)}%` }} />
+                    </div>
+                    {externalConfig.instructions && (
+                      <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{externalConfig.instructions}</p>
+                    )}
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                      Nếu game không tải do website ngoài chặn nhúng, bấm biểu tượng mở tab mới ở góc khung game.
+                    </p>
                   </div>
-                  {externalConfig.instructions && (
-                    <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{externalConfig.instructions}</p>
-                  )}
-                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    Nếu khung game bị trắng do website ngoài chặn nhúng, bấm biểu tượng mở tab mới ở góc khung game.
-                  </p>
-                  <button onClick={finishExternal} disabled={busy || !externalReady} className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:bg-slate-300">
+                  <button onClick={finishExternal} disabled={busy || !externalReady} className="w-full rounded-xl bg-slate-950 px-5 py-4 font-black text-white disabled:bg-slate-300 md:w-72">
                     {busy ? 'Đang ghi nhận...' : externalReady ? 'Hoàn thành và nhận thưởng' : `Chơi thêm ${Math.max(0, minPlaySeconds - elapsedExternalSeconds)}s`}
                   </button>
                 </aside>
@@ -388,8 +393,8 @@ export default function GamesPage() {
                 <h2 className="text-xl font-black text-slate-950">Game thư giãn</h2>
                 <p className="mt-1 text-sm text-slate-500">Game ngoài nhẹ, phổ biến và ưu tiên nguồn cho phép nhúng để hạn chế lỗi từ chối kết nối.</p>
               </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                {loading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : relaxingModes.map(renderModeCard)}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : relaxingModes.map(renderModeCard)}
               </div>
             </section>
 

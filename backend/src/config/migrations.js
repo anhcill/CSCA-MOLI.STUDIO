@@ -814,6 +814,7 @@ async function runOptimizations() {
       "031_add_question_category.sql",
       "032_upsert_light_external_games.sql",
       "033_upsert_hot_external_games.sql",
+      "034_replace_relaxing_external_games.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

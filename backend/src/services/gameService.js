@@ -30,6 +30,7 @@ async function listModes() {
             reward_coins, daily_reward_cap, question_count, time_limit_seconds,
             min_accuracy_reward, sort_order, config
      FROM game_modes
+     WHERE is_active = TRUE
      ORDER BY sort_order ASC, id ASC`,
   );
   return result.rows;
