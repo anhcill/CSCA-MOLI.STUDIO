@@ -812,6 +812,7 @@ async function runOptimizations() {
       "029_external_arcade_games.sql",
       "030_backfill_coin_ledger.sql",
       "031_add_question_category.sql",
+      "032_upsert_light_external_games.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

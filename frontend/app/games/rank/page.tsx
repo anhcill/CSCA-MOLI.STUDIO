@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
 import {
   findRankMatch,
@@ -97,8 +96,10 @@ export default function RankPage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Header />
-        <main className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 text-center sm:px-6 lg:px-10">
+          <Link href="/games" className="mb-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
+            <FiChevronLeft /> Quay lại Game Hub
+          </Link>
           <h1 className="text-3xl font-black text-slate-950">Thi đấu Rank</h1>
           <p className="mt-3 text-slate-500">Đăng nhập để ghép trận, tính MMR và xem bảng xếp hạng mùa.</p>
           <Link href="/login?redirect=/games/rank" className="mt-6 inline-flex rounded-xl bg-slate-950 px-5 py-3 font-bold text-white">Đăng nhập</Link>
@@ -109,13 +110,12 @@ export default function RankPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header />
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <Link href="/games" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900">
+      <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-10">
+        <Link href="/games" className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
           <FiChevronLeft /> Quay lại Game Hub
         </Link>
 
-        <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_22rem]">
+        <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="rounded-2xl bg-gradient-to-br from-slate-950 to-indigo-950 p-6 text-white shadow-xl">
             <p className="text-sm font-bold text-cyan-300">Rank theo mùa</p>
             <h1 className="mt-1 text-3xl font-black">{season?.name || 'Mùa hiện tại'}</h1>
@@ -194,7 +194,7 @@ export default function RankPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="flex items-center gap-2 text-lg font-black text-slate-950"><FiAward /> Bảng xếp hạng mùa</h2>
             <div className="mt-4 space-y-2">

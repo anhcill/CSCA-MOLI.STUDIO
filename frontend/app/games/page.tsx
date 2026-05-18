@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
 import {
   answerGameQuestion,
@@ -15,7 +14,7 @@ import {
   type GameMode,
   type GameQuestion,
 } from '@/lib/api/games';
-import { FiAward, FiCheck, FiClock, FiExternalLink, FiGift, FiLock, FiPlay, FiRefreshCw, FiStar, FiZap } from 'react-icons/fi';
+import { FiAward, FiCheck, FiChevronLeft, FiClock, FiExternalLink, FiGift, FiLock, FiPlay, FiStar, FiZap } from 'react-icons/fi';
 
 const toneMap: Record<string, string> = {
   quiz: 'from-blue-500 to-cyan-500',
@@ -161,8 +160,10 @@ export default function GamesPage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <Header />
-        <main className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 text-center sm:px-6 lg:px-10">
+          <Link href="/" className="mb-10 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
+            <FiChevronLeft /> Quay về trang chủ
+          </Link>
           <h1 className="text-3xl font-black text-slate-950">Game Hub</h1>
           <p className="mt-3 text-slate-500">Đăng nhập để chơi mini game, nhận xu và leo rank.</p>
           <Link href="/login?redirect=/games" className="mt-6 inline-flex rounded-xl bg-slate-950 px-5 py-3 font-bold text-white">Đăng nhập</Link>
@@ -173,8 +174,11 @@ export default function GamesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header />
-      <main className="mx-auto max-w-6xl px-4 py-6">
+      <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-10">
+        <Link href="/" className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
+          <FiChevronLeft /> Quay về trang chủ
+        </Link>
+
         <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-slate-950 p-6 text-white shadow-xl md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-bold text-cyan-300">Học mà chơi, chơi vẫn lên trình</p>
@@ -208,7 +212,7 @@ export default function GamesPage() {
             </div>
 
             {isExternalActive && !result && (
-              <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
                   <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
                     <div className="min-w-0">
@@ -224,7 +228,7 @@ export default function GamesPage() {
                   <iframe
                     src={externalConfig.external_url}
                     title={active.mode.name}
-                    className="h-[520px] w-full bg-white"
+                    className="h-[70vh] min-h-[560px] w-full bg-white"
                     allow="fullscreen; gamepad; autoplay"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
                   />
@@ -239,6 +243,9 @@ export default function GamesPage() {
                   {externalConfig.instructions && (
                     <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{externalConfig.instructions}</p>
                   )}
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    Nếu khung game bị trắng do website ngoài chặn nhúng, bấm biểu tượng mở tab mới ở góc khung game.
+                  </p>
                   <button onClick={finishExternal} disabled={busy || !externalReady} className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:bg-slate-300">
                     {busy ? 'Đang ghi nhận...' : externalReady ? 'Hoàn thành và nhận thưởng' : `Chơi thêm ${Math.max(0, minPlaySeconds - elapsedExternalSeconds)}s`}
                   </button>
@@ -247,7 +254,7 @@ export default function GamesPage() {
             )}
 
             {currentQuestion && !result && !isExternalActive && (
-              <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
                 <div className="rounded-2xl bg-slate-50 p-5">
                   <p className="text-sm font-semibold text-slate-500">{currentQuestion.exam_title || currentQuestion.prompt_cn || 'Câu hỏi nhanh'}</p>
                   <h3 className="mt-2 whitespace-pre-wrap text-2xl font-black leading-snug text-slate-950">{currentQuestion.prompt}</h3>
@@ -300,7 +307,7 @@ export default function GamesPage() {
           </section>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
               {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : modes.map((mode) => (
                 <article key={mode.slug} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className={`h-2 bg-gradient-to-r ${toneMap[mode.mode_type] || toneMap.quiz}`} />
@@ -326,7 +333,7 @@ export default function GamesPage() {
               ))}
             </section>
 
-            <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_22rem]">
+            <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-black text-slate-950">Lịch sử chơi gần đây</h2>
                 <div className="mt-4 space-y-2">
