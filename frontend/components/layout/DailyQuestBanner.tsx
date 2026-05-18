@@ -71,7 +71,7 @@ export default function DailyQuestBanner() {
               })}
           </span>
           <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 text-xs font-bold text-amber-200">
-            {currentCoins.toLocaleString()} xu
+            {currentCoins.toLocaleString('vi-VN')} xu
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">

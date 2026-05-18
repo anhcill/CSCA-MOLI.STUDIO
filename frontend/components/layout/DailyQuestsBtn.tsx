@@ -196,7 +196,7 @@ export default function DailyQuestsBtn() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
                   <FiStar size={14} className="text-amber-500" />
-                  <span className="text-sm font-bold text-amber-700">{currentCoins.toLocaleString()} xu</span>
+                  <span className="text-sm font-bold text-amber-700">{currentCoins.toLocaleString('vi-VN')} xu</span>
                 </div>
                 <button
                   onClick={() => setShowCoinsInfo(!showCoinsInfo)}

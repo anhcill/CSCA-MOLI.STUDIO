@@ -466,9 +466,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       </div>
 
       {/* ── Controls Row ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         {/* Filter pills */}
-        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
+        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
           {([
             { value: 'all', label: 'Tất cả', emoji: '📋', count: stats.total },
             { value: 'done', label: 'Đã làm', emoji: '✓', count: stats.done },
@@ -477,7 +477,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <button
               key={f.value}
               onClick={() => setFilter(f.value)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 filter === f.value
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
@@ -491,7 +491,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         </div>
 
         {/* Sort */}
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex items-center gap-1.5 sm:ml-auto">
           <span className="text-xs text-gray-400 font-medium">Sắp xếp:</span>
           <select
             value={sort}
@@ -507,7 +507,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         {/* Show done toggle */}
         <button
           onClick={() => setShowDone(v => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+          className={`flex w-fit items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
             showDone
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
               : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
@@ -519,7 +519,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       </div>
 
       {/* ── Result count ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
         <span>Tìm thấy <strong className="text-gray-600">{visibleExams.length}</strong> đề thi</span>
         {search && <span>cho "<strong className="text-gray-600">{search}</strong>"</span>}
         <span className="text-gray-300">|</span>

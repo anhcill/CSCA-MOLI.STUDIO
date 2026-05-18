@@ -1,128 +1,83 @@
 export const dynamic = 'force-dynamic';
 
-import Header from '@/components/layout/Header';
-import SubjectNavigation from '@/components/layout/SubjectNavigation';
-import ExamList from '@/components/toan/ExamList';
-import { FiBookOpen } from 'react-icons/fi';
-import AdminExamButton from '@/components/common/AdminExamButton';
+import FocusedExamPage from '@/components/layout/FocusedExamPage';
 
 const SUBJECT_CONFIG: Record<string, {
-    code: string;
-    name: string;
-    subjectSlug: string; // slug dùng cho query param
-    colorScheme: { from: string; via?: string; to: string; bgSoft: string };
-    emoji: string;
+  code: string;
+  name: string;
+  subjectSlug: string;
+  colorScheme: { from: string; via?: string; to: string };
+  shadowClass: string;
+  accentSoftClass: string;
+  adminGradientClass: string;
 }> = {
-    'toan': {
-        code: 'MATH',
-        name: 'Toán',
-        subjectSlug: 'toan',
-        colorScheme: { from: 'from-blue-600', via: 'via-indigo-600', to: 'to-purple-700', bgSoft: 'bg-indigo-50/50' },
-        emoji: '📐'
-    },
-    'vatly': {
-        code: 'PHYSICS',
-        name: 'Vật lý',
-        subjectSlug: 'vat-ly',
-        colorScheme: { from: 'from-amber-500', via: 'via-orange-500', to: 'to-red-600', bgSoft: 'bg-orange-50/50' },
-        emoji: '⚡'
-    },
-    'hoa': {
-        code: 'CHEMISTRY',
-        name: 'Hóa học',
-        subjectSlug: 'hoa',
-        colorScheme: { from: 'from-emerald-500', via: 'via-teal-600', to: 'to-cyan-600', bgSoft: 'bg-teal-50/50' },
-        emoji: '🧪'
-    },
-    'tiengtrung-xahoi': {
-        code: 'CHINESE',
-        name: 'Tiếng Trung XH',
-        subjectSlug: 'tiengtrung-xahoi',
-        colorScheme: { from: 'from-rose-500', via: 'via-pink-600', to: 'to-purple-600', bgSoft: 'bg-rose-50/50' },
-        emoji: '📖'
-    },
-    'tiengtrung-tunhien': {
-        code: 'CHINESE',
-        name: 'Tiếng Trung TN',
-        subjectSlug: 'tiengtrung-tunhien',
-        colorScheme: { from: 'from-violet-500', via: 'via-purple-600', to: 'to-fuchsia-600', bgSoft: 'bg-violet-50/50' },
-        emoji: '🔬'
-    }
+  toan: {
+    code: 'MATH',
+    name: 'Toán',
+    subjectSlug: 'toan',
+    colorScheme: { from: 'from-blue-600', via: 'via-indigo-600', to: 'to-purple-700' },
+    shadowClass: 'shadow-indigo-900/10',
+    accentSoftClass: 'from-blue-600',
+    adminGradientClass: 'from-violet-600 to-fuchsia-600',
+  },
+  vatly: {
+    code: 'PHYSICS',
+    name: 'Vật Lý',
+    subjectSlug: 'vat-ly',
+    colorScheme: { from: 'from-amber-500', via: 'via-orange-500', to: 'to-red-600' },
+    shadowClass: 'shadow-orange-900/10',
+    accentSoftClass: 'from-orange-500',
+    adminGradientClass: 'from-amber-500 to-red-600',
+  },
+  hoa: {
+    code: 'CHEMISTRY',
+    name: 'Hóa Học',
+    subjectSlug: 'hoa',
+    colorScheme: { from: 'from-emerald-500', via: 'via-teal-600', to: 'to-cyan-600' },
+    shadowClass: 'shadow-teal-900/10',
+    accentSoftClass: 'from-emerald-500',
+    adminGradientClass: 'from-emerald-500 to-cyan-600',
+  },
+  'tiengtrung-xahoi': {
+    code: 'CHINESE',
+    name: 'Tiếng Trung Xã Hội',
+    subjectSlug: 'tiengtrung-xahoi',
+    colorScheme: { from: 'from-rose-500', via: 'via-pink-600', to: 'to-purple-600' },
+    shadowClass: 'shadow-rose-900/10',
+    accentSoftClass: 'from-rose-500',
+    adminGradientClass: 'from-rose-500 to-purple-600',
+  },
+  'tiengtrung-tunhien': {
+    code: 'CHINESE',
+    name: 'Tiếng Trung Tự Nhiên',
+    subjectSlug: 'tiengtrung-tunhien',
+    colorScheme: { from: 'from-violet-500', via: 'via-purple-600', to: 'to-fuchsia-600' },
+    shadowClass: 'shadow-fuchsia-900/10',
+    accentSoftClass: 'from-violet-500',
+    adminGradientClass: 'from-violet-500 to-fuchsia-600',
+  },
 };
 
 export default function DeMoPhongPage({ params }: { params: { subject: string } }) {
-    const subjectSlug = params.subject;
-    const subjectInfo = SUBJECT_CONFIG[subjectSlug];
+  const subjectInfo = SUBJECT_CONFIG[params.subject];
 
-    if (!subjectInfo) {
-        return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Không tìm thấy môn học</div>;
-    }
-
+  if (!subjectInfo) {
     return (
-        <div className="min-h-screen bg-slate-50 relative overflow-hidden">
-            {/* Luminous Background blobs */}
-            <div className={`absolute top-0 left-1/4 w-full h-[500px] bg-gradient-to-br ${subjectInfo.colorScheme.from} opacity-5 blur-[120px] pointer-events-none`} />
-            
-            <Header />
-
-            <main className="w-full mx-auto px-4 md:px-8 xl:px-10 py-4 md:py-6 max-w-none relative z-10">
-                {/* Hero Banner Component */}
-                <div className={`w-full rounded-2xl bg-gradient-to-r ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.via || ''} ${subjectInfo.colorScheme.to} p-5 lg:p-6 shadow-lg relative overflow-hidden text-white flex items-center justify-between gap-4 mb-5`}>
-                    <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
-                    <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-white/20 rounded-full blur-2xl mix-blend-overlay pointer-events-none" />
-                    <div className="absolute -top-16 -right-16 w-48 h-48 bg-white/20 rounded-full blur-2xl mix-blend-overlay pointer-events-none" />
-                    
-                    <div className="relative z-10 w-full max-w-3xl">
-                        <h1 className="text-xl lg:text-2xl font-black drop-shadow-md tracking-tight leading-tight">
-                            Đề Mô Phỏng {subjectInfo.name}
-                        </h1>
-                        <p className="text-white/90 font-medium text-sm leading-relaxed max-w-2xl mt-1">
-                            Luyện tập ngay hôm nay để được AI phân tích lộ trình cải thiện điểm số.
-                        </p>
-                    </div>
-                    
-                    <div className="hidden md:flex relative z-10 w-16 h-16 bg-white/10 border border-white/20 backdrop-blur-md rounded-2xl items-center justify-center shadow-xl rotate-3 hover:rotate-0 transition-transform duration-500 flex-shrink-0">
-                        <span className="text-4xl drop-shadow-xl">{subjectInfo.emoji}</span>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10">
-                    {/* Main Content */}
-                    <div className="lg:col-span-9 flex flex-col gap-6">
-                        <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm px-6 py-5 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br ${subjectInfo.colorScheme.from} ${subjectInfo.colorScheme.to} shadow-sm`}>
-                                    <FiBookOpen size={20} />
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">
-                                        Danh sách Đề thi
-                                    </h2>
-                                    <p className="text-sm text-gray-500 font-medium">Bạn có thể thi đi thi lại nhiều lần</p>
-                                </div>
-                            </div>
-
-                            <AdminExamButton href="/admin/exams/create" gradientClass={subjectInfo.colorScheme.from} shadowClass="" hoverClass="hover:-translate-y-0.5" />
-                        </div>
-
-                        <ExamList subjectCode={subjectInfo.code} subjectSlug={subjectInfo.subjectSlug} />
-                    </div>
-
-                    {/* Sidebar */}
-                    <div className="lg:col-span-3">
-                        <SubjectNavigation
-                            subject={subjectInfo.name}
-                            subjectCode={subjectInfo.code}
-                            subjectSlug={subjectInfo.subjectSlug}
-                            colorScheme={{
-                                from: subjectInfo.colorScheme.from.replace('to-', 'from-'),
-                                to: subjectInfo.colorScheme.to.replace('to-', 'from-').replace('from-', 'to-')
-                            }}
-                            emoji={subjectInfo.emoji}
-                        />
-                    </div>
-                </div>
-            </main>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-center text-slate-400">
+        Không tìm thấy môn học
+      </div>
     );
+  }
+
+  return (
+    <FocusedExamPage
+      title={`Đề Mô Phỏng ${subjectInfo.name}`}
+      subjectCode={subjectInfo.code}
+      subjectSlug={subjectInfo.subjectSlug}
+      colorScheme={subjectInfo.colorScheme}
+      shadowClass={subjectInfo.shadowClass}
+      accentSoftClass={subjectInfo.accentSoftClass}
+      adminGradientClass={subjectInfo.adminGradientClass}
+    />
+  );
 }
