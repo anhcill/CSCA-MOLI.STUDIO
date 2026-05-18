@@ -300,14 +300,17 @@ export default function GamesPage() {
                     )}
                   </div>
                   {externalConfig.external_url ? (
-                    <iframe
-                      src={externalConfig.external_url}
-                      title={active.mode.name}
-                      className="h-[78vh] min-h-[680px] w-full bg-white"
-                      allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope"
-                      allowFullScreen
-                      referrerPolicy="no-referrer-when-downgrade"
-                    />
+                    <div className="relative h-[78vh] min-h-[680px] bg-white">
+                      <iframe
+                        src={externalConfig.external_url}
+                        title={active.mode.name}
+                        className="h-full w-full bg-white"
+                        allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                      <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 h-11 bg-slate-950" aria-hidden="true" />
+                    </div>
                   ) : (
                     <div className="flex h-[78vh] min-h-[680px] items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500">
                       Game này chưa có nội dung hiển thị.
