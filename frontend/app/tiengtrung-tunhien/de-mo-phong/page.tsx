@@ -1,10 +1,22 @@
 export const dynamic = 'force-dynamic';
 
+import type { Metadata } from 'next';
 import Header from '@/components/layout/Header';
 import SubjectNavigation from '@/components/layout/SubjectNavigation';
 import ExamList from '@/components/toan/ExamList';
 import { FiBookOpen } from 'react-icons/fi';
 import AdminExamButton from '@/components/common/AdminExamButton';
+
+export const metadata: Metadata = {
+    title: 'Tiếng Trung Tự Nhiên - Đề Mô Phỏng',
+    description: 'Luyện thi Tiếng Trung Tự Nhiên với đề mô phỏng CSCA, danh sách đề luyện tập và phân tích kết quả theo từng lần làm bài.',
+    alternates: { canonical: '/tiengtrung-tunhien/de-mo-phong' },
+    openGraph: {
+        title: 'Tiếng Trung Tự Nhiên - Đề Mô Phỏng',
+        description: 'Luyện thi Tiếng Trung Tự Nhiên với đề mô phỏng CSCA và phân tích kết quả học tập.',
+        url: '/tiengtrung-tunhien/de-mo-phong',
+    },
+};
 
 export default function TiengTrungTuNhienDeMoPhongPage() {
     const subjectCode = 'CHINESE';

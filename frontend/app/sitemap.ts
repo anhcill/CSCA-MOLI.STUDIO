@@ -44,20 +44,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
 
   const subjectRoutes: MetadataRoute.Sitemap = [
-    route('/toan', now, 'weekly', 0.8),
     route('/toan/de-mo-phong', now, 'weekly', 0.7),
     route('/toan/lo-trinh', now, 'monthly', 0.6),
     route('/toan/lich-su', now, 'weekly', 0.5),
     route('/toan/cau-truc-de', now, 'monthly', 0.6),
     route('/toan/ly-thuyet', now, 'monthly', 0.6),
     route('/toan/tu-vung', now, 'monthly', 0.6),
-    route('/hoa', now, 'weekly', 0.8),
     route('/hoa/de-mo-phong', now, 'weekly', 0.7),
-    route('/vat-ly', now, 'weekly', 0.8),
     route('/vat-ly/de-mo-phong', now, 'weekly', 0.7),
-    route('/tiengtrung-tunhien', now, 'weekly', 0.8),
     route('/tiengtrung-tunhien/de-mo-phong', now, 'weekly', 0.7),
-    route('/tiengtrung-xahoi', now, 'weekly', 0.8),
     route('/tiengtrung-xahoi/de-mo-phong', now, 'weekly', 0.7),
   ];
 
