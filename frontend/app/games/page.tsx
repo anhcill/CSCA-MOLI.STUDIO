@@ -279,7 +279,10 @@ export default function GamesPage() {
 
             {isExternalActive && !result && (
               <div className="space-y-4">
-                <div ref={externalFrameRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                <div
+                  ref={externalFrameRef}
+                  className={`overflow-hidden bg-slate-950 ${isFrameFullscreen ? 'flex h-screen flex-col rounded-none border-0' : 'rounded-2xl border border-slate-200'}`}
+                >
                   <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-black">{active.mode.name}</p>
@@ -300,7 +303,7 @@ export default function GamesPage() {
                     )}
                   </div>
                   {externalConfig.external_url ? (
-                    <div className="relative h-[78vh] min-h-[680px] bg-white">
+                    <div className={`relative bg-white ${isFrameFullscreen ? 'min-h-0 flex-1' : 'h-[78vh] min-h-[680px]'}`}>
                       <iframe
                         src={externalConfig.external_url}
                         title={active.mode.name}
@@ -312,7 +315,7 @@ export default function GamesPage() {
                       <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-10 h-11 bg-slate-950" aria-hidden="true" />
                     </div>
                   ) : (
-                    <div className="flex h-[78vh] min-h-[680px] items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500">
+                    <div className={`flex items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500 ${isFrameFullscreen ? 'min-h-0 flex-1' : 'h-[78vh] min-h-[680px]'}`}>
                       Game này chưa có nội dung hiển thị.
                     </div>
                   )}
