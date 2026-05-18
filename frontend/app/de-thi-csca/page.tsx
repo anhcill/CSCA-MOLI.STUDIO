@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
+import { getCanonicalSiteUrl } from '@/lib/seo/site';
 
 export const metadata: Metadata = {
   title: 'Đề Thi CSCA 2026 - Bộ Đề Mô Phỏng Có Lời Giải Chi Tiết | MOLI.STUDIO',
@@ -11,14 +12,40 @@ export const metadata: Metadata = {
     description: 'Tải ngay bộ đề thi CSCA 2026 gồm 20+ đề mô phỏng có lời giải chi tiết. Luyện thi CSCA online với đề chuẩn format.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Đề Thi CSCA 2026' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Đề Thi CSCA 2026' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Đề Thi CSCA 2026 - Bộ Đề Mô Phỏng Có Lời Giải',
+    description: 'Bộ đề thi CSCA mô phỏng có lời giải chi tiết, luyện theo format và theo dõi tiến độ bằng AI.',
+    images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
   alternates: { canonical: '/de-thi-csca' },
 };
 
 export default function DeThiCSCA() {
+  const siteUrl = getCanonicalSiteUrl();
+  const learningResourceJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'LearningResource',
+    name: 'Đề thi CSCA mô phỏng có lời giải',
+    description: metadata.description,
+    url: `${siteUrl}/de-thi-csca`,
+    inLanguage: 'vi-VN',
+    isAccessibleForFree: true,
+    learningResourceType: 'Practice exam',
+    educationalLevel: 'Ôn thi đầu vào học bổng du học Trung Quốc',
+    about: ['đề thi CSCA', 'luyện đề CSCA', 'thi thử CSCA'],
+    provider: {
+      '@type': 'EducationalOrganization',
+      name: 'CSCA MOLI.STUDIO',
+      url: siteUrl,
+    },
+  };
+
   return (
     <main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(learningResourceJsonLd) }} />
       <Header />
 
       {/* Hero */}

@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
+import { getCanonicalSiteUrl } from '@/lib/seo/site';
 
 export const metadata: Metadata = {
   title: 'Ôn Thi CSCA Online - Đề Thi, Tài Liệu & AI Hỗ Trợ | MOLI.STUDIO',
@@ -11,14 +12,71 @@ export const metadata: Metadata = {
     description: 'Luyện thi CSCA online với đề mô phỏng chuẩn format, tài liệu ôn tập, AI phân tích kết quả và lộ trình học thông minh.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Ôn Thi CSCA Online' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Ôn Thi CSCA Online' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Ôn Thi CSCA Online - Đề Thi, Tài Liệu & AI Hỗ Trợ',
+    description: 'Luyện thi CSCA online với đề mô phỏng, tài liệu ôn tập, AI phân tích kết quả và lộ trình học thông minh.',
+    images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
   alternates: { canonical: '/on-thi-csca' },
 };
 
 export default function OnThiCSCA() {
+  const siteUrl = getCanonicalSiteUrl();
+  const courseJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    name: 'Ôn thi CSCA online',
+    description: metadata.description,
+    url: `${siteUrl}/on-thi-csca`,
+    inLanguage: 'vi-VN',
+    isAccessibleForFree: true,
+    educationalLevel: 'Ôn thi đầu vào học bổng du học Trung Quốc',
+    teaches: [
+      'Toán CSCA',
+      'Tiếng Trung CSCA',
+      'Kiến thức tổng hợp CSCA',
+      'Luyện đề mô phỏng CSCA',
+    ],
+    about: ['CSCA', 'học bổng CSC', 'du học Trung Quốc', 'luyện thi CSCA'],
+    provider: {
+      '@type': 'EducationalOrganization',
+      name: 'CSCA MOLI.STUDIO',
+      url: siteUrl,
+      logo: `${siteUrl}/images/logo.svg`,
+    },
+    hasCourseInstance: {
+      '@type': 'CourseInstance',
+      courseMode: 'online',
+      courseWorkload: 'PT40H',
+      inLanguage: 'vi-VN',
+    },
+  };
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Trang chủ',
+        item: siteUrl,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Ôn thi CSCA',
+        item: `${siteUrl}/on-thi-csca`,
+      },
+    ],
+  };
+
   return (
     <main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Header />
 
       {/* Hero Section */}

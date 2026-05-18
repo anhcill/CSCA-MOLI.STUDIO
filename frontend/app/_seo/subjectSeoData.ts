@@ -336,13 +336,13 @@ export function buildSubjectSeoMetadata(pageKey: SubjectSeoKey): Metadata {
       url: page.route,
       type: 'website',
       locale: 'vi_VN',
-      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: page.h1 }],
+      images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: page.h1 }],
     },
     twitter: {
       card: 'summary_large_image',
       title: page.title,
       description: page.description,
-      images: ['/og-image.png'],
+      images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
     },
   };
 }

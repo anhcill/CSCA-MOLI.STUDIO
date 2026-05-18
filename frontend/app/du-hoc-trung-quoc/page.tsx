@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Du học Trung Quốc 2026: điều kiện, chi phí, top trường, học bổng và hướng dẫn đăng ký chi tiết.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Du Học Trung Quốc 2026' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Du Học Trung Quốc 2026' }],
   },
   alternates: { canonical: '/du-hoc-trung-quoc' },
 };

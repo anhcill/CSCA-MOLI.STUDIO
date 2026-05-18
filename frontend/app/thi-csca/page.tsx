@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Thông tin thi CSCA 2026: lịch thi, địa điểm, cách đăng ký, kết quả thi CSCA. Cập nhật chi tiết nhất.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Thi CSCA 2026' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Thi CSCA 2026' }],
   },
   alternates: { canonical: '/thi-csca' },
 };

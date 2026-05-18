@@ -95,11 +95,34 @@ export default function SubjectSeoPage({ pageKey }: { pageKey: SubjectSeoKey }) 
       },
     ],
   };
+  const courseJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    name: page.h1,
+    description: page.description,
+    url: `${siteUrl}${page.route}`,
+    inLanguage: 'vi-VN',
+    isAccessibleForFree: true,
+    educationalLevel: 'Ôn thi đầu vào học bổng du học Trung Quốc',
+    about: ['CSCA', page.h1],
+    provider: {
+      '@type': 'EducationalOrganization',
+      name: 'CSCA MOLI.STUDIO',
+      url: siteUrl,
+    },
+    hasCourseInstance: {
+      '@type': 'CourseInstance',
+      courseMode: 'online',
+      courseWorkload: 'PT20H',
+      inLanguage: 'vi-VN',
+    },
+  };
 
   return (
     <main className="min-h-screen bg-white">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
       <Header />
 
       <section className={`relative bg-gradient-to-br ${theme.hero} pt-20 pb-14 sm:pt-24 sm:pb-20 overflow-hidden`}>
@@ -150,7 +173,7 @@ export default function SubjectSeoPage({ pageKey }: { pageKey: SubjectSeoKey }) 
           <div className="max-w-2xl mb-10">
             <span className={`text-xs font-black uppercase tracking-widest ${theme.accent}`}>Nội dung ôn tập</span>
             <h2 className="mt-3 text-2xl sm:text-3xl font-black text-gray-950">
-              Học Đúng Phần Google Và Người Học Đang Tìm
+              Học Đúng Trọng Tâm Người Học Đang Cần
             </h2>
           </div>
 

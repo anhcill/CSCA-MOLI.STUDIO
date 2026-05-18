@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Học từ vựng CSCA theo chủ đề: toán, văn hóa, lịch sử, địa lý Trung Quốc. Flashcard thông minh, ôn tập spaced repetition.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Từ Vựng CSCA' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Từ Vựng CSCA' }],
   },
   alternates: { canonical: '/tu-vung-csca' },
 };

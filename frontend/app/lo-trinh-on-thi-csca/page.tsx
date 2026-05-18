@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Lộ trình ôn thi CSCA chi tiết từ cơ bản đến nâng cao trong 3 tháng. Phương pháp học khoa học, tài liệu chuẩn.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Lộ Trình Ôn Thi CSCA' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Lộ Trình Ôn Thi CSCA' }],
   },
   alternates: { canonical: '/lo-trinh-on-thi-csca' },
 };

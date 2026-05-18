@@ -33,6 +33,7 @@ export const metadata: Metadata = {
   keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'đề thi CSCA', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
   authors: [{ name: 'CSCA MOLI.STUDIO' }],
   creator: 'CSCA MOLI.STUDIO',
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
@@ -108,7 +109,7 @@ export default function RootLayout({
                 "url": SITE_URL,
                 "logo": {
                   "@type": "ImageObject",
-                  "url": `${SITE_URL}/images/logo.png`
+                  "url": `${SITE_URL}/images/logo.svg`
                 },
                 "sameAs": [
                   "https://www.facebook.com/molistudio",
@@ -125,11 +126,38 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
-              "@type": "Organization",
+              "@type": ["EducationalOrganization", "Organization"],
               "name": "CSCA MOLI.STUDIO",
               "url": SITE_URL,
+              "logo": `${SITE_URL}/images/logo.svg`,
               "description": "Nền tảng giáo dục trực tuyến chuyên ôn thi CSCA, học bổng CSC và du học Trung Quốc",
               "knowsAbout": ["CSCA", "Ôn thi CSCA", "Học bổng CSC", "Du học Trung Quốc", "Tiếng Trung", "Thi HSK"],
+              "sameAs": [
+                "https://www.facebook.com/molistudio",
+                "https://www.youtube.com/@moli-studio"
+              ],
+              "hasOfferCatalog": {
+                "@type": "OfferCatalog",
+                "name": "Tài nguyên ôn thi CSCA",
+                "itemListElement": [
+                  {
+                    "@type": "Offer",
+                    "itemOffered": {
+                      "@type": "Course",
+                      "name": "Ôn thi CSCA online",
+                      "url": `${SITE_URL}/on-thi-csca`
+                    }
+                  },
+                  {
+                    "@type": "Offer",
+                    "itemOffered": {
+                      "@type": "LearningResource",
+                      "name": "Đề thi CSCA mô phỏng",
+                      "url": `${SITE_URL}/de-thi-csca`
+                    }
+                  }
+                ]
+              },
               "areaServed": {
                 "@type": "Country",
                 "name": "Vietnam"

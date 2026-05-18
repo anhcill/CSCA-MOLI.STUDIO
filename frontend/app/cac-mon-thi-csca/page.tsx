@@ -22,7 +22,13 @@ export const metadata: Metadata = {
     url: '/cac-mon-thi-csca',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Các môn thi CSCA' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Các môn thi CSCA' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Các Môn Thi CSCA - Toán, Lý, Hóa, Tiếng Trung & Tổng Hợp',
+    description: 'Xem danh sách môn thi CSCA và chọn lộ trình ôn theo từng môn.',
+    images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
 };
 

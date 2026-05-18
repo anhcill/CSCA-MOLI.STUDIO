@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
+import { getCanonicalSiteUrl } from '@/lib/seo/site';
 
 export const metadata: Metadata = {
   title: 'Luyện Thi CSCA Online - Bài Tập, Đề Thi & Phân Tích AI | MOLI.STUDIO',
@@ -11,14 +12,45 @@ export const metadata: Metadata = {
     description: 'Luyện thi CSCA online với 5000+ câu hỏi, đề thi mô phỏng chuẩn format, AI phân tích kết quả chi tiết.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Luyện Thi CSCA' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Luyện Thi CSCA' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Luyện Thi CSCA Online - Bài Tập, Đề Thi & Phân Tích AI',
+    description: 'Luyện thi CSCA online với bài tập, đề mô phỏng và AI phân tích kết quả chi tiết.',
+    images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
   alternates: { canonical: '/luyen-thi-csca' },
 };
 
 export default function LuyenThiCSCA() {
+  const siteUrl = getCanonicalSiteUrl();
+  const courseJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    name: 'Luyện thi CSCA online',
+    description: metadata.description,
+    url: `${siteUrl}/luyen-thi-csca`,
+    inLanguage: 'vi-VN',
+    isAccessibleForFree: true,
+    educationalLevel: 'Ôn thi đầu vào học bổng du học Trung Quốc',
+    about: ['luyện thi CSCA', 'bài tập CSCA', 'thi thử CSCA'],
+    provider: {
+      '@type': 'EducationalOrganization',
+      name: 'CSCA MOLI.STUDIO',
+      url: siteUrl,
+    },
+    hasCourseInstance: {
+      '@type': 'CourseInstance',
+      courseMode: 'online',
+      courseWorkload: 'PT40H',
+      inLanguage: 'vi-VN',
+    },
+  };
+
   return (
     <main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
       <Header />
 
       {/* Hero */}

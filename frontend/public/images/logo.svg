@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">CSCA MOLI.STUDIO</title>
+  <desc id="desc">Logo CSCA MOLI.STUDIO</desc>
+  <rect width="512" height="512" rx="112" fill="#4f46e5"/>
+  <path d="M128 158c0-22 18-40 40-40h176c22 0 40 18 40 40v196c0 22-18 40-40 40H168c-22 0-40-18-40-40V158Z" fill="#ffffff"/>
+  <path d="M176 182h160v28H176v-28Zm0 60h160v28H176v-28Zm0 60h108v28H176v-28Z" fill="#4f46e5"/>
+  <path d="M320 310l18 36 40 6-29 28 7 40-36-19-36 19 7-40-29-28 40-6 18-36Z" fill="#f59e0b"/>
+</svg>

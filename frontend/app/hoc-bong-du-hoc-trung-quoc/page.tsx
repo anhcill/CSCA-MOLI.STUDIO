@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description: 'Tổng hợp thông tin học bổng du học Trung Quốc 2026: học bổng CSC, điều kiện, quy trình đăng ký chi tiết.',
     type: 'website',
     locale: 'vi_VN',
-    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Học Bổng Du Học Trung Quốc 2026' }],
+    images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Học Bổng Du Học Trung Quốc 2026' }],
   },
   alternates: { canonical: '/hoc-bong-du-hoc-trung-quoc' },
 };
