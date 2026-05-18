@@ -305,7 +305,7 @@ export default function GamesPage() {
                         src={externalConfig.external_url}
                         title={active.mode.name}
                         className="h-full w-full bg-white"
-                        allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope"
+                        allow="fullscreen *; gamepad *; autoplay *; clipboard-write *; accelerometer *; gyroscope *"
                         allowFullScreen
                         referrerPolicy="no-referrer-when-downgrade"
                       />
