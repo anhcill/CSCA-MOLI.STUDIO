@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     url: '/toan/de-mo-phong',
     images: [{ url: '/images/pexels-markus-winkler-1430818-30855414.jpg', width: 1200, height: 630, alt: 'Đề Thi Toán CSCA' }],
   },
+  alternates: { canonical: '/toan/de-mo-phong' },
   twitter: {
     card: 'summary_large_image',
     title: 'Đề Thi Toán | CSCA',

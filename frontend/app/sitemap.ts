@@ -41,6 +41,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     route('/luyen-thi-csca', now, 'weekly', 0.9),
     route('/thi-csca', now, 'weekly', 0.9),
     route('/du-hoc-trung-quoc', now, 'monthly', 0.9),
+    route('/cac-mon-thi-csca', now, 'weekly', 0.9),
+    route('/on-thi-toan-csca', now, 'weekly', 0.85),
+    route('/on-thi-vat-ly-csca', now, 'weekly', 0.85),
+    route('/on-thi-hoa-csca', now, 'weekly', 0.85),
+    route('/on-thi-tieng-trung-csca', now, 'weekly', 0.85),
+    route('/on-thi-tong-hop-csca', now, 'weekly', 0.85),
   ];
 
   const subjectRoutes: MetadataRoute.Sitemap = [

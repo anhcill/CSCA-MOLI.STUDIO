@@ -1,10 +1,22 @@
 export const dynamic = 'force-dynamic';
 
+import type { Metadata } from 'next';
 import Header from '@/components/layout/Header';
 import SubjectNavigation from '@/components/layout/SubjectNavigation';
 import ExamList from '@/components/toan/ExamList';
 import { FiBookOpen } from 'react-icons/fi';
 import AdminExamButton from '@/components/common/AdminExamButton';
+
+export const metadata: Metadata = {
+    title: 'Tiếng Trung Xã Hội - Đề Mô Phỏng',
+    description: 'Luyện thi Tiếng Trung Xã Hội với đề mô phỏng CSCA, câu hỏi theo chủ đề văn hóa, lịch sử, xã hội và phân tích kết quả học tập.',
+    alternates: { canonical: '/tiengtrung-xahoi/de-mo-phong' },
+    openGraph: {
+        title: 'Tiếng Trung Xã Hội - Đề Mô Phỏng',
+        description: 'Luyện thi Tiếng Trung Xã Hội với đề mô phỏng CSCA và phân tích kết quả học tập.',
+        url: '/tiengtrung-xahoi/de-mo-phong',
+    },
+};
 
 export default function TiengTrungXaHoiDeMoPhongPage() {
     const subjectCode = 'CHINESE';
