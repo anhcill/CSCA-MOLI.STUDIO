@@ -58,6 +58,8 @@ interface ExamResult {
   subject_name: string;
   total_score: number;
   total_correct: number;
+  total_incorrect?: number;
+  total_unanswered?: number;
   submit_time: string;
   total_questions: number;
   solution_video_url?: string | null;
@@ -261,12 +263,12 @@ function ExamResultContent() {
   }
 
   const answers = result.answers ?? [];
+  const total = result.total_questions || answers.length || 1;
   const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
-  const totalIncorrect = answers.filter(a => a.selected_answer_key && !a.is_correct).length;
-  const totalUnanswered = answers.filter(a => !a.selected_answer_key).length;
-  const total = answers.length || result.total_questions || 1;
+  const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && !a.is_correct).length;
+  const totalUnanswered = result.total_unanswered ?? Math.max(0, total - totalCorrect - totalIncorrect);
   const accuracy = Math.round((totalCorrect / total) * 100);
-  const score = Number(result.total_score) || 0;
+  const displayScore = Math.round((totalCorrect / total) * 100) / 10;
   const wrongAnswers = answers.filter(a => a.selected_answer_key && !a.is_correct);
   const skippedAnswers = answers.filter(a => !a.selected_answer_key);
 
@@ -360,7 +362,7 @@ function ExamResultContent() {
                 <div className="text-center mb-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{result.exam_title}</p>
                   <p className={`text-5xl font-black text-${gradeColor}-600`}>
-                    {score.toFixed(1)}
+                    {displayScore.toFixed(1)}
                   </p>
                   <p className="text-gray-400 text-sm">/ 10 điểm</p>
                 </div>
