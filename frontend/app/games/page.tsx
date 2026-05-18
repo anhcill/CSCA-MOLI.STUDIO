@@ -78,6 +78,8 @@ export default function GamesPage() {
     ? Math.max(0, Math.floor((now - new Date(active.session.started_at).getTime()) / 1000))
     : 0;
   const externalReady = Boolean(isExternalActive && elapsedExternalSeconds >= minPlaySeconds);
+  const learningModes = useMemo(() => modes.filter((mode) => mode.mode_type !== 'external'), [modes]);
+  const relaxingModes = useMemo(() => modes.filter((mode) => mode.mode_type === 'external'), [modes]);
 
   const begin = async (mode: GameMode) => {
     setBusy(true);
@@ -144,6 +146,30 @@ export default function GamesPage() {
       setBusy(false);
     }
   };
+
+  const renderModeCard = (mode: GameMode) => (
+    <article key={mode.slug} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className={`h-2 bg-gradient-to-r ${toneMap[mode.mode_type] || toneMap.quiz}`} />
+      <div className="p-5">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-950">{mode.name}</h2>
+            <p className="mt-1 text-sm text-slate-500">{mode.description}</p>
+          </div>
+          {!mode.is_active && <FiLock className="text-slate-300" />}
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
+          <span className="rounded-lg bg-slate-50 px-2 py-1"><FiZap className="inline" /> {mode.mode_type === 'external' ? 'Game ngoài' : `${mode.question_count} câu`}</span>
+          <span className="rounded-lg bg-slate-50 px-2 py-1"><FiGift className="inline" /> +{mode.reward_coins} xu</span>
+          <span className="rounded-lg bg-slate-50 px-2 py-1">Phí {mode.entry_fee_coins} xu</span>
+          <span className="rounded-lg bg-slate-50 px-2 py-1">Cap {mode.daily_reward_cap}/ngày</span>
+        </div>
+        <button onClick={() => begin(mode)} disabled={!mode.is_active || busy} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:bg-slate-300">
+          <FiPlay /> Chơi ngay
+        </button>
+      </div>
+    </article>
+  );
 
   const buyUnlock = async (type: string, key: string) => {
     setBusy(true);
@@ -216,7 +242,9 @@ export default function GamesPage() {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{active.mode.name}</p>
-                <h2 className="text-xl font-black text-slate-950">Câu {Math.min(answeredCount + 1, active.questions.length)} / {active.questions.length}</h2>
+                <h2 className="text-xl font-black text-slate-950">
+                  {isExternalActive ? 'Đang chơi game thư giãn' : `Câu ${Math.min(answeredCount + 1, active.questions.length)} / ${active.questions.length}`}
+                </h2>
               </div>
               <button onClick={() => { setActive(null); setResult(null); }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600">Thoát</button>
             </div>
@@ -235,13 +263,19 @@ export default function GamesPage() {
                       </a>
                     )}
                   </div>
-                  <iframe
-                    src={externalConfig.external_url}
-                    title={active.mode.name}
-                    className="h-[70vh] min-h-[560px] w-full bg-white"
-                    allow="fullscreen; gamepad; autoplay"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
-                  />
+                  {externalConfig.external_url ? (
+                    <iframe
+                      src={externalConfig.external_url}
+                      title={active.mode.name}
+                      className="h-[70vh] min-h-[560px] w-full bg-white"
+                      allow="fullscreen; gamepad; autoplay"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
+                    />
+                  ) : (
+                    <div className="flex h-[70vh] min-h-[560px] items-center justify-center bg-white p-6 text-center text-sm font-bold text-slate-500">
+                      Game này chưa có nội dung hiển thị.
+                    </div>
+                  )}
                 </div>
                 <aside className="rounded-2xl border border-slate-200 p-5">
                   <div className="flex items-center gap-2 text-sm font-bold text-slate-500"><FiClock /> Thời gian ghi nhận</div>
@@ -317,8 +351,13 @@ export default function GamesPage() {
           </section>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-              {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : modes.map((mode) => (
+            <section>
+              <div className="mb-3">
+                <h2 className="text-xl font-black text-slate-950">Game học tập</h2>
+                <p className="mt-1 text-sm text-slate-500">Ôn câu hỏi, từ vựng và thử thách CSCA để vừa chơi vừa giữ nhịp học.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+              {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : learningModes.map((mode) => (
                 <article key={mode.slug} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className={`h-2 bg-gradient-to-r ${toneMap[mode.mode_type] || toneMap.quiz}`} />
                   <div className="p-5">
@@ -341,6 +380,17 @@ export default function GamesPage() {
                   </div>
                 </article>
               ))}
+              </div>
+            </section>
+
+            <section className="mt-8">
+              <div className="mb-3">
+                <h2 className="text-xl font-black text-slate-950">Game thư giãn</h2>
+                <p className="mt-1 text-sm text-slate-500">Game ngoài nhẹ, phổ biến và ưu tiên nguồn cho phép nhúng để hạn chế lỗi từ chối kết nối.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+                {loading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : relaxingModes.map(renderModeCard)}
+              </div>
             </section>
 
             <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">

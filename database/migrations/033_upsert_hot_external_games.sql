@@ -1,0 +1,165 @@
+-- Extra external arcade games. These sources are selected because they publish iframe embed URLs.
+
+INSERT INTO game_modes (
+  slug, name, description, mode_type, is_active, entry_fee_coins, reward_coins,
+  daily_reward_cap, question_count, time_limit_seconds, min_accuracy_reward,
+  sort_order, config
+) VALUES
+  (
+    'arcade-slope',
+    'Slope 3D',
+    'Game bóng lăn tốc độ cao, né chướng ngại và giữ phản xạ nhanh giữa giờ học.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    180,
+    0,
+    24,
+    '{
+      "tone": "cyan",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/slope/",
+      "cover_url": "",
+      "instructions": "Điều khiển bóng đi càng xa càng tốt. Chơi tối thiểu 30 giây để hệ thống ghi nhận.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  ),
+  (
+    'arcade-brick-breaker',
+    'Brick Breaker',
+    'Phá gạch cổ điển, dễ chơi và hợp để giải trí nhẹ nhàng.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    180,
+    0,
+    25,
+    '{
+      "tone": "orange",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/brick-breaker/",
+      "cover_url": "",
+      "instructions": "Giữ bóng không rơi và phá hết các viên gạch. Chơi tối thiểu 30 giây để nhận thưởng.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  ),
+  (
+    'arcade-t-rex',
+    'T-Rex Runner',
+    'Game khủng long nhảy né chướng ngại quen thuộc, chơi nhanh và không cần học luật.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    180,
+    0,
+    26,
+    '{
+      "tone": "slate",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/t-rex/",
+      "cover_url": "",
+      "instructions": "Nhảy qua chướng ngại và cố gắng chạy xa nhất có thể. Chơi tối thiểu 30 giây để hệ thống ghi nhận.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  ),
+  (
+    'arcade-minesweeper',
+    'Minesweeper',
+    'Dò mìn kinh điển, rèn suy luận nhẹ và hợp với người thích game logic.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    180,
+    0,
+    27,
+    '{
+      "tone": "emerald",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/minesweeper/",
+      "cover_url": "",
+      "instructions": "Mở ô an toàn, dùng số gợi ý để tránh mìn. Chơi tối thiểu 30 giây để nhận thưởng.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  ),
+  (
+    'arcade-sudoku',
+    'Sudoku',
+    'Điền số thư giãn, tập trung nhẹ và phù hợp nghỉ giữa các phiên ôn thi.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    240,
+    0,
+    28,
+    '{
+      "tone": "blue",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/sudoku/",
+      "cover_url": "",
+      "instructions": "Điền số sao cho mỗi hàng, cột và ô 3x3 không trùng số. Chơi tối thiểu 30 giây để hệ thống ghi nhận.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  ),
+  (
+    'arcade-memory-match',
+    'Memory Match',
+    'Lật thẻ tìm cặp giống nhau, nhẹ nhàng và luyện trí nhớ ngắn hạn.',
+    'external',
+    TRUE,
+    0,
+    5,
+    25,
+    0,
+    180,
+    0,
+    29,
+    '{
+      "tone": "pink",
+      "provider": "GameZipper",
+      "license": "Free iframe embed",
+      "external_url": "https://gamezipper.com/memory-match/",
+      "cover_url": "",
+      "instructions": "Lật thẻ và ghi nhớ vị trí để tìm đúng các cặp giống nhau. Chơi tối thiểu 30 giây để nhận thưởng.",
+      "min_play_seconds": 30,
+      "max_score": 1500
+    }'::jsonb
+  )
+ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  mode_type = EXCLUDED.mode_type,
+  is_active = EXCLUDED.is_active,
+  entry_fee_coins = EXCLUDED.entry_fee_coins,
+  reward_coins = EXCLUDED.reward_coins,
+  daily_reward_cap = EXCLUDED.daily_reward_cap,
+  question_count = EXCLUDED.question_count,
+  time_limit_seconds = EXCLUDED.time_limit_seconds,
+  min_accuracy_reward = EXCLUDED.min_accuracy_reward,
+  sort_order = EXCLUDED.sort_order,
+  config = EXCLUDED.config,
+  updated_at = CURRENT_TIMESTAMP;
