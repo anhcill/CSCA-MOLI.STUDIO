@@ -574,7 +574,7 @@ const refreshToken = async (req, res) => {
 };
 
 // ─── Facebook OAuth (Authorization Code Flow) ───────────────────────────────
-const FACEBOOK_OAUTH_VERSION = 'v19.0';
+const FACEBOOK_OAUTH_VERSION = process.env.FACEBOOK_OAUTH_VERSION || 'v21.0';
 
 const getBackendBaseUrl = (req) => {
   const configured = process.env.BACKEND_PUBLIC_URL;
