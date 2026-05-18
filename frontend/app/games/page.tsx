@@ -175,9 +175,19 @@ export default function GamesPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-10">
-        <Link href="/" className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
-          <FiChevronLeft /> Quay về trang chủ
-        </Link>
+        {active ? (
+          <button
+            type="button"
+            onClick={() => { setActive(null); setResult(null); load(); }}
+            className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950"
+          >
+            <FiChevronLeft /> Quay lại Game Hub
+          </button>
+        ) : (
+          <Link href="/" className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:text-slate-950">
+            <FiChevronLeft /> Quay về trang chủ
+          </Link>
+        )}
 
         <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-slate-950 p-6 text-white shadow-xl md:flex-row md:items-center md:justify-between">
           <div>
