@@ -207,7 +207,7 @@ export default function ForumPage() {
   const isAuth = mounted && isAuthenticated;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] relative overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 relative overflow-hidden flex flex-col">
       {/* Premium Ambient Background */}
       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-violet-200/40 to-pink-200/40 blur-[120px] rounded-full mix-blend-multiply pointer-events-none" />
       <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-gradient-to-tr from-cyan-100/40 to-indigo-200/40 blur-[120px] rounded-full mix-blend-multiply pointer-events-none -translate-x-1/2" />
@@ -215,15 +215,15 @@ export default function ForumPage() {
       <Header />
 
       {/* ── Sticky filter bar ── */}
-      <div className="sticky top-[64px] z-30 bg-white/70 backdrop-blur-2xl border-b border-gray-200/50 shadow-sm">
+      <div className="sticky top-[64px] z-30 bg-white/70 dark:bg-slate-900/80 backdrop-blur-2xl border-b border-gray-200/50 dark:border-slate-800/80 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-6">
           <div className="flex items-center gap-2 shrink-0 hidden md:flex">
              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
                <FiZap size={16} className="text-white" />
              </div>
-             <span className="font-black tracking-tight text-gray-900">Mạng Lưới</span>
+             <span className="font-black tracking-tight text-gray-900 dark:text-white">Mạng Lưới</span>
           </div>
-          <div className="w-px h-6 bg-gray-200 shrink-0 hidden md:block" />
+          <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 shrink-0 hidden md:block" />
 
           {/* Tag pills */}
           <div className="flex gap-2 overflow-x-auto scrollbar-none flex-1 pb-1 pt-1 -my-1">
@@ -233,7 +233,7 @@ export default function ForumPage() {
                 onClick={() => setActiveTag(tag)}
                 className={`shrink-0 px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300 ${activeTag === tag
                   ? `bg-gradient-to-r ${TAG_COLORS[tag] || 'from-violet-600 to-indigo-600'} text-white shadow-lg scale-105`
-                  : 'bg-white text-gray-500 hover:bg-gray-100/80 hover:text-gray-900 border border-gray-200/60 shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-300 hover:bg-gray-100/80 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-gray-200/60 dark:border-slate-700 shadow-sm'
                   }`}
               >
                 {activeTag === tag && <FiHash className="inline-block mr-1 opacity-80" size={12} />}
@@ -253,7 +253,7 @@ export default function ForumPage() {
 
             {/* ── Composer ── */}
             {isAuth ? (
-              <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/50 shadow-xl shadow-indigo-100/50 overflow-hidden transition-all duration-300">
+              <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[2rem] border border-white/50 dark:border-slate-800 shadow-xl shadow-indigo-100/50 dark:shadow-black/30 overflow-hidden transition-all duration-300">
                 {!composerOpen ? (
                   <button
                     onClick={() => setComposerOpen(true)}
@@ -261,7 +261,7 @@ export default function ForumPage() {
                   >
                     <Avatar src={user?.avatar} name={user?.full_name} size={48} />
                     <div className="flex-1">
-                       <div className="px-5 py-3.5 rounded-2xl bg-gray-50/80 border border-gray-100 text-gray-400 font-medium group-hover:bg-violet-50/50 group-hover:border-violet-100 transition-colors shadow-inner flex items-center justify-between">
+                       <div className="px-5 py-3.5 rounded-2xl bg-gray-50/80 dark:bg-slate-800/80 border border-gray-100 dark:border-slate-700 text-gray-400 dark:text-slate-400 font-medium group-hover:bg-violet-50/50 dark:group-hover:bg-violet-900/20 group-hover:border-violet-100 dark:group-hover:border-violet-800 transition-colors shadow-inner flex items-center justify-between">
                           <span>{user?.full_name?.split(' ').pop() || 'Bạn'} ơi, chia sẻ bí kíp học tập nào!</span>
                           <FiFeather className="text-violet-400 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all" size={20} />
                        </div>
@@ -272,33 +272,33 @@ export default function ForumPage() {
                     <div className="flex gap-4 items-center">
                       <Avatar src={user?.avatar} name={user?.full_name} size={48} />
                       <div>
-                        <p className="text-sm font-black text-gray-900 tracking-tight">{user?.full_name}</p>
-                        <div className="flex items-center gap-1.5 mt-1 bg-green-50 px-2 py-0.5 rounded-md w-fit">
+                        <p className="text-sm font-black text-gray-900 dark:text-white tracking-tight">{user?.full_name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-md w-fit">
                           <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                          <p className="text-[10px] uppercase font-bold text-green-700 tracking-wider">Đang kết nối viễn thông</p>
+                          <p className="text-[10px] uppercase font-bold text-green-700 dark:text-green-300 tracking-wider">Đang kết nối viễn thông</p>
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-gray-200 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all bg-white shadow-inner">
+                    <div className="rounded-2xl border border-gray-200 dark:border-slate-700 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all bg-white dark:bg-slate-900 shadow-inner">
                       <textarea
                         value={newPost}
                         onChange={e => setNewPost(e.target.value)}
                         placeholder="Hãy bật mí kinh nghiệm ôn thi, review tài liệu hay đặt lộ trình chung cho mọi người nhé..."
                         rows={4}
-                        className="resize-none w-full outline-none text-[15px] text-gray-800 placeholder-gray-400 leading-relaxed font-medium"
+                        className="resize-none w-full outline-none text-[15px] text-gray-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 leading-relaxed font-medium bg-transparent"
                       />
                     </div>
                     <div className="flex items-center justify-between pt-2">
-                       <div className="flex items-center gap-2 text-xs text-gray-400 font-medium bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
-                         <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200 shadow-sm text-gray-500">Ctrl</span>
+                       <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-slate-400 font-medium bg-gray-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-slate-700">
+                          <span className="px-1.5 py-0.5 bg-white dark:bg-slate-900 rounded border border-gray-200 dark:border-slate-700 shadow-sm text-gray-500 dark:text-slate-300">Ctrl</span>
                          <span>+</span>
-                         <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200 shadow-sm text-gray-500">Enter</span>
+                          <span className="px-1.5 py-0.5 bg-white dark:bg-slate-900 rounded border border-gray-200 dark:border-slate-700 shadow-sm text-gray-500 dark:text-slate-300">Enter</span>
                          <span>để đăng bài</span>
                        </div>
                       <div className="flex gap-3">
                         <button
                           onClick={() => { setComposerOpen(false); setNewPost(''); }}
-                          className="px-5 py-2.5 text-sm text-gray-500 hover:bg-gray-100 rounded-xl transition-colors font-bold"
+                          className="px-5 py-2.5 text-sm text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors font-bold"
                         >
                           Hủy
                         </button>
@@ -338,12 +338,12 @@ export default function ForumPage() {
                 ? Array.from({ length: 4 }).map((_, i) => <PostSkeleton key={i} />)
                 : posts.length === 0
                   ? (
-                    <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] border border-white/50 p-12 text-center shadow-xl shadow-indigo-100/30 w-full flex flex-col items-center justify-center min-h-[400px]">
+                    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[2rem] border border-white/50 dark:border-slate-800 p-12 text-center shadow-xl shadow-indigo-100/30 dark:shadow-black/30 w-full flex flex-col items-center justify-center min-h-[400px]">
                       <div className="w-24 h-24 bg-gradient-to-br from-violet-100 to-pink-100 rounded-3xl flex items-center justify-center rotate-12 mb-6 shadow-inner border border-white">
                          <span className="text-4xl -rotate-12">🪶</span>
                       </div>
-                      <h3 className="text-2xl font-black text-gray-900 mb-2">Chưa có dòng tâm sự nào</h3>
-                      <p className="text-gray-500">Hãy là người tiên phong khai phá khu vực vùng đất này nhé!</p>
+                      <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Chưa có dòng tâm sự nào</h3>
+                      <p className="text-gray-500 dark:text-slate-400">Hãy là người tiên phong khai phá khu vực vùng đất này nhé!</p>
                     </div>
                   )
                   : posts.map(post => (
@@ -387,14 +387,14 @@ export default function ForumPage() {
           <div className="hidden lg:flex lg:col-span-4 flex-col gap-6 self-start sticky top-[120px]">
 
             {/* Community Stats */}
-            <div className="bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 p-6 shadow-xl shadow-gray-200/40 relative overflow-hidden">
+            <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 dark:border-slate-800 p-6 shadow-xl shadow-gray-200/40 dark:shadow-black/30 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-full pointer-events-none" />
                <div className="flex items-center gap-3 mb-6 relative z-10">
                  <div className="w-10 h-10 rounded-[1rem] bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                    <FiGlobe size={20} className="text-white" />
                  </div>
                  <div>
-                   <h3 className="font-black text-gray-900 text-base">Toàn cảnh CSCA</h3>
+                    <h3 className="font-black text-gray-900 dark:text-white text-base">Toàn cảnh CSCA</h3>
                    <p className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Hệ sinh thái</p>
                  </div>
                </div>
@@ -408,8 +408,8 @@ export default function ForumPage() {
                          <Icon size={20} />
                        </div>
                        <div>
-                         <p className="text-sm font-black text-gray-900 group-hover:text-violet-600 transition-colors">{stat.label}</p>
-                         <p className="text-xs font-medium text-gray-500 mt-0.5">{stat.sub}</p>
+                          <p className="text-sm font-black text-gray-900 dark:text-slate-100 group-hover:text-violet-600 dark:group-hover:text-violet-300 transition-colors">{stat.label}</p>
+                          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mt-0.5">{stat.sub}</p>
                        </div>
                      </div>
                    );
@@ -417,8 +417,8 @@ export default function ForumPage() {
                </div>
 
                {!isAuth && mounted && (
-                 <div className="mt-6 pt-6 border-t border-gray-100">
-                    <Link href="/auth" className="flex items-center justify-center w-full py-3.5 bg-gray-900 text-white hover:bg-gray-800 text-sm font-bold rounded-xl transition-colors shadow-lg">
+                  <div className="mt-6 pt-6 border-t border-gray-100 dark:border-slate-800">
+                     <Link href="/auth" className="flex items-center justify-center w-full py-3.5 bg-gray-900 dark:bg-white text-white dark:text-slate-900 hover:bg-gray-800 dark:hover:bg-slate-200 text-sm font-bold rounded-xl transition-colors shadow-lg">
                       Đăng Ký Thành Viên
                     </Link>
                  </div>
@@ -426,9 +426,9 @@ export default function ForumPage() {
             </div>
 
             {/* Popular Topics */}
-            <div className="bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 p-6 shadow-xl shadow-gray-200/40">
-              <h3 className="font-black text-gray-900 text-base mb-5 flex items-center gap-2">
-                <div className="p-1.5 bg-orange-100 text-orange-500 rounded-lg"><FiTrendingUp size={16} /></div>
+            <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl rounded-[2rem] border border-white/50 dark:border-slate-800 p-6 shadow-xl shadow-gray-200/40 dark:shadow-black/30">
+              <h3 className="font-black text-gray-900 dark:text-white text-base mb-5 flex items-center gap-2">
+                <div className="p-1.5 bg-orange-100 dark:bg-orange-900/30 text-orange-500 dark:text-orange-300 rounded-lg"><FiTrendingUp size={16} /></div>
                 Xu hướng thao luận
               </h3>
               <div className="flex flex-wrap gap-2.5">
@@ -436,10 +436,10 @@ export default function ForumPage() {
                   <button
                     key={tag}
                     onClick={() => setActiveTag(tag)}
-                    className="px-4 py-2 hover:scale-105 transition-transform bg-gray-50 hover:bg-white border border-gray-100 hover:border-violet-200 rounded-xl flex items-center gap-1.5 group shadow-sm hover:shadow-md"
+                    className="px-4 py-2 hover:scale-105 transition-transform bg-gray-50 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-gray-100 dark:border-slate-700 hover:border-violet-200 dark:hover:border-violet-700 rounded-xl flex items-center gap-1.5 group shadow-sm hover:shadow-md"
                   >
                     <span className="text-violet-400 group-hover:text-violet-600 font-bold">#</span>
-                    <span className="text-xs font-bold text-gray-700 group-hover:text-gray-900">{tag}</span>
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-300 group-hover:text-gray-900 dark:group-hover:text-white">{tag}</span>
                   </button>
                 ))}
               </div>

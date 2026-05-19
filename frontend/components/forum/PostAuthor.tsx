@@ -36,12 +36,12 @@ export default function PostAuthor({
         <img
           src={getAvatar()}
           alt={name}
-          className="rounded-2xl object-cover ring-2 ring-white/50 shadow-md transition-transform duration-200 group-hover:scale-105"
+          className="rounded-2xl object-cover ring-2 ring-white/50 dark:ring-slate-700/70 shadow-md transition-transform duration-200 group-hover:scale-105"
           style={{ width: avatarSize, height: avatarSize }}
         />
         {isVip && (
           <div
-            className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 rounded-full border-2 border-white flex items-center justify-center"
+            className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center"
             title="VIP"
           >
             <div className="w-1.5 h-1.5 bg-amber-600 rounded-full" />
@@ -52,7 +52,7 @@ export default function PostAuthor({
       {/* Name + meta */}
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`font-bold text-gray-900 ${textSize} truncate`}>{name}</span>
+          <span className={`font-bold text-gray-900 dark:text-white ${textSize} truncate`}>{name}</span>
           {role === 'admin' && (
             <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700">Admin</span>
           )}
@@ -66,9 +66,9 @@ export default function PostAuthor({
             <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-violet-100 text-violet-700">{badge}</span>
           )}
         </div>
-        <p className={`text-gray-400 font-medium ${subTextSize} flex items-center gap-1.5`}>
+        <p className={`text-gray-400 dark:text-slate-400 font-medium ${subTextSize} flex items-center gap-1.5`}>
           {time}
-          <span className="w-1 h-1 rounded-full bg-gray-300" />
+          <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-600" />
           <span>Công khai</span>
         </p>
       </div>

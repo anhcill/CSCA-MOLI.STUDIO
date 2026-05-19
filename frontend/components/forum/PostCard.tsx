@@ -89,7 +89,7 @@ export default function PostCard({
   const isOwn = user?.id === post.user_id;
 
   return (
-    <article className="bg-white/90 backdrop-blur-xl rounded-[2rem] border border-white shadow-lg shadow-gray-200/40 overflow-hidden group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/60 hover:-translate-y-1">
+    <article className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2rem] border border-white dark:border-slate-800 shadow-lg shadow-gray-200/40 dark:shadow-black/30 overflow-hidden group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/60 dark:hover:shadow-black/40 hover:-translate-y-1">
 
       {/* Header */}
       <div className="flex items-start justify-between px-6 pt-6 mb-4">
@@ -109,13 +109,13 @@ export default function PostCard({
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(v => !v)}
-              className="w-10 h-10 flex items-center justify-center rounded-2xl text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-2xl text-gray-400 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
             >
               <FiMoreHorizontal size={20} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 p-2 z-20 animate-in zoom-in-95 duration-200">
-                <button onClick={handleEdit} className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-violet-50 hover:text-violet-600 font-bold text-sm rounded-xl transition-colors">
+              <div className="absolute right-0 mt-2 w-48 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 dark:border-slate-700 p-2 z-20 animate-in zoom-in-95 duration-200">
+                <button onClick={handleEdit} className="w-full flex items-center gap-3 px-4 py-2.5 text-gray-700 dark:text-slate-200 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 dark:hover:text-violet-300 font-bold text-sm rounded-xl transition-colors">
                   <FiEdit2 size={16} /> Chỉnh sửa
                 </button>
                 <button onClick={handleDeleteConfirm} className="w-full flex items-center gap-3 px-4 py-2.5 text-red-600 hover:bg-red-50 font-bold text-sm rounded-xl transition-colors mt-1">
@@ -131,12 +131,12 @@ export default function PostCard({
       <div className="px-6 mb-4">
         {editingId === post.id ? (
           <div className="space-y-3">
-            <div className="bg-gray-50 rounded-2xl border border-gray-200 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all">
+             <div className="bg-gray-50 dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 focus-within:border-violet-400 focus-within:ring-4 focus-within:ring-violet-500/10 p-4 transition-all">
               <textarea
                 value={editContent}
                 onChange={e => setEditContent(e.target.value)}
                 rows={4}
-                className="resize-none overflow-hidden w-full bg-transparent outline-none text-[15px] text-gray-800 leading-relaxed font-medium"
+                 className="resize-none overflow-hidden w-full bg-transparent outline-none text-[15px] text-gray-800 dark:text-slate-100 leading-relaxed font-medium"
                 onInput={e => {
                   const el = e.target as HTMLTextAreaElement;
                   el.style.height = 'auto';
@@ -146,7 +146,7 @@ export default function PostCard({
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={handleCancelEdit}
-                className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 text-sm font-bold rounded-xl transition-colors">
+                className="px-5 py-2.5 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 text-sm font-bold rounded-xl transition-colors">
                 Hủy sửa
               </button>
               <button onClick={handleUpdate} disabled={!editContent.trim()}
@@ -156,14 +156,14 @@ export default function PostCard({
             </div>
           </div>
         ) : (
-          <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap">{post.content}</p>
+          <p className="text-gray-800 dark:text-slate-100 text-base leading-relaxed whitespace-pre-wrap">{post.content}</p>
         )}
       </div>
 
       {/* Image */}
       {post.image_url && (
         <div className="px-6 pb-2">
-          <div className="rounded-2xl overflow-hidden border border-gray-100 shadow-inner">
+          <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-slate-700 shadow-inner">
             <img src={post.image_url} alt="" className="w-full max-h-[500px] object-cover hover:scale-105 transition-transform duration-700" loading="lazy" />
           </div>
         </div>
@@ -183,7 +183,7 @@ export default function PostCard({
             )}
           </div>
           {post.comment_count > 0 && (
-            <button onClick={() => onToggleComments?.(post.id)} className="text-xs font-bold text-gray-500 hover:text-violet-600 transition-colors">
+            <button onClick={() => onToggleComments?.(post.id)} className="text-xs font-bold text-gray-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors">
               {post.comment_count} Ý kiến
             </button>
           )}
@@ -191,12 +191,12 @@ export default function PostCard({
       )}
 
       {/* Action bar */}
-      <div className="flex border-t border-gray-100 px-6 py-2 gap-2 mt-2">
+      <div className="flex border-t border-gray-100 dark:border-slate-800 px-6 py-2 gap-2 mt-2">
         <button
           onClick={() => onLike?.(post)}
           className={`flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${post.is_liked
             ? 'text-rose-600 bg-rose-50 shadow-inner border border-rose-100'
-            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100'
+            : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-gray-100 dark:hover:border-slate-700'
             }`}
         >
           <FiHeart size={18} className={post.is_liked ? 'fill-current' : ''} />
@@ -205,7 +205,7 @@ export default function PostCard({
 
         <button
           onClick={() => onToggleComments?.(post.id)}
-          className="flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-xl transition-all duration-300"
+          className="flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-gray-100 dark:hover:border-slate-700 rounded-xl transition-all duration-300"
         >
           <FiMessageCircle size={18} />
           Thảo luận
@@ -219,7 +219,7 @@ export default function PostCard({
               navigator.clipboard.writeText(window.location.href).then(() => alert('Đã sao chép link!'));
             }
           }}
-          className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-900 border border-transparent hover:border-gray-100 rounded-xl transition-all duration-300"
+          className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-gray-100 dark:hover:border-slate-700 rounded-xl transition-all duration-300"
         >
           <FiShare2 size={18} />
         </button>
@@ -286,7 +286,7 @@ function CommentsSection({
   const currentText = commentText || '';
 
   return (
-    <div className="bg-gray-50/50 border-t border-gray-100 px-6 py-5">
+    <div className="bg-gray-50/50 dark:bg-slate-950/40 border-t border-gray-100 dark:border-slate-800 px-6 py-5">
       {/* Comment input */}
       {isAuthenticated && (
         <div className="flex gap-4 items-start mb-6">
@@ -299,7 +299,7 @@ function CommentsSection({
           </div>
           <div className="flex-1 relative group">
             {isReplyingTo && (
-              <div className="absolute -top-6 left-2 flex items-center gap-2 text-xs font-bold text-violet-600 bg-violet-50 px-3 py-1 rounded-t-lg">
+              <div className="absolute -top-6 left-2 flex items-center gap-2 text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 px-3 py-1 rounded-t-lg">
                 <span>Đang phản hồi {replyName}</span>
                 <button onClick={() => onSetReplyingTo?.(null)} className="hover:text-red-500 ml-1">
                   <FiX size={14} />
@@ -311,7 +311,7 @@ function CommentsSection({
               onChange={e => onCommentTextChange?.(post.id, e.target.value)}
               placeholder={isReplyingTo ? `Phản hồi ${replyName}...` : "Nhập ý kiến của bạn..."}
               rows={1}
-              className={`w-full bg-white rounded-2xl border ${isReplyingTo ? 'border-violet-300 rounded-tl-none' : 'border-gray-200'} focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 outline-none placeholder-gray-400 shadow-sm resize-none`}
+              className={`w-full bg-white dark:bg-slate-900 rounded-2xl border ${isReplyingTo ? 'border-violet-300 rounded-tl-none' : 'border-gray-200 dark:border-slate-700'} focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 dark:text-slate-100 outline-none placeholder-gray-400 dark:placeholder-slate-500 shadow-sm resize-none`}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAddComment?.(post.id); } }}
               onInput={e => {
                 const el = e.target as HTMLTextAreaElement;
@@ -352,7 +352,7 @@ function CommentsSection({
           {comments.length === 0 && (
             <div className="text-center py-6">
               <span className="text-3xl grayscale opacity-50 block mb-2">🎈</span>
-              <p className="text-[13px] font-bold text-gray-400">Trở thành người bình luận đầu tiên</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-slate-500">Trở thành người bình luận đầu tiên</p>
             </div>
           )}
         </div>
@@ -396,9 +396,9 @@ function CommentThread({
           />
         </div>
         <div className="flex-1">
-          <div className="inline-block bg-white border border-gray-100 shadow-sm rounded-2xl px-4 py-2">
-            <p className="text-[13px] font-black text-gray-900 mb-0.5">{comment.author_name}</p>
-            <p className="text-[14px] text-gray-700 leading-snug font-medium">
+          <div className="inline-block bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm rounded-2xl px-4 py-2">
+            <p className="text-[13px] font-black text-gray-900 dark:text-white mb-0.5">{comment.author_name}</p>
+            <p className="text-[14px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
               {comment.reply_to_user_name && (
                 <span className="font-bold text-violet-600 mr-1.5">@{comment.reply_to_user_name}</span>
               )}
@@ -406,10 +406,10 @@ function CommentThread({
             </p>
           </div>
           <div className="flex items-center gap-3 ml-2 mt-1.5 text-[11px] font-bold">
-            <span className="text-gray-400">{timeAgo(comment.created_at)}</span>
+            <span className="text-gray-400 dark:text-slate-500">{timeAgo(comment.created_at)}</span>
             <button
               onClick={() => onLikeComment?.(postId, comment)}
-              className={`transition-colors ${comment.is_liked ? 'text-rose-500' : 'text-gray-500 hover:text-gray-900'}`}
+              className={`transition-colors ${comment.is_liked ? 'text-rose-500' : 'text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               Thích {Number(comment.like_count) > 0 && `(${comment.like_count})`}
             </button>
@@ -420,7 +420,7 @@ function CommentThread({
                 userId: comment.user_id,
                 userName: comment.author_name,
               })}
-              className="text-gray-500 hover:text-gray-900 transition-colors"
+              className="text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               Phản hồi
             </button>
@@ -430,7 +430,7 @@ function CommentThread({
 
       {/* Replies */}
       {replies.length > 0 && (
-        <div className="ml-10 border-l-2 border-gray-100 pl-4 mt-3 space-y-3">
+        <div className="ml-10 border-l-2 border-gray-100 dark:border-slate-700 pl-4 mt-3 space-y-3">
           {replies.map(r => (
             <div key={r.id} className="flex gap-3 items-start">
               <div
@@ -444,9 +444,9 @@ function CommentThread({
                 />
               </div>
               <div className="flex-1">
-                <div className="inline-block bg-white border border-gray-100 shadow-sm rounded-2xl px-3 py-1.5">
-                  <p className="text-[12px] font-black text-gray-900 mb-0.5">{r.author_name}</p>
-                  <p className="text-[13px] text-gray-700 leading-snug font-medium">
+                <div className="inline-block bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm rounded-2xl px-3 py-1.5">
+                  <p className="text-[12px] font-black text-gray-900 dark:text-white mb-0.5">{r.author_name}</p>
+                  <p className="text-[13px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
                     {r.reply_to_user_name && (
                       <span className="font-bold text-violet-600 mr-1">@{r.reply_to_user_name}</span>
                     )}
@@ -454,10 +454,10 @@ function CommentThread({
                   </p>
                 </div>
                 <div className="flex items-center gap-3 ml-1 mt-1 text-[10px] font-bold">
-                  <span className="text-gray-400">{timeAgo(r.created_at)}</span>
+                  <span className="text-gray-400 dark:text-slate-500">{timeAgo(r.created_at)}</span>
                   <button
                     onClick={() => onLikeComment?.(postId, r)}
-                    className={`transition-colors ${r.is_liked ? 'text-rose-500' : 'text-gray-500 hover:text-gray-900'}`}
+                    className={`transition-colors ${r.is_liked ? 'text-rose-500' : 'text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
                   >
                     Thích {Number(r.like_count) > 0 && `(${r.like_count})`}
                   </button>
@@ -468,7 +468,7 @@ function CommentThread({
                       userId: r.user_id,
                       userName: r.author_name,
                     })}
-                    className="text-gray-500 hover:text-gray-900 transition-colors"
+                    className="text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                   >
                     Phản hồi
                   </button>
