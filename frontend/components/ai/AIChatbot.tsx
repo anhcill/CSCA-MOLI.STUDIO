@@ -90,13 +90,13 @@ function formatMessage(text: string): React.ReactNode[] {
 
 function ThinkingDots({ label = 'AI đang đọc bài và chuẩn bị trả lời...' }: { label?: string }) {
     return (
-        <div className="flex items-center gap-3 min-w-[220px]">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="flex gap-1.5">
                 <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                 <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                 <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <span className="text-sm text-gray-500">{label}</span>
+            <span className="min-w-0 text-xs text-gray-500 sm:text-sm">{label}</span>
         </div>
     );
 }
@@ -242,48 +242,62 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     };
 
     return (
-        <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
+        <div className="flex h-[min(720px,calc(100dvh-140px))] min-h-[420px] flex-col sm:min-h-[500px]">
 
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white rounded-t-2xl shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-200">
+            <div className="flex shrink-0 items-center justify-between gap-3 rounded-t-2xl border-b border-gray-100 bg-white px-3 py-3 sm:px-6 sm:py-4">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 shadow-lg shadow-purple-200 sm:h-10 sm:w-10">
                         <FiCpu className="text-white" size={18} />
                     </div>
-                    <div>
-                        <h3 className="font-bold text-gray-900 text-base">Trợ lý AI</h3>
-                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-gray-900 sm:text-base">Trợ lý AI</h3>
+                        <p className="flex min-w-0 items-center gap-1 truncate text-xs text-gray-500">
                             {examTitle ? (
                                 <>
-                                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />
-                                    {examTitle}
+                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-400" />
+                                    <span className="truncate">{examTitle}</span>
                                 </>
                             ) : (
                                 <>
-                                    <span className="w-1.5 h-1.5 bg-purple-400 rounded-full inline-block" />
-                                    Hệ thống AI
+                                    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                                    <span className="truncate">Hệ thống AI</span>
                                 </>
                             )}
                         </p>
                     </div>
                 </div>
                 <button onClick={clearChat}
-                    className="flex items-center gap-1.5 px-3 py-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-sm">
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-xs text-gray-400 transition-all hover:bg-red-50 hover:text-red-500 sm:px-3 sm:text-sm">
                     <FiTrash2 size={14} />
-                    <span>Xóa chat</span>
+                    <span className="hidden xs:inline sm:inline">Xóa chat</span>
                 </button>
+            </div>
+
+            {/* Mobile quick questions */}
+            <div className="shrink-0 border-b border-gray-100 bg-white px-3 py-2 md:hidden">
+                <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {QUICK_QUESTIONS.map((q, i) => (
+                        <button key={i}
+                            onClick={() => sendMessage(q.prompt)}
+                            disabled={loading}
+                            className="shrink-0 rounded-full border border-purple-100 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span className="mr-1">{q.emoji}</span>{q.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Main content: Messages + Quick Questions Sidebar */}
             <div className="flex flex-1 overflow-hidden">
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-gray-50/50">
+                <div className="flex-1 space-y-4 overflow-y-auto bg-gray-50/50 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-5">
                     {messages.map(msg => (
-                        <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                        <div key={msg.id} className={`flex gap-2 sm:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
 
                             {/* Avatar */}
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:h-9 sm:w-9 ${
                                 msg.role === 'user'
                                     ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md'
                                     : msg.role === 'system'
@@ -294,13 +308,13 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             </div>
 
                             {/* Bubble */}
-                            <div className="max-w-[75%]">
+                            <div className="max-w-[88%] sm:max-w-[75%]">
                                 {/* Sender name */}
                                 <p className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-right text-blue-600' : 'text-purple-600'}`}>
                                     {msg.role === 'user' ? 'Bạn' : 'Trợ lý AI'}
                                 </p>
 
-                                <div className={`rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-sm ${
+                                <div className={`break-words rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:px-5 sm:py-3.5 ${
                                     msg.role === 'user'
                                         ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-tr-sm'
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
@@ -356,7 +370,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 </div>
 
                 {/* Quick Questions Sidebar */}
-                <div className="w-64 border-l border-gray-100 bg-white p-4 flex flex-col shrink-0 overflow-y-auto">
+                <div className="hidden w-64 shrink-0 flex-col overflow-y-auto border-l border-gray-100 bg-white p-4 md:flex">
                     <div className="mb-4">
                         <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1">
                             <FiMessageCircle size={14} className="text-purple-500" />
@@ -393,8 +407,8 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             </div>
 
             {/* Input Area */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-white rounded-b-2xl shrink-0">
-                <div className="flex gap-3 items-end">
+            <div className="shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 py-3 sm:px-6 sm:py-4">
+                <div className="flex items-end gap-2 sm:gap-3">
                     <textarea
                         ref={inputRef}
                         value={input}
@@ -408,13 +422,13 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         placeholder="Nhập câu hỏi cho AI..."
                         maxLength={3000}
                         rows={2}
-                        className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all placeholder:text-gray-400"
+                        className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-purple-500 sm:px-4 sm:py-3"
                         style={{ maxHeight: '120px' }}
                     />
                     <button
                         onClick={() => sendMessage(input)}
                         disabled={!input.trim() || loading}
-                        className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl flex items-center justify-center hover:shadow-lg hover:shadow-purple-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0">
+                        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white transition-all hover:shadow-lg hover:shadow-purple-200 disabled:cursor-not-allowed disabled:opacity-40 sm:h-12 sm:w-12">
                         <FiSend size={18} />
                     </button>
                 </div>
