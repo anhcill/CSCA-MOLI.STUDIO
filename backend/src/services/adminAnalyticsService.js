@@ -376,7 +376,7 @@ async function getAdminPerformance(query = {}) {
           SELECT eam.admin_id, COUNT(DISTINCT q.id)::int AS questions_created
           FROM exams e
           JOIN exam_admin_map eam ON eam.exam_id = e.id
-          JOIN questions q ON q.exam_id = e.id AND q.question_number > 0
+          JOIN questions q ON q.exam_id = e.id AND q.question_number > 0 AND q.deleted_at IS NULL
           WHERE eam.admin_id IS NOT NULL
             AND ${questionExamDateFilter}
           GROUP BY eam.admin_id

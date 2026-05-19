@@ -61,6 +61,7 @@ async function fetchQuizQuestions(limit, modeType) {
       JOIN answers a ON a.question_id = q.id
       LEFT JOIN exams e ON e.id = q.exam_id
       WHERE q.question_type IN ('single_choice', 'true_false', 'reading_item', 'fill_blank_item')
+        AND q.deleted_at IS NULL
         ${difficultyClause}
       GROUP BY q.id, e.title
       HAVING COUNT(a.id) >= 2 AND MAX(CASE WHEN a.is_correct THEN 1 ELSE 0 END) = 1

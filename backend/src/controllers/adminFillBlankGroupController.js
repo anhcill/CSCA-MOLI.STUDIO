@@ -71,7 +71,7 @@ function countClozeBlanks(text) {
 
 async function getAppendPosition(client, examId) {
   const result = await client.query(
-    "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0",
+    "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0 AND deleted_at IS NULL",
     [examId],
   );
   return result.rows[0].position || 1;
@@ -79,7 +79,7 @@ async function getAppendPosition(client, examId) {
 
 async function getNextContainerNumber(client, examId) {
   const result = await client.query(
-    "SELECT COALESCE(MIN(question_number), 0)::int - 1 AS question_number FROM questions WHERE exam_id = $1 AND question_number < 0",
+    "SELECT COALESCE(MIN(question_number), 0)::int - 1 AS question_number FROM questions WHERE exam_id = $1 AND question_number < 0 AND deleted_at IS NULL",
     [examId],
   );
   return result.rows[0].question_number || -1;
@@ -91,13 +91,13 @@ async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
   await client.query(
     `UPDATE questions
      SET question_number = question_number + $3::int
-     WHERE exam_id = $1::int AND question_number >= $2::int AND question_number > 0`,
+     WHERE exam_id = $1::int AND question_number >= $2::int AND question_number > 0 AND deleted_at IS NULL`,
     [examId, fromPosition, offset],
   );
   await client.query(
     `UPDATE questions
      SET question_number = question_number - $3::int + $4::int
-     WHERE exam_id = $1::int AND question_number >= ($2::int + $3::int)`,
+     WHERE exam_id = $1::int AND question_number >= ($2::int + $3::int) AND deleted_at IS NULL`,
     [examId, fromPosition, offset, delta],
   );
 }

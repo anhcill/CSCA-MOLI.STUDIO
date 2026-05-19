@@ -10,12 +10,13 @@ const Exam = {
         s.name as subject_name,
         s.code as subject_code,
         COALESCE(
-          (SELECT COUNT(DISTINCT user_id) FROM exam_attempts WHERE exam_id = e.id),
+          (SELECT COUNT(DISTINCT user_id) FROM exam_registrations WHERE exam_id = e.id AND status IN ('registered', 'approved', 'checked_in')),
           0
         ) as participants
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.status = 'published'
+        AND e.deleted_at IS NULL
         AND e.start_time <= CURRENT_TIMESTAMP 
         AND e.end_time >= CURRENT_TIMESTAMP
     `;
@@ -27,14 +28,13 @@ const Exam = {
         s.name as subject_name,
         s.code as subject_code,
         COALESCE(
-          (SELECT COUNT(DISTINCT user_id)
-           FROM exam_registrations
-           WHERE exam_id = e.id AND status IN ('registered', 'approved', 'checked_in')),
+          (SELECT COUNT(DISTINCT user_id) FROM exam_registrations WHERE exam_id = e.id AND status IN ('registered', 'approved', 'checked_in')),
           0
         ) as registered
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.status = 'published'
+        AND e.deleted_at IS NULL
         AND e.start_time > CURRENT_TIMESTAMP
       ORDER BY e.start_time ASC
       LIMIT 10
@@ -46,10 +46,11 @@ const Exam = {
         e.*,
         s.name as subject_name,
         s.code as subject_code,
-        (SELECT COUNT(*) FROM questions WHERE exam_id = e.id AND question_number > 0) as question_count
+        (SELECT COUNT(*) FROM questions WHERE exam_id = e.id AND question_number > 0 AND deleted_at IS NULL) as question_count
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.status = 'published'
+        AND e.deleted_at IS NULL
         AND e.start_time IS NULL
       ORDER BY e.publish_date DESC
       LIMIT 20
@@ -80,7 +81,7 @@ const Exam = {
           s.name as subject_name,
           s.code as subject_code,
           u.full_name as created_by_name,
-          COUNT(DISTINCT CASE WHEN q.question_number > 0 THEN q.id END) as question_count,
+          COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END) as question_count,
           COALESCE(
             (SELECT COUNT(*) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -105,7 +106,7 @@ const Exam = {
               SELECT q.difficulty
               FROM exam_attempts ea2
               JOIN questions q ON ea2.exam_id = q.exam_id
-              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL
+              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL AND q.deleted_at IS NULL
               GROUP BY q.difficulty
               ORDER BY COUNT(*) DESC
               LIMIT 1
@@ -122,9 +123,9 @@ const Exam = {
         FROM exams e
         INNER JOIN subjects s ON e.subject_id = s.id
         LEFT JOIN users u ON e.created_by = u.id
-        LEFT JOIN questions q ON e.id = q.exam_id
+        LEFT JOIN questions q ON e.id = q.exam_id AND q.deleted_at IS NULL
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
-        WHERE s.slug = $1 AND e.status = 'published'
+        WHERE s.slug = $1 AND e.status = 'published' AND e.deleted_at IS NULL
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
@@ -137,7 +138,7 @@ const Exam = {
           s.name as subject_name,
           s.code as subject_code,
           u.full_name as created_by_name,
-          COUNT(DISTINCT CASE WHEN q.question_number > 0 THEN q.id END) as question_count,
+          COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END) as question_count,
           COALESCE(
             (SELECT COUNT(*) FROM exam_attempts
              WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
@@ -162,7 +163,7 @@ const Exam = {
               SELECT q.difficulty
               FROM exam_attempts ea2
               JOIN questions q ON ea2.exam_id = q.exam_id
-              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL
+              WHERE ea2.exam_id = e.id AND ea2.status = 'completed' AND q.difficulty IS NOT NULL AND q.deleted_at IS NULL
               GROUP BY q.difficulty
               ORDER BY COUNT(*) DESC
               LIMIT 1
@@ -179,9 +180,9 @@ const Exam = {
         FROM exams e
         INNER JOIN subjects s ON e.subject_id = s.id
         LEFT JOIN users u ON e.created_by = u.id
-        LEFT JOIN questions q ON e.id = q.exam_id
+        LEFT JOIN questions q ON e.id = q.exam_id AND q.deleted_at IS NULL
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
-        WHERE s.code = $1 AND e.status = 'published'
+        WHERE s.code = $1 AND e.status = 'published' AND e.deleted_at IS NULL
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
@@ -192,6 +193,47 @@ const Exam = {
     return result.rows;
   },
 
+  async getSummaryForUser(examId, userId = null) {
+    const examResult = await pool.query(
+      `SELECT e.*,
+              s.name AS subject_name,
+              s.code AS subject_code,
+              COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END)::int AS question_count,
+              COALESCE(
+                (SELECT COUNT(*) FROM exam_attempts
+                 WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+                0
+              )::int AS user_attempt_count,
+              COALESCE(
+                (SELECT MAX(total_score) FROM exam_attempts
+                 WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
+                0
+              )::decimal AS user_best_score,
+              (
+                SELECT jsonb_build_object(
+                  'id', ea.id,
+                  'attempt_number', ea.attempt_number,
+                  'start_time', ea.start_time,
+                  'answered_count', COALESCE((
+                    SELECT COUNT(*) FROM user_answers ua WHERE ua.attempt_id = ea.id
+                  ), 0)
+                )
+                FROM exam_attempts ea
+                WHERE ea.exam_id = e.id AND ea.user_id = $2 AND ea.status = 'in_progress'
+                ORDER BY ea.start_time DESC
+                LIMIT 1
+              ) AS in_progress_attempt
+       FROM exams e
+       INNER JOIN subjects s ON e.subject_id = s.id
+       LEFT JOIN questions q ON q.exam_id = e.id AND q.deleted_at IS NULL
+       WHERE e.id = $1 AND e.deleted_at IS NULL
+       GROUP BY e.id, s.id`,
+      [examId, userId],
+    );
+
+    return examResult.rows[0] || null;
+  },
+
   // Lấy chi tiết đề thi kèm câu hỏi và đáp án
   async getById(examId, includeAnswers = false) {
     // Get exam info
@@ -199,7 +241,7 @@ const Exam = {
       SELECT e.*, s.name as subject_name, s.code as subject_code
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
-      WHERE e.id = $1
+      WHERE e.id = $1 AND e.deleted_at IS NULL
     `;
     const examResult = await pool.query(examQuery, [examId]);
 
@@ -210,6 +252,7 @@ const Exam = {
     const exam = examResult.rows[0];
 
     // Get questions
+    const answerCorrectField = includeAnswers ? `, 'is_correct', a.is_correct` : "";
     const questionsQuery = `
       SELECT q.*,
         COALESCE(
@@ -228,20 +271,23 @@ const Exam = {
           q.cloze_mode,
           parent.cloze_mode
         ) as effective_cloze_mode,
-        ARRAY_AGG(
-          json_build_object(
+        COALESCE(
+          jsonb_agg(
+          jsonb_build_object(
             'id', a.id,
             'answer_key', a.answer_key,
             'answer_text', a.answer_text,
             'answer_text_cn', a.answer_text_cn,
             'answer_text_en', a.answer_text_en,
-            'is_correct', a.is_correct
+            'image_url', a.image_url
+            ${answerCorrectField}
           ) ORDER BY a.answer_key
-        ) as answers
+        ) FILTER (WHERE a.id IS NOT NULL), '[]'::jsonb) as answers
       FROM questions q
       LEFT JOIN questions parent ON parent.id = q.passage_group_id
       LEFT JOIN answers a ON q.id = a.question_id
       WHERE q.exam_id = $1
+        AND q.deleted_at IS NULL
       GROUP BY q.id, parent.id
       ORDER BY q.question_number
     `;
@@ -362,9 +408,19 @@ const Exam = {
   },
 
   // Xóa đề thi
-  async delete(examId) {
-    const query = "DELETE FROM exams WHERE id = $1 RETURNING *";
-    const result = await pool.query(query, [examId]);
+  async delete(examId, deletedBy = null, reason = null) {
+    const query = `
+      UPDATE exams
+      SET status = 'archived',
+          deleted_at = NOW(),
+          deleted_by = $2,
+          delete_reason = NULLIF($3, ''),
+          deletion_status = 'soft_deleted',
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    const result = await pool.query(query, [examId, deletedBy, reason || ""]);
     return result.rows[0];
   },
 };

@@ -53,6 +53,7 @@ async function getWrongQuestionIds(userId, limit = 20) {
       WHERE ea.user_id = $1
         AND ea.status = 'completed'
         AND ua.is_correct = FALSE
+        AND q.deleted_at IS NULL
       ORDER BY q.id, last_seen_at DESC
       LIMIT $2
     `,
@@ -83,6 +84,7 @@ async function getWrongQuestions(userId, limit = 20) {
         WHERE ea.user_id = $1
           AND ea.status = 'completed'
           AND ua.is_correct = FALSE
+          AND q.deleted_at IS NULL
         ORDER BY q.id, ea.submit_time DESC
       )
       SELECT
@@ -152,6 +154,7 @@ async function getQuestionDetails(userId, questionIds) {
       LEFT JOIN user_question_notes n ON n.user_id = $1 AND n.question_id = q.id
       LEFT JOIN user_bookmarks b ON b.user_id = $1 AND b.entity_type = 'question' AND b.entity_id = q.id
       WHERE q.id = ANY($2::int[])
+        AND q.deleted_at IS NULL
       GROUP BY q.id, e.id, s.id, n.note, b.id
       ORDER BY array_position($2::int[], q.id)
     `,
@@ -201,6 +204,7 @@ async function createWeakTopicPractice(userId, topicId, limit = 20) {
       LEFT JOIN user_answers ua ON ua.question_id = q.id
       LEFT JOIN exam_attempts ea ON ea.id = ua.attempt_id AND ea.user_id = $1
       WHERE qtm.topic_id = $2
+        AND q.deleted_at IS NULL
       GROUP BY q.id
       ORDER BY
         COUNT(*) FILTER (WHERE ua.is_correct = FALSE) DESC,
@@ -330,6 +334,7 @@ async function listQuestionNotes(userId) {
       JOIN questions q ON q.id = n.question_id
       JOIN exams e ON e.id = q.exam_id
       WHERE n.user_id = $1
+        AND q.deleted_at IS NULL
       ORDER BY n.updated_at DESC
       LIMIT 100
     `,
@@ -387,7 +392,11 @@ async function getActionSummary(userId) {
         SELECT COUNT(DISTINCT ua.question_id)::int AS count
         FROM user_answers ua
         JOIN exam_attempts ea ON ea.id = ua.attempt_id
-        WHERE ea.user_id = $1 AND ea.status = 'completed' AND ua.is_correct = FALSE
+        JOIN questions q ON q.id = ua.question_id
+        WHERE ea.user_id = $1
+          AND ea.status = 'completed'
+          AND ua.is_correct = FALSE
+          AND q.deleted_at IS NULL
       `,
       [userId],
     ),

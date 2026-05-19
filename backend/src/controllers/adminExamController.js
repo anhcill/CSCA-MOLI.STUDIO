@@ -69,6 +69,7 @@ async function getLatestPassageGroupId(client, examId) {
   const r = await client.query(
     `SELECT id FROM questions
      WHERE exam_id = $1 AND passage_group_id IS NOT NULL
+       AND deleted_at IS NULL
      ORDER BY id DESC LIMIT 1`,
     [examId],
   );
@@ -97,7 +98,7 @@ function normalizeLinkedOptions(rawOptions) {
 
 async function getAppendQuestionPosition(client, examId) {
   const result = await client.query(
-    "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0",
+    "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0 AND deleted_at IS NULL",
     [examId],
   );
   return result.rows[0].position || 1;
@@ -105,7 +106,7 @@ async function getAppendQuestionPosition(client, examId) {
 
 async function getNextContainerQuestionNumber(client, examId) {
   const result = await client.query(
-    "SELECT COALESCE(MIN(question_number), 0)::int - 1 AS question_number FROM questions WHERE exam_id = $1 AND question_number < 0",
+    "SELECT COALESCE(MIN(question_number), 0)::int - 1 AS question_number FROM questions WHERE exam_id = $1 AND question_number < 0 AND deleted_at IS NULL",
     [examId],
   );
   return result.rows[0].question_number || -1;
@@ -129,13 +130,13 @@ async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
   await client.query(
     `UPDATE questions
      SET question_number = question_number + $3::int
-     WHERE exam_id = $1::int AND question_number >= $2::int AND question_number > 0`,
+     WHERE exam_id = $1::int AND question_number >= $2::int AND question_number > 0 AND deleted_at IS NULL`,
     [examId, fromPosition, offset],
   );
   await client.query(
     `UPDATE questions
      SET question_number = question_number - $3::int + $4::int
-     WHERE exam_id = $1::int AND question_number >= ($2::int + $3::int)`,
+     WHERE exam_id = $1::int AND question_number >= ($2::int + $3::int) AND deleted_at IS NULL`,
     [examId, fromPosition, offset, delta],
   );
 }
@@ -565,7 +566,7 @@ const AdminExamController = {
 
         // ── Kiểm tra max questions ──
         const countResult = await client.query(
-          "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1",
+          "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1 AND deleted_at IS NULL",
           [examId],
         );
         if (countResult.rows[0].count >= MAX_QUESTIONS_PER_EXAM) {
@@ -899,11 +900,11 @@ const AdminExamController = {
         await client.query("BEGIN");
 
         const examResult = await client.query(
-          "SELECT exam_id, question_number, question_type FROM questions WHERE id = $1",
+          "SELECT exam_id, question_number, question_type, deleted_at FROM questions WHERE id = $1",
           [questionId],
         );
 
-        if (examResult.rows.length === 0) {
+        if (examResult.rows.length === 0 || examResult.rows[0].deleted_at) {
           await client.query("ROLLBACK");
           return res.status(404).json({ message: "Question not found" });
         }
@@ -916,7 +917,34 @@ const AdminExamController = {
         const isAnswerableQuestion = deletedQuestionNumber > 0
           && ![QUESTION_TYPES.FILL_BLANK_POOL, QUESTION_TYPES.READING_PASSAGE].includes(examResult.rows[0].question_type);
 
-        await client.query("DELETE FROM questions WHERE id = $1", [questionId]);
+        const answerHistoryResult = await client.query(
+          `SELECT EXISTS (
+             SELECT 1
+             FROM user_answers ua
+             WHERE ua.question_id = $1
+                OR ua.selected_answer_id IN (SELECT id FROM answers WHERE question_id = $1)
+           ) AS has_history`,
+          [questionId],
+        );
+        const hasAnswerHistory = answerHistoryResult.rows[0]?.has_history === true;
+
+        if (hasAnswerHistory) {
+          await client.query(
+            `UPDATE questions
+             SET deleted_at = NOW(),
+                 deleted_by = $2,
+                 delete_reason = 'Deleted from admin question editor; preserved because user_answers exists',
+                 deleted_question_number = question_number,
+                 question_number = CASE
+                   WHEN question_number > 0 THEN -100000000 - id
+                   ELSE question_number
+                 END
+             WHERE id = $1`,
+            [questionId, req.user.id],
+          );
+        } else {
+          await client.query("DELETE FROM questions WHERE id = $1", [questionId]);
+        }
         if (isAnswerableQuestion) {
           await shiftQuestionNumbers(client, examId, deletedQuestionNumber + 1, -1);
         }
@@ -926,8 +954,16 @@ const AdminExamController = {
         );
 
         await client.query("COMMIT");
+        cache.delByPrefix("exams:");
+        cache.del("exams:lobby");
 
-        UserActivity.log(req.user.id, 'admin.delete_question', { examId, questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
+        UserActivity.log(req.user.id, 'admin.delete_question', {
+          examId,
+          questionId,
+          mode: hasAnswerHistory ? 'soft_delete' : 'hard_delete',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+        });
 
         res.json({ message: "Question deleted" });
       } catch (error) {
@@ -986,7 +1022,7 @@ const AdminExamController = {
                     targetPosition = atPosition;
                 } else if (afterQuestionId) {
                     const afterRes = await client.query(
-                        "SELECT question_number FROM questions WHERE id = $1 AND exam_id = $2",
+                        "SELECT question_number FROM questions WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL",
                         [afterQuestionId, examId],
                     );
                     if (afterRes.rows.length === 0) {
@@ -1005,7 +1041,7 @@ const AdminExamController = {
                      SET question_number = q.question_number + 1
                      FROM (
                          SELECT id FROM questions
-                         WHERE exam_id = $1 AND question_number >= $2
+                         WHERE exam_id = $1 AND question_number >= $2 AND deleted_at IS NULL
                          ORDER BY question_number DESC
                      ) AS sub
                      WHERE q.id = sub.id`,
@@ -1207,7 +1243,7 @@ const AdminExamController = {
 
                 // Verify all questions belong to this exam
                 const verifyResult = await client.query(
-                    `SELECT id FROM questions WHERE exam_id = $1 AND id = ANY($2::int[])`,
+                    `SELECT id FROM questions WHERE exam_id = $1 AND deleted_at IS NULL AND id = ANY($2::int[])`,
                     [examId, orderedIds],
                 );
                 if (verifyResult.rows.length !== orderedIds.length) {
@@ -1218,7 +1254,7 @@ const AdminExamController = {
                 // Update question_number for each question
                 for (let i = 0; i < orderedIds.length; i++) {
                     await client.query(
-                        "UPDATE questions SET question_number = $1 WHERE id = $2",
+                        "UPDATE questions SET question_number = $1 WHERE id = $2 AND deleted_at IS NULL",
                         [i + 1, orderedIds[i]],
                     );
                 }
@@ -1565,6 +1601,7 @@ const AdminExamController = {
          FROM questions q
          LEFT JOIN answers a ON q.id = a.question_id
          WHERE q.exam_id = $1
+           AND q.deleted_at IS NULL
          GROUP BY q.id
          ORDER BY q.question_number, q.id`,
         [examId],

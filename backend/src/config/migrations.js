@@ -156,8 +156,18 @@ async function runOptimizations() {
     await pool.query(`
       ALTER TABLE questions
       ALTER COLUMN points TYPE NUMERIC(6,2)
-      USING points::NUMERIC(6,2)
+      USING points::NUMERIC(6,2),
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS delete_reason TEXT,
+      ADD COLUMN IF NOT EXISTS deleted_question_number INTEGER
     `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_questions_deleted_at ON questions(deleted_at)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_questions_exam_active ON questions(exam_id, question_number) WHERE deleted_at IS NULL`,
+    );
 
     // Analyze tables
     const tables = [
