@@ -109,8 +109,8 @@ const AdminVipController = {
         pkgName = pkgRes.rows[0].name;
         pkgDays = pkgRes.rows[0].duration_days;
         pkgTier = pkgRes.rows[0].tier || 'vip';
-      } else if (durationDays && durationDays >= 1) {
-        pkgDays = parseInt(durationDays);
+      } else if (durationDays && parseInt(durationDays, 10) >= 1) {
+        pkgDays = parseInt(durationDays, 10);
         pkgTier = ['vip', 'premium'].includes(tier) ? tier : 'vip';
         pkgName = `Gói ${pkgTier === 'premium' ? 'Pre' : 'VIP'} ${pkgDays} ngày`;
       } else {
@@ -142,12 +142,21 @@ const AdminVipController = {
         expiresAt: grantedUser.vip_expires_at,
       }).catch(err => console.error('Admin grant VIP email error:', err.message));
 
-      // Ghi transaction thủ công
-      await db.query(
-        `INSERT INTO transactions (user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, status)
-         VALUES ($1, 0, 'manual', $2, $3, $4, $5, 'completed')`,
-        [userId, pkgId, pkgDays, pkgName, `MANUAL_${adminId}_${Date.now()}`]
-      );
+      // Ghi transaction thủ công. Một số DB cũ chưa có cột package_id, nên tự fallback.
+      try {
+        await db.query(
+          `INSERT INTO transactions (user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, status, paid_at, vip_expires_at)
+           VALUES ($1, 0, 'manual', $2, $3, $4, $5, 'completed', NOW(), $6)`,
+          [userId, pkgId, pkgDays, pkgName, `MANUAL_${adminId}_${Date.now()}`, grantedUser.vip_expires_at]
+        );
+      } catch (txErr) {
+        if (txErr.code !== '42703') throw txErr;
+        await db.query(
+          `INSERT INTO transactions (user_id, amount, payment_method, package_duration, package_name, transaction_code, status, paid_at, vip_expires_at)
+           VALUES ($1, 0, 'manual', $2, $3, $4, 'completed', NOW(), $5)`,
+          [userId, pkgDays, pkgName, `MANUAL_${adminId}_${Date.now()}`, grantedUser.vip_expires_at]
+        );
+      }
 
       UserActivity.log(req.user.id, 'admin.grant_vip', { userId, packageId: pkgId, durationDays: pkgDays, reason, ip: req.ip, userAgent: req.headers['user-agent'] });
       console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId} (${email}). Reason: ${reason || 'N/A'}`);

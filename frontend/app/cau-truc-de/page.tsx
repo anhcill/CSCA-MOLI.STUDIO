@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
+import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import axios from '@/lib/utils/axios';
 import {
   SUBJECT_OPTIONS,
@@ -224,11 +225,8 @@ export default function CauTrucDePage() {
     return map;
   }, [filtered]);
 
-  return (
-    <>
-      <div className="min-h-screen bg-gray-50">
-        <ScopedStudyTopBar title="Cấu Trúc Đề" subject={activeSubject} fallbackIcon="📚" />
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+  const pageContent = (
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           {/* Page header */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-1">
@@ -289,7 +287,31 @@ export default function CauTrucDePage() {
               <TopicSection key={topic} topic={topic} materials={items} onView={setViewing} />
             ))
           )}
-        </main>
+    </div>
+  );
+
+  if (isStrictSubject) {
+    return (
+      <>
+        <SubjectStudyShell
+          title="Cấu Trúc Đề"
+          subjectSlug={activeSubject}
+          activeSection="cau-truc-de"
+          searchPlaceholder="Tìm kiếm tài liệu..."
+        >
+          {pageContent}
+        </SubjectStudyShell>
+
+        {viewing && <PDFModal material={viewing} onClose={() => setViewing(null)} />}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="min-h-screen bg-gray-50">
+        <ScopedStudyTopBar title="Cấu Trúc Đề" subject={activeSubject} fallbackIcon="📚" />
+        {pageContent}
       </div>
 
       {viewing && <PDFModal material={viewing} onClose={() => setViewing(null)} />}

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { FiBook, FiBookmark, FiSearch, FiChevronRight, FiChevronLeft, FiX, FiList } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
+import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import axios from '@/lib/utils/axios';
 import VocabularyLearningPanel from '@/components/vocabulary/VocabularyLearningPanel';
 import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
@@ -119,9 +120,10 @@ function VocabularyContent() {
 
   const activeMeta = isStrictSubject ? getMeta(subjectParam) : null;
 
-  return (
-    <div className="min-h-screen bg-gray-50">
+  const page = (
+    <div className={isStrictSubject ? '' : 'min-h-screen bg-gray-50'}>
       {/* Custom Top Navigation */}
+      {!isStrictSubject && (
       <div className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-3 sm:px-4 min-h-16 py-2 flex items-center justify-between gap-2">
           <button 
@@ -148,6 +150,7 @@ function VocabularyContent() {
           <div className="w-16" /> {/* Spacer for perfect centering */}
         </div>
       </div>
+      )}
 
       <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-6xl">
         {selectedTopic ? (
@@ -357,6 +360,21 @@ function VocabularyContent() {
       </main>
     </div>
   );
+
+  if (isStrictSubject) {
+    return (
+      <SubjectStudyShell
+        title={activeMeta ? `Từ Vựng ${activeMeta.label}` : 'Từ Vựng'}
+        subjectSlug={subjectParam}
+        activeSection="tu-vung"
+        searchPlaceholder="Tìm từ vựng..."
+      >
+        {page}
+      </SubjectStudyShell>
+    );
+  }
+
+  return page;
 }
 
 export default function VocabularyPage() {

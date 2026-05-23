@@ -1,15 +1,19 @@
 'use client';
 
 import Header from '@/components/layout/Header';
+import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import { AIInsights } from '@/components/ai/AIInsights';
 import { useAuthStore } from '@/lib/store/authStore';
 import Link from 'next/link';
 import { FiLock, FiStar, FiTarget, FiUnlock, FiTrendingUp } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import axiosInstance from '@/lib/utils/axios';
 
 export default function LoTrinhPage() {
   const { isAuthenticated } = useAuthStore();
+  const searchParams = useSearchParams();
+  const subjectParam = searchParams.get('subject');
   const [mounted, setMounted] = useState(false);
 
   const [roadmapMilestones, setRoadmapMilestones] = useState<any[]>([]);
@@ -42,6 +46,76 @@ export default function LoTrinhPage() {
     FiLock: FiLock,
     FiStar: FiStar
   };
+
+  if (subjectParam) {
+    return (
+      <SubjectStudyShell
+        title="Lộ Trình Học Cá Nhân"
+        subjectSlug={subjectParam}
+        activeSection="lo-trinh"
+        searchPlaceholder="Tìm mốc lộ trình..."
+      >
+        {!mounted || loading ? (
+          <div className="space-y-5 animate-pulse">
+            <div className="h-32 rounded-2xl border border-slate-200 bg-white" />
+            <div className="h-96 rounded-2xl border border-slate-200 bg-white" />
+          </div>
+        ) : !isAuthenticated ? (
+          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+              <FiLock size={34} />
+            </div>
+            <h2 className="mb-3 text-xl font-black text-slate-900">Đăng nhập để xem Lộ Trình</h2>
+            <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed text-slate-500">
+              AI sẽ phân tích kết quả theo môn và tạo lộ trình học tập cá nhân hóa.
+            </p>
+            <Link
+              href="/login"
+              className="inline-flex rounded-xl bg-violet-600 px-8 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/20 transition hover:bg-violet-700"
+            >
+              Đăng nhập ngay
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {roadmapMilestones.length > 0 && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                    <FiTrendingUp />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900">Mốc tiến bộ</h2>
+                    <p className="text-sm font-medium text-slate-500">Các chặng học tập được mở theo kết quả luyện đề.</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {roadmapMilestones.map((ms, i) => {
+                    const Icon = IconMap[ms.icon] || FiLock;
+                    return (
+                      <div key={ms.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                        <div className="mb-2 flex items-center gap-3">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm">
+                            <Icon size={16} />
+                          </span>
+                          <div>
+                            <span className="text-[11px] font-black uppercase text-violet-500">Chặng {i + 1}</span>
+                            <h3 className="text-sm font-black text-slate-900">{ms.title}</h3>
+                          </div>
+                        </div>
+                        <p className="text-xs font-medium leading-relaxed text-slate-500">{ms.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+            <AIInsights />
+          </div>
+        )}
+      </SubjectStudyShell>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] relative overflow-hidden">

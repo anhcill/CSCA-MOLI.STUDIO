@@ -262,31 +262,37 @@ export default function AdminVocabularyPage() {
   const handleBulkImport = async () => {
     if (!bulkTopic.trim()) { alert('Nhập tên chủ đề'); return; }
     try {
-      // Parse multiple formats per line: 汉字|pinyin|nghĩa Việt|meaning EN, tab-separated, or comma-separated.
+      // Parse nhiều format mỗi dòng: 汉字|pinyin|nghĩa Việt|meaning EN|ví dụ Hán|ví dụ Việt, tab, comma.
       const lines = bulkText.trim().split('\n').filter(l => l.trim());
-      const words = lines.map(line => {
+      const skipped: number[] = [];
+      const words = lines.map((line, index) => {
         const delimiter = line.includes('|') ? '|' : line.includes('\t') ? '\t' : ',';
         const parts = line.split(delimiter).map(s => s.trim());
-        return {
+        const word = {
           word_cn: parts[0] || '',
           pinyin: parts[1] || '',
           word_vn: parts[2] || '',
           word_en: parts[3] || '',
+          example_cn: parts[4] || '',
+          example_vn: parts[5] || '',
           subject: bulkSubject,
           topic: bulkTopic,
           is_premium: bulkVipTier !== 'basic',
           vip_tier: bulkVipTier,
         };
+        if (!word.word_cn || !word.pinyin || !word.word_vn) skipped.push(index + 1);
+        return word;
       }).filter(w => w.word_cn && w.pinyin && w.word_vn);
 
-      if (words.length === 0) { alert('Không có từ hợp lệ. Format: 汉字|pīnyīn|nghĩa Việt|meaning EN'); return; }
+      if (words.length === 0) { alert('Không có từ hợp lệ. Format: 汉字|pīnyīn|nghĩa Việt|meaning EN|例句|ví dụ'); return; }
 
       setSaving(true);
-      await axios.post('/vocabulary/bulk', { words });
+      const res = await axios.post('/vocabulary/bulk', { words });
       setShowBulk(false);
       setBulkText('');
       loadData();
-      alert(`Import thành công ${words.length} từ!`);
+      const msg = res.data?.message || `Import thành công ${words.length} từ!`;
+      alert(skipped.length ? `${msg}\nBỏ qua dòng lỗi: ${skipped.join(', ')}` : msg);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Lỗi import');
     } finally {
@@ -553,8 +559,13 @@ export default function AdminVocabularyPage() {
                   ))}
                 </div>
               </div>
-              <textarea placeholder={'Mỗi dòng 1 từ. Hỗ trợ |, tab, hoặc dấu phẩy:\n汉字|pīnyīn|nghĩa Việt|meaning EN\n学习\txuéxí\thọc tập\tstudy'} value={bulkText} onChange={e => setBulkText(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 h-48 font-mono text-sm" />
+              <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3 leading-5">
+                <b>Format:</b> mỗi dòng 1 từ, hỗ trợ dấu <code>|</code>, tab, hoặc dấu phẩy.<br />
+                <code>汉字|pīnyīn|nghĩa Việt|meaning EN|ví dụ Hán|ví dụ Việt</code><br />
+                Ví dụ: <code>学习|xuéxí|học tập|study|我学习中文。|Tôi học tiếng Trung.</code>
+              </div>
+              <textarea placeholder={'汉字|pīnyīn|nghĩa Việt|meaning EN|ví dụ Hán|ví dụ Việt\n学习|xuéxí|học tập|study|我学习中文。|Tôi học tiếng Trung.'} value={bulkText} onChange={e => setBulkText(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 h-56 font-mono text-sm" />
               <div className="flex gap-3">
                 <button onClick={() => setShowBulk(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Hủy</button>
                 <button onClick={handleBulkImport} disabled={saving}

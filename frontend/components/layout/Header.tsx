@@ -10,6 +10,7 @@ import {
   FiFileText,
   FiGift,
   FiHelpCircle,
+  FiHome,
   FiLogOut,
   FiMap,
   FiMenu,
@@ -18,8 +19,9 @@ import {
   FiShield,
   FiUser,
   FiX,
+  FiGitBranch,
 } from 'react-icons/fi';
-import { FaCrown, FaFire } from 'react-icons/fa';
+import { FaCrown, FaFire, FaTrophy, FaGamepad, FaGraduationCap } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import { useLanguage } from '@/context/LanguageContext';
@@ -39,16 +41,16 @@ const COURSE_ITEMS = [
 ];
 
 const MAIN_NAV_TOP = [
-  { id: 'home', labelKey: 'nav.home', href: '/' },
-  { id: 'roadmap', labelKey: 'nav.roadmap', href: '/lo-trinh', icon: FiMap },
+  { id: 'home', labelKey: 'nav.home', href: '/', icon: FiHome },
+  { id: 'roadmap', labelKey: 'nav.roadmap', href: '/lo-trinh', icon: FiGitBranch },
   { id: 'exam', labelKey: 'nav.examRoom', href: '/exam-room', icon: FiMonitor },
 ];
 
 const MAIN_NAV_BOTTOM = [
-  { id: 'games', labelKey: 'nav.games', href: '/games', icon: FiGift },
+  { id: 'games', labelKey: 'nav.games', href: '/games', icon: FaGamepad },
   { id: 'docs', labelKey: 'nav.docs', href: '/tailieu', icon: FiFileText },
   { id: 'forum', labelKey: 'nav.forum', href: '/forum', icon: FiMessageSquare },
-  { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FiHelpCircle },
+  { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FaCrown },
   { id: 'blog', labelKey: 'nav.blog', href: '/blog', icon: FiBookOpen },
 ];
 
@@ -94,26 +96,31 @@ export default function Header() {
 
   const navLinkClass = (active: boolean) =>
     `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
-      active ? 'bg-violet-50 text-violet-700' : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700'
+      active
+        ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400'
+        : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-violet-400'
     }`;
 
   return (
-    <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-3 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'}`}>
+    <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'}`}>
       <div className="container mx-auto overflow-visible px-4 md:px-6">
-        <div className="flex items-center justify-between gap-2 sm:gap-4 xl:items-start">
-          <Link href="/" className="group flex shrink-0 items-center gap-2 sm:gap-3 xl:mt-1">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-400 shadow-[0_10px_22px_rgba(14,116,244,0.35)] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:rotate-2 group-hover:shadow-[0_14px_26px_rgba(14,116,244,0.45)] sm:h-11 sm:w-11">
-              <span className="text-base font-black leading-none text-white sm:text-lg">m</span>
-              <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-white/90 bg-cyan-100 shadow-sm" />
+        {/* Top Row: Logo, Nav, Search, Actions */}
+        <div className="flex items-center justify-between gap-4 overflow-visible">
+          {/* Logo */}
+          <Link href="/" className="group flex shrink-0 items-center gap-2.5 sm:gap-3">
+            <div className="relative flex h-9.5 w-9.5 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-500 shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5">
+              <span className="text-lg font-black leading-none text-white sm:text-xl">m</span>
             </div>
-            <span className="bg-gradient-to-r from-blue-700 via-sky-600 to-cyan-500 bg-clip-text text-xl font-black tracking-tight text-transparent sm:text-2xl">
+            <span className="text-xl font-black tracking-tight text-gray-900 dark:text-white sm:text-2xl">
               moly.study
             </span>
           </Link>
 
-          <div className="ml-4 hidden flex-1 flex-col gap-2 xl:flex">
-            <nav className="flex items-center gap-1">
+          {/* Desktop Navigation & Search (Hidden on Mobile) */}
+          <div className="hidden flex-1 items-center justify-between gap-4 xl:flex px-6">
+            <nav className="flex items-center gap-1.5">
               <Link href={MAIN_NAV_TOP[0].href} className={navLinkClass(isActive(MAIN_NAV_TOP[0].href))}>
+                <FiHome className="text-lg" />
                 {t(MAIN_NAV_TOP[0].labelKey)}
               </Link>
 
@@ -123,14 +130,14 @@ export default function Header() {
                   onClick={(event) => { event.stopPropagation(); setShowCourseMenu((open) => !open); }}
                   className={navLinkClass(courseActive)}
                 >
-                  <FiBookOpen className="text-lg" />
+                  <FaGraduationCap className="text-lg" />
                   {t('nav.courses')}
                   <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
                 </button>
 
                 {showCourseMenu && (
                   <div className="absolute left-0 top-full z-50 pt-3" onMouseLeave={() => setShowCourseMenu(false)}>
-                    <div className="w-60 overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-xl" onClick={(event) => event.stopPropagation()}>
+                    <div className="w-60 overflow-hidden rounded-2xl border border-gray-100 bg-white p-2 shadow-xl dark:border-gray-800 dark:bg-gray-900" onClick={(event) => event.stopPropagation()}>
                       <div className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wider text-gray-400">
                         {t('nav.chooseSubject')}
                       </div>
@@ -138,7 +145,7 @@ export default function Header() {
                         <Link
                           key={course.id}
                           href={course.href}
-                          className="flex items-center rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-violet-50 hover:text-violet-700"
+                          className="flex items-center rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-violet-50 hover:text-violet-700 dark:text-gray-300 dark:hover:bg-violet-950/30 dark:hover:text-violet-400"
                         >
                           {t(course.labelKey)}
                         </Link>
@@ -157,44 +164,17 @@ export default function Header() {
                   </Link>
                 );
               })}
-
-              <div className="ml-2 max-w-xs flex-1">
-                <SearchBar />
-              </div>
             </nav>
 
-            <nav className="flex items-center gap-1 border-t border-gray-100 pl-2 pt-1.5 dark:border-gray-800">
-              <span className="mr-1 text-xs font-semibold text-gray-400">{t('nav.more')}</span>
-              {MAIN_NAV_BOTTOM.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                      isActive(item.href) ? 'bg-violet-50 text-violet-700' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700'
-                    }`}
-                  >
-                    {Icon && <Icon className="text-sm" />}
-                    {t(item.labelKey)}
-                  </Link>
-                );
-              })}
-              <Link
-                href="/bang-xep-hang"
-                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                  isActive('/bang-xep-hang') ? 'bg-violet-50 text-violet-700' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700'
-                }`}
-              >
-                <FiAward className="text-sm" />
-                {t('nav.ranking')}
-              </Link>
-            </nav>
+            <div className="w-full max-w-[220px] shrink-0">
+              <SearchBar />
+            </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2 xl:mt-2">
-            <Link href="/vip" className="hidden items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-orange-500/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-orange-500/50 xl:flex">
-              <FaCrown className="text-yellow-200" size={12} />
+          {/* Right Side Icons & Actions */}
+          <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+            <Link href="/vip" className="hidden items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 px-4 py-2 text-xs font-extrabold text-white shadow-md shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/20 xl:flex">
+              <FaCrown className="text-white" size={12} />
               <span>{t('nav.upgrade')}</span>
             </Link>
 
@@ -233,9 +213,9 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={(event) => { event.stopPropagation(); setShowUserMenu((open) => !open); }}
-                  className="flex items-center gap-1.5 rounded-2xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-gray-200 hover:bg-gray-100"
+                  className="flex items-center gap-2 rounded-2xl border border-transparent py-1 pl-1 pr-2 transition-colors hover:border-gray-200 hover:bg-gray-100 dark:hover:border-gray-800 dark:hover:bg-gray-800/50"
                 >
-                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-violet-500 to-indigo-400 shadow-sm ring-2 ring-white sm:h-9 sm:w-9">
+                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-violet-500 to-indigo-400 shadow-sm ring-2 ring-white sm:h-9 sm:w-9 dark:ring-gray-900">
                     {user.avatar ? (
                       <img src={user.avatar} alt={user.full_name} className="h-full w-full object-cover" />
                     ) : (
@@ -243,42 +223,46 @@ export default function Header() {
                     )}
                   </div>
                   <span className="hidden flex-col items-start leading-tight md:flex">
-                    <span className="max-w-[100px] truncate text-sm font-bold text-gray-800">{user.full_name}</span>
-                    {isVipActive(user) && <span className="text-[10px] font-bold tracking-wider text-orange-500">PRO</span>}
+                    <span className="max-w-[100px] truncate text-sm font-bold text-gray-800 dark:text-gray-200">{user.full_name}</span>
+                    {isVipActive(user) && (
+                      <span className="rounded bg-violet-600 px-1 py-0.5 text-[9px] font-extrabold tracking-wide text-white leading-none mt-0.5">
+                        PRO
+                      </span>
+                    )}
                   </span>
                   <FiChevronDown size={14} className={`hidden text-gray-400 transition-transform duration-200 md:block ${showUserMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showUserMenu && (
-                  <div className="animate-in fade-in slide-in-from-top-2 absolute right-0 top-full z-[200] mt-2 w-64 overflow-hidden rounded-3xl border border-gray-100 bg-white py-3 shadow-2xl duration-150" onClick={(event) => event.stopPropagation()}>
-                    <div className="mb-2 flex items-center gap-3 border-b border-gray-100 px-5 py-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100">
+                  <div className="animate-in fade-in slide-in-from-top-2 absolute right-0 top-full z-[200] mt-2 w-64 overflow-hidden rounded-3xl border border-gray-100 bg-white py-3 shadow-2xl duration-150 dark:border-gray-800 dark:bg-gray-900" onClick={(event) => event.stopPropagation()}>
+                    <div className="mb-2 flex items-center gap-3 border-b border-gray-100 px-5 py-3 dark:border-gray-800">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                         {user.avatar ? <img src={user.avatar} alt={user.full_name} className="h-full w-full object-cover" /> : <FiUser className="text-gray-400" />}
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-gray-900">{user.full_name}</p>
-                        <p className="truncate text-xs text-gray-500">{user.email}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{user.full_name}</p>
+                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
                       </div>
                     </div>
-                    <Link href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-violet-50 hover:text-violet-700">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-100 text-violet-600"><FiUser size={16} /></div>
+                    <Link href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-violet-50 hover:text-violet-700 dark:text-gray-300 dark:hover:bg-violet-950/30 dark:hover:text-violet-400">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400"><FiUser size={16} /></div>
                       {t('nav.profile')}
                     </Link>
                     {user.role === 'admin' && (
-                      <Link href="/admin" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><FiShield size={16} /></div>
+                      <Link href="/admin" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400"><FiShield size={16} /></div>
                         {t('nav.admin')}
                       </Link>
                     )}
                     {!isVipActive(user) && (
-                      <Link href="/vip" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-orange-600"><FaCrown size={16} /></div>
+                      <Link href="/vip" onClick={() => setShowUserMenu(false)} className="flex items-center gap-3 px-5 py-2.5 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/30">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-950/50 dark:text-orange-450"><FaCrown size={16} /></div>
                         {t('nav.upgradeVip')}
                       </Link>
                     )}
-                    <div className="mt-2 border-t border-gray-100 pt-2">
-                      <button type="button" onClick={() => { logout(); setShowUserMenu(false); }} className="flex w-full items-center gap-3 px-5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600"><FiLogOut size={16} /></div>
+                    <div className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                      <button type="button" onClick={() => { logout(); setShowUserMenu(false); }} className="flex w-full items-center gap-3 px-5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-450"><FiLogOut size={16} /></div>
                         {t('nav.logout')}
                       </button>
                     </div>
@@ -287,10 +271,10 @@ export default function Header() {
               </div>
             ) : mounted ? (
               <div className="flex items-center gap-2">
-                <Link href="/login" className="rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-100 sm:px-4 sm:py-2">
+                <Link href="/login" className="rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 sm:px-4 sm:py-2">
                   {t('nav.login')}
                 </Link>
-                <Link href="/register" className="rounded-xl bg-gray-900 px-3 py-1.5 text-sm font-bold text-white shadow-md transition-all hover:bg-gray-800 hover:shadow-lg sm:px-4 sm:py-2">
+                <Link href="/register" className="rounded-xl bg-gray-900 px-3 py-1.5 text-sm font-bold text-white shadow-md transition-all hover:bg-gray-800 hover:shadow-lg dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 sm:px-4 sm:py-2">
                   {t('nav.register')}
                 </Link>
               </div>
@@ -301,10 +285,48 @@ export default function Header() {
               </div>
             )}
 
-            <button type="button" onClick={() => setMobileOpen((open) => !open)} className="rounded-xl p-2 text-gray-800 transition-colors hover:bg-gray-100 xl:hidden" aria-label="Menu">
+            <button type="button" onClick={() => setMobileOpen((open) => !open)} className="rounded-xl p-2 text-gray-800 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 xl:hidden" aria-label="Menu">
               {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
             </button>
           </div>
+        </div>
+
+        {/* Divider line under top row (Hidden on Mobile) */}
+        <div className="my-2.5 hidden border-t border-gray-100 dark:border-gray-800 xl:block" />
+
+        {/* Desktop Secondary Navigation Bar (Hidden on Mobile) */}
+        <div className="hidden xl:block">
+          <nav className="flex items-center gap-1.5 py-0.5 pl-1.5">
+            <span className="mr-3 text-xs font-bold text-gray-400 dark:text-gray-500">{t('nav.more')}</span>
+            {MAIN_NAV_BOTTOM.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${
+                    isActive(item.href)
+                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+                  }`}
+                >
+                  {Icon && <Icon className="text-sm" />}
+                  {t(item.labelKey)}
+                </Link>
+              );
+            })}
+            <Link
+              href="/bang-xep-hang"
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${
+                isActive('/bang-xep-hang')
+                  ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+              }`}
+            >
+              <FaTrophy className="text-sm" />
+              {t('nav.ranking')}
+            </Link>
+          </nav>
         </div>
       </div>
 

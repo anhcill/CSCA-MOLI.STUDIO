@@ -139,6 +139,19 @@ export default function SearchBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Focus input on Cmd+K or Ctrl+K
+  useEffect(() => {
+    const handleKeyDownShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDownShortcut);
+    return () => document.removeEventListener('keydown', handleKeyDownShortcut);
+  }, []);
+
   // Build flat list for keyboard nav
   const allItems = results ? [
     ...results.materials.map(m => ({ type: 'material' as const, data: m })),
@@ -199,9 +212,13 @@ export default function SearchBar() {
   return (
     <div ref={containerRef} className="relative">
       {/* Input */}
-      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${open ? 'border-purple-400 ring-2 ring-purple-100 bg-white' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} w-full`}>
+      <div className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition-all ${
+        open
+          ? 'border-violet-400 ring-2 ring-violet-100 bg-white dark:border-violet-500 dark:ring-violet-950/30 dark:bg-gray-800'
+          : 'border-gray-150 bg-gray-50/50 hover:border-gray-300 dark:border-gray-800 dark:bg-gray-850 hover:dark:border-gray-700'
+      } w-full`}>
         {loading
-          ? <div className="w-4 h-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin shrink-0" />
+          ? <div className="w-4 h-4 rounded-full border-2 border-violet-500 border-t-transparent animate-spin shrink-0" />
           : <FiSearch size={15} className="text-gray-400 shrink-0" />
         }
         <input
@@ -212,14 +229,18 @@ export default function SearchBar() {
           onChange={e => { setQuery(e.target.value); setActiveIdx(-1); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none min-w-0"
+          className="flex-1 bg-transparent text-sm text-gray-850 dark:text-gray-200 placeholder-gray-400 outline-none min-w-0"
           autoComplete="off"
           spellCheck={false}
         />
-        {query && (
-          <button onClick={() => { setQuery(''); setResults(null); setActiveIdx(-1); inputRef.current?.focus(); }} className="text-gray-400 hover:text-gray-600 shrink-0">
+        {query ? (
+          <button onClick={() => { setQuery(''); setResults(null); setActiveIdx(-1); inputRef.current?.focus(); }} className="text-gray-400 hover:text-gray-650 shrink-0 dark:hover:text-gray-350">
             <FiX size={14} />
           </button>
+        ) : (
+          <span className="hidden sm:inline-flex items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-450 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500 leading-none">
+            ⌘K
+          </span>
         )}
       </div>
 

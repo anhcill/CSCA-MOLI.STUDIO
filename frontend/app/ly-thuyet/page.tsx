@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
+import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import axios from '@/lib/utils/axios';
 import {
   normalizeContentSubject,
@@ -31,7 +32,10 @@ const SUBJECTS = [
 
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
   const [loading, setLoading] = useState(true);
-  const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true`;
+  const [useGoogleViewer, setUseGoogleViewer] = useState(false);
+  const viewerUrl = useGoogleViewer
+    ? `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true`
+    : material.file_url;
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -70,7 +74,7 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
             <p className="text-sm text-gray-300">Đang tải PDF...</p>
           </div>
         )}
-        <iframe src={viewerUrl} className="w-full h-full border-0" title={material.title} onLoad={() => setLoading(false)} />
+        <iframe src={viewerUrl} className="w-full h-full border-0" title={material.title} onLoad={() => setLoading(false)} onError={() => setUseGoogleViewer(true)} />
       </div>
     </div>
   );
@@ -129,6 +133,7 @@ export default function LyThuyetPage() {
   const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [viewing, setViewing] = useState<Material | null>(null);
   const [viewerLoaded, setViewerLoaded] = useState(false);
+  const [useGoogleViewer, setUseGoogleViewer] = useState(false);
 
   useEffect(() => {
     setActiveSubject(subjectParam);
@@ -169,6 +174,7 @@ export default function LyThuyetPage() {
 
   useEffect(() => {
     setViewerLoaded(false);
+    setUseGoogleViewer(false);
   }, [viewing?.id]);
 
   const grouped = useMemo(() => {
@@ -181,11 +187,8 @@ export default function LyThuyetPage() {
     return map;
   }, [filtered]);
 
-  return (
-    <>
-      <div className="min-h-screen bg-gray-50">
-        <ScopedStudyTopBar title="Lý Thuyết" subject={activeSubject} fallbackIcon="📖" />
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+  const pageContent = (
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-1">
               <span className="text-3xl">📖</span>
@@ -236,7 +239,13 @@ export default function LyThuyetPage() {
                     <p className="text-sm text-gray-300">Đang tải tài liệu...</p>
                   </div>
                 )}
-                <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true`} className="w-full h-full border-0" title={viewing.title} onLoad={() => setViewerLoaded(true)} />
+                <iframe
+                  src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true` : viewing.file_url}
+                  className="w-full h-full border-0"
+                  title={viewing.title}
+                  onLoad={() => setViewerLoaded(true)}
+                  onError={() => setUseGoogleViewer(true)}
+                />
               </div>
             </section>
           )}
@@ -255,7 +264,30 @@ export default function LyThuyetPage() {
               <TopicSection key={topic} topic={topic} materials={items} onView={setViewing} />
             ))
           )}
-        </main>
+    </div>
+  );
+
+  if (isStrictSubject) {
+    return (
+      <>
+        <SubjectStudyShell
+          title="Lý Thuyết"
+          subjectSlug={activeSubject}
+          activeSection="ly-thuyet"
+          searchPlaceholder="Tìm tài liệu..."
+        >
+          {pageContent}
+        </SubjectStudyShell>
+
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="min-h-screen bg-gray-50">
+        <ScopedStudyTopBar title="Lý Thuyết" subject={activeSubject} fallbackIcon="📖" />
+        {pageContent}
       </div>
 
     </>

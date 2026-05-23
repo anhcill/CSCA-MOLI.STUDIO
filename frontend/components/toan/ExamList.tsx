@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiSearch, FiX, FiCalendar, FiClock, FiUsers, FiPlayCircle, FiBarChart2, FiLock, FiChevronDown, FiChevronUp, FiBookmark, FiCheckCircle, FiRotateCw } from 'react-icons/fi';
+import { FiSearch, FiX, FiCalendar, FiClock, FiUsers, FiPlayCircle, FiLock, FiBookmark, FiCheckCircle, FiRotateCw, FiBarChart2, FiTarget, FiTrendingUp, FiEdit3 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import examApi, { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -163,6 +163,31 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     regular: exams.filter(e => !isVipExam(e)).length,
     vip: exams.filter(e => isVipExam(e)).length,
   }), [exams]);
+
+  const progressStats = useMemo(() => {
+    const doneExams = exams.filter(isExamDone);
+    const bestScores = doneExams
+      .map(exam => Number(exam.user_best_score || 0))
+      .filter(score => Number.isFinite(score));
+    const avgScore = bestScores.length
+      ? Math.round((bestScores.reduce((sum, score) => sum + score, 0) / bestScores.length) * 10) / 10
+      : 0;
+    const avgPassRateItems = exams
+      .map(exam => Number(exam.pass_rate))
+      .filter(rate => Number.isFinite(rate));
+    const avgPassRate = avgPassRateItems.length
+      ? Math.round(avgPassRateItems.reduce((sum, rate) => sum + rate, 0) / avgPassRateItems.length)
+      : 0;
+    const completion = exams.length ? Math.round((doneExams.length / exams.length) * 100) : 0;
+
+    return {
+      completion,
+      done: doneExams.length,
+      totalQuestions: exams.reduce((sum, exam) => sum + Number(exam.total_questions || 0), 0),
+      avgScore,
+      avgPassRate,
+    };
+  }, [exams]);
 
   // Difficulty badge
   const DiffBadge = ({ level }: { level?: string }) => {
@@ -339,15 +364,15 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
     return (
       <section className={`rounded-2xl border bg-white shadow-sm overflow-hidden flex flex-col min-h-[220px] max-h-[72vh] ${
-        isVipSection ? 'border-amber-200' : 'border-indigo-100'
+        isVipSection ? 'border-amber-100' : 'border-violet-100'
       }`}>
         <div className={`px-4 sm:px-5 py-4 border-b shrink-0 ${
-          isVipSection ? 'bg-amber-50/80 border-amber-100' : 'bg-indigo-50/70 border-indigo-100'
+          isVipSection ? 'bg-amber-50/80 border-amber-100' : 'bg-white border-violet-100'
         }`}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                isVipSection ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+                isVipSection ? 'bg-amber-100 text-amber-700' : 'bg-violet-50 text-violet-700'
               }`}>
                 {isVipSection ? <FaCrown size={16} /> : <FiPlayCircle size={17} />}
               </div>
@@ -357,7 +382,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
               </div>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
-              isVipSection ? 'bg-white text-amber-700 border border-amber-200' : 'bg-white text-indigo-700 border border-indigo-200'
+              isVipSection ? 'bg-white text-amber-700 border border-amber-200' : 'bg-violet-50 text-violet-700 border border-violet-100'
             }`}>
               {count} đề
             </span>
@@ -373,15 +398,15 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             {[...grouped.entries()].map(([year, yearExams]) => (
               <div key={`${variant}-${year}`}>
                 <div className="flex items-center gap-3 mb-3">
-                  <span className={`text-lg font-black ${isVipSection ? 'text-amber-700' : 'text-indigo-700'}`}>
+                  <span className={`text-lg font-black ${isVipSection ? 'text-amber-700' : 'text-violet-700'}`}>
                     {year === 0 ? '?' : year}
                   </span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                    isVipSection ? 'text-amber-700 bg-amber-50 border-amber-100' : 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                    isVipSection ? 'text-amber-700 bg-amber-50 border-amber-100' : 'text-violet-700 bg-violet-50 border-violet-100'
                   }`}>
                     {yearExams.length} đề
                   </span>
-                  <div className={`flex-1 h-px ${isVipSection ? 'bg-amber-100' : 'bg-indigo-100'}`} />
+                  <div className={`flex-1 h-px ${isVipSection ? 'bg-amber-100' : 'bg-violet-100'}`} />
                 </div>
                 <div className="space-y-2">
                   {yearExams.map(exam => <ExamCard key={exam.id} exam={exam} />)}
@@ -445,7 +470,43 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   // ─── MAIN ──────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+
+      <section className="grid gap-5 xl:grid-cols-[0.62fr_1fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <FiBarChart2 />
+            </div>
+            <h3 className="text-base font-black text-slate-900">Tổng quan luyện tập</h3>
+          </div>
+          <div className="flex flex-col items-center gap-5 sm:flex-row">
+            <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-[conic-gradient(#6d4aff_var(--progress),#ede9fe_0)]" style={{ ['--progress' as string]: `${progressStats.completion}%` }}>
+              <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+                <span className="text-3xl font-black text-slate-900">{progressStats.completion}%</span>
+                <span className="text-xs font-bold text-slate-400">Tiến độ tuần này</span>
+              </div>
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-4 text-sm">
+              <div className="flex items-center gap-3"><FiEdit3 className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.done}</div><div className="text-xs font-medium text-slate-500">Đề đã làm</div></div></div>
+              <div className="flex items-center gap-3"><FiCheckCircle className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.totalQuestions}</div><div className="text-xs font-medium text-slate-500">Câu hỏi đã làm</div></div></div>
+              <div className="flex items-center gap-3"><FiClock className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.avgScore}</div><div className="text-xs font-medium text-slate-500">Điểm TB</div></div></div>
+              <div className="flex items-center gap-3"><FiTrendingUp className="text-emerald-500" /><div><div className="font-black text-slate-900">{progressStats.avgPassRate}%</div><div className="text-xs font-medium text-slate-500">Tỉ lệ đỗ TB</div></div></div>
+            </div>
+          </div>
+          <div className="mt-5 rounded-2xl bg-gradient-to-r from-violet-50 to-indigo-50 p-4">
+            <div className="flex items-center gap-3">
+              <FiTarget className="text-3xl text-violet-600" />
+              <div>
+                <div className="text-sm font-black text-slate-900">Gợi ý hôm nay</div>
+                <p className="text-xs font-medium text-slate-500">Bạn nên luyện 1 đề VIP để cải thiện tốc độ và độ chính xác.</p>
+              </div>
+            </div>
+            <button className="mt-3 rounded-lg bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-sm">Luyện ngay</button>
+          </div>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-1">
 
       {/* ── Search Bar ─────────────────────────────────────────────── */}
       <div className="relative">
@@ -456,7 +517,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           placeholder='Tìm nhanh đề thi... (nhấn / để focus)'
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full pl-11 pr-10 py-3 bg-white border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent shadow-sm"
+            className="w-full pl-11 pr-10 py-3 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent shadow-sm"
         />
         {search && (
           <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600">
@@ -468,7 +529,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       {/* ── Controls Row ──────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         {/* Filter pills */}
-        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           {([
             { value: 'all', label: 'Tất cả', emoji: '📋', count: stats.total },
             { value: 'done', label: 'Đã làm', emoji: '✓', count: stats.done },
@@ -479,7 +540,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
               onClick={() => setFilter(f.value)}
               className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 filter === f.value
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-violet-600 text-white shadow-sm'
                   : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
               }`}
             >
@@ -496,7 +557,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           <select
             value={sort}
             onChange={e => setSort(e.target.value as SortType)}
-            className="text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer"
+            className="text-xs font-semibold border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-400 cursor-pointer"
           >
             <option value="newest">Mới nhất</option>
             <option value="oldest">Cũ nhất</option>
@@ -523,10 +584,12 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         <span>Tìm thấy <strong className="text-gray-600">{visibleExams.length}</strong> đề thi</span>
         {search && <span>cho "<strong className="text-gray-600">{search}</strong>"</span>}
         <span className="text-gray-300">|</span>
-        <span><strong className="text-indigo-600">{regularExams.length}</strong> đề thường</span>
+        <span><strong className="text-violet-600">{regularExams.length}</strong> đề thường</span>
         <span><strong className="text-amber-600">{vipExams.length}</strong> đề VIP</span>
         {showDone && <span className="text-emerald-500">(đã ẩn đề đã làm)</span>}
       </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <ExamSection

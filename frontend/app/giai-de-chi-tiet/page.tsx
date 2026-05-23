@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ScopedStudyTopBar from '@/components/layout/ScopedStudyTopBar';
+import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import {
   FiPlay, FiVideo, FiShuffle, FiX, FiChevronRight, FiSearch,
   FiClock, FiAward, FiLock, FiMessageSquare, FiStar, FiZap
@@ -311,12 +312,12 @@ export default function GiaiDeChiTietPage() {
     return filtered.filter(e => !e.solution_video_url);
   }, [filtered, user, isAdmin]);
 
-  return (
-    <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20">
-        <ScopedStudyTopBar title="Giải Đề Chi Tiết" subject={activeSubject} fallbackIcon="🎥" />
+  const page = (
+      <div className={isStrictSubject ? '' : 'min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20'}>
+        {!isStrictSubject && <ScopedStudyTopBar title="Giải Đề Chi Tiết" subject={activeSubject} fallbackIcon="🎥" />}
 
         {/* ── Hero ──────────────────────────────────────────────────── */}
+        {!isStrictSubject && (
         <div className="relative bg-gradient-to-r from-purple-700 via-indigo-700 to-violet-700 overflow-hidden">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/cubes.png")' }} />
           <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500 rounded-full blur-[120px] opacity-30" />
@@ -349,6 +350,7 @@ export default function GiaiDeChiTietPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* ── Tier Banner (if not premium) ─────────────────────────────── */}
         {!isPremiumActive(user) && lockedCount > 0 && (
@@ -449,6 +451,10 @@ export default function GiaiDeChiTietPage() {
           )}
         </main>
       </div>
+  );
+
+  const modals = (
+    <>
 
       {/* Video modal */}
       {playing && playing.solution_video_url && (
@@ -457,6 +463,29 @@ export default function GiaiDeChiTietPage() {
 
       {/* Upsell modal */}
       {upsellTier && <UpsellModal tier={upsellTier} onClose={() => setUpsellTier(null)} />}
+    </>
+  );
+
+  if (isStrictSubject) {
+    return (
+      <>
+        <SubjectStudyShell
+          title="Giải Đề Chi Tiết"
+          subjectSlug={activeSubject}
+          activeSection="giai-de-chi-tiet"
+          searchPlaceholder="Tìm kiếm đề..."
+        >
+          {page}
+        </SubjectStudyShell>
+        {modals}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {page}
+      {modals}
     </>
   );
 }

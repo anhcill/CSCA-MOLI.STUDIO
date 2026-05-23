@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getVipDisplay } from '@/lib/utils/permissions';
 import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
-import { FiLoader, FiTag, FiPercent, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
+import { FiArrowLeft, FiLoader, FiTag, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
 
 interface VipPackage {
@@ -43,13 +43,13 @@ interface Discount {
 }
 
 function deriveColor(pkg: VipPackage) {
-  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
+  const isPre = isPrePackage(pkg);
   if (isPre) {
     return pkg.duration_days >= 300
       ? { gradient: 'from-amber-600 to-red-600', border: 'border-amber-300', tag: 'bg-amber-600 text-white', icon: 'text-amber-500', headerBg: 'bg-gradient-to-r from-amber-600 to-red-600' }
       : { gradient: 'from-amber-500 to-orange-600', border: 'border-amber-200', tag: 'bg-amber-100 text-amber-700', icon: 'text-amber-500', headerBg: 'bg-gradient-to-r from-amber-500 to-orange-600' };
   }
-  if (pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name)) {
+  if (isFreePackage(pkg)) {
     return pkg.duration_days >= 300
       ? { gradient: 'from-gray-500 to-slate-600', border: 'border-gray-300', tag: 'bg-gray-500 text-white', icon: 'text-gray-500', headerBg: 'bg-gradient-to-r from-gray-500 to-slate-600' }
       : { gradient: 'from-gray-400 to-slate-500', border: 'border-gray-200', tag: 'bg-gray-100 text-gray-700', icon: 'text-gray-400', headerBg: 'bg-gradient-to-r from-gray-400 to-slate-500' };
@@ -57,6 +57,26 @@ function deriveColor(pkg: VipPackage) {
   return pkg.duration_days >= 300
     ? { gradient: 'from-indigo-600 to-purple-700', border: 'border-indigo-300', tag: 'bg-indigo-600 text-white', icon: 'text-indigo-500', headerBg: 'bg-gradient-to-r from-indigo-600 to-purple-700' }
     : { gradient: 'from-indigo-500 to-purple-600', border: 'border-indigo-200', tag: 'bg-indigo-100 text-indigo-700', icon: 'text-indigo-500', headerBg: 'bg-gradient-to-r from-indigo-500 to-purple-600' };
+}
+
+function isFreePackage(pkg: VipPackage) {
+  return pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name) || pkg.price === 0;
+}
+
+function isPrePackage(pkg: VipPackage) {
+  return pkg.tier === 'premium' || pkg.tier === 'pre' || /pre|premium/i.test(pkg.name);
+}
+
+function getPackageDisplayName(pkg: VipPackage) {
+  if (isFreePackage(pkg)) return 'Miễn phí';
+  if (isPrePackage(pkg)) return 'Gói Pre';
+  return 'Gói VIP';
+}
+
+function getPackageDescription(pkg: VipPackage) {
+  if (isFreePackage(pkg)) return 'Truy cập đề thi cơ bản miễn phí';
+  if (isPrePackage(pkg)) return 'Bao gồm đề VIP, video giải đề và hỗ trợ cố vấn 1-1';
+  return 'Đề thi cao cấp, AI phân tích kết quả và lịch sử thi chi tiết';
 }
 
 export default function VipPricingPage() {
@@ -142,15 +162,32 @@ export default function VipPricingPage() {
   };
 
   // Lọc gói theo tier
-  const freePkgs = packages.filter(p => !p.name.toLowerCase().includes('vip') && !p.name.toLowerCase().includes('pre') && p.price === 0);
-  const vipPkgs = packages.filter(p => (p.tier === 'vip' || /vip/i.test(p.name)) && !/pre/i.test(p.name));
-  const premiumPkgs = packages.filter(p => p.tier === 'premium' || /pre/i.test(p.name));
+  const freePkgs = packages.filter(isFreePackage);
+  const vipPkgs = packages.filter(p => !isFreePackage(p) && !isPrePackage(p) && (p.tier === 'vip' || /vip/i.test(p.name)));
+  const premiumPkgs = packages.filter(isPrePackage);
 
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
+
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push('/');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 py-16 px-4 pt-24 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mb-8 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm transition hover:border-violet-200 hover:text-violet-700"
+        >
+          <FiArrowLeft size={16} />
+          Quay về
+        </button>
+
         {/* Header */}
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-5 py-2 bg-amber-100 border border-amber-200 rounded-full text-amber-800 text-sm font-bold mb-4">
@@ -309,7 +346,7 @@ export default function VipPricingPage() {
                             ))}
                             {/* Disabled features */}
                             {[
-                              'Truy cập tất cả đề thi VIP / Premium',
+                              'Truy cập tất cả đề thi VIP / Pre',
                               'AI phân tích kết quả bài thi',
                               'Video giải đề chi tiết từng câu',
                               'Đội ngũ cố vấn hỗ trợ 1-1',
@@ -464,8 +501,8 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
   onSelectPkg?: (p: VipPackage | null) => void;
 }) {
   const colors = deriveColor(pkg);
-  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
-  const isFree = pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name);
+  const isPre = isPrePackage(pkg);
+  const isFree = isFreePackage(pkg);
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');
@@ -514,7 +551,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
       <div className={`bg-gradient-to-r ${colors.gradient} p-4 text-white pt-6`}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-black">{pkg.name}</h3>
+            <h3 className="text-lg font-black">{getPackageDisplayName(pkg)}</h3>
             <p className="text-white/70 text-xs mt-0.5">{pkg.duration_days} ngày</p>
           </div>
           {isPre && !isSelected && (
@@ -546,7 +583,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
           )}
         </div>
         <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2">
-          {pkg.description || (isPre ? 'Truy cập toàn bộ tính năng và bài giảng' : 'Truy cập kho đề thi giới hạn')}
+          {getPackageDescription(pkg)}
         </p>
       </div>
 
@@ -604,12 +641,12 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
           className={`w-full mt-auto py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
             ${isPre
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
-              : pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name)
+              : isFree
               ? 'bg-gradient-to-r from-gray-400 to-slate-500 hover:from-gray-500 hover:to-slate-600'
               : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
         >
-          {pkg.tier === 'free' || /free|miễn phí/i.test(pkg.name) ? 'Miễn phí'
+          {isFree ? 'Miễn phí'
             : !isVip ? 'Nâng cấp ngay'
             : isPre ? 'Nâng cấp lên Pre'
             : 'Gia hạn ngay'}

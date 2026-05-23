@@ -1,46 +1,21 @@
 import { redirect } from 'next/navigation';
 
-const SUBJECT_CONFIG: Record<string, {
-  code: string;
-  name: string;
-  redirectPath: string;
-}> = {
-  'toan': {
-    code: 'MATH',
-    name: 'Toán',
-    redirectPath: '/toan/de-mo-phong'
-  },
-  'vatly': {
-    code: 'PHYSICS',
-    name: 'Vật lý',
-    redirectPath: '/mon/vatly/de-mo-phong'
-  },
-  'hoa': {
-    code: 'CHEMISTRY',
-    name: 'Hóa học',
-    redirectPath: '/mon/hoa/de-mo-phong'
-  },
-  'tiengtrung-xahoi': {
-    code: 'CHINESE',
-    name: 'Tiếng Trung Xã Hội',
-    redirectPath: '/tiengtrung-xahoi'
-  },
-  'tiengtrung-tunhien': {
-    code: 'CHINESE',
-    name: 'Tiếng Trung Tự Nhiên',
-    redirectPath: '/tiengtrung-tunhien'
-  }
+const SUBJECT_CONFIG: Record<string, { redirectPath: string }> = {
+  toan: { redirectPath: '/toan/de-mo-phong' },
+  vatly: { redirectPath: '/vat-ly/de-mo-phong' },
+  'vat-ly': { redirectPath: '/vat-ly/de-mo-phong' },
+  hoa: { redirectPath: '/hoa/de-mo-phong' },
+  'hoa-hoc': { redirectPath: '/hoa/de-mo-phong' },
+  'tiengtrung-xahoi': { redirectPath: '/tiengtrung-xahoi/de-mo-phong' },
+  'tiengtrung-tunhien': { redirectPath: '/tiengtrung-tunhien/de-mo-phong' },
 };
 
 export default function SubjectPage({ params }: { params: { subject: string } }) {
-  const subjectSlug = params.subject;
-  const subjectInfo = SUBJECT_CONFIG[subjectSlug];
+  const subjectInfo = SUBJECT_CONFIG[params.subject];
 
-  // If subject not found, redirect to home
   if (!subjectInfo) {
     redirect('/');
   }
 
-  // Redirect directly to exam list to improve performance
   redirect(subjectInfo.redirectPath);
 }
