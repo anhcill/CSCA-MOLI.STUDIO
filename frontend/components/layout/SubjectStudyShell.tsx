@@ -52,7 +52,7 @@ const QUICK_LINKS = [
 const SIDE_LINKS = [
   { key: 'de-mo-phong', icon: FiHome, label: 'Đề mô phỏng', href: 'exam' },
   { key: 'lich-su', icon: FiClock, label: 'Lịch sử thi', href: '/lich-su' },
-  { key: 'ai-phan-tich', icon: BsGraphUp, label: 'AI phân tích', href: '/profile/insights' },
+  { key: 'ai-phan-tich', icon: BsGraphUp, label: 'AI phân tích', href: '/lo-trinh' },
   { key: 'ly-thuyet', icon: BsLightbulb, label: 'Lý thuyết', href: '/ly-thuyet' },
   { key: 'tu-vung', icon: BsStars, label: 'Từ vựng', href: '/tu-vung' },
   { key: 'lo-trinh', icon: FiTrendingUp, label: 'Theo dõi tiến bộ', href: '/lo-trinh' },
@@ -125,7 +125,7 @@ export default function SubjectStudyShell({
             Phân tích điểm mạnh, điểm yếu và gợi ý cách cải thiện.
           </p>
           <Link
-            href={buildSubjectScopedHref('/profile/insights', normalizedSubject || undefined)}
+            href={buildSubjectScopedHref('/lo-trinh', normalizedSubject || undefined)}
             className="mt-3 inline-flex rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-black text-white shadow-sm"
           >
             Khám phá ngay →

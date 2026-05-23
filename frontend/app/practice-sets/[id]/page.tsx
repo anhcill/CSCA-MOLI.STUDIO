@@ -95,146 +95,189 @@ export default function PracticeSetPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <FiRefreshCw className="animate-spin text-3xl text-indigo-600" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <FiRefreshCw className="animate-spin text-4xl text-purple-600" />
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">Đang tải bộ luyện tập...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !practiceSet) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 text-center">
-        <p className="font-bold text-gray-900">{error || 'Khong tim thay bo luyen tap.'}</p>
-        <Link href="/profile/insights" className="mt-4 text-indigo-600 font-semibold">Quay lai insights</Link>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex flex-col items-center justify-center px-4 text-center">
+        <div className="w-16 h-16 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-full flex items-center justify-center mb-4 text-xl">⚠️</div>
+        <p className="font-extrabold text-gray-900 dark:text-white text-lg">{error || 'Không tìm thấy bộ luyện tập.'}</p>
+        <Link href="/profile/insights" className="mt-4 px-6 py-2.5 bg-purple-600 text-white font-bold text-sm rounded-xl hover:bg-purple-700 shadow-md transition-all">Quay lại Insights</Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 pb-24">
+      <header className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-20">
+        <div className="max-w-[1360px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <button onClick={() => router.push('/profile/insights')} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
-              <FiArrowLeft />
+            <button onClick={() => router.push('/profile/insights')} className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors shrink-0">
+              <FiArrowLeft size={20} />
             </button>
             <div className="min-w-0">
-              <h1 className="font-black text-gray-900 truncate">{practiceSet.title}</h1>
-              <p className="text-sm text-gray-500">{practiceSet.questions.length} cau - {practiceSet.description}</p>
+              <h1 className="font-black text-gray-900 dark:text-white text-lg sm:text-xl truncate">{practiceSet.title}</h1>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium truncate">{practiceSet.questions.length} câu hỏi · {practiceSet.description}</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-black text-gray-900">{submitted ? `${score.correct}/${score.total}` : `${Object.keys(answers).length}/${score.total}`}</p>
-            <p className="text-xs text-gray-500">{submitted ? 'ket qua' : 'da chon'}</p>
+          <div className="text-right shrink-0">
+            <p className="text-2xl font-black text-purple-600 dark:text-purple-400">
+              {submitted ? `${score.correct}/${score.total}` : `${Object.keys(answers).length}/${score.total}`}
+            </p>
+            <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{submitted ? 'kết quả' : 'đã chọn'}</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-[1360px] mx-auto px-4 sm:px-6 py-6 space-y-6">
         {practiceSet.questions.map((question, index) => {
           const chosen = answers[question.id];
           const correctAnswer = question.answers.find((a) => a.is_correct);
           const isCorrect = chosen && correctAnswer?.answer_key === chosen;
 
           return (
-            <section key={question.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <section key={question.id} className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100/80 dark:border-gray-800/80 p-6 shadow-sm hover:shadow-md transition-all duration-205">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold text-indigo-600">
-                    #{index + 1} - {question.subject_name} - {question.exam_title}
-                  </p>
-                  <h2 className="mt-2 text-base font-bold text-gray-900 whitespace-pre-wrap">
+                <div className="min-w-0 flex-1">
+                  <span className="inline-block text-[10px] font-bold px-2 py-0.5 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 rounded-md uppercase tracking-wider">
+                    Câu #{index + 1} · {question.subject_name || 'CSCA'}
+                  </span>
+                  <p className="text-xs text-gray-400 mt-1 truncate">{question.exam_title}</p>
+                  <h2 className="mt-3 text-base sm:text-lg font-bold text-gray-900 dark:text-white whitespace-pre-wrap leading-relaxed">
                     {question.question_text}
                   </h2>
                   {question.question_text_cn && (
-                    <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">{question.question_text_cn}</p>
+                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 whitespace-pre-wrap italic">{question.question_text_cn}</p>
                   )}
                 </div>
                 <button
                   onClick={() => toggleBookmark(question)}
-                  className={`p-2 rounded-lg ${bookmarks[question.id] ? 'bg-blue-50 text-blue-700' : 'text-gray-400 hover:bg-gray-100'}`}
-                  title="Bookmark cau hoi"
+                  className={`p-2.5 rounded-xl transition-all shrink-0 border ${
+                    bookmarks[question.id]
+                      ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-400 shadow-sm'
+                      : 'border-transparent text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                  title="Bookmark câu hỏi"
                 >
-                  <FiBookmark />
+                  <FiBookmark size={18} />
                 </button>
               </div>
 
-              <div className="mt-4 grid gap-2">
+              <div className="mt-5 grid gap-2.5">
                 {question.answers.map((answer) => {
                   const selected = chosen === answer.answer_key;
                   const revealCorrect = submitted && answer.is_correct;
                   const revealWrong = submitted && selected && !answer.is_correct;
 
+                  let optionStyle = 'border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:border-purple-300 dark:hover:border-purple-800 hover:bg-purple-50/10';
+                  if (revealCorrect) {
+                    optionStyle = 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-300 font-semibold shadow-sm shadow-emerald-500/5';
+                  } else if (revealWrong) {
+                    optionStyle = 'border-rose-450 bg-rose-50 dark:bg-rose-950/20 text-rose-950 dark:text-rose-300 font-semibold shadow-sm shadow-rose-500/5';
+                  } else if (selected) {
+                    optionStyle = 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20 text-purple-950 dark:text-purple-300 font-semibold';
+                  }
+
                   return (
                     <button
                       key={answer.id}
+                      disabled={submitted}
                       onClick={() => !submitted && setAnswers((prev) => ({ ...prev, [question.id]: answer.answer_key }))}
-                      className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
-                        revealCorrect
-                          ? 'border-emerald-400 bg-emerald-50 text-emerald-900'
-                          : revealWrong
-                            ? 'border-rose-400 bg-rose-50 text-rose-900'
-                            : selected
-                              ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                              : 'border-gray-200 text-gray-700 hover:border-indigo-300'
-                      }`}
+                      className={`w-full rounded-2xl border px-4 py-3.5 text-left text-sm transition-all duration-200 flex items-start gap-2.5 ${optionStyle}`}
                     >
-                      <span className="font-black mr-2">{answer.answer_key}.</span>
-                      {answer.answer_text}
-                      {answer.answer_text_cn && <span className="block mt-1 text-gray-500">{answer.answer_text_cn}</span>}
+                      <span className="font-extrabold shrink-0">{answer.answer_key}.</span>
+                      <div className="flex-1">
+                        <span>{answer.answer_text}</span>
+                        {answer.answer_text_cn && <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400 font-normal">{answer.answer_text_cn}</span>}
+                      </div>
+                      {revealCorrect && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓ Đúng</span>}
+                      {revealWrong && <span className="text-xs text-rose-600 dark:text-rose-400 font-bold shrink-0">✗ Bạn chọn</span>}
                     </button>
                   );
                 })}
               </div>
 
               {submitted && (
-                <div className={`mt-4 rounded-xl p-4 ${isCorrect ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-                  <p className={`font-bold flex items-center gap-2 ${isCorrect ? 'text-emerald-800' : 'text-rose-800'}`}>
-                    {isCorrect ? <FiCheckCircle /> : <FiXCircle />}
-                    {isCorrect ? 'Dung' : `Sai - dap an dung: ${correctAnswer?.answer_key || '-'}`}
+                <div className={`mt-5 rounded-2xl p-5 border ${
+                  isCorrect
+                    ? 'bg-emerald-50/30 border-emerald-100/50 text-emerald-900 dark:bg-emerald-950/10 dark:border-emerald-900/20 dark:text-emerald-300'
+                    : 'bg-rose-50/30 border-rose-100/50 text-rose-900 dark:bg-rose-950/10 dark:border-rose-900/20 dark:text-rose-300'
+                }`}>
+                  <p className={`font-bold flex items-center gap-2 text-sm ${isCorrect ? 'text-emerald-800 dark:text-emerald-400' : 'text-rose-800 dark:text-rose-400'}`}>
+                    {isCorrect ? <FiCheckCircle size={18} /> : <FiXCircle size={18} />}
+                    {isCorrect ? 'Chúc mừng! Bạn đã trả lời đúng.' : `Chưa chính xác. Đáp án đúng là: ${correctAnswer?.answer_key || '-'}`}
                   </p>
                   {question.explanation && (
-                    <p className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{question.explanation}</p>
+                    <div className="mt-3 pt-3 border-t border-dashed border-gray-200/50 dark:border-gray-800 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                      <p className="font-bold text-gray-800 dark:text-gray-200 mb-1">💡 Giải thích:</p>
+                      <p className="whitespace-pre-wrap">{question.explanation}</p>
+                    </div>
                   )}
                 </div>
               )}
 
-              <div className="mt-4 rounded-xl border border-gray-100 p-3">
-                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-                  <FiEdit3 /> Notebook ca nhan
+              {/* Personal Note */}
+              <div className="mt-5 rounded-2xl border border-gray-100 dark:border-gray-800 p-4 bg-gray-50/50 dark:bg-gray-900/30">
+                <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2.5">
+                  <FiEdit3 className="text-purple-500" /> Notebook cá nhân
                 </label>
                 <textarea
                   value={notes[question.id] || ''}
                   onChange={(e) => setNotes((prev) => ({ ...prev, [question.id]: e.target.value }))}
-                  rows={3}
-                  className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                  placeholder="Ghi lai ly do sai, cong thuc can nho, meo lam bai..."
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm outline-none focus:border-purple-500 dark:focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all dark:text-white"
+                  placeholder="Ghi lại lý do sai, công thức cần nhớ, mẹo làm bài..."
                 />
-                <button
-                  onClick={() => saveNote(question.id)}
-                  className="mt-2 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-bold text-white hover:bg-gray-800"
-                >
-                  <FiSave /> {savingNote === question.id ? 'Dang luu...' : 'Luu ghi chu'}
-                </button>
+                <div className="mt-2.5 flex justify-end">
+                  <button
+                    onClick={() => saveNote(question.id)}
+                    disabled={savingNote === question.id}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gray-900 hover:bg-gray-800 dark:bg-purple-600 dark:hover:bg-purple-755 text-white px-4 py-2 text-xs font-bold transition-all shadow-sm active:scale-[0.98] disabled:opacity-60"
+                  >
+                    <FiSave />
+                    <span>{savingNote === question.id ? 'Đang lưu...' : 'Lưu ghi chú'}</span>
+                  </button>
+                </div>
               </div>
             </section>
           );
         })}
 
-        <div className="sticky bottom-4 bg-white/95 backdrop-blur border border-gray-200 rounded-2xl p-4 shadow-lg flex items-center justify-between gap-4">
+        {/* Floating Submit Bar */}
+        <div className="sticky bottom-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-150 dark:border-gray-800 rounded-3xl p-5 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 max-w-[1360px] mx-auto z-20">
           <div>
-            <p className="font-black text-gray-900">
-              {submitted ? `Ket qua: ${score.correct}/${score.total}` : `${Object.keys(answers).length}/${score.total} cau da chon`}
+            <p className="font-extrabold text-gray-900 dark:text-white text-base">
+              {submitted ? `Kết quả luyện tập: ${score.correct}/${score.total}` : `${Object.keys(answers).length}/${score.total} câu đã chọn`}
             </p>
-            <p className="text-sm text-gray-500">Sau khi nop bai, dap an va giai thich se hien ra.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+              {submitted ? 'Bài làm của bạn đã được ghi lại vào lịch sử.' : 'Sau khi nộp bài, đáp án và giải thích chi tiết sẽ hiện ra.'}
+            </p>
           </div>
-          <button
-            onClick={() => setSubmitted(true)}
-            disabled={submitted || Object.keys(answers).length === 0}
-            className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            Nop bo luyen
-          </button>
+          <div className="flex justify-end gap-3 shrink-0">
+            {submitted ? (
+              <button
+                onClick={() => router.push('/profile/insights')}
+                className="w-full sm:w-auto rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-3 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all active:scale-[0.97]"
+              >
+                Về Insights
+              </button>
+            ) : (
+              <button
+                onClick={() => setSubmitted(true)}
+                disabled={submitted || Object.keys(answers).length === 0}
+                className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3.5 text-sm font-black transition-all shadow-lg shadow-purple-600/20 hover:shadow-xl active:scale-[0.97] disabled:opacity-50"
+              >
+                Nộp bài luyện
+              </button>
+            )}
+          </div>
         </div>
       </main>
     </div>

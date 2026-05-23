@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiSearch, FiX, FiCalendar, FiClock, FiUsers, FiPlayCircle, FiLock, FiBookmark, FiCheckCircle, FiRotateCw, FiBarChart2, FiTarget, FiTrendingUp, FiEdit3 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
-import examApi, { Exam } from '@/lib/api/exams';
+import examApi, { Exam, SUBJECT_SLUG_TO_CODE } from '@/lib/api/exams';
+import { getHistoryStats, type HistoryStatsData } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
@@ -42,6 +43,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const user = useAuthStore((s) => s.user);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historyStats, setHistoryStats] = useState<HistoryStatsData | null>(null);
   const [vipModalExam, setVipModalExam] = useState<{ title: string; id: number } | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
@@ -53,6 +55,31 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   useEffect(() => {
     loadExams();
   }, [subjectCode, subjectSlug]);
+
+  useEffect(() => {
+    if (!user) {
+      setHistoryStats(null);
+      return;
+    }
+
+    let cancelled = false;
+    const historySubjectCode = subjectSlug
+      ? (SUBJECT_SLUG_TO_CODE[subjectSlug] || subjectCode)
+      : subjectCode;
+
+    getHistoryStats(historySubjectCode || undefined)
+      .then((data) => {
+        if (!cancelled) setHistoryStats(data);
+      })
+      .catch((error) => {
+        console.error('[ExamList] Error loading history stats:', error?.response?.data || error?.message || error);
+        if (!cancelled) setHistoryStats(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, subjectCode, subjectSlug]);
 
   // Keyboard shortcut: focus search on /
   useEffect(() => {
@@ -166,28 +193,93 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   const progressStats = useMemo(() => {
     const doneExams = exams.filter(isExamDone);
-    const bestScores = doneExams
-      .map(exam => Number(exam.user_best_score || 0))
-      .filter(score => Number.isFinite(score));
-    const avgScore = bestScores.length
-      ? Math.round((bestScores.reduce((sum, score) => sum + score, 0) / bestScores.length) * 10) / 10
+    const completedQuestions = historyStats
+      ? historyStats.overview.totalCorrect + historyStats.overview.totalIncorrect + historyStats.overview.totalUnanswered
+      : doneExams.reduce((sum, exam) => sum + (Number(exam.total_questions || 0) * Math.max(1, getAttemptCount(exam))), 0);
+    const completedExams = historyStats?.overview.uniqueExams ?? doneExams.length;
+    const avgScore = historyStats
+      ? Math.round(Number(historyStats.overview.avgScore || 0) * 10) / 10
       : 0;
-    const avgPassRateItems = exams
-      .map(exam => Number(exam.pass_rate))
-      .filter(rate => Number.isFinite(rate));
-    const avgPassRate = avgPassRateItems.length
-      ? Math.round(avgPassRateItems.reduce((sum, rate) => sum + rate, 0) / avgPassRateItems.length)
+    const passRate = historyStats
+      ? Math.round(Number(historyStats.passFail.passRate || 0))
       : 0;
-    const completion = exams.length ? Math.round((doneExams.length / exams.length) * 100) : 0;
+    const completion = exams.length ? Math.min(100, Math.round((completedExams / exams.length) * 100)) : 0;
 
     return {
       completion,
-      done: doneExams.length,
-      totalQuestions: exams.reduce((sum, exam) => sum + Number(exam.total_questions || 0), 0),
+      done: completedExams,
+      totalQuestions: completedQuestions,
       avgScore,
-      avgPassRate,
+      passRate,
     };
-  }, [exams]);
+  }, [exams, historyStats]);
+
+  const recommendation = useMemo(() => {
+    if (exams.length === 0) {
+      return {
+        exam: null as Exam | null,
+        title: 'Chưa có đề để luyện',
+        text: 'Bộ đề cho môn này đang được cập nhật.',
+        action: 'Xem sau',
+        disabled: true,
+      };
+    }
+
+    const accessibleExams = exams.filter(exam => !isVipExam(exam) || isVip);
+    const inProgressExam = accessibleExams.find(exam => exam.in_progress_attempt);
+    if (inProgressExam) {
+      return {
+        exam: inProgressExam,
+        title: 'Tiếp tục bài đang làm',
+        text: inProgressExam.title,
+        action: 'Tiếp tục',
+        disabled: false,
+      };
+    }
+
+    const nextExam = accessibleExams.find(exam => !isExamDone(exam));
+    if (nextExam) {
+      return {
+        exam: nextExam,
+        title: 'Gợi ý hôm nay',
+        text: `Làm ${nextExam.title} để tăng tiến độ bộ đề.`,
+        action: 'Luyện ngay',
+        disabled: false,
+      };
+    }
+
+    const retryExam = accessibleExams
+      .filter(isExamDone)
+      .sort((a, b) => Number(a.user_best_score || 0) - Number(b.user_best_score || 0))[0];
+    if (retryExam) {
+      return {
+        exam: retryExam,
+        title: 'Ôn lại điểm yếu',
+        text: `Làm lại ${retryExam.title} để cải thiện điểm thấp nhất.`,
+        action: 'Làm lại',
+        disabled: false,
+      };
+    }
+
+    const lockedVipExam = exams.find(isVipExam);
+    if (lockedVipExam) {
+      return {
+        exam: lockedVipExam,
+        title: 'Mở khóa đề nâng cao',
+        text: 'Bạn đã hết đề miễn phí phù hợp. Mở khóa VIP để luyện tiếp.',
+        action: 'Xem gói VIP',
+        disabled: false,
+      };
+    }
+
+    return {
+      exam: null as Exam | null,
+      title: 'Đã hoàn thành',
+      text: 'Bạn đã hoàn thành các đề hiện có trong môn này.',
+      action: 'Hoàn tất',
+      disabled: true,
+    };
+  }, [exams, isVip]);
 
   // Difficulty badge
   const DiffBadge = ({ level }: { level?: string }) => {
@@ -484,29 +576,36 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-[conic-gradient(#6d4aff_var(--progress),#ede9fe_0)]" style={{ ['--progress' as string]: `${progressStats.completion}%` }}>
               <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
                 <span className="text-3xl font-black text-slate-900">{progressStats.completion}%</span>
-                <span className="text-xs font-bold text-slate-400">Tiến độ tuần này</span>
+                <span className="text-xs font-bold text-slate-400">Tiến độ bộ đề</span>
               </div>
             </div>
             <div className="grid flex-1 grid-cols-2 gap-4 text-sm">
               <div className="flex items-center gap-3"><FiEdit3 className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.done}</div><div className="text-xs font-medium text-slate-500">Đề đã làm</div></div></div>
-              <div className="flex items-center gap-3"><FiCheckCircle className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.totalQuestions}</div><div className="text-xs font-medium text-slate-500">Câu hỏi đã làm</div></div></div>
+              <div className="flex items-center gap-3"><FiCheckCircle className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.totalQuestions}</div><div className="text-xs font-medium text-slate-500">Câu đã luyện</div></div></div>
               <div className="flex items-center gap-3"><FiClock className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.avgScore}</div><div className="text-xs font-medium text-slate-500">Điểm TB</div></div></div>
-              <div className="flex items-center gap-3"><FiTrendingUp className="text-emerald-500" /><div><div className="font-black text-slate-900">{progressStats.avgPassRate}%</div><div className="text-xs font-medium text-slate-500">Tỉ lệ đỗ TB</div></div></div>
+              <div className="flex items-center gap-3"><FiTrendingUp className="text-emerald-500" /><div><div className="font-black text-slate-900">{progressStats.passRate}%</div><div className="text-xs font-medium text-slate-500">Tỉ lệ đạt</div></div></div>
             </div>
           </div>
           <div className="mt-5 rounded-2xl bg-gradient-to-r from-violet-50 to-indigo-50 p-4">
             <div className="flex items-center gap-3">
               <FiTarget className="text-3xl text-violet-600" />
               <div>
-                <div className="text-sm font-black text-slate-900">Gợi ý hôm nay</div>
-                <p className="text-xs font-medium text-slate-500">Bạn nên luyện 1 đề VIP để cải thiện tốc độ và độ chính xác.</p>
+                <div className="text-sm font-black text-slate-900">{recommendation.title}</div>
+                <p className="text-xs font-medium text-slate-500">{recommendation.text}</p>
               </div>
             </div>
-            <button className="mt-3 rounded-lg bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-sm">Luyện ngay</button>
+            <button
+              type="button"
+              disabled={recommendation.disabled || !recommendation.exam}
+              onClick={() => recommendation.exam && handleExamClick(recommendation.exam)}
+              className="mt-3 rounded-lg bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {recommendation.action}
+            </button>
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-1">
+        <div className="flex flex-col gap-5">
 
       {/* ── Search Bar ─────────────────────────────────────────────── */}
       <div className="relative">

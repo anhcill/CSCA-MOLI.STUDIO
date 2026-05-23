@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
@@ -13,6 +13,7 @@ let activityRecordRequest: Promise<unknown> | null = null;
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const { isAuthenticated } = useAuthStore();
 
@@ -42,8 +43,9 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const isChat = pathname?.startsWith('/hoi-dap');
   const isGame = pathname?.startsWith('/games');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
-  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage;
-  const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage;
+  const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|giai-de-chi-tiet|lo-trinh)$/);
+  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
+  const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
 
   return (
     <>
