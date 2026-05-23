@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fi';
 import { BsGraphUp, BsJournalBookmark, BsLightbulb, BsStars } from 'react-icons/bs';
 import { HiOutlineSparkles } from 'react-icons/hi2';
+import BackButton from '@/components/layout/BackButton';
 import {
   buildSubjectScopedHref,
   getExamSubjectSlug,
@@ -134,32 +135,39 @@ export default function SubjectStudyShell({
       </aside>
 
       <main className={`relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 xl:pl-[244px] xl:pr-6 ${className}`}>
-        <header className="mb-6 flex items-center gap-4">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
-            {subjectMeta && (
-              <div className="mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-violet-500">
-                <span>{subjectMeta.icon}</span>
-                <span>{subjectMeta.label}</span>
-              </div>
-            )}
-            <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-              {title} <span className="text-violet-500">⚡</span>
-            </h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p>
+            <div className="mb-2 flex flex-wrap items-center gap-3">
+              <BackButton fallbackHref="/" />
+              {subjectMeta && (
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-violet-500">
+                  <span>{subjectMeta.icon}</span>
+                  <span>{subjectMeta.label}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                {title} <span className="text-violet-500">⚡</span>
+              </h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p>
+            </div>
           </div>
-          <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-400 shadow-sm lg:flex">
-            <FiSearch />
-            <span>{searchPlaceholder}</span>
-          </div>
-          <button
-            type="button"
-            aria-label="Thông báo"
-            className="hidden h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 lg:flex"
-          >
-            <FiBell />
-          </button>
-          <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white lg:flex">
-            M
+          <div className="flex items-center gap-3 lg:shrink-0">
+            <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-400 shadow-sm lg:flex">
+              <FiSearch />
+              <span>{searchPlaceholder}</span>
+            </div>
+            <button
+              type="button"
+              aria-label="Thông báo"
+              className="hidden h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 lg:flex"
+            >
+              <FiBell />
+            </button>
+            <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white lg:flex">
+              M
+            </div>
           </div>
         </header>
 
