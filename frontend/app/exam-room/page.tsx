@@ -7,12 +7,13 @@ import {
   FiMonitor, FiUsers, FiClock, FiCalendar, 
   FiFileText, FiAward, FiSearch, FiFilter,
   FiPlayCircle, FiChevronRight, FiSettings,
-  FiTrendingUp, FiArrowRight
+  FiTrendingUp, FiArrowRight, FiCheckCircle, FiXCircle, FiMapPin, FiPrinter
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axiosInstance from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
+import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 
 interface LeaderboardEntry {
   rank: number;
@@ -31,6 +32,8 @@ export default function ExamRoomPage() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [lobbyData, setLobbyData] = useState<{ live: any[]; upcoming: any[]; public: any[] }>({ live: [], upcoming: [], public: [] });
+  const [registrations, setRegistrations] = useState<Record<number, ExamRegistration | null>>({});
+  const [registrationLoading, setRegistrationLoading] = useState<Record<number, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
@@ -69,6 +72,34 @@ export default function ExamRoomPage() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    const officialExams = [...lobbyData.live, ...lobbyData.upcoming];
+    if (officialExams.length === 0) return;
+
+    let cancelled = false;
+    Promise.all(
+      officialExams.map(async (exam) => {
+        try {
+          const registration = await officialExamApi.getMyRegistration(exam.id);
+          return [exam.id, registration] as const;
+        } catch {
+          return [exam.id, null] as const;
+        }
+      })
+    ).then((items) => {
+      if (cancelled) return;
+      setRegistrations((prev) => ({
+        ...prev,
+        ...Object.fromEntries(items),
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, lobbyData.live, lobbyData.upcoming]);
+
   const getTimeRemaining = (endTime: string) => {
     if (!endTime) return "N/A";
     const end = new Date(endTime).getTime();
@@ -92,12 +123,124 @@ export default function ExamRoomPage() {
     publicExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const registrationLabel: Record<string, string> = {
+    registered: 'Chờ duyệt',
+    approved: 'Đã duyệt',
+    checked_in: 'Đã check-in',
+    completed: 'Đã hoàn tất',
+    no_show: 'Vắng thi',
+    cancelled: 'Đã hủy',
+  };
+
+  const registrationClass = (status?: string) => {
+    if (status === 'approved' || status === 'checked_in') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'registered') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (status === 'cancelled' || status === 'no_show') return 'bg-gray-50 text-gray-500 border-gray-200';
+    return 'bg-slate-50 text-slate-600 border-slate-200';
+  };
+
+  const refreshRegistration = async (examId: number) => {
+    const registration = await officialExamApi.getMyRegistration(examId);
+    setRegistrations((prev) => ({ ...prev, [examId]: registration }));
+  };
+
+  const handleRegister = async (examId: number) => {
+    if (!user?.id) {
+      window.location.href = '/login';
+      return;
+    }
+    try {
+      setRegistrationLoading((prev) => ({ ...prev, [examId]: true }));
+      const registration = await officialExamApi.register(examId);
+      setRegistrations((prev) => ({ ...prev, [examId]: registration }));
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể đăng ký kỳ thi lúc này.');
+    } finally {
+      setRegistrationLoading((prev) => ({ ...prev, [examId]: false }));
+    }
+  };
+
+  const handleCancelRegistration = async (examId: number) => {
+    if (!confirm('Hủy đăng ký kỳ thi này?')) return;
+    try {
+      setRegistrationLoading((prev) => ({ ...prev, [examId]: true }));
+      const registration = await officialExamApi.cancelRegistration(examId);
+      setRegistrations((prev) => ({ ...prev, [examId]: registration }));
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể hủy đăng ký lúc này.');
+      await refreshRegistration(examId).catch(() => {});
+    } finally {
+      setRegistrationLoading((prev) => ({ ...prev, [examId]: false }));
+    }
+  };
+
   // Filter public exams by both subject filter and search query
   const filteredPublicExams = lobbyData.public.filter(e => {
     const matchSubject = activeFilter === 'all' || e.subject_name?.toLowerCase().includes(activeFilter.toLowerCase());
     const matchSearch = !searchQuery.trim() || e.title?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchSubject && matchSearch;
   });
+
+  const renderRegistrationPanel = (exam: any, compact = false) => {
+    const registration = registrations[exam.id];
+    const loading = registrationLoading[exam.id];
+    const status = registration?.status;
+    const approved = status === 'approved' || status === 'checked_in';
+    const canCancel = status === 'registered' || status === 'approved';
+
+    return (
+      <div className={`rounded-2xl border ${registrationClass(status)} ${compact ? 'p-3' : 'p-4'} space-y-3`}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wide">
+            {approved ? <FiCheckCircle size={14} /> : status === 'cancelled' ? <FiXCircle size={14} /> : <FiCalendar size={14} />}
+            {status ? registrationLabel[status] || status : 'Chưa đăng ký'}
+          </span>
+          {approved && (
+            <Link href={`/exam/${exam.id}/ticket`} className="inline-flex items-center gap-1 text-xs font-black text-emerald-700 hover:text-emerald-900">
+              <FiPrinter size={13} /> Vé dự thi
+            </Link>
+          )}
+        </div>
+
+        {registration?.room_name && (
+          <div className="grid gap-1 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1.5">
+              <FiMapPin size={13} /> {registration.room_name}{registration.location ? ` - ${registration.location}` : ''}
+            </span>
+            {registration.seat_number ? <span>Ghế: {registration.seat_number}</span> : null}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {!status || status === 'cancelled' ? (
+            <button
+              type="button"
+              onClick={() => handleRegister(exam.id)}
+              disabled={loading}
+              className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-black text-white hover:bg-rose-600 disabled:opacity-60"
+            >
+              {loading ? 'Đang xử lý...' : 'Đăng ký'}
+            </button>
+          ) : canCancel ? (
+            <button
+              type="button"
+              onClick={() => handleCancelRegistration(exam.id)}
+              disabled={loading}
+              className="rounded-xl border border-current px-4 py-2 text-xs font-black hover:bg-white/70 disabled:opacity-60"
+            >
+              {loading ? 'Đang xử lý...' : 'Hủy đăng ký'}
+            </button>
+          ) : null}
+          <Link
+            href={`/exam/${exam.id}`}
+            className="rounded-xl bg-white/80 px-4 py-2 text-xs font-black text-gray-800 hover:bg-white"
+          >
+            Chi tiết
+          </Link>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] relative flex flex-col">
@@ -205,6 +348,10 @@ export default function ExamRoomPage() {
                 
                 <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 group-hover:text-rose-600 transition-colors leading-tight">{exam.title}</h3>
                 
+                <div className="mb-5">
+                  {renderRegistrationPanel(exam)}
+                </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-6">
                     <div className="flex flex-col">
@@ -280,7 +427,8 @@ export default function ExamRoomPage() {
                         <span className="font-semibold text-gray-900">{exam.registered || 0} người</span>
                       </div>
                     </div>
-                    
+                    {renderRegistrationPanel(exam, true)}
+
                     <Link 
                       href={`/exam-room/${exam.id}`}
                       className="w-full py-3 bg-white border-2 border-gray-200 text-gray-800 font-bold rounded-xl hover:border-gray-900 transition-colors text-center block"

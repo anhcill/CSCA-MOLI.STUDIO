@@ -3,7 +3,25 @@ const ExamAttempt = require("../models/ExamAttempt");
 const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
 const { checkVipAccess } = require("../middleware/authMiddleware");
-const { pool } = require("../config/database");
+
+function sanitizeQuestionForAttempt(question) {
+  const {
+    explanation,
+    explanation_cn,
+    explanation_en,
+    correct_answer,
+    correct_answer_key,
+    ...safeQuestion
+  } = question;
+
+  return {
+    ...safeQuestion,
+    answers: (question.answers || []).map((answer) => {
+      const { is_correct, ...safeAnswer } = answer;
+      return safeAnswer;
+    }),
+  };
+}
 
 const examController = {
   // Lấy dữ liệu sảnh thi (Lobby)
@@ -71,7 +89,7 @@ const examController = {
   async getExamDetail(req, res) {
     try {
       const { examId } = req.params;
-      const includeAnswers = req.query.answers === "true";
+      const includeAnswers = false;
 
       const exam = await Exam.getById(examId, includeAnswers);
 
@@ -92,6 +110,8 @@ const examController = {
         });
       }
 
+      exam.questions = (exam.questions || []).map(sanitizeQuestionForAttempt);
+
       res.json({
         success: true,
         data: exam,
@@ -107,6 +127,47 @@ const examController = {
   },
 
   // Tạo đề thi mới (Admin only)
+  async getExamPreflight(req, res) {
+    try {
+      const parsedId = parseInt(req.params.examId, 10);
+      if (!Number.isFinite(parsedId) || parsedId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID de thi khong hop le",
+        });
+      }
+
+      const exam = await Exam.getSummaryForUser(parsedId, req.user.id);
+      if (!exam) {
+        return res.status(404).json({
+          success: false,
+          message: "Khong tim thay de thi",
+        });
+      }
+
+      if (exam.is_premium && !checkVipAccess(req.user)) {
+        return res.status(403).json({
+          success: false,
+          message: "Noi dung nay chi danh cho thanh vien VIP",
+          code: "VIP_REQUIRED",
+          is_vip_required: true,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: exam,
+      });
+    } catch (error) {
+      console.error("Get exam preflight error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Loi khi lay thong tin de thi",
+        error: error.message,
+      });
+    }
+  },
+
   async createExam(req, res) {
     try {
       const examData = {
@@ -175,6 +236,8 @@ const examController = {
     try {
       const { examId } = req.params;
       const userId = req.user.id;
+      const restart = req.body?.restart === true || req.body?.mode === "restart";
+      const practiceMode = req.body?.practiceMode === true || req.body?.mode === "practice";
 
       // Guard: reject NaN / non-integer IDs before touching the DB
       const parsedId = parseInt(examId, 10);
@@ -186,7 +249,7 @@ const examController = {
       }
 
       // Get exam details with questions
-      const exam = await Exam.getById(parsedId);
+      const exam = await Exam.getById(parsedId, false);
 
       if (!exam) {
         return res.status(404).json({
@@ -206,54 +269,61 @@ const examController = {
       }
 
       if (exam.start_time) {
-        const now = new Date();
-        const startTime = new Date(exam.start_time);
-        const endTime = exam.end_time ? new Date(exam.end_time) : null;
-
-        if (Number.isFinite(startTime.getTime()) && now < startTime) {
-          return res.status(403).json({
-            success: false,
-            code: "EXAM_NOT_STARTED",
-            message: "Kỳ thi chưa bắt đầu. Vui lòng xem chi tiết đăng ký trong phòng thi.",
-          });
-        }
-
-        if (endTime && Number.isFinite(endTime.getTime()) && now > endTime) {
-          return res.status(403).json({
-            success: false,
-            code: "EXAM_ENDED",
-            message: "Kỳ thi đã kết thúc.",
-          });
-        }
-
-        const registrationResult = await pool.query(
-          `SELECT status
-           FROM exam_registrations
-           WHERE exam_id = $1 AND user_id = $2
-           ORDER BY registered_at DESC
+        const db = require("../config/database");
+        const registrationResult = await db.query(
+          `SELECT er.status, room.room_name, room.location, ers.seat_number
+           FROM exam_registrations er
+           LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
+           LEFT JOIN exam_rooms room ON room.id = ers.room_id
+           WHERE er.exam_id = $1 AND er.user_id = $2
            LIMIT 1`,
           [parsedId, userId],
         );
         const registration = registrationResult.rows[0];
-
-        if (!registration || registration.status === "cancelled") {
+        const allowedStatuses = new Set(["approved", "checked_in"]);
+        if (!registration || !allowedStatuses.has(registration.status)) {
           return res.status(403).json({
             success: false,
-            code: "REGISTRATION_REQUIRED",
-            message: "Bạn cần đăng ký kỳ thi và được duyệt trước khi vào thi.",
+            message: "Bạn cần đăng ký và được duyệt trước khi vào kỳ thi chính thức",
+            code: "OFFICIAL_REGISTRATION_REQUIRED",
+            registration,
           });
         }
 
-        if (!["approved", "checked_in"].includes(registration.status)) {
+        const now = Date.now();
+        const startsAt = new Date(exam.start_time).getTime();
+        const endsAt = exam.end_time ? new Date(exam.end_time).getTime() : null;
+        if (Number.isFinite(startsAt) && now < startsAt) {
           return res.status(403).json({
             success: false,
-            code: "REGISTRATION_NOT_APPROVED",
-            message: "Đăng ký của bạn chưa được duyệt để vào thi.",
+            message: "Kỳ thi chưa đến giờ bắt đầu",
+            code: "EXAM_NOT_STARTED",
+            registration,
+          });
+        }
+        if (endsAt && Number.isFinite(endsAt) && now > endsAt) {
+          return res.status(403).json({
+            success: false,
+            message: "Kỳ thi đã kết thúc",
+            code: "EXAM_ENDED",
+            registration,
           });
         }
       }
 
-      const attempt = await ExamAttempt.start(userId, parsedId);
+      const existingAttempt = !restart && !practiceMode
+        ? await ExamAttempt.getInProgress(userId, parsedId)
+        : null;
+      const attempt = await ExamAttempt.start(userId, parsedId, { restart, practiceMode });
+      const savedAnswers = existingAttempt
+        ? await ExamAttempt.getSavedAnswers(attempt.id)
+        : [];
+      const elapsedSeconds = attempt.start_time
+        ? Math.max(0, Math.floor((Date.now() - new Date(attempt.start_time).getTime()) / 1000))
+        : 0;
+      const timeLeftSeconds = practiceMode
+        ? null
+        : Math.max(0, (Number(exam.duration) || 0) * 60 - elapsedSeconds);
 
       // Log hành vi bắt đầu thi
       UserActivity.log(userId, 'exam_start', {
@@ -263,9 +333,9 @@ const examController = {
       });
 
       // Shuffle questions if exam has shuffle_mode enabled
-      let questions = (exam.questions || []).filter(
-        (q) => q.question_type !== 'reading_passage' && q.question_type !== 'fill_blank_pool'
-      );
+      let questions = (exam.questions || [])
+        .filter((q) => q.question_type !== 'reading_passage' && q.question_type !== 'fill_blank_pool')
+        .map(sanitizeQuestionForAttempt);
       if (exam.shuffle_mode) {
         // Fisher-Yates shuffle
         questions = [...questions];
@@ -282,13 +352,19 @@ const examController = {
         }));
       }
 
+      const { questions: _rawQuestions, ...safeExam } = exam;
+
       res.json({
         success: true,
         message: "Bắt đầu làm bài",
         data: {
           attemptId: attempt.id,
-          exam: exam,
+          exam: safeExam,
           questions: questions,
+          savedAnswers,
+          isResume: Boolean(existingAttempt),
+          practiceMode,
+          timeLeftSeconds,
         },
       });
     } catch (error) {
@@ -305,7 +381,7 @@ const examController = {
   async saveAnswer(req, res) {
     try {
       const { attemptId } = req.params;
-      const { questionId, answerKey, timeSpent, essayAnswer } = req.body;
+      const { questionId, answerKey, timeSpent, essayAnswer, practiceMode } = req.body;
 
       console.log('Save answer request:', { attemptId, questionId, answerKey, timeSpent });
 
@@ -317,10 +393,33 @@ const examController = {
         essayAnswer || null
       );
 
+      let feedback = null;
+      if (practiceMode) {
+        const db = require("../config/database");
+        const feedbackResult = await db.query(
+          `SELECT
+             q.explanation,
+             q.explanation_cn,
+             a.answer_key AS correct_answer_key,
+             a.answer_text AS correct_answer_text,
+             a.answer_text_cn AS correct_answer_text_cn
+           FROM questions q
+           LEFT JOIN answers a ON a.question_id = q.id AND a.is_correct = TRUE
+           WHERE q.id = $1
+           LIMIT 1`,
+          [questionId]
+        );
+
+        feedback = {
+          is_correct: answer.is_correct,
+          ...(feedbackResult.rows[0] || {}),
+        };
+      }
+
       res.json({
         success: true,
         message: "Lưu câu trả lời thành công",
-        data: answer,
+        data: practiceMode ? { ...answer, feedback } : answer,
       });
     } catch (error) {
       console.error("Save answer error:", error);
@@ -493,7 +592,7 @@ const examController = {
     try {
       const { examId } = req.params;
 
-      const exam = await Exam.delete(examId);
+      const exam = await Exam.delete(examId, req.user.id, req.body?.reason || req.query?.reason || null);
 
       if (!exam) {
         return res.status(404).json({

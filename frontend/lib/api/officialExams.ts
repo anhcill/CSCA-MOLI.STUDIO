@@ -10,6 +10,9 @@ export interface ExamRegistration {
   room_name?: string | null;
   location?: string | null;
   seat_number?: number | null;
+  exam_title?: string;
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 export interface ExamRoom {
@@ -52,6 +55,37 @@ export interface ExamCertificate {
   pass_score: number;
   status: string;
   issued_at: string;
+  exam_title?: string;
+  exam_title_cn?: string | null;
+  full_name?: string;
+  email?: string;
+}
+
+export interface AdmissionTicket {
+  registration_id: number;
+  status: string;
+  registered_at: string;
+  approved_at?: string | null;
+  exam_id: number;
+  exam_code?: string | null;
+  exam_title: string;
+  exam_title_cn?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  duration?: number | null;
+  subject_name?: string | null;
+  subject_code?: string | null;
+  room_id?: number | null;
+  room_name?: string | null;
+  location?: string | null;
+  seat_number?: number | null;
+  user_id: number;
+  full_name?: string | null;
+  email?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  avatar?: string | null;
+  check_in_code: string;
 }
 
 export const officialExamApi = {
@@ -67,6 +101,11 @@ export const officialExamApi = {
 
   cancelRegistration: async (examId: number): Promise<ExamRegistration> => {
     const response = await axios.delete(`/exams/${examId}/register`);
+    return response.data.data;
+  },
+
+  getAdmissionTicket: async (examId: number): Promise<AdmissionTicket> => {
+    const response = await axios.get(`/exams/${examId}/admission-ticket`);
     return response.data.data;
   },
 

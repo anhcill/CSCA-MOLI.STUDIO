@@ -2,21 +2,19 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import examApi, { Exam, Question } from '@/lib/api/exams';
-import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield } from 'react-icons/fi';
+import examApi, { Exam, PracticeFeedback, Question } from '@/lib/api/exams';
+import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiRotateCcw, FiBookOpen } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
-import { officialExamApi } from '@/lib/api/officialExams';
-import { useLanguage } from '@/context/LanguageContext';
-import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
+import RichMathText from '@/components/common/RichMathText';
 
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { pick } = useLanguage();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -32,10 +30,18 @@ export default function ExamPage() {
   }, [params?.id]);
 
   const [exam, setExam] = useState<Exam | null>(null);
+  const [preflight, setPreflight] = useState<Exam | null>(null);
+  const [registration, setRegistration] = useState<ExamRegistration | null>(null);
+  const [registrationLoading, setRegistrationLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attemptId, setAttemptId] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
+  const [practiceMode, setPracticeMode] = useState(false);
+  const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
+  const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -48,7 +54,7 @@ export default function ExamPage() {
   const submitInFlightRef = useRef(false);
 
   const { maxViolations } = useExamProtection({
-    enabled: !!attemptId && !submitting,
+    enabled: !!attemptId && !submitting && !practiceMode,
     onViolation: (type: string) => {
       setViolations((v) => {
         const next = v + 1;
@@ -98,12 +104,12 @@ export default function ExamPage() {
       router.replace('/exam-room');
       return;
     }
-    startExam();
+    loadPreflight();
   }, [examId]);
 
   // Timer countdown
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (practiceMode || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -118,7 +124,7 @@ export default function ExamPage() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  const startExam = async () => {
+  const loadPreflight = async () => {
     if (examId === null || Number.isNaN(examId)) {
       return;
     }
@@ -133,12 +139,99 @@ export default function ExamPage() {
         return;
       }
 
-      const response = await examApi.startExam(examId);
+      const response = await examApi.getExamPreflight(examId);
+      setPreflight(response);
+      if (response.start_time) {
+        officialExamApi.getMyRegistration(examId)
+          .then(setRegistration)
+          .catch(() => setRegistration(null));
+      }
+    } catch (error: any) {
+      console.error('Error loading exam preflight:', error);
+      const errorCode = error.response?.data?.code;
+      const errorMessage = error.response?.data?.message || 'Không thể tải thông tin đề.';
+
+      if (errorCode === 'VIP_REQUIRED') {
+        setVipError(errorMessage);
+      } else {
+        alert(errorMessage);
+        router.push('/exam-room');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOfficialRegister = async () => {
+    if (examId === null || Number.isNaN(examId)) return;
+    try {
+      setRegistrationLoading(true);
+      const data = await officialExamApi.register(examId);
+      setRegistration(data);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể đăng ký kỳ thi lúc này.');
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
+  const handleOfficialCancel = async () => {
+    if (examId === null || Number.isNaN(examId)) return;
+    if (!confirm('Hủy đăng ký kỳ thi này?')) return;
+    try {
+      setRegistrationLoading(true);
+      const data = await officialExamApi.cancelRegistration(examId);
+      setRegistration(data);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể hủy đăng ký lúc này.');
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
+  const startExam = async (options: { restart?: boolean; practice?: boolean } = {}) => {
+    if (examId === null || Number.isNaN(examId)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        alert('Vui lòng đăng nhập để thực hiện tính năng này!');
+        router.push('/login');
+        return;
+      }
+
+      const response = await examApi.startExam(examId, {
+        restart: options.restart,
+        practiceMode: options.practice,
+        mode: options.practice ? 'practice' : options.restart ? 'restart' : 'resume',
+      });
 
       setExam(response.exam);
       setQuestions(response.questions);
       setAttemptId(response.attemptId);
-      setTimeLeft(response.exam.duration * 60); // Convert minutes to seconds
+      setStarted(true);
+      setPracticeMode(Boolean(options.practice || response.practiceMode));
+      setCurrentQuestionIndex(0);
+      setFlaggedQuestions(new Set());
+      setPracticeFeedback({});
+
+      const restoredAnswers: Record<number, number | string> = {};
+      for (const answer of response.savedAnswers || []) {
+        if (answer.essay_answer) restoredAnswers[answer.question_id] = answer.essay_answer;
+        else if (answer.selected_answer_id) restoredAnswers[answer.question_id] = answer.selected_answer_id;
+        else if (answer.selected_answer_key) restoredAnswers[answer.question_id] = answer.selected_answer_key;
+      }
+      setSelectedAnswers(restoredAnswers);
+
+      setTimeLeft(
+        options.practice || response.practiceMode
+          ? 0
+          : response.timeLeftSeconds ?? response.exam.duration * 60
+      );
     } catch (error: any) {
       console.error('Error starting exam:', error);
       const errorCode = error.response?.data?.code;
@@ -148,13 +241,7 @@ export default function ExamPage() {
         setVipError(errorMessage);
       } else {
         alert(errorMessage);
-        const roomDetailCodes = new Set([
-          'EXAM_NOT_STARTED',
-          'EXAM_ENDED',
-          'REGISTRATION_REQUIRED',
-          'REGISTRATION_NOT_APPROVED',
-        ]);
-        router.push(roomDetailCodes.has(errorCode) ? `/exam-room/${examId}` : '/exam-room');
+        router.push('/login');
       }
     } finally {
       setLoading(false);
@@ -173,7 +260,13 @@ export default function ExamPage() {
     }));
 
     try {
-      await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText);
+      const saved = await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText, practiceMode);
+      if (practiceMode && saved?.feedback) {
+        setPracticeFeedback((prev) => ({
+          ...prev,
+          [questionId]: saved.feedback,
+        }));
+      }
     } catch (error: any) {
       console.error('Error saving answer:', error);
     }
@@ -266,6 +359,166 @@ export default function ExamPage() {
     );
   }
 
+  if (!started && preflight) {
+    const inProgress = preflight.in_progress_attempt;
+    const totalQuestions = preflight.question_count || preflight.total_questions || 0;
+    const bestScore = Number(preflight.user_best_score || 0);
+    const isOfficialExam = Boolean(preflight.start_time);
+    const registrationStatus = registration?.status;
+    const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
+
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-8">
+        <div className="mx-auto max-w-4xl">
+          <button
+            onClick={() => router.back()}
+            className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
+          >
+            <FiChevronLeft size={18} /> Quay lại
+          </button>
+
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 p-6 sm:p-8">
+              <p className="mb-2 text-xs font-black uppercase tracking-widest text-indigo-600">
+                {preflight.subject_name || 'CSCA'}
+              </p>
+              <h1 className="text-2xl font-black leading-tight text-slate-950 sm:text-4xl">
+                {preflight.title}
+              </h1>
+              {preflight.description && (
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                  {preflight.description}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 p-6 sm:grid-cols-4 sm:p-8">
+              {[
+                { label: 'Số câu', value: totalQuestions || '-' },
+                { label: 'Thời gian', value: `${preflight.duration || 0} phút` },
+                { label: 'Mức khó', value: preflight.difficulty_level || preflight.overall_difficulty || '-' },
+                { label: 'Đã làm', value: `${preflight.user_attempt_count || 0} lượt` },
+              ].map((item) => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-bold uppercase text-slate-400">{item.label}</p>
+                  <p className="mt-1 text-lg font-black text-slate-900">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-slate-100 p-6 sm:p-8">
+              <div className="mb-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900">
+                <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
+                {inProgress && (
+                  <span className="ml-0 mt-2 block sm:ml-3 sm:mt-0 sm:inline">
+                    Đang làm dở: {inProgress.answered_count || 0}/{totalQuestions || '?'} câu
+                  </span>
+                )}
+              </div>
+
+              {isOfficialExam && (
+                <div className={`mb-5 rounded-2xl border p-4 text-sm ${
+                  isApproved
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : registrationStatus === 'registered'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-black">
+                        Trạng thái đăng ký: {registrationStatus === 'approved' ? 'Đã duyệt' :
+                          registrationStatus === 'checked_in' ? 'Đã check-in' :
+                          registrationStatus === 'registered' ? 'Chờ duyệt' :
+                          registrationStatus === 'cancelled' ? 'Đã hủy' : 'Chưa đăng ký'}
+                      </p>
+                      <p className="mt-1">
+                        Giờ thi: {preflight.start_time ? new Date(preflight.start_time).toLocaleString('vi-VN') : 'Chưa đặt'}
+                      </p>
+                      {registration?.room_name && (
+                        <p className="mt-1">
+                          Phòng: {registration.room_name}
+                          {registration.location ? ` - ${registration.location}` : ''}
+                          {registration.seat_number ? ` · Ghế ${registration.seat_number}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(!registrationStatus || registrationStatus === 'cancelled') && (
+                        <button
+                          onClick={handleOfficialRegister}
+                          disabled={registrationLoading}
+                          className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          {registrationLoading ? 'Đang xử lý...' : 'Đăng ký'}
+                        </button>
+                      )}
+                      {(registrationStatus === 'registered' || registrationStatus === 'approved') && (
+                        <button
+                          onClick={handleOfficialCancel}
+                          disabled={registrationLoading}
+                          className="rounded-xl border border-current px-4 py-2 text-xs font-black hover:bg-white/70 disabled:opacity-60"
+                        >
+                          {registrationLoading ? 'Đang xử lý...' : 'Hủy đăng ký'}
+                        </button>
+                      )}
+                      {isApproved && (
+                        <button
+                          onClick={() => router.push(`/exam/${examId}/ticket`)}
+                          className="rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100"
+                        >
+                          Vé dự thi
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                {inProgress ? (
+                  <>
+                    <button
+                      onClick={() => startExam()}
+                      disabled={loading || (isOfficialExam && !isApproved)}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      <FiPlay size={18} /> Tiếp tục bài đang làm
+                    </button>
+                    <button
+                      onClick={() => startExam({ restart: true })}
+                      disabled={loading || (isOfficialExam && !isApproved)}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      <FiRotateCcw size={18} /> Làm lại từ đầu
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => startExam()}
+                    disabled={loading || (isOfficialExam && !isApproved)}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    <FiPlay size={18} /> Bắt đầu làm bài
+                  </button>
+                )}
+                {!isOfficialExam && (
+                <button
+                  onClick={() => startExam({ practice: true })}
+                  disabled={loading}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <FiBookOpen size={18} /> Luyện tập không tính giờ
+                </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!exam || questions.length === 0) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -286,12 +539,25 @@ export default function ExamPage() {
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
   const answeredCount = Object.keys(selectedAnswers).length;
   const progressPercent = (answeredCount / questions.length) * 100;
-  const isTimeCritical = timeLeft < 300; // less than 5 min
-  const questionText = pick({
-    vi: currentQuestion.question_text,
-    en: currentQuestion.question_text_en,
-    zh: currentQuestion.question_text_cn,
-  });
+  const isTimeCritical = !practiceMode && timeLeft < 300; // less than 5 min
+  const currentFeedback = practiceFeedback[currentQuestion?.id];
+  const displayedQuestionIndexes = questions
+    .map((q, index) => ({ q, index }))
+    .filter(({ q }) => {
+      if (navFilter === 'answered') return !!selectedAnswers[q.id];
+      if (navFilter === 'unanswered') return !selectedAnswers[q.id];
+      if (navFilter === 'flagged') return flaggedQuestions.has(q.id);
+      return true;
+    });
+  const toggleFlag = () => {
+    if (!currentQuestion?.id) return;
+    setFlaggedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(currentQuestion.id)) next.delete(currentQuestion.id);
+      else next.add(currentQuestion.id);
+      return next;
+    });
+  };
 
   return (
     <div
@@ -361,17 +627,13 @@ export default function ExamPage() {
 
         {/* Right Side: Tools */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-6">
-          <div className="hidden md:block">
-            <LanguageSwitcher compact />
-          </div>
-
           <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-mono text-base sm:text-2xl font-bold tracking-tight shadow-inner border ${
               isTimeCritical 
                 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' 
                 : 'bg-slate-100 text-slate-700 border-slate-200'
             }`}>
-            <FiClock size={18} className={isTimeCritical ? 'text-red-500' : 'text-slate-400'} />
-            {formatTime(timeLeft)}
+            <FiClock size={18} className={isTimeCritical && !practiceMode ? 'text-red-500' : 'text-slate-400'} />
+            {practiceMode ? 'Luyện tập' : formatTime(timeLeft)}
           </div>
 
           <button
@@ -411,8 +673,20 @@ export default function ExamPage() {
              <div className="flex items-center gap-3 mb-6">
                 <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg text-sm font-black uppercase tracking-widest border border-indigo-200">
                    Câu Hỏi {currentQuestionIndex + 1}
-                </span>
-             </div>
+                 </span>
+                <button
+                  type="button"
+                  onClick={toggleFlag}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-sm font-bold transition-colors ${
+                    flaggedQuestions.has(currentQuestion.id)
+                      ? 'border-amber-300 bg-amber-100 text-amber-700'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <FiFlag size={15} />
+                  {flaggedQuestions.has(currentQuestion.id) ? 'Đã đánh dấu' : 'Đánh dấu'}
+                </button>
+              </div>
 
              {/* Group Context / Passage */}
              {currentQuestion.groupContext && currentQuestion.groupContext.text && (
@@ -433,12 +707,19 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
-                {(questionText || '').split('\n').map((line: string, idx: number) => (
+                {(currentQuestion.question_text || '').split('\n').map((line: string, idx: number) => (
                   <span key={idx}>
                     {line}
                     <br />
                   </span>
                 ))}
+                
+                {/* Chinese / Secondary Translation if exist */}
+                {currentQuestion.question_text_cn && currentQuestion.question_text_cn !== currentQuestion.question_text && (
+                  <div className="text-lg md:text-xl font-medium text-slate-500 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
+                    {currentQuestion.question_text_cn}
+                  </div>
+                )}
              </div>
 
              {/* Question Attachments */}
@@ -528,11 +809,6 @@ export default function ExamPage() {
                   return visibleAnswers.map((answer: any, index: number) => {
                     const isSelected = currentQuestionAnswer === answer.id || currentQuestionAnswer === answer.answer_key;
                     const letter = answer.answer_key || String.fromCharCode(65 + index);
-                    const answerText = pick({
-                      vi: answer.answer_text,
-                      en: answer.answer_text_en,
-                      zh: answer.answer_text_cn,
-                    });
 
                     return (
                       <button
@@ -553,8 +829,13 @@ export default function ExamPage() {
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
                           <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                             {answerText}
+                             {answer.answer_text}
                           </span>
+                          {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
+                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
+                               {answer.answer_text_cn}
+                            </div>
+                          )}
                           {answer.image_url && (
                             <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
                               <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
@@ -605,6 +886,31 @@ export default function ExamPage() {
                )}
              </div>
 
+             {practiceMode && currentFeedback && (
+               <div className={`mt-6 rounded-2xl border p-4 ${
+                 currentFeedback.is_correct
+                   ? 'border-emerald-200 bg-emerald-50'
+                   : 'border-red-200 bg-red-50'
+               }`}>
+                 <p className={`mb-2 text-sm font-black ${
+                   currentFeedback.is_correct ? 'text-emerald-700' : 'text-red-700'
+                 }`}>
+                   {currentFeedback.is_correct ? 'Đúng' : 'Chưa đúng'}
+                 </p>
+                 {!currentFeedback.is_correct && (
+                   <p className="mb-2 text-sm font-semibold text-slate-700">
+                     Đáp án đúng: {currentFeedback.correct_answer_key}. {currentFeedback.correct_answer_text}
+                   </p>
+                 )}
+                 {(currentFeedback.explanation || currentFeedback.explanation_cn) && (
+                   <RichMathText
+                     value={currentFeedback.explanation || currentFeedback.explanation_cn || ''}
+                     className="text-sm leading-6 text-slate-700"
+                   />
+                 )}
+               </div>
+             )}
+
            </div>
 
            {/* Mobile / Screen bottom Navigation Bar */}
@@ -642,27 +948,54 @@ export default function ExamPage() {
               <h3 className="font-bold text-slate-800 tracking-tight">Biểu Đồ Câu Hỏi</h3>
             </div>
             
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              {[
+                { key: 'all', label: 'Tất cả' },
+                { key: 'unanswered', label: 'Chưa làm' },
+                { key: 'answered', label: 'Đã làm' },
+                { key: 'flagged', label: 'Đánh dấu' },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setNavFilter(item.key as typeof navFilter)}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition-colors ${
+                    navFilter === item.key
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
             {/* The Grid */}
             <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-5 gap-2.5 max-h-[40vh] lg:max-h-[50vh] overflow-y-auto px-1 custom-scrollbar">
-              {questions.map((q, index) => {
+              {displayedQuestionIndexes.map(({ q, index }) => {
                 const isActive = index === currentQuestionIndex;
                 const isDone = !!selectedAnswers[q.id];
+                const isFlagged = flaggedQuestions.has(q.id);
 
                 return (
                   <button
                     key={q.id}
                     onClick={() => setCurrentQuestionIndex(index)}
                     className={`
-                      aspect-square rounded-xl font-bold text-[13px] transition-all flex items-center justify-center outline-none
+                      relative aspect-square rounded-xl font-bold text-[13px] transition-all flex items-center justify-center outline-none
                       ${isActive
                         ? 'bg-slate-800 text-white shadow-lg ring-4 ring-slate-100 scale-110 z-10'
                         : isDone
                           ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 hover:border-indigo-300'
                           : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
                       }
+                      ${isFlagged && !isActive ? 'ring-2 ring-amber-300' : ''}
                     `}
                   >
                     {index + 1}
+                    {isFlagged && (
+                      <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-500" />
+                    )}
                   </button>
                 );
               })}
@@ -712,11 +1045,10 @@ export default function ExamPage() {
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur-md sm:hidden">
         <div className="mx-auto flex max-w-md items-center gap-3">
-          <LanguageSwitcher compact />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiến độ</p>
             <p className="truncate text-sm font-black text-slate-900">
-              {answeredCount}/{questions.length} câu - {formatTime(timeLeft)}
+              {answeredCount}/{questions.length} câu - {practiceMode ? 'Luyện tập' : formatTime(timeLeft)}
             </p>
           </div>
           <button
@@ -748,17 +1080,20 @@ export default function ExamPage() {
               </div>
             </div>
 
-            <div className="mb-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
+            <div className="mb-5 grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-3 text-sm">
               <div>
                 <p className="text-xs font-bold uppercase text-slate-400">Đã làm</p>
                 <p className="font-black text-slate-900">{answeredCount}/{questions.length}</p>
               </div>
               <div>
                 <p className="text-xs font-bold uppercase text-slate-400">Còn lại</p>
-                <p className="font-black text-slate-900">{formatTime(timeLeft)}</p>
+                <p className="font-black text-slate-900">{practiceMode ? 'Không tính giờ' : formatTime(timeLeft)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-400">Đánh dấu</p>
+                <p className="font-black text-slate-900">{flaggedQuestions.size}</p>
               </div>
             </div>
-
             <div className="flex gap-3">
               <button
                 type="button"

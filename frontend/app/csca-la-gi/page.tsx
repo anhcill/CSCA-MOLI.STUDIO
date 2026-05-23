@@ -1,0 +1,13 @@
+import type { Metadata } from 'next';
+import CscaKeywordLanding from '../_seo/CscaKeywordLanding';
+
+export const metadata: Metadata = {
+  title: 'CSCA Là Gì? Cấu Trúc Đề Thi, Lệ Phí Và Cách Ôn 2026',
+  description: 'CSCA là gì? Tìm hiểu kỳ thi CSCA cho học bổng CSC, cấu trúc đề thi, thang điểm, điều kiện dự thi và cách ôn hiệu quả cho du học Trung Quốc.',
+  alternates: { canonical: '/csca-la-gi' },
+  keywords: ['CSCA là gì', 'thi CSCA', 'chứng chỉ CSCA', 'học bổng CSC', 'du học Trung Quốc'],
+};
+
+export default function Page() {
+  return <CscaKeywordLanding slug="csca-la-gi" badge="Giải thích CSCA" title="CSCA Là Gì? Cấu Trúc Đề Thi, Thang Điểm Và Cách Ôn Hiệu Quả" description="CSCA là kỳ thi đánh giá năng lực dành cho ứng viên muốn xin học bổng CSC và du học Trung Quốc. Trang này giúp bạn hiểu đúng CSCA, biết cần học gì và bắt đầu luyện đề theo lộ trình rõ ràng." primaryCta="Làm đề thử CSCA miễn phí" keywords={['CSCA là gì', 'thi CSCA', 'học bổng CSC', 'du học Trung Quốc']} sections={[{ title: 'CSCA là gì?', body: ['CSCA thường được hiểu là bài đánh giá năng lực đầu vào cho nhóm ứng viên du học Trung Quốc hoặc xin học bổng liên quan đến CSC. Nội dung kiểm tra tập trung vào năng lực tiếng Trung, kiến thức nền và khả năng xử lý bài thi bằng tiếng Trung.', 'Với học sinh Việt Nam, CSCA quan trọng vì điểm thi có thể ảnh hưởng đến hồ sơ học bổng, lựa chọn ngành và mức độ cạnh tranh khi nộp vào trường Trung Quốc.'] }, { title: 'Đề thi CSCA gồm những phần nào?', body: ['Một bài CSCA thường xoay quanh ba nhóm năng lực: tiếng Trung, toán hoặc tư duy định lượng, và kiến thức tổng hợp. Tùy trường hoặc đợt xét tuyển, format có thể thay đổi nên thí sinh cần luyện cả đọc hiểu đề, từ vựng chuyên ngành và kỹ năng quản lý thời gian.', 'Cách học tốt nhất là kết hợp lý thuyết ngắn, từ vựng theo chủ đề và đề mô phỏng có chấm điểm.'] }, { title: 'Nên bắt đầu ôn CSCA ra sao?', body: ['Nếu mới bắt đầu, hãy học theo thứ tự: hiểu cấu trúc đề, học từ vựng cốt lõi, làm đề dễ, phân tích lỗi sai rồi tăng dần độ khó. Không nên chỉ đọc tài liệu mà không luyện đề tính giờ.', 'Bạn có thể bắt đầu bằng trang đề thi CSCA của MOLI.STUDIO để kiểm tra trình độ hiện tại và biết phần nào cần ưu tiên.'] }]} faqs={[{ question: 'CSCA có khó không?', answer: 'CSCA không quá khó nếu có nền HSK 3–4 và ôn đúng trọng tâm, nhưng khó với người chưa quen đọc đề bằng tiếng Trung.' }, { question: 'CSCA khác HSK không?', answer: 'HSK chủ yếu đánh giá tiếng Trung. CSCA có thể gồm thêm kiến thức tổng hợp, toán hoặc tư duy học thuật tùy yêu cầu.' }, { question: 'Ôn CSCA trong bao lâu?', answer: 'Người có nền tiếng Trung khá nên dành 1–3 tháng. Người mới nên chuẩn bị 3–6 tháng.' }]} />;
+}

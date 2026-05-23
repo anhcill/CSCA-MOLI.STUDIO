@@ -34,6 +34,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const landingPages: MetadataRoute.Sitemap = [
     route('/on-thi-csca', siteUpdated, 'weekly', 0.9),
+    route('/csca-la-gi', siteUpdated, 'weekly', 0.95),
+    route('/de-thi-thu-csca', siteUpdated, 'weekly', 0.95),
+    route('/on-thi-csca-online', siteUpdated, 'weekly', 0.95),
     route('/de-thi-csca', siteUpdated, 'weekly', 0.9),
     route('/hoc-bong-du-hoc-trung-quoc', siteUpdated, 'monthly', 0.9),
     route('/tu-vung-csca', siteUpdated, 'weekly', 0.8),

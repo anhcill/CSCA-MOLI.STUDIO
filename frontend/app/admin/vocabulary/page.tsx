@@ -75,6 +75,10 @@ export default function AdminVocabularyPage() {
   const [bulkTopic, setBulkTopic] = useState('');
   const [bulkVipTier, setBulkVipTier] = useState('basic');
 
+  // Rename topic
+  const [showRenameTopic, setShowRenameTopic] = useState(false);
+  const [renameTopicName, setRenameTopicName] = useState('');
+
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
     if (!_token) {
@@ -213,13 +217,56 @@ export default function AdminVocabularyPage() {
     }
   };
 
+  const openRenameTopic = () => {
+    if (!filterSubject || !filterTopic) {
+      alert('Vui lòng chọn cả môn và chủ đề trước khi sửa tên chủ đề');
+      return;
+    }
+    setRenameTopicName(filterTopic);
+    setShowRenameTopic(true);
+  };
+
+  const handleRenameTopic = async () => {
+    const newTopic = renameTopicName.trim();
+    if (!filterSubject || !filterTopic) {
+      alert('Vui lòng chọn cả môn và chủ đề trước khi sửa tên chủ đề');
+      return;
+    }
+    if (!newTopic) {
+      alert('Nhập tên chủ đề mới');
+      return;
+    }
+    if (newTopic === filterTopic) {
+      alert('Tên chủ đề mới phải khác tên cũ');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const res = await axios.put('/vocabulary/topics', {
+        subject: filterSubject,
+        oldTopic: filterTopic,
+        newTopic,
+      });
+      alert(res.data?.message || 'Đã đổi tên chủ đề từ vựng');
+      setShowRenameTopic(false);
+      setFilterTopic(newTopic);
+      loadData();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Lỗi đổi tên chủ đề từ vựng');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleBulkImport = async () => {
     if (!bulkTopic.trim()) { alert('Nhập tên chủ đề'); return; }
     try {
-      // Parse format: từHán|pinyin|nghĩaViệt|nghĩaAnh (mỗi dòng 1 từ)
+      // Parse multiple formats per line: 汉字|pinyin|nghĩa Việt|meaning EN, tab-separated, or comma-separated.
       const lines = bulkText.trim().split('\n').filter(l => l.trim());
       const words = lines.map(line => {
-        const parts = line.split('|').map(s => s.trim());
+        const delimiter = line.includes('|') ? '|' : line.includes('\t') ? '\t' : ',';
+        const parts = line.split(delimiter).map(s => s.trim());
         return {
           word_cn: parts[0] || '',
           pinyin: parts[1] || '',
@@ -264,6 +311,14 @@ export default function AdminVocabularyPage() {
             </div>
           </div>
           <div className="flex gap-3">
+            <button
+              onClick={openRenameTopic}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              <FiEdit2 size={16} />
+              Sửa tên chủ đề
+            </button>
             <button
               onClick={handleDeleteTopic}
               disabled={saving}
@@ -330,6 +385,19 @@ export default function AdminVocabularyPage() {
               <FiX size={14} /> Xóa filter
             </button>
           )}
+          <button
+            onClick={openRenameTopic}
+            disabled={saving}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              filterSubject && filterTopic
+                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+            }`}
+            title={filterSubject && filterTopic ? 'Đổi tên chủ đề đang chọn' : 'Chọn môn và chủ đề trước khi sửa'}
+          >
+            <FiEdit2 size={14} />
+            Sửa tên chủ đề
+          </button>
           <button
             onClick={handleDeleteTopic}
             disabled={saving}
@@ -485,7 +553,7 @@ export default function AdminVocabularyPage() {
                   ))}
                 </div>
               </div>
-              <textarea placeholder={'Format mỗi dòng:\n汉字|pīnyīn|nghĩa Việt|meaning EN'} value={bulkText} onChange={e => setBulkText(e.target.value)}
+              <textarea placeholder={'Mỗi dòng 1 từ. Hỗ trợ |, tab, hoặc dấu phẩy:\n汉字|pīnyīn|nghĩa Việt|meaning EN\n学习\txuéxí\thọc tập\tstudy'} value={bulkText} onChange={e => setBulkText(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 h-48 font-mono text-sm" />
               <div className="flex gap-3">
                 <button onClick={() => setShowBulk(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Hủy</button>
@@ -493,6 +561,29 @@ export default function AdminVocabularyPage() {
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50">
                   {saving ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <FiUpload size={16} />}
                   Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Topic Modal */}
+      {showRenameTopic && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Sửa tên chủ đề</h2>
+              <button onClick={() => setShowRenameTopic(false)} className="text-gray-400 hover:text-gray-600"><FiX size={20} /></button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">Đổi tên chủ đề <b>{filterTopic}</b> của môn <b>{subjectLabel(filterSubject)}</b>.</p>
+              <input value={renameTopicName} onChange={e => setRenameTopicName(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="Tên chủ đề mới" />
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowRenameTopic(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Hủy</button>
+                <button onClick={handleRenameTopic} disabled={saving} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" /> : <FiCheck size={16} />}
+                  Cập nhật
                 </button>
               </div>
             </div>

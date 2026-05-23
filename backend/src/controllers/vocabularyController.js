@@ -216,6 +216,38 @@ exports.deleteTopic = async (req, res) => {
   }
 };
 
+// PUT /api/vocabulary/topics (admin only) - rename a whole topic
+exports.renameTopic = async (req, res) => {
+  try {
+    const subject = (req.body?.subject || "").trim();
+    const oldTopic = (req.body?.oldTopic || req.body?.topic || "").trim();
+    const newTopic = (req.body?.newTopic || "").trim();
+
+    if (!subject || !oldTopic || !newTopic) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập môn, tên chủ đề cũ và tên chủ đề mới" });
+    }
+    if (oldTopic === newTopic) {
+      return res.status(400).json({ success: false, message: "Tên chủ đề mới phải khác tên cũ" });
+    }
+
+    const result = await db.query(
+      `UPDATE vocabulary_items
+       SET topic = $3, updated_at = NOW()
+       WHERE subject = $1 AND topic = $2 AND is_active = TRUE
+       RETURNING id`,
+      [subject, oldTopic, newTopic],
+    );
+
+    const updatedCount = result.rowCount || 0;
+    UserActivity.log(req.user.id, "admin.rename_vocabulary_topic", { subject, oldTopic, newTopic, updatedCount, ip: req.ip, userAgent: req.headers["user-agent"] });
+
+    res.json({ success: true, updatedCount, message: updatedCount > 0 ? `Đã đổi tên ${updatedCount} từ sang chủ đề "${newTopic}"` : "Không tìm thấy từ nào trong chủ đề này" });
+  } catch (error) {
+    console.error("Rename vocabulary topic error:", error);
+    res.status(500).json({ success: false, message: "Lỗi đổi tên chủ đề từ vựng" });
+  }
+};
+
 // POST /api/vocabulary/bulk (admin only) - Import nhiều từ cùng lúc
 exports.bulkCreate = async (req, res) => {
   try {

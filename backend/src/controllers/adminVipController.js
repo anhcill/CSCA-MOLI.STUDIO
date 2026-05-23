@@ -75,7 +75,7 @@ const AdminVipController = {
   async grantVip(req, res) {
     try {
       const { userId } = req.params;
-      const { durationDays, reason, packageId } = req.body;
+      const { durationDays, reason, packageId, tier } = req.body;
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
@@ -95,8 +95,8 @@ const AdminVipController = {
         pkgTier = pkgRes.rows[0].tier || 'vip';
       } else if (durationDays && durationDays >= 1) {
         pkgDays = parseInt(durationDays);
-        pkgName = `Gói ${pkgDays} ngày`;
-        pkgTier = 'vip';
+        pkgTier = ['vip', 'premium'].includes(tier) ? tier : 'vip';
+        pkgName = `Gói ${pkgTier === 'premium' ? 'Pre' : 'VIP'} ${pkgDays} ngày`;
       } else {
         return res.status(400).json({ success: false, message: 'Cần cung cấp packageId hoặc durationDays.' });
       }

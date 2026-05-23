@@ -53,12 +53,81 @@ function renderMath(latex: string, displayMode = false): string {
 }
 
 function insertMathIntoText(text: string, latex: string): string {
-  const wrapped = displayMath(latex);
-  return text ? `${text} ${wrapped}` : wrapped;
+  const formatted = formatCustomMathInput(latex);
+  return text ? `${text} ${formatted}` : formatted;
 }
 
 function displayMath(latex: string): string {
   return `\\(${latex}\\)`;
+}
+
+function shouldTreatAsMixedText(input: string): boolean {
+  const trimmed = input.trim();
+  if (!/\s/.test(trimmed)) return false;
+  if (/^\\(?:text|mathrm|operatorname)\s*\{/.test(trimmed)) return false;
+
+  const words = trimmed.match(/[A-Za-z\u00C0-\u1EF9]{2,}/g) || [];
+  return words.length >= 2;
+}
+
+function isMathToken(token: string): boolean {
+  return (
+    /\\[a-zA-Z]+/.test(token) ||
+    /[\^_{}=+\-*/<>\u2264\u2265]/.test(token) ||
+    /^\d+(?:[.,]\d+)?$/.test(token) ||
+    /^[a-zA-Z]$/.test(token)
+  );
+}
+
+function wrapMixedMathFragments(input: string): string {
+  const parts = input.trim().split(/(\s+)/);
+  const out: string[] = [];
+  const mathBuffer: string[] = [];
+  let pendingSpace = '';
+
+  const flushMath = () => {
+    if (!mathBuffer.length) return;
+    out.push(displayMath(mathBuffer.join('').trim()));
+    mathBuffer.length = 0;
+  };
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    if (/^\s+$/.test(part)) {
+      pendingSpace += part;
+      continue;
+    }
+
+    if (isMathToken(part)) {
+      if (mathBuffer.length) {
+        mathBuffer.push(pendingSpace);
+      } else {
+        out.push(pendingSpace);
+      }
+      pendingSpace = '';
+      mathBuffer.push(part);
+      continue;
+    }
+
+    flushMath();
+    out.push(pendingSpace, part);
+    pendingSpace = '';
+  }
+
+  flushMath();
+  out.push(pendingSpace);
+
+  return out.join('');
+}
+
+function formatCustomMathInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  return shouldTreatAsMixedText(trimmed)
+    ? wrapMixedMathFragments(trimmed)
+    : displayMath(trimmed);
 }
 
 export default function MathInput({
@@ -90,7 +159,7 @@ export default function MathInput({
 
   useEffect(() => {
     if (mathInput.trim()) {
-      const html = renderMath(mathInput, false);
+      const html = renderMathDisplay(formatCustomMathInput(mathInput));
       setPreviewHtml(html);
     } else {
       setPreviewHtml('');
@@ -293,17 +362,6 @@ function renderMathDisplay(text: string): string {
     }
   }
 
-  // Find existing \(...\) and \[...\] ranges to skip
-  const skipRanges: [number, number][] = [];
-  let m: RegExpExecArray | null;
-  const skipRe = /\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/g;
-  while ((m = skipRe.exec(text)) !== null) {
-    skipRanges.push([m.index, m.index + m[0].length]);
-  }
-  function isInSkip(pos: number): boolean {
-    return skipRanges.some(([s, e]) => pos >= s && pos < e);
-  }
-
   const out: string[] = [];
   let i = 0;
   const len = text.length;
@@ -317,15 +375,6 @@ function renderMathDisplay(text: string): string {
         i = gt + 1;
         continue;
       }
-    }
-
-    // Skip already-wrapped ranges
-    const skip = skipRanges.find(([s]) => s > i);
-    const skipStart = skip ? skip[0] : len;
-    if (isInSkip(i)) {
-      out.push(text.slice(i, skipStart));
-      i = skipStart;
-      continue;
     }
 
     // Already wrapped \(...\)

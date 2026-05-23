@@ -199,6 +199,12 @@ router.delete(
   vocabularyController.deleteTopic,
 );
 router.put(
+  "/topics",
+  authenticate,
+  authorizePermission("content.manage"),
+  vocabularyController.renameTopic,
+);
+router.put(
   "/:id",
   authenticate,
   authorizePermission("content.manage"),

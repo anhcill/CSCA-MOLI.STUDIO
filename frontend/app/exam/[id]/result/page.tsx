@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiBook, FiArrowLeft, FiArrowRight, FiTarget, FiVideo } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiBook, FiArrowLeft } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -10,26 +10,24 @@ import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
-import { canUseAI, canWatchVideo } from '@/lib/utils/permissions';
+import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
-import { useLanguage } from '@/context/LanguageContext';
-import LanguageSwitcher from '@/components/common/LanguageSwitcher';
-import { createWrongQuestionPractice, getRecommendations, type ExamRecommendation } from '@/lib/api/insights';
+import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
 
 interface AnswerOption {
   key: string;
   text: string;
   text_cn?: string | null;
-  text_en?: string | null;
   is_correct: boolean;
 }
 
 interface QuestionResult {
+  id?: number;
+  question_id?: number;
   question_number: number;
   sub_question_number?: number;
   question_text: string;
   question_text_cn?: string;
-  question_text_en?: string;
   question_type?: string;
   passage_text?: string;
   selected_answer_key: string | null;
@@ -38,15 +36,11 @@ interface QuestionResult {
   correct_answer_text: string;
   is_correct: boolean;
   points: number;
-  score_awarded?: number | string | null;
-  max_score?: number | string | null;
-  grading_status?: string | null;
-  grading_feedback?: string | null;
-  grading_result?: any;
   explanation?: string;
   explanation_cn?: string;
   options: AnswerOption[];
   difficulty?: string;
+  topic_name?: string;
   question_category?: string;
 }
 
@@ -58,62 +52,19 @@ interface ExamResult {
   subject_name: string;
   total_score: number;
   total_correct: number;
-  total_incorrect?: number;
-  total_unanswered?: number;
   submit_time: string;
   total_questions: number;
-  solution_video_url?: string | null;
-  solution_description?: string | null;
   answers: QuestionResult[];
-}
-
-function getReviewAIButtonLabel(status: string) {
-  if (status === 'correct') return 'Hỏi AI củng cố câu đúng';
-  if (status === 'unanswered') return 'Hỏi AI hướng dẫn câu bỏ qua';
-  return 'Hỏi AI giải thích thêm';
-}
-
-function getQuestionReviewStatus(question: QuestionResult) {
-  if (!question.selected_answer_key) return 'unanswered';
-  return question.is_correct ? 'correct' : 'incorrect';
-}
-
-function formatReviewAnswer(key?: string | null, text?: string | null, fallback = 'Bỏ qua') {
-  if (!key) return fallback;
-  const cleanText = (text || '').trim();
-  return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
-}
-
-function buildQuestionExplanationPrompt(question: QuestionResult, questionText: string) {
-  const questionNo = question.sub_question_number || question.question_number;
-  const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
-  const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
-  const base = [
-    `Câu ${questionNo}`,
-    questionText ? `Nội dung câu hỏi: ${questionText}` : '',
-    `Đáp án đúng: ${correctAnswer}`,
-  ].filter(Boolean).join('\n');
-
-  const status = getQuestionReviewStatus(question);
-  if (status === 'correct') {
-    return `${base}\nHọc sinh đã chọn đúng: ${selectedAnswer}.\nHãy giải thích vì sao đáp án này đúng, chỉ ra kiến thức cần nhớ, dấu hiệu nhận biết và bẫy dễ nhầm. Trả lời bằng tiếng Việt có dấu, ngắn gọn nhưng đủ ý.`;
-  }
-  if (status === 'unanswered') {
-    return `${base}\nHọc sinh đã bỏ qua câu này.\nHãy hướng dẫn cách suy luận từ đầu, vì sao đáp án đúng là phù hợp, mẹo nhận biết lần sau và kiến thức cần ôn lại. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
-  }
-  return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
 }
 
 function ExamResultContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { pick } = useLanguage();
   const examId = parseInt(params.id as string);
   const attemptId = searchParams.get('attemptId');
   const user = useAuthStore((s) => s.user);
   const hasAIAccess = canUseAI(user);
-  const hasVideoAccess = canWatchVideo(user);
 
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,9 +76,8 @@ function ExamResultContent() {
   const [aiLoading, setAiLoading] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState<any>(null);
   const [aiLoaded, setAiLoaded] = useState(false);
-  const [nextExam, setNextExam] = useState<ExamRecommendation | null>(null);
-  const [actionLoading, setActionLoading] = useState<'wrong' | 'next' | null>(null);
-  const [actionError, setActionError] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [savedWrongQuestions, setSavedWrongQuestions] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (attemptId) {
@@ -140,12 +90,6 @@ function ExamResultContent() {
       loadAIAnalysis(result.id);
     }
   }, [result?.id, hasAIAccess]);
-
-  useEffect(() => {
-    if (result?.id) {
-      loadNextExam();
-    }
-  }, [result?.id]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -198,43 +142,60 @@ function ExamResultContent() {
     }
   };
 
-  const loadNextExam = async () => {
-    try {
-      const data = await getRecommendations();
-      const recommendation = data.recommendations.find((exam) => exam.examId !== result?.exam_id)
-        || data.recommendations[0]
-        || null;
-      setNextExam(recommendation);
-    } catch (error) {
-      console.error('Load recommendation error:', error);
-    }
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleWrongPractice = async () => {
+  const handleCreateWrongPractice = async () => {
     try {
-      setActionError('');
       setActionLoading('wrong');
       const practiceSet = await createWrongQuestionPractice(20);
       router.push(`/practice-sets/${practiceSet.id}`);
-    } catch (error: any) {
-      setActionError(error?.response?.data?.message || 'Chưa tạo được bộ ôn câu sai.');
+    } catch (error) {
+      console.error('Create wrong practice error:', error);
+      alert('Không thể tạo bộ luyện câu sai lúc này.');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleNextExam = () => {
-    if (nextExam?.examId) {
-      router.push(`/exam/${nextExam.examId}`);
-      return;
+  const handleCreateWeakTopicPractice = async () => {
+    try {
+      setActionLoading('weak-topic');
+      const practiceSet = await createWeakTopicPractice(undefined, 20);
+      router.push(`/practice-sets/${practiceSet.id}`);
+    } catch (error) {
+      console.error('Create weak topic practice error:', error);
+      alert('Không thể tạo bộ luyện chủ đề yếu lúc này.');
+    } finally {
+      setActionLoading(null);
     }
-    router.push('/exam-room');
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const handleSaveWrongQuestion = async (question: QuestionResult) => {
+    const questionId = question.question_id || question.id;
+    if (!questionId) return;
+
+    try {
+      await saveBookmark({
+        entity_type: 'question',
+        entity_id: questionId,
+        title: `Câu ${question.question_number} - ${result?.exam_title || 'Đề thi'}`,
+        metadata: {
+          attemptId: result?.id,
+          examId: result?.exam_id,
+          selectedAnswer: question.selected_answer_key,
+          correctAnswer: question.correct_answer_key,
+          topic: question.topic_name || question.question_category || null,
+        },
+      });
+      setSavedWrongQuestions((prev) => new Set(prev).add(questionId));
+    } catch (error) {
+      console.error('Save wrong question error:', error);
+      alert('Không thể lưu câu này lúc này.');
+    }
   };
 
   if (loading) {
@@ -263,34 +224,12 @@ function ExamResultContent() {
   }
 
   const answers = result.answers ?? [];
-  const total = result.total_questions || answers.length || 1;
   const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
-  const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && !a.is_correct).length;
-  const totalUnanswered = result.total_unanswered ?? Math.max(0, total - totalCorrect - totalIncorrect);
+  const totalIncorrect = answers.filter(a => a.selected_answer_key && !a.is_correct).length;
+  const totalUnanswered = answers.filter(a => !a.selected_answer_key).length;
+  const total = answers.length || result.total_questions || 1;
   const accuracy = Math.round((totalCorrect / total) * 100);
-  const displayScore = Math.round((totalCorrect / total) * 100) / 10;
-  const wrongAnswers = answers.filter(a => a.selected_answer_key && !a.is_correct);
-  const skippedAnswers = answers.filter(a => !a.selected_answer_key);
-
-  const labelDifficulty = (difficulty?: string) => {
-    if (difficulty === 'easy') return 'Câu dễ';
-    if (difficulty === 'hard') return 'Câu khó';
-    if (difficulty === 'medium') return 'Câu trung bình';
-    return '';
-  };
-
-  const masteryRows = Array.from(answers.reduce((map, answer) => {
-    const key = answer.question_category || labelDifficulty(answer.difficulty) || 'Tổng hợp';
-    const current = map.get(key) || { label: key, total: 0, correct: 0 };
-    current.total += 1;
-    if (answer.is_correct) current.correct += 1;
-    map.set(key, current);
-    return map;
-  }, new Map<string, { label: string; total: number; correct: number }>()).values())
-    .map(row => ({ ...row, accuracy: Math.round((row.correct / Math.max(row.total, 1)) * 100) }))
-    .sort((a, b) => a.accuracy - b.accuracy);
-  const weakestArea = masteryRows[0] || null;
-  const strongestArea = [...masteryRows].sort((a, b) => b.accuracy - a.accuracy)[0] || null;
+  const score = Number(result.total_score) || 0;
 
   const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
   const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
@@ -301,6 +240,16 @@ function ExamResultContent() {
     { name: 'Sai', value: totalIncorrect, color: '#ef4444' },
     { name: 'Bỏ qua', value: totalUnanswered, color: '#9ca3af' },
   ].filter(d => d.value > 0);
+  const topicBreakdown = Object.values(
+    answers.reduce<Record<string, { name: string; total: number; incorrect: number; correct: number }>>((acc, answer) => {
+      const name = answer.topic_name || answer.question_category || answer.difficulty || 'Chưa phân loại';
+      if (!acc[name]) acc[name] = { name, total: 0, incorrect: 0, correct: 0 };
+      acc[name].total += 1;
+      if (answer.is_correct) acc[name].correct += 1;
+      else acc[name].incorrect += 1;
+      return acc;
+    }, {})
+  ).sort((a, b) => b.incorrect - a.incorrect);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
@@ -320,7 +269,6 @@ function ExamResultContent() {
           <FiArrowLeft size={18} /> Quay lại
         </button>
         <div className="flex-1" />
-        <LanguageSwitcher compact />
         <button
           onClick={() => window.print()}
           className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 text-xs font-medium shadow-sm no-print"
@@ -362,7 +310,7 @@ function ExamResultContent() {
                 <div className="text-center mb-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{result.exam_title}</p>
                   <p className={`text-5xl font-black text-${gradeColor}-600`}>
-                    {displayScore.toFixed(1)}
+                    {score.toFixed(1)}
                   </p>
                   <p className="text-gray-400 text-sm">/ 10 điểm</p>
                 </div>
@@ -461,6 +409,38 @@ function ExamResultContent() {
                   </div>
                 </button>
 
+                <button
+                  onClick={handleCreateWrongPractice}
+                  disabled={actionLoading === 'wrong'}
+                  className="w-full bg-red-50 border border-red-200 rounded-xl p-4 text-left hover:bg-red-100 transition-colors group disabled:opacity-60">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center shrink-0">
+                      <FiRotateCw className="text-white" size={16} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-sm group-hover:text-red-800">Luyện lại 20 câu sai</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Tạo bộ luyện từ các câu bạn hay sai gần đây</p>
+                    </div>
+                    <span className="text-red-400 text-sm">→</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleCreateWeakTopicPractice}
+                  disabled={actionLoading === 'weak-topic'}
+                  className="w-full bg-amber-50 border border-amber-200 rounded-xl p-4 text-left hover:bg-amber-100 transition-colors group disabled:opacity-60">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-amber-600 rounded-lg flex items-center justify-center shrink-0">
+                      <FiBarChart2 className="text-white" size={16} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-sm group-hover:text-amber-800">Luyện chủ đề yếu</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Tập trung vào nhóm kiến thức sai nhiều</p>
+                    </div>
+                    <span className="text-amber-400 text-sm">→</span>
+                  </div>
+                </button>
+
                 {/* Quick Links */}
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 px-1">Xem thêm</p>
@@ -481,68 +461,39 @@ function ExamResultContent() {
             </div>
 
             {/* AI Analysis — chỉ VIP/Pre */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 no-print">
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Điểm mạnh / yếu</p>
-                <div className="space-y-3">
-                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
-                    <p className="text-xs font-bold text-emerald-700">Mạnh nhất</p>
-                    <p className="mt-1 font-black text-gray-900">{strongestArea?.label || 'Chưa đủ dữ liệu'}</p>
-                    <p className="text-xs text-emerald-700 mt-0.5">{strongestArea ? `${strongestArea.correct}/${strongestArea.total} câu đúng (${strongestArea.accuracy}%)` : 'Làm thêm đề để phân tích rõ hơn'}</p>
+            {topicBreakdown.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Thống kê theo chủ đề</p>
+                    <h2 className="text-lg font-black text-gray-900">Nhóm kiến thức cần ưu tiên</h2>
                   </div>
-                  <div className="rounded-xl bg-rose-50 border border-rose-100 p-3">
-                    <p className="text-xs font-bold text-rose-700">Cần ôn lại</p>
-                    <p className="mt-1 font-black text-gray-900">{weakestArea?.label || 'Chưa đủ dữ liệu'}</p>
-                    <p className="text-xs text-rose-700 mt-0.5">{weakestArea ? `${weakestArea.correct}/${weakestArea.total} câu đúng (${weakestArea.accuracy}%)` : 'Không có nhóm yếu rõ ràng'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Ôn câu sai</p>
-                <p className="text-sm text-gray-600">
-                  Bạn có <strong className="text-rose-600">{wrongAnswers.length}</strong> câu sai và <strong>{skippedAnswers.length}</strong> câu bỏ qua trong lần làm này.
-                </p>
-                <button
-                  onClick={handleWrongPractice}
-                  disabled={wrongAnswers.length === 0 || actionLoading === 'wrong'}
-                  className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FiTarget size={16} />
-                  {actionLoading === 'wrong' ? 'Đang tạo bộ ôn...' : 'Ôn lại câu sai'}
-                </button>
-                {actionError && <p className="mt-2 text-xs font-semibold text-rose-600">{actionError}</p>}
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Học tiếp</p>
-                {nextExam ? (
-                  <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 mb-3">
-                    <p className="font-black text-gray-900 line-clamp-1">{nextExam.examTitle}</p>
-                    <p className="text-xs text-indigo-700 mt-1">{nextExam.reason?.text || 'Đề phù hợp để luyện tiếp'}</p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600 mb-3">Chưa có đề gợi ý riêng, bạn có thể vào phòng thi để chọn đề tiếp theo.</p>
-                )}
-                <div className="grid gap-2">
                   <button
-                    onClick={handleNextExam}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-700"
+                    onClick={() => router.push('/lich-su/thong-ke')}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50"
                   >
-                    Làm đề tương tự <FiArrowRight size={16} />
+                    Xem chi tiết
                   </button>
-                  {result.solution_video_url && (
-                    <button
-                      onClick={() => hasVideoAccess ? window.open(result.solution_video_url || '', '_blank', 'noopener,noreferrer') : router.push('/vip')}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-black text-amber-800 hover:bg-amber-100"
-                    >
-                      <FiVideo size={16} />
-                      {hasVideoAccess ? 'Xem video giải đề' : 'Mở Pre để xem video'}
-                    </button>
-                  )}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {topicBreakdown.slice(0, 6).map((topic) => {
+                    const errorRate = Math.round((topic.incorrect / Math.max(topic.total, 1)) * 100);
+                    return (
+                      <div key={topic.name} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="truncate text-sm font-bold text-gray-900">{topic.name}</p>
+                          <span className="text-xs font-black text-red-600">{errorRate}% sai</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-white">
+                          <div className="h-full rounded-full bg-red-500" style={{ width: `${errorRate}%` }} />
+                        </div>
+                        <p className="mt-2 text-xs text-gray-500">Sai {topic.incorrect}/{topic.total} câu</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            )}
 
             <PremiumGate type="ai">
               <AIExamAnalysis
@@ -609,11 +560,17 @@ function ExamResultContent() {
                               Bạn: {q.selected_answer_key}
                             </span>
                           )}
+                          {(q.topic_name || q.question_category) && (
+                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                              {q.topic_name || q.question_category}
+                            </span>
+                          )}
                           <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                         </div>
-                        <p className="text-gray-900 font-medium leading-relaxed">
-                          {pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn })}
-                        </p>
+                        <p className="text-gray-900 font-medium leading-relaxed">{q.question_text || q.question_text_cn}</p>
+                        {q.question_text_cn && q.question_text_cn !== q.question_text && (
+                          <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
+                        )}
                       </div>
                     </div>
 
@@ -630,9 +587,10 @@ function ExamResultContent() {
                           <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
                             <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
                             <div className="flex-1">
-                              <span className={`text-sm ${text}`}>
-                                {pick({ vi: opt.text, en: opt.text_en, zh: opt.text_cn })}
-                              </span>
+                              <span className={`text-sm ${text}`}>{opt.text}</span>
+                              {opt.text_cn && (
+                                <p className={`text-xs mt-0.5 ${isCorrect ? 'text-green-700' : 'text-gray-500'}`}>{opt.text_cn}</p>
+                              )}
                             </div>
                             {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
                             {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0">✗ Bạn chọn</span>}
@@ -650,21 +608,6 @@ function ExamResultContent() {
                     {/* Essay/Translation answer display */}
                     {(q.question_type === 'essay' || q.question_type === 'translation') && (
                       <div className="mt-4 ml-8 space-y-3">
-                        {q.grading_status && (
-                          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">Cham tu dong</p>
-                              <span className="text-sm font-black text-orange-700">
-                                {Number(q.score_awarded ?? 0).toFixed(1)}/{Number(q.max_score ?? q.points ?? 0).toFixed(1)} diem
-                              </span>
-                            </div>
-                            {(q.grading_feedback || q.grading_result?.feedback) && (
-                              <p className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">
-                                {q.grading_feedback || q.grading_result?.feedback}
-                              </p>
-                            )}
-                          </div>
-                        )}
                         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                           <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
                           <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
@@ -687,20 +630,27 @@ function ExamResultContent() {
                     )}
 
                     {/* AI buttons */}
-                    {q.question_type !== 'essay' && q.question_type !== 'translation' && (
+                    {status === 'incorrect' && (
                       <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
                         <button
                           onClick={() => setShowExplanationModal(q)}
                           className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                          <FiZap size={14} /> {getReviewAIButtonLabel(status)}
+                          <FiZap size={14} /> Hỏi AI giải thích thêm
                         </button>
-                        {status === 'incorrect' && (
-                          <button
-                            onClick={() => setShowTeachModal(q)}
-                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
-                            <FiBook size={14} /> Giảng lại lý thuyết
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setShowTeachModal(q)}
+                          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
+                          <FiBook size={14} /> Giảng lại lý thuyết
+                        </button>
+                        <button
+                          onClick={() => handleSaveWrongQuestion(q)}
+                          disabled={Boolean((q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!))}
+                          className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1.5 disabled:text-gray-400">
+                          <FiBookOpen size={14} />
+                          {(q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!)
+                            ? 'Đã lưu câu sai'
+                            : 'Lưu câu sai'}
+                        </button>
                       </div>
                     )}
 
@@ -765,26 +715,8 @@ function ExamResultContent() {
 
 // ─── AI Explanation Modal ──────────────────────────────────────────────────────
 function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
-  const { pick } = useLanguage();
   const [explanation, setExplanation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const answerStatus = getQuestionReviewStatus(question);
-  const questionText = pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn }) || question.question_text || '';
-  const answerBoxClass = answerStatus === 'correct'
-    ? 'bg-green-50 border border-green-200 rounded-lg p-3'
-    : answerStatus === 'unanswered'
-      ? 'bg-amber-50 border border-amber-200 rounded-lg p-3'
-      : 'bg-red-50 border border-red-200 rounded-lg p-3';
-  const answerTextClass = answerStatus === 'correct'
-    ? 'text-green-800 font-semibold text-sm'
-    : answerStatus === 'unanswered'
-      ? 'text-amber-800 font-semibold text-sm'
-      : 'text-red-800 font-semibold text-sm';
-  const answerLabelClass = answerStatus === 'correct'
-    ? 'text-xs font-bold text-green-600 mb-1'
-    : answerStatus === 'unanswered'
-      ? 'text-xs font-bold text-amber-600 mb-1'
-      : 'text-xs font-bold text-red-600 mb-1';
 
   useEffect(() => {
     loadExplanation();
@@ -795,7 +727,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
       const res = await authFetch('/api/ai/ask', {
         method: 'POST',
         body: JSON.stringify({
-          question: buildQuestionExplanationPrompt(question, questionText),
+          question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng? Hãy giải thích chi tiết kiến thức liên quan và mẹo ghi nhớ.`,
           attemptId,
         }),
       });
@@ -825,20 +757,20 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
         <div className="p-6">
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
             <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-            <p className="text-sm text-gray-800">{questionText}</p>
+            <p className="text-sm text-gray-800">{question.question_text || question.question_text_cn}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className={answerBoxClass}>
-              <p className={answerLabelClass}>{answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}</p>
-              <p className={answerTextClass}>
-                {formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-red-600 mb-1">✗ Đáp án của bạn</p>
+              <p className="text-red-800 font-semibold text-sm">
+                {question.selected_answer_key || '?'}. {question.selected_answer_text || ''}
               </p>
             </div>
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-green-600 mb-1">Đáp án đúng</p>
+              <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
               <p className="text-green-800 font-semibold text-sm">
-                {formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
+                {question.correct_answer_key || '?'}. {question.correct_answer_text || ''}
               </p>
             </div>
           </div>
@@ -846,7 +778,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
           {loading ? (
             <div className="flex flex-col items-center gap-3 py-8">
               <div className="animate-spin rounded-full h-10 w-10 border-3 border-purple-200 border-t-purple-600" />
-              <p className="text-gray-500 text-sm text-center">AI đang đọc câu hỏi, đối chiếu đáp án và soạn giải thích...</p>
+              <p className="text-gray-500 text-sm">AI đang phân tích câu này...</p>
             </div>
           ) : explanation?.success ? (
             <div className="space-y-3">
@@ -905,7 +837,6 @@ function GradeEssayModal({ question, attemptId, onClose }: {
         body: JSON.stringify({
           questionText: question.question_text,
           questionTextCn: question.question_text_cn,
-          questionTextEn: question.question_text_en,
           userAnswer: question.selected_answer_text,
           correctAnswer: question.correct_answer_text,
           questionType: question.question_type,
@@ -1068,7 +999,6 @@ function GradeEssayModal({ question, attemptId, onClose }: {
 function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
   question: QuestionResult; attemptId: number; onClose: () => void; onAskAI: () => void;
 }) {
-  const { pick } = useLanguage();
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -1079,7 +1009,7 @@ function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
       const res = await authFetch('/api/ai/teach-grammar', {
         method: 'POST',
         body: JSON.stringify({
-          question: pick({ vi: question.question_text, en: question.question_text_en, zh: question.question_text_cn }),
+          question: question.question_text || question.question_text_cn || '',
           topic: '',
           wrongAnswer: `${question.selected_answer_key}. ${question.selected_answer_text}`,
           correctAnswer: `${question.correct_answer_key}. ${question.correct_answer_text}`,

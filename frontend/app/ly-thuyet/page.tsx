@@ -104,21 +104,17 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
 }
 
 function TopicSection({ topic, materials, onView }: { topic: string; materials: Material[]; onView: (m: Material) => void }) {
-  const [open, setOpen] = useState(true);
   return (
     <div className="mb-7">
-      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center justify-between py-2 mb-3 border-b border-gray-200">
+      <div className="w-full flex items-center justify-between py-2 mb-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <span className="font-bold text-gray-800">{topic || 'Tài liệu chung'}</span>
           <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full font-medium">{materials.length}</span>
         </div>
-        {open ? <FiChevronUp className="text-gray-400" size={16} /> : <FiChevronDown className="text-gray-400" size={16} />}
-      </button>
-      {open && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {materials.map(m => <PDFCard key={m.id} m={m} onView={onView} />)}
-        </div>
-      )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {materials.map(m => <PDFCard key={m.id} m={m} onView={onView} />)}
+      </div>
     </div>
   );
 }
@@ -132,6 +128,7 @@ export default function LyThuyetPage() {
   const [search, setSearch] = useState('');
   const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [viewing, setViewing] = useState<Material | null>(null);
+  const [viewerLoaded, setViewerLoaded] = useState(false);
 
   useEffect(() => {
     setActiveSubject(subjectParam);
@@ -165,6 +162,14 @@ export default function LyThuyetPage() {
     const matchSearch = !q || m.title.toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q) || (m.topic || '').toLowerCase().includes(q);
     return matchSubject && matchSearch;
   }), [allMaterials, activeSubject, search]);
+
+  useEffect(() => {
+    if (!viewing && filtered.length > 0) setViewing(filtered[0]);
+  }, [filtered, viewing]);
+
+  useEffect(() => {
+    setViewerLoaded(false);
+  }, [viewing?.id]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Material[]>();
@@ -212,6 +217,30 @@ export default function LyThuyetPage() {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" />
           </div>
 
+          {viewing && (
+            <section className="mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-gray-900 text-white">
+                <div className="min-w-0">
+                  <h2 className="font-semibold truncate">{viewing.title}</h2>
+                  {viewing.topic && <p className="text-xs text-gray-300 truncate">{viewing.topic}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a href={viewing.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiDownload size={13} /> Tải về</a>
+                  <a href={viewing.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiExternalLink size={13} /> Mở file</a>
+                </div>
+              </div>
+              <div className="relative h-[72vh] bg-gray-800">
+                {!viewerLoaded && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
+                    <div className="animate-spin rounded-full h-10 w-10 border-2 border-white border-t-transparent" />
+                    <p className="text-sm text-gray-300">Đang tải tài liệu...</p>
+                  </div>
+                )}
+                <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true`} className="w-full h-full border-0" title={viewing.title} onLoad={() => setViewerLoaded(true)} />
+              </div>
+            </section>
+          )}
+
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[...Array(6)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />)}
@@ -229,7 +258,6 @@ export default function LyThuyetPage() {
         </main>
       </div>
 
-      {viewing && <PDFModal material={viewing} onClose={() => setViewing(null)} />}
     </>
   );
 }

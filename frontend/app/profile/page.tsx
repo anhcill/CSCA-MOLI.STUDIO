@@ -33,32 +33,32 @@ function derivePackageUI(pkg: any) {
 }
 
 const Sk = ({ className }: { className: string }) => (
-  <div className={`animate-pulse bg-gray-100 rounded-xl ${className}`} />
+  <div className={`animate-pulse bg-gray-200/60 rounded-2xl ${className}`} />
 );
 
 const StatCard = ({ icon: Icon, label, value, color }: {
   icon: React.ElementType; label: string; value: number | string; color: string;
 }) => (
-  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
-      <Icon className="text-white" size={20} />
+  <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${color}`}>
+      <Icon className="text-white" size={22} />
     </div>
     <div>
-      <p className="text-xs text-gray-400 font-medium">{label}</p>
-      <p className="text-2xl font-bold text-gray-800 leading-tight">{value}</p>
+      <p className="text-xs text-gray-400 font-semibold tracking-wide uppercase">{label}</p>
+      <p className="text-2xl font-black text-gray-800 leading-tight mt-0.5">{value}</p>
     </div>
   </div>
 );
 
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
-      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
-        <Icon size={13} className="text-gray-400" />
+    <div className="flex items-start gap-4 py-4 border-b border-gray-100 last:border-0">
+      <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 mt-0.5">
+        <Icon size={15} className="text-gray-400" />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-        <p className="text-sm text-gray-800 font-medium break-words">{value}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-400 font-semibold mb-0.5 uppercase tracking-wider">{label}</p>
+        <p className="text-sm text-gray-800 font-semibold break-words leading-relaxed">{value}</p>
       </div>
     </div>
   );
@@ -70,21 +70,21 @@ function PwField({ label, value, onChange, placeholder }: {
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{label}</label>
       <div className="relative">
         <input
           type={show ? 'text' : 'password'}
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full px-4 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-gray-900"
+          className="w-full px-4 py-3 pr-10 border border-gray-200 bg-gray-50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white focus:border-transparent transition-all text-gray-900 font-medium"
         />
         <button
           type="button"
           onClick={() => setShow(s => !s)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
         >
-          {show ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+          {show ? <FiEyeOff size={16} /> : <FiEye size={16} />}
         </button>
       </div>
     </div>
@@ -94,19 +94,24 @@ function PwField({ label, value, onChange, placeholder }: {
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
+      type="button"
       onClick={onToggle}
-      className={`relative w-10 h-5 rounded-full transition-colors ${on ? 'bg-gray-900' : 'bg-gray-200'}`}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${on ? 'bg-indigo-600' : 'bg-gray-200'}`}
     >
-      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? 'right-0.5' : 'left-0.5'}`} />
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${on ? 'translate-x-5' : 'translate-x-0'}`}
+      />
     </button>
   );
 }
 
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
   return (
-    <div className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium
-      ${type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'}`}>
-      {type === 'success' ? <FiCheckCircle size={15} /> : <FiAlertTriangle size={15} />}
+    <div className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-bold transition-all duration-300 border
+      ${type === 'success' 
+        ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+        : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
+      {type === 'success' ? <FiCheckCircle className="text-emerald-500" size={18} /> : <FiAlertTriangle className="text-rose-500" size={18} />}
       {message}
     </div>
   );
@@ -362,25 +367,36 @@ export default function ProfilePage() {
 
   if (!mounted || userLoading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50/50">
         <Header />
-        <main className="container mx-auto px-4 py-8 max-w-3xl space-y-5">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-pulse">
-            <div className="flex items-start gap-5">
-              <div className="w-20 h-20 rounded-2xl bg-gray-200 shrink-0" />
-              <div className="flex-1 space-y-3">
-                <div className="h-5 bg-gray-200 rounded w-48" />
-                <div className="h-4 bg-gray-200 rounded w-32" />
-                <div className="h-4 bg-gray-200 rounded w-64" />
+        <main className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Sidebar Skeleton */}
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-white rounded-3xl border border-gray-100/85 shadow-sm p-6 space-y-6 animate-pulse">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="w-24 h-24 rounded-3xl bg-gray-200/70" />
+                  <div className="h-6 bg-gray-200/70 rounded-xl w-36" />
+                  <div className="h-4 bg-gray-200/70 rounded-xl w-24" />
+                </div>
+                <div className="border-t border-gray-100 my-4" />
+                <div className="space-y-3">
+                  <div className="h-4 bg-gray-200/70 rounded-lg w-full" />
+                  <div className="h-4 bg-gray-200/70 rounded-lg w-5/6" />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-pulse">
-            <div className="h-8 bg-gray-100 rounded w-1/2 mb-6" />
-            <div className="space-y-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-10 bg-gray-100 rounded-xl" />
-              ))}
+            {/* Main Content Skeleton */}
+            <div className="lg:col-span-8 space-y-6">
+              <div className="bg-white rounded-3xl border border-gray-100/85 shadow-sm p-6 animate-pulse space-y-6">
+                <div className="h-12 bg-gray-200/50 rounded-2xl w-full" />
+                <div className="space-y-4 pt-4">
+                  <div className="h-4 bg-gray-200/70 rounded-lg w-1/3" />
+                  <div className="h-10 bg-gray-200/70 rounded-xl w-full" />
+                  <div className="h-10 bg-gray-200/70 rounded-xl w-full" />
+                  <div className="h-10 bg-gray-200/70 rounded-xl w-full" />
+                </div>
+              </div>
             </div>
           </div>
         </main>
@@ -392,8 +408,17 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="flex items-center justify-center h-64">
-          <p className="text-gray-400">Vui lòng đăng nhập để xem trang này</p>
+        <div className="flex flex-col items-center justify-center h-96 px-4">
+          <div className="w-16 h-16 bg-gray-100 rounded-3xl flex items-center justify-center text-gray-400 mb-4 shadow-inner">
+            <FiUser size={28} />
+          </div>
+          <p className="text-gray-500 font-bold text-base text-center">Vui lòng đăng nhập để xem thông tin cá nhân</p>
+          <button 
+            onClick={() => router.push('/login')} 
+            className="mt-4 px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
+          >
+            Đăng nhập ngay
+          </button>
         </div>
       </div>
     );
@@ -428,61 +453,100 @@ export default function ProfilePage() {
   ] as const;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       <Header />
       {toast && <Toast message={toast.msg} type={toast.type} />}
 
-      <main className="container mx-auto px-4 py-8 max-w-3xl">
-
-        {/* ── Profile Card ─────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-5">
-              <div className="relative shrink-0">
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt={displayName} className="w-20 h-20 rounded-2xl object-cover border-2 border-gray-100" />
-                ) : (
-                  <div className="w-20 h-20 rounded-2xl bg-gray-900 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{avatarLetter}</span>
-                  </div>
-                )}
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold text-gray-900">{displayName}</h1>
-                  {profileUser?.is_vip && (() => {
-                    // Find the user's active purchased package
-                    const purchasedIds = Array.from(purchasedPkgIds);
-                    const activePkg = purchasedIds.length > 0
-                      ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
-                      : null;
-                    const pkgName = activePkg?.name || 'PRO';
-                    const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
-                    return (
-                      <span className={`bg-gradient-to-r ${isPre ? 'from-amber-400 to-orange-500' : 'from-indigo-500 to-purple-600'} text-white text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm`}>
-                        <FaCrown size={10} /> {pkgName}
-                        {vipDaysLeft !== null && vipDaysLeft > 0 && (
-                          <span className="ml-1 bg-white/30 px-1 rounded text-[10px]">{vipDaysLeft}d</span>
-                        )}
-                      </span>
-                    );
-                  })()}
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* ── CỘT TRÁI: SIDEBAR CÁ NHÂN (4/12) ─────────────────────────── */}
+          <div className="lg:col-span-4 space-y-6">
+            
+            {/* Profile Summary Card */}
+            <div className="bg-white rounded-3xl border border-gray-100/90 shadow-sm p-6 relative overflow-hidden transition-all duration-300 hover:shadow-md">
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+              
+              <div className="flex flex-col items-center lg:items-start gap-4 mt-2">
+                <div className="relative shrink-0 group">
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt={displayName} className="w-24 h-24 rounded-3xl object-cover border-4 border-white shadow-md transition-transform duration-350 group-hover:scale-[1.02]" />
+                  ) : (
+                    <div className="w-24 h-24 rounded-3xl bg-gray-900 flex items-center justify-center border-4 border-white shadow-md">
+                      <span className="text-3xl font-black text-white">{avatarLetter}</span>
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-4 border-white shadow-sm" />
                 </div>
-                <p className="text-sm text-gray-400">@{profileUser.username}</p>
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
-                  <FiMail size={11} /><span>{profileUser.email}</span>
+                
+                <div className="w-full text-center lg:text-left">
+                  <div className="flex flex-col gap-1 items-center lg:items-start justify-center">
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-tight">{displayName}</h1>
+                    <p className="text-sm font-semibold text-gray-400">@{profileUser.username}</p>
+                  </div>
+                  
+                  {/* Badges strip */}
+                  <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mt-3.5">
+                    {profileUser?.is_vip && (() => {
+                      const purchasedIds = Array.from(purchasedPkgIds);
+                      const activePkg = purchasedIds.length > 0
+                        ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
+                        : null;
+                      const pkgName = activePkg?.name || 'PRO';
+                      const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
+                      return (
+                        <span className={`bg-gradient-to-r ${isPre ? 'from-amber-500 to-orange-600' : 'from-indigo-600 to-purple-700'} text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-sm`}>
+                          <FaCrown size={11} className="text-amber-200" /> {pkgName}
+                          {vipDaysLeft !== null && vipDaysLeft > 0 && (
+                            <span className="ml-1 bg-white/20 px-1 py-0.2 rounded text-[9px] font-black">{vipDaysLeft}d</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                    
+                    {canAccessAdminPanel(profileUser) && (
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-xl text-[10px] font-black uppercase tracking-widest">Admin</span>
+                    )}
+
+                    {profileUser.target_score && (
+                      <div className="flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                        <FiTarget size={11} className="text-gray-400" />
+                        <span>Mục tiêu: {profileUser.target_score} đ</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 my-5" />
+
+              {/* Quick Details List */}
+              <div className="space-y-3.5 text-left text-sm text-gray-500 font-semibold">
+                <div className="flex items-center gap-3">
+                  <FiMail size={16} className="text-gray-400 shrink-0" />
+                  <span className="truncate text-gray-700 font-bold">{profileUser.email}</span>
                 </div>
                 {joinDate && (
-                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-400">
-                    <FiCalendar size={11} /><span>Tham gia {joinDate}</span>
+                  <div className="flex items-center gap-3">
+                    <FiCalendar size={16} className="text-gray-400 shrink-0" />
+                    <span className="text-gray-700 font-bold">Gia nhập {joinDate}</span>
                   </div>
                 )}
-                {profileUser.bio && <p className="mt-2 text-sm text-gray-600 max-w-sm">{profileUser.bio}</p>}
               </div>
-            </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <div className="flex gap-2">
+
+              {profileUser.bio && (
+                <div className="mt-4 p-3.5 bg-gray-50/60 rounded-2xl border border-gray-100/50 text-xs text-gray-600 text-left font-medium leading-relaxed italic">
+                  "{profileUser.bio}"
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col sm:flex-row lg:flex-col gap-2">
+                <button
+                  onClick={isEditing ? () => setIsEditing(false) : initEdit}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-sm font-extrabold rounded-2xl transition-all shadow-sm"
+                >
+                  {isEditing ? <><FiX size={16} />Hủy bỏ</> : <><FiEdit2 size={15} />Chỉnh sửa hồ sơ</>}
+                </button>
                 <button
                   onClick={() => {
                     setUserLoading(true);
@@ -494,562 +558,698 @@ export default function ProfilePage() {
                     }).finally(() => setUserLoading(false));
                   }}
                   disabled={userLoading}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-xl transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gray-150/70 hover:bg-gray-200/80 active:scale-[0.98] text-gray-600 text-sm font-extrabold rounded-2xl transition-all"
                   title="Làm mới"
                 >
-                  <FiRefreshCw size={14} className={userLoading ? 'animate-spin' : ''} />
-                </button>
-                <button
-                  onClick={isEditing ? () => setIsEditing(false) : initEdit}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors"
-                >
-                  {isEditing ? <><FiX size={14} />Hủy</> : <><FiEdit2 size={14} />Chỉnh sửa</>}
+                  <FiRefreshCw size={15} className={userLoading ? 'animate-spin' : ''} />
+                  <span>Làm mới dữ liệu</span>
                 </button>
               </div>
-              {profileUser.target_score && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600">
-                  <FiTarget size={12} className="text-gray-400" />
-                  Mục tiêu: <span className="font-semibold text-gray-800">{profileUser.target_score} điểm</span>
+            </div>
+
+            {/* Language Selection Card */}
+            <div className="bg-white rounded-3xl border border-gray-100/90 shadow-sm p-6 transition-all duration-300 hover:shadow-md">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">{t('profile.languageTitle')}</h2>
+                  <p className="mt-0.5 text-xs text-gray-400 font-semibold">{t('profile.languageDesc')}</p>
                 </div>
-              )}
-              {canAccessAdminPanel(profileUser) && (
-                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-medium">Admin</span>
-              )}
+                <div className="border-t border-gray-100 my-1" />
+                <div className="flex justify-center lg:justify-start">
+                  <LanguageSwitcher />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* ── Tabs ─────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-gray-900">{t('profile.languageTitle')}</h2>
-              <p className="mt-1 text-sm text-gray-500">{t('profile.languageDesc')}</p>
+          </div>
+
+          {/* ── CỘT PHẢI: TABS & NỘI DUNG (8/12) ─────────────────────────── */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Tabs Selector Navigation */}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-2 overflow-hidden">
+              <div className="flex gap-1.5 overflow-x-auto hide-scrollbar scroll-smooth">
+                {profileTabs.map(tab => {
+                  const I = tab.icon;
+                  const isActive = activeTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`flex items-center gap-2 px-4.5 py-3 rounded-2xl text-sm font-extrabold transition-all duration-200 shrink-0 select-none ${
+                        isActive
+                          ? 'bg-gray-900 text-white shadow-md'
+                          : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50/50'
+                      }`}
+                    >
+                      <I size={15} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <LanguageSwitcher />
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex border-b border-gray-100">
-            {profileTabs.map(tab => {
-              const I = tab.icon;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors ${activeTab === tab.key
-                      ? 'text-gray-900 border-b-2 border-gray-900'
-                      : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                >
-                  <I size={14} />{tab.label}
-                </button>
-              );
-            })}
-          </div>
+            {/* Tab Workspace Panel Card */}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 lg:p-8 min-h-[420px] transition-all duration-300 hover:shadow-md">
+              
+              {/* ── Tab Content: Thông tin ────────────────────── */}
+              {activeTab === 'info' && (
+                <div className="space-y-6">
+                  {isEditing ? (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                        <h3 className="text-lg font-black text-gray-900 tracking-tight">Chỉnh sửa thông tin</h3>
+                        <span className="text-xs text-gray-400 font-semibold">Cập nhật thông tin công khai</span>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">Ảnh đại diện</label>
+                        <div className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-gray-55 rounded-2xl border border-gray-100/80">
+                          {avatarPreview ? (
+                            <img src={avatarPreview} alt="preview" className="w-20 h-20 rounded-2xl object-cover border border-gray-200 shadow-sm shrink-0" />
+                          ) : (
+                            <div className="w-20 h-20 rounded-2xl bg-gray-900 flex items-center justify-center text-white text-2xl font-black shrink-0 shadow-sm">{avatarLetter}</div>
+                          )}
+                          <div className="flex flex-col items-center sm:items-start gap-2">
+                            <label className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] rounded-xl text-sm font-extrabold text-gray-700 cursor-pointer shadow-sm transition-all">
+                              <FiUpload size={14} />
+                              <span>Chọn ảnh mới</span>
+                              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                            </label>
+                            <span className="text-[11px] text-gray-400 font-semibold">Chấp nhận JPG, PNG, GIF, WEBP · Tối đa 10MB</span>
+                          </div>
+                        </div>
+                      </div>
 
-          {/* ── Tab: Thông tin ───────────────────────────────── */}
-          {activeTab === 'info' && (
-            <div className="p-6">
-              {isEditing ? (
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Ảnh đại diện</label>
-                    <div className="flex items-center gap-4">
-                      {avatarPreview ? (
-                        <img src={avatarPreview} alt="preview" className="w-16 h-16 rounded-xl object-cover border border-gray-100" />
-                      ) : (
-                        <div className="w-16 h-16 rounded-xl bg-gray-900 flex items-center justify-center text-white text-xl font-bold">{avatarLetter}</div>
-                      )}
-                      <label className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors">
-                        <FiUpload size={14} />Chọn ảnh
-                        <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-                      </label>
-                      <span className="text-xs text-gray-500">JPG, PNG, GIF, WEBP · Tối đa 10MB</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Họ và tên</label>
+                          <input type="text" value={formData.full_name}
+                            onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all text-gray-900" placeholder="Nguyễn Văn A" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Điểm mục tiêu (0–100)</label>
+                          <input type="number" min="0" max="100" value={formData.target_score}
+                            onChange={e => setFormData(p => ({ ...p, target_score: e.target.value }))}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all text-gray-900"
+                            placeholder="Ví dụ: 85" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Giới thiệu bản thân</label>
+                        <textarea value={formData.bio} rows={3} maxLength={500}
+                          onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all text-gray-900 resize-none"
+                          placeholder="Viết vài dòng giới thiệu bản thân..." />
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-[10px] text-gray-400 font-semibold">Tự giới thiệu ngắn giúp nổi bật trên bảng xếp hạng</span>
+                          <span className="text-xs text-gray-400 font-bold">{formData.bio.length}/500</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-3 border-t border-gray-100">
+                        <button onClick={handleSaveInfo} disabled={saving}
+                          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-sm font-bold rounded-2xl shadow-md transition-all disabled:opacity-50">
+                          <FiSave size={15} />{saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                        </button>
+                        <button onClick={() => setIsEditing(false)} className="px-6 py-3 border border-gray-200 hover:bg-gray-50 active:scale-[0.98] text-gray-600 text-sm font-bold rounded-2xl transition-all">
+                          Hủy bỏ
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Họ và tên</label>
-                    <input type="text" value={formData.full_name}
-                      onChange={e => setFormData(p => ({ ...p, full_name: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900" placeholder="Nguyễn Văn A" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Giới thiệu bản thân</label>
-                    <textarea value={formData.bio} rows={3} maxLength={500}
-                      onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900 resize-none"
-                      placeholder="Viết vài dòng về bản thân..." />
-                    <p className="text-xs text-gray-400 mt-1 text-right">{formData.bio.length}/500</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Điểm mục tiêu (0–100)</label>
-                    <input type="number" min="0" max="100" value={formData.target_score}
-                      onChange={e => setFormData(p => ({ ...p, target_score: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900"
-                      placeholder="Ví dụ: 85" />
-                  </div>
-                  <div className="flex gap-3 pt-1">
-                    <button onClick={handleSaveInfo} disabled={saving}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50">
-                      <FiSave size={14} />{saving ? 'Đang lưu...' : 'Lưu thay đổi'}
-                    </button>
-                    <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm rounded-xl transition-colors">
-                      Hủy
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-0">
-                  <InfoRow icon={FiUser} label="Họ và tên" value={profileUser.full_name || '—'} />
-                  <InfoRow icon={FiMail} label="Email" value={profileUser.email} />
-                  <InfoRow icon={FiUser} label="Tên đăng nhập" value={`@${profileUser.username}`} />
-                  <InfoRow icon={FiBook} label="Giới thiệu" value={profileUser.bio || 'Chưa có giới thiệu'} />
-                  <InfoRow icon={FiTarget} label="Điểm mục tiêu" value={profileUser.target_score ? `${profileUser.target_score} điểm` : 'Chưa đặt'} />
-                  <InfoRow icon={FiCalendar} label="Tham gia" value={joinDate} />
-                  {profileUser.is_vip && profileUser.vip_expires_at && (
-                    <InfoRow icon={FaCrown} label="Hạn VIP" value={new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })} />
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                        <h3 className="text-lg font-black text-gray-900 tracking-tight">Thông tin tài khoản</h3>
+                        <button
+                          onClick={initEdit}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl transition-all"
+                        >
+                          <FiEdit2 size={12} />
+                          <span>Chỉnh sửa</span>
+                        </button>
+                      </div>
+                      <div className="divide-y divide-gray-100/50">
+                        <InfoRow icon={FiUser} label="Họ và tên" value={profileUser.full_name || '—'} />
+                        <InfoRow icon={FiMail} label="Email" value={profileUser.email} />
+                        <InfoRow icon={FiUser} label="Tên đăng nhập" value={`@${profileUser.username}`} />
+                        <InfoRow icon={FiBook} label="Giới thiệu" value={profileUser.bio || 'Chưa có giới thiệu'} />
+                        <InfoRow icon={FiTarget} label="Điểm mục tiêu" value={profileUser.target_score ? `${profileUser.target_score} điểm` : 'Chưa đặt'} />
+                        <InfoRow icon={FiCalendar} label="Tham gia" value={joinDate} />
+                        {profileUser.is_vip && profileUser.vip_expires_at && (
+                          <InfoRow icon={FaCrown} label="Hạn VIP" value={new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })} />
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* ── Tab: Thống kê ────────────────────────────── */}
-          {activeTab === 'stats' && (
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                {statsLoading ? (
-                  <><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /><Sk className="h-20" /></>
-                ) : (
-                  <>
-                    <StatCard icon={FiBook} label="Đề thi đã làm" value={stats?.total_exams ?? 0} color="bg-blue-500" />
-                    <StatCard icon={FiAward} label="Điểm trung bình" value={stats?.avg_score ?? 0} color="bg-emerald-500" />
-                    <StatCard icon={FiTarget} label="Điểm cao nhất" value={stats?.highest_score ?? 0} color="bg-amber-500" />
-                    <StatCard icon={FiMessageSquare} label="Bài viết" value={stats?.total_posts ?? 0} color="bg-purple-500" />
-                  </>
-                )}
-              </div>
-              
-              {!statsLoading && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  {[
-                    { label: 'Streak hiện tại', value: `${profileUser?.current_streak || 0} ngày`, color: 'from-rose-50 to-rose-100 text-rose-600', icon: '🔥' },
-                    { label: 'Streak kỷ lục', value: `${profileUser?.longest_streak || 0} ngày`, color: 'from-orange-50 to-orange-100 text-orange-600', icon: '🏆' },
-                    { label: 'Tổng Xu', value: profileUser?.coins || 0, color: 'from-yellow-50 to-yellow-100 text-yellow-600', icon: '⭐' },
-                    { label: 'Kinh nghiệm', value: `${profileUser?.exp || 0} XP`, color: 'from-blue-50 to-cyan-100 text-cyan-600', icon: '⚡' },
-                  ].map(stat => (
-                    <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3 text-center flex flex-col items-center justify-center`}>
-                      <div className="text-xl mb-1">{stat.icon}</div>
-                      <p className="text-sm font-black">{stat.value}</p>
-                      <p className="text-[10px] font-semibold opacity-70">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* ── Tab Content: Thống kê ────────────────────── */}
+              {activeTab === 'stats' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Kết quả học tập & Thống kê</h3>
+                    <span className="text-xs text-gray-400 font-semibold">Tóm tắt tiến độ luyện đề</span>
+                  </div>
 
-              {!statsLoading && (
-                <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-indigo-500">Cấp độ học viên</p>
-                      <h3 className="mt-1 text-lg font-black text-gray-900">{learnerLevel.label}</h3>
-                      <p className="mt-1 text-sm text-gray-500">{learnerLevel.next}</p>
-                    </div>
-                    <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
-                      <p className="text-2xl font-black text-indigo-600">{learnerLevel.progress}%</p>
-                      <p className="text-[10px] font-bold text-gray-400">tiến độ</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
-                    <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${learnerLevel.progress}%` }} />
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    {earnedBadges.map((badge) => (
-                      <div
-                        key={badge.label}
-                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
-                          badge.unlocked
-                            ? 'border-amber-200 bg-amber-50 text-amber-800'
-                            : 'border-gray-100 bg-white text-gray-400'
-                        }`}
-                      >
-                        {badge.unlocked ? '✓ ' : '○ '}
-                        {badge.label}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!statsLoading && stats && profileUser.target_score && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Tiến độ đến mục tiêu</span>
-                    <span className="text-sm font-semibold text-gray-800">{stats.avg_score}/{profileUser.target_score}</span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gray-900 rounded-full transition-all duration-700"
-                      style={{ width: `${Math.min((stats.avg_score / profileUser.target_score) * 100, 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1.5">
-                    {Math.round((stats.avg_score / profileUser.target_score) * 100)}% đạt mục tiêu
-                  </p>
-                </div>
-              )}
-              <button
-                onClick={() => router.push('/lich-su/thong-ke')}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all"
-              >
-                <FiAward size={16} />
-                Xem thống kê chi tiết toàn bộ
-              </button>
-            </div>
-          )}
-
-          {/* ── Tab: VIP ─────────────────────────────────── */}
-          {activeTab === 'wallet' && (
-            <div className="p-6 space-y-5">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                <p className="text-sm font-bold text-amber-700">Số dư ví xu</p>
-                <p className="mt-1 text-3xl font-black text-amber-900">
-                  {(wallet?.balance ?? profileUser?.coins ?? 0).toLocaleString('vi-VN')} xu
-                </p>
-                <p className="mt-2 text-sm text-amber-700">
-                  Xu dùng để mở lượt chơi, vật phẩm, phân tích AI và giảm một phần khóa học/VIP như hiện tại.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="mb-3 text-base font-black text-gray-900">Lịch sử xu</h3>
-                {walletLoading ? (
-                  <div className="space-y-2">{[1, 2, 3].map(i => <Sk key={i} className="h-14" />)}</div>
-                ) : wallet?.entries?.length ? (
-                  <div className="space-y-2">
-                    {wallet.entries.map((entry: any) => (
-                      <div key={entry.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm">
-                        <div>
-                          <p className="font-bold text-gray-800">{entry.description || entry.source}</p>
-                          <p className="text-xs text-gray-400">{new Date(entry.created_at).toLocaleString('vi-VN')} · {entry.source}</p>
-                        </div>
-                        <div className={entry.amount >= 0 ? 'font-black text-emerald-600' : 'font-black text-red-600'}>
-                          {entry.amount >= 0 ? '+' : ''}{entry.amount} xu
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">Chưa có giao dịch xu nào.</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'vip' && (
-            <div className="p-6 space-y-6">
-              <div className={`rounded-2xl border p-6 ${profileUser?.is_vip ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'}`}>
-                <div className="flex items-start gap-5">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${profileUser?.is_vip ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-500 to-purple-600'}`}>
-                    <FaCrown className="text-white" size={24} />
-                  </div>
-                  <div className="flex-1">
-                    {profileUser?.is_vip ? (() => {
-                      const purchasedIds = Array.from(purchasedPkgIds);
-                      const activePkg = purchasedIds.length > 0
-                        ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
-                        : null;
-                      const pkgName = activePkg?.name || 'PRO';
-                      const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
-                      return (
-                        <>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className={`text-lg font-black ${isPre ? 'text-amber-900' : 'text-indigo-900'}`}>Bạn đang là thành viên {pkgName}</h3>
-                            <span className={`px-2 py-0.5 ${isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900'} text-xs font-bold rounded-full flex items-center gap-1`}>
-                              <FaCrown size={10} /> ACTIVE
-                            </span>
-                          </div>
-                          <p className={`text-sm ${isPre ? 'text-amber-700' : 'text-indigo-700'}`}>
-                            Hạn VIP: <span className="font-bold">
-                              {profileUser.vip_expires_at ? new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                            </span>
-                            {vipDaysLeft !== null && (
-                              <span className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full ${vipDaysLeft > 0 ? (isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900') : 'bg-red-200 text-red-900'}`}>
-                                {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Đã hết hạn'}
-                              </span>
-                            )}
-                          </p>
-                        </>
-                      );
-                    })() : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {statsLoading ? (
+                      <><Sk className="h-24" /><Sk className="h-24" /><Sk className="h-24" /><Sk className="h-24" /></>
+                    ) : (
                       <>
-                        <h3 className="text-lg font-black text-indigo-900 mb-1">Nâng cấp lên VIP</h3>
-                        <p className="text-sm text-indigo-700">Mở khóa tất cả đề thi, tài liệu và tính năng độc quyền để đạt điểm cao nhất!</p>
-                        <button onClick={() => window.location.href = '/vip'}
-                          className="mt-3 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl shadow-md hover:shadow-lg transition-all">
-                          <FaCrown className="text-amber-300" size={14} /> Nâng cấp ngay
-                        </button>
+                        <StatCard icon={FiBook} label="Đề thi đã làm" value={stats?.total_exams ?? 0} color="bg-gradient-to-br from-blue-500 to-indigo-600" />
+                        <StatCard icon={FiAward} label="Điểm trung bình" value={stats?.avg_score ?? 0} color="bg-gradient-to-br from-emerald-500 to-teal-600" />
+                        <StatCard icon={FiTarget} label="Điểm cao nhất" value={stats?.highest_score ?? 0} color="bg-gradient-to-br from-amber-500 to-orange-600" />
+                        <StatCard icon={FiMessageSquare} label="Bài viết" value={stats?.total_posts ?? 0} color="bg-gradient-to-br from-purple-500 to-pink-600" />
                       </>
                     )}
                   </div>
-                </div>
-              </div>
-
-              {/* 3 VIP Packages */}
-              <div>
-                <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <FiZap className="text-indigo-500" size={18} /> Các gói VIP
-                </h3>
-                {pkgsLoading ? (
-                  <div className="flex justify-center py-6"><div className="w-8 h-8 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"/></div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {packages.map(pkg => {
-                      const ui = derivePackageUI(pkg);
-                      const userTier = profileUser?.subscription_tier;
-                      const isVipUser = !!profileUser?.is_vip;
-
-                      const alreadyPurchased = purchasedPkgIds.has(pkg.id);
-                      // Premium hạ cấp sang VIP → không cho
-                      const downgradeBlocked = isVipUser && userTier === 'premium' && ui.tier === 'vip';
-
-                      const disabled = alreadyPurchased || downgradeBlocked;
-
-                      return (
-                        <div key={pkg.id} className={`bg-white rounded-xl border ${ui.border} p-5 hover:shadow-md transition-shadow relative overflow-hidden ${disabled ? 'opacity-70' : ''}`}>
-                          {alreadyPurchased && (
-                             <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                               ✓ Đã mua
-                             </div>
-                          )}
-                          {downgradeBlocked && (
-                             <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                               ↓ Hạ cấp
-                             </div>
-                          )}
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={`w-9 h-9 rounded-lg ${ui.iconBg} flex items-center justify-center`}>
-                              <FaCrown size={15} className={ui.iconColor} />
-                            </div>
-                            <div>
-                              <p className="font-bold text-gray-900 text-sm">{pkg.name}</p>
-                              <p className="text-xs text-gray-500">{pkg.duration_days} ngày</p>
-                            </div>
-                          </div>
-                          <div className="mb-4">
-                            <span className="text-2xl font-black text-gray-900">{pkg.price.toLocaleString('vi-VN')}</span>
-                            <span className="text-sm text-gray-500 ml-1">đ</span>
-                          </div>
-                          <ul className="space-y-2 mb-4">
-                            {(pkg.features || []).slice(0, 4).map((f: string, i: number) => (
-                              <li key={i} className="flex items-center gap-2 text-xs text-gray-600 min-h-[20px]">
-                                <FiCheckCircle size={13} className="text-emerald-500 shrink-0" />
-                                <span className="leading-tight">{f}</span>
-                              </li>
-                            ))}
-                            {(pkg.features || []).length > 4 && (
-                               <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
-                            )}
-                          </ul>
-                          {alreadyPurchased ? (
-                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-green-200 bg-green-50 text-green-700">
-                              ✓ Đã đăng ký gói này
-                            </div>
-                          ) : downgradeBlocked ? (
-                            <div className="w-full py-2 text-center text-sm font-semibold rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
-                              Bạn đang dùng Premium — không thể hạ cấp
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`}
-                              className={`w-full py-2 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg border transition-all ${ui.border} ${ui.iconColor} ${ui.btnHover} hover:shadow-sm`}
-                            >
-                              {isVipUser && ui.tier === 'premium' ? 'Nâng cấp lên Premium' : isVipUser ? 'Đăng ký thêm' : 'Đăng ký ngay'}
-                            </button>
-                          )}
+                  
+                  {!statsLoading && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                      {[
+                        { label: 'Streak hiện tại', value: `${profileUser?.current_streak || 0} ngày`, color: 'from-rose-50 to-orange-50 border-rose-100 text-rose-700', icon: '🔥' },
+                        { label: 'Streak kỷ lục', value: `${profileUser?.longest_streak || 0} ngày`, color: 'from-amber-50 to-yellow-50 border-amber-100 text-amber-700', icon: '🏆' },
+                        { label: 'Tổng số dư xu', value: `${(profileUser?.coins || 0).toLocaleString('vi-VN')} xu`, color: 'from-yellow-50 to-orange-50 border-yellow-100 text-yellow-700', icon: '⭐' },
+                        { label: 'Kinh nghiệm', value: `${(profileUser?.exp || 0).toLocaleString('vi-VN')} XP`, color: 'from-blue-50 to-cyan-50 border-blue-100 text-blue-700', icon: '⚡' },
+                      ].map(stat => (
+                        <div key={stat.label} className={`bg-gradient-to-br ${stat.color} border rounded-2xl p-4 text-center flex flex-col items-center justify-center hover:shadow-sm transition-all duration-300`}>
+                          <div className="text-2xl mb-1.5">{stat.icon}</div>
+                          <p className="text-base font-black tracking-tight">{stat.value}</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80 mt-1 leading-tight">{stat.label}</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Tab: Thiết bị ─────────────────────────────── */}
-          {activeTab === 'devices' && (
-            <div className="p-6 space-y-5">
-              {sessionsLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
-                      <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-100 rounded animate-pulse w-1/3" />
-                        <div className="h-3 bg-gray-100 rounded animate-pulse w-1/4" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : sessionsError ? (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
-                    <FiAlertTriangle size={20} className="text-red-400" />
-                  </div>
-                  <p className="text-sm text-gray-500">{sessionsError}</p>
-                  <button onClick={() => { setSessions([]); setSessionsFetched(false); }}
-                    className="mt-3 text-sm text-gray-600 hover:text-gray-900 underline">Thử lại</button>
-                </div>
-              ) : sessions.length <= 1 ? (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                    <FiMonitor size={20} className="text-gray-400" />
-                  </div>
-                  <p className="text-sm text-gray-500">Chỉ có một thiết bị được đăng nhập</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FiMonitor size={14} className="text-gray-400" />
-                      <span>{sessions.length}/{sessions.length} thiết bị đang dùng</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {sessions.map(session => {
-                      const isCurrent = session.jti === sessionCurrentJti;
-                      const deviceParts = session.device_info?.split(' on ') || [];
-                      const browser = deviceParts[0] || 'Trình duyệt';
-                      const os = deviceParts[1] || 'Hệ điều hành';
-
-                      const lastActive = session.last_active
-                        ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                        : '—';
-
-                      return (
-                        <div key={session.id || session.jti} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-gray-200 transition-colors">
-                          <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-                            <FiMonitor size={18} className="text-gray-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium text-gray-800 truncate">{browser} trên {os}</p>
-                              {isCurrent && (
-                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full shrink-0">Hiện tại</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-xs text-gray-400">{session.ip_address || '—'}</span>
-                              <span className="text-xs text-gray-400">•</span>
-                              <span className="text-xs text-gray-400">Hoạt động: {lastActive}</span>
-                            </div>
-                          </div>
-                          {!isCurrent && (
-                            <button onClick={async () => {
-                              if (!confirm('Đăng xuất thiết bị này?')) return;
-                              try {
-                                await axios.delete(`/auth/sessions/${session.jti}`);
-                                setSessions(prev => prev.filter(s => s.jti !== session.jti));
-                                showToast('Đăng xuất thiết bị thành công');
-                              } catch {
-                                showToast('Không thể đăng xuất thiết bị', 'error');
-                              }
-                            }}
-                              className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
-                              Đăng xuất
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <button onClick={async () => {
-                    if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
-                    try {
-                      await axios.delete('/auth/sessions');
-                      const current = sessions.find(s => s.jti === (window as any).__currentJti);
-                      setSessions(current ? [current] : []);
-                      showToast('Đã đăng xuất khỏi các thiết bị khác');
-                    } catch {
-                      showToast('Không thể đăng xuất các thiết bị khác', 'error');
-                    }
-                  }}
-                    className="w-full py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                    Đăng xuất tất cả thiết bị khác
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── Tab: Settings ──────────────────────────── */}
-          {activeTab === 'settings' && (
-            <div className="p-6 space-y-6">
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiLock size={13} className="text-gray-500" /></div>
-                  <h3 className="text-sm font-semibold text-gray-800">Đổi mật khẩu</h3>
-                </div>
-                <form onSubmit={handleChangePassword} className="space-y-3">
-                  {pwError && (
-                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">
-                      <FiAlertTriangle size={13} className="shrink-0" />{pwError}
+                      ))}
                     </div>
                   )}
-                  <PwField label="Mật khẩu hiện tại" value={pwForm.current} onChange={v => setPwForm(p => ({ ...p, current: v }))} placeholder="••••••••" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <PwField label="Mật khẩu mới" value={pwForm.next} onChange={v => setPwForm(p => ({ ...p, next: v }))} placeholder="Ít nhất 8 ký tự" />
-                    <PwField label="Xác nhận mật khẩu mới" value={pwForm.confirm} onChange={v => setPwForm(p => ({ ...p, confirm: v }))} placeholder="••••••••" />
+
+                  {!statsLoading && (
+                    <div className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 via-indigo-50/20 to-white p-6 shadow-sm">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Cấp độ học viên</p>
+                          <h3 className="mt-1 text-xl font-black text-gray-900 tracking-tight">{learnerLevel.label}</h3>
+                          <p className="mt-1.5 text-xs text-gray-500 font-medium leading-relaxed">{learnerLevel.next}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white px-4 py-2.5 text-center shadow-sm border border-indigo-50/40 shrink-0 self-stretch sm:self-auto flex sm:flex-col justify-between items-center">
+                          <p className="text-3xl font-black text-indigo-600">{learnerLevel.progress}%</p>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider sm:mt-0.5">tiến độ</p>
+                        </div>
+                      </div>
+                      <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-white border border-indigo-50/30">
+                        <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-700" style={{ width: `${learnerLevel.progress}%` }} />
+                      </div>
+                      <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {earnedBadges.map((badge) => (
+                          <div
+                            key={badge.label}
+                            className={`rounded-2xl border px-4 py-3 text-xs font-bold flex items-center gap-2.5 transition-all ${
+                              badge.unlocked
+                                ? 'border-amber-200 bg-amber-50/60 text-amber-800'
+                                : 'border-gray-100 bg-white/70 text-gray-400'
+                            }`}
+                          >
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${badge.unlocked ? 'bg-amber-500 text-white shadow-sm' : 'bg-gray-100 text-gray-300'}`}>
+                              {badge.unlocked ? '✓' : '○'}
+                            </span>
+                            <span className="leading-tight">{badge.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!statsLoading && stats && profileUser.target_score && (
+                    <div className="bg-gray-50/50 rounded-2xl p-5 border border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tiến trình đạt mục tiêu điểm</span>
+                        <span className="text-sm font-bold text-gray-800">{stats.avg_score}/{profileUser.target_score} điểm</span>
+                      </div>
+                      <div className="h-2 bg-gray-200/60 rounded-full overflow-hidden">
+                        <div className="h-full bg-gray-900 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min((stats.avg_score / profileUser.target_score) * 100, 100)}%` }} />
+                      </div>
+                      <p className="text-[11px] text-gray-400 font-semibold mt-2">
+                        Đã hoàn thành {Math.round((stats.avg_score / profileUser.target_score) * 100)}% chặng đường đến mục tiêu đề ra.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => router.push('/lich-su/thong-ke')}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 active:scale-[0.99] text-white font-extrabold rounded-2xl shadow-md hover:shadow-lg transition-all"
+                  >
+                    <FiAward size={16} />
+                    <span>Xem thống kê chi tiết toàn bộ</span>
+                  </button>
+                </div>
+              )}
+
+              {/* ── Tab Content: Ví Xu ────────────────────────── */}
+              {activeTab === 'wallet' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Ví xu của bạn</h3>
+                    <span className="text-xs text-gray-400 font-semibold">Quản lý và xem lịch sử xu</span>
                   </div>
-                  <p className="text-xs text-gray-400">Mật khẩu phải có ít nhất 8 ký tự</p>
-                  <button type="submit" disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-40">
-                    <FiSave size={13} />{pwSaving ? 'Đang lưu...' : 'Đổi mật khẩu'}
-                  </button>
-                </form>
-              </section>
 
-              <div className="border-t border-gray-100" />
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiBell size={13} className="text-gray-500" /></div>
-                  <h3 className="text-sm font-semibold text-gray-800">Thông báo</h3>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div><p className="text-sm text-gray-700">Thông báo qua email</p><p className="text-xs text-gray-400">Nhận thông báo qua email</p></div>
-                  <Toggle on={notifEmail} onToggle={() => setNotifEmail(p => !p)} />
-                </div>
-              </section>
+                  <div className="rounded-3xl border border-amber-200/50 bg-gradient-to-br from-amber-400 via-orange-500 to-yellow-600 p-6 lg:p-8 text-white shadow-lg relative overflow-hidden transition-all hover:scale-[1.01] hover:shadow-xl duration-300">
+                    <div className="absolute top-[-30px] right-[-30px] w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute bottom-[-20px] left-[-20px] w-28 h-28 bg-black/10 rounded-full blur-xl pointer-events-none" />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+                          <FiStar className="text-yellow-250 fill-yellow-250 animate-pulse" size={20} />
+                        </div>
+                        <span className="text-sm font-bold tracking-wider uppercase text-yellow-50/90">Số dư hiện tại</span>
+                      </div>
+                      <FaCrown className="text-white/20" size={32} />
+                    </div>
+                    
+                    <div className="mt-6">
+                      <p className="text-4xl lg:text-5xl font-black tracking-tight leading-none">
+                        {(wallet?.balance ?? profileUser?.coins ?? 0).toLocaleString('vi-VN')}
+                        <span className="text-lg lg:text-xl font-bold ml-2 text-yellow-100">xu</span>
+                      </p>
+                    </div>
 
-              <div className="border-t border-gray-100" />
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center"><FiShield size={13} className="text-gray-500" /></div>
-                  <h3 className="text-sm font-semibold text-gray-800">Quyền riêng tư</h3>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div><p className="text-sm text-gray-700">Hồ sơ công khai</p><p className="text-xs text-gray-400">Cho phép người khác xem hồ sơ</p></div>
-                  <Toggle on={publicProfile} onToggle={() => setPublicProfile(p => !p)} />
-                </div>
-              </section>
+                    <div className="mt-6 border-t border-white/20 pt-4 flex items-center justify-between text-xs text-amber-50 font-medium">
+                      <span className="leading-relaxed max-w-[80%]">Xu dùng để chơi game ôn luyện, mở phân tích chi tiết bằng AI và các ưu đãi.</span>
+                      <span className="font-extrabold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-xl backdrop-blur-md">CSCA WALLET</span>
+                    </div>
+                  </div>
 
-              <div className="border-t border-gray-100" />
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center"><FiAlertTriangle size={13} className="text-red-400" /></div>
-                  <h3 className="text-sm font-semibold text-gray-800">Tài khoản</h3>
+                  <div>
+                    <h3 className="mb-4 text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                      Lịch sử giao dịch
+                    </h3>
+                    {walletLoading ? (
+                      <div className="space-y-2.5">{[1, 2, 3].map(i => <Sk key={i} className="h-16" />)}</div>
+                    ) : wallet?.entries?.length ? (
+                      <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                        {wallet.entries.map((entry: any) => {
+                          const isGain = entry.amount >= 0;
+                          return (
+                            <div key={entry.id} className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm hover:border-gray-200/80 transition-colors">
+                              <div className="min-w-0 pr-4">
+                                <p className="font-bold text-gray-800 truncate leading-snug">{entry.description || entry.source}</p>
+                                <p className="text-xs text-gray-400 mt-1 font-semibold">
+                                  {new Date(entry.created_at).toLocaleString('vi-VN')} · <span className="text-gray-500 font-bold">{entry.source}</span>
+                                </p>
+                              </div>
+                              <div className={`text-base font-extrabold tracking-tight shrink-0 ${isGain ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {isGain ? '+' : ''}{entry.amount.toLocaleString('vi-VN')} xu
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl bg-gray-50 p-6 text-center border border-gray-100/50">
+                        <p className="text-sm text-gray-400 font-bold">Chưa có giao dịch xu nào.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <button onClick={() => { if (confirm('Đăng xuất khỏi tất cả thiết bị?')) { logout?.(); window.location.href = '/login'; } }}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors">
-                    <FiLogOut size={14} />Đăng xuất khỏi tất cả thiết bị
-                  </button>
+              )}
+
+              {/* ── Tab Content: VIP ──────────────────────────── */}
+              {activeTab === 'vip' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Thành viên VIP / Premium</h3>
+                    <span className="text-xs text-gray-400 font-semibold">Quản lý và đăng ký gói VIP</span>
+                  </div>
+
+                  <div className={`rounded-3xl border p-6 transition-all duration-300 hover:shadow-sm ${
+                    profileUser?.is_vip 
+                      ? 'bg-gradient-to-br from-amber-50 to-orange-50/40 border-amber-200' 
+                      : 'bg-gradient-to-br from-indigo-50 to-purple-50/40 border-indigo-200'
+                  }`}>
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-5">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                        profileUser?.is_vip 
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500' 
+                          : 'bg-gradient-to-br from-indigo-500 to-purple-600'
+                      }`}>
+                        <FaCrown className="text-white" size={26} />
+                      </div>
+                      <div className="flex-1">
+                        {profileUser?.is_vip ? (() => {
+                          const purchasedIds = Array.from(purchasedPkgIds);
+                          const activePkg = purchasedIds.length > 0
+                            ? Object.values(userPkgMap).find((p: any) => purchasedIds.includes(p.id))
+                            : null;
+                          const pkgName = activePkg?.name || 'PRO';
+                          const isPre = activePkg?.tier === 'premium' || /premium/i.test(pkgName);
+                          return (
+                            <>
+                              <div className="flex flex-col sm:flex-row items-center gap-2 mb-1.5 justify-center sm:justify-start">
+                                <h3 className={`text-lg font-black tracking-tight ${isPre ? 'text-amber-900' : 'text-indigo-900'}`}>
+                                  Thành viên {pkgName}
+                                </h3>
+                                <span className={`px-2.5 py-0.5 ${isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900'} text-[10px] font-extrabold rounded-full flex items-center gap-1`}>
+                                  <FaCrown size={10} /> ĐANG KÍCH HOẠT
+                                </span>
+                              </div>
+                              <p className={`text-sm font-semibold ${isPre ? 'text-amber-700' : 'text-indigo-700'} leading-relaxed`}>
+                                Hạn sử dụng: <span className="font-extrabold">{profileUser.vip_expires_at ? new Date(profileUser.vip_expires_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}</span>
+                                {vipDaysLeft !== null && (
+                                  <span className={`ml-2 inline-block px-2.5 py-0.5 text-xs font-black rounded-lg ${
+                                    vipDaysLeft > 0 
+                                      ? (isPre ? 'bg-amber-200 text-amber-900' : 'bg-indigo-200 text-indigo-900') 
+                                      : 'bg-red-200 text-red-900'
+                                  }`}>
+                                    {vipDaysLeft > 0 ? `Còn ${vipDaysLeft} ngày` : 'Hết hạn'}
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          );
+                        })() : (
+                          <>
+                            <h3 className="text-lg font-black text-indigo-950 mb-1 tracking-tight">Nâng cấp tài khoản VIP</h3>
+                            <p className="text-sm font-medium text-indigo-700 leading-relaxed">
+                              Mở khóa không giới hạn ngân hàng đề thi thử, lời giải chi tiết và tính năng học tập cao cấp khác.
+                            </p>
+                            <button onClick={() => window.location.href = '/vip'}
+                              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] text-white text-sm font-bold rounded-xl shadow-md transition-all">
+                              <FaCrown className="text-amber-300" size={14} /> 
+                              <span>Nâng cấp ngay</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
+                      <FiZap className="text-indigo-500" size={16} /> Các gói tài khoản
+                    </h3>
+                    {pkgsLoading ? (
+                      <div className="flex justify-center py-8"><div className="w-9 h-9 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"/></div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {packages.map(pkg => {
+                          const ui = derivePackageUI(pkg);
+                          const userTier = profileUser?.subscription_tier;
+                          const isVipUser = !!profileUser?.is_vip;
+
+                          const alreadyPurchased = purchasedPkgIds.has(pkg.id);
+                          const downgradeBlocked = isVipUser && userTier === 'premium' && ui.tier === 'vip';
+                          const disabled = alreadyPurchased || downgradeBlocked;
+
+                          return (
+                            <div key={pkg.id} className={`bg-white rounded-2xl border ${ui.border} p-5 hover:shadow-md transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${disabled ? 'opacity-70' : ''}`}>
+                              <div>
+                                {alreadyPurchased && (
+                                   <div className="absolute top-0 right-0 bg-emerald-600 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-bl-xl shadow-sm">
+                                     ✓ Đã mua
+                                   </div>
+                                )}
+                                {downgradeBlocked && (
+                                   <div className="absolute top-0 right-0 bg-amber-500 text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-bl-xl shadow-sm">
+                                     ↓ Hạ cấp
+                                   </div>
+                                )}
+                                <div className="flex items-center gap-3 mb-4">
+                                  <div className={`w-10 h-10 rounded-xl ${ui.iconBg} flex items-center justify-center shrink-0 shadow-sm`}>
+                                    <FaCrown size={18} className={ui.iconColor} />
+                                  </div>
+                                  <div>
+                                    <p className="font-extrabold text-gray-900 text-sm leading-tight">{pkg.name}</p>
+                                    <p className="text-xs text-gray-400 font-semibold mt-0.5">{pkg.duration_days} ngày sử dụng</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="mb-4">
+                                  <span className="text-3xl font-black text-gray-900 tracking-tight">{pkg.price.toLocaleString('vi-VN')}</span>
+                                  <span className="text-xs text-gray-450 font-bold ml-1 uppercase">đ</span>
+                                </div>
+                                
+                                <ul className="space-y-2 mb-6">
+                                  {(pkg.features || []).slice(0, 4).map((f: string, i: number) => (
+                                    <li key={i} className="flex items-start gap-2 text-xs text-gray-600 font-medium">
+                                      <FiCheckCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                                      <span className="leading-relaxed">{f}</span>
+                                    </li>
+                                  ))}
+                                  {(pkg.features || []).length > 4 && (
+                                     <li className="text-[11px] text-gray-400 font-semibold pl-6">+{pkg.features.length - 4} đặc quyền khác...</li>
+                                  )}
+                                </ul>
+                              </div>
+
+                              <div>
+                                {alreadyPurchased ? (
+                                  <div className="w-full py-2.5 text-center text-xs font-bold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800">
+                                    Gói hiện tại
+                                  </div>
+                                ) : downgradeBlocked ? (
+                                  <div className="w-full py-2.5 text-center text-[10px] font-bold rounded-xl border border-amber-200 bg-amber-50 text-amber-800 leading-normal px-2">
+                                    Không thể hạ cấp từ Premium
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => window.location.href = `/checkout?package_id=${pkg.id}`}
+                                    className={`w-full py-2.5 flex items-center justify-center gap-1.5 text-xs font-bold rounded-xl border transition-all active:scale-[0.98] ${
+                                      ui.tier === 'premium' 
+                                        ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 border-transparent text-white shadow-sm'
+                                        : 'border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700'
+                                    }`}
+                                  >
+                                    <span>{isVipUser && ui.tier === 'premium' ? 'Nâng cấp Premium' : isVipUser ? 'Gia hạn thêm' : 'Đăng ký sử dụng'}</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </section>
+              )}
+
+              {/* ── Tab Content: Thiết bị ─────────────────────── */}
+              {activeTab === 'devices' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Thiết bị đang đăng nhập</h3>
+                    <span className="text-xs text-gray-400 font-semibold">Giám sát các phiên đăng nhập</span>
+                  </div>
+
+                  {sessionsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
+                          <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-gray-100 rounded animate-pulse w-1/3" />
+                            <div className="h-3 bg-gray-100 rounded animate-pulse w-1/4" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : sessionsError ? (
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+                        <FiAlertTriangle size={20} className="text-red-400" />
+                      </div>
+                      <p className="text-sm text-gray-500 font-bold">{sessionsError}</p>
+                      <button onClick={() => { setSessions([]); setSessionsFetched(false); }}
+                        className="mt-3 text-xs text-indigo-650 hover:text-indigo-850 underline font-bold">Thử tải lại</button>
+                    </div>
+                  ) : sessions.length <= 1 ? (
+                    <div className="text-center py-8 border border-gray-100 rounded-3xl bg-gray-50/50">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3 animate-pulse">
+                        <FiMonitor size={20} className="text-gray-400" />
+                      </div>
+                      <p className="text-sm text-gray-500 font-bold">Tài khoản an toàn. Chỉ có thiết bị hiện tại đăng nhập</p>
+                      <p className="text-xs text-gray-400 mt-1 font-semibold">Địa chỉ IP hiện tại: {sessions[0]?.ip_address || '—'}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          <FiMonitor size={14} className="text-gray-400" />
+                          <span>Danh sách thiết bị ({sessions.length} phiên)</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {sessions.map(session => {
+                          const isCurrent = session.jti === sessionCurrentJti;
+                          const deviceParts = session.device_info?.split(' on ') || [];
+                          const browser = deviceParts[0] || 'Trình duyệt';
+                          const os = deviceParts[1] || 'Hệ điều hành';
+
+                          const lastActive = session.last_active
+                            ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                            : '—';
+
+                          return (
+                            <div key={session.id || session.jti} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/30 transition-all duration-300">
+                              <div className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0">
+                                <FiMonitor size={18} className="text-gray-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-bold text-gray-800 truncate">{browser} trên {os}</p>
+                                  {isCurrent && (
+                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-lg shrink-0 uppercase tracking-wider">Hiện tại</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2.5 mt-1.5 flex-wrap text-xs text-gray-400 font-semibold">
+                                  <span>IP: {session.ip_address || '—'}</span>
+                                  <span>•</span>
+                                  <span>Hoạt động: <span className="text-gray-500 font-bold">{lastActive}</span></span>
+                                </div>
+                              </div>
+                              {!isCurrent && (
+                                <button onClick={async () => {
+                                  if (!confirm('Đăng xuất tài khoản khỏi thiết bị này?')) return;
+                                  try {
+                                    await axios.delete(`/auth/sessions/${session.jti}`);
+                                    setSessions(prev => prev.filter(s => s.jti !== session.jti));
+                                    showToast('Đăng xuất thiết bị thành công');
+                                  } catch {
+                                    showToast('Không thể đăng xuất thiết bị', 'error');
+                                  }
+                                }}
+                                  className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 active:scale-[0.98] rounded-xl border border-red-100/50 bg-red-50/20 hover:border-red-200 transition-all shrink-0">
+                                  Đăng xuất
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <button onClick={async () => {
+                        if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
+                        try {
+                          await axios.delete('/auth/sessions');
+                          const current = sessions.find(s => s.jti === sessionCurrentJti);
+                          setSessions(current ? [current] : []);
+                          showToast('Đã đăng xuất khỏi các thiết bị khác');
+                        } catch {
+                          showToast('Không thể đăng xuất thiết bị khác', 'error');
+                        }
+                      }}
+                        className="w-full py-3.5 text-sm font-bold text-gray-600 border border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99] transition-all">
+                        Đăng xuất tất cả thiết bị khác
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Tab Content: Cài đặt ─────────────────────── */}
+              {activeTab === 'settings' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Cài đặt tài khoản & Bảo mật</h3>
+                    <span className="text-xs text-gray-400 font-semibold">Tùy chỉnh bảo mật và nhắc nhở</span>
+                  </div>
+
+                  <section className="bg-gray-50/50 rounded-2xl p-5 border border-gray-100">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100/40 flex items-center justify-center shrink-0">
+                        <FiLock size={14} className="text-indigo-650" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Đổi mật khẩu</h3>
+                    </div>
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                      {pwError && (
+                        <div className="flex items-center gap-2 text-xs font-bold text-red-705 bg-red-50 border border-red-100 px-4 py-3 rounded-xl">
+                          <FiAlertTriangle size={15} className="shrink-0 text-red-500" />
+                          <span>{pwError}</span>
+                        </div>
+                      )}
+                      <PwField label="Mật khẩu hiện tại" value={pwForm.current} onChange={v => setPwForm(p => ({ ...p, current: v }))} placeholder="Nhập mật khẩu hiện tại" />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <PwField label="Mật khẩu mới" value={pwForm.next} onChange={v => setPwForm(p => ({ ...p, next: v }))} placeholder="Tối thiểu 8 ký tự" />
+                        <PwField label="Xác nhận mật khẩu mới" value={pwForm.confirm} onChange={v => setPwForm(p => ({ ...p, confirm: v }))} placeholder="Nhập lại mật khẩu mới" />
+                      </div>
+                      <p className="text-[11px] text-gray-400 font-semibold leading-relaxed">Hãy sử dụng mật khẩu mạnh bao gồm chữ cái, chữ số và ký tự đặc biệt để bảo vệ tài khoản.</p>
+                      <button type="submit" disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
+                        className="flex items-center gap-2 px-5 py-3 bg-gray-900 hover:bg-gray-800 active:scale-[0.98] text-white text-sm font-bold rounded-xl transition-all disabled:opacity-40">
+                        <FiSave size={14} />{pwSaving ? 'Đang lưu...' : 'Cập nhật mật khẩu'}
+                      </button>
+                    </form>
+                  </section>
+
+                  <div className="border-t border-gray-100" />
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <FiBell size={14} className="text-gray-500" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Thông báo nhận tin</h3>
+                    </div>
+                    <div className="flex items-center justify-between p-4 border border-gray-100 rounded-2xl bg-white hover:bg-gray-50/20 transition-colors">
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">Thông báo qua Email</p>
+                        <p className="text-xs text-gray-400 mt-1 font-semibold">Nhận cập nhật về các đề thi mới, sự kiện học tập và nhắc nhở ôn tập</p>
+                      </div>
+                      <Toggle on={notifEmail} onToggle={() => setNotifEmail(p => !p)} />
+                    </div>
+                  </section>
+
+                  <div className="border-t border-gray-100" />
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <FiShield size={14} className="text-gray-500" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Cấu hình riêng tư</h3>
+                    </div>
+                    <div className="flex items-center justify-between p-4 border border-gray-100 rounded-2xl bg-white hover:bg-gray-50/20 transition-colors">
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">Hồ sơ cá nhân công khai</p>
+                        <p className="text-xs text-gray-400 mt-1 font-semibold">Cho phép học viên khác xem tiến độ học tập và thành tích trên BXH</p>
+                      </div>
+                      <Toggle on={publicProfile} onToggle={() => setPublicProfile(p => !p)} />
+                    </div>
+                  </section>
+
+                  <div className="border-t border-gray-100" />
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                        <FiAlertTriangle size={14} className="text-red-500" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Tác vụ khẩn cấp</h3>
+                    </div>
+                    
+                    <div className="p-4 border border-red-100 rounded-2xl bg-red-50/10 space-y-3 text-left">
+                      <p className="text-xs font-semibold text-gray-500">Nếu cảm thấy tài khoản bị xâm nhập trái phép, bạn có thể đăng xuất tức thì trên tất cả thiết bị khác.</p>
+                      <button 
+                        onClick={() => { 
+                          if (confirm('Đăng xuất khỏi tất cả thiết bị?')) { 
+                            logout?.(); 
+                            window.location.href = '/login'; 
+                          } 
+                        }}
+                        className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold border border-red-250 bg-red-50 text-red-750 hover:bg-red-100/60 rounded-xl transition-all"
+                      >
+                        <FiLogOut size={14} />
+                        <span>Đăng xuất khỏi tất cả thiết bị</span>
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
             </div>
-          )}
+          </div>
+
         </div>
       </main>
     </div>

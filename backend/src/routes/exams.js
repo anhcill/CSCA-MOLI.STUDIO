@@ -13,11 +13,17 @@ router.get("/subjects/:subjectCode/exams", examController.getExamsBySubject);
 router.get("/exams/:examId", examController.getExamDetail);
 
 // Protected routes - Require authentication
+router.get("/exams/:examId/preflight", authenticate, examController.getExamPreflight);
 router.post("/exams/:examId/start", authenticate, examController.startExam);
 router.get(
   "/exams/:examId/registration",
   authenticate,
   officialExamController.getMyRegistration,
+);
+router.get(
+  "/exams/:examId/admission-ticket",
+  authenticate,
+  officialExamController.getMyAdmissionTicket,
 );
 router.post(
   "/exams/:examId/register",

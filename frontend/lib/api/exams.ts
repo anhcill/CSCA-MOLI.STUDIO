@@ -17,6 +17,9 @@ export interface Exam {
   user_attempt_count: number;
   user_best_score: number;
   publish_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  max_participants?: number | null;
   is_premium?: boolean;
   solution_video_url?: string;
   solution_description?: string;
@@ -26,6 +29,12 @@ export interface Exam {
   pass_rate?: number;
   overall_difficulty?: string;
   user_last_score?: number;
+  in_progress_attempt?: {
+    id: number;
+    attempt_number: number;
+    start_time: string;
+    answered_count: number;
+  } | null;
 }
 
 export interface Question {
@@ -60,6 +69,28 @@ export interface ExamAttempt {
   total_correct?: number;
   total_incorrect?: number;
   status: string;
+}
+
+export interface SavedAnswer {
+  question_id: number;
+  selected_answer_id?: number | null;
+  selected_answer_key?: string | null;
+  essay_answer?: string | null;
+}
+
+export interface ExamStartOptions {
+  restart?: boolean;
+  practiceMode?: boolean;
+  mode?: 'resume' | 'restart' | 'practice';
+}
+
+export interface PracticeFeedback {
+  is_correct: boolean;
+  correct_answer_key?: string;
+  correct_answer_text?: string;
+  correct_answer_text_cn?: string;
+  explanation?: string;
+  explanation_cn?: string;
 }
 
 export interface TopicStats {
@@ -106,18 +137,32 @@ const examApi = {
   },
 
   // Bắt đầu làm bài
-  async startExam(examId: number): Promise<{ exam: Exam; questions: Question[]; attemptId: number }> {
-    const response = await axios.post(`/exams/${examId}/start`);
+  async getExamPreflight(examId: number): Promise<Exam> {
+    const response = await axios.get(`/exams/${examId}/preflight`);
+    return response.data.data;
+  },
+
+  async startExam(examId: number, options: ExamStartOptions = {}): Promise<{
+    exam: Exam;
+    questions: Question[];
+    attemptId: number;
+    savedAnswers?: SavedAnswer[];
+    isResume?: boolean;
+    practiceMode?: boolean;
+    timeLeftSeconds?: number | null;
+  }> {
+    const response = await axios.post(`/exams/${examId}/start`, options);
     return response.data.data;
   },
 
   // Lưu câu trả lời
-  async saveAnswer(attemptId: number, questionId: number, answerKey: string, timeSpent: number, essayAnswer?: string) {
+  async saveAnswer(attemptId: number, questionId: number, answerKey: string, timeSpent: number, essayAnswer?: string, practiceMode = false): Promise<any & { feedback?: PracticeFeedback }> {
     const response = await axios.post(`/attempts/${attemptId}/answers`, {
       questionId,
       answerKey,
       timeSpent,
       essayAnswer,
+      practiceMode,
     });
     return response.data.data;
   },

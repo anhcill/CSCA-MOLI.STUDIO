@@ -144,6 +144,7 @@ export default function AdminVipPage() {
   const [grantUserId, setGrantUserId] = useState('');
   const [grantPackageId, setGrantPackageId] = useState('');
   const [grantCustomDays, setGrantCustomDays] = useState('');
+  const [grantTier, setGrantTier] = useState<'vip' | 'premium'>('vip');
   const [grantReason, setGrantReason] = useState('');
   const [grantLoading, setGrantLoading] = useState(false);
 
@@ -274,12 +275,14 @@ export default function AdminVipPage() {
         payload.packageId = parseInt(grantPackageId);
       } else {
         payload.durationDays = parseInt(grantCustomDays);
+        payload.tier = grantTier;
       }
       await axios.post(`/admin/vip/users/${grantUserId}/grant`, payload);
       setShowGrantModal(false);
       setGrantUserId('');
       setGrantPackageId('');
       setGrantCustomDays('');
+      setGrantTier('vip');
       setGrantReason('');
       loadStats();
       loadUsers();
@@ -887,12 +890,23 @@ export default function AdminVipPage() {
                   <option value="">— Chọn từ danh sách gói —</option>
                   {packages.map(pkg => (
                     <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} — {pkg.duration_days} ngày — {pkg.price.toLocaleString('vi-VN')}đ
+                      {pkg.name} — {(pkg.tier || 'vip').toUpperCase()} — {pkg.duration_days} ngày — {pkg.price.toLocaleString('vi-VN')}đ
                     </option>
                   ))}
                 </select>
               </div>
               <div className="text-center text-xs text-gray-400 font-medium">hoặc nhập số ngày tùy chỉnh</div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại gói tùy chỉnh</label>
+                <select
+                  value={grantTier}
+                  onChange={e => setGrantTier(e.target.value as 'vip' | 'premium')}
+                  disabled={!!grantPackageId}
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white disabled:bg-gray-50 disabled:text-gray-400">
+                  <option value="vip">VIP</option>
+                  <option value="premium">Pre / Premium</option>
+                </select>
+              </div>
               <div>
                 <input
                   type="number"

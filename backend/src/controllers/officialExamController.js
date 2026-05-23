@@ -178,6 +178,59 @@ const officialExamController = {
     }
   },
 
+  async getMyAdmissionTicket(req, res) {
+    const client = await pool.connect();
+    try {
+      const examId = parsePositiveInt(req.params.examId);
+      if (!examId) return res.status(400).json({ success: false, message: "ID ky thi khong hop le" });
+
+      const result = await client.query(
+        `SELECT er.id AS registration_id, er.status, er.registered_at, er.approved_at,
+                e.id AS exam_id, e.code AS exam_code, e.title AS exam_title,
+                e.title_cn AS exam_title_cn, e.start_time, e.end_time, e.duration,
+                s.name AS subject_name, s.code AS subject_code,
+                room.id AS room_id, room.room_name, room.location, ers.seat_number,
+                u.id AS user_id, u.full_name, u.email, u.username, u.avatar_url, u.avatar
+         FROM exam_registrations er
+         JOIN exams e ON e.id = er.exam_id
+         JOIN subjects s ON s.id = e.subject_id
+         JOIN users u ON u.id = er.user_id
+         LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
+         LEFT JOIN exam_rooms room ON room.id = ers.room_id
+         WHERE er.exam_id = $1 AND er.user_id = $2
+         LIMIT 1`,
+        [examId, req.user.id],
+      );
+
+      const ticket = result.rows[0];
+      if (!ticket) {
+        return res.status(404).json({ success: false, message: "Ban chua dang ky ky thi nay" });
+      }
+
+      if (!["approved", "checked_in", "completed"].includes(ticket.status)) {
+        return res.status(403).json({
+          success: false,
+          message: "Dang ky chua duoc duyet nen chua co ve du thi",
+          code: "REGISTRATION_NOT_APPROVED",
+        });
+      }
+
+      const checkInCode = `CSCA-CHECKIN:${ticket.exam_id}:${ticket.registration_id}:${ticket.user_id}`;
+      return res.json({
+        success: true,
+        data: {
+          ...ticket,
+          check_in_code: checkInCode,
+        },
+      });
+    } catch (error) {
+      console.error("Get admission ticket error:", error);
+      return res.status(500).json({ success: false, message: "Loi lay ve du thi" });
+    } finally {
+      client.release();
+    }
+  },
+
   async listRegistrations(req, res) {
     try {
       const examId = parsePositiveInt(req.params.examId);
