@@ -12,7 +12,7 @@ router.get('/stats', AdminVipController.getStats);
 
 // VIP users
 router.get('/users', AdminVipController.getVipUsers);
-router.post('/users/:userId/grant', AdminVipController.grantVip);
+router.post('/users/grant', AdminVipController.grantVip);
 router.post('/users/:userId/revoke', AdminVipController.revokeVip);
 
 // Transactions

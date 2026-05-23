@@ -74,10 +74,26 @@ const AdminVipController = {
    */
   async grantVip(req, res) {
     try {
-      const { userId } = req.params;
-      const { durationDays, reason, packageId, tier } = req.body;
+      const { email, durationDays, reason, packageId, tier } = req.body;
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
+
+      if (!email) {
+        return res.status(400).json({ success: false, message: 'Vui lòng cung cấp email người dùng.' });
+      }
+
+      // Tìm user theo email
+      const userRes = await db.query(
+        `SELECT id, email, full_name, username FROM users WHERE email = $1`,
+        [email.trim()]
+      );
+
+      if (!userRes.rows[0]) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng với email này.' });
+      }
+
+      const userObj = userRes.rows[0];
+      const userId = userObj.id;
 
       let pkgId = null, pkgName = null, pkgDays = null, pkgTier = 'vip';
 
@@ -117,11 +133,7 @@ const AdminVipController = {
       const grantedUser = result.rows[0];
 
       // Gửi email kích hoạt VIP
-      const userInfo = await db.query(
-        `SELECT full_name, username FROM users WHERE id = $1`,
-        [userId]
-      );
-      const name = grantedUser.full_name || userInfo.rows[0]?.username || 'bạn';
+      const name = grantedUser.full_name || userObj.username || 'bạn';
       emailService.sendVipActivatedEmail({
         email: grantedUser.email,
         name,
@@ -138,8 +150,8 @@ const AdminVipController = {
       );
 
       UserActivity.log(req.user.id, 'admin.grant_vip', { userId, packageId: pkgId, durationDays: pkgDays, reason, ip: req.ip, userAgent: req.headers['user-agent'] });
-      console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId}. Reason: ${reason || 'N/A'}`);
-      res.json({ success: true, message: `Đã cấp "${pkgName}" (${pkgDays} ngày) cho user`, data: result.rows[0] });
+      console.info(`[VIP] ${adminName} granted "${pkgName}" (${pkgDays}d) to user#${userId} (${email}). Reason: ${reason || 'N/A'}`);
+      res.json({ success: true, message: `Đã cấp "${pkgName}" (${pkgDays} ngày) cho người dùng ${email}`, data: result.rows[0] });
     } catch (err) {
       console.error('Admin grantVip error:', err);
       res.status(500).json({ success: false, message: 'Lỗi cấp VIP' });

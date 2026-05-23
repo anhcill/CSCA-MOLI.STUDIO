@@ -141,7 +141,7 @@ export default function AdminVipPage() {
 
   // ── Grant modal ───────────────────────────────────────
   const [showGrantModal, setShowGrantModal] = useState(false);
-  const [grantUserId, setGrantUserId] = useState('');
+  const [grantEmail, setGrantEmail] = useState('');
   const [grantPackageId, setGrantPackageId] = useState('');
   const [grantCustomDays, setGrantCustomDays] = useState('');
   const [grantTier, setGrantTier] = useState<'vip' | 'premium'>('vip');
@@ -264,11 +264,12 @@ export default function AdminVipPage() {
   };
 
   const handleGrantVip = async () => {
-    if (!grantUserId) return alert('Vui lòng nhập User ID');
+    if (!grantEmail) return alert('Vui lòng nhập Email người dùng');
     if (!grantPackageId && !grantCustomDays) return alert('Vui lòng chọn gói VIP hoặc nhập số ngày tùy chỉnh');
     setGrantLoading(true);
     try {
       const payload: any = {
+        email: grantEmail.trim(),
         reason: grantReason,
       };
       if (grantPackageId) {
@@ -277,9 +278,9 @@ export default function AdminVipPage() {
         payload.durationDays = parseInt(grantCustomDays);
         payload.tier = grantTier;
       }
-      await axios.post(`/admin/vip/users/${grantUserId}/grant`, payload);
+      await axios.post(`/admin/vip/users/grant`, payload);
       setShowGrantModal(false);
-      setGrantUserId('');
+      setGrantEmail('');
       setGrantPackageId('');
       setGrantCustomDays('');
       setGrantTier('vip');
@@ -873,12 +874,12 @@ export default function AdminVipPage() {
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">User ID *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email người dùng *</label>
                 <input
-                  type="number"
-                  value={grantUserId}
-                  onChange={e => setGrantUserId(e.target.value)}
-                  placeholder="VD: 5"
+                  type="email"
+                  value={grantEmail}
+                  onChange={e => setGrantEmail(e.target.value)}
+                  placeholder="VD: user@gmail.com"
                   className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
               </div>
               <div>
