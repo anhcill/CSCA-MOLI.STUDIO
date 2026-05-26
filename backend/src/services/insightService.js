@@ -1038,32 +1038,41 @@ async function generateStudyPlan(userId, subjectCode = null) {
       estimatedMinutes: 120,
     });
 
-    // Lưu vào DB
-    const insertQuery = `
-      INSERT INTO user_study_plans (user_id, plan_type, title, data, is_active, starts_at, ends_at)
-      VALUES ($1, 'auto', $2, $3, true, $4, $5)
-      ON CONFLICT (user_id, is_active) WHERE is_active = true
-      DO UPDATE SET
-        title = $2,
-        data = $3,
-        starts_at = $4,
-        ends_at = $5,
-        created_at = CURRENT_TIMESTAMP
-    `;
-    await client.query(insertQuery, [
+    const planTitle = `Kế hoạch 7 ngày${subjectCode ? ` - ${subjectCode}` : ""}`;
+
+    await client.query("BEGIN");
+    await client.query(
+      `
+        UPDATE user_study_plans
+        SET is_active = false, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1 AND is_active = true
+      `,
+      [userId],
+    );
+    await client.query(
+      `
+        INSERT INTO user_study_plans (user_id, plan_type, title, data, is_active, starts_at, ends_at)
+        VALUES ($1, 'auto', $2, $3, true, $4, $5)
+      `,
+      [
       userId,
-      `Kế hoạch 7 ngày${subjectCode ? ` - ${subjectCode}` : ""}`,
+      planTitle,
       JSON.stringify(days),
       days[0].date,
       days[6].date,
-    ]);
+      ],
+    );
+    await client.query("COMMIT");
 
     return {
-      planTitle: `Kế hoạch 7 ngày${subjectCode ? ` - ${subjectCode}` : ""}`,
+      planTitle,
       startsAt: days[0].date,
       endsAt: days[6].date,
       days,
     };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
   } finally {
     client.release();
   }
