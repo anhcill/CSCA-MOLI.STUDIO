@@ -194,33 +194,93 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
 
     const loadSingleExplanation = async (question: QuestionResult, index: number) => {
         setLoadingIndex(index);
+        setTypingFlags(prev => { const s = new Set(prev); s.delete(index); return s; });
+        setDoneFlags(prev => { const s = new Set(prev); s.delete(index); return s; });
+
+        const baseExp = {
+            questionNumber: question.sub_question_number || question.question_number || index + 1,
+            yourAnswer: `${question.selected_answer_key || '?'}. ${question.selected_answer_text || ''}`,
+            correctAnswer: `${question.correct_answer_key || '?'}. ${question.correct_answer_text || ''}`,
+            whyWrong: '',
+            knowledgeNote: '',
+            tip: 'Hãy ghi nhớ và ôn lại phần này.',
+            vocabulary: [],
+        };
+        setExplanations(prev => {
+            const next = [...prev];
+            next[index] = baseExp;
+            return next;
+        });
+
         try {
-            const res = await authFetch('/api/ai/ask', {
+            const res = await authFetch('/api/ai/ask-stream', {
                 method: 'POST',
+                credentials: 'include',
                 body: JSON.stringify({
                     question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng?`,
                     attemptId,
                 }),
             });
-            const data = await res.json();
-            if (data.success) {
-                const newExp = [...explanations];
-                newExp[index] = {
-                    ...(newExp[index] || {}),
-                    questionNumber: question.sub_question_number || question.question_number || index + 1,
-                    yourAnswer: `${question.selected_answer_key || '?'}. ${question.selected_answer_text || ''}`,
-                    correctAnswer: `${question.correct_answer_key || '?'}. ${question.correct_answer_text || ''}`,
-                    whyWrong: data.answer,
-                    knowledgeNote: '',
-                    tip: 'Hãy ghi nhớ và ôn lại phần này.',
-                    vocabulary: [],
-                };
-                setExplanations(newExp);
-                setTypingFlags(prev => { const s = new Set(prev); s.add(index); return s; });
-                setDoneFlags(prev => { const s = new Set(prev); s.delete(index); return s; });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                throw new Error(data?.message || 'AI đang bận. Vui lòng thử lại.');
+            }
+
+            if (!res.body) throw new Error('Không nhận được phản hồi từ AI');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let pending = '';
+            let fullContent = '';
+            let done = false;
+
+            while (!done) {
+                const { value, done: doneReading } = await reader.read();
+                done = doneReading;
+                if (!value) continue;
+
+                pending += decoder.decode(value, { stream: !done });
+                const lines = pending.split('\n');
+                pending = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const dataStr = line.slice(6).trim();
+                    if (dataStr === '[DONE]') {
+                        done = true;
+                        break;
+                    }
+
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        const content = parsed?.choices?.[0]?.delta?.content;
+                        const error = parsed?.error;
+
+                        if (error) {
+                            fullContent = typeof error === 'string' ? error : 'AI đang gặp lỗi khi trả lời.';
+                            done = true;
+                        } else if (content) {
+                            fullContent += content;
+                        }
+
+                        setExplanations(prev => {
+                            const next = [...prev];
+                            next[index] = { ...(next[index] || baseExp), whyWrong: fullContent };
+                            return next;
+                        });
+                    } catch {
+                        // skip malformed stream chunks
+                    }
+                }
             }
         } catch (err) {
             console.error(err);
+            setExplanations(prev => {
+                const next = [...prev];
+                next[index] = { ...(next[index] || baseExp), whyWrong: 'Không thể tải phân tích AI cho câu này. Vui lòng thử lại.' };
+                return next;
+            });
         } finally {
             setLoadingIndex(null);
         }
@@ -308,6 +368,11 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                                     </p>
                                     {typingFlags.has(i) && !doneFlags.has(i) ? (
                                         <TypewriterText text={exp.whyWrong} onDone={() => setDoneFlags(prev => { const s = new Set(prev); s.add(i); return s; })} />
+                                    ) : isLoadingThis ? (
+                                        <p className="text-sm text-gray-700 leading-relaxed">
+                                            {parseAIExplanation(exp.whyWrong)}
+                                            <span className="inline-block w-1.5 h-4 bg-purple-400 ml-0.5 animate-pulse align-middle" />
+                                        </p>
                                     ) : (
                                         <p className="text-sm text-gray-700 leading-relaxed">{parseAIExplanation(exp.whyWrong)}</p>
                                     )}

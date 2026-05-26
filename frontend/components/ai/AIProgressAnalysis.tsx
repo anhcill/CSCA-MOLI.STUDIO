@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiBarChart2, FiClock } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
+import { useTypewriter } from '@/hooks/useTypewriter';
 
 interface HistoryItem {
     examTitle: string;
@@ -22,6 +23,16 @@ interface ProgressData {
     summary: string;
     improvementNotes: string[];
     warningNotes: string[];
+}
+
+function TypewriterText({ text, className = '' }: { text: string; className?: string }) {
+    const { displayed, done } = useTypewriter(text || '', { speed: 12, startDelay: 80 });
+    return (
+        <span className={className}>
+            {displayed}
+            {!done && <span className="inline-block h-4 w-1.5 animate-pulse bg-purple-400 align-middle ml-0.5" />}
+        </span>
+    );
 }
 
 export default function AIProgressAnalysis({ userId }: { userId?: number }) {
@@ -135,7 +146,7 @@ export default function AIProgressAnalysis({ userId }: { userId?: number }) {
                             data.trend === 'improving' ? 'text-emerald-800' :
                             data.trend === 'declining' ? 'text-red-800' :
                             'text-amber-800'
-                        }`}>{data.summary}</p>
+                        }`}><TypewriterText text={data.summary} /></p>
                     </div>
                 )}
 
@@ -147,7 +158,7 @@ export default function AIProgressAnalysis({ userId }: { userId?: number }) {
                             {data.improvementNotes.map((note, i) => (
                                 <div key={i} className="flex items-start gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                                     <span className="text-green-600 font-bold text-sm">✓</span>
-                                    <span className="text-sm text-green-800">{note}</span>
+                                    <TypewriterText text={note} className="text-sm text-green-800" />
                                 </div>
                             ))}
                         </div>
@@ -162,7 +173,7 @@ export default function AIProgressAnalysis({ userId }: { userId?: number }) {
                             {data.warningNotes.map((note, i) => (
                                 <div key={i} className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                                     <span className="text-red-600 font-bold text-sm">!</span>
-                                    <span className="text-sm text-red-800">{note}</span>
+                                    <TypewriterText text={note} className="text-sm text-red-800" />
                                 </div>
                             ))}
                         </div>
