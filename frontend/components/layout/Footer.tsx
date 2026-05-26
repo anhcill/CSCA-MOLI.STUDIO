@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { FiFacebook, FiYoutube, FiInstagram, FiMail, FiPhone, FiMapPin } from 'react-icons/fi';
+import { FiFacebook, FiYoutube, FiMail, FiPhone, FiMapPin } from 'react-icons/fi';
+import { SOCIAL_LINKS } from '@/lib/seo/social';
 
 export default function Footer() {
   const year = new Date().getFullYear();
@@ -29,9 +30,8 @@ export default function Footer() {
   ];
 
   const SOCIALS = [
-    { icon: FiFacebook,  label: 'Facebook',  href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr', color: 'hover:text-blue-400' },
-    { icon: FiYoutube,   label: 'YouTube',    href: 'https://youtube.com',  color: 'hover:text-red-400' },
-    { icon: FiInstagram, label: 'Instagram',   href: 'https://instagram.com', color: 'hover:text-pink-400' },
+    { icon: FiFacebook,  label: 'Facebook',  href: SOCIAL_LINKS.facebook.url, color: 'hover:text-blue-400' },
+    { icon: FiYoutube,   label: 'YouTube',    href: SOCIAL_LINKS.youtube.url,  color: 'hover:text-red-400' },
   ];
 
   return (
@@ -54,9 +54,9 @@ export default function Footer() {
                   <s.icon size={16} />
                 </a>
               ))}
-              <a href="https://zalo.me" target="_blank" rel="noreferrer" aria-label="Zalo"
+              <a href={SOCIAL_LINKS.zalo.url} target="_blank" rel="noreferrer" aria-label="Zalo"
                 className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center transition-colors hover:text-blue-300 text-[11px] font-black">ZL</a>
-              <a href="https://tiktok.com" target="_blank" rel="noreferrer" aria-label="TikTok"
+              <a href={SOCIAL_LINKS.tiktok.url} target="_blank" rel="noreferrer" aria-label="TikTok"
                 className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg flex items-center justify-center transition-colors hover:text-white text-[11px] font-black">TT</a>
             </div>
           </div>

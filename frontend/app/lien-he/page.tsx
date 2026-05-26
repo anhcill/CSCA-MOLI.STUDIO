@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Header from '@/components/layout/Header';
-import { FiMapPin, FiMail, FiPhone, FiFacebook, FiYoutube, FiInstagram, FiSend, FiMessageCircle } from 'react-icons/fi';
+import { FiMapPin, FiMail, FiPhone, FiFacebook, FiYoutube, FiSend, FiMessageCircle } from 'react-icons/fi';
+import { SiTiktok } from 'react-icons/si';
+import { SOCIAL_LINKS } from '@/lib/seo/social';
 
 interface FormData {
   name: string;
@@ -46,24 +48,24 @@ const CONTACT_CHANNELS = [
   {
     icon: FiFacebook,
     label: 'Facebook',
-    value: 'fb.com/csca.edu.vn',
-    href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr',
+    value: SOCIAL_LINKS.facebook.display,
+    href: SOCIAL_LINKS.facebook.url,
     color: 'text-blue-600 bg-blue-50 border-blue-100',
     hover: 'hover:bg-blue-50',
   },
   {
     icon: FiYoutube,
     label: 'YouTube',
-    value: 'youtube.com/@csca',
-    href: 'https://youtube.com',
+    value: SOCIAL_LINKS.youtube.display,
+    href: SOCIAL_LINKS.youtube.url,
     color: 'text-red-600 bg-red-50 border-red-100',
     hover: 'hover:bg-red-50',
   },
   {
-    icon: FiInstagram,
+    icon: SiTiktok,
     label: 'TikTok',
-    value: '@cloudly_studio',
-    href: 'https://www.tiktok.com/@cloudly_studio',
+    value: SOCIAL_LINKS.tiktok.display,
+    href: SOCIAL_LINKS.tiktok.url,
     color: 'text-pink-500 bg-pink-50 border-pink-100',
     hover: 'hover:bg-pink-50',
   },

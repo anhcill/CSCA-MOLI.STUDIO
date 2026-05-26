@@ -5,6 +5,7 @@ import Providers from "@/components/layout/Providers";
 import ClientShell from "@/components/layout/ClientShell";
 import GlobalFeedbackBridge from "@/components/common/GlobalFeedbackBridge";
 import { getCanonicalSiteUrl } from "@/lib/seo/site";
+import { SAME_AS_LINKS } from "@/lib/seo/social";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import "@/components/admin/MathInput.css";
@@ -33,14 +34,12 @@ export const metadata: Metadata = {
   keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'đề thi CSCA', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
   authors: [{ name: 'CSCA MOLI.STUDIO' }],
   creator: 'CSCA MOLI.STUDIO',
-  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
     siteName: 'CSCA MOLI.STUDIO',
     title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
     description: 'Luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc với đề mô phỏng, từ vựng, lộ trình cá nhân hóa.',
-    url: '/',
     images: [{
       url: '/images/du-hoc-trung-quoc-1200x799.jpg',
       width: 1200,
@@ -111,10 +110,7 @@ export default function RootLayout({
                   "@type": "ImageObject",
                   "url": `${SITE_URL}/images/logo.svg`
                 },
-                "sameAs": [
-                  "https://www.facebook.com/molistudio",
-                  "https://www.youtube.com/@moli-studio"
-                ]
+                "sameAs": SAME_AS_LINKS
               }
             })
           }}
@@ -132,10 +128,7 @@ export default function RootLayout({
               "logo": `${SITE_URL}/images/logo.svg`,
               "description": "Nền tảng giáo dục trực tuyến chuyên ôn thi CSCA, học bổng CSC và du học Trung Quốc",
               "knowsAbout": ["CSCA", "Ôn thi CSCA", "Học bổng CSC", "Du học Trung Quốc", "Tiếng Trung", "Thi HSK"],
-              "sameAs": [
-                "https://www.facebook.com/molistudio",
-                "https://www.youtube.com/@moli-studio"
-              ],
+              "sameAs": SAME_AS_LINKS,
               "hasOfferCatalog": {
                 "@type": "OfferCatalog",
                 "name": "Tài nguyên ôn thi CSCA",

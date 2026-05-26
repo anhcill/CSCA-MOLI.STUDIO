@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +9,217 @@ import { FiCalendar, FiClock, FiTag, FiArrowLeft, FiShare2 } from 'react-icons/f
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+const isTableLine = (line: string) => {
+  const trimmed = line.trim();
+  return trimmed.startsWith('|') && trimmed.endsWith('|');
+};
+
+const parseTableCells = (line: string) =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+
+const isTableDivider = (line: string) => {
+  if (!isTableLine(line)) return false;
+  const cells = parseTableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+};
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const chunks = text.split(/(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
+
+  return chunks.map((chunk, index) => {
+    const linkMatch = chunk.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      const [, label, href] = linkMatch;
+      if (href.startsWith('http')) {
+        return (
+          <a key={index} href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2">
+            {label}
+          </a>
+        );
+      }
+      return (
+        <Link key={index} href={href} className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2">
+          {label}
+        </Link>
+      );
+    }
+
+    if (chunk.startsWith('**') && chunk.endsWith('**')) {
+      return <strong key={index} className="font-extrabold text-gray-950">{chunk.slice(2, -2)}</strong>;
+    }
+
+    if (chunk.startsWith('`') && chunk.endsWith('`')) {
+      return (
+        <code key={index} className="bg-gray-150/70 text-indigo-700 px-2 py-0.5 rounded-lg font-mono text-xs sm:text-sm font-bold border border-gray-200">
+          {chunk.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return chunk;
+  });
+}
+
+function renderBlogContent(content: string): ReactNode[] {
+  const lines = content.split(/\r?\n/);
+  const blocks: ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const key = `block-${i}`;
+
+    if (!trimmed) {
+      blocks.push(<div key={key} className="h-4" />);
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('# ')) {
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('## ')) {
+      blocks.push(<h2 key={key} className="text-xl sm:text-2xl font-black text-gray-950 mt-10 mb-4 tracking-tight leading-snug">{renderInlineMarkdown(trimmed.slice(3))}</h2>);
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('### ')) {
+      blocks.push(<h3 key={key} className="text-lg sm:text-xl font-bold text-gray-900 mt-8 mb-3 tracking-tight">{renderInlineMarkdown(trimmed.slice(4))}</h3>);
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('#### ')) {
+      blocks.push(<h4 key={key} className="text-base sm:text-lg font-extrabold text-gray-900 mt-6 mb-2 tracking-tight">{renderInlineMarkdown(trimmed.slice(5))}</h4>);
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      const codeLines: string[] = [];
+      i += 1;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length) i += 1;
+      blocks.push(
+        <pre key={key} className="my-6 overflow-x-auto rounded-2xl border border-gray-200 bg-gray-950 p-4 text-gray-50 text-xs sm:text-sm">
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    if (isTableLine(trimmed) && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      const headers = parseTableCells(trimmed);
+      const rows: string[][] = [];
+      i += 2;
+
+      while (i < lines.length && isTableLine(lines[i]) && !isTableDivider(lines[i])) {
+        rows.push(parseTableCells(lines[i]));
+        i += 1;
+      }
+
+      blocks.push(
+        <div key={key} className="overflow-x-auto rounded-2xl border border-gray-150/70 shadow-sm my-6">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-indigo-50/50 border-b border-gray-100">
+                {headers.map((cell, index) => (
+                  <th key={index} className="px-4 py-3 text-left font-extrabold text-indigo-900 uppercase tracking-wider text-xs">
+                    {renderInlineMarkdown(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="hover:bg-gray-50/40 transition-colors">
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className="px-4 py-3 text-gray-600 font-semibold align-top">
+                      {renderInlineMarkdown(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    if (trimmed === '---') {
+      blocks.push(<hr key={key} className="my-8 border-gray-200" />);
+      i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('> ')) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('> ')) {
+        quoteLines.push(lines[i].trim().slice(2));
+        i += 1;
+      }
+      blocks.push(
+        <blockquote key={key} className="border-l-4 border-indigo-500 pl-5 py-3.5 my-6 text-gray-650 italic bg-indigo-50/40 rounded-r-2xl border-y border-r border-indigo-100/50">
+          {quoteLines.map((quote, index) => (
+            <p key={index} className="my-1">{renderInlineMarkdown(quote)}</p>
+          ))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ul key={key} className="list-disc pl-6 my-4 space-y-2">
+          {items.map((item, index) => (
+            <li key={index} className="text-gray-700 pl-1 font-semibold leading-relaxed">{renderInlineMarkdown(item)}</li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ol key={key} className="list-decimal pl-6 my-4 space-y-2">
+          {items.map((item, index) => (
+            <li key={index} className="text-gray-700 pl-1 font-semibold leading-relaxed">{renderInlineMarkdown(item)}</li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    blocks.push(<p key={key} className="text-gray-650 leading-relaxed my-4.5 font-medium">{renderInlineMarkdown(trimmed)}</p>);
+    i += 1;
+  }
+
+  return blocks;
 }
 
 export async function generateStaticParams() {
@@ -159,100 +371,7 @@ export default async function BlogPostPage({ params }: PageProps) {
               {/* Markdown Content Parser */}
               <div className="p-6 sm:p-8 lg:p-10">
                 <div className="prose prose-indigo max-w-none text-gray-700 text-sm sm:text-base leading-relaxed font-medium">
-                  {post.content.split('\n').map((line, i) => {
-                    if (line.startsWith('# ')) return null;
-                    
-                    if (line.startsWith('## ')) {
-                      return (
-                        <h2 key={i} className="text-xl sm:text-2xl font-black text-gray-950 mt-10 mb-4 tracking-tight leading-snug">
-                          {line.slice(3)}
-                        </h2>
-                      );
-                    }
-                    
-                    if (line.startsWith('### ')) {
-                      return (
-                        <h3 key={i} className="text-lg sm:text-xl font-bold text-gray-900 mt-8 mb-3 tracking-tight">
-                          {line.slice(4)}
-                        </h3>
-                      );
-                    }
-                    
-                    if (line.startsWith('| ')) {
-                      const cells = line.split('|').filter(c => c.trim());
-                      const isHeader = i > 0 && post.content.split('\n')[i - 1].startsWith('|') && !post.content.split('\n')[i - 1].startsWith('|---');
-                      if (isHeader) {
-                        return (
-                          <div key={i} className="overflow-x-auto rounded-2xl border border-gray-150/70 shadow-sm my-6">
-                            <table className="w-full border-collapse text-sm">
-                              <thead>
-                                <tr className="bg-indigo-50/50 border-b border-gray-100">
-                                  {cells.map((cell, j) => (
-                                    <th key={j} className="px-4 py-3 text-left font-extrabold text-indigo-900 uppercase tracking-wider text-xs">
-                                      {cell.trim()}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-100">
-                                {(() => {
-                                  const bodyLines = [];
-                                  let j = i + 1;
-                                  while (j < post.content.split('\n').length && post.content.split('\n')[j].startsWith('|')) {
-                                    const rowCells = post.content.split('\n')[j].split('|').filter(c => c.trim());
-                                    bodyLines.push(
-                                      <tr key={j} className="hover:bg-gray-50/40 transition-colors">
-                                        {rowCells.map((cell, k) => (
-                                          <td key={k} className="px-4 py-3 text-gray-600 font-semibold">
-                                            {cell.trim()}
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    );
-                                    j++;
-                                  }
-                                  return bodyLines;
-                                })()}
-                              </tbody>
-                            </table>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }
-                    
-                    if (line.startsWith('> ')) {
-                      return (
-                        <blockquote key={i} className="border-l-4 border-indigo-500 pl-5 py-3.5 my-6 text-gray-650 italic bg-indigo-50/40 rounded-r-2xl border-y border-r border-indigo-100/50">
-                          {line.slice(2)}
-                        </blockquote>
-                      );
-                    }
-                    
-                    if (line.startsWith('**') && line.endsWith('**')) {
-                      return <p key={i} className="font-extrabold text-gray-950 my-4">{line.slice(2, -2)}</p>;
-                    }
-                    
-                    if (line.startsWith('- ')) {
-                      return (
-                        <li key={i} className="ml-5 list-disc text-gray-700 my-2 pl-1 font-semibold leading-relaxed">
-                          {line.slice(2)}
-                        </li>
-                      );
-                    }
-                    
-                    if (line.startsWith('`') && line.endsWith('`')) {
-                      return (
-                        <code key={i} className="bg-gray-150/70 text-indigo-700 px-2 py-0.5 rounded-lg font-mono text-xs sm:text-sm font-bold border border-gray-200">
-                          {line.slice(1, -1)}
-                        </code>
-                      );
-                    }
-                    
-                    if (line.trim() === '') return <div key={i} className="h-4" />;
-                    
-                    return <p key={i} className="text-gray-650 leading-relaxed my-4.5 font-medium">{line}</p>;
-                  })}
+                  {renderBlogContent(post.content)}
                 </div>
 
                 {/* Continue exam block CTA */}

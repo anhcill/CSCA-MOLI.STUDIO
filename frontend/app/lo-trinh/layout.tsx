@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     url: '/lo-trinh',
     images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Lộ Trình Học CSCA' }],
   },
+  alternates: { canonical: '/lo-trinh' },
   twitter: {
     card: 'summary_large_image',
     title: 'Lộ Trình Học | CSCA',

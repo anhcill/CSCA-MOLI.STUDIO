@@ -3,6 +3,7 @@
 import { type CSSProperties, type ReactNode, useState } from 'react';
 import { FiFacebook, FiPhone } from 'react-icons/fi';
 import { SiTiktok } from 'react-icons/si';
+import { SOCIAL_LINKS } from '@/lib/seo/social';
 
 interface ContactItem {
   label: string;
@@ -15,7 +16,7 @@ interface ContactItem {
 const CONTACT_ITEMS: ContactItem[] = [
   {
     label: 'Zalo',
-    href: 'https://zalo.me/0812352005',
+    href: SOCIAL_LINKS.zalo.url,
     bgStyle: { background: 'linear-gradient(135deg, #0068FF, #004FC4)' },
     content: (
       <svg width="20" height="20" viewBox="0 0 512 512" fill="white">
@@ -25,7 +26,7 @@ const CONTACT_ITEMS: ContactItem[] = [
   },
   {
     label: 'Messenger',
-    href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr',
+    href: SOCIAL_LINKS.facebook.url,
     bgClass: 'bg-gradient-to-br from-blue-500 to-indigo-600',
     content: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
@@ -35,13 +36,13 @@ const CONTACT_ITEMS: ContactItem[] = [
   },
   {
     label: 'Facebook Fanpage',
-    href: 'https://www.facebook.com/share/1awx75D2rm/?mibextid=wwXIfr',
+    href: SOCIAL_LINKS.facebook.url,
     bgClass: 'bg-[#1877F2]',
     content: <FiFacebook size={18} color="white" />,
   },
   {
     label: 'TikTok @cloudly_studio',
-    href: 'https://www.tiktok.com/@cloudly_studio?_r=1&_t=ZS-95aeonJsDzt',
+    href: SOCIAL_LINKS.tiktok.url,
     bgStyle: { background: 'linear-gradient(135deg, #25F4EE 0%, #FE2C55 50%, #000 100%)' },
     content: <SiTiktok size={18} color="white" />,
   },

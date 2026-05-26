@@ -47,10 +47,19 @@ export default function LuyenThiCSCA() {
       inLanguage: 'vi-VN',
     },
   };
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Trang chu', item: siteUrl },
+      { '@type': 'ListItem', position: 2, name: 'Luyen thi CSCA', item: `${siteUrl}/luyen-thi-csca` },
+    ],
+  };
 
   return (
     <main>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Header />
 
       {/* Hero */}

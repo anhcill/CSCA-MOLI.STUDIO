@@ -68,7 +68,7 @@ function isPrePackage(pkg: VipPackage) {
 }
 
 function getPackageDisplayName(pkg: VipPackage) {
-  if (isFreePackage(pkg)) return 'Miễn phí';
+  if (isFreePackage(pkg)) return 'Gói Miễn phí';
   if (isPrePackage(pkg)) return 'Gói Pre';
   return 'Gói VIP';
 }
@@ -316,18 +316,16 @@ export default function VipPricingPage() {
                     ) : (
                       /* Hardcoded Free card when no free package in DB */
                       <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300">
-                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white pt-6">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-lg font-black">Miễn phí</h3>
-                              <p className="text-white/70 text-xs mt-0.5">Không giới hạn thời gian</p>
-                            </div>
+                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white pt-6 text-center flex flex-col items-center">
+                          <div className="relative w-full text-center flex flex-col items-center">
+                            <h3 className="text-lg font-black">Gói Miễn phí</h3>
+                            <p className="text-white/70 text-xs mt-0.5">Không giới hạn thời gian</p>
                           </div>
-                          <div className="mt-3 flex items-baseline gap-1">
+                          <div className="mt-3 flex items-baseline justify-center gap-1">
                             <span className="text-3xl font-black">0</span>
                             <span className="text-white/70 text-xs">đ</span>
                           </div>
-                          <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2">
+                          <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2 text-center">
                             Truy cập đề thi cơ bản miễn phí
                           </p>
                         </div>
@@ -361,7 +359,7 @@ export default function VipPricingPage() {
                           </ul>
                           <div className="mb-4 pt-5 mt-auto" />
                           <div className="pt-5 mt-auto">
-                            <div className="py-3.5 rounded-xl text-center text-sm font-black text-gray-500 bg-gradient-to-r from-gray-400 to-slate-500 shadow-md">
+                            <div className="py-3.5 rounded-xl text-center text-sm font-black text-white bg-gradient-to-r from-gray-400 to-slate-500 shadow-md">
                               Miễn phí — Không cần đăng ký
                             </div>
                           </div>
@@ -548,20 +546,18 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
         </div>
       )}
       {/* Header */}
-      <div className={`bg-gradient-to-r ${colors.gradient} p-4 text-white pt-6`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-black">{getPackageDisplayName(pkg)}</h3>
-            <p className="text-white/70 text-xs mt-0.5">{pkg.duration_days} ngày</p>
-          </div>
+      <div className={`bg-gradient-to-r ${colors.gradient} p-4 text-white pt-6 text-center flex flex-col items-center`}>
+        <div className="relative w-full text-center flex flex-col items-center">
+          <h3 className="text-lg font-black">{getPackageDisplayName(pkg)}</h3>
+          <p className="text-white/70 text-xs mt-0.5">{pkg.duration_days} ngày</p>
           {isPre && !isSelected && (
-            <div className="bg-white/20 rounded-xl p-1.5 text-center">
+            <div className="absolute right-0 top-0 bg-white/20 rounded-xl p-1.5 text-center">
               <FaVideo size={16} className="mx-auto text-white" />
               <span className="text-[8px] font-bold text-white/80 block mt-0.5">Cố vấn</span>
             </div>
           )}
         </div>
-        <div className="mt-3 flex items-baseline gap-1">
+        <div className="mt-3 flex items-baseline justify-center gap-1">
           {discount ? (
             <>
               <span className="text-lg font-black line-through text-white/50">
@@ -582,7 +578,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
             </>
           )}
         </div>
-        <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2">
+        <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2 text-center">
           {getPackageDescription(pkg)}
         </p>
       </div>

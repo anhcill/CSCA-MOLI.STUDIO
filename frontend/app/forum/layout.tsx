@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     url: '/forum',
     images: [{ url: '/images/pexels-markus-winkler-1430818-30855414.jpg', width: 1200, height: 630, alt: 'Diễn Đàn CSCA' }],
   },
+  alternates: { canonical: '/forum' },
   twitter: {
     card: 'summary_large_image',
     title: 'Diễn Đàn | CSCA',

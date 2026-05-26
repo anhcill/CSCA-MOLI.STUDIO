@@ -10,6 +10,7 @@ export const metadata: Metadata = {
     description: 'Giải đáp nhanh các thắc mắc về luyện thi HSK/HSKK, CSCA, đăng ký tài khoản và thanh toán.',
     type: 'article',
   },
+  alternates: { canonical: '/cau-hoi-thuong-gap' },
 };
 
 export default function FAQPage() {

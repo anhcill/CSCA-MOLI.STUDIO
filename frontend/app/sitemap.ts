@@ -27,7 +27,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     route('/lo-trinh', siteUpdated, 'monthly', 0.7),
     route('/ly-thuyet', siteUpdated, 'monthly', 0.7),
     route('/cau-truc-de', siteUpdated, 'monthly', 0.6),
-    route('/de-mo-phong', siteUpdated, 'weekly', 0.8),
     route('/giai-de-chi-tiet', siteUpdated, 'monthly', 0.6),
     route('/cau-hoi-thuong-gap', siteUpdated, 'monthly', 0.7),
   ];
@@ -54,10 +53,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const subjectRoutes: MetadataRoute.Sitemap = [
     route('/toan/de-mo-phong', siteUpdated, 'weekly', 0.7),
-    route('/toan/lo-trinh', siteUpdated, 'monthly', 0.6),
-    route('/toan/cau-truc-de', siteUpdated, 'monthly', 0.6),
-    route('/toan/ly-thuyet', siteUpdated, 'monthly', 0.6),
-    route('/toan/tu-vung', siteUpdated, 'monthly', 0.6),
     route('/hoa/de-mo-phong', siteUpdated, 'weekly', 0.7),
     route('/vat-ly/de-mo-phong', siteUpdated, 'weekly', 0.7),
     route('/tiengtrung-tunhien/de-mo-phong', siteUpdated, 'weekly', 0.7),

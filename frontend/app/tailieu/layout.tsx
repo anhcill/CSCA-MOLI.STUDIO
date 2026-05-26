@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     url: '/tailieu',
     images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Tài Liệu CSCA' }],
   },
+  alternates: { canonical: '/tailieu' },
   twitter: {
     card: 'summary_large_image',
     title: 'Tài Liệu Ôn Thi | CSCA',

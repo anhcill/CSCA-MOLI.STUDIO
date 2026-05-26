@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     url: '/tu-vung',
     images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'Từ Vựng CSCA' }],
   },
+  alternates: { canonical: '/tu-vung' },
   twitter: {
     card: 'summary_large_image',
     title: 'Từ Vựng Tiếng Trung | CSCA',
