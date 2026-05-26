@@ -30,8 +30,8 @@ export const metadata: Metadata = {
     default: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc - MOLI.STUDIO',
     template: '%s | CSCA MOLI.STUDIO',
   },
-  description: 'Nền tảng ôn thi CSCA, luyện đề học bổng CSC và du học Trung Quốc cho học sinh Việt Nam: đề mô phỏng, từ vựng, lộ trình học và lời giải chi tiết.',
-  keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'đề thi CSCA', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
+  description: 'Nền tảng ôn thi CSCA, luyện đề học bổng CSC và chuẩn bị du học Trung Quốc chuyên nghiệp dành cho học sinh Việt Nam: đề thi mô phỏng chuẩn format, từ vựng tiếng Trung, lộ trình ôn tập cá nhân hóa và đáp án giải chi tiết.',
+  keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'luyện thi CSCA online', 'đề thi CSCA', 'mock test CSCA', 'thi thử HSK online', 'luyện HSK miễn phí', 'AI phân tích bài thi', 'nền tảng ôn thi tiếng Trung', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
   authors: [{ name: 'CSCA MOLI.STUDIO' }],
   creator: 'CSCA MOLI.STUDIO',
   openGraph: {
@@ -122,7 +122,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
-              "@type": ["EducationalOrganization", "Organization"],
+              "@type": "EducationalOrganization",
               "name": "CSCA MOLI.STUDIO",
               "url": SITE_URL,
               "logo": `${SITE_URL}/images/logo.svg`,
@@ -138,6 +138,12 @@ export default function RootLayout({
                     "itemOffered": {
                       "@type": "Course",
                       "name": "Ôn thi CSCA online",
+                      "description": "Luyện thi CSCA online với đề mô phỏng chuẩn format, tài liệu ôn tập, AI phân tích kết quả và lộ trình học thông minh.",
+                      "provider": {
+                        "@type": "EducationalOrganization",
+                        "name": "CSCA MOLI.STUDIO",
+                        "url": SITE_URL
+                      },
                       "url": `${SITE_URL}/on-thi-csca`
                     }
                   },
@@ -146,6 +152,7 @@ export default function RootLayout({
                     "itemOffered": {
                       "@type": "LearningResource",
                       "name": "Đề thi CSCA mô phỏng",
+                      "description": "Tổng hợp các đề thi thử, đề thi mô phỏng CSCA chuẩn cấu trúc phục vụ ôn luyện thi học bổng Trung Quốc.",
                       "url": `${SITE_URL}/de-thi-csca`
                     }
                   }

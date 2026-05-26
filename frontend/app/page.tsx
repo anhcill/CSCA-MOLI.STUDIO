@@ -6,20 +6,21 @@ import DailyQuestBanner from '@/components/layout/DailyQuestBanner';
 
 export const metadata: Metadata = {
   title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
-  description: 'Ôn thi CSCA và học bổng du học Trung Quốc với đề mô phỏng, từ vựng tiếng Trung, lộ trình học cá nhân hóa và lời giải chi tiết.',
+  description: 'Nền tảng ôn thi CSCA và luyện đề học bổng du học Trung Quốc (CSC) hàng đầu dành cho học sinh Việt Nam. Cung cấp đề thi mô phỏng sát đề thi thật, từ vựng tiếng Trung, lộ trình học cá nhân hóa bằng AI và lời giải chi tiết.',
   alternates: {
     canonical: '/',
   },
   openGraph: {
+    type: 'website',
     title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
-    description: 'Nền tảng luyện thi CSCA, học bổng CSC và du học Trung Quốc cho học sinh Việt Nam.',
+    description: 'Nền tảng luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc với đề mô phỏng chuẩn cấu trúc và lộ trình cá nhân hóa bằng AI.',
     url: '/',
     images: [{ url: '/images/du-hoc-trung-quoc-1200x799.jpg', width: 1200, height: 799, alt: 'CSCA MOLI.STUDIO - Luyện thi HSK/HSKK & CSCA' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
-    description: 'Ôn thi CSCA, học bổng CSC và du học Trung Quốc.',
+    description: 'Ôn thi CSCA, ôn học bổng CSC và du học Trung Quốc với lộ trình thông minh.',
     images: ['/images/du-hoc-trung-quoc-1200x799.jpg'],
   },
 };
@@ -27,14 +28,6 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      {/* 
-        This H1 is crucial for SEO but hidden visually since the banner has multiple titles. 
-        It contains all the targeted long-tail keywords. 
-      */}
-      <h1 className="sr-only text-[#00000000] absolute -z-50 opacity-0 pointer-events-none">
-        CSCA MOLI.STUDIO - Nền tảng luyện thi HSK/HSKK online và ôn thi CSCA, cung cấp đề thi mô phỏng chuẩn format, từ vựng HSK, lộ trình học tập cá nhân hoá
-      </h1>
-      
       <Header />
       {/* Daily Quests Banner */}
       <DailyQuestBanner />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, type ElementType } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiSearch, FiX, FiCalendar, FiClock, FiUsers, FiPlayCircle, FiLock, FiBookmark, FiCheckCircle, FiRotateCw, FiBarChart2, FiTarget, FiTrendingUp, FiEdit3 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
@@ -17,6 +17,7 @@ interface ExamListProps {
 
 type FilterType = 'all' | 'done' | 'not-done';
 type SortType = 'newest' | 'oldest' | 'name';
+type ExamTypeTab = 'regular' | 'vip';
 
 const isVipExam = (exam: Exam) =>
   exam.is_premium === true || (!!exam.vip_tier && exam.vip_tier !== 'basic');
@@ -46,6 +47,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const [historyStats, setHistoryStats] = useState<HistoryStatsData | null>(null);
   const [vipModalExam, setVipModalExam] = useState<{ title: string; id: number } | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
+  const [examTypeTab, setExamTypeTab] = useState<ExamTypeTab>('regular');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortType>('newest');
   const [showDone, setShowDone] = useState(false);
@@ -181,6 +183,19 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   const regularByYear = useMemo(() => groupExamsByYear(regularExams), [regularExams]);
   const vipByYear = useMemo(() => groupExamsByYear(vipExams), [vipExams]);
+  const activeExamList = examTypeTab === 'regular' ? regularExams : vipExams;
+  const activeExamByYear = examTypeTab === 'regular' ? regularByYear : vipByYear;
+  const activeExamMeta = examTypeTab === 'regular'
+    ? {
+        title: 'Đề thường',
+        description: 'Tất cả tài khoản đều có thể làm',
+        variant: 'regular' as const,
+      }
+    : {
+        title: 'Đề VIP',
+        description: 'Tài khoản VIP và Pre dùng chung bộ đề này',
+        variant: 'vip' as const,
+      };
 
   // Stats
   const stats = useMemo(() => ({
@@ -589,6 +604,38 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           ))}
         </div>
 
+        {/* Exam type tabs */}
+        <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+          {([
+            { value: 'regular', label: 'Đề thường', icon: FiPlayCircle, count: regularExams.length },
+            { value: 'vip', label: 'Đề VIP', icon: FaCrown, count: vipExams.length },
+          ] as { value: ExamTypeTab; label: string; icon: ElementType; count: number }[]).map(tab => {
+            const Icon = tab.icon;
+            const active = examTypeTab === tab.value;
+            const isVipTab = tab.value === 'vip';
+
+            return (
+              <button
+                key={tab.value}
+                onClick={() => setExamTypeTab(tab.value)}
+                className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  active
+                    ? isVipTab
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'bg-violet-600 text-white shadow-sm'
+                    : isVipTab
+                    ? 'text-amber-700 hover:bg-amber-50'
+                    : 'text-violet-700 hover:bg-violet-50'
+                }`}
+              >
+                <Icon size={13} />
+                <span>{tab.label}</span>
+                <span className={`text-xs ${active ? 'opacity-85' : 'opacity-60'}`}>({tab.count})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Sort */}
         <div className="flex items-center gap-1.5 sm:ml-auto">
           <span className="text-xs text-gray-400 font-medium">Sắp xếp:</span>
@@ -624,13 +671,15 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         <span className="text-gray-300">|</span>
         <span><strong className="text-violet-600">{regularExams.length}</strong> đề thường</span>
         <span><strong className="text-amber-600">{vipExams.length}</strong> đề VIP</span>
+        <span className="text-gray-300">|</span>
+        <span>Đang xem <strong className={examTypeTab === 'vip' ? 'text-amber-600' : 'text-violet-600'}>{activeExamMeta.title.toLowerCase()}</strong></span>
         {showDone && <span className="text-emerald-500">(đã ẩn đề đã làm)</span>}
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-5 items-start">
 
-        {/* ── Left column: Stats + Recommendation + Đề thường ───── */}
+        {/* ── Left column: Stats + Recommendation ──────────────── */}
         <div className="flex flex-col gap-5">
           {/* Stats overview card */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -674,18 +723,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
               </button>
             </div>
           </div>
-
-          {/* Đề thường section */}
-          <ExamSection
-            title="Đề thường"
-            description="Tất cả tài khoản đều có thể làm"
-            count={regularExams.length}
-            grouped={regularByYear}
-            variant="regular"
-          />
         </div>
 
-        {/* ── Right column: Search + Đề VIP ──────────────────────── */}
+        {/* ── Right column: Search + active exam type ───────────── */}
         <div className="flex flex-col gap-5">
           {/* Search Bar */}
           <div className="relative">
@@ -705,13 +745,12 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             )}
           </div>
 
-          {/* Đề VIP section */}
           <ExamSection
-            title="Đề VIP"
-            description="Tài khoản VIP và Pre dùng chung bộ đề này"
-            count={vipExams.length}
-            grouped={vipByYear}
-            variant="vip"
+            title={activeExamMeta.title}
+            description={activeExamMeta.description}
+            count={activeExamList.length}
+            grouped={activeExamByYear}
+            variant={activeExamMeta.variant}
           />
         </div>
       </div>

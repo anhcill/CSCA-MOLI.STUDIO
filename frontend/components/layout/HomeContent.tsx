@@ -593,6 +593,73 @@ export default function HomeContent() {
         </div>
       </section>
 
+      {/* SEO Introduction Section */}
+      <section className="w-full bg-gray-50/50 py-16 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
+        <div className="mx-auto max-w-4xl px-6 text-left">
+          <h2 className="mb-6 text-2xl font-black text-gray-900 dark:text-white sm:text-3xl">
+            {pick({
+              vi: 'MOLI.STUDIO - Nền tảng ôn thi tiếng Trung và luyện thi CSCA online hàng đầu',
+              en: 'CSCA Prep & Chinese Government Scholarship (CSC) Learning Platform',
+              zh: 'CSCA 备考与中国政府奖学金 (CSC) 学习平台'
+            })}
+          </h2>
+          
+          <div className="space-y-6 text-sm sm:text-base leading-relaxed text-gray-650 dark:text-gray-350">
+            <p>
+              {pick({
+                vi: 'Chào mừng bạn đến với MOLI.STUDIO, nền tảng ôn thi tiếng Trung và hỗ trợ luyện thi CSCA online hàng đầu dành cho học viên Việt Nam. Hệ thống cung cấp kho dữ liệu đề thi CSCA phong phú, bao gồm các bài mock test CSCA chuẩn cấu trúc và chức năng thi thử HSK online cập nhật liên tục. Nền tảng của chúng tôi được thiết kế chuyên biệt để giúp bạn chinh phục kỳ thi đánh giá năng lực CSCA (Chinese Scholarship Council Assessment), mở rộng cơ hội giành các suất học bổng CSC toàn phần danh giá để đi du học Trung Quốc.',
+                en: 'Welcome to MOLI.STUDIO, the premier online learning platform specialized in helping students conquer the CSCA (Chinese Scholarship Council Assessment) exam and secure prestigious scholarships to study in China. The CSCA exam is a mandatory assessment that determines eligibility for full government scholarships at top Chinese universities.',
+                zh: '欢迎来到 MOLI.STUDIO，这是专为帮助学生攻克 CSCA 考试并获得中国政府奖学金而设计的在线学习平台。CSCA 考试是评估学生学术水平和汉语能力的重要指标。'
+              })}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white mb-2">
+                  {pick({
+                    vi: 'Cấu trúc bài thi & Nội dung ôn luyện',
+                    en: 'Exam Structure & Practice Content',
+                    zh: '考试结构与练习内容'
+                  })}
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                  {pick({
+                    vi: 'Hệ thống cung cấp đầy đủ tài liệu lý thuyết và hàng trăm đề thi CSCA chuẩn format cùng các đề mock test CSCA tự luận/trắc nghiệm đầy đủ. Người học có thể tham gia thi thử HSK online để đánh giá trình độ và nhận tài liệu luyện HSK miễn phí. Mỗi câu hỏi trong đề thi CSCA đều đi kèm đáp án chi tiết và dịch nghĩa song ngữ tiếng Trung - tiếng Việt chuẩn xác để bạn tích lũy từ vựng nhanh chóng.',
+                    en: 'Our system offers comprehensive theoretical documents and hundreds of mock exams modeled after the three main sections of CSCA: Mathematics (in Chinese/English), General Knowledge (Chinese history, culture, and geography), and Chinese language proficiency.',
+                    zh: '我们的系统提供全面的理论文档和数百套模拟考试，涵盖数学（中文/英文）、综合知识（中国历史、文化和地理）以及汉语水平（HSK）三大核心部分。'
+                  })}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white mb-2">
+                  {pick({
+                    vi: 'Công nghệ AI phân tích bài thi & Lộ trình học',
+                    en: 'AI Weak Point Analysis & Learning Paths',
+                    zh: 'AI 弱点分析与学习路径'
+                  })}
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                  {pick({
+                    vi: 'MOLI.STUDIO tiên phong ứng dụng công nghệ AI phân tích bài thi thông minh. Sau mỗi lượt làm đề, hệ thống AI phân tích bài thi sẽ chỉ ra những lỗ hổng kiến thức, phân loại các dạng câu hỏi bạn thường sai để đề xuất lộ trình ôn tập hàng ngày. Bạn cũng có thể luyện HSK miễn phí trên hệ thống với các bộ đề thi thử được chấm điểm và sửa lỗi trực tiếp bằng AI giúp nâng cao điểm số của mình.',
+                    en: 'Using integrated Gemini AI technology, MOLI.STUDIO tracks your practice history, evaluates accuracy by topic, and identifies knowledge gaps. The AI suggests a personalized daily roadmap to optimize your study time and boost your target scores.',
+                    zh: '借助集成的 Gemini AI 技术，MOLI.STUDIO 自动跟踪做题历史，评估各主题正确率，并发现知识薄弱点，从而生成每日个性化复习路径。'
+                  })}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4">
+              {pick({
+                vi: 'Hãy bắt đầu hành trình chinh phục học bổng hôm nay. Đăng ký tài khoản để luyện HSK miễn phí, làm đề thi CSCA mô phỏng và trải nghiệm tính năng AI phân tích bài thi ngay hôm nay tại nền tảng ôn thi tiếng Trung thông minh nhất Việt Nam.',
+                en: 'Start your journey to study in China today with MOLI.STUDIO. Sign up for a free account to practice mock exams and experience the smartest prep tools.',
+                zh: '立即加入 MOLI.STUDIO，开启您的中国留学之旅。注册免费账号，体验最智能的备考工具。'
+              })}
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="relative w-full overflow-hidden bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 py-24">
         <div className="relative mx-auto max-w-3xl px-6 text-center">
           <FiAward className="mx-auto mb-6 text-white" size={56} />

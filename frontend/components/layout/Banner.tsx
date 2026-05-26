@@ -210,9 +210,9 @@ export default function Banner() {
                 <span className="text-sm font-semibold text-white">{pick(slide.badge)}</span>
               </div>
 
-              <p className="mb-4 text-2xl font-black leading-tight tracking-tight text-white xs:text-3xl sm:text-4xl md:mb-5 md:text-5xl lg:text-6xl">
+              <h1 className="mb-4 text-2xl font-black leading-tight tracking-tight text-white xs:text-3xl sm:text-4xl md:mb-5 md:text-5xl lg:text-6xl">
                 {pick(slide.title)}
-              </p>
+              </h1>
 
               <p className="mb-6 text-base font-light leading-relaxed text-white/80 sm:text-lg md:mb-8 md:text-xl">
                 {pick(slide.subtitle)}

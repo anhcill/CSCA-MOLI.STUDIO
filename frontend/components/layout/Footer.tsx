@@ -14,6 +14,7 @@ export default function Footer() {
   ];
 
   const RESOURCES = [
+    { name: 'Trang chủ', href: '/' },
     { name: 'Cấu trúc đề', href: '/cau-truc-de' },
     { name: 'Lý thuyết', href: '/ly-thuyet' },
     { name: 'Từ vựng', href: '/tu-vung' },
