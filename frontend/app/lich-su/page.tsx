@@ -36,10 +36,27 @@ const SUBJECT_META: Record<string, { color: string; bg: string; emoji: string }>
   CHINESE: { color: 'text-red-700', bg: 'bg-red-100', emoji: '🈶' },
 };
 
-function scoreBadge(score: number): { label: string; cls: string } {
-  if (score >= 8) return { label: 'Xuất sắc', cls: 'bg-emerald-100 text-emerald-700' };
-  if (score >= 6.5) return { label: 'Khá', cls: 'bg-blue-100 text-blue-700' };
-  if (score >= 5) return { label: 'Trung bình', cls: 'bg-yellow-100 text-yellow-700' };
+function attemptAccuracy(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): number {
+  const totalQuestions = Number(item.total_questions) || 0;
+  if (totalQuestions > 0) {
+    return Math.max(0, Math.min(100, ((Number(item.total_correct) || 0) / totalQuestions) * 100));
+  }
+  return Math.max(0, Math.min(100, (Number(item.total_score) || 0) * 10));
+}
+
+function attemptPassed(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): boolean {
+  return attemptAccuracy(item) >= 50;
+}
+
+function attemptScore(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): number {
+  return attemptAccuracy(item) / 10;
+}
+
+function scoreBadge(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): { label: string; cls: string } {
+  const accuracy = attemptAccuracy(item);
+  if (accuracy >= 80) return { label: 'Xuất sắc', cls: 'bg-emerald-100 text-emerald-700' };
+  if (accuracy >= 65) return { label: 'Khá', cls: 'bg-blue-100 text-blue-700' };
+  if (accuracy >= 50) return { label: 'Trung bình', cls: 'bg-yellow-100 text-yellow-700' };
   return { label: 'Yếu', cls: 'bg-red-100 text-red-700' };
 }
 
@@ -124,13 +141,7 @@ export default function LichSuPage() {
       })
     : filtered;
 
-  const avgScore = history.length
-    ? (history.reduce((s, h) => s + (Number(h.total_score) || 0), 0) / history.length).toFixed(1)
-    : '0';
-  const bestScore = history.length
-    ? Math.max(...history.map(h => h.total_score || 0)).toFixed(1)
-    : '0';
-  const passCount = history.filter(h => h.total_score >= 5).length;
+  const passCount = history.filter(attemptPassed).length;
 
   const totalPages = Math.ceil(displayFiltered.length / PER_PAGE);
   const paged = displayFiltered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -212,9 +223,9 @@ export default function LichSuPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard icon={FiBarChart2} label="Tổng bài" value={displayFiltered.length} color="bg-indigo-500" />
-        <StatCard icon={FiTrendingUp} label="Điểm TB" value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + (Number(h.total_score) || 0), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
-        <StatCard icon={FiAward} label="Điểm cao nhất" value={`${displayFiltered.length ? Math.max(...displayFiltered.map(h => h.total_score || 0)).toFixed(1) : '0'}/10`} color="bg-green-500" />
-        <StatCard icon={FiCheckCircle} label="Lần đạt (≥5)" value={displayFiltered.filter(h => h.total_score >= 5).length} color="bg-emerald-500" />
+        <StatCard icon={FiTrendingUp} label="Điểm TB" value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + attemptScore(h), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
+        <StatCard icon={FiAward} label="Điểm cao nhất" value={`${displayFiltered.length ? Math.max(...displayFiltered.map(attemptScore)).toFixed(1) : '0'}/10`} color="bg-green-500" />
+        <StatCard icon={FiCheckCircle} label="Lần đạt (≥50%)" value={displayFiltered.filter(attemptPassed).length} color="bg-emerald-500" />
       </div>
 
       {/* Filter tabs */}
@@ -280,10 +291,8 @@ export default function LichSuPage() {
 
             {paged.map((item) => {
               const meta = SUBJECT_META[item.subject_code] || { color: 'text-gray-700', bg: 'bg-gray-100', emoji: '📝' };
-              const badge = scoreBadge(item.total_score || 0);
-              const pct = item.total_questions
-                ? Math.round(((item.total_correct || 0) / item.total_questions) * 100)
-                : 0;
+              const badge = scoreBadge(item);
+              const pct = Math.round(attemptAccuracy(item));
 
               return (
                 <Link
@@ -304,7 +313,7 @@ export default function LichSuPage() {
                   </div>
 
                   <div className="col-span-2 text-center">
-                    <span className="text-lg font-black text-gray-900">{Number(item.total_score || 0).toFixed(1)}</span>
+                    <span className="text-lg font-black text-gray-900">{attemptScore(item).toFixed(1)}</span>
                     <span className="text-xs text-gray-400">/10</span>
                   </div>
 
