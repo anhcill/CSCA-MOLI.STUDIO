@@ -3,6 +3,32 @@ const bcrypt = require("bcrypt");
 const db = require("../config/database");
 const coinService = require("../services/coinService");
 
+const SUBJECT_ALIASES = {
+  toan: "MATH",
+  math: "MATH",
+  "vat-ly": "PHYSICS",
+  vatly: "PHYSICS",
+  physics: "PHYSICS",
+  hoa: "CHEMISTRY",
+  "hoa-hoc": "CHEMISTRY",
+  hoahoc: "CHEMISTRY",
+  chemistry: "CHEMISTRY",
+  "tiengtrung-xahoi": "CHINESE_SOC",
+  "tieng-trung-xh": "CHINESE_SOC",
+  "tieng-trung-xahoi": "CHINESE_SOC",
+  chinese_soc: "CHINESE_SOC",
+  "tiengtrung-tunhien": "CHINESE_SCI",
+  "tieng-trung-tn": "CHINESE_SCI",
+  "tieng-trung-tunhien": "CHINESE_SCI",
+  chinese_sci: "CHINESE_SCI",
+};
+
+function normalizeSubjectCode(value) {
+  const key = String(value || "").trim();
+  if (!key) return null;
+  return SUBJECT_ALIASES[key.toLowerCase()] || key.toUpperCase();
+}
+
 /**
  * @desc    Get user by ID
  * @route   GET /api/users/:id
@@ -189,14 +215,48 @@ exports.changePassword = async (req, res) => {
 exports.getUserRoadmap = async (req, res) => {
   try {
     const userId = req.user.id;
+    const subjectCode = normalizeSubjectCode(req.query.subject);
+    const params = [userId];
+    let subjectJoin = "";
+    let subjectWhere = "";
+
+    if (subjectCode) {
+      params.push(subjectCode);
+      subjectJoin = "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id";
+      subjectWhere = `AND s.code = $${params.length}`;
+    }
+
     // Get attempts statistics
     const examRes = await db.query(
-      `SELECT COUNT(*) as total_completed, ROUND(AVG(total_score)::numeric, 1) as avg_score
-       FROM exam_attempts WHERE user_id = $1 AND status = 'completed'`, [userId]
+      `SELECT
+         COUNT(*) as total_completed,
+         ROUND(AVG(ea.total_score)::numeric, 1) as avg_score,
+         MAX(ea.submit_time) as last_submit_time
+       FROM exam_attempts ea
+       ${subjectJoin}
+       WHERE ea.user_id = $1
+         AND ea.status = 'completed'
+         ${subjectWhere}`,
+      params,
+    );
+
+    const trendRes = await db.query(
+      `SELECT
+         ROUND(AVG(ea.total_score) FILTER (WHERE ea.submit_time >= NOW() - INTERVAL '7 days')::numeric, 1) as avg_7d,
+         ROUND(AVG(ea.total_score) FILTER (WHERE ea.submit_time < NOW() - INTERVAL '7 days' AND ea.submit_time >= NOW() - INTERVAL '30 days')::numeric, 1) as avg_prev
+       FROM exam_attempts ea
+       ${subjectJoin}
+       WHERE ea.user_id = $1
+         AND ea.status = 'completed'
+         ${subjectWhere}`,
+      params,
     );
     
     const attempts = parseInt(examRes.rows[0]?.total_completed) || 0;
     const avgScore = parseFloat(examRes.rows[0]?.avg_score) || 0;
+    const avg7d = parseFloat(trendRes.rows[0]?.avg_7d) || 0;
+    const avgPrev = parseFloat(trendRes.rows[0]?.avg_prev) || 0;
+    const weeklyChange = avg7d && avgPrev ? Math.round((avg7d - avgPrev) * 10) / 10 : 0;
 
     let rows = [];
     try {
@@ -250,7 +310,13 @@ exports.getUserRoadmap = async (req, res) => {
     res.json({
       success: true,
       data: {
-        stats: { attempts, avgScore },
+        stats: {
+          attempts,
+          avgScore,
+          subjectCode,
+          weeklyChange,
+          lastSubmitTime: examRes.rows[0]?.last_submit_time || null,
+        },
         milestones
       }
     });

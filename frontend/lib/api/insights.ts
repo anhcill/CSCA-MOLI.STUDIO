@@ -584,18 +584,20 @@ export interface UserBookmark {
   created_at: string;
 }
 
-export async function getLearningActionSummary(): Promise<LearningActionSummary> {
-  const res = await axios.get(`${BASE}/actions/summary`);
+export async function getLearningActionSummary(subject?: string): Promise<LearningActionSummary> {
+  const res = await axios.get(`${BASE}/actions/summary`, {
+    params: subject ? { subject } : undefined,
+  });
   return res.data.data;
 }
 
-export async function createWrongQuestionPractice(limit = 20): Promise<PracticeSetSummary> {
-  const res = await axios.post(`${BASE}/actions/practice/wrong`, { limit });
+export async function createWrongQuestionPractice(limit = 20, subject?: string): Promise<PracticeSetSummary> {
+  const res = await axios.post(`${BASE}/actions/practice/wrong`, { limit, subject });
   return res.data.data;
 }
 
-export async function createWeakTopicPractice(topicId?: number, limit = 20): Promise<PracticeSetSummary> {
-  const res = await axios.post(`${BASE}/actions/practice/weak-topic`, { topic_id: topicId, limit });
+export async function createWeakTopicPractice(topicId?: number, limit = 20, subject?: string): Promise<PracticeSetSummary> {
+  const res = await axios.post(`${BASE}/actions/practice/weak-topic`, { topic_id: topicId, limit, subject });
   return res.data.data;
 }
 

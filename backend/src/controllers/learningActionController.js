@@ -10,7 +10,7 @@ const handleError = (res, error, label) => {
 
 exports.getSummary = async (req, res) => {
   try {
-    const data = await learningActionService.getActionSummary(req.user.id);
+    const data = await learningActionService.getActionSummary(req.user.id, req.query.subject || null);
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error, "Learning action summary");
@@ -28,7 +28,7 @@ exports.getWrongQuestions = async (req, res) => {
 
 exports.createWrongPractice = async (req, res) => {
   try {
-    const data = await learningActionService.createWrongQuestionPractice(req.user.id, req.body.limit);
+    const data = await learningActionService.createWrongQuestionPractice(req.user.id, req.body.limit, req.body.subject || null);
     res.status(201).json({ success: true, data });
   } catch (error) {
     handleError(res, error, "Create wrong practice");
@@ -41,6 +41,7 @@ exports.createWeakTopicPractice = async (req, res) => {
       req.user.id,
       req.body.topic_id,
       req.body.limit,
+      req.body.subject || null,
     );
     res.status(201).json({ success: true, data });
   } catch (error) {
@@ -109,7 +110,7 @@ exports.saveQuestionNote = async (req, res) => {
 
 exports.getNextLessons = async (req, res) => {
   try {
-    const data = await learningActionService.getNextLessons(req.user.id);
+    const data = await learningActionService.getNextLessons(req.user.id, req.query.subject || null);
     res.json({ success: true, data });
   } catch (error) {
     handleError(res, error, "Next lessons");

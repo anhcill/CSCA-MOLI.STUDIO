@@ -3,10 +3,21 @@
 import Header from '@/components/layout/Header';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import { AIInsights } from '@/components/ai/AIInsights';
+import LearningActionsPanel from '@/components/insights/LearningActionsPanel';
+import {
+  getRecommendations,
+  getStudyPlan,
+  getTopicAnalysis,
+  type ExamRecommendation,
+  type StudyPlanData,
+  type StudyPlanDay,
+  type TopicAnalysisData,
+} from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
+import { getExamSubjectCode, getSubjectMeta, normalizeContentSubject } from '@/lib/utils/subjectScope';
 import Link from 'next/link';
-import { FiLock, FiStar, FiTarget, FiUnlock, FiTrendingUp } from 'react-icons/fi';
-import { useState, useEffect } from 'react';
+import { FiBookOpen, FiCheckCircle, FiClock, FiLock, FiPlayCircle, FiRefreshCw, FiStar, FiTarget, FiUnlock, FiTrendingUp, FiZap } from 'react-icons/fi';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import axiosInstance from '@/lib/utils/axios';
 
@@ -14,27 +25,52 @@ export default function LoTrinhPage() {
   const { isAuthenticated } = useAuthStore();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
+  const normalizedSubject = normalizeContentSubject(subjectParam);
+  const subjectMeta = getSubjectMeta(normalizedSubject);
+  const subjectCode = normalizedSubject ? getExamSubjectCode(normalizedSubject) : undefined;
   const [mounted, setMounted] = useState(false);
 
   const [roadmapMilestones, setRoadmapMilestones] = useState<any[]>([]);
+  const [roadmapStats, setRoadmapStats] = useState<any>(null);
+  const [studyPlan, setStudyPlan] = useState<StudyPlanData | null>(null);
+  const [topicData, setTopicData] = useState<TopicAnalysisData | null>(null);
+  const [recommendations, setRecommendations] = useState<ExamRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
     if (isAuthenticated) {
-      axiosInstance.get('/users/roadmap')
-        .then(res => {
-          if (res.data?.success) {
-            setRoadmapMilestones(res.data.data.milestones);
-          }
-        })
-        .finally(() => {
-          setLoading(false);
-        });
+      loadRoadmapData();
     } else {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, subjectCode]);
+
+  const loadRoadmapData = async (forcePlan = false) => {
+    try {
+      setLoading(true);
+      const [roadmapRes, planRes, topicsRes, recRes] = await Promise.allSettled([
+        axiosInstance.get('/users/roadmap', { params: subjectCode ? { subject: subjectCode } : undefined }),
+        getStudyPlan(subjectCode, forcePlan),
+        getTopicAnalysis(subjectCode),
+        getRecommendations(),
+      ]);
+
+      if (roadmapRes.status === 'fulfilled' && roadmapRes.value.data?.success) {
+        setRoadmapMilestones(roadmapRes.value.data.data.milestones || []);
+        setRoadmapStats(roadmapRes.value.data.data.stats || null);
+      }
+      if (planRes.status === 'fulfilled') setStudyPlan(planRes.value);
+      if (topicsRes.status === 'fulfilled') setTopicData(topicsRes.value);
+      if (recRes.status === 'fulfilled') {
+        setRecommendations(
+          (recRes.value.recommendations || []).filter((item) => !subjectCode || item.subjectCode === subjectCode).slice(0, 3),
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const IconMap: any = {
     FaFlagCheckered: FiUnlock,
@@ -110,7 +146,17 @@ export default function LoTrinhPage() {
                 </div>
               </section>
             )}
-            <AIInsights />
+            <RoadmapFocusPanel
+              subjectLabel={subjectMeta?.label || 'môn này'}
+              stats={roadmapStats}
+              studyPlan={studyPlan}
+              topicData={topicData}
+              recommendations={recommendations}
+              loading={loading}
+              onRefresh={() => loadRoadmapData(true)}
+            />
+            <LearningActionsPanel subjectCode={subjectCode} />
+            <AIInsights subjectCode={subjectCode} />
           </div>
         )}
       </SubjectStudyShell>
@@ -240,14 +286,193 @@ export default function LoTrinhPage() {
                 </div>
 
                 {/* 2. Original AI Insights Dashboard */}
-                <div>
-                  <AIInsights />
-                </div>
+                <RoadmapFocusPanel
+                  subjectLabel="tất cả môn"
+                  stats={roadmapStats}
+                  studyPlan={studyPlan}
+                  topicData={topicData}
+                  recommendations={recommendations}
+                  loading={loading}
+                  onRefresh={() => loadRoadmapData(true)}
+                />
+                <LearningActionsPanel subjectCode={subjectCode} />
+                <AIInsights subjectCode={subjectCode} />
               </div>
             )}
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function RoadmapFocusPanel({
+  subjectLabel,
+  stats,
+  studyPlan,
+  topicData,
+  recommendations,
+  loading,
+  onRefresh,
+}: {
+  subjectLabel: string;
+  stats: any;
+  studyPlan: StudyPlanData | null;
+  topicData: TopicAnalysisData | null;
+  recommendations: ExamRecommendation[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const today = studyPlan?.days?.find((day) => day.isToday) || studyPlan?.days?.[0];
+  const weakTopics = topicData?.weaknesses?.slice(0, 4) || [];
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-black text-slate-900">
+            <FiZap className="text-violet-600" /> Lộ trình cải thiện hằng ngày
+          </h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            Tổng hợp riêng cho {subjectLabel}: tiến độ, việc hôm nay, chủ đề yếu và đề nên làm tiếp.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex w-fit items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"
+        >
+          <FiRefreshCw className={loading ? 'animate-spin' : ''} /> Tạo lại kế hoạch
+        </button>
+      </div>
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <MetricCard icon={<FiCheckCircle />} label="Đề đã làm" value={stats?.attempts || 0} />
+        <MetricCard icon={<FiTrendingUp />} label="Điểm TB" value={stats?.avgScore ? `${stats.avgScore}` : '--'} />
+        <MetricCard
+          icon={<FiClock />}
+          label="7 ngày gần đây"
+          value={stats?.weeklyChange ? `${stats.weeklyChange > 0 ? '+' : ''}${stats.weeklyChange}` : '--'}
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
+        <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-black text-violet-800">
+            <FiTarget /> Hôm nay cần làm
+          </div>
+          {today ? (
+            <div>
+              <h3 className="font-black text-slate-900">{today.title}</h3>
+              <p className="mt-1 text-sm font-medium text-slate-500">{today.description}</p>
+              <ul className="mt-3 space-y-2">
+                {(today.tasks || []).slice(0, 4).map((task) => (
+                  <li key={task} className="flex gap-2 text-sm font-medium text-slate-600">
+                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                    {task}
+                  </li>
+                ))}
+              </ul>
+              {today.targetExam && (
+                <Link
+                  href={`/exam/${today.targetExam.id}`}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white"
+                >
+                  <FiPlayCircle /> Làm đề gợi ý
+                </Link>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-slate-500">Làm ít nhất 1 đề để hệ thống tạo việc học hôm nay.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-100 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-black text-slate-900">
+              <FiBookOpen className="text-indigo-600" /> Kế hoạch 7 ngày
+            </h3>
+            {studyPlan && <span className="text-xs font-bold text-slate-400">{studyPlan.startsAt} - {studyPlan.endsAt}</span>}
+          </div>
+          {studyPlan?.days?.length ? (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+              {studyPlan.days.map((day) => <MiniStudyDay key={day.day} day={day} />)}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-slate-500">Chưa có kế hoạch 7 ngày.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
+          <h3 className="mb-3 text-sm font-black text-amber-900">Chủ đề yếu cần ưu tiên</h3>
+          {weakTopics.length ? (
+            <div className="space-y-2">
+              {weakTopics.map((topic) => (
+                <div key={topic.topicId} className="rounded-xl bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-black text-slate-900">{topic.topicName}</span>
+                    <span className="text-xs font-black text-rose-600">{Math.round(topic.errorRate)}% sai</span>
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{topic.advice || 'Ôn lại lý thuyết và luyện thêm câu cùng chủ đề.'}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-slate-500">Chưa đủ dữ liệu chủ đề yếu cho môn này.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+          <h3 className="mb-3 text-sm font-black text-indigo-900">Đề nên làm tiếp</h3>
+          {recommendations.length ? (
+            <div className="space-y-2">
+              {recommendations.map((exam) => (
+                <Link key={exam.examId} href={`/exam/${exam.examId}`} className="block rounded-xl bg-white p-3 transition hover:-translate-y-0.5 hover:shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-black text-slate-900">{exam.examTitle}</span>
+                    <span className="text-xs font-black text-indigo-600">{exam.totalQuestions} câu</span>
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{exam.reason?.text}</p>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-slate-500">Chưa có đề gợi ý riêng cho môn này.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-violet-600 shadow-sm">{icon}</div>
+      <div className="text-2xl font-black text-slate-900">{value}</div>
+      <div className="text-xs font-bold text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+function MiniStudyDay({ day }: { day: StudyPlanDay }) {
+  const tone = day.isToday
+    ? 'border-violet-300 bg-violet-50 text-violet-800'
+    : day.isPast
+    ? 'border-slate-100 bg-slate-50 text-slate-400'
+    : 'border-slate-100 bg-white text-slate-700';
+
+  return (
+    <div className={`min-h-[118px] rounded-xl border p-3 ${tone}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-black">Ngày {day.day}</span>
+        {day.isToday && <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-black text-white">Hôm nay</span>}
+      </div>
+      <p className="line-clamp-2 text-xs font-black leading-snug">{day.title}</p>
+      <p className="mt-2 text-[11px] font-medium opacity-70">{day.estimatedMinutes} phút</p>
     </div>
   );
 }

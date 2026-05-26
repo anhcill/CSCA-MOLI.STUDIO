@@ -712,7 +712,8 @@ async function recommendNextExams(userId) {
         s.name as subject_name
       FROM exams e
       JOIN subjects s ON e.subject_id = s.id
-      WHERE e.is_published = true
+      WHERE e.status = 'published'
+        AND e.deleted_at IS NULL
         AND ($2 = true OR e.is_premium = false)
         AND e.id NOT IN (
           SELECT ea.exam_id
@@ -905,7 +906,9 @@ async function generateStudyPlan(userId, subjectCode = null) {
         SELECT e.id, e.title, e.code, s.name as subject_name
         FROM exams e
         JOIN subjects s ON e.subject_id = s.id
-        WHERE s.code = $2 AND e.is_published = true
+        WHERE s.code = $2
+          AND e.status = 'published'
+          AND e.deleted_at IS NULL
           AND e.id NOT IN (
             SELECT exam_id FROM exam_attempts
             WHERE user_id = $1 AND status = 'completed'
@@ -917,7 +920,8 @@ async function generateStudyPlan(userId, subjectCode = null) {
         SELECT e.id, e.title, e.code, s.name as subject_name
         FROM exams e
         JOIN subjects s ON e.subject_id = s.id
-        WHERE e.is_published = true
+        WHERE e.status = 'published'
+          AND e.deleted_at IS NULL
           AND e.id NOT IN (
             SELECT exam_id FROM exam_attempts
             WHERE user_id = $1 AND status = 'completed'

@@ -15,7 +15,7 @@ import {
 
 const num = (value?: number) => Number(value || 0).toLocaleString('vi-VN');
 
-export default function LearningActionsPanel() {
+export default function LearningActionsPanel({ subjectCode }: { subjectCode?: string } = {}) {
   const router = useRouter();
   const [summary, setSummary] = useState<LearningActionSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +26,7 @@ export default function LearningActionsPanel() {
     try {
       setLoading(true);
       setError('');
-      const data = await getLearningActionSummary();
+      const data = await getLearningActionSummary(subjectCode);
       setSummary(data);
     } catch {
       setError('Không tải được luồng hành động học tập.');
@@ -37,14 +37,14 @@ export default function LearningActionsPanel() {
 
   useEffect(() => {
     loadSummary();
-  }, []);
+  }, [subjectCode]);
 
   const openPractice = async (type: 'wrong' | 'weak', topic?: WeakTopicAction) => {
     try {
       setCreating(type === 'wrong' ? 'wrong' : `weak-${topic?.topic_id || 'auto'}`);
       const set = type === 'wrong'
-        ? await createWrongQuestionPractice(20)
-        : await createWeakTopicPractice(topic?.topic_id, 20);
+        ? await createWrongQuestionPractice(20, subjectCode)
+        : await createWeakTopicPractice(topic?.topic_id, 20, subjectCode);
       router.push(`/practice-sets/${set.id}`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Chưa tạo được bộ luyện tập.');

@@ -804,7 +804,7 @@ async function recommendNextExam(req, res) {
     // Lấy danh sách đề thi
     const exams = await db.query(
       `SELECT e.id, e.title, e.title_cn, e.difficulty_level, e.total_questions,
-              e.duration, e.status, e.is_published, s.name as subject_name
+              e.duration, e.status, s.name as subject_name
        FROM exams e
        LEFT JOIN subjects s ON e.subject_id = s.id
        WHERE e.status = 'published'

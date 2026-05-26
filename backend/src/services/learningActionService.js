@@ -13,7 +13,11 @@ const normalizeEntityType = (type) => {
   throw error;
 };
 
-async function getWeakTopics(userId, limit = 5) {
+async function getWeakTopics(userId, limit = 5, subjectCode = null) {
+  const params = [userId, limit];
+  const subjectFilter = subjectCode ? "AND s.code = $3" : "";
+  if (subjectCode) params.push(subjectCode);
+
   const result = await db.query(
     `
       SELECT
@@ -33,15 +37,21 @@ async function getWeakTopics(userId, limit = 5) {
       WHERE uts.user_id = $1
         AND uts.total_questions >= 2
         AND uts.error_percentage >= 35
+        ${subjectFilter}
       ORDER BY uts.error_percentage DESC, uts.incorrect_answers DESC
       LIMIT $2
     `,
-    [userId, limit],
+    params,
   );
   return result.rows;
 }
 
-async function getWrongQuestionIds(userId, limit = 20) {
+async function getWrongQuestionIds(userId, limit = 20, subjectCode = null) {
+  const params = [userId, limit];
+  const subjectJoin = subjectCode ? "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id" : "";
+  const subjectFilter = subjectCode ? "AND s.code = $3" : "";
+  if (subjectCode) params.push(subjectCode);
+
   const result = await db.query(
     `
       SELECT DISTINCT ON (q.id)
@@ -49,15 +59,17 @@ async function getWrongQuestionIds(userId, limit = 20) {
         MAX(ea.submit_time) OVER (PARTITION BY q.id) AS last_seen_at
       FROM user_answers ua
       JOIN exam_attempts ea ON ea.id = ua.attempt_id
+      ${subjectJoin}
       JOIN questions q ON q.id = ua.question_id
       WHERE ea.user_id = $1
         AND ea.status = 'completed'
         AND ua.is_correct = FALSE
         AND q.deleted_at IS NULL
+        ${subjectFilter}
       ORDER BY q.id, last_seen_at DESC
       LIMIT $2
     `,
-    [userId, limit],
+    params,
   );
   return result.rows.map((row) => Number(row.id));
 }
@@ -163,8 +175,8 @@ async function getQuestionDetails(userId, questionIds) {
   return result.rows;
 }
 
-async function createWrongQuestionPractice(userId, limit = 20) {
-  const ids = await getWrongQuestionIds(userId, toLimit(limit));
+async function createWrongQuestionPractice(userId, limit = 20, subjectCode = null) {
+  const ids = await getWrongQuestionIds(userId, toLimit(limit), subjectCode);
   if (!ids.length) {
     const error = new Error("No wrong questions found");
     error.statusCode = 404;
@@ -187,8 +199,8 @@ async function createWrongQuestionPractice(userId, limit = 20) {
   return result.rows[0];
 }
 
-async function createWeakTopicPractice(userId, topicId, limit = 20) {
-  const weakTopics = await getWeakTopics(userId, 20);
+async function createWeakTopicPractice(userId, topicId, limit = 20, subjectCode = null) {
+  const weakTopics = await getWeakTopics(userId, 20, subjectCode);
   const target = weakTopics.find((topic) => Number(topic.topic_id) === Number(topicId)) || weakTopics[0];
   if (!target) {
     const error = new Error("No weak topic found");
@@ -343,8 +355,8 @@ async function listQuestionNotes(userId) {
   return result.rows;
 }
 
-async function getNextLessons(userId) {
-  const weakTopics = await getWeakTopics(userId, 5);
+async function getNextLessons(userId, subjectCode = null) {
+  const weakTopics = await getWeakTopics(userId, 5, subjectCode);
   if (!weakTopics.length) return [];
 
   const params = [weakTopics.map((topic) => topic.subject_code), weakTopics.map((topic) => topic.topic_name)];
@@ -384,25 +396,36 @@ async function getNextLessons(userId) {
   }));
 }
 
-async function getActionSummary(userId) {
+async function getActionSummary(userId, subjectCode = null) {
+  const wrongParams = [userId];
+  let subjectJoin = "";
+  let subjectFilter = "";
+  if (subjectCode) {
+    wrongParams.push(subjectCode);
+    subjectJoin = "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id";
+    subjectFilter = `AND s.code = $${wrongParams.length}`;
+  }
+
   const [weakTopics, wrongCount, bookmarks, notes, nextLessons] = await Promise.all([
-    getWeakTopics(userId, 5),
+    getWeakTopics(userId, 5, subjectCode),
     db.query(
       `
         SELECT COUNT(DISTINCT ua.question_id)::int AS count
         FROM user_answers ua
         JOIN exam_attempts ea ON ea.id = ua.attempt_id
+        ${subjectJoin}
         JOIN questions q ON q.id = ua.question_id
         WHERE ea.user_id = $1
           AND ea.status = 'completed'
           AND ua.is_correct = FALSE
           AND q.deleted_at IS NULL
+          ${subjectFilter}
       `,
-      [userId],
+      wrongParams,
     ),
     db.query(`SELECT COUNT(*)::int AS count FROM user_bookmarks WHERE user_id = $1`, [userId]),
     db.query(`SELECT COUNT(*)::int AS count FROM user_question_notes WHERE user_id = $1`, [userId]),
-    getNextLessons(userId),
+    getNextLessons(userId, subjectCode),
   ]);
 
   return {
