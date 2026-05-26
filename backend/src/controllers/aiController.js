@@ -917,7 +917,71 @@ async function analyzeUserPerformance(req, res) {
       return res.json({ success: true, hasEnoughData: false, message: 'Chưa có bài thi nào.' });
     }
 
-    const fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, []);
+    let fullAnalysis;
+    try {
+      fullAnalysis = await aiService.generateFullAnalysis(attempts.rows, []);
+    } catch (analysisError) {
+      console.error('generateFullAnalysis fallback:', analysisError.message);
+      const subjects = new Map();
+      attempts.rows.forEach((attempt) => {
+        const name = attempt.subject_name || 'Tổng hợp';
+        const score = attempt.total_questions > 0
+          ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
+          : Math.round(Number(attempt.total_score || 0) * 10);
+        const current = subjects.get(name) || { subject: name, scores: [], count: 0 };
+        current.scores.push(score);
+        current.count += 1;
+        subjects.set(name, current);
+      });
+      const subjectStats = [...subjects.values()].map((item) => ({
+        subject: item.subject,
+        average: Math.round(item.scores.reduce((sum, score) => sum + score, 0) / item.scores.length),
+        count: item.count,
+      }));
+      const weaknesses = subjectStats
+        .filter((item) => item.average < 75)
+        .map((item) => ({
+          subject: item.subject,
+          percentage: item.average,
+          advice: 'Ôn lại lý thuyết, làm thêm bài tập cùng môn và xem kỹ các câu sai gần đây.',
+        }));
+      const strengths = subjectStats
+        .filter((item) => item.average >= 75)
+        .map((item) => ({
+          subject: item.subject,
+          percentage: item.average,
+          praise: 'Bạn đang làm tốt phần này, hãy duy trì nhịp luyện đề.',
+        }));
+      fullAnalysis = {
+        totalExams: attempts.rows.length,
+        subjectStats,
+        weaknesses,
+        strengths,
+        suggestions: weaknesses.length
+          ? weaknesses.slice(0, 3).map((item) => `Ưu tiên cải thiện ${item.subject} trong 3 ngày tới.`)
+          : ['Duy trì luyện đề đều đặn và thử các đề khó hơn.'],
+        roadmap: [
+          {
+            phase: 1,
+            days: '1-3',
+            title: 'Sửa lỗi sai gần đây',
+            description: 'Tập trung xem lại câu sai và ghi chú nguyên nhân.',
+            tasks: ['Xem lại câu sai', 'Ghi chú lỗi lặp lại', 'Làm lại 10 câu liên quan'],
+          },
+          {
+            phase: 2,
+            days: '4-7',
+            title: 'Luyện đề củng cố',
+            description: 'Làm đề mới để kiểm tra tiến bộ sau khi ôn.',
+            tasks: ['Làm 1 đề mô phỏng', 'So sánh điểm với lần trước', 'Cập nhật kế hoạch học'],
+          },
+        ],
+        recommendedMaterials: [],
+        analyzedAt: new Date().toISOString(),
+        fallback: true,
+        fallbackReason: analysisError.message,
+      };
+    }
 
     if (!isVip) {
       chargedLedger = await coinService.debit(userId, 50, 'ai_analysis', {

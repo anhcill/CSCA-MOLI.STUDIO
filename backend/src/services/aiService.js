@@ -1062,11 +1062,21 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
   const topics = topicResult.status === 'fulfilled' ? topicResult.value : null;
   const progress = progressResult.status === 'fulfilled' ? progressResult.value : null;
 
-  const latestAttempt = examAttempts?.[examAttempts.length - 1];
-  const recs = await getPracticeRecommendations(
-    topics?.weaknesses || [],
-    allExams,
-  );
+  const latestAttempt = examAttempts?.[0] || examAttempts?.[examAttempts.length - 1];
+  const recResult = await Promise.allSettled([
+    getPracticeRecommendations(topics?.weaknesses || [], allExams),
+  ]);
+  const recs = recResult[0].status === 'fulfilled'
+    ? recResult[0].value
+    : {
+        recommendations: (topics?.weaknesses || []).slice(0, 3).map((w, i) => ({
+          title: `Ôn luyện: ${w.name || w.subject || 'chủ đề yếu'}`,
+          description: w.advice || 'Ôn lại lý thuyết, làm thêm bài tập và xem lại lỗi sai gần đây.',
+          priority: i === 0 ? 'high' : 'medium',
+          actionSteps: ['Đọc lại lý thuyết', 'Làm 10 câu liên quan', 'Ghi chú lỗi sai'],
+        })),
+        studyPlan: 'Học đều 30 phút mỗi ngày và ưu tiên sửa các lỗi sai gần đây.',
+      };
   const weaknesses = (topics?.weaknesses || []).map((w) => ({
     subject: w.subject || w.name || 'Chủ đề cần cải thiện',
     percentage: Number(w.percentage ?? w.average ?? 0),
@@ -1110,7 +1120,11 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
         : parseFloat(latestAttempt?.total_score) || 60,
       subjectName: latestAttempt?.subject_name,
       allExams,
-    }),
+    }).catch(() => ({
+      recommendedExam: null,
+      alternativeExams: [],
+      studyAdvice: 'Hãy làm lại các câu sai gần đây và chọn một đề chưa làm để tiếp tục luyện.',
+    })),
     generatedAt: new Date().toISOString(),
   };
 }
