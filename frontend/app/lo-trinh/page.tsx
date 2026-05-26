@@ -171,11 +171,8 @@ export default function LoTrinhPage() {
 
       <Header />
 
-      <main className="container mx-auto px-4 md:px-6 py-6 md:py-8 max-w-[1400px] relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Main Content Area */}
-          <div className="lg:col-span-8 lg:col-start-3 space-y-8">
+      <main className="mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 md:py-8 relative z-10">
+        <div className="space-y-8">
             
             {/* Hero Banner Roadmap */}
             <div className="bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-800 rounded-[2rem] p-8 md:p-10 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
@@ -227,11 +224,11 @@ export default function LoTrinhPage() {
               <div className="space-y-12">
                 
                 {/* 1. Milestone Timeline UI */}
-                <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm p-8 max-w-3xl mx-auto">
+                <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm p-8">
                   <h3 className="text-xl font-bold border-b border-gray-100 pb-4 mb-8 text-gray-800">
                     Sống sót chặng đường
                   </h3>
-                  <div className="relative pl-6 md:pl-8 border-l-2 border-indigo-100 space-y-10">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     
                     {roadmapMilestones.map((ms, i) => {
                       const isComplete = ms.status === 'completed';
@@ -240,31 +237,27 @@ export default function LoTrinhPage() {
                       const Icon = IconMap[ms.icon] || FiLock;
                       
                       return (
-                        <div key={ms.id} className="relative group">
-                          {/* Circle dot on line */}
-                          <div className={`absolute -left-[35px] md:-left-[43px] w-8 h-8 md:w-10 md:h-10 rounded-full border-4 border-white flex items-center justify-center shadow-sm z-10 transition-colors duration-300 ${isLocked ? 'bg-gray-200' : ms.color}`}>
-                             <Icon size={14} className={isLocked ? 'text-gray-400' : 'text-white'} />
-                             
-                             {/* Ping effect for current stage */}
-                             {isCurrent && (
-                                <span className="absolute w-full h-full rounded-full bg-indigo-500 opacity-40 animate-ping" />
-                             )}
-                          </div>
-                          
-                          {/* Content Bubble */}
-                          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
+                        <div key={ms.id} className={`group relative min-h-[210px] rounded-2xl border p-5 transition-all duration-300 ${
                             isCurrent 
-                              ? 'bg-gradient-to-r from-indigo-50 to-white hover:shadow-lg border-indigo-200 -translate-y-1' 
+                              ? 'bg-gradient-to-br from-indigo-50 to-white hover:shadow-lg border-indigo-200'
                               : isComplete 
                                 ? 'bg-white border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/10'
                                 : 'bg-gray-50 border-transparent opacity-60 grayscale hover:grayscale-0'
                           }`}>
+                          <div className="mb-4 flex items-center justify-between gap-3">
+                            <div className={`relative flex h-11 w-11 items-center justify-center rounded-2xl shadow-sm transition-colors duration-300 ${isLocked ? 'bg-gray-200' : ms.color}`}>
+                              <Icon size={16} className={isLocked ? 'text-gray-400' : 'text-white'} />
+                              {isCurrent && (
+                                <span className="absolute h-full w-full rounded-2xl bg-indigo-500 opacity-30 animate-ping" />
+                              )}
+                            </div>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide ${
+                              isComplete ? 'bg-emerald-100 text-emerald-800' : isCurrent ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              Chặng {i + 1}
+                            </span>
+                          </div>
                             <div className="flex items-center gap-3 mb-1">
-                              <span className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide ${
-                                isComplete ? 'bg-emerald-100 text-emerald-800' : isCurrent ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-600'
-                              }`}>
-                                Chặng {i + 1}
-                              </span>
                               <h4 className={`text-lg font-bold ${isLocked ? 'text-gray-500' : 'text-gray-900'}`}>
                                 {ms.title}
                               </h4>
@@ -278,7 +271,6 @@ export default function LoTrinhPage() {
                                 Tiếp tục học
                               </button>
                             )}
-                          </div>
                         </div>
                       );
                     })}
@@ -299,7 +291,6 @@ export default function LoTrinhPage() {
                 <AIInsights subjectCode={subjectCode} />
               </div>
             )}
-          </div>
         </div>
       </main>
     </div>
