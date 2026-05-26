@@ -975,7 +975,10 @@ async function refreshAnalysis(req, res) {
     }
     userCooldowns.set(userId, Date.now() + REFRESH_COOLDOWN_MS);
     cache.del(`ai:full_analysis:${userId}`);
-    await db.query(`DELETE FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis' AND created_at < NOW() - INTERVAL '30 minutes'`, [userId]);
+    await db.query(
+      `DELETE FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis'`,
+      [userId],
+    );
     await analyzeUserPerformance(req, res);
   } catch (error) {
     console.error('refreshAnalysis error:', error);

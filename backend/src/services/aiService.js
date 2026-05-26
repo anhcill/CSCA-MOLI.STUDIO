@@ -1067,8 +1067,40 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
     topics?.weaknesses || [],
     allExams,
   );
+  const weaknesses = (topics?.weaknesses || []).map((w) => ({
+    subject: w.subject || w.name || 'Chủ đề cần cải thiện',
+    percentage: Number(w.percentage ?? w.average ?? 0),
+    advice: w.advice || 'Cần ôn luyện thêm phần này.',
+  }));
+  const strengths = (topics?.strengths || []).map((s) => ({
+    subject: s.subject || s.name || 'Điểm mạnh',
+    percentage: Number(s.percentage ?? s.average ?? 0),
+    praise: s.praise || s.advice || 'Bạn đang làm tốt phần này.',
+  }));
+  const roadmap = (recs?.recommendations || []).slice(0, 5).map((r, i) => ({
+    phase: i + 1,
+    days: `${i * 3 + 1}-${i * 3 + 3}`,
+    title: r.title || 'Ôn luyện cá nhân',
+    description: r.description || r.reason || 'Tiếp tục luyện tập theo điểm yếu đã phát hiện.',
+    tasks: r.actionSteps || r.tasks || ['Đọc lại lý thuyết', 'Làm bài tập liên quan', 'Review lỗi sai'],
+  }));
+  const suggestions = [
+    ...(topics?.topRecommendations || []),
+    ...(recs?.recommendations || []).map((r) => r.description || r.title).filter(Boolean),
+  ].slice(0, 5);
 
   return {
+    // Legacy shape used by AIInsights UI.
+    totalExams: examAttempts?.length || 0,
+    subjectStats: topics?.subjects || [],
+    weaknesses,
+    strengths,
+    suggestions,
+    roadmap,
+    recommendedMaterials: [],
+    analyzedAt: new Date().toISOString(),
+
+    // Structured shape used by newer consumers.
     topics,
     progress,
     recommendations: recs,
