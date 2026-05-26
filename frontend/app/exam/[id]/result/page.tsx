@@ -789,10 +789,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center gap-3 py-8">
-              <div className="animate-spin rounded-full h-10 w-10 border-3 border-purple-200 border-t-purple-600" />
-              <p className="text-gray-500 text-sm">AI đang phân tích câu này...</p>
-            </div>
+            <QuestionAnalysisLoading />
           ) : explanation?.success ? (
             <div className="space-y-3">
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
@@ -828,6 +825,36 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function QuestionAnalysisLoading() {
+  const steps = ['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích'];
+  return (
+    <div className="py-8">
+      <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-purple-200 border-t-purple-600" />
+      </div>
+      <p className="text-center text-sm font-semibold text-gray-700">
+        AI đang phân tích câu này<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
+      </p>
+      <div className="mx-auto mt-5 max-w-sm space-y-2">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/60 px-3 py-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-black text-purple-600 shadow-sm">
+              {index + 1}
+            </span>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-purple-100">
+              <div
+                className="h-full rounded-full bg-purple-500"
+                style={{ width: `${35 + index * 25}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
+              />
+            </div>
+            <span className="w-24 text-xs font-bold text-purple-700">{step}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
