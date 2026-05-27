@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { FiCalendar, FiClock, FiTag, FiBookOpen, FiArrowRight } from 'react-icons/fi';
-import { formatDate } from './blogData';
+import { formatDate } from './utils';
 
 interface BlogPost {
   slug: string;
