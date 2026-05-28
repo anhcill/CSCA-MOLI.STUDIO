@@ -8,6 +8,7 @@ const AdminExamController = require("../controllers/adminExamController");
 const adminFillBlankGroupController = require("../controllers/adminFillBlankGroupController");
 const officialExamController = require("../controllers/officialExamController");
 const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
+const uploadPdf = require("../middleware/pdfUploadMiddleware");
 
 // All routes require authentication and exam management permission
 router.use(authenticate);
@@ -16,6 +17,7 @@ router.use(authorizePermission("exams.manage"));
 // Counts (place before /:examId to avoid route conflict) — no rate limit needed
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
+router.post("/import/pdf/preview", examWriteLimiter, uploadPdf.single("pdf"), AdminExamController.previewPdfImport);
 
 // Exam CRUD — rate limited for write operations
 router.get("/", AdminExamController.getAllExams);
@@ -32,6 +34,7 @@ router.post("/:examId/questions/insert", examWriteLimiter, AdminExamController.i
 
 // Question CRUD — all write operations are rate limited
 router.post("/:examId/questions", examWriteLimiter, AdminExamController.addQuestion);
+router.post("/:examId/questions/bulk-import", examWriteLimiter, AdminExamController.bulkImportQuestions);
 router.put("/questions/:questionId", examWriteLimiter, AdminExamController.updateQuestion);
 router.delete("/questions/:questionId", examWriteLimiter, AdminExamController.deleteQuestion);
 

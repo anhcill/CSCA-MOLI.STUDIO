@@ -39,6 +39,67 @@ export interface QuestionData {
     subQuestionNumber?: number;       // Số câu con (34, 35, 36...)
 }
 
+export interface ImportedQuestionData extends QuestionData {
+    itemType?: 'single_choice';
+    needsImage?: boolean;
+    imageHint?: string;
+    reviewNotes?: string;
+    importIndex?: number;
+}
+
+export interface ImportedReadingGroupData {
+    itemType: 'reading_group';
+    passageText: string;
+    passageImageUrl?: string;
+    subQuestions: ImportedQuestionData[];
+    needsImage?: boolean;
+    imageHint?: string;
+    reviewNotes?: string;
+    importIndex?: number;
+}
+
+export interface ImportedFillBlankGroupData {
+    itemType: 'fill_blank_group';
+    clozeMode: 'sentences' | 'passage';
+    passageText: string;
+    passageImageUrl?: string;
+    linkedOptions: LinkedOption[];
+    subItems: {
+        questionText: string;
+        questionTextCn?: string;
+        points?: number;
+        explanation?: string;
+        explanationCn?: string;
+        correctAnswerKey: string;
+        difficulty?: string;
+        subQuestionNumber?: number;
+    }[];
+    needsImage?: boolean;
+    imageHint?: string;
+    reviewNotes?: string;
+    importIndex?: number;
+}
+
+export type ImportedExamItem = ImportedQuestionData | ImportedReadingGroupData | ImportedFillBlankGroupData;
+
+export interface PdfImportPreview {
+    exam?: {
+        title?: string;
+        duration?: number;
+        totalPoints?: number;
+    };
+    items: ImportedExamItem[];
+    questions: ImportedQuestionData[];
+    totalQuestionCount?: number;
+    warnings?: string[];
+    source?: {
+        fileName?: string;
+        pages?: number | null;
+        textLength?: number;
+        truncated?: boolean;
+    };
+}
+
 // LinkedOption cho fill_blank_pool (A-F)
 export interface LinkedOption {
     key: string;      // 'A', 'B', 'C', 'D', 'E', 'F'
@@ -83,6 +144,20 @@ export const examAdminApi = {
     // Add question to exam (append to end)
     addQuestion: async (examId: number, data: QuestionData) => {
         const response = await axios.post(`/admin/exams/${examId}/questions`, data);
+        return response.data;
+    },
+
+    // Preview questions from a text PDF before saving
+    previewPdfImport: async (file: File): Promise<PdfImportPreview> => {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const response = await axios.post('/admin/exams/import/pdf/preview', formData);
+        return response.data;
+    },
+
+    // Save reviewed imported questions to an exam
+    bulkImportQuestions: async (examId: number, items: ImportedExamItem[]) => {
+        const response = await axios.post(`/admin/exams/${examId}/questions/bulk-import`, { items });
         return response.data;
     },
 

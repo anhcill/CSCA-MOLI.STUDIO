@@ -1,6 +1,8 @@
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
+const pdfParse = require("pdf-parse");
+const aiService = require("../services/aiService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -141,7 +143,921 @@ async function shiftQuestionNumbers(client, examId, fromPosition, delta) {
   );
 }
 
+const PDF_IMPORT_TEXT_LIMIT = 60000;
+const PDF_IMPORT_MAX_QUESTIONS = 120;
+const PDF_IMPORT_IMAGE_HINT_RE = /(hinh|anh|bieu do|do thi|so do|figure|image|diagram|chart|map|graph|picture|看图|图|图片|图表)/i;
+
+function stripAiNoise(raw) {
+  return String(raw || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+}
+
+function findBalancedJsonObject(raw) {
+  const text = stripAiNoise(raw);
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let lastObject = "";
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = inString;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      if (depth === 0) start = i;
+      depth++;
+      continue;
+    }
+
+    if (char === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        lastObject = text.slice(start, i + 1);
+        start = -1;
+      }
+    }
+  }
+
+  return lastObject;
+}
+
+function parseAiJsonObject(raw) {
+  const fencedBlocks = [...String(raw || "").matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
+    .map((match) => match[1].trim());
+
+  for (let i = fencedBlocks.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(fencedBlocks[i]);
+      if (parsed && typeof parsed === "object" && (Array.isArray(parsed.items) || Array.isArray(parsed.questions) || parsed.exam)) {
+        return parsed;
+      }
+    } catch (error) {
+      // Try the balanced-object fallback below.
+    }
+  }
+
+  const json = findBalancedJsonObject(raw);
+  if (!json) return null;
+  try {
+    return JSON.parse(json);
+  } catch (error) {
+    return null;
+  }
+}
+
+function stringValue(value, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim();
+}
+
+function normalizeImportAnswers(rawAnswers) {
+  const source = rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers)
+    ? Object.keys(rawAnswers).sort().map((key) => rawAnswers[key])
+    : rawAnswers;
+
+  if (!Array.isArray(source)) return [];
+
+  return source
+    .slice(0, 8)
+    .map((answer) => {
+      if (typeof answer === "string") {
+        return { text: answer.trim(), textCn: "", imageUrl: "" };
+      }
+
+      return {
+        text: stringValue(answer?.text || answer?.answerText || answer?.content),
+        textCn: stringValue(answer?.textCn || answer?.answerTextCn || answer?.contentCn),
+        imageUrl: stringValue(answer?.imageUrl),
+        isCorrect: answer?.isCorrect === true,
+      };
+    })
+    .filter((answer) => answer.text || answer.textCn);
+}
+
+function normalizeCorrectAnswer(rawQuestion, answers) {
+  const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const raw = stringValue(
+    rawQuestion.correctAnswer ||
+    rawQuestion.correct_answer ||
+    rawQuestion.answer ||
+    rawQuestion.answerKey ||
+    rawQuestion.correctAnswerKey,
+  ).toUpperCase();
+
+  if (/^[A-H]$/.test(raw)) return raw;
+
+  const number = Number.parseInt(raw, 10);
+  if (Number.isFinite(number) && number >= 1 && number <= answers.length) {
+    return answerKeys[number - 1];
+  }
+
+  const correctIndex = answers.findIndex((answer) => answer.isCorrect === true);
+  return correctIndex >= 0 ? answerKeys[correctIndex] : "";
+}
+
+function normalizeImportedQuestion(rawQuestion, index) {
+  const rawType = stringValue(rawQuestion?.questionType || rawQuestion?.question_type || QUESTION_TYPES.SINGLE_CHOICE)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!["single_choice", "multiple_choice", "trac_nghiem"].includes(rawType)) {
+    return null;
+  }
+
+  const answers = normalizeImportAnswers(rawQuestion?.answers || rawQuestion?.options);
+  const questionText = stringValue(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
+  const questionTextCn = stringValue(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
+  const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
+
+  if (!normalizedQuestion || answers.length < 2) return null;
+
+  const difficulty = ["easy", "medium", "hard"].includes(rawQuestion?.difficulty)
+    ? rawQuestion.difficulty
+    : "medium";
+  const correctAnswer = normalizeCorrectAnswer(rawQuestion, answers);
+  const imageHint = stringValue(rawQuestion?.imageHint || rawQuestion?.image_hint);
+  const reviewNotes = stringValue(rawQuestion?.reviewNotes || rawQuestion?.review_notes);
+  const combinedText = `${questionText} ${questionTextCn} ${imageHint} ${reviewNotes}`;
+  const needsImage = rawQuestion?.needsImage === true || PDF_IMPORT_IMAGE_HINT_RE.test(combinedText);
+
+  return {
+    questionType: QUESTION_TYPES.SINGLE_CHOICE,
+    questionText: normalizedQuestion.en,
+    questionTextCn: normalizedQuestion.cn,
+    imageUrl: stringValue(rawQuestion?.imageUrl),
+    points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
+    explanation: stringValue(rawQuestion?.explanation),
+    explanationCn: stringValue(rawQuestion?.explanationCn || rawQuestion?.explanation_cn),
+    answers: answers.map((answer) => ({
+      text: answer.text || answer.textCn,
+      textCn: answer.textCn || answer.text,
+      imageUrl: answer.imageUrl || "",
+    })),
+    correctAnswer,
+    difficulty,
+    needsImage,
+    imageHint: imageHint || (needsImage ? "Question may reference an image/table/chart in the PDF. Add image manually before publishing." : ""),
+    reviewNotes,
+    importIndex: index + 1,
+  };
+}
+
+function normalizeImportLinkedOptions(rawOptions) {
+  if (!Array.isArray(rawOptions)) return [];
+
+  return rawOptions
+    .slice(0, 12)
+    .map((option, index) => ({
+      key: stringValue(option?.key || String.fromCharCode(65 + index)).toUpperCase().slice(0, 1) || String.fromCharCode(65 + index),
+      text: stringValue(option?.text || option?.content),
+      textCn: stringValue(option?.textCn || option?.contentCn),
+    }))
+    .filter((option) => option.text || option.textCn);
+}
+
+function countImportClozeBlanks(text) {
+  if (!text || typeof text !== "string") return 0;
+  return (text.match(/_{2,}|＿+/g) || []).length;
+}
+
+function normalizeImportedReadingGroup(rawGroup, index) {
+  const passageText = stringValue(rawGroup?.passageText || rawGroup?.passage || rawGroup?.text);
+  const passageImageUrl = stringValue(rawGroup?.passageImageUrl || rawGroup?.imageUrl);
+  const subQuestions = (Array.isArray(rawGroup?.subQuestions) ? rawGroup.subQuestions : [])
+    .map((question, subIndex) => normalizeImportedQuestion(question, subIndex))
+    .filter(Boolean);
+  const needsImage = rawGroup?.needsImage === true || PDF_IMPORT_IMAGE_HINT_RE.test(`${passageText} ${rawGroup?.imageHint || ""}`);
+
+  if (!passageText || subQuestions.length === 0) return null;
+
+  return {
+    itemType: "reading_group",
+    passageText,
+    passageImageUrl,
+    subQuestions,
+    needsImage,
+    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Reading passage may reference a visual in the PDF. Add image manually before publishing." : ""),
+    reviewNotes: stringValue(rawGroup?.reviewNotes),
+    importIndex: index + 1,
+  };
+}
+
+function normalizeImportedFillBlankGroup(rawGroup, index) {
+  const clozeMode = rawGroup?.clozeMode === "passage" ? "passage" : "sentences";
+  const passageText = stringValue(rawGroup?.passageText || rawGroup?.passage || rawGroup?.text);
+  const passageImageUrl = stringValue(rawGroup?.passageImageUrl || rawGroup?.imageUrl);
+  const linkedOptions = normalizeImportLinkedOptions(rawGroup?.linkedOptions || rawGroup?.options);
+  const optionKeys = new Set(linkedOptions.map((option) => option.key));
+  const rawSubItems = Array.isArray(rawGroup?.subItems) ? rawGroup.subItems : [];
+  const subItems = rawSubItems
+    .map((item, subIndex) => {
+      const questionText = stringValue(item?.questionText || item?.question || item?.text);
+      const questionTextCn = stringValue(item?.questionTextCn || item?.question_cn || item?.textCn);
+      const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
+      const correctAnswerKey = stringValue(item?.correctAnswerKey || item?.correctAnswer || item?.answerKey || item?.answer)
+        .toUpperCase()
+        .slice(0, 1);
+
+      if (!optionKeys.has(correctAnswerKey)) return null;
+      if (clozeMode === "sentences" && !normalizedQuestion) return null;
+
+      return {
+        questionText: normalizedQuestion?.en || `Blank ${subIndex + 1}`,
+        questionTextCn: normalizedQuestion?.cn || `Blank ${subIndex + 1}`,
+        points: clamp(parsePositiveNumber(item?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
+        explanation: stringValue(item?.explanation),
+        explanationCn: stringValue(item?.explanationCn || item?.explanation_cn),
+        correctAnswerKey,
+        difficulty: ["easy", "medium", "hard"].includes(item?.difficulty) ? item.difficulty : "medium",
+        subQuestionNumber: Number.parseInt(item?.subQuestionNumber, 10) || subIndex + 1,
+      };
+    })
+    .filter(Boolean);
+
+  if (linkedOptions.length < 2 || subItems.length === 0) return null;
+  if (clozeMode === "passage" && !passageText) return null;
+
+  const blankCount = clozeMode === "passage" ? countImportClozeBlanks(passageText) : 0;
+  const reviewNotes = [
+    stringValue(rawGroup?.reviewNotes),
+    blankCount > 0 && blankCount !== subItems.length
+      ? `Blank count (${blankCount}) does not match answer count (${subItems.length}). Review before publishing.`
+      : "",
+  ].filter(Boolean).join(" ");
+  const needsImage = rawGroup?.needsImage === true || PDF_IMPORT_IMAGE_HINT_RE.test(`${passageText} ${rawGroup?.imageHint || ""}`);
+
+  return {
+    itemType: "fill_blank_group",
+    clozeMode,
+    passageText,
+    passageImageUrl,
+    linkedOptions,
+    subItems,
+    needsImage,
+    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Fill-blank group may reference a visual in the PDF. Add image manually before publishing." : ""),
+    reviewNotes,
+    importIndex: index + 1,
+  };
+}
+
+function getImportItemType(rawItem) {
+  const rawType = stringValue(rawItem?.itemType || rawItem?.type || rawItem?.questionType || rawItem?.question_type)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (["reading_group", "reading_passage", "reading"].includes(rawType)) return "reading_group";
+  if (["fill_blank_group", "fill_blank_pool", "fill_blank", "cloze"].includes(rawType)) return "fill_blank_group";
+  return "single_choice";
+}
+
+function normalizeImportedItem(rawItem, index) {
+  const itemType = getImportItemType(rawItem);
+
+  if (itemType === "reading_group") return normalizeImportedReadingGroup(rawItem, index);
+  if (itemType === "fill_blank_group") return normalizeImportedFillBlankGroup(rawItem, index);
+
+  const question = normalizeImportedQuestion(rawItem, index);
+  return question ? { ...question, itemType: "single_choice" } : null;
+}
+
+function flattenImportSourceItems(aiResult) {
+  const items = Array.isArray(aiResult?.items) ? [...aiResult.items] : [];
+
+  if (Array.isArray(aiResult?.questions)) {
+    items.push(...aiResult.questions.map((question) => ({ ...question, itemType: "single_choice" })));
+  }
+
+  if (Array.isArray(aiResult?.readingGroups)) {
+    items.push(...aiResult.readingGroups.map((group) => ({ ...group, itemType: "reading_group" })));
+  }
+
+  if (Array.isArray(aiResult?.fillBlankGroups)) {
+    items.push(...aiResult.fillBlankGroups.map((group) => ({ ...group, itemType: "fill_blank_group" })));
+  }
+
+  return items;
+}
+
+function countImportedItemQuestions(item) {
+  if (!item) return 0;
+  if (item.itemType === "reading_group") return item.subQuestions.length;
+  if (item.itemType === "fill_blank_group") return item.subItems.length;
+  return 1;
+}
+
+function normalizePdfImportResult(aiResult, sourceMeta) {
+  const warnings = Array.isArray(aiResult?.warnings)
+    ? aiResult.warnings.map((warning) => stringValue(warning)).filter(Boolean)
+    : [];
+
+  const rawItems = flattenImportSourceItems(aiResult);
+  const items = rawItems
+    .slice(0, PDF_IMPORT_MAX_QUESTIONS)
+    .map((item, index) => normalizeImportedItem(item, index))
+    .filter(Boolean);
+  const questions = items.filter((item) => item.itemType === "single_choice");
+
+  if (rawItems.length > items.length) {
+    warnings.push(`Skipped ${rawItems.length - items.length} invalid or unsupported items. Review the PDF and add missing parts manually.`);
+  }
+
+  return {
+    exam: {
+      title: stringValue(aiResult?.exam?.title || aiResult?.title),
+      duration: Number.parseInt(aiResult?.exam?.duration || aiResult?.duration || 90, 10) || 90,
+      totalPoints: Number.parseFloat(aiResult?.exam?.totalPoints || aiResult?.totalPoints || 100) || 100,
+    },
+    items,
+    questions,
+    totalQuestionCount: items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0),
+    warnings,
+    source: sourceMeta,
+  };
+}
+
+function buildPdfImportPrompt(pdfText) {
+  return `You are an exam data parser for a Vietnamese CSCA/Chinese learning platform.
+
+Task:
+- Read the PDF text below.
+- Extract mixed exam content into three supported item types:
+  1. single_choice: normal A/B/C/D multiple choice question.
+  2. reading_group: one reading passage with multiple single-choice subQuestions.
+  3. fill_blank_group: word-bank/cloze questions with linkedOptions and blank subItems.
+- Add short Vietnamese explanations for each correct answer if possible.
+- If a question references an image, table, chart, diagram, or missing visual, set needsImage=true and write imageHint.
+- Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.
+- Put unsupported items such as essay/listening-only tasks into warnings, not items.
+- Return one valid JSON object only. No markdown fence. No explanation outside JSON.
+
+Required JSON schema:
+{
+  "exam": {
+    "title": "",
+    "duration": 90,
+    "totalPoints": 100
+  },
+  "items": [
+    {
+      "itemType": "single_choice",
+      "questionType": "single_choice",
+      "questionText": "",
+      "questionTextCn": "",
+      "answers": [
+        { "text": "", "textCn": "" }
+      ],
+      "correctAnswer": "A",
+      "explanation": "",
+      "explanationCn": "",
+      "points": 1,
+      "difficulty": "medium",
+      "needsImage": false,
+      "imageHint": "",
+      "reviewNotes": ""
+    },
+    {
+      "itemType": "reading_group",
+      "passageText": "",
+      "passageImageUrl": "",
+      "subQuestions": [
+        {
+          "questionType": "single_choice",
+          "questionText": "",
+          "questionTextCn": "",
+          "answers": [
+            { "text": "", "textCn": "" }
+          ],
+          "correctAnswer": "A",
+          "explanation": "",
+          "explanationCn": "",
+          "points": 1,
+          "difficulty": "medium",
+          "needsImage": false,
+          "imageHint": "",
+          "reviewNotes": ""
+        }
+      ],
+      "needsImage": false,
+      "imageHint": "",
+      "reviewNotes": ""
+    },
+    {
+      "itemType": "fill_blank_group",
+      "clozeMode": "sentences",
+      "passageText": "",
+      "passageImageUrl": "",
+      "linkedOptions": [
+        { "key": "A", "text": "", "textCn": "" },
+        { "key": "B", "text": "", "textCn": "" }
+      ],
+      "subItems": [
+        {
+          "questionText": "",
+          "questionTextCn": "",
+          "correctAnswerKey": "A",
+          "explanation": "",
+          "explanationCn": "",
+          "points": 1,
+          "difficulty": "medium"
+        }
+      ],
+      "needsImage": false,
+      "imageHint": "",
+      "reviewNotes": ""
+    }
+  ],
+  "warnings": []
+}
+
+Rules:
+- questionText is Vietnamese/English text. questionTextCn is Chinese text if available.
+- answers must contain 2 to 8 options.
+- correctAnswer must be A-H or empty if not clear.
+- reading_group must have passageText and at least 1 valid subQuestion.
+- fill_blank_group linkedOptions must be a word bank A-F/A-H. subItems use correctAnswerKey pointing to linkedOptions.
+- For fill_blank_group clozeMode: use "passage" for one paragraph with blanks, "sentences" for separate fill-blank sentences.
+- Keep explanations concise and practical.
+- Prefer Vietnamese for explanations.
+- If output is long, reduce explanation length and finish valid JSON.
+
+PDF text:
+${pdfText}`;
+}
+
+function validateImportItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return "Questions are required";
+  }
+
+  const totalQuestions = items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0);
+  if (totalQuestions > PDF_IMPORT_MAX_QUESTIONS) {
+    return `Cannot import more than ${PDF_IMPORT_MAX_QUESTIONS} questions at once`;
+  }
+
+  const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+    const item = items[itemIndex];
+
+    if (item.itemType === "single_choice") {
+      const allowedKeys = answerKeys.slice(0, item.answers.length);
+      if (!allowedKeys.includes(item.correctAnswer)) {
+        return `Item ${itemIndex + 1} needs a valid correct answer`;
+      }
+      continue;
+    }
+
+    if (item.itemType === "reading_group") {
+      for (let subIndex = 0; subIndex < item.subQuestions.length; subIndex++) {
+        const subQuestion = item.subQuestions[subIndex];
+        const allowedKeys = answerKeys.slice(0, subQuestion.answers.length);
+        if (!allowedKeys.includes(subQuestion.correctAnswer)) {
+          return `Reading item ${itemIndex + 1}.${subIndex + 1} needs a valid correct answer`;
+        }
+      }
+      continue;
+    }
+
+    if (item.itemType === "fill_blank_group") {
+      const optionKeys = new Set(item.linkedOptions.map((option) => option.key));
+      for (let subIndex = 0; subIndex < item.subItems.length; subIndex++) {
+        if (!optionKeys.has(item.subItems[subIndex].correctAnswerKey)) {
+          return `Fill-blank item ${itemIndex + 1}.${subIndex + 1} needs a valid correct answer key`;
+        }
+      }
+      continue;
+    }
+
+    return `Item ${itemIndex + 1} has an unsupported type`;
+  }
+
+  return "";
+}
+
+async function insertImportedSingleChoice(client, { examId, question, questionNumber }) {
+  const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const normalizedQuestion = normalizeBilingualText(question.questionText, question.questionTextCn);
+
+  const questionResult = await client.query(
+    `INSERT INTO questions (
+       exam_id, question_number, question_type,
+       question_text, question_text_cn,
+       points, explanation, explanation_cn,
+       image_url, question_group_type, difficulty
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING id`,
+    [
+      examId,
+      questionNumber,
+      QUESTION_TYPES.SINGLE_CHOICE,
+      sanitize(normalizedQuestion.en),
+      sanitize(normalizedQuestion.cn),
+      clamp(parsePositiveNumber(question.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
+      question.explanation ? sanitizeExplanation(question.explanation) : null,
+      question.explanationCn ? sanitizeExplanation(question.explanationCn) : null,
+      question.imageUrl ? sanitize(question.imageUrl) : null,
+      QUESTION_TYPES.SINGLE_CHOICE,
+      question.difficulty || "medium",
+    ],
+  );
+
+  const questionId = questionResult.rows[0].id;
+
+  for (let i = 0; i < question.answers.length; i++) {
+    const answer = question.answers[i];
+    const normalizedAnswer = normalizeBilingualText(answer.text, answer.textCn);
+    const key = answerKeys[i];
+
+    await client.query(
+      `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        questionId,
+        key,
+        sanitize(normalizedAnswer.en),
+        sanitize(normalizedAnswer.cn),
+        key === question.correctAnswer,
+        answer.imageUrl ? sanitize(answer.imageUrl) : null,
+      ],
+    );
+  }
+
+  return {
+    itemType: "single_choice",
+    id: questionId,
+    questionNumber,
+    correctAnswer: question.correctAnswer,
+    needsImage: question.needsImage === true,
+  };
+}
+
+async function insertImportedReadingGroup(client, { examId, group, startQuestionNumber }) {
+  const containerNumber = await getNextContainerQuestionNumber(client, examId);
+  const passageResult = await client.query(
+    `INSERT INTO questions (
+       exam_id, question_number, question_type,
+       question_text, question_text_cn,
+       points, passage_text, passage_image_url,
+       question_group_type, sub_question_number, passage_group_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     RETURNING id`,
+    [
+      examId,
+      containerNumber,
+      QUESTION_TYPES.READING_PASSAGE,
+      "Doan van doc hieu",
+      "阅读理解",
+      0,
+      sanitize(group.passageText),
+      group.passageImageUrl ? sanitize(group.passageImageUrl) : null,
+      QUESTION_TYPES.READING_PASSAGE,
+      null,
+      null,
+    ],
+  );
+  const groupId = passageResult.rows[0].id;
+  await client.query("UPDATE questions SET passage_group_id = id WHERE id = $1", [groupId]);
+
+  let questionNumber = startQuestionNumber - 1;
+  const subQuestions = [];
+  for (const subQuestion of group.subQuestions) {
+    questionNumber++;
+    const inserted = await insertImportedSingleChoice(client, {
+      examId,
+      question: subQuestion,
+      questionNumber,
+    });
+    await client.query(
+      `UPDATE questions
+       SET question_type = $1,
+           question_group_type = $1,
+           sub_question_number = $2,
+           passage_group_id = $3
+       WHERE id = $4`,
+      [
+        QUESTION_TYPES.READING_ITEM,
+        subQuestion.subQuestionNumber || questionNumber,
+        groupId,
+        inserted.id,
+      ],
+    );
+    subQuestions.push(inserted);
+  }
+
+  return {
+    itemType: "reading_group",
+    groupId,
+    questionNumber: startQuestionNumber,
+    subQuestions,
+    totalItems: subQuestions.length,
+    needsImage: group.needsImage === true,
+  };
+}
+
+async function insertImportedFillBlankGroup(client, { examId, group, startQuestionNumber }) {
+  const containerNumber = await getNextContainerQuestionNumber(client, examId);
+  const normalizedOpts = group.linkedOptions.map((option, index) => ({
+    key: option.key || String.fromCharCode(65 + index),
+    text: option.text || option.textCn,
+    textCn: option.textCn || option.text,
+  }));
+
+  const poolResult = await client.query(
+    `INSERT INTO questions (
+       exam_id, question_number, question_type,
+       question_text, question_text_cn,
+       points, passage_text, passage_image_url,
+       question_group_type, difficulty,
+       linked_options, sub_question_number, passage_group_id, cloze_mode
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     RETURNING id`,
+    [
+      examId,
+      containerNumber,
+      QUESTION_TYPES.FILL_BLANK_POOL,
+      "Dien tu",
+      "填空",
+      0,
+      group.passageText ? sanitize(group.passageText) : null,
+      group.passageImageUrl ? sanitize(group.passageImageUrl) : null,
+      QUESTION_TYPES.FILL_BLANK_POOL,
+      "medium",
+      JSON.stringify(normalizedOpts),
+      null,
+      null,
+      group.clozeMode === "passage" ? "passage" : "sentences",
+    ],
+  );
+
+  const groupId = poolResult.rows[0].id;
+  await client.query("UPDATE questions SET passage_group_id = id WHERE id = $1", [groupId]);
+
+  let questionNumber = startQuestionNumber - 1;
+  const subItems = [];
+  for (const subItem of group.subItems) {
+    questionNumber++;
+    const parsedPoints = clamp(parsePositiveNumber(subItem.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
+    const normQ = normalizeBilingualText(subItem.questionText, subItem.questionTextCn);
+
+    const subResult = await client.query(
+      `INSERT INTO questions (
+         exam_id, question_number, question_type,
+         question_text, question_text_cn,
+         points, explanation, explanation_cn,
+         question_group_type, difficulty,
+         sub_question_number, passage_group_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id`,
+      [
+        examId,
+        questionNumber,
+        QUESTION_TYPES.FILL_BLANK_ITEM,
+        sanitize(normQ?.en || `Blank ${questionNumber}`),
+        sanitize(normQ?.cn || `Blank ${questionNumber}`),
+        parsedPoints,
+        subItem.explanation ? sanitizeExplanation(subItem.explanation) : null,
+        subItem.explanationCn ? sanitizeExplanation(subItem.explanationCn) : null,
+        QUESTION_TYPES.FILL_BLANK_ITEM,
+        subItem.difficulty || "medium",
+        subItem.subQuestionNumber || questionNumber,
+        groupId,
+      ],
+    );
+    const questionId = subResult.rows[0].id;
+
+    for (const option of normalizedOpts) {
+      await client.query(
+        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          questionId,
+          option.key,
+          sanitize(option.text),
+          sanitize(option.textCn),
+          option.key === subItem.correctAnswerKey,
+        ],
+      );
+    }
+
+    subItems.push({
+      id: questionId,
+      questionNumber,
+      correctAnswerKey: subItem.correctAnswerKey,
+    });
+  }
+
+  return {
+    itemType: "fill_blank_group",
+    groupId,
+    questionNumber: startQuestionNumber,
+    subItems,
+    totalItems: subItems.length,
+    needsImage: group.needsImage === true,
+  };
+}
+
 const AdminExamController = {
+  async previewPdfImport(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "PDF file is required" });
+      }
+
+      const pdfData = await pdfParse(req.file.buffer);
+      const extractedText = stringValue(pdfData.text)
+        .replace(/\r/g, "\n")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      if (extractedText.length < 120) {
+        return res.status(400).json({
+          message: "PDF does not contain enough selectable text. Please use a text PDF or enter questions manually.",
+        });
+      }
+
+      const truncatedText = extractedText.slice(0, PDF_IMPORT_TEXT_LIMIT);
+      const sourceMeta = {
+        fileName: req.file.originalname,
+        pages: pdfData.numpages || null,
+        textLength: extractedText.length,
+        truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
+      };
+
+      const rawAi = await aiService.callBeeknoee(buildPdfImportPrompt(truncatedText), {
+        temperature: 0.15,
+        maxTokens: 6500,
+      });
+      const aiResult = parseAiJsonObject(rawAi);
+
+      if (!aiResult) {
+        return res.status(502).json({
+          message: "AI did not return a valid import JSON. Please try again with a shorter PDF.",
+          preview: String(rawAi || "").slice(0, 800),
+        });
+      }
+
+      const normalized = normalizePdfImportResult(aiResult, sourceMeta);
+
+      if (normalized.items.length === 0) {
+        return res.status(422).json({
+          message: "No valid supported questions were found in this PDF.",
+          ...normalized,
+        });
+      }
+
+      res.json(normalized);
+    } catch (error) {
+      console.error("Preview PDF import error:", error);
+
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI is rate limited. Please try again later.",
+          retryAfter: error.retryAfter || aiService.getRateLimitRemaining?.(),
+        });
+      }
+
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({
+          message: "AI took too long to parse this PDF. Please try a shorter PDF.",
+        });
+      }
+
+      if (error.message === "Chi cho phep upload file PDF") {
+        return res.status(400).json({ message: error.message });
+      }
+
+      res.status(500).json({ message: "Failed to preview PDF import" });
+    }
+  },
+
+  async bulkImportQuestions(req, res) {
+    const { examId } = req.params;
+    const rawItems = Array.isArray(req.body?.items)
+      ? req.body.items
+      : Array.isArray(req.body?.questions)
+        ? req.body.questions.map((question) => ({ ...question, itemType: "single_choice" }))
+        : [];
+    const items = rawItems.map((item, index) => normalizeImportedItem(item, index));
+    const invalidIndex = items.findIndex((item) => !item);
+
+    if (invalidIndex !== -1) {
+      return res.status(400).json({ message: `Item ${invalidIndex + 1} is invalid or unsupported` });
+    }
+
+    const validationError = validateImportItems(items);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+    const totalImportQuestions = items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock($1::bigint)", [parseInt(examId, 10)]);
+
+      if (!(await ensureExamExists(client, examId))) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const countResult = await client.query(
+        "SELECT COUNT(*)::int as count FROM questions WHERE exam_id = $1 AND question_number > 0 AND deleted_at IS NULL",
+        [examId],
+      );
+      const currentCount = countResult.rows[0].count || 0;
+
+      if (currentCount + totalImportQuestions > MAX_QUESTIONS_PER_EXAM) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: `Exam cannot exceed ${MAX_QUESTIONS_PER_EXAM} questions` });
+      }
+
+      let questionNumber = (await getAppendQuestionPosition(client, examId)) - 1;
+      const insertedItems = [];
+
+      for (const item of items) {
+        const startQuestionNumber = questionNumber + 1;
+        let insertedItem;
+
+        if (item.itemType === "reading_group") {
+          insertedItem = await insertImportedReadingGroup(client, {
+            examId,
+            group: item,
+            startQuestionNumber,
+          });
+        } else if (item.itemType === "fill_blank_group") {
+          insertedItem = await insertImportedFillBlankGroup(client, {
+            examId,
+            group: item,
+            startQuestionNumber,
+          });
+        } else {
+          insertedItem = await insertImportedSingleChoice(client, {
+            examId,
+            question: item,
+            questionNumber: startQuestionNumber,
+          });
+        }
+
+        questionNumber += countImportedItemQuestions(item);
+        insertedItems.push(insertedItem);
+      }
+
+      await client.query(
+        "UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2",
+        [totalImportQuestions, examId],
+      );
+
+      await client.query("COMMIT");
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+
+      UserActivity.log(req.user.id, "admin.bulk_import_questions", {
+        examId,
+        count: totalImportQuestions,
+        items: insertedItems.length,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.status(201).json({
+        message: "Questions imported",
+        insertedCount: totalImportQuestions,
+        insertedItems,
+        insertedQuestions: insertedItems.filter((item) => item.itemType === "single_choice"),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Bulk import questions error:", error);
+      if (isMissingQuestionExamForeignKey(error)) {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      res.status(500).json({ message: "Failed to import questions" });
+    } finally {
+      client.release();
+    }
+  },
+
   // Create new exam
   async createExam(req, res) {
     try {
