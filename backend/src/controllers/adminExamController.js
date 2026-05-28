@@ -465,6 +465,111 @@ function countImportedItemQuestions(item) {
   return 1;
 }
 
+function splitRuleBasedOptionText(rawText) {
+  const text = stringValue(rawText);
+  if (!text) return "";
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:，。；：）\)])/g, "$1")
+    .trim();
+}
+
+function inferCorrectAnswerFromExplanation(answers, explanation) {
+  const normalizedExplanation = stringValue(explanation).replace(/\s+/g, "");
+  if (!normalizedExplanation) return "";
+
+  const explicitAnswer = normalizedExplanation.match(/(?:答案|正确答案|故选|应选|选)[:：为是]*([A-H])/i);
+  if (explicitAnswer?.[1]) {
+    return explicitAnswer[1].toUpperCase();
+  }
+
+  const candidates = answers
+    .map((answer, index) => ({
+      key: String.fromCharCode(65 + index),
+      text: stringValue(answer.textCn || answer.text).replace(/\s+/g, ""),
+    }))
+    .filter((answer) => answer.text && answer.text.length >= 2);
+
+  const matches = candidates.filter((answer) => normalizedExplanation.includes(answer.text));
+  return matches.length === 1 ? matches[0].key : "";
+}
+
+function parsePdfTextWithRules(pdfText, sourceMeta) {
+  const text = stringValue(pdfText)
+    .replace(/\r/g, "\n")
+    .replace(/Page\s+\d+\s*\|\s*\d+/gi, "\n")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const questionMatches = [...text.matchAll(/(?:^|\s)(\d{1,3})[.．、]\s*/g)];
+  const items = [];
+
+  for (let i = 0; i < questionMatches.length; i++) {
+    const start = questionMatches[i].index + questionMatches[i][0].length;
+    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : text.length;
+    const block = text.slice(start, end).trim();
+    if (!block) continue;
+
+    const optionMatch = block.match(/\sA[.．、]?\s+/);
+    if (!optionMatch) continue;
+
+    const questionText = block.slice(0, optionMatch.index).trim();
+    const afterA = block.slice(optionMatch.index).trim();
+    const explanationMatch = afterA.match(/\s(?:解析|解答|说明|答案解析)[:：]\s*/);
+    const optionsPart = explanationMatch ? afterA.slice(0, explanationMatch.index).trim() : afterA;
+    const explanation = explanationMatch ? afterA.slice(explanationMatch.index + explanationMatch[0].length).trim() : "";
+    const optionMatches = [...optionsPart.matchAll(/(?:^|\s)([A-H])[.．、]?\s+/g)];
+
+    if (optionMatches.length < 2) continue;
+
+    const answers = [];
+    for (let optionIndex = 0; optionIndex < optionMatches.length; optionIndex++) {
+      const optStart = optionMatches[optionIndex].index + optionMatches[optionIndex][0].length;
+      const optEnd = optionIndex + 1 < optionMatches.length ? optionMatches[optionIndex + 1].index : optionsPart.length;
+      const optionText = splitRuleBasedOptionText(optionsPart.slice(optStart, optEnd));
+      if (optionText) {
+        answers.push({ text: "", textCn: optionText });
+      }
+    }
+
+    if (answers.length < 2 || !questionText) continue;
+
+    const correctAnswer = inferCorrectAnswerFromExplanation(answers, explanation);
+    items.push({
+      itemType: "single_choice",
+      questionType: "single_choice",
+      questionText: "",
+      questionTextCn: questionText,
+      answers,
+      correctAnswer,
+      explanation: "",
+      explanationCn: explanation,
+      points: 1,
+      difficulty: /提高|advanced|hard/i.test(questionText) ? "hard" : "medium",
+      needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
+      imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Question may reference an image/table/chart in the PDF. Add image manually before publishing." : "",
+      reviewNotes: correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  const warnings = [
+    "This preview used the fast PDF text parser. Please review correct answers before saving.",
+  ];
+
+  return normalizePdfImportResult({
+    exam: {
+      title: sourceMeta?.fileName ? String(sourceMeta.fileName).replace(/\.pdf$/i, "") : "Imported PDF exam",
+      duration: 90,
+      totalPoints: Math.max(items.length, 1),
+    },
+    items,
+    warnings,
+  }, sourceMeta);
+}
+
 function normalizePdfImportResult(aiResult, sourceMeta) {
   const warnings = Array.isArray(aiResult?.warnings)
     ? aiResult.warnings.map((warning) => stringValue(warning)).filter(Boolean)
@@ -877,6 +982,8 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
 
 const AdminExamController = {
   async previewPdfImport(req, res) {
+    let ruleBasedPreview = null;
+
     try {
       if (!req.file) {
         return res.status(400).json({ message: "PDF file is required" });
@@ -903,6 +1010,11 @@ const AdminExamController = {
         truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
       };
 
+      ruleBasedPreview = parsePdfTextWithRules(truncatedText, sourceMeta);
+      if (ruleBasedPreview?.items?.length >= 5) {
+        return res.json(ruleBasedPreview);
+      }
+
       const rawAi = await aiService.callBeeknoee(buildPdfImportPrompt(truncatedText), {
         temperature: 0.15,
         maxTokens: 6500,
@@ -910,6 +1022,10 @@ const AdminExamController = {
       const aiResult = parseAiJsonObject(rawAi);
 
       if (!aiResult) {
+        if (ruleBasedPreview?.items?.length) {
+          return res.json(ruleBasedPreview);
+        }
+
         return res.status(502).json({
           message: "AI did not return a valid import JSON. Please try again with a shorter PDF.",
           preview: String(rawAi || "").slice(0, 800),
@@ -937,6 +1053,10 @@ const AdminExamController = {
       }
 
       if (error.message === "AI_TIMEOUT") {
+        if (ruleBasedPreview?.items?.length) {
+          return res.json(ruleBasedPreview);
+        }
+
         return res.status(504).json({
           message: "AI took too long to parse this PDF. Please try a shorter PDF.",
         });
