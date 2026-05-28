@@ -151,7 +151,10 @@ export const examAdminApi = {
     previewPdfImport: async (file: File): Promise<PdfImportPreview> => {
         const formData = new FormData();
         formData.append('pdf', file);
-        const response = await axios.post('/admin/exams/import/pdf/preview', formData);
+        const response = await axios.post('/admin/exams/import/pdf/preview', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 120000,
+        });
         return response.data;
     },
 
