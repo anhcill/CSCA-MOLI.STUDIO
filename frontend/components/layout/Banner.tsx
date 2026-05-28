@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { FiArrowRight, FiAward, FiBook, FiChevronLeft, FiChevronRight, FiStar, FiTarget, FiTrendingUp, FiUsers } from 'react-icons/fi';
 import { useLanguage } from '@/context/LanguageContext';
 
-const SLIDES = [
+const SLIDE_COPY = [
   {
     id: 1,
     title: {
@@ -117,6 +117,31 @@ const SLIDES = [
   },
 ];
 
+const BANNER_IMAGES = [
+  { src: '/images/banner/campus-01.jpg', objectPosition: 'center 48%', accentColor: 'from-amber-500 to-red-600' },
+  { src: '/images/banner/campus-02.jpg', objectPosition: '65% center', accentColor: 'from-sky-500 to-cyan-600' },
+  { src: '/images/banner/campus-03.jpg', objectPosition: 'center center', accentColor: 'from-emerald-500 to-lime-600' },
+  { src: '/images/banner/campus-04.jpg', objectPosition: 'center 45%', accentColor: 'from-pink-400 to-rose-600' },
+  { src: '/images/banner/campus-05.jpg', objectPosition: 'center 45%', accentColor: 'from-cyan-500 to-teal-600' },
+  { src: '/images/banner/campus-06.jpg', objectPosition: 'center center', accentColor: 'from-rose-400 to-orange-500' },
+  { src: '/images/banner/campus-07.jpg', objectPosition: 'center center', accentColor: 'from-green-500 to-emerald-600' },
+  { src: '/images/banner/campus-08.jpg', objectPosition: 'center 54%', accentColor: 'from-yellow-400 to-emerald-600' },
+  { src: '/images/banner/campus-09.jpg', objectPosition: 'center 47%', accentColor: 'from-violet-500 to-rose-500' },
+  { src: '/images/banner/campus-10.jpg', objectPosition: 'center center', accentColor: 'from-blue-400 to-slate-600' },
+  { src: '/images/banner/campus-11.jpg', objectPosition: 'center center', accentColor: 'from-amber-400 to-green-600' },
+  { src: '/images/banner/campus-12.jpg', objectPosition: 'center center', accentColor: 'from-orange-400 to-emerald-600' },
+  { src: '/images/banner/campus-13.jpg', objectPosition: 'center center', accentColor: 'from-lime-500 to-stone-600' },
+  { src: '/images/banner/campus-14.jpg', objectPosition: 'center center', accentColor: 'from-yellow-400 to-red-600' },
+];
+
+const SLIDES = BANNER_IMAGES.map((image, index) => ({
+  ...SLIDE_COPY[index % SLIDE_COPY.length],
+  id: index + 1,
+  bgImage: image.src,
+  objectPosition: image.objectPosition,
+  accentColor: image.accentColor,
+}));
+
 const QUICK_STATS = [
   { icon: FiUsers, value: '10k+', labelKey: 'home.stats.students' },
   { icon: FiBook, value: '500+', labelKey: 'home.stats.exams' },
@@ -179,27 +204,21 @@ export default function Banner() {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {SLIDES.map((item, index) => (
-        <div
-          key={item.id}
-          className={`absolute inset-0 transition-all duration-700 ease-in-out ${
-            index === current ? 'scale-100 opacity-100' : 'scale-105 opacity-0'
-          }`}
-        >
-          <Image
-            src={item.bgImage}
-            alt={pick(item.title)}
-            fill
-            priority={index === 0}
-            quality={90}
-            sizes="100vw"
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/10" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-          <div className={`absolute inset-0 bg-gradient-to-br ${item.accentColor} opacity-[0.08]`} />
-        </div>
-      ))}
+      <div key={slide.id} className="absolute inset-0 scale-100 opacity-100 transition-all duration-700 ease-in-out">
+        <Image
+          src={slide.bgImage}
+          alt={pick(slide.title)}
+          fill
+          priority={current === 0}
+          quality={90}
+          sizes="100vw"
+          className="object-cover"
+          style={{ objectPosition: slide.objectPosition }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className={`absolute inset-0 bg-gradient-to-br ${slide.accentColor} opacity-[0.08]`} />
+      </div>
 
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-8 md:px-12 lg:px-16">
@@ -304,7 +323,7 @@ export default function Banner() {
         <FiChevronRight className="text-white" size={22} />
       </button>
 
-      <div className="absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3">
+      <div className="absolute bottom-8 left-1/2 z-20 flex max-w-[calc(100%-7rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 sm:gap-3">
         {SLIDES.map((item, index) => (
           <button
             key={item.id}
@@ -317,7 +336,7 @@ export default function Banner() {
           />
         ))}
       </div>
-      <div className="absolute bottom-8 right-8 z-20 font-mono text-sm text-white/50">
+      <div className="absolute bottom-8 right-8 z-20 hidden font-mono text-sm text-white/50 sm:block">
         {String(current + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}
       </div>
 
