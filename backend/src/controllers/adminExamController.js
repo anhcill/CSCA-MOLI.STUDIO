@@ -465,13 +465,159 @@ function countImportedItemQuestions(item) {
   return 1;
 }
 
-function splitRuleBasedOptionText(rawText) {
-  const text = stringValue(rawText);
-  if (!text) return "";
-  return text
+function mapPdfMathGlyph(char) {
+  const rawCodePoint = char.codePointAt(0);
+  const codePoint = rawCodePoint >= 0xd400 && rawCodePoint <= 0xd7ff
+    ? rawCodePoint + 0x10000
+    : rawCodePoint;
+
+  const greekMap = new Map([
+    [0x1d703, "θ"],
+    [0x1d70b, "π"],
+  ]);
+  if (greekMap.has(codePoint)) {
+    return greekMap.get(codePoint);
+  }
+
+  const alphaRanges = [
+    [0x1d400, 0x1d419, 65],
+    [0x1d41a, 0x1d433, 97],
+    [0x1d434, 0x1d44d, 65],
+    [0x1d44e, 0x1d467, 97],
+    [0x1d468, 0x1d481, 65],
+    [0x1d482, 0x1d49b, 97],
+    [0x1d5a0, 0x1d5b9, 65],
+    [0x1d5ba, 0x1d5d3, 97],
+    [0x1d5d4, 0x1d5ed, 65],
+    [0x1d5ee, 0x1d607, 97],
+  ];
+
+  for (const [start, end, asciiStart] of alphaRanges) {
+    if (codePoint >= start && codePoint <= end) {
+      return String.fromCharCode(asciiStart + codePoint - start);
+    }
+  }
+
+  const digitRanges = [0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6];
+  for (const start of digitRanges) {
+    if (codePoint >= start && codePoint <= start + 9) {
+      return String(codePoint - start);
+    }
+  }
+
+  return char;
+}
+
+function compactRuleBasedFormulaLine(line) {
+  return stringValue(line)
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+function isRuleBasedMathLine(line) {
+  const normalized = compactRuleBasedFormulaLine(line);
+  if (!normalized || normalized.length > 100) return false;
+  if (/^[A-H][.．、]/.test(normalized)) return false;
+  if (/[\u4e00-\u9fff]/.test(normalized)) return false;
+  return /[A-Za-z0-9πθ√+\-*/^=().,≠≤≥<>|∈∪∩∞{}\[\]]/.test(normalized);
+}
+
+function isVerticalFractionBoundary(line) {
+  const normalized = compactRuleBasedFormulaLine(line);
+  if (!normalized) return true;
+  if (/^=/.test(normalized)) return true;
+  if (/^[，。,;；)）(（]/.test(normalized)) return true;
+  if (/^\d{1,3}[.．、]/.test(normalized)) return true;
+  if (/^[A-H][.．、]/.test(normalized)) return true;
+  if (/^(解析|解答|说明|答案解析)[:：]?/.test(normalized)) return true;
+  return /[\u4e00-\u9fff]/.test(normalized);
+}
+
+function appendRuleBasedFormulaLine(lines, line) {
+  if (line === "=" && lines.length > 0) {
+    lines[lines.length - 1] = `${lines[lines.length - 1]}=`;
+    return;
+  }
+  lines.push(line);
+}
+
+function normalizeVerticalFormulaFractions(rawText) {
+  const lines = stringValue(rawText).split("\n");
+  const output = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const prefixEndsWithEquals = /=\s*$/.test(line);
+
+    if (prefixEndsWithEquals) {
+      const numerator = compactRuleBasedFormulaLine(lines[i + 1]);
+      const denominator = compactRuleBasedFormulaLine(lines[i + 2]);
+      const sqrtNumerator = lines[i + 1]?.trim() === "√"
+        ? compactRuleBasedFormulaLine(lines[i + 2])
+        : "";
+      const sqrtDenominator = lines[i + 1]?.trim() === "√"
+        ? compactRuleBasedFormulaLine(lines[i + 3])
+        : "";
+
+      if (sqrtNumerator && sqrtDenominator && isRuleBasedMathLine(sqrtNumerator) && isRuleBasedMathLine(sqrtDenominator) && isVerticalFractionBoundary(lines[i + 4])) {
+        appendRuleBasedFormulaLine(output, `${line}√(${sqrtNumerator})/(${sqrtDenominator})`);
+        i += 3;
+        continue;
+      }
+
+      if (numerator && denominator && isRuleBasedMathLine(numerator) && isRuleBasedMathLine(denominator) && isVerticalFractionBoundary(lines[i + 3])) {
+        appendRuleBasedFormulaLine(output, `${line}(${numerator})/(${denominator})`);
+        i += 2;
+        continue;
+      }
+    }
+
+    output.push(lines[i]);
+  }
+
+  return output.join("\n");
+}
+
+function normalizePdfMathGlyphs(rawText) {
+  return [...stringValue(rawText)]
+    .map(mapPdfMathGlyph)
+    .join("")
+    .replace(/−/g, "-")
+    .replace(/∣/g, "|")
+    .replace(/∘/g, "°");
+}
+
+function normalizeRuleBasedMathLayout(rawText) {
+  return normalizeVerticalFormulaFractions(normalizePdfMathGlyphs(rawText))
+    .replace(/\r/g, "\n")
+    .replace(/Page\s+\d+\s*\|\s*\d+/gi, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/([A-Za-z])\s*\n\s*([2-9])\s*\n\s*([0-9]+)(?=\s*(?:\n|[-+*/=<>≤≥,，。;；)）\]}]|$))/g, "$1^$2/$3")
+    .replace(/([0-9])\s*\n\s*√\s*\n\s*([0-9πθ]+)(?=\s*(?:\n|[,.，。；:：)）]|$))/g, "$1√$2")
+    .replace(/([+-]?)\s*\n\s*√\s*\n\s*([0-9πθ]+)\s*\n\s*([0-9πθ]+)(?=\s*(?:\n|[A-H][.．、]|[，。；:：)）]|$))/g, (_, sign, numerator, denominator) => `${sign || ""}√${numerator}/${denominator}`)
+    .replace(/([+-]?)\s*\n\s*([0-9πθ]+)\s*\n\s*([0-9πθ]+)(?=\s*(?:\n|[A-H][.．、]|[，。；:：)）]|$))/g, (_, sign, numerator, denominator) => `${sign || ""}${numerator}/${denominator}`)
+    .replace(/([A-Za-z0-9)\]}])\s*\n\s*([2-9])(?=\s*\n\s*(?:[-+*/=<>≤≥,，。;；)）\]}]|$))/g, "$1^$2");
+}
+
+function cleanRuleBasedTextFragment(rawText) {
+  return stringValue(rawText)
     .replace(/\s+/g, " ")
-    .replace(/\s+([,.;:，。；：）\)])/g, "$1")
+    .replace(/\b(sin|cos|tan|cot|ln|log)\s+\(/gi, "$1(")
+    .replace(/√\s+/g, "√")
+    .replace(/([0-9])\s+√/g, "$1√")
+    .replace(/\s+\^/g, "^")
+    .replace(/\^\s+/g, "^")
+    .replace(/\bf\s*-1\s*\(/gi, "f^-1(")
+    .replace(/\b([A-Za-z])\s+\(/g, "$1(")
+    .replace(/\s+([,.;:，。；：）\)°])/g, "$1")
+    .replace(/([（\(])\s+/g, "$1")
     .trim();
+}
+
+function splitRuleBasedOptionText(rawText) {
+  const text = cleanRuleBasedTextFragment(rawText);
+  if (!text) return "";
+  return text;
 }
 
 function inferCorrectAnswerFromExplanation(answers, explanation) {
@@ -495,9 +641,7 @@ function inferCorrectAnswerFromExplanation(answers, explanation) {
 }
 
 function parsePdfTextWithRules(pdfText, sourceMeta) {
-  const text = stringValue(pdfText)
-    .replace(/\r/g, "\n")
-    .replace(/Page\s+\d+\s*\|\s*\d+/gi, "\n")
+  const text = normalizeRuleBasedMathLayout(pdfText)
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -511,15 +655,15 @@ function parsePdfTextWithRules(pdfText, sourceMeta) {
     const block = text.slice(start, end).trim();
     if (!block) continue;
 
-    const optionMatch = block.match(/\sA[.．、]?\s+/);
+    const optionMatch = block.match(/\sA\s*[.．、]\s*/);
     if (!optionMatch) continue;
 
-    const questionText = block.slice(0, optionMatch.index).trim();
+    const questionText = cleanRuleBasedTextFragment(block.slice(0, optionMatch.index));
     const afterA = block.slice(optionMatch.index).trim();
     const explanationMatch = afterA.match(/\s(?:解析|解答|说明|答案解析)[:：]\s*/);
     const optionsPart = explanationMatch ? afterA.slice(0, explanationMatch.index).trim() : afterA;
-    const explanation = explanationMatch ? afterA.slice(explanationMatch.index + explanationMatch[0].length).trim() : "";
-    const optionMatches = [...optionsPart.matchAll(/(?:^|\s)([A-H])[.．、]?\s+/g)];
+    const explanation = explanationMatch ? cleanRuleBasedTextFragment(afterA.slice(explanationMatch.index + explanationMatch[0].length)) : "";
+    const optionMatches = [...optionsPart.matchAll(/(?:^|\s)([A-H])\s*[.．、]\s*/g)];
 
     if (optionMatches.length < 2) continue;
 
