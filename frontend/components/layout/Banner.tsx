@@ -158,20 +158,46 @@ const SUBJECT_PILLS = [
 export default function Banner() {
   const { t, pick } = useLanguage();
   const [current, setCurrent] = useState(0);
+  const [previous, setPrevious] = useState<number | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transitionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentRef = useRef(0);
+
+  const commitSlide = (index: number) => {
+    const next = (index + SLIDES.length) % SLIDES.length;
+    if (next === currentRef.current) return;
+
+    setPrevious(currentRef.current);
+    currentRef.current = next;
+    setCurrent(next);
+
+    if (transitionRef.current) clearTimeout(transitionRef.current);
+    transitionRef.current = setTimeout(() => setPrevious(null), 800);
+  };
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
-      setCurrent((prev) => (prev + 1) % SLIDES.length);
+      commitSlide(currentRef.current + 1);
     }, 5000);
   };
 
   useEffect(() => {
     startTimer();
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (transitionRef.current) clearTimeout(transitionRef.current);
+    };
   }, []);
+
+  useEffect(() => {
+    [current, current + 1, current - 1].forEach((index) => {
+      const slideToPreload = SLIDES[(index + SLIDES.length) % SLIDES.length];
+      const image = new window.Image();
+      image.src = slideToPreload.bgImage;
+    });
+  }, [current]);
 
   useEffect(() => {
     const mq = window.matchMedia('(pointer: coarse)');
@@ -187,13 +213,13 @@ export default function Banner() {
 
   const go = (dir: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setCurrent((prev) => (prev + dir + SLIDES.length) % SLIDES.length);
+    commitSlide(currentRef.current + dir);
     startTimer();
   };
 
   const goTo = (index: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setCurrent(index);
+    commitSlide(index);
     startTimer();
   };
 
@@ -204,21 +230,31 @@ export default function Banner() {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div key={slide.id} className="absolute inset-0 scale-100 opacity-100 transition-all duration-700 ease-in-out">
-        <Image
-          src={slide.bgImage}
-          alt={pick(slide.title)}
-          fill
-          priority={current === 0}
-          quality={90}
-          sizes="100vw"
-          className="object-cover"
-          style={{ objectPosition: slide.objectPosition }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/10" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-        <div className={`absolute inset-0 bg-gradient-to-br ${slide.accentColor} opacity-[0.08]`} />
-      </div>
+      {[previous, current].filter((index, position, indexes): index is number => index !== null && indexes.indexOf(index) === position).map((index) => {
+        const item = SLIDES[index];
+        const isActive = index === current;
+
+        return (
+          <div
+            key={item.id}
+            className={`absolute inset-0 transition-opacity duration-500 ease-out ${isActive ? 'z-[1] opacity-100' : 'z-0 opacity-0'}`}
+          >
+            <Image
+              src={item.bgImage}
+              alt={pick(item.title)}
+              fill
+              priority={index === 0}
+              quality={90}
+              sizes="100vw"
+              className="object-cover"
+              style={{ objectPosition: item.objectPosition }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/10" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            <div className={`absolute inset-0 bg-gradient-to-br ${item.accentColor} opacity-[0.08]`} />
+          </div>
+        );
+      })}
 
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-8 md:px-12 lg:px-16">
