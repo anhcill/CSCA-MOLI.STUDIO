@@ -279,7 +279,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                 <button
                   key={quality}
                   onClick={() => submitQuality(quality)}
-                  disabled={!flipped || saving}
+                  disabled={saving}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border font-bold text-sm disabled:opacity-40 ${className}`}
                 >
                   <Icon /> {label}
@@ -297,4 +297,3 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     </section>
   );
 }
-
