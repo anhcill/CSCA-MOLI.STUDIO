@@ -293,14 +293,20 @@ function getStoredDiscountDetails(transaction) {
   };
 }
 
-async function getReservedCoins(userId) {
-  const reservedRes = await db.query(
-    `SELECT COALESCE(SUM((raw_response->>'coinsUsed')::int), 0) AS reserved
+async function getReservedCoins(userId, client = db) {
+  const reservedRes = await client.query(
+    `SELECT COALESCE(SUM(
+       CASE
+         WHEN raw_response ? 'coinsUsed'
+          AND (raw_response->>'coinsUsed') ~ '^[0-9]+$'
+         THEN (raw_response->>'coinsUsed')::int
+         ELSE 0
+       END
+     ), 0)::int AS reserved
      FROM transactions
      WHERE user_id = $1
-       AND status = 'pending'
-       AND created_at >= NOW() - INTERVAL '24 hours'
-       AND raw_response ? 'coinsUsed'`,
+       AND status IN ('pending', 'processing')
+       AND created_at >= NOW() - INTERVAL '24 hours'`,
     [userId]
   );
   return Number.parseInt(reservedRes.rows[0]?.reserved, 10) || 0;
@@ -382,11 +388,9 @@ async function updateVipStatusForPayment(userId, durationDays, tier) {
 }
 
 async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
+  await applyCoinSpend(transaction);
   await incrementCouponUsage(transaction).catch(err => {
     console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
-  });
-  await applyCoinSpend(transaction).catch(err => {
-    console.error('[Payment] Coin spend update failed, continuing payment completion:', err.message);
   });
 
   const tier = transaction.package_id
@@ -438,8 +442,10 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
 }
 
 async function completeZeroAmountTransaction(transaction, providerPayload = {}) {
-  await incrementCouponUsage(transaction);
   await applyCoinSpend(transaction);
+  await incrementCouponUsage(transaction).catch(err => {
+    console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
+  });
 
   const tier = transaction.package_id
     ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
@@ -573,10 +579,15 @@ async function reconcilePendingBankTransfer(transaction) {
       return await Transaction.findByTransactionCode(transaction.transaction_code);
     }
 
-    await completeClaimedBankTransfer(
-      claimedTransaction,
-      mapSePayApiTransactionToWebhookPayload(sepayTransaction)
-    );
+    try {
+      await completeClaimedBankTransfer(
+        claimedTransaction,
+        mapSePayApiTransactionToWebhookPayload(sepayTransaction)
+      );
+    } catch (processErr) {
+      await Transaction.updateStatus(claimedTransaction.id, 'pending');
+      throw processErr;
+    }
     return await Transaction.findByTransactionCode(transaction.transaction_code);
   } catch (err) {
     console.error('[SePay] API reconcile failed:', err.message);
@@ -736,42 +747,60 @@ router.post('/create', authenticate, async (req, res) => {
 
     let coinsUsed = 0;
     let coinDiscountAmount = 0;
-    if (use_coins === true || Number.parseInt(coins_to_use, 10) > 0) {
-      const requestedCoins = Number.parseInt(coins_to_use, 10);
-      const reservedCoins = await getReservedCoins(userId);
-      const availableCoins = Math.max(0, Number(user?.coins || 0) - reservedCoins);
-      const maxCoinsByOrder = Math.floor((finalAmount * MAX_COIN_DISCOUNT_RATIO) / COIN_VALUE_VND);
-      const maxUsableCoins = Math.max(0, Math.min(availableCoins, maxCoinsByOrder));
-      coinsUsed = Number.isFinite(requestedCoins) && requestedCoins > 0
-        ? Math.min(requestedCoins, maxUsableCoins)
-        : maxUsableCoins;
-      coinDiscountAmount = coinsUsed * COIN_VALUE_VND;
-      finalAmount = Math.max(0, finalAmount - coinDiscountAmount);
+    let transaction = null;
+    const paymentClient = await db.pool.connect();
+    try {
+      await paymentClient.query('BEGIN');
+      const lockedUser = await paymentClient.query(
+        `SELECT COALESCE(coins, 0)::int AS coins FROM users WHERE id = $1 FOR UPDATE`,
+        [userId],
+      );
+      const lockedCoins = lockedUser.rows[0]?.coins || 0;
+
+      if (use_coins === true || Number.parseInt(coins_to_use, 10) > 0) {
+        const requestedCoins = Number.parseInt(coins_to_use, 10);
+        const reservedCoins = await getReservedCoins(userId, paymentClient);
+        const availableCoins = Math.max(0, Number(lockedCoins || 0) - reservedCoins);
+        const maxCoinsByOrder = Math.floor((finalAmount * MAX_COIN_DISCOUNT_RATIO) / COIN_VALUE_VND);
+        const maxUsableCoins = Math.max(0, Math.min(availableCoins, maxCoinsByOrder));
+        coinsUsed = Number.isFinite(requestedCoins) && requestedCoins > 0
+          ? Math.min(requestedCoins, maxUsableCoins)
+          : maxUsableCoins;
+        coinDiscountAmount = coinsUsed * COIN_VALUE_VND;
+        finalAmount = Math.max(0, finalAmount - coinDiscountAmount);
+      }
+
+      // Lưu transaction pending — lưu giá đã giảm vào amount, coupon vào raw_response
+      const paymentMeta = {
+        couponCode: coupon_code?.trim() || null,
+        coinsUsed,
+        coinValueVnd: COIN_VALUE_VND,
+        coinDiscountAmount,
+        originalAmount: Number(pkg.price),
+        couponDiscountAmount: discountAmount,
+        finalAmount,
+        paymentMethodRequested: payment_method,
+      };
+
+      transaction = await Transaction.create({
+        user_id: userId,
+        amount: finalAmount,
+        payment_method: finalAmount <= 0 ? 'coupon_free' : payment_method,
+        package_id: pkg.id,
+        package_duration: pkg.duration_days,
+        package_name: pkg.name,
+        transaction_code: orderId,
+        coupon_code: coupon_code?.trim() || null,
+        raw_response: paymentMeta,
+      }, paymentClient);
+
+      await paymentClient.query('COMMIT');
+    } catch (paymentCreateErr) {
+      await paymentClient.query('ROLLBACK').catch(() => {});
+      throw paymentCreateErr;
+    } finally {
+      paymentClient.release();
     }
-
-    // Lưu transaction pending — lưu giá đã giảm vào amount, coupon vào raw_response
-    const paymentMeta = {
-      couponCode: coupon_code?.trim() || null,
-      coinsUsed,
-      coinValueVnd: COIN_VALUE_VND,
-      coinDiscountAmount,
-      originalAmount: Number(pkg.price),
-      couponDiscountAmount: discountAmount,
-      finalAmount,
-      paymentMethodRequested: payment_method,
-    };
-
-    const transaction = await Transaction.create({
-      user_id: userId,
-      amount: finalAmount,
-      payment_method: finalAmount <= 0 ? 'coupon_free' : payment_method,
-      package_id: pkg.id,
-      package_duration: pkg.duration_days,
-      package_name: pkg.name,
-      transaction_code: orderId,
-      coupon_code: coupon_code?.trim() || null,
-      raw_response: paymentMeta,
-    });
 
     // Nếu payment_method là bank_transfer → trả về thông tin QR
     if (finalAmount <= 0) {
@@ -937,8 +966,10 @@ router.post('/momo-webhook', async (req, res) => {
         const tier = extra.tier || 'vip';
 
         // ── Increment coupon usage CHỈ khi thành công ──────────────────────
-        await incrementCouponUsage(transaction);
         await applyCoinSpend(transaction);
+        await incrementCouponUsage(transaction).catch(err => {
+          console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
+        });
 
         // Update user VIP with tier
         await User.updateVipStatus(transaction.user_id, durationDays, tier);
@@ -1032,8 +1063,10 @@ router.post('/vnpay-webhook', async (req, res) => {
     if (vnp_ResponseCode === '00') {
       if (transaction.status !== 'completed') {
         // Increment coupon usage CHỉ khi thành công
-        await incrementCouponUsage(transaction);
         await applyCoinSpend(transaction);
+        await incrementCouponUsage(transaction).catch(err => {
+          console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
+        });
 
         const tier = transaction.package_id
           ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'

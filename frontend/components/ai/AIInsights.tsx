@@ -209,7 +209,7 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
   }, []);
 
   const handleRefresh = () => {
-    fetchAnalysis(true);
+    fetchAnalysis(true, !hasAI);
   };
 
   if (loading) {
@@ -400,11 +400,12 @@ export function AIInsights({ userId: userIdProp, subjectCode }: AIInsightsProps 
         </div>
         <button
           onClick={handleRefresh}
-          disabled={refreshing}
+          disabled={refreshing || (!hasAI && !canSpendCoins)}
+          title={!hasAI && !canSpendCoins ? coinHelpText : undefined}
           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl hover:bg-gray-700 transition-colors text-sm disabled:opacity-50"
         >
           <FiRefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Đang phân tích...' : 'Làm mới'}
+          {refreshing ? 'Đang phân tích...' : hasAI ? 'Làm mới' : `Làm mới ${AI_ANALYSIS_COST} Xu`}
         </button>
       </div>
 

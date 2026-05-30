@@ -873,9 +873,11 @@ async function analyzeUserPerformance(req, res) {
       }
 
       // Kiểm tra và trừ 50 Xu
-      const userRes = await db.query('SELECT coins FROM users WHERE id = $1', [userId]);
-      const currentCoins = userRes.rows[0]?.coins || 0;
-      if (currentCoins < 50) {
+      const [currentCoins, reservedCoins] = await Promise.all([
+        coinService.getBalance(userId),
+        coinService.getReservedPaymentCoins(userId),
+      ]);
+      if (Math.max(0, currentCoins - reservedCoins) < 50) {
         if (req._resolveInflight) req._resolveInflight(null);
         return res.status(403).json({ success: false, message: 'Bạn không đủ 50 Xu.', code: 'INSUFFICIENT_COINS', cost: 50 });
       }
@@ -1032,6 +1034,33 @@ async function analyzeUserPerformance(req, res) {
 async function refreshAnalysis(req, res) {
   try {
     const userId = req.user.id;
+    const isVip = canUseAIFeatures(req.user);
+    const useCoins = req.query.useCoins === 'true';
+
+    if (!isVip) {
+      if (!useCoins) {
+        return res.status(403).json({
+          success: false,
+          message: 'Cần nâng cấp Premium/VIP hoặc dùng 50 Xu để phân tích.',
+          code: 'PREMIUM_REQUIRED',
+          cost: 50,
+        });
+      }
+
+      const [currentCoins, reservedCoins] = await Promise.all([
+        coinService.getBalance(userId),
+        coinService.getReservedPaymentCoins(userId),
+      ]);
+      if (Math.max(0, currentCoins - reservedCoins) < 50) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không đủ 50 Xu.',
+          code: 'INSUFFICIENT_COINS',
+          cost: 50,
+        });
+      }
+    }
+
     const cooldownUntil = userCooldowns.get(userId) || 0;
     if (Date.now() < cooldownUntil) {
       const remainMin = Math.ceil((cooldownUntil - Date.now()) / 60000);

@@ -341,6 +341,15 @@ function CheckoutContent() {
     }
   }, [useCoins, maxCoinUse]);
 
+  const refreshAuthUser = async () => {
+    try {
+      const response = await getCurrentUser();
+      if (response?.success && response?.data?.user) {
+        updateUser(response.data.user);
+      }
+    } catch (_) {}
+  };
+
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
     if (couponMismatchError) { setError(couponMismatchError); return; }
@@ -360,6 +369,7 @@ function CheckoutContent() {
           setAppliedCouponInfo(res.data.appliedCoupon);
         }
         if (res.data.status === 'completed' || res.data.payment_method === 'coupon_free') {
+          await refreshAuthUser();
           setSuccessData(res.data.data || {
             package_name: selectedPkg.name,
             amount: 0,
@@ -381,7 +391,8 @@ function CheckoutContent() {
     }
   };
 
-  const handlePaid = (data: any) => {
+  const handlePaid = async (data: any) => {
+    await refreshAuthUser();
     setSuccessData(data);
     setStep('success');
   };

@@ -32,6 +32,34 @@ async function getBalance(userId, client = db) {
   return result.rows[0]?.coins || 0;
 }
 
+async function getReservedPaymentCoins(userId, { excludeTransactionId = null, client = db } = {}) {
+  const params = [userId];
+  let excludeClause = "";
+  const excludedId = Number.parseInt(excludeTransactionId, 10);
+  if (Number.isFinite(excludedId) && excludedId > 0) {
+    params.push(excludedId);
+    excludeClause = `AND id <> $${params.length}`;
+  }
+
+  const result = await client.query(
+    `SELECT COALESCE(SUM(
+       CASE
+         WHEN raw_response ? 'coinsUsed'
+          AND (raw_response->>'coinsUsed') ~ '^[0-9]+$'
+         THEN (raw_response->>'coinsUsed')::int
+         ELSE 0
+       END
+     ), 0)::int AS reserved
+     FROM transactions
+     WHERE user_id = $1
+       AND status IN ('pending', 'processing')
+       AND created_at >= NOW() - INTERVAL '24 hours'
+       ${excludeClause}`,
+    params,
+  );
+  return result.rows[0]?.reserved || 0;
+}
+
 async function adjustBalance({
   userId,
   amount,
@@ -67,6 +95,20 @@ async function adjustBalance({
     const next = current + delta;
     if (next < 0) {
       throw new CoinError("Bạn không đủ xu", "INSUFFICIENT_COINS", 402);
+    }
+
+    if (delta < 0) {
+      const reservedCoins = await getReservedPaymentCoins(userId, {
+        excludeTransactionId: metadata?.transactionId,
+        client: tx,
+      });
+      if (next < reservedCoins) {
+        throw new CoinError(
+          "Ban khong du xu kha dung vi dang co xu giu cho don thanh toan cho xu ly",
+          "INSUFFICIENT_COINS",
+          402,
+        );
+      }
     }
 
     await tx.query("UPDATE users SET coins = $1, updated_at = NOW() WHERE id = $2", [
@@ -157,6 +199,7 @@ module.exports = {
   credit,
   debit,
   getBalance,
+  getReservedPaymentCoins,
   getLedger,
   getAdminSummary,
 };

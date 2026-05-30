@@ -1,10 +1,15 @@
 const multer = require("multer");
 
 const storage = multer.memoryStorage();
+const allowedPdfMimeTypes = new Set([
+  "application/pdf",
+  "application/x-pdf",
+  "application/octet-stream",
+]);
 
 const fileFilter = (req, file, cb) => {
   const extension = String(file.originalname || "").toLowerCase().split(".").pop();
-  const isPdf = extension === "pdf" && file.mimetype === "application/pdf";
+  const isPdf = extension === "pdf" && allowedPdfMimeTypes.has(file.mimetype);
 
   if (isPdf) {
     cb(null, true);

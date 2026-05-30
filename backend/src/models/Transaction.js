@@ -8,7 +8,7 @@ class Transaction {
   /**
    * Create a new transaction
    */
-  static async create(data) {
+  static async create(data, client = db) {
     const {
       user_id,
       amount,
@@ -26,7 +26,7 @@ class Transaction {
         ? JSON.stringify({ couponCode: coupon_code })
         : null;
     try {
-      const result = await db.query(
+      const result = await client.query(
         `INSERT INTO transactions (user_id, amount, payment_method, package_id, package_duration, package_name, transaction_code, status, raw_response)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
          RETURNING *`,

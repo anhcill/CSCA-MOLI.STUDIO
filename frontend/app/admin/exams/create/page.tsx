@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiPlus, FiEye, FiX, FiUpload, FiAlertCircle } from 'react-icons/fi';
+import { FiPlus, FiEye, FiX, FiUpload } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
+import PdfImportReview from '@/components/admin/pdf-import/PdfImportReview';
 import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -17,6 +18,111 @@ interface Subject {
     name: string;
     code: string;
 }
+
+type EditableQuestion = QuestionFormData & {
+    _id: string;
+    _order?: number;
+    _savedQuestionId?: number;
+};
+
+const IMPORT_ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+const hasImportText = (...values: Array<string | undefined | null>) =>
+    values.some(value => typeof value === 'string' && value.trim().length > 0);
+
+const getImportItemQuestionCount = (item: ImportedExamItem) => {
+    if (item.itemType === 'reading_group') return item.subQuestions.length;
+    if (item.itemType === 'fill_blank_group') return item.subItems.length;
+    return 1;
+};
+
+const getImportPreviewItems = (preview: PdfImportPreview | null): ImportedExamItem[] => {
+    if (!preview) return [];
+    return preview.items?.length ? preview.items : preview.questions || [];
+};
+
+const getImportItemsQuestionCount = (items: ImportedExamItem[]) =>
+    items.reduce((sum, item) => sum + getImportItemQuestionCount(item), 0);
+
+const validateImportedSingleChoice = (item: ImportedQuestionData, label: string) => {
+    if (!hasImportText(item.questionText, item.questionTextCn)) {
+        return `${label} cần nội dung câu hỏi`;
+    }
+
+    const answers = item.answers || [];
+    if (answers.length < 2 || answers.length > IMPORT_ANSWER_KEYS.length) {
+        return `${label} cần từ 2 đến 8 đáp án`;
+    }
+
+    const emptyAnswerIndex = answers.findIndex(answer => !hasImportText(answer.text, answer.textCn));
+    if (emptyAnswerIndex !== -1) {
+        return `${label} thiếu nội dung đáp án ${IMPORT_ANSWER_KEYS[emptyAnswerIndex]}`;
+    }
+
+    const allowedKeys = IMPORT_ANSWER_KEYS.slice(0, answers.length);
+    if (!item.correctAnswer || !allowedKeys.includes(item.correctAnswer)) {
+        return `${label} cần chọn đáp án đúng`;
+    }
+
+    return '';
+};
+
+const validateImportedItems = (items: ImportedExamItem[]) => {
+    if (!items.length) return 'Không có câu hỏi để import';
+
+    for (let index = 0; index < items.length; index++) {
+        const item = items[index];
+        const label = `Mục ${index + 1}`;
+
+        if (item.itemType === 'reading_group') {
+            if (!hasImportText(item.passageText)) {
+                return `${label} đọc hiểu cần đoạn văn`;
+            }
+            if (!item.subQuestions?.length) {
+                return `${label} đọc hiểu cần ít nhất 1 câu con`;
+            }
+            for (let subIndex = 0; subIndex < item.subQuestions.length; subIndex++) {
+                const error = validateImportedSingleChoice(item.subQuestions[subIndex], `${label}.${subIndex + 1}`);
+                if (error) return error;
+            }
+            continue;
+        }
+
+        if (item.itemType === 'fill_blank_group') {
+            const options = item.linkedOptions || [];
+            const validOptionKeys = new Set(options.map(option => option.key));
+
+            if (options.length < 2) {
+                return `${label} điền từ cần ít nhất 2 lựa chọn`;
+            }
+            const emptyOptionIndex = options.findIndex(option => !hasImportText(option.text, option.textCn));
+            if (emptyOptionIndex !== -1) {
+                return `${label} thiếu nội dung lựa chọn ${options[emptyOptionIndex]?.key || emptyOptionIndex + 1}`;
+            }
+            if (item.clozeMode === 'passage' && !hasImportText(item.passageText)) {
+                return `${label} điền từ dạng đoạn văn cần passageText`;
+            }
+            if (!item.subItems?.length) {
+                return `${label} điền từ cần ít nhất 1 chỗ trống`;
+            }
+            for (let subIndex = 0; subIndex < item.subItems.length; subIndex++) {
+                const subItem = item.subItems[subIndex];
+                if (item.clozeMode !== 'passage' && !hasImportText(subItem.questionText, subItem.questionTextCn)) {
+                    return `${label}.${subIndex + 1} cần nội dung câu điền từ`;
+                }
+                if (!subItem.correctAnswerKey || !validOptionKeys.has(subItem.correctAnswerKey)) {
+                    return `${label}.${subIndex + 1} cần đáp án đúng nằm trong pool`;
+                }
+            }
+            continue;
+        }
+
+        const error = validateImportedSingleChoice(item, label);
+        if (error) return error;
+    }
+
+    return '';
+};
 
 export default function CreateExamPage() {
     const router = useRouter();
@@ -51,7 +157,7 @@ export default function CreateExamPage() {
     };
 
     // Questions with unique IDs
-    const [questions, setQuestions] = useState<(QuestionFormData & { _id: string; _order?: number })[]>([]);
+    const [questions, setQuestions] = useState<EditableQuestion[]>([]);
     // Reading passage groups (đoạn văn + nhiều câu con gom chung 1 card)
     const [readingPassageGroups, setReadingPassageGroups] = useState<(ReadingPassageGroupData & { _id: string; _order?: number })[]>([]);
     // Fill blank groups (điền từ + nhiều chỗ trống gom chung 1 card)
@@ -76,7 +182,7 @@ export default function CreateExamPage() {
 
     // ── Computed: interleave all question types in display order with question numbers ──
     type AllQuestionItem =
-        | { type: 'single'; question: QuestionFormData & { _id: string; _order?: number }; index: number; displayNumber: number }
+        | { type: 'single'; question: EditableQuestion; index: number; displayNumber: number }
         | { type: 'reading'; group: ReadingPassageGroupData & { _id: string; _order?: number }; index: number; displayNumber: number }
         | { type: 'fill'; group: FillBlankGroupData & { _id: string; _order?: number }; index: number; displayNumber: number };
 
@@ -256,10 +362,12 @@ export default function CreateExamPage() {
                 alert('Hãy dùng nút "Thêm Điền Từ" để tạo nhóm câu rời/đoạn văn có đáp án con.');
                 return;
             } else {
-                await examAdminApi.addQuestion(currentExamId, data as any);
+                const res = await examAdminApi.addQuestion(currentExamId, data as any);
+                const savedQuestionId = Number(res?.questionId) || undefined;
                 const newQ = {
-                    _id: `q-${Date.now()}`,
+                    _id: savedQuestionId ? `q-${savedQuestionId}` : `q-${Date.now()}`,
                     _order: Date.now(),
+                    _savedQuestionId: savedQuestionId,
                     ...data,
                 };
                 setQuestions(prev => [...prev, newQ]);
@@ -287,15 +395,19 @@ export default function CreateExamPage() {
 
         try {
             setLoading(true);
-            const res = await examAdminApi.insertQuestion(currentExamId, data as any, undefined, displayNumber);
+            const existingQuestionId = questions[index]?._savedQuestionId;
+            const res = existingQuestionId
+                ? await examAdminApi.updateQuestion(existingQuestionId, data as any)
+                : await examAdminApi.insertQuestion(currentExamId, data as any, undefined, displayNumber);
+            const savedQuestionId = existingQuestionId || Number((res as any)?.questionId) || undefined;
 
             // Update local state với thông tin từ backend
             const newQuestions = [...questions];
-            const dataWithId = data as QuestionFormData & { _id?: string };
             newQuestions[index] = {
                 ...newQuestions[index],
                 ...data,
-                _id: dataWithId._id || `q-${res.questionId}`,
+                _id: newQuestions[index]?._id || (savedQuestionId ? `q-${savedQuestionId}` : `q-${Date.now()}`),
+                _savedQuestionId: savedQuestionId,
             };
             setQuestions(newQuestions);
 
@@ -307,7 +419,7 @@ export default function CreateExamPage() {
                 reading_item: 'Đọc hiểu con',
                 true_false: 'Đúng/Sai',
             };
-            alert(`${typeLabel[res.questionType] || 'Câu hỏi'} ${index + 1} đã được lưu!`);
+            alert(`${typeLabel[(res as any)?.questionType || data.questionType] || 'Câu hỏi'} ${index + 1} đã được lưu!`);
         } catch (error) {
             console.error('Error saving question:', error);
             if (isMissingExamError(error)) {
@@ -320,10 +432,22 @@ export default function CreateExamPage() {
         }
     };
 
-    const deleteQuestion = (index: number) => {
-        if (confirm('Xóa câu hỏi này?')) {
+    const deleteQuestion = async (index: number) => {
+        if (!confirm('Xóa câu hỏi này?')) return;
+
+        const question = questions[index];
+        try {
+            setLoading(true);
+            if (question?._savedQuestionId) {
+                await examAdminApi.deleteQuestion(question._savedQuestionId);
+            }
             const newQuestions = questions.filter((_, i) => i !== index);
             setQuestions(newQuestions);
+        } catch (error) {
+            console.error('Error deleting question:', error);
+            alert('Xóa câu hỏi thất bại');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -538,58 +662,13 @@ export default function CreateExamPage() {
         }
     };
 
-    const updateImportedQuestion = (index: number, updates: Partial<ImportedQuestionData>) => {
-        setPdfImportPreview(prev => {
-            if (!prev) return prev;
-            const nextItems = [...(prev.items || [])];
-            const item = nextItems[index];
-            if (!item || item.itemType === 'reading_group' || item.itemType === 'fill_blank_group') return prev;
-            nextItems[index] = { ...item, ...updates };
-            return {
-                ...prev,
-                items: nextItems,
-                questions: nextItems.filter((nextItem): nextItem is ImportedQuestionData => nextItem.itemType !== 'reading_group' && nextItem.itemType !== 'fill_blank_group'),
-            };
-        });
-    };
-
-    const updateImportedAnswer = (
-        questionIndex: number,
-        answerIndex: number,
-        updates: Partial<{ text: string; textCn: string; imageUrl: string }>
-    ) => {
-        setPdfImportPreview(prev => {
-            if (!prev) return prev;
-            const nextItems = [...(prev.items || [])];
-            const item = nextItems[questionIndex];
-            if (!item || item.itemType === 'reading_group' || item.itemType === 'fill_blank_group') return prev;
-            const answers = [...(item.answers || [])];
-            answers[answerIndex] = { ...answers[answerIndex], ...updates };
-            nextItems[questionIndex] = { ...item, answers };
-            return {
-                ...prev,
-                items: nextItems,
-                questions: nextItems.filter((nextItem): nextItem is ImportedQuestionData => nextItem.itemType !== 'reading_group' && nextItem.itemType !== 'fill_blank_group'),
-            };
-        });
-    };
-
     const savePdfImportedQuestions = async () => {
-        const importItems = pdfImportPreview?.items?.length ? pdfImportPreview.items : pdfImportPreview?.questions || [];
+        const importItems = getImportPreviewItems(pdfImportPreview);
         if (!currentExamId || !importItems.length) return;
 
-        const invalidIndex = importItems.findIndex(item => {
-            if (item.itemType === 'reading_group') {
-                return !item.passageText?.trim() || !item.subQuestions?.length;
-            }
-            if (item.itemType === 'fill_blank_group') {
-                return item.linkedOptions.length < 2 || !item.subItems.length;
-            }
-            const answers = item.answers || [];
-            return !item.questionText?.trim() || answers.length < 2 || !item.correctAnswer;
-        });
-        if (invalidIndex !== -1) {
-            alert(`Câu ${invalidIndex + 1} cần nội dung, ít nhất 2 đáp án và đáp án đúng`);
+        const validationError = validateImportedItems(importItems);
+        if (validationError) {
+            alert(validationError);
             return;
         }
 
@@ -597,32 +676,38 @@ export default function CreateExamPage() {
             setPdfImportSaving(true);
             const response = await examAdminApi.bulkImportQuestions(currentExamId, importItems);
             const orderBase = Date.now();
+            const insertedItems = Array.isArray(response?.insertedItems) ? response.insertedItems : [];
+            const insertedSingles = insertedItems.filter((item: any) => item.itemType === 'single_choice');
             const localQuestions = importItems
                 .filter((item): item is ImportedQuestionData => item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group')
-                .map((question, index) => ({
-                _id: `import-single-${orderBase}-${index}`,
-                _order: orderBase + index,
-                questionType: 'single_choice' as const,
-                questionText: question.questionText || '',
-                questionTextCn: question.questionTextCn || '',
-                imageUrl: question.imageUrl || '',
-                passageText: '',
-                passageImageUrl: '',
-                points: question.points || 1,
-                explanation: question.explanation || '',
-                explanationCn: question.explanationCn || '',
-                answers: (question.answers || []).map(answer => ({
-                    text: answer.text || '',
-                    textCn: answer.textCn || '',
-                    imageUrl: answer.imageUrl || '',
-                })),
-                correctAnswer: question.correctAnswer || '',
-                linkedOptions: [],
-                correctAnswerKey: '',
-                subQuestionNumber: 0,
-                difficulty: question.difficulty || 'medium',
-            }));
-            const insertedItems = Array.isArray(response?.insertedItems) ? response.insertedItems : [];
+                .map((question, index) => {
+                    const inserted = insertedSingles[index];
+                    const savedQuestionId = Number(inserted?.id || inserted?.questionId) || undefined;
+                    return {
+                        _id: savedQuestionId ? `q-${savedQuestionId}` : `import-single-${orderBase}-${index}`,
+                        _order: orderBase + index,
+                        _savedQuestionId: savedQuestionId,
+                        questionType: 'single_choice' as const,
+                        questionText: question.questionText || '',
+                        questionTextCn: question.questionTextCn || '',
+                        imageUrl: question.imageUrl || '',
+                        passageText: '',
+                        passageImageUrl: '',
+                        points: question.points || 1,
+                        explanation: question.explanation || '',
+                        explanationCn: question.explanationCn || '',
+                        answers: (question.answers || []).map(answer => ({
+                            text: answer.text || '',
+                            textCn: answer.textCn || '',
+                            imageUrl: answer.imageUrl || '',
+                        })),
+                        correctAnswer: question.correctAnswer || '',
+                        linkedOptions: [],
+                        correctAnswerKey: '',
+                        subQuestionNumber: 0,
+                        difficulty: question.difficulty || 'medium',
+                    };
+                });
             const localReadingGroups = importItems
                 .filter((item): item is Extract<ImportedExamItem, { itemType: 'reading_group' }> => item.itemType === 'reading_group')
                 .map((group, index) => {
@@ -682,7 +767,7 @@ export default function CreateExamPage() {
             setFillBlankGroups(prev => [...prev, ...localFillBlankGroups]);
             setPdfImportPreview(null);
             setPdfImportFile(null);
-            alert(`Đã import ${response?.insertedCount || localQuestions.length} câu vào đề nháp`);
+            alert(`Đã import ${response?.insertedCount || getImportItemsQuestionCount(importItems)} câu vào đề nháp`);
         } catch (error: any) {
             console.error('Error saving imported questions:', error);
             alert(error?.response?.data?.message || 'Lưu câu hỏi import thất bại');
@@ -736,6 +821,8 @@ export default function CreateExamPage() {
             setLoading(false);
         }
     };
+
+    const pdfPreviewItems = getImportPreviewItems(pdfImportPreview);
 
     return (
         <div className="min-h-screen bg-gray-50 py-8">
@@ -1116,168 +1203,19 @@ export default function CreateExamPage() {
                             </div>
 
                             {pdfImportPreview && (
-                                <div className="mt-5 border-t border-gray-200 pt-5">
-                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-                                        <div>
-                                            <p className="text-sm font-semibold text-gray-900">
-                                                Tìm thấy {pdfImportPreview.questions.length} câu hỏi
-                                            </p>
-                                            {pdfImportPreview.source && (
-                                                <p className="text-xs text-gray-500">
-                                                    {pdfImportPreview.source.fileName} - {pdfImportPreview.source.pages || '?'} trang - {pdfImportPreview.source.textLength || 0} ký tự
-                                                </p>
-                                            )}
-                                        </div>
-                                        <button
-                                            onClick={savePdfImportedQuestions}
-                                            disabled={pdfImportSaving || (pdfImportPreview.items || pdfImportPreview.questions).length === 0}
-                                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                                        >
-                                            {pdfImportSaving ? 'Đang lưu...' : `Lưu ${pdfImportPreview.questions.length} câu vào đề`}
-                                        </button>
-                                    </div>
-
-                                    {!!pdfImportPreview.warnings?.length && (
-                                        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                            {pdfImportPreview.warnings.map((warning, index) => (
-                                                <div key={index} className="flex gap-2">
-                                                    <FiAlertCircle className="mt-0.5 shrink-0" />
-                                                    <span>{warning}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    <div className="divide-y divide-gray-200">
-                                        {(pdfImportPreview.items || pdfImportPreview.questions).map((question, questionIndex) => {
-                                            if (question.itemType === 'reading_group') {
-                                                return (
-                                                    <div key={questionIndex} className="py-4 first:pt-0 last:pb-0">
-                                                        <div className="flex items-center justify-between gap-3 mb-2">
-                                                            <h4 className="font-semibold text-gray-900">Doc hieu - {question.subQuestions.length} cau</h4>
-                                                            {question.needsImage && (
-                                                                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Can them anh</span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-line">{question.passageText}</p>
-                                                        <p className="mt-2 text-xs text-gray-500">Sau khi luu, nhom nay se hien bang editor Doc Hieu de sua chi tiet va them anh.</p>
-                                                        {(question.imageHint || question.reviewNotes) && (
-                                                            <p className="mt-2 text-xs text-amber-700">{question.imageHint || question.reviewNotes}</p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            }
-                                            if (question.itemType === 'fill_blank_group') {
-                                                return (
-                                                    <div key={questionIndex} className="py-4 first:pt-0 last:pb-0">
-                                                        <div className="flex items-center justify-between gap-3 mb-2">
-                                                            <h4 className="font-semibold text-gray-900">Dien tu - {question.subItems.length} cho trong</h4>
-                                                            {question.needsImage && (
-                                                                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Can them anh</span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-line">{question.passageText || question.subItems[0]?.questionText}</p>
-                                                        <p className="mt-2 text-xs text-gray-500">Pool {question.linkedOptions.map(option => `${option.key}. ${option.text || option.textCn}`).join(' | ')}</p>
-                                                        <p className="mt-2 text-xs text-gray-500">Sau khi luu, nhom nay se hien bang editor Dien Tu de sua chi tiet va them anh.</p>
-                                                        {(question.imageHint || question.reviewNotes) && (
-                                                            <p className="mt-2 text-xs text-amber-700">{question.imageHint || question.reviewNotes}</p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            }
-                                            const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, question.answers?.length || 0);
-                                            return (
-                                                <div key={questionIndex} className="py-4 first:pt-0 last:pb-0">
-                                                    <div className="flex items-center justify-between gap-3 mb-3">
-                                                        <h4 className="font-semibold text-gray-900">Câu {questionIndex + 1}</h4>
-                                                        {question.needsImage && (
-                                                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                                                                Cần thêm ảnh
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nội dung câu hỏi</label>
-                                                    <textarea
-                                                        value={question.questionText || ''}
-                                                        onChange={(event) => updateImportedQuestion(questionIndex, { questionText: event.target.value })}
-                                                        rows={3}
-                                                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                    />
-
-                                                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                        {(question.answers || []).map((answer, answerIndex) => (
-                                                            <div key={answerIndex}>
-                                                                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                                                                    Đáp án {String.fromCharCode(65 + answerIndex)}
-                                                                </label>
-                                                                <input
-                                                                    type="text"
-                                                                    value={answer.text || ''}
-                                                                    onChange={(event) => updateImportedAnswer(questionIndex, answerIndex, { text: event.target.value })}
-                                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                                />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                        <div>
-                                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
-                                                            <select
-                                                                value={question.correctAnswer || ''}
-                                                                onChange={(event) => updateImportedQuestion(questionIndex, { correctAnswer: event.target.value })}
-                                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                            >
-                                                                <option value="">Chọn đáp án</option>
-                                                                {answerKeys.map(key => (
-                                                                    <option key={key} value={key}>{key}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
-                                                            <input
-                                                                type="number"
-                                                                min="0.1"
-                                                                step="0.1"
-                                                                value={question.points || 1}
-                                                                onChange={(event) => updateImportedQuestion(questionIndex, { points: parseDecimal(event.target.value) || 1 })}
-                                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
-                                                            <select
-                                                                value={question.difficulty || 'medium'}
-                                                                onChange={(event) => updateImportedQuestion(questionIndex, { difficulty: event.target.value })}
-                                                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                            >
-                                                                <option value="easy">Dễ</option>
-                                                                <option value="medium">Trung bình</option>
-                                                                <option value="hard">Khó</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <label className="mt-3 block text-xs font-semibold text-gray-600 mb-1">Giải thích</label>
-                                                    <textarea
-                                                        value={question.explanation || ''}
-                                                        onChange={(event) => updateImportedQuestion(questionIndex, { explanation: event.target.value })}
-                                                        rows={2}
-                                                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                    />
-
-                                                    {(question.imageHint || question.reviewNotes) && (
-                                                        <p className="mt-2 text-xs text-amber-700">
-                                                            {question.imageHint || question.reviewNotes}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                                <PdfImportReview
+                                    preview={pdfImportPreview}
+                                    items={pdfPreviewItems}
+                                    saving={pdfImportSaving}
+                                    onSave={savePdfImportedQuestions}
+                                    onChangeItems={(nextItems) => {
+                                        setPdfImportPreview(prev => prev ? {
+                                            ...prev,
+                                            items: nextItems,
+                                            questions: nextItems.filter((item): item is ImportedQuestionData => item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group'),
+                                        } : prev);
+                                    }}
+                                />
                             )}
                         </div>
 
@@ -1343,6 +1281,7 @@ export default function CreateExamPage() {
                                                 key={item.question._id}
                                                 questionNumber={item.displayNumber}
                                                 initialData={item.question}
+                                                savedQuestionId={item.question._savedQuestionId}
                                                 onSave={(data) => saveQuestion(item.index, data, item.displayNumber)}
                                                 onDelete={() => deleteQuestion(item.index)}
                                             />

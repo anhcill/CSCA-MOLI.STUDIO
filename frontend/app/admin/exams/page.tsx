@@ -227,6 +227,20 @@ export default function ExamsPage() {
         }
     };
 
+    const handlePermanentDeleteExam = async (examId: number) => {
+        const confirmation = window.prompt(`Xóa VĨNH VIỄN đề #${examId}? Nhập XOA VINH VIEN để xác nhận.`);
+        if (confirmation !== 'XOA VINH VIEN') return;
+        const reason = window.prompt('Lý do xóa vĩnh viễn? Có thể để trống.');
+        if (reason === null) return;
+        try {
+            const result = await examAdminApi.permanentDeleteExam(examId, reason.trim());
+            alert(result?.message || 'Đã xóa vĩnh viễn đề thi.');
+            refreshExamData();
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Xóa vĩnh viễn đề thi thất bại');
+        }
+    };
+
     const handleFilterChange = (type: ExamFilter) => {
         setFilterType(type);
         setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -531,22 +545,31 @@ export default function ExamsPage() {
                                                 </>
                                             )}
                                             {isSuperAdminUser && exam.deleted_at && (
-                                                <button
-                                                    onClick={() => handleRestoreExam(exam.id)}
-                                                    className="text-emerald-600 hover:text-emerald-800"
-                                                    title="Khôi phục đề"
-                                                >
-                                                    <FiRotateCcw size={18} />
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={() => handleRestoreExam(exam.id)}
+                                                        className="text-emerald-600 hover:text-emerald-800"
+                                                        title="Khôi phục đề"
+                                                    >
+                                                        <FiRotateCcw size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handlePermanentDeleteExam(exam.id)}
+                                                        className="text-red-700 hover:text-red-900"
+                                                        title="Xóa vĩnh viễn đề thi"
+                                                    >
+                                                        <FiTrash2 size={18} />
+                                                    </button>
+                                                </>
                                             )}
                                             {!exam.deleted_at && exam.deletion_status !== 'requested' && (
-                                            <button
-                                                onClick={() => handleDeleteExam(exam.id)}
-                                                className="text-red-600 hover:text-red-800"
-                                                title="Xóa mềm hoặc gửi yêu cầu xóa"
-                                            >
-                                                <FiTrash2 size={18} />
-                                            </button>
+                                                <button
+                                                    onClick={() => handleDeleteExam(exam.id)}
+                                                    className="text-red-600 hover:text-red-800"
+                                                    title="Xóa mềm hoặc gửi yêu cầu xóa"
+                                                >
+                                                    <FiTrash2 size={18} />
+                                                </button>
                                             )}
                                         </td>
                                     </tr>

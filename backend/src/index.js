@@ -103,8 +103,10 @@ app.use(
   }),
 );
 app.use(compression()); // Compress responses
-app.use(express.json({ limit: "50kb" })); // Body size limit – prevent DoS
-app.use(express.urlencoded({ extended: true, limit: "50kb" }));
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "2mb";
+const urlEncodedBodyLimit = process.env.URLENCODED_BODY_LIMIT || "200kb";
+app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: urlEncodedBodyLimit }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 // ====================================

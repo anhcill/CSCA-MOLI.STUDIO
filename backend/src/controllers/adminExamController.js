@@ -122,6 +122,17 @@ async function ensureExamExists(client, examId) {
   return result.rows.length > 0;
 }
 
+async function tableExists(client, tableName) {
+  const result = await client.query("SELECT to_regclass($1::text) AS table_name", [`public.${tableName}`]);
+  return Boolean(result.rows[0]?.table_name);
+}
+
+async function execIfTableExists(client, tableName, sql, params = []) {
+  if (!(await tableExists(client, tableName))) return 0;
+  const result = await client.query(sql, params);
+  return result.rowCount || 0;
+}
+
 function isMissingQuestionExamForeignKey(error) {
   return error.code === "23503" && error.constraint === "questions_exam_id_fkey";
 }
@@ -1578,7 +1589,163 @@ const AdminExamController = {
     }
   },
 
-  // ─── ADD QUESTION (hỗ trợ 6 loại câu hỏi) ──────────────────────────────
+  // Permanently delete an exam that is already in soft trash.
+  async permanentDeleteExam(req, res) {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({ message: "Chỉ admin tổng được xóa vĩnh viễn đề trong thùng rác mềm." });
+    }
+
+    const { examId } = req.params;
+    const reason = sanitize(req.body?.reason || req.query?.reason || "");
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      const examResult = await client.query(
+        `SELECT id, title, deleted_at, deletion_status
+         FROM exams
+         WHERE id = $1
+         FOR UPDATE`,
+        [examId],
+      );
+
+      if (examResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Exam not found" });
+      }
+
+      const exam = examResult.rows[0];
+      if (!exam.deleted_at) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Chỉ có thể xóa vĩnh viễn đề đã nằm trong thùng rác mềm." });
+      }
+
+      const stats = {};
+      stats.certificates = await execIfTableExists(client, "exam_certificates", "DELETE FROM exam_certificates WHERE exam_id = $1", [examId]);
+      stats.violations = await execIfTableExists(client, "exam_violations", "DELETE FROM exam_violations WHERE exam_id = $1", [examId]);
+      stats.aiInsights = await execIfTableExists(
+        client,
+        "ai_insights",
+        "DELETE FROM ai_insights WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = $1)",
+        [examId],
+      );
+      stats.userAnswers = await execIfTableExists(
+        client,
+        "user_answers",
+        `DELETE FROM user_answers
+         WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = $1)
+            OR question_id IN (SELECT id FROM questions WHERE exam_id = $1)
+            OR selected_answer_id IN (
+              SELECT a.id FROM answers a
+              JOIN questions q ON q.id = a.question_id
+              WHERE q.exam_id = $1
+            )`,
+        [examId],
+      );
+      stats.attempts = await execIfTableExists(client, "exam_attempts", "DELETE FROM exam_attempts WHERE exam_id = $1", [examId]);
+
+      stats.roomStudents = await execIfTableExists(
+        client,
+        "exam_room_students",
+        `DELETE FROM exam_room_students
+         WHERE registration_id IN (SELECT id FROM exam_registrations WHERE exam_id = $1)
+            OR room_id IN (SELECT id FROM exam_rooms WHERE exam_id = $1)`,
+        [examId],
+      );
+      stats.proctors = await execIfTableExists(
+        client,
+        "exam_proctor_assignments",
+        "DELETE FROM exam_proctor_assignments WHERE room_id IN (SELECT id FROM exam_rooms WHERE exam_id = $1)",
+        [examId],
+      );
+      stats.rooms = await execIfTableExists(client, "exam_rooms", "DELETE FROM exam_rooms WHERE exam_id = $1", [examId]);
+      stats.registrations = await execIfTableExists(client, "exam_registrations", "DELETE FROM exam_registrations WHERE exam_id = $1", [examId]);
+      stats.scheduleLogs = await execIfTableExists(client, "exam_schedule_logs", "DELETE FROM exam_schedule_logs WHERE exam_id = $1", [examId]);
+      stats.adminMap = await execIfTableExists(client, "exam_admin_map", "DELETE FROM exam_admin_map WHERE exam_id = $1", [examId]);
+      stats.recommendations = await execIfTableExists(client, "user_recommended_exams", "DELETE FROM user_recommended_exams WHERE exam_id = $1", [examId]);
+      stats.examBookmarks = await execIfTableExists(client, "user_bookmarks", "DELETE FROM user_bookmarks WHERE entity_type = 'exam' AND entity_id = $1", [examId]);
+      stats.questionBookmarks = await execIfTableExists(
+        client,
+        "user_bookmarks",
+        "DELETE FROM user_bookmarks WHERE entity_type = 'question' AND entity_id IN (SELECT id FROM questions WHERE exam_id = $1)",
+        [examId],
+      );
+      stats.questionNotes = await execIfTableExists(
+        client,
+        "user_question_notes",
+        "DELETE FROM user_question_notes WHERE question_id IN (SELECT id FROM questions WHERE exam_id = $1)",
+        [examId],
+      );
+
+      if (await tableExists(client, "user_practice_sets")) {
+        await client.query(
+          `UPDATE user_practice_sets ups
+           SET question_ids = COALESCE((
+             SELECT array_agg(kept.qid ORDER BY kept.ord)
+             FROM unnest(ups.question_ids) WITH ORDINALITY AS kept(qid, ord)
+             WHERE NOT EXISTS (
+               SELECT 1 FROM questions q WHERE q.exam_id = $1 AND q.id = kept.qid
+             )
+           ), '{}'::integer[]),
+               updated_at = CURRENT_TIMESTAMP
+           WHERE EXISTS (
+             SELECT 1
+             FROM unnest(ups.question_ids) AS ids(qid)
+             JOIN questions q ON q.id = ids.qid
+             WHERE q.exam_id = $1
+           )`,
+          [examId],
+        );
+      }
+
+      stats.topicMappings = await execIfTableExists(
+        client,
+        "question_topic_mapping",
+        "DELETE FROM question_topic_mapping WHERE question_id IN (SELECT id FROM questions WHERE exam_id = $1)",
+        [examId],
+      );
+      await client.query("UPDATE questions SET passage_group_id = NULL WHERE exam_id = $1", [examId]);
+      stats.answers = await execIfTableExists(
+        client,
+        "answers",
+        "DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE exam_id = $1)",
+        [examId],
+      );
+      stats.questions = await execIfTableExists(client, "questions", "DELETE FROM questions WHERE exam_id = $1", [examId]);
+      const deletedExam = await client.query("DELETE FROM exams WHERE id = $1 RETURNING id, title", [examId]);
+
+      await client.query("COMMIT");
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+      UserActivity.log(req.user.id, "admin.permanent_delete_exam", {
+        examId,
+        examTitle: exam.title,
+        reason,
+        deletedRows: stats,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      return res.json({
+        message: "Đã xóa vĩnh viễn đề thi khỏi thùng rác mềm.",
+        exam: deletedExam.rows[0],
+        deletedRows: stats,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Permanent delete exam error:", error);
+      if (error.code === "23503") {
+        return res.status(409).json({
+          message: "Không thể xóa vĩnh viễn vì vẫn còn dữ liệu liên kết. Vui lòng báo kỹ thuật kiểm tra khóa ngoại còn lại.",
+          constraint: error.constraint,
+        });
+      }
+      return res.status(500).json({ message: "Failed to permanently delete exam" });
+    } finally {
+      client.release();
+    }
+  },
+
   async approveDeleteRequest(req, res) {
     try {
       if (!isSuperAdmin(req)) {
@@ -1693,6 +1860,7 @@ const AdminExamController = {
     }
   },
 
+  // ─── ADD QUESTION (hỗ trợ 6 loại câu hỏi) ──────────────────────────────
   async addQuestion(req, res) {
     try {
       const { examId } = req.params;
@@ -3349,4 +3517,3 @@ const AdminExamController = {
 };
 
 module.exports = AdminExamController;
-

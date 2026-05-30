@@ -236,12 +236,12 @@ async function submitMatch(userId, matchId, answers) {
 
       const ratingA = await applyRating(client, updated.user_a_id, updated.season_id, resultA);
       const ratingB = await applyRating(client, updated.user_b_id, updated.season_id, resultB);
-      if (winner === userId) {
+      if (winner) {
         await client.query(
           `UPDATE user_quests
            SET progress = LEAST(progress + 1, target)
            WHERE user_id = $1 AND quest_type = 'rank_win' AND date = CURRENT_DATE AND progress < target`,
-          [userId],
+          [winner],
         );
       }
 

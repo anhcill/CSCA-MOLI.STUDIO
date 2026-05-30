@@ -205,6 +205,11 @@ export const examAdminApi = {
         return response.data;
     },
 
+    permanentDeleteExam: async (examId: number, reason?: string) => {
+        const response = await axios.delete(`/admin/exams/${examId}/permanent`, { data: { reason } });
+        return response.data;
+    },
+
     approveDeleteRequest: async (examId: number, reason?: string) => {
         const response = await axios.post(`/admin/exams/${examId}/delete-request/approve`, { reason });
         return response.data;

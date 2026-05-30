@@ -22,13 +22,19 @@ function parseApiKeys() {
     .map(key => key.trim())
     .filter(Boolean);
 
-  const legacy = [
-    process.env.BEEKNOEE_API_KEY,
-    process.env.BEEKNOEE_API_KEY_1,
-    process.env.BEEKNOEE_API_KEY_2,
-  ].filter(Boolean);
+  const legacy = Object.entries(process.env)
+    .filter(([name, value]) => /^BEEKNOEE_API_KEY(?:_\d+)?$/.test(name) && Boolean(value))
+    .sort(([left], [right]) => getApiKeyEnvIndex(left) - getApiKeyEnvIndex(right))
+    .map(([, key]) => key.trim())
+    .filter(Boolean);
 
   return [...new Set([...fromCombined, ...legacy])];
+}
+
+function getApiKeyEnvIndex(name) {
+  if (name === 'BEEKNOEE_API_KEY') return 0;
+  const match = name.match(/_(\d+)$/);
+  return match ? Number.parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
 }
 
 const config = {
