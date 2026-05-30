@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, type PointerEvent } from 'react';
-import { FiCheck, FiChevronLeft, FiChevronRight, FiRefreshCw, FiRotateCcw, FiX } from 'react-icons/fi';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { FiCheck, FiChevronLeft, FiChevronRight, FiRefreshCw, FiRotateCcw, FiVolume2, FiX } from 'react-icons/fi';
 import { vocabularyReviewApi, type VocabularyReviewFilters } from '@/lib/api/vocabulary';
 import type { VocabularyReviewCard } from '@/lib/types/vocabulary';
 
@@ -25,11 +25,43 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
   const [error, setError] = useState('');
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
   const dragStartX = useRef<number | null>(null);
   const dragOffsetRef = useRef(0);
   const suppressNextClick = useRef(false);
 
   const current = cards[index];
+
+  const speakChinese = useCallback((text: string) => {
+    if (!text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.85;
+    utterance.pitch = 1;
+
+    const chineseVoice = window.speechSynthesis
+      .getVoices()
+      .find((voice) => voice.lang.toLowerCase().startsWith('zh'));
+
+    if (chineseVoice) {
+      utterance.voice = chineseVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  useEffect(() => {
+    if (!autoSpeak || !current?.word_cn) return;
+
+    const timer = window.setTimeout(() => {
+      speakChinese(current.word_cn);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [autoSpeak, current?.id, current?.word_cn, speakChinese]);
 
   const goToCard = (nextIndex: number) => {
     const boundedIndex = Math.max(0, Math.min(nextIndex, cards.length - 1));
@@ -38,7 +70,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     setFlipped(false);
   };
 
-  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (!current || saving) return;
     dragStartX.current = event.clientX;
     dragOffsetRef.current = 0;
@@ -46,7 +78,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     setIsDragging(true);
   };
 
-  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     if (dragStartX.current === null) return;
     const nextOffset = event.clientX - dragStartX.current;
     dragOffsetRef.current = nextOffset;
@@ -118,11 +150,20 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
 
   return (
     <section className="bg-white rounded-2xl border border-cyan-100 p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-black text-gray-900">Flashcard</h2>
           <p className="text-sm text-gray-500">Lật thẻ Hán tự, pinyin, nghĩa</p>
         </div>
+        <label className="inline-flex items-center gap-2 rounded-xl border border-cyan-100 px-3 py-2 text-sm font-bold text-gray-600">
+          <input
+            type="checkbox"
+            checked={autoSpeak}
+            onChange={(event) => setAutoSpeak(event.target.checked)}
+            className="h-4 w-4 accent-cyan-600"
+          />
+          Tự phát âm
+        </label>
         <button
           onClick={startSession}
           disabled={loading}
@@ -137,8 +178,16 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
 
       {current ? (
         <>
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={handleCardClick}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleCardClick();
+              }
+            }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrag}
@@ -156,11 +205,39 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
               <div className="flex min-h-[200px] sm:min-h-[210px] flex-col items-center justify-center">
                 <p className="text-sm font-bold text-cyan-700 mb-3">{current.topic}</p>
                 <p className="text-5xl font-black text-gray-950 leading-tight sm:text-6xl">{current.word_cn}</p>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    speakChinese(current.word_cn);
+                  }}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  className="mt-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
+                  title="Phát âm"
+                >
+                  <FiVolume2 />
+                </button>
                 <p className="mt-5 text-sm text-gray-500">Nhấn để lật thẻ</p>
               </div>
             ) : (
               <div className="flex min-h-[200px] sm:min-h-[210px] flex-col items-center justify-center">
-                <p className="text-xl font-black text-cyan-700 italic sm:text-2xl">{current.pinyin}</p>
+                <div className="flex items-center justify-center gap-3">
+                  <p className="text-xl font-black text-cyan-700 italic sm:text-2xl">{current.pinyin}</p>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      speakChinese(current.word_cn);
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
+                    title="Phát âm"
+                  >
+                    <FiVolume2 />
+                  </button>
+                </div>
                 <p className="mt-4 text-xl font-bold text-gray-900 sm:text-2xl">{current.word_vn}</p>
                 {current.word_en && <p className="mt-1 text-sm text-gray-500">{current.word_en}</p>}
                 {current.example_cn && (
@@ -171,7 +248,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                 )}
               </div>
             )}
-          </button>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-500">
