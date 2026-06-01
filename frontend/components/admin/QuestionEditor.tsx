@@ -538,6 +538,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           cnValue={form.explanationCn}
           onCnChange={v => set('explanationCn', v)}
           cnPlaceholder="解释正确答案..."
+          defaultTab="cn"
         />
       </div>
     </details>

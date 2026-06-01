@@ -416,9 +416,11 @@ export default function FillBlankGroup({
                           value={item.explanation}
                           onChange={(v) => setSubItem(item._localId, 'explanation', v)}
                           placeholder="Giải thích đáp án..."
+                          cnLabel="Tiếng Trung"
                           cnValue={item.explanationCn}
                           onCnChange={(v) => setSubItem(item._localId, 'explanationCn', v)}
                           cnPlaceholder="解释正确答案..."
+                          defaultTab="cn"
                         />
                       </div>
                     </details>

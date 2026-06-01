@@ -16,6 +16,7 @@ interface MathInputProps {
   cnValue?: string;
   onCnChange?: (value: string) => void;
   cnPlaceholder?: string;
+  defaultTab?: 'vi' | 'cn';
 }
 
 const PRESET_TEMPLATES = [
@@ -141,17 +142,24 @@ export default function MathInput({
   cnValue,
   onCnChange,
   cnPlaceholder,
+  defaultTab = 'vi',
 }: MathInputProps) {
   const [showMath, setShowMath] = useState(false);
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
-  const [tab, setTab] = useState<'vi' | 'cn'>('vi');
+  const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
   const mathRef = useRef<HTMLTextAreaElement>(null);
 
   const currentValue = tab === 'vi' ? value : (cnValue || '');
   const setCurrentValue = tab === 'vi'
     ? onChange
     : (onCnChange || (() => {}));
+
+  useEffect(() => {
+    if (cnLabel && defaultTab === 'cn') {
+      setTab('cn');
+    }
+  }, [cnLabel, cnValue, defaultTab]);
 
   useEffect(() => {
     if (showMath && mathRef.current) {
@@ -188,8 +196,10 @@ export default function MathInput({
 
   return (
     <div className="space-y-2">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700">{label}</label>
+      {(label || (tab === 'cn' && cnLabel)) && (
+        <label className="block text-sm font-medium text-gray-700">
+          {tab === 'cn' && cnLabel ? cnLabel : label}
+        </label>
       )}
 
       {cnLabel && (
@@ -223,7 +233,7 @@ export default function MathInput({
         <textarea
           value={currentValue}
           onChange={handleRawInput}
-          placeholder={placeholder}
+          placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : placeholder}
           rows={3}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y font-mono"
         />
@@ -334,19 +344,6 @@ export default function MathInput({
         </div>
       )}
 
-      {/* CN input below if needed */}
-      {cnLabel && tab === 'cn' && onCnChange && (
-        <div className="mt-2 space-y-1">
-          <label className="block text-xs font-medium text-gray-600">{cnLabel}</label>
-          <textarea
-            value={cnValue || ''}
-            onChange={(e) => onCnChange(e.target.value)}
-            placeholder={cnPlaceholder}
-            rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y font-mono"
-          />
-        </div>
-      )}
     </div>
   );
 }

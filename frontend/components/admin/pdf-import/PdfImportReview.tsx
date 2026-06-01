@@ -591,6 +591,7 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                   onCnChange={(value) => updateSingle(itemIndex, { explanationCn: value })}
                   placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
                   cnPlaceholder="Giải thích tiếng Trung"
+                  defaultTab="cn"
                 />
               </div>
               <ItemWarnings item={item} />

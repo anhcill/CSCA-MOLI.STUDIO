@@ -352,9 +352,11 @@ export default function ReadingPassageGroup({
                   value={sq.explanation}
                   onChange={v => setSubQuestion(sq._localId, 'explanation', v)}
                   placeholder="VD: Vì f'(x) = 2x + 1, nên \(f'(0) = 1\) → đáp án B"
+                  cnLabel="Tiếng Trung"
                   cnValue={sq.explanationCn}
                   onCnChange={v => setSubQuestion(sq._localId, 'explanationCn', v)}
                   cnPlaceholder="解释正确答案..."
+                  defaultTab="cn"
                 />
               </div>
             </details>
