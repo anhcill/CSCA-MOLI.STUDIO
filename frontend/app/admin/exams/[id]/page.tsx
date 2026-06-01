@@ -1504,12 +1504,16 @@ export default function AdminExamDetailPage() {
                                                 <span className="text-xs text-gray-400">{q.question_type}</span>
                                             </div>
                                             {q.passage_text && (
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-4">{q.passage_text}</p>
+                                                <RichMathText value={q.passage_text} className="text-gray-700 line-clamp-4" />
                                             )}
                                             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 {q.children.map(child => (
                                                     <div key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
-                                                        <span className="font-semibold">Câu {child.question_number}:</span> {child.question_text_cn || child.question_text}
+                                                        <span className="font-semibold">Câu {child.question_number}:</span>
+                                                        <RichMathText
+                                                            value={child.question_text_cn || child.question_text}
+                                                            className="mt-1 text-gray-700"
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>
@@ -1566,9 +1570,9 @@ export default function AdminExamDetailPage() {
                                                         {q.question_number}
                                                     </span>
                                                     <div className="flex-1">
-                                                        <p className="text-gray-900 font-medium">{q.question_text}</p>
+                                                        <RichMathText value={q.question_text} className="font-medium text-gray-900" />
                                                         {q.question_text_cn && q.question_text_cn !== q.question_text && (
-                                                            <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
+                                                            <RichMathText value={q.question_text_cn} className="mt-1 text-gray-500" />
                                                         )}
                                                         {q.image_url && (
                                                             <img src={q.image_url} alt="question" className="mt-2 max-h-32 rounded-lg border border-gray-200" />
@@ -1615,11 +1619,12 @@ export default function AdminExamDetailPage() {
                                                             {a.answer_key}.
                                                         </span>
                                                         <div className="flex-1 text-sm">
-                                                            <span className={a.is_correct ? 'text-green-800 font-medium' : 'text-gray-700'}>
-                                                                {a.answer_text}
-                                                            </span>
+                                                            <RichMathText
+                                                                value={a.answer_text}
+                                                                className={a.is_correct ? 'font-medium text-green-800' : 'text-gray-700'}
+                                                            />
                                                             {a.answer_text_cn && a.answer_text_cn !== a.answer_text && (
-                                                                <p className="text-gray-500 text-xs mt-0.5">{a.answer_text_cn}</p>
+                                                                <RichMathText value={a.answer_text_cn} className="mt-0.5 text-gray-500" />
                                                             )}
                                                             {a.image_url && (
                                                                 <img src={a.image_url} alt={a.answer_key} className="mt-1 max-h-16 rounded border border-gray-200" />
@@ -1630,10 +1635,13 @@ export default function AdminExamDetailPage() {
                                                 ))}
                                             </div>
 
-                                            {q.explanation && (
+                                            {(q.explanation || q.explanation_cn) && (
                                                 <div className="mt-3 pt-3 border-t border-gray-100">
                                                     <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Giải thích:</p>
-                                                    <RichMathText value={q.explanation} className="text-gray-600" />
+                                                    <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-gray-600" />
+                                                    {q.explanation && q.explanation_cn && q.explanation_cn !== q.explanation && (
+                                                        <RichMathText value={q.explanation_cn} className="mt-2 text-gray-500" />
+                                                    )}
                                                 </div>
                                             )}
 
