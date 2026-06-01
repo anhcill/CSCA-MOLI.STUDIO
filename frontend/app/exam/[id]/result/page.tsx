@@ -12,6 +12,7 @@ import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
+import AIFormattedText from '@/components/ai/AIFormattedText';
 import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
@@ -858,9 +859,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                 <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
                   🤖 AI phân tích
                 </p>
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {explanation.answer}
-                </p>
+                <AIFormattedText value={explanation.answer} className="text-gray-700" />
               </div>
               {(question.explanation || question.explanation_cn) && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -1094,7 +1093,7 @@ function GradeEssayModal({ question, attemptId, onClose }: {
               {result.feedback && (
                 <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
                   <p className="text-xs font-bold text-purple-700 mb-2">💬 Nhận xét</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{result.feedback}</p>
+                  <AIFormattedText value={result.feedback} className="text-gray-700" />
                 </div>
               )}
 
@@ -1106,7 +1105,7 @@ function GradeEssayModal({ question, attemptId, onClose }: {
                     {result.suggestions.map((s: string, i: number) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                         <span className="text-blue-500 shrink-0 mt-0.5">▸</span>
-                        {s}
+                        <AIFormattedText value={s} className="text-gray-700" />
                       </li>
                     ))}
                   </ul>
@@ -1212,9 +1211,9 @@ function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI 
               {lesson.grammarRule && (
                 <div>
                   <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">📚 Ngữ pháp</h5>
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-xl p-4">
-                    {lesson.grammarRule}
-                  </p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <AIFormattedText value={lesson.grammarRule} className="text-gray-700" />
+                  </div>
                 </div>
               )}
 
@@ -1225,10 +1224,10 @@ function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI 
                   <div className="space-y-3">
                     {lesson.examples.map((ex: any, i: number) => (
                       <div key={i} className="bg-green-50 border border-green-200 rounded-xl p-4">
-                        <p className="text-base font-semibold text-green-900 mb-1">{ex.chinese}</p>
+                        <AIFormattedText value={ex.chinese} className="text-base font-semibold text-green-900 mb-1" />
                         {ex.pinyin && <p className="text-xs text-green-600 italic mb-2">{ex.pinyin}</p>}
-                        <p className="text-sm text-green-800 mb-1">{ex.vietnamese}</p>
-                        {ex.usage && <p className="text-xs text-green-500">→ {ex.usage}</p>}
+                        <AIFormattedText value={ex.vietnamese} className="text-green-800 mb-1" />
+                        {ex.usage && <AIFormattedText value={`→ ${ex.usage}`} className="text-xs text-green-500" />}
                       </div>
                     ))}
                   </div>
@@ -1243,7 +1242,7 @@ function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI 
                     {lesson.memoryTips.map((tip: string, i: number) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
                         <span className="text-amber-500 shrink-0 mt-0.5">✦</span>
-                        {tip}
+                        <AIFormattedText value={tip} className="text-gray-700" />
                       </li>
                     ))}
                   </ul>
@@ -1258,7 +1257,7 @@ function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI 
                     {lesson.commonMistakes.map((m: string, i: number) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
                         <span className="text-red-500 shrink-0 mt-0.5">!</span>
-                        {m}
+                        <AIFormattedText value={m} className="text-gray-700" />
                       </li>
                     ))}
                   </ul>

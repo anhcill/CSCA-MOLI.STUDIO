@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
-import RichMathText from '@/components/common/RichMathText';
+import AIFormattedText from '@/components/ai/AIFormattedText';
 
 interface Message {
     id: string;
@@ -262,7 +262,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
                                 }`}>
                                     {msg.role === 'ai'
-                                        ? (msg.content ? <RichMathText value={msg.content} className="text-gray-700" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
+                                        ? (msg.content ? <AIFormattedText value={msg.content} className="text-gray-700" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
                                         : msg.content.split('\n').map((line, i) => (
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))

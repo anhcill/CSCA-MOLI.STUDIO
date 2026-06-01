@@ -12,99 +12,10 @@ import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
+import AIFormattedText from '@/components/ai/AIFormattedText';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
-
-/* ─── AI Text Formatter ──────────────────────────────────────────── */
-function parseAIExplanation(text: string): React.ReactNode[] {
-    if (!text) return [];
-    const lines = text.split('\n').filter(l => l.trim());
-    const blocks: React.ReactNode[] = [];
-    let i = 0;
-
-    while (i < lines.length) {
-        const line = lines[i].trim();
-
-        // Section heading
-        if (/^#{1,3}\s/.test(line)) {
-            blocks.push(
-                <h4 key={`h-${i}`} className="mt-3 first:mt-0 font-bold text-purple-800 text-sm flex items-center gap-1.5">
-                    <FiCpu size={12} className="shrink-0" />
-                    {line.replace(/^#{1,3}\s/, '')}
-                </h4>
-            );
-            i++; continue;
-        }
-
-        // Bold label + content
-        const labelMatch = line.match(/^([A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸĐ][^\s:：]*[:：.]?\s?)(.+)/);
-        if (labelMatch) {
-            const label = labelMatch[1].replace(/[:：.]\s?$/, '').trim();
-            const content = labelMatch[2].trim();
-            blocks.push(
-                <div key={`lb-${i}`} className="mt-2 first:mt-0">
-                    <span className="font-semibold text-purple-800 text-sm">{label} </span>
-                    <span className="text-gray-700 text-sm">{content}</span>
-                </div>
-            );
-            i++; continue;
-        }
-
-        // Bullet points
-        if (/^[—•\-\*]\s/.test(line)) {
-            const bulletText = line.replace(/^[—•\-\*]\s/, '');
-            if (bulletText) {
-                blocks.push(
-                    <div key={`b-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
-                        <span className="text-purple-400 shrink-0 mt-0.5">•</span>
-                        <span className="text-gray-700 text-sm flex-1">{bulletText}</span>
-                    </div>
-                );
-            }
-            i++; continue;
-        }
-
-        // Numbered list
-        const numMatch = line.match(/^(\d+[.)]\s)(.+)/);
-        if (numMatch) {
-            blocks.push(
-                <div key={`n-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
-                    <span className="text-purple-600 font-bold text-sm shrink-0 w-5">{numMatch[1].trim()}</span>
-                    <span className="text-gray-700 text-sm flex-1">{numMatch[2]}</span>
-                </div>
-            );
-            i++; continue;
-        }
-
-        // Math formula
-        if (/[=<>≤≥√∑∏π→⇒∈∉⊂⊃∀∃]/.test(line) && !/^[A-ZÀÁ][a-zàáạảã]/.test(line)) {
-            blocks.push(
-                <div key={`m-${i}`} className="mt-1 font-mono text-sm bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg text-purple-900 overflow-x-auto">
-                    {line}
-                </div>
-            );
-            i++; continue;
-        }
-
-        if (!line) { i++; continue; }
-
-        // Regular paragraph — clean **bold** markers
-        const clean = line
-            .replace(/\*\*(.+?)\*\*/g, '$1')
-            .replace(/\*(.+?)\*/g, '$1')
-            .replace(/`(.+?)`/g, '$1');
-
-        if (clean.length > 0) {
-            blocks.push(
-                <p key={`p-${i}`} className="mt-1 first:mt-0 text-sm text-gray-700 leading-relaxed">{clean}</p>
-            );
-        }
-        i++;
-    }
-
-    return blocks;
-}
 
 interface AnswerOption {
     key: string;
@@ -806,9 +717,7 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                                 <p className="text-xs font-bold text-purple-700 mb-3 flex items-center gap-1.5">
                                     <FiCpu size={12} /> 🤖 AI phân tích
                                 </p>
-                                <div className="space-y-1">
-                                    {parseAIExplanation(explanation.answer)}
-                                </div>
+                                <AIFormattedText value={explanation.answer} className="text-gray-700" />
                             </div>
                             {(question.explanation || question.explanation_cn) && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">

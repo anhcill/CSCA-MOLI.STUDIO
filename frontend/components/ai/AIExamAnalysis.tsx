@@ -7,31 +7,20 @@ import {
     FiClock, FiBookOpen, FiAward, FiAlertTriangle
 } from 'react-icons/fi';
 import { useTypewriter } from '@/hooks/useTypewriter';
-
-// Strip markdown symbols from AI text, PRESERVE newlines and list markers
-function cleanMarkdown(text: string): string {
-    if (!text) return '';
-    return text
-        .replace(/\*\*(.+?)\*\*/g, '$1')  // **bold** -> text
-        .replace(/\*(.+?)\*/g, '$1')        // *italic* -> text
-        .replace(/_(.+?)_/g, '$1')          // _underline_ -> text
-        .replace(/^#{1,6}\s/gm, '')         // # headers -> plain text (keep newline)
-        .replace(/`(.+?)`/g, '$1')          // `code` -> text
-        .replace(/^\d+\.\s/gm, (m) => m);  // keep numbered lists: "1. " stays "1. "
-}
+import AIFormattedText from '@/components/ai/AIFormattedText';
 
 function TypewriterPlain({ text, className = '' }: { text: string; className?: string }) {
-    const { displayed, done } = useTypewriter(cleanMarkdown(text), { speed: 4, startDelay: 20 });
+    const { displayed, done } = useTypewriter(text, { speed: 4, startDelay: 20 });
     return (
-        <span className={className}>
-            {displayed}
+        <div className={className}>
+            <AIFormattedText value={displayed} />
             {!done && <span className="inline-block h-4 w-1.5 animate-pulse bg-purple-400 align-middle ml-0.5" />}
-        </span>
+        </div>
     );
 }
 
 function PlainText({ text, className = '' }: { text: string; className?: string }) {
-    return <span className={className}>{cleanMarkdown(text)}</span>;
+    return <AIFormattedText value={text} className={className} />;
 }
 
 interface AIExamAnalysisProps {
@@ -219,7 +208,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 }`}>{analysis.grade}</span>
                             </div>
                             {analysis.summary && (
-                                <p className="text-sm text-gray-700 leading-relaxed"><TypewriterPlain text={analysis.summary} /></p>
+                                <TypewriterPlain text={analysis.summary} className="text-gray-700" />
                             )}
                         </div>
                     )}
@@ -326,7 +315,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                             <h4 className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
                                 <FiBookOpen size={12} /> Phân tích chi tiết
                             </h4>
-                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><PlainText text={analysis.analysis} /></p>
+                            <PlainText text={analysis.analysis} className="text-gray-700" />
                         </div>
                     )}
 
@@ -336,7 +325,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                             <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
                                 💡 Lời khuyên từ AI
                             </h4>
-                            <p className="text-sm text-purple-900 font-medium leading-relaxed whitespace-pre-wrap"><PlainText text={analysis.overallAdvice} /></p>
+                            <PlainText text={analysis.overallAdvice} className="font-medium text-purple-900" />
                         </div>
                     )}
 
@@ -362,7 +351,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                             <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                                 <FiClock size={12} /> Gợi ý bài thi tiếp theo
                             </h4>
-                            <p className="text-sm text-indigo-800 leading-relaxed"><PlainText text={analysis.nextExamSuggestion} /></p>
+                            <PlainText text={analysis.nextExamSuggestion} className="text-indigo-800" />
                         </div>
                     )}
 
@@ -372,7 +361,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                             <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
                                 <FiTarget size={12} /> Kế hoạch học cho bạn
                             </h4>
-                            <p className="text-sm text-indigo-900 leading-relaxed font-medium whitespace-pre-wrap"><PlainText text={analysis.studyPlan} /></p>
+                            <PlainText text={analysis.studyPlan} className="font-medium text-indigo-900" />
                         </div>
                     )}
 
@@ -400,10 +389,10 @@ function MiniAnalysis({ data }: { data: any }) {
                 <span className="text-gray-500 text-sm">({score}%)</span>
             </div>
             {data.analysis && (
-                <p className="text-sm text-gray-700">{data.analysis}</p>
+                <PlainText text={data.analysis} className="text-gray-700" />
             )}
             {data.overallAdvice && (
-                <p className="text-sm text-purple-700 font-medium">{data.overallAdvice}</p>
+                <PlainText text={data.overallAdvice} className="font-medium text-purple-700" />
             )}
         </div>
     );
