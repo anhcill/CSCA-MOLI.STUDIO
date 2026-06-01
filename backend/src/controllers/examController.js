@@ -382,15 +382,25 @@ const examController = {
     try {
       const { attemptId } = req.params;
       const { questionId, answerKey, timeSpent, essayAnswer, practiceMode } = req.body;
+      const parsedAttemptId = parseInt(attemptId, 10);
+      const parsedQuestionId = parseInt(questionId, 10);
+
+      if (!Number.isFinite(parsedAttemptId) || parsedAttemptId <= 0 || !Number.isFinite(parsedQuestionId) || parsedQuestionId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Du lieu luu cau tra loi khong hop le",
+        });
+      }
 
       console.log('Save answer request:', { attemptId, questionId, answerKey, timeSpent });
 
       const answer = await ExamAttempt.saveAnswer(
-        attemptId,
-        questionId,
+        parsedAttemptId,
+        parsedQuestionId,
         answerKey,
         timeSpent || 0,
-        essayAnswer || null
+        essayAnswer ?? null,
+        req.user.id
       );
 
       let feedback = null;
@@ -407,7 +417,7 @@ const examController = {
            LEFT JOIN answers a ON a.question_id = q.id AND a.is_correct = TRUE
            WHERE q.id = $1
            LIMIT 1`,
-          [questionId]
+          [parsedQuestionId]
         );
 
         feedback = {
@@ -424,7 +434,7 @@ const examController = {
     } catch (error) {
       console.error("Save answer error:", error);
       console.error("Error details:", error.message);
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         success: false,
         message: "Lỗi khi lưu câu trả lời",
         error: error.message,
@@ -436,29 +446,41 @@ const examController = {
   async submitExam(req, res) {
     try {
       const { attemptId } = req.params;
+      const parsedAttemptId = parseInt(attemptId, 10);
+
+      if (!Number.isFinite(parsedAttemptId) || parsedAttemptId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID lan thi khong hop le",
+        });
+      }
 
       console.log('Submit exam request:', { attemptId });
 
-      const result = await ExamAttempt.submit(attemptId);
+      const result = await ExamAttempt.submit(parsedAttemptId, req.user.id);
 
       // Log hành vi nộp bài
-      UserActivity.log(req.user.id, 'exam_submit', {
-        examId: result.exam_id,
-        attemptId: parseInt(attemptId),
-        score: result.total_score,
-        status: result.status,
-      });
+      if (!result.already_completed) {
+        UserActivity.log(req.user.id, 'exam_submit', {
+          examId: result.exam_id,
+          attemptId: parsedAttemptId,
+          score: result.total_score,
+          status: result.status,
+        });
+      }
 
       // Cập nhật tiến độ nhiệm vụ "do_exam"
-      try {
-        const db = require("../config/database");
-        await db.query(
-          `UPDATE user_quests SET progress = progress + 1 
-           WHERE user_id = $1 AND quest_type = 'do_exam' AND date = CURRENT_DATE AND progress < target`,
-          [req.user.id]
-        );
-      } catch (err) {
-        console.error("Failed to update quest progress for do_exam:", err);
+      if (!result.already_completed) {
+        try {
+          const db = require("../config/database");
+          await db.query(
+            `UPDATE user_quests SET progress = progress + 1
+             WHERE user_id = $1 AND quest_type = 'do_exam' AND date = CURRENT_DATE AND progress < target`,
+            [req.user.id]
+          );
+        } catch (err) {
+          console.error("Failed to update quest progress for do_exam:", err);
+        }
       }
 
       res.json({
@@ -469,7 +491,7 @@ const examController = {
     } catch (error) {
       console.error("Submit exam error:", error);
       console.error("Error details:", error.message);
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         success: false,
         message: "Lỗi khi nộp bài",
         error: error.message,

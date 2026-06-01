@@ -12,6 +12,20 @@ import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
+type PendingEssaySave = {
+  questionId: number;
+  answerKey: string;
+  essayText: string;
+  practiceMode: boolean;
+};
+
+const ESSAY_SAVE_DEBOUNCE_MS = 650;
+
+function hasAnsweredValue(value: number | string | undefined) {
+  if (typeof value === 'string') return value.trim().length > 0;
+  return value !== undefined && value !== null;
+}
+
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
@@ -53,6 +67,9 @@ export default function ExamPage() {
   const [isScreenCaptured, setIsScreenCaptured] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const submitInFlightRef = useRef(false);
+  const activeSavePromisesRef = useRef<Set<Promise<void>>>(new Set());
+  const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
 
   const { maxViolations } = useExamProtection({
     enabled: !!attemptId && !submitting && !practiceMode,
@@ -89,6 +106,14 @@ export default function ExamPage() {
     return () => clearTimeout(timer);
   }, [isScreenCaptured]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(essaySaveTimersRef.current).forEach(clearTimeout);
+      essaySaveTimersRef.current = {};
+      pendingEssaySavesRef.current = {};
+    };
+  }, []);
+
   const handleViolationClose = useCallback(() => {
     setShowViolation(false);
     if (violations >= maxViolations) {
@@ -110,7 +135,11 @@ export default function ExamPage() {
 
   // Timer countdown
   useEffect(() => {
-    if (practiceMode || timeLeft <= 0) return;
+    if (!started || !attemptId || practiceMode || submitting) return;
+    if (timeLeft <= 0) {
+      handleSubmit({ force: true });
+      return;
+    }
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -123,7 +152,7 @@ export default function ExamPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [attemptId, practiceMode, started, submitting, timeLeft]);
 
   const loadPreflight = async () => {
     if (examId === null || Number.isNaN(examId)) {
@@ -249,28 +278,105 @@ export default function ExamPage() {
     }
   };
 
+  const trackSavePromise = (promise: Promise<void>) => {
+    activeSavePromisesRef.current.add(promise);
+    promise.finally(() => {
+      activeSavePromisesRef.current.delete(promise);
+    });
+    return promise;
+  };
+
+  const saveAnswerForQuestion = (
+    questionId: number,
+    answerKey: string,
+    essayText?: string,
+    requestPracticeMode = practiceMode,
+  ) => {
+    if (!attemptId) return Promise.resolve();
+
+    const promise = examApi
+      .saveAnswer(attemptId, questionId, answerKey, 0, essayText, requestPracticeMode)
+      .then((saved) => {
+        if (requestPracticeMode && saved?.feedback) {
+          setPracticeFeedback((prev) => ({
+            ...prev,
+            [questionId]: saved.feedback,
+          }));
+        }
+      })
+      .catch((error: any) => {
+        console.error('Error saving answer:', error);
+      });
+
+    return trackSavePromise(promise);
+  };
+
+  const scheduleEssaySave = (save: PendingEssaySave) => {
+    const existingTimer = essaySaveTimersRef.current[save.questionId];
+    if (existingTimer) clearTimeout(existingTimer);
+
+    pendingEssaySavesRef.current[save.questionId] = save;
+    essaySaveTimersRef.current[save.questionId] = setTimeout(() => {
+      const pending = pendingEssaySavesRef.current[save.questionId];
+      delete pendingEssaySavesRef.current[save.questionId];
+      delete essaySaveTimersRef.current[save.questionId];
+      if (pending) {
+        saveAnswerForQuestion(pending.questionId, pending.answerKey, pending.essayText, pending.practiceMode);
+      }
+    }, ESSAY_SAVE_DEBOUNCE_MS);
+  };
+
+  const flushPendingAnswerSaves = async () => {
+    const pendingSaves = Object.values(pendingEssaySavesRef.current);
+    Object.values(essaySaveTimersRef.current).forEach(clearTimeout);
+    pendingEssaySavesRef.current = {};
+    essaySaveTimersRef.current = {};
+
+    if (pendingSaves.length) {
+      await Promise.allSettled(
+        pendingSaves.map((save) =>
+          saveAnswerForQuestion(save.questionId, save.answerKey, save.essayText, save.practiceMode),
+        ),
+      );
+    }
+
+    const activeSaves = Array.from(activeSavePromisesRef.current);
+    if (activeSaves.length) {
+      await Promise.allSettled(activeSaves);
+    }
+  };
+
   const handleAnswerSelect = async (answerId: number, answerKey: string, essayText?: string) => {
     if (!attemptId || submitting) return;
 
-    const questionId = questions[currentQuestionIndex].id;
-    const q = questions[currentQuestionIndex] as any;
+    const question = questions[currentQuestionIndex];
+    if (!question) return;
 
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [questionId]: essayText !== undefined ? essayText : answerId,
-    }));
+    const questionId = question.id;
+    const isEssayAnswer = essayText !== undefined;
 
-    try {
-      const saved = await examApi.saveAnswer(attemptId, questionId, answerKey, 0, essayText, practiceMode);
-      if (practiceMode && saved?.feedback) {
-        setPracticeFeedback((prev) => ({
-          ...prev,
-          [questionId]: saved.feedback,
-        }));
+    setSelectedAnswers((prev) => {
+      const next = { ...prev };
+      if (isEssayAnswer) {
+        if ((essayText || '').trim()) next[questionId] = essayText || '';
+        else delete next[questionId];
+      } else {
+        next[questionId] = answerId;
       }
-    } catch (error: any) {
-      console.error('Error saving answer:', error);
+      return next;
+    });
+
+    if (isEssayAnswer) {
+      scheduleEssaySave({
+        questionId,
+        answerKey,
+        essayText: essayText || '',
+        practiceMode,
+      });
+      return;
     }
+
+    await saveAnswerForQuestion(questionId, answerKey, undefined, practiceMode);
   };
 
   const handleSubmit = async (options: { force?: boolean } = {}) => {
@@ -282,12 +388,14 @@ export default function ExamPage() {
     }
 
     try {
+      const submittingAttemptId = attemptId;
       submitInFlightRef.current = true;
       setSubmitting(true);
       setShowSubmitConfirm(false);
-      await examApi.submitExam(attemptId);
+      await flushPendingAnswerSaves();
+      await examApi.submitExam(submittingAttemptId);
       // Redirect to result page
-      router.push(`/exam/${examId}/result?attemptId=${attemptId}`);
+      router.push(`/exam/${examId}/result?attemptId=${submittingAttemptId}`);
     } catch (error) {
       console.error('Error submitting exam:', error);
       submitInFlightRef.current = false;
@@ -538,15 +646,19 @@ export default function ExamPage() {
 
   const currentQuestion = processedQuestions[currentQuestionIndex] as any;
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
-  const answeredCount = Object.keys(selectedAnswers).length;
+  const answeredCount = questions.reduce(
+    (count, question) => count + (hasAnsweredValue(selectedAnswers[question.id]) ? 1 : 0),
+    0,
+  );
   const progressPercent = (answeredCount / questions.length) * 100;
   const isTimeCritical = !practiceMode && timeLeft < 300; // less than 5 min
   const currentFeedback = practiceFeedback[currentQuestion?.id];
   const displayedQuestionIndexes = questions
     .map((q, index) => ({ q, index }))
     .filter(({ q }) => {
-      if (navFilter === 'answered') return !!selectedAnswers[q.id];
-      if (navFilter === 'unanswered') return !selectedAnswers[q.id];
+      const isAnswered = hasAnsweredValue(selectedAnswers[q.id]);
+      if (navFilter === 'answered') return isAnswered;
+      if (navFilter === 'unanswered') return !isAnswered;
       if (navFilter === 'flagged') return flaggedQuestions.has(q.id);
       return true;
     });
@@ -738,15 +850,11 @@ export default function ExamPage() {
                  /* ─── Essay / Translation input ─── */
                  <div className="col-span-1 md:col-span-2">
                    <textarea
-                     value={(currentQuestionAnswer as string) || ''}
-                     onChange={e => {
-                       if (!attemptId || submitting) return;
-                       const questionId = currentQuestion.id;
-                       const text = e.target.value;
-                       setSelectedAnswers(prev => ({ ...prev, [questionId]: text }));
-                       // Save immediately on change (debounced feel via onChange)
-                       handleAnswerSelect(0, 'ESSAY', text).catch(() => {});
-                     }}
+                      value={(currentQuestionAnswer as string) || ''}
+                      onChange={e => {
+                        if (!attemptId || submitting) return;
+                        handleAnswerSelect(0, 'ESSAY', e.target.value).catch(() => {});
+                      }}
                      placeholder={currentQuestion.question_type === 'translation'
                        ? 'Nhập câu dịch tiếng Trung vào đây...'
                        : 'Nhập câu trả lời tự luận vào đây...'}
@@ -974,7 +1082,7 @@ export default function ExamPage() {
             <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-5 gap-2.5 max-h-[40vh] lg:max-h-[50vh] overflow-y-auto px-1 custom-scrollbar">
               {displayedQuestionIndexes.map(({ q, index }) => {
                 const isActive = index === currentQuestionIndex;
-                const isDone = !!selectedAnswers[q.id];
+                const isDone = hasAnsweredValue(selectedAnswers[q.id]);
                 const isFlagged = flaggedQuestions.has(q.id);
 
                 return (

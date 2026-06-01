@@ -176,6 +176,29 @@ function buildQuestionExplanationPrompt(question: QuestionResult, questionText: 
     return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
 }
 
+function buildQuestionTheoryPrompt(question: QuestionResult, questionText: string) {
+    const questionNo = question.sub_question_number || question.question_number;
+    const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
+    const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
+    const status = getQuestionReviewStatus(question);
+    const learnerState = status === 'correct'
+        ? `Học sinh đã chọn đúng: ${selectedAnswer}`
+        : status === 'unanswered'
+            ? 'Học sinh đã bỏ qua câu này'
+            : `Học sinh đã chọn sai: ${selectedAnswer}`;
+
+    return [
+        `Câu ${questionNo}`,
+        questionText ? `Nội dung câu hỏi: ${questionText}` : '',
+        learnerState,
+        `Đáp án đúng: ${correctAnswer}`,
+        'Hãy giảng lại lý thuyết liên quan trực tiếp tới câu này.',
+        'Trả lời bằng tiếng Việt có dấu, gồm: kiến thức trọng tâm, cách nhận biết, ví dụ ngắn, lỗi dễ nhầm, mẹo nhớ.',
+    ].filter(Boolean).join('\n');
+}
+
+type ReviewAIMode = 'explain' | 'theory';
+
 interface AttemptResult {
     id: number;
     exam_id: number;
@@ -199,7 +222,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const [result, setResult] = useState<AttemptResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
-    const [showExplanationModal, setShowExplanationModal] = useState<QuestionResult | null>(null);
+    const [showExplanationModal, setShowExplanationModal] = useState<{ question: QuestionResult; mode: ReviewAIMode } | null>(null);
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [aiLoading, setAiLoading] = useState(false);
     const [reviewStarted, setReviewStarted] = useState(false);
@@ -608,11 +631,18 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                                         {/* AI giải thích thêm */}
                                         {q.question_type !== 'essay' && q.question_type !== 'translation' && (
-                                            <button
-                                                onClick={() => setShowExplanationModal(q)}
-                                                className="mt-3 ml-8 text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                                                <FiZap size={14} /> {getReviewAIButtonLabel(status)}
-                                            </button>
+                                            <div className="mt-3 ml-8 flex flex-wrap items-center gap-3">
+                                                <button
+                                                    onClick={() => setShowExplanationModal({ question: q, mode: 'explain' })}
+                                                    className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
+                                                    <FiZap size={14} /> {getReviewAIButtonLabel(status)}
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowExplanationModal({ question: q, mode: 'theory' })}
+                                                    className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
+                                                    <FiBookOpen size={14} /> Giảng lại lý thuyết
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 );
@@ -644,7 +674,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
             {/* AI Explanation Modal */}
             {showExplanationModal && (
                 <ExplanationModal
-                    question={showExplanationModal}
+                    question={showExplanationModal.question}
+                    mode={showExplanationModal.mode}
                     attemptId={result.id}
                     onClose={() => setShowExplanationModal(null)}
                 />
@@ -684,7 +715,7 @@ function QuestionAnalysisLoading() {
 }
 
 // ─── AI Explanation Modal ──────────────────────────────────────────────────────
-function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
+function ExplanationModal({ question, mode, attemptId, onClose }: { question: QuestionResult; mode: ReviewAIMode; attemptId: number; onClose: () => void }) {
     const { pick } = useLanguage();
     const [explanation, setExplanation] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -716,7 +747,9 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
             const res = await authFetch('/api/ai/ask', {
                 method: 'POST',
                 body: JSON.stringify({
-                    question: buildQuestionExplanationPrompt(question, questionText),
+                    question: mode === 'theory'
+                        ? buildQuestionTheoryPrompt(question, questionText)
+                        : buildQuestionExplanationPrompt(question, questionText),
                     attemptId,
                 }),
             });

@@ -1,5 +1,11 @@
 const { pool } = require("../config/database");
 
+function createAttemptError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
 const ExamAttempt = {
   async getInProgress(userId, examId) {
     const result = await pool.query(
@@ -102,24 +108,52 @@ const ExamAttempt = {
   },
 
   // Lưu câu trả lời
-  async saveAnswer(attemptId, questionId, selectedAnswerKey, timeSpent, essayAnswer = null) {
+  async saveAnswer(attemptId, questionId, selectedAnswerKey, timeSpent, essayAnswer = null, userId = null) {
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
 
       // Lấy thông tin câu hỏi để xác định loại
-      const qResult = await client.query(
-        `SELECT question_type FROM questions WHERE id = $1 AND deleted_at IS NULL`,
-        [questionId]
+      const contextResult = await client.query(
+        `SELECT ea.user_id, ea.status, ea.exam_id, q.question_type
+         FROM exam_attempts ea
+         INNER JOIN questions q ON q.exam_id = ea.exam_id AND q.id = $2 AND q.deleted_at IS NULL
+         WHERE ea.id = $1
+         FOR UPDATE OF ea`,
+        [attemptId, questionId]
       );
-      const questionType = qResult.rows[0]?.question_type;
+      const context = contextResult.rows[0];
+      const questionType = context?.question_type;
       if (!questionType) {
-        throw new Error("Question not found");
+        throw createAttemptError("Attempt or question not found", 404);
+      }
+      if (userId && Number(context.user_id) !== Number(userId)) {
+        throw createAttemptError("Attempt does not belong to current user", 403);
+      }
+      if (!["in_progress", "practice"].includes(context.status)) {
+        throw createAttemptError("Attempt is not editable", 409);
       }
 
       // Nếu là câu tự luận hoặc dịch thuật → lưu essay_answer, không check đáp án
       if (questionType === 'essay' || questionType === 'translation') {
+        const normalizedEssay = typeof essayAnswer === "string" ? essayAnswer.trim() : "";
+        if (!normalizedEssay) {
+          await client.query(
+            `DELETE FROM user_answers WHERE attempt_id = $1 AND question_id = $2`,
+            [attemptId, questionId]
+          );
+          await client.query("COMMIT");
+          return {
+            attempt_id: Number(attemptId),
+            question_id: Number(questionId),
+            selected_answer_key: null,
+            selected_answer_id: null,
+            is_correct: null,
+            essay_answer: null,
+          };
+        }
+
         const upsertQuery = `
           INSERT INTO user_answers (
             attempt_id, question_id, selected_answer_key,
@@ -138,7 +172,7 @@ const ExamAttempt = {
           questionId,
           selectedAnswerKey || 'ESSAY_ANSWER',
           timeSpent || 0,
-          essayAnswer,
+          normalizedEssay,
         ]);
         await client.query("COMMIT");
         return result.rows[0];
@@ -196,11 +230,35 @@ const ExamAttempt = {
   },
 
   // Nộp bài và tính điểm
-  async submit(attemptId) {
+  async submit(attemptId, userId = null) {
     const client = await pool.connect();
 
     try {
       await client.query("BEGIN");
+
+      const examQuery = `
+        SELECT ea.*, e.total_questions,
+               EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ea.start_time))::INTEGER as duration
+        FROM exam_attempts ea
+        INNER JOIN exams e ON ea.exam_id = e.id
+        WHERE ea.id = $1
+        FOR UPDATE OF ea
+      `;
+      const examResult = await client.query(examQuery, [attemptId]);
+      const examInfo = examResult.rows[0];
+      if (!examInfo) {
+        throw createAttemptError("Attempt not found", 404);
+      }
+      if (userId && Number(examInfo.user_id) !== Number(userId)) {
+        throw createAttemptError("Attempt does not belong to current user", 403);
+      }
+      if (examInfo.status === "completed") {
+        await client.query("COMMIT");
+        return { ...examInfo, already_completed: true };
+      }
+      if (!["in_progress", "practice"].includes(examInfo.status)) {
+        throw createAttemptError("Attempt cannot be submitted", 409);
+      }
 
       // Calculate scores
       const statsQuery = `
@@ -215,17 +273,6 @@ const ExamAttempt = {
       `;
       const statsResult = await client.query(statsQuery, [attemptId]);
       const stats = statsResult.rows[0];
-
-      // Get total questions in exam
-      const examQuery = `
-        SELECT e.total_questions, 
-               EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ea.start_time))::INTEGER as duration
-        FROM exam_attempts ea
-        INNER JOIN exams e ON ea.exam_id = e.id
-        WHERE ea.id = $1
-      `;
-      const examResult = await client.query(examQuery, [attemptId]);
-      const examInfo = examResult.rows[0];
 
       const totalUnanswered =
         examInfo.total_questions - parseInt(stats.total_answered);
@@ -259,7 +306,7 @@ const ExamAttempt = {
       await this.updateTopicStats(client, attemptId);
 
       await client.query("COMMIT");
-      return result.rows[0];
+      return { ...result.rows[0], already_completed: false };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

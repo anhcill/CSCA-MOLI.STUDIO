@@ -58,6 +58,44 @@ interface ExamResult {
   answers: QuestionResult[];
 }
 
+function getQuestionReviewStatus(question: QuestionResult) {
+  if (!question.selected_answer_key) return 'unanswered';
+  return question.is_correct ? 'correct' : 'incorrect';
+}
+
+function getReviewAIButtonLabel(status: string) {
+  if (status === 'correct') return 'Hỏi AI củng cố câu đúng';
+  if (status === 'unanswered') return 'Hỏi AI hướng dẫn câu bỏ qua';
+  return 'Hỏi AI giải thích thêm';
+}
+
+function formatReviewAnswer(key?: string | null, text?: string | null, fallback = 'Bỏ qua') {
+  if (!key) return fallback;
+  const cleanText = (text || '').trim();
+  return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
+}
+
+function buildQuestionExplanationPrompt(question: QuestionResult) {
+  const questionNo = question.sub_question_number || question.question_number;
+  const questionText = question.question_text || question.question_text_cn || '';
+  const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
+  const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
+  const base = [
+    `Câu ${questionNo}`,
+    questionText ? `Nội dung câu hỏi: ${questionText}` : '',
+    `Đáp án đúng: ${correctAnswer}`,
+  ].filter(Boolean).join('\n');
+
+  const status = getQuestionReviewStatus(question);
+  if (status === 'correct') {
+    return `${base}\nHọc sinh đã chọn đúng: ${selectedAnswer}.\nHãy giải thích vì sao đáp án này đúng, chỉ ra kiến thức cần nhớ, dấu hiệu nhận biết và bẫy dễ nhầm. Trả lời bằng tiếng Việt có dấu, ngắn gọn nhưng đủ ý.`;
+  }
+  if (status === 'unanswered') {
+    return `${base}\nHọc sinh đã bỏ qua câu này.\nHãy hướng dẫn cách suy luận từ đầu, vì sao đáp án đúng là phù hợp, mẹo nhận biết lần sau và kiến thức cần ôn lại. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
+  }
+  return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
+}
+
 function ExamResultContent() {
   const params = useParams();
   const router = useRouter();
@@ -533,11 +571,11 @@ function ExamResultContent() {
               </div>
             ) : (
               answers.map((q, index) => {
-                const status = !q.selected_answer_key ? 'unanswered'
-                  : q.is_correct ? 'correct' : 'incorrect';
+                const status = getQuestionReviewStatus(q);
                 const borderCls = status === 'correct' ? 'bg-green-50 border-green-200'
                   : status === 'incorrect' ? 'bg-red-50 border-red-200'
                     : 'bg-gray-50 border-gray-200';
+                const isEssayQuestion = q.question_type === 'essay' || q.question_type === 'translation';
 
                 return (
                   <div key={index} className={`rounded-xl border-2 p-5 transition-all ${borderCls}`}>
@@ -622,7 +660,7 @@ function ExamResultContent() {
                     </div>
 
                     {/* Essay/Translation answer display */}
-                    {(q.question_type === 'essay' || q.question_type === 'translation') && (
+                    {isEssayQuestion && (
                       <div className="mt-4 ml-8 space-y-3">
                         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                           <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
@@ -646,32 +684,34 @@ function ExamResultContent() {
                     )}
 
                     {/* AI buttons */}
-                    {status === 'incorrect' && (
+                    {!isEssayQuestion && (
                       <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
                         <button
                           onClick={() => setShowExplanationModal(q)}
                           className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                          <FiZap size={14} /> Hỏi AI giải thích thêm
+                          <FiZap size={14} /> {getReviewAIButtonLabel(status)}
                         </button>
                         <button
                           onClick={() => setShowTeachModal(q)}
                           className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
                           <FiBook size={14} /> Giảng lại lý thuyết
                         </button>
-                        <button
-                          onClick={() => handleSaveWrongQuestion(q)}
-                          disabled={Boolean((q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!))}
-                          className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1.5 disabled:text-gray-400">
-                          <FiBookOpen size={14} />
-                          {(q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!)
-                            ? 'Đã lưu câu sai'
-                            : 'Lưu câu sai'}
-                        </button>
+                        {status === 'incorrect' && (
+                          <button
+                            onClick={() => handleSaveWrongQuestion(q)}
+                            disabled={Boolean((q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!))}
+                            className="text-sm text-red-600 hover:text-red-800 font-medium flex items-center gap-1.5 disabled:text-gray-400">
+                            <FiBookOpen size={14} />
+                            {(q.question_id || q.id) && savedWrongQuestions.has((q.question_id || q.id)!)
+                              ? 'Đã lưu câu sai'
+                              : 'Lưu câu sai'}
+                          </button>
+                        )}
                       </div>
                     )}
 
                     {/* Grade essay button */}
-                    {(q.question_type === 'essay' || q.question_type === 'translation') && (
+                    {isEssayQuestion && (
                       <div className="mt-3 ml-8">
                         <button
                           onClick={() => setShowGradeModal(q)}
@@ -734,6 +774,22 @@ function ExamResultContent() {
 function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
   const [explanation, setExplanation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const answerStatus = getQuestionReviewStatus(question);
+  const answerBoxClass = answerStatus === 'correct'
+    ? 'bg-green-50 border border-green-200 rounded-lg p-3'
+    : answerStatus === 'unanswered'
+      ? 'bg-amber-50 border border-amber-200 rounded-lg p-3'
+      : 'bg-red-50 border border-red-200 rounded-lg p-3';
+  const answerLabelClass = answerStatus === 'correct'
+    ? 'text-xs font-bold text-green-600 mb-1'
+    : answerStatus === 'unanswered'
+      ? 'text-xs font-bold text-amber-600 mb-1'
+      : 'text-xs font-bold text-red-600 mb-1';
+  const answerTextClass = answerStatus === 'correct'
+    ? 'text-green-800 font-semibold text-sm'
+    : answerStatus === 'unanswered'
+      ? 'text-amber-800 font-semibold text-sm'
+      : 'text-red-800 font-semibold text-sm';
 
   useEffect(() => {
     loadExplanation();
@@ -744,7 +800,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
       const res = await authFetch('/api/ai/ask', {
         method: 'POST',
         body: JSON.stringify({
-          question: `Câu ${question.sub_question_number || question.question_number} sai. Giải thích tại sao đáp án "${question.selected_answer_key}. ${question.selected_answer_text}" sai và "${question.correct_answer_key}. ${question.correct_answer_text}" đúng? Hãy giải thích chi tiết kiến thức liên quan và mẹo ghi nhớ.`,
+          question: buildQuestionExplanationPrompt(question),
           attemptId,
         }),
       });
@@ -778,16 +834,18 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-red-600 mb-1">✗ Đáp án của bạn</p>
-              <p className="text-red-800 font-semibold text-sm">
-                {question.selected_answer_key || '?'}. {question.selected_answer_text || ''}
+            <div className={answerBoxClass}>
+              <p className={answerLabelClass}>
+                {answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}
+              </p>
+              <p className={answerTextClass}>
+                {formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
               </p>
             </div>
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
               <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
               <p className="text-green-800 font-semibold text-sm">
-                {question.correct_answer_key || '?'}. {question.correct_answer_text || ''}
+                {formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
               </p>
             </div>
           </div>
@@ -1086,10 +1144,13 @@ function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI 
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const questionText = question.question_text || question.question_text_cn || '';
-  const selectedAnswer = question.selected_answer_key
-    ? `${question.selected_answer_key}. ${question.selected_answer_text || ''}`.trim()
-    : (question.selected_answer_text || 'Chưa trả lời');
-  const correctAnswer = `${question.correct_answer_key || '?'}. ${question.correct_answer_text || ''}`.trim();
+  const answerStatus = getQuestionReviewStatus(question);
+  const selectedAnswer = answerStatus === 'correct'
+    ? `Học sinh đã chọn đúng: ${formatReviewAnswer(question.selected_answer_key, question.selected_answer_text)}`
+    : answerStatus === 'unanswered'
+      ? 'Học sinh đã bỏ qua câu này'
+      : `Học sinh đã chọn sai: ${formatReviewAnswer(question.selected_answer_key, question.selected_answer_text)}`;
+  const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
   const lessonTopic = [subjectName, question.topic_name, question.question_category, question.difficulty].filter(Boolean).join(' / ');
 
   useEffect(() => { loadLesson(); }, []);
