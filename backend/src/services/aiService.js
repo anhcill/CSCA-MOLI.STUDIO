@@ -309,7 +309,10 @@ function ruleBasedExamAnalysis(attemptData) {
 async function analyzeExamResult(attemptData) {
   const { questions = [] } = attemptData;
   const { correctCount, totalQuestions } = attemptData;
-  const percentage = Math.round((correctCount / totalQuestions) * 100);
+  const safeTotal = Number(totalQuestions) || questions.length || 1;
+  const safeCorrect = Number(correctCount) || 0;
+  const percentage = Math.round((safeCorrect / safeTotal) * 100);
+  const examAnalysisMaxTokens = Math.min(BEE.examAnalysisMaxTokens || 3000, 3200);
 
   // Nếu không có câu hỏi chi tiết → rule-based
   if (!questions.length || questions.length < 3) {
@@ -318,69 +321,85 @@ async function analyzeExamResult(attemptData) {
 
   // Phân loại câu sai theo loại
   const wrongQuestions = questions.filter(q => !q.is_correct && q.selected_answer_key);
+  const unansweredQuestions = questions.filter(q => !q.selected_answer_key);
+  const focusQuestions = [...wrongQuestions, ...unansweredQuestions].slice(0, 45);
+  const correctSamples = [];
+  const usedCorrectNumbers = new Set();
+  ['hard', 'medium', 'easy'].forEach(level => {
+    const sample = questions.find(q => q.is_correct && q.difficulty === level);
+    if (sample && !usedCorrectNumbers.has(sample.question_number)) {
+      correctSamples.push(sample);
+      usedCorrectNumbers.add(sample.question_number);
+    }
+  });
+  questions.forEach(q => {
+    if (correctSamples.length >= 4) return;
+    if (q.is_correct && !usedCorrectNumbers.has(q.question_number)) {
+      correctSamples.push(q);
+      usedCorrectNumbers.add(q.question_number);
+    }
+  });
+
   const easyCorrect = questions.filter(q => q.difficulty === 'easy' && q.is_correct).length;
   const mediumCorrect = questions.filter(q => q.difficulty === 'medium' && q.is_correct).length;
   const hardCorrect = questions.filter(q => q.difficulty === 'hard' && q.is_correct).length;
-  const easyTotal = questions.filter(q => q.difficulty === 'easy').length || 1;
-  const mediumTotal = questions.filter(q => q.difficulty === 'medium').length || 1;
-  const hardTotal = questions.filter(q => q.difficulty === 'hard').length || 1;
+  const easyTotal = questions.filter(q => q.difficulty === 'easy').length;
+  const mediumTotal = questions.filter(q => q.difficulty === 'medium').length;
+  const hardTotal = questions.filter(q => q.difficulty === 'hard').length;
 
   const difficultyBreakdown = {
-    easy:   { correct: easyCorrect,   total: easyTotal,   rate: Math.round(easyCorrect / easyTotal * 100) },
-    medium: { correct: mediumCorrect, total: mediumTotal, rate: Math.round(mediumCorrect / mediumTotal * 100) },
-    hard:   { correct: hardCorrect,   total: hardTotal,   rate: Math.round(hardCorrect / hardTotal * 100) },
+    easy:   { correct: easyCorrect,   total: easyTotal,   rate: easyTotal ? Math.round(easyCorrect / easyTotal * 100) : 0 },
+    medium: { correct: mediumCorrect, total: mediumTotal, rate: mediumTotal ? Math.round(mediumCorrect / mediumTotal * 100) : 0 },
+    hard:   { correct: hardCorrect,   total: hardTotal,   rate: hardTotal ? Math.round(hardCorrect / hardTotal * 100) : 0 },
   };
 
-  // Xây dựng prompt cho DeepSeek R1
+  // Xây dựng prompt ngắn hơn: thống kê toàn bài + câu sai/bỏ trống + vài câu đúng mẫu.
   const prevAttempt = attemptData.previousAttempt;
-  const questionsText = questions.slice(0, 80).map(q => {
-    const status = q.is_correct ? '✓ ĐÚNG' : '✗ SAI';
+  const compactQuestion = (q) => {
+    const status = q.is_correct ? 'ĐÚNG' : (q.selected_answer_key ? 'SAI' : 'BỎ TRỐNG');
     const userAnswer = q.selected_answer_key
       ? `${q.selected_answer_key}. ${getAnswerText(q.options, q.selected_answer_key)}`
       : 'CHƯA TRẢ LỜI';
     const correctKey = q.correct_answer_key || '?';
     const correctAnswerText = getAnswerText(q.options, correctKey);
-    const optionsText = (q.options || [])
-      .slice(0, 8)
-      .map(o => `${o.key}. ${o.text || o.text_cn || ''}`)
-      .join(' | ');
     return `Câu ${q.question_number}: [${status}]
-  Loại: ${q.question_type || 'single_choice'}
-  Độ khó: ${q.difficulty || 'medium'}
-  Đề bài: ${q.question_text || q.question_text_cn || ''}
-  Lựa chọn: ${optionsText}
-  Bạn chọn: ${userAnswer}
-  Đáp án đúng: ${correctKey}. ${correctAnswerText || ''}
-  Giải thích: ${q.explanation || q.explanation_cn || 'Không có'}
-  ${q.passage_text ? `Đoạn văn: ${q.passage_text.substring(0, 200)}` : ''}`.substring(0, 700);
-  }).join('\n\n');
+Loại: ${q.question_type || 'single_choice'} | Độ khó: ${q.difficulty || 'medium'}
+Đề: ${q.question_text || q.question_text_cn || ''}
+Bạn chọn: ${userAnswer}
+Đáp án đúng: ${correctKey}. ${correctAnswerText || ''}
+Gợi ý có sẵn: ${q.explanation || q.explanation_cn || 'Không có'}
+${q.passage_text ? `Đoạn văn: ${q.passage_text.substring(0, 160)}` : ''}`.substring(0, 520);
+  };
+  const focusQuestionsText = focusQuestions.map(compactQuestion).join('\n\n') || 'Không có câu sai hoặc bỏ trống.';
+  const correctSamplesText = correctSamples.map(compactQuestion).join('\n\n') || 'Không có mẫu câu đúng.';
 
   // Phân loại câu sai để AI có thêm context
   const typeBreakdown = {};
   questions.forEach(q => {
-    if (!q.is_correct && q.selected_answer_key) {
-      const type = q.question_type || 'single_choice';
-      if (!typeBreakdown[type]) typeBreakdown[type] = { total: 0, wrong: 0 };
-      typeBreakdown[type].total++;
-      typeBreakdown[type].wrong++;
-    }
+    const type = q.question_type || 'single_choice';
+    if (!typeBreakdown[type]) typeBreakdown[type] = { total: 0, wrong: 0, unanswered: 0 };
+    typeBreakdown[type].total++;
+    if (!q.selected_answer_key) typeBreakdown[type].unanswered++;
+    else if (!q.is_correct) typeBreakdown[type].wrong++;
   });
+  const typeBreakdownText = Object.entries(typeBreakdown)
+    .map(([type, stat]) => `- ${type}: sai ${stat.wrong}, bỏ trống ${stat.unanswered}, tổng ${stat.total}`)
+    .join('\n') || '- Không có dữ liệu';
 
-  const prompt = `Bạn là giáo viên giỏi, phân tích bài thi chi tiết cho học sinh. VIẾT TIẾNG VIỆT.
+  const prompt = `Bạn là giáo viên giỏi. Phân tích bài thi bằng TIẾNG VIỆT, đủ chi tiết nhưng gọn.
 
-HƯỚNG DẪN:
-- Viết đầy đủ, chi tiết, không cắt ngắn
-- Từng câu trả lời phải dài ít nhất 3-5 câu
-- Đưa ra ví dụ cụ thể từ bài thi
-- Nhận xét thật, gợi ý thực tế
-- Dùng ngôn ngữ tự nhiên, thân thiện
-- Chỉ kết luận dựa trên dữ liệu bài thi được cung cấp, không bịa chủ đề hoặc câu hỏi không có trong dữ liệu
-- Khi nêu điểm yếu, phải chỉ rõ số câu hoặc nhóm câu làm căn cứ nếu dữ liệu có đủ
+Nguyên tắc:
+- Dựa trên thống kê toàn bài và danh sách câu sai/bỏ trống bên dưới.
+- Không bịa câu hỏi/chủ đề ngoài dữ liệu. Nếu chưa đủ dữ liệu, nói rõ "cần xem thêm".
+- Khi nêu điểm yếu, chỉ rõ câu hoặc nhóm câu làm căn cứ.
+- Ưu tiên lời khuyên học được ngay, không viết chung chung.
+- Trả về JSON hợp lệ duy nhất, không markdown, không chữ ngoài JSON.
 
 THÔNG TIN BÀI THI:
 - Môn: ${attemptData.subjectName || 'Tiếng Trung'}
-- Đúng: ${correctCount}/${totalQuestions} (${percentage}%)
+- Đúng: ${safeCorrect}/${safeTotal} (${percentage}%)
 - Số câu sai: ${wrongQuestions.length}
+- Số câu bỏ trống: ${unansweredQuestions.length}
 ${prevAttempt ? `
 SO SÁNH VỚI LẦN TRƯỚC:
 - Lần trước: ${prevAttempt.score}%
@@ -394,35 +413,42 @@ PHÂN TÍCH THEO ĐỘ KHÓ:
 - TB: ${difficultyBreakdown.medium.rate}% đúng (${difficultyBreakdown.medium.correct}/${difficultyBreakdown.medium.total})
 - Khó: ${difficultyBreakdown.hard.rate}% đúng (${difficultyBreakdown.hard.correct}/${difficultyBreakdown.hard.total})
 
-CHI TIẾT TỪNG CÂU:
-${questionsText}
+THỐNG KÊ THEO LOẠI CÂU:
+${typeBreakdownText}
 
-TRẢ VỀ JSON. QUY TẮC QUAN TRỌNG: Mỗi trường text phải xuống dòng cho từng ý, dùng ký tự xuống dòng \n giữa các câu/ý. KHÔNG viết liền 1 đoạn.
+CÂU CẦN PHÂN TÍCH (${focusQuestions.length}/${wrongQuestions.length + unansweredQuestions.length} câu sai/bỏ trống):
+${focusQuestionsText}
+
+MỘT SỐ CÂU ĐÚNG ĐỂ SO SÁNH CÁCH LÀM:
+${correctSamplesText}
+
+TRẢ VỀ JSON. Mỗi trường text dùng \\n để tách ý.
 {
   "score": ${percentage},
-  "grade": "Mô tả đánh giá 1-2 câu",
+  "grade": "Đánh giá ngắn 1 câu",
   "gradeColor": "emerald|blue|amber|red",
-  "summary": "Viết 3-5 câu, mỗi câu 1 ý, xuống dòng giữa các câu. Tổng quan về kết quả bài thi.",
-  "strengths": ["Điểm mạnh 1: viết 1-2 câu chi tiết", "Điểm mạnh 2: viết 1-2 câu chi tiết"],
-  "weaknesses": ["Điểm yếu 1: viết 1-2 câu, giải thích vì sao sai", "Điểm yếu 2: viết 1-2 câu"],
-  "analysis": "Xuống dòng cho từng ý:\n1. Tổng quan sai ở phần nào - chỉ rõ từng nhóm kiến thức (ví dụ: 'Sai nhiều ở cơ học: câu 3, 4, 9 về lực đàn hồi, ma sát, gia tốc')\n2. Nguyên nhân cụ thể - vì sao hay sai (ví dụ: 'Học rời rạc từng công thức, chưa hiểu bản chất nên đề đổi cách hỏi là nhầm')\n3. Kiến thức cần bổ sung cụ thể - liệt kê từng phần (ví dụ: 'Cần học lại: định nghĩa lực, vectơ, hợp lực, công thức ω=v/R, chu kỳ-tần số')",
-  "overallAdvice": "Xuống dòng cho từng ý:\n1. Ưu tiên học gì trước (ví dụ: 'Ưu tiên học lại phần cơ học trước vì chiếm nhiều câu sai nhất')\n2. Phương pháp ôn luyện cụ thể (ví dụ: 'Mỗi ngày học 1 công thức, hiểu bản chất trước khi nhớ')\n3. Tài liệu nên tham khảo\n4. Thời gian biểu ôn tập cụ thể (ví dụ: 'Tuần 1: ôn cơ học, Tuần 2: ôn điện từ')",
+  "summary": "3-4 dòng: tổng quan điểm số, tiến bộ nếu có, vấn đề chính.",
+  "strengths": ["Điểm mạnh 1: 1 câu có căn cứ", "Điểm mạnh 2: 1 câu có căn cứ"],
+  "weaknesses": ["Điểm yếu 1: nêu câu/nhóm câu liên quan", "Điểm yếu 2: nêu câu/nhóm câu liên quan"],
+  "analysis": "5-7 dòng: sai phần nào, vì sao sai, kiến thức cần học lại, ví dụ từ câu sai.",
+  "overallAdvice": "4-6 dòng: ưu tiên học gì trước, học thế nào, luyện bao nhiêu, kiểm tra lại ra sao.",
   "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2", "Chủ đề ưu tiên 3"],
-  "studyPlan": "Xuống dòng cho từng giai đoạn:\nGiai đoạn 1 (Tuần 1-2): [Học gì, ví dụ: Học lại lý thuyết cơ học - lực, vectơ, tổng hợp lực]\nGiai đoạn 2 (Tuần 3-4): [Học gì, ví dụ: Luyện bài tập cơ bản từng chủ đề]\nGiai đoạn 3 (Tuần 5+): [Học gì, ví dụ: Làm đề thi thử, kiểm tra lại kết quả]",
-  "examTips": ["Mẹo thi 1", "Mẹo thi 2", "Mẹo thi 3"],
-  "commonMistakes": ["Lỗi sai 1: mô tả lỗi và cách tránh", "Lỗi sai 2: mô tả lỗi và cách tránh"],
-  "nextExamSuggestion": "Viết 2-3 câu, xuống dòng giữa các ý. Gợi ý nên thử đề nào, độ khó bao nhiêu, lý do tại sao."
+  "studyPlan": "3 giai đoạn rõ: Tuần 1, Tuần 2, Tuần 3+; mỗi giai đoạn 1-2 việc cụ thể.",
+  "examTips": ["Mẹo 1 sát dữ liệu bài thi", "Mẹo 2", "Mẹo 3"],
+  "commonMistakes": ["Lỗi sai 1 và cách tránh", "Lỗi sai 2 và cách tránh"],
+  "nextExamSuggestion": "2-3 dòng: nên làm đề mức nào tiếp theo và lý do."
 }`;
 
   try {
     const fallback = ruleBasedExamAnalysis(attemptData);
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: BEE.examAnalysisMaxTokens || 6000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: examAnalysisMaxTokens });
     const ai = parseAIMaybeJSON(raw);
 
     return {
       ...normalizeExamAnalysis(ai, fallback, percentage),
       difficultyBreakdown,
       wrongCount: wrongQuestions.length,
+      unansweredCount: unansweredQuestions.length,
     };
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
@@ -1233,34 +1259,38 @@ TRẢ VỀ JSON:
 async function teachGrammar({ question, topic, wrongAnswer, correctAnswer, userLevel = 'beginner' }) {
   const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
   const levelText = levelMap[userLevel] || 'sơ cấp';
+  const lessonMaxTokens = Math.min(BEE.lessonMaxTokens || 1600, 1800);
 
-  const prompt = `Bạn là giáo viên tiếng Trung. Tạo bài giảng ngắn bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
+  const prompt = `Bạn là gia sư giỏi, giải thích bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
 
-CẤU TRÚC BÀI GIẢNG:
-1. Giải thích ngữ pháp/qui tắc liên quan (ngắn gọn, 3-5 câu)
-2. Đưa 2-3 ví dụ minh hoạ (câu thường gặp trong đời sống)
-3. Mẹo ghi nhớ (1-2 mẹo)
-4. Lưu ý thường sai (1-2 lưu ý)
-
-NGỮ CẢNH:
-- Câu hỏi liên quan: ${question || ''}
-- Chủ đề: ${topic || 'Ngữ pháp tiếng Trung'}
-- Đáp án sai của học sinh: ${wrongAnswer || 'không có'}
+Ngữ cảnh:
+- Câu hỏi: ${question || ''}
+- Môn/chủ đề: ${topic || 'không rõ'}
+- Học sinh chọn: ${wrongAnswer || 'không có'}
 - Đáp án đúng: ${correctAnswer || 'không có'}
 
-YÊU CẦU:
-- Viết plain text, có thể dùng bullet (-)
-- Mỗi phần 2-5 câu, đi thẳng vào vấn đề
-- Ví dụ tiếng Trung bắt buộc có pinyin và nghĩa tiếng Việt
-- Từ tiếng Trung gắn kèm pinyin ngay sau
-- Không dùng markdown phức tạp (không **, ##)
+Nhiệm vụ:
+- Xác định đúng điểm kiến thức cần học từ câu hỏi và đáp án đúng.
+- Nếu là tiếng Trung: giải thích ngữ pháp/từ vựng/cách dùng; ví dụ phải có tiếng Trung, pinyin, nghĩa Việt.
+- Nếu không phải tiếng Trung: giải thích kiến thức môn đó, không ép thành ngữ pháp tiếng Trung.
+- Trong "grammarRule", nêu vì sao đáp án đúng đúng và vì sao đáp án học sinh chọn sai.
+- Viết ngắn, chính xác, đủ ý; không lan man; không dùng markdown.
+- Trả về JSON hợp lệ duy nhất, không thêm chữ ngoài JSON.
 
-TRẢ VỀ JSON:
+Độ dài bắt buộc:
+- title: tối đa 12 từ
+- grammarRule: 4-6 câu
+- examples: đúng 2 ví dụ
+- memoryTips: đúng 2 ý
+- commonMistakes: đúng 2 ý
+- relatedTopics: đúng 2 ý
+
+JSON schema:
 {
   "title": "Tiêu đề bài học",
-  "grammarRule": "Giải thích qui tắc ngữ pháp ngắn gọn",
+  "grammarRule": "Giải thích trọng tâm, đáp án đúng, lỗi sai",
   "examples": [
-    { "chinese": "câu tiếng Trung", "pinyin": "pinyin", "vietnamese": "nghĩa tiếng Việt", "usage": "dùng khi nào" }
+    { "chinese": "ví dụ/công thức/câu mẫu", "pinyin": "pinyin nếu là tiếng Trung, nếu không thì để rỗng", "vietnamese": "nghĩa hoặc lời giải tiếng Việt", "usage": "dùng khi nào" }
   ],
   "memoryTips": ["Mẹo 1", "Mẹo 2"],
   "commonMistakes": ["Lỗi thường gặp 1", "Lỗi thường gặp 2"],
@@ -1268,7 +1298,7 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.45, maxTokens: BEE.lessonMaxTokens || 3000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');

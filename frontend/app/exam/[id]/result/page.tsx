@@ -709,6 +709,7 @@ function ExamResultContent() {
         <TeachGrammarModal
           question={showTeachModal}
           attemptId={result.id}
+          subjectName={result.subject_name}
           onClose={() => setShowTeachModal(null)}
           onAskAI={() => {
             setShowTeachModal(null);
@@ -834,28 +835,68 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
 }
 
 function QuestionAnalysisLoading() {
-  const steps = ['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích'];
   return (
-    <div className="py-8">
-      <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-purple-200 border-t-purple-600" />
+    <AIStepLoading
+      title="AI đang phân tích câu này"
+      tone="purple"
+      steps={['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích']}
+    />
+  );
+}
+
+function LessonLoading() {
+  return (
+    <AIStepLoading
+      title="AI đang soạn bài học đúng trọng tâm"
+      tone="indigo"
+      steps={['Tìm điểm kiến thức', 'Kiểm tra đúng sai', 'Viết ví dụ dễ nhớ']}
+    />
+  );
+}
+
+function AIStepLoading({ title, steps, tone }: { title: string; steps: string[]; tone: 'purple' | 'indigo' }) {
+  const colors = {
+    purple: {
+      iconBg: 'bg-purple-50',
+      spinner: 'border-purple-200 border-t-purple-600',
+      row: 'border-purple-100 bg-purple-50/60',
+      number: 'text-purple-600',
+      track: 'bg-purple-100',
+      bar: 'bg-purple-500',
+      label: 'text-purple-700',
+    },
+    indigo: {
+      iconBg: 'bg-indigo-50',
+      spinner: 'border-indigo-200 border-t-indigo-600',
+      row: 'border-indigo-100 bg-indigo-50/60',
+      number: 'text-indigo-600',
+      track: 'bg-indigo-100',
+      bar: 'bg-indigo-500',
+      label: 'text-indigo-700',
+    },
+  }[tone];
+
+  return (
+    <div className="py-8" aria-live="polite">
+      <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${colors.iconBg}`}>
+        <div className={`h-8 w-8 animate-spin rounded-full border-[3px] ${colors.spinner}`} />
       </div>
       <p className="text-center text-sm font-semibold text-gray-700">
-        AI đang phân tích câu này<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
+        {title}<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
       </p>
       <div className="mx-auto mt-5 max-w-sm space-y-2">
         {steps.map((step, index) => (
-          <div key={step} className="flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/60 px-3 py-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-black text-purple-600 shadow-sm">
+          <div key={step} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${colors.row}`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-black shadow-sm ${colors.number}`}>
               {index + 1}
             </span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-purple-100">
+            <div className={`h-2 flex-1 overflow-hidden rounded-full ${colors.track}`}>
               <div
-                className="h-full rounded-full bg-purple-500"
+                className={`h-full rounded-full ${colors.bar}`}
                 style={{ width: `${35 + index * 25}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
               />
             </div>
-            <span className="w-24 text-xs font-bold text-purple-700">{step}</span>
+            <span className={`w-28 text-xs font-bold ${colors.label}`}>{step}</span>
           </div>
         ))}
       </div>
@@ -1039,23 +1080,31 @@ function GradeEssayModal({ question, attemptId, onClose }: {
 }
 
 // ─── Teach Grammar Modal (Mini-lesson) ──────────────────────────────────────────
-function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
-  question: QuestionResult; attemptId: number; onClose: () => void; onAskAI: () => void;
+function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI }: {
+  question: QuestionResult; attemptId: number; subjectName?: string; onClose: () => void; onAskAI: () => void;
 }) {
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const questionText = question.question_text || question.question_text_cn || '';
+  const selectedAnswer = question.selected_answer_key
+    ? `${question.selected_answer_key}. ${question.selected_answer_text || ''}`.trim()
+    : (question.selected_answer_text || 'Chưa trả lời');
+  const correctAnswer = `${question.correct_answer_key || '?'}. ${question.correct_answer_text || ''}`.trim();
+  const lessonTopic = [subjectName, question.topic_name, question.question_category, question.difficulty].filter(Boolean).join(' / ');
 
   useEffect(() => { loadLesson(); }, []);
 
   const loadLesson = async () => {
+    setLoading(true);
+    setLesson(null);
     try {
       const res = await authFetch('/api/ai/teach-grammar', {
         method: 'POST',
         body: JSON.stringify({
-          question: question.question_text || question.question_text_cn || '',
-          topic: '',
-          wrongAnswer: `${question.selected_answer_key}. ${question.selected_answer_text}`,
-          correctAnswer: `${question.correct_answer_key}. ${question.correct_answer_text}`,
+          question: questionText,
+          topic: lessonTopic,
+          wrongAnswer: selectedAnswer,
+          correctAnswer,
         }),
       });
       const data = await res.json();
@@ -1087,17 +1136,14 @@ function TeachGrammarModal({ question, attemptId, onClose, onAskAI }: {
 
         <div className="p-6">
           {loading ? (
-            <div className="flex flex-col items-center gap-3 py-10">
-              <div className="animate-spin rounded-full h-10 w-10 border-3 border-indigo-200 border-t-indigo-600" />
-              <p className="text-gray-500 text-sm">AI đang soạn bài giảng...</p>
-            </div>
+            <LessonLoading />
           ) : lesson ? (
             <div className="space-y-5">
               {/* Title */}
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                 <h4 className="font-bold text-indigo-900 text-lg mb-1">{lesson.title}</h4>
                 <p className="text-xs text-indigo-600">
-                  Câu hỏi gốc: {question.question_text || question.question_text_cn}
+                  Câu hỏi gốc: {questionText}
                 </p>
               </div>
 

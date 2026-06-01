@@ -50,6 +50,54 @@ async function handleRateLimit(res, userId, retryAfter, message, insightType = I
   return res.json({ success: false, rateLimited: true, retryAfter, message });
 }
 
+function buildExamAttemptPayload(attempt, duration) {
+  return {
+    id: attempt.id,
+    examTitle: attempt.exam_title,
+    subjectName: attempt.subject_name,
+    totalScore: attempt.total_score,
+    totalQuestions: attempt.total_questions,
+    correctCount: attempt.total_correct,
+    duration,
+    submittedAt: attempt.submit_time,
+  };
+}
+
+async function getPreviousAttemptSummary(userId, attemptId, attempt) {
+  try {
+    const prevResult = await db.query(
+      `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              ea.submit_time, e.title as exam_title, e.total_questions
+       FROM exam_attempts ea
+       JOIN exams e ON ea.exam_id = e.id
+       WHERE ea.user_id = $1 AND ea.id != $2 AND ea.status = 'completed'
+       ORDER BY ea.submit_time DESC LIMIT 1`,
+      [userId, attemptId],
+    );
+
+    if (!prevResult.rows[0]) return null;
+
+    const p = prevResult.rows[0];
+    const prevPct = p.total_questions > 0
+      ? Math.round((p.total_correct / p.total_questions) * 100)
+      : parseFloat(p.total_score) || 0;
+    const currPct = attempt.total_questions > 0
+      ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
+      : parseFloat(attempt.total_score) || 0;
+
+    return {
+      examTitle: p.exam_title,
+      date: p.submit_time,
+      score: prevPct,
+      correct: p.total_correct,
+      total: p.total_questions,
+      delta: currPct - prevPct,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function tryStartAIChat(userId) {
   if (chatInFlightUsers.has(userId)) return false;
   chatInFlightUsers.add(userId);
@@ -208,6 +256,61 @@ async function analyzeExamResult(req, res) {
     const duration = attempt.submit_time && attempt.start_time
       ? Math.round((new Date(attempt.submit_time) - new Date(attempt.start_time)) / 60000)
       : null;
+    const attemptPayload = buildExamAttemptPayload(attempt, duration);
+
+    // Check cache trước khi lấy chi tiết câu hỏi/options để mở trang kết quả nhanh hơn.
+    const cacheResult = await db.query(
+      `SELECT data, created_at FROM ai_insights
+       WHERE user_id = $1 AND insight_type IN ($3, 'full_analysis')
+       AND attempt_id = $2
+       ORDER BY CASE WHEN insight_type = $3 THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+      [userId, String(attemptId), INSIGHT_TYPES.examAnalysis],
+    );
+    if (cacheResult.rows[0]) {
+      const age = Math.floor((Date.now() - new Date(cacheResult.rows[0].created_at)) / 60000);
+      const previousAttempt = await getPreviousAttemptSummary(userId, attemptId, attempt);
+      return res.json({
+        success: true,
+        cached: true,
+        cacheAge: age,
+        attempt: attemptPayload,
+        previousAttempt,
+        aiAnalysis: cacheResult.rows[0].data,
+      });
+    }
+
+    // Nếu AI đang bận thì trả sớm, không tải chi tiết toàn bộ câu hỏi.
+    if (aiService.isRateLimited()) {
+      const retryAfter = aiService.getRateLimitRemaining();
+      const previousAttempt = await getPreviousAttemptSummary(userId, attemptId, attempt);
+      const stale = await getStaleCache(userId, INSIGHT_TYPES.examAnalysis, attemptId);
+      if (stale) {
+        const age = Math.floor((Date.now() - new Date(stale.created_at)) / 60000);
+        return res.json({
+          success: true,
+          cached: true,
+          cacheSource: 'stale',
+          cacheAge: age,
+          rateLimited: true,
+          retryAfter,
+          attempt: attemptPayload,
+          previousAttempt,
+          aiAnalysis: stale.data,
+          message: 'AI đang bận, đang hiển thị phân tích đã lưu.',
+        });
+      }
+      return res.json({
+        success: true, rateLimited: true, retryAfter,
+        attempt: attemptPayload,
+        previousAttempt,
+        aiAnalysis: {
+          score: attempt.total_questions > 0
+            ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
+            : parseFloat(attempt.total_score) || 0,
+        },
+        message: 'AI đang bận, hiển thị kết quả cơ bản.',
+      });
+    }
 
     // Lấy câu hỏi chi tiết (ALL questions in exam, with user answer if exists)
     let questions = [];
@@ -270,6 +373,7 @@ async function analyzeExamResult(req, res) {
       console.error('Error fetching questions for AI:', e);
     }
 
+    const previousAttempt = await getPreviousAttemptSummary(userId, attemptId, attempt);
     const attemptData = {
       attemptId: attempt.id,
       examTitle: attempt.exam_title,
@@ -279,111 +383,8 @@ async function analyzeExamResult(req, res) {
       correctCount: attempt.total_correct,
       duration,
       questions,
+      previousAttempt,
     };
-
-    // Lấy lần thi trước để so sánh
-    let previousAttempt = null;
-    try {
-      const prevResult = await db.query(
-        `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
-                ea.submit_time, e.title as exam_title, e.total_questions
-         FROM exam_attempts ea
-         JOIN exams e ON ea.exam_id = e.id
-         WHERE ea.user_id = $1 AND ea.id != $2 AND ea.status = 'completed'
-         ORDER BY ea.submit_time DESC LIMIT 1`,
-        [userId, attemptId],
-      );
-      if (prevResult.rows[0]) {
-        const p = prevResult.rows[0];
-        const prevPct = p.total_questions > 0
-          ? Math.round((p.total_correct / p.total_questions) * 100)
-          : parseFloat(p.total_score) || 0;
-        const currPct = Math.round((attempt.total_correct / attempt.total_questions) * 100);
-        previousAttempt = {
-          examTitle: p.exam_title,
-          date: p.submit_time,
-          score: prevPct,
-          correct: p.total_correct,
-          total: p.total_questions,
-          delta: currPct - prevPct,
-        };
-      }
-    } catch { /* no previous attempt */ }
-
-    // Check cache trong DB trước
-    const cacheResult = await db.query(
-      `SELECT data, created_at FROM ai_insights
-       WHERE user_id = $1 AND insight_type IN ($3, 'full_analysis')
-       AND attempt_id = $2
-       ORDER BY CASE WHEN insight_type = $3 THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
-      [userId, String(attemptId), INSIGHT_TYPES.examAnalysis],
-    );
-    if (cacheResult.rows[0]) {
-      const age = Math.floor((Date.now() - new Date(cacheResult.rows[0].created_at)) / 60000);
-      return res.json({
-        success: true,
-        cached: true,
-        cacheAge: age,
-        attempt: {
-          id: attempt.id,
-          examTitle: attempt.exam_title,
-          subjectName: attempt.subject_name,
-          totalScore: attempt.total_score,
-          totalQuestions: attempt.total_questions,
-          correctCount: attempt.total_correct,
-          duration,
-          submittedAt: attempt.submit_time,
-        },
-        previousAttempt,
-        aiAnalysis: cacheResult.rows[0].data,
-      });
-    }
-
-    // Gọi AI
-    if (aiService.isRateLimited()) {
-      const retryAfter = aiService.getRateLimitRemaining();
-      const stale = await getStaleCache(userId, INSIGHT_TYPES.examAnalysis, attemptId);
-      if (stale) {
-        const age = Math.floor((Date.now() - new Date(stale.created_at)) / 60000);
-        return res.json({
-          success: true,
-          cached: true,
-          cacheSource: 'stale',
-          cacheAge: age,
-          rateLimited: true,
-          retryAfter,
-          attempt: {
-            id: attempt.id,
-            examTitle: attempt.exam_title,
-            subjectName: attempt.subject_name,
-            totalScore: attempt.total_score,
-            totalQuestions: attempt.total_questions,
-            correctCount: attempt.total_correct,
-            duration,
-            submittedAt: attempt.submit_time,
-          },
-          previousAttempt,
-          aiAnalysis: stale.data,
-          message: 'AI đang bận, đang hiển thị phân tích đã lưu.',
-        });
-      }
-      return res.json({
-        success: true, rateLimited: true, retryAfter,
-        attempt: {
-          id: attempt.id,
-          examTitle: attempt.exam_title,
-          subjectName: attempt.subject_name,
-          totalScore: attempt.total_score,
-          totalQuestions: attempt.total_questions,
-          correctCount: attempt.total_correct,
-          duration,
-          submittedAt: attempt.submit_time,
-        },
-        previousAttempt,
-        aiAnalysis: { score: Math.round((attempt.total_correct / attempt.total_questions) * 100) },
-        message: 'AI đang bận, hiển thị kết quả cơ bản.',
-      });
-    }
 
     const inflightKey = `${INSIGHT_TYPES.examAnalysis}:${userId}:${attemptId}`;
     let aiAnalysis;
@@ -414,16 +415,7 @@ async function analyzeExamResult(req, res) {
     res.json({
       success: true,
       cached: false,
-      attempt: {
-        id: attempt.id,
-        examTitle: attempt.exam_title,
-        subjectName: attempt.subject_name,
-        totalScore: attempt.total_score,
-        totalQuestions: attempt.total_questions,
-        correctCount: attempt.total_correct,
-        duration,
-        submittedAt: attempt.submit_time,
-      },
+      attempt: attemptPayload,
       previousAttempt,
       aiAnalysis,
     });
