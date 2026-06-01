@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
-import MathInput, { renderMathDisplay } from './MathInput';
+import MathInput from './MathInput';
 import SingleQuestionOcrPaste from './SingleQuestionOcrPaste';
+import RichMathText from '@/components/common/RichMathText';
 import type { ParsedSingleQuestionOcr } from '@/lib/ocr-question/parseSingleQuestionOcr';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
@@ -303,10 +304,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         {form.questionText && (
           <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
             <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
-            <div
-              className="text-sm text-gray-800 math-preview"
-              dangerouslySetInnerHTML={{ __html: renderMathDisplay(form.questionText) }}
-            />
+            <RichMathText value={form.questionText} className="text-gray-800" />
           </div>
         )}
       </div>
@@ -322,10 +320,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         {form.questionTextCn && (
           <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
             <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
-            <div
-              className="text-sm text-gray-800 math-preview"
-              dangerouslySetInnerHTML={{ __html: renderMathDisplay(form.questionTextCn) }}
-            />
+            <RichMathText value={form.questionTextCn} className="text-gray-800" />
           </div>
         )}
       </div>
@@ -394,6 +389,16 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
               className="w-full px-3 py-1 border rounded text-sm"
               placeholder={`选项${key} (中文)...`}
             />
+
+            {(ans.text || ans.textCn) && (
+              <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2">
+                <span className="mb-1 block text-xs text-gray-400">Xem trước đáp án:</span>
+                {ans.text && <RichMathText value={ans.text} className="text-gray-800" />}
+                {ans.textCn && ans.textCn !== ans.text && (
+                  <RichMathText value={ans.textCn} className="mt-1 text-gray-600" />
+                )}
+              </div>
+            )}
 
             {/* Ảnh đính kèm đáp án */}
             {ans.imageUrl && (

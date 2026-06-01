@@ -1,4 +1,4 @@
-import { normalizeLatexMath } from '@/lib/math/normalizeMath';
+import { normalizeEscapedLatexBackslashes, normalizeLatexMath } from '@/lib/math/normalizeMath';
 import { normalizeOcrMathText } from '@/lib/ocr-question/normalizeOcrMath';
 
 const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
@@ -34,7 +34,7 @@ export interface ParsedSingleQuestionOcr {
 }
 
 function normalizeRawOcr(input: string): string {
-  return input
+  return normalizeEscapedLatexBackslashes(input)
     .replace(/\r\n?/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/[\u200b-\u200d\ufeff]/g, '')
@@ -56,9 +56,11 @@ function splitInlineOptions(input: string): string {
 
 function cleanSegment(input: string): string {
   return input
-    .replace(/\\\s+/g, ' ')
+    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .replace(/^\s*\\quad\s+/i, '')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
     .trim();
 }
 
@@ -139,7 +141,7 @@ function parseBody(input: string): { question: string; optionParts: Map<string, 
   }
 
   return {
-    question: stripQuestionNumber(questionLines.join(' ')),
+    question: stripQuestionNumber(questionLines.join('\n')),
     optionParts,
   };
 }
@@ -196,7 +198,7 @@ export function parseSingleQuestionOcr(input: string): ParsedSingleQuestionOcr {
   const { question, optionParts } = parseBody(split.body);
   const rawOptions = ANSWER_KEYS.map(key => ({
     key,
-    value: (optionParts.get(key) || []).join(' ').trim(),
+    value: (optionParts.get(key) || []).join('\n').trim(),
   })).filter(option => option.value);
   const primaryLanguage = choosePrimaryLanguage(raw, question, split.explanation, rawOptions.map(option => option.value));
 

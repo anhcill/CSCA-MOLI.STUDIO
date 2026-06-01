@@ -59,6 +59,10 @@ export function normalizeMathUnicode(input: string): string {
   return out;
 }
 
+export function normalizeEscapedLatexBackslashes(input: string): string {
+  return input.replace(/\\\\(?=(?:[A-Za-z]|\(|\)|\[|\]|\{|\}))/g, '\\');
+}
+
 function findMatchingBackward(input: string, closeIndex: number): number {
   const close = input[closeIndex];
   const open = close === ')' ? '(' : close === ']' ? '[' : '{';
@@ -236,12 +240,14 @@ export function normalizePlainFractions(input: string): string {
 }
 
 export function normalizeMathText(input: string): string {
-  return normalizePlainFractions(normalizeMathUnicode(input).replace(/\r\n?/g, '\n'));
+  return normalizePlainFractions(
+    normalizeMathUnicode(normalizeEscapedLatexBackslashes(input)).replace(/\r\n?/g, '\n'),
+  );
 }
 
 export function normalizeLatexMath(input: string): string {
   return normalizeLostSuperscripts(normalizeMathText(input)
-    .replace(/\\[ \t]+/g, ' ')
+    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .replace(/[ \t]*\n[ \t]*/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim());
@@ -333,7 +339,7 @@ export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
   return normalizeMathText(input)
-    .replace(/\\[ \t]+/g, ' ')
+    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
       if (!part || part.startsWith('`')) return part;

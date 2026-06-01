@@ -1,4 +1,8 @@
-import { normalizeLatexMath, normalizeRichMathText } from '@/lib/math/normalizeMath';
+import {
+  normalizeEscapedLatexBackslashes,
+  normalizeLatexMath,
+  normalizeRichMathText,
+} from '@/lib/math/normalizeMath';
 
 const COMMAND_RE =
   /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|infty|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Rightarrow|Leftrightarrow|to|le|ge|ne|approx)\b/;
@@ -16,10 +20,13 @@ const GREEK_REPLACEMENTS: Array<[RegExp, string]> = [
 ];
 
 function cleanOcrMathInput(input: string): string {
-  return input
-    .replace(/\\\s+/g, ' ')
+  return normalizeEscapedLatexBackslashes(input)
+    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .replace(/^\s*\\quad\s+/i, '')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -107,16 +114,24 @@ function normalizeIntervals(input: string): string {
     .replace(/\bU\b(?=\s*[\[(])/g, '\\cup ');
 }
 
+function normalizeOcrSubscripts(input: string): string {
+  return input
+    .replace(/\b([A-Za-z])\s+([0-9])\b/g, '$1_{$2}')
+    .replace(/\b([A-Za-z])([0-9])\b/g, '$1_{$2}');
+}
+
 function applyOcrMathRules(input: string): string {
-  return normalizeIntervals(
-    normalizeFunctionFractions(
-      normalizeCalculus(
-        normalizeCombinatorics(
-          normalizeDecorators(
-            normalizeDegrees(
-              normalizeFunctions(
-                normalizeRoots(
-                  normalizeSymbols(input),
+  return normalizeOcrSubscripts(
+    normalizeIntervals(
+      normalizeFunctionFractions(
+        normalizeCalculus(
+          normalizeCombinatorics(
+            normalizeDecorators(
+              normalizeDegrees(
+                normalizeFunctions(
+                  normalizeRoots(
+                    normalizeSymbols(input),
+                  ),
                 ),
               ),
             ),
@@ -181,16 +196,21 @@ function wrapCommandMath(input: string): string {
     .join('');
 }
 
-function maybeBuildCases(input: string): string {
-  const lines = input
-    .split(/[;\n]+/)
+function buildCasesFromLines(lines: string[]): string {
+  const expandedLines = lines.flatMap(line => (
+    (line.match(/=/g) || []).length > 1 ? splitJoinedEquations(line) : [line]
+  ));
+  const equations = expandedLines
     .map(line => line.trim())
-    .filter(Boolean);
+    .filter(line => {
+      const eq = line.indexOf('=');
+      return eq > 0 && line.slice(eq + 1).trim().length > 0;
+    });
 
-  if (lines.length < 2 || lines.some(line => !line.includes('='))) return '';
-  if (/[\u3400-\u9fff]/.test(input)) return '';
+  if (equations.length < 2) return '';
+  if (equations.some(line => /[\u3400-\u9fff]/.test(line))) return '';
 
-  const rows = lines.map(line => {
+  const rows = equations.map(line => {
     const eq = line.indexOf('=');
     const left = normalizeLatexMath(line.slice(0, eq).trim());
     const right = normalizeLatexMath(line.slice(eq + 1).trim());
@@ -200,13 +220,113 @@ function maybeBuildCases(input: string): string {
   return `\\(\\begin{cases}${rows.join(' \\\\ ')}\\end{cases}\\)`;
 }
 
+function splitJoinedEquations(input: string): string[] {
+  const compact = normalizeOcrSubscripts(input.replace(/[{}\s]+/g, ''));
+  const separated = compact.replace(
+    /(=[+\-]?(?:\d+(?:\.\d+)?|[A-Za-z](?:_\{[^{}]+\})?|\\frac\{[^{}]+\}\{[^{}]+\}))(?=[A-Za-z\\])/g,
+    '$1\n',
+  );
+
+  return separated
+    .split(/[;\n]+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function buildCasesFromText(input: string): string {
+  const lines = input
+    .split(/[;\n]+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const joined = buildCasesFromLines(splitJoinedEquations(input));
+  if (joined) return joined;
+
+  return buildCasesFromLines(lines);
+}
+
+function isCaseMathCandidate(line: string): boolean {
+  return /^[{}A-Za-z0-9\\()[\]^_+\-*/=<>.,|&\s]+$/.test(line);
+}
+
+function replaceBraceCaseBlocks(input: string): string {
+  const lines = input.split('\n');
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const braceIndex = line.indexOf('{');
+    const beforeBrace = braceIndex === -1 ? '' : line.slice(0, braceIndex);
+
+    if (braceIndex === -1 || line.includes('\\begin{') || /[A-Za-z\\]\s*$/.test(beforeBrace)) {
+      out.push(line);
+      continue;
+    }
+
+    const prefix = beforeBrace.trimEnd();
+    const collected: string[] = [];
+    let suffix = '';
+    const afterBrace = line.slice(braceIndex + 1).replace(/^\s*{+/, '').replace(/}+[\s]*$/, '').trim();
+    if (afterBrace) collected.push(afterBrace);
+
+    let j = i + 1;
+    for (; j < lines.length; j++) {
+      const candidate = lines[j].trim();
+      if (!candidate) continue;
+
+      const close = candidate.match(/^}\s*(.*)$/);
+      if (close) {
+        suffix = close[1]?.trim() || '';
+        j++;
+        break;
+      }
+
+      if (!isCaseMathCandidate(candidate)) {
+        suffix = candidate;
+        j++;
+        break;
+      }
+
+      collected.push(candidate);
+    }
+
+    const cases = buildCasesFromText(collected.join('\n'));
+    if (!cases) {
+      out.push(line);
+      continue;
+    }
+
+    out.push([prefix, cases, suffix].filter(Boolean).join(' '));
+    i = j - 1;
+  }
+
+  return out.join('\n');
+}
+
+function maybeBuildCases(input: string): string {
+  if (input.includes('\\begin{cases}') || /[\u3400-\u9fff]/.test(input)) return '';
+  if (!input.trim().startsWith('{')) return '';
+  return buildCasesFromText(input);
+}
+
+function repairCaseRows(input: string): string {
+  return input.replace(/(\\begin\{cases\})([\s\S]*?)(\\end\{cases\})/g, (_, open, body, close) => {
+    const repaired = String(body).replace(
+      /(&=\s*[+\-]?(?:\d+(?:\.\d+)?|[A-Za-z](?:_\{?\d+\}?)?))\s+(?=[A-Za-z][^&=]*&=)/g,
+      '$1 \\\\ ',
+    );
+    return `${open}${repaired}${close}`;
+  });
+}
+
 export function normalizeOcrMathText(input: string): string {
   const cleaned = cleanOcrMathInput(input);
   if (!cleaned) return '';
 
   const enhanced = applyOcrMathRules(cleaned);
-  const cases = maybeBuildCases(enhanced);
+  const withCases = repairCaseRows(replaceBraceCaseBlocks(enhanced));
+  const cases = maybeBuildCases(withCases);
   if (cases) return cases;
 
-  return wrapCommandMath(normalizeRichMathText(enhanced));
+  return repairCaseRows(wrapCommandMath(normalizeRichMathText(withCases)));
 }
