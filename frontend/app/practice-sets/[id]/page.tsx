@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -14,6 +14,7 @@ import {
   type PracticeQuestion,
   type PracticeSetDetail,
 } from '@/lib/api/insights';
+import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
 type AnswerState = Record<number, string>;
 type NoteState = Record<number, string>;
@@ -28,9 +29,11 @@ export default function PracticeSetPage() {
   const [notes, setNotes] = useState<NoteState>({});
   const [bookmarks, setBookmarks] = useState<BookmarkState>({});
   const [submitted, setSubmitted] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingNote, setSavingNote] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const submitDelayRef = useRef<number | null>(null);
 
   const loadSet = async () => {
     try {
@@ -51,6 +54,10 @@ export default function PracticeSetPage() {
   useEffect(() => {
     if (setId) loadSet();
   }, [setId]);
+
+  useEffect(() => () => {
+    if (submitDelayRef.current) window.clearTimeout(submitDelayRef.current);
+  }, []);
 
   const score = useMemo(() => {
     if (!practiceSet) return { correct: 0, total: 0 };
@@ -93,6 +100,18 @@ export default function PracticeSetPage() {
     }
   };
 
+  const submitPractice = () => {
+    if (submitted || analyzing || submitDelayRef.current || Object.keys(answers).length === 0) return;
+
+    setAnalyzing(true);
+    submitDelayRef.current = window.setTimeout(() => {
+      setSubmitted(true);
+      setAnalyzing(false);
+      submitDelayRef.current = null;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 900);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center">
@@ -116,6 +135,8 @@ export default function PracticeSetPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 pb-24">
+      <AiAnalyzingOverlay open={analyzing} mode="practice" />
+
       <header className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-20">
         <div className="max-w-[1360px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -270,11 +291,11 @@ export default function PracticeSetPage() {
               </button>
             ) : (
               <button
-                onClick={() => setSubmitted(true)}
-                disabled={submitted || Object.keys(answers).length === 0}
+                onClick={submitPractice}
+                disabled={submitted || analyzing || Object.keys(answers).length === 0}
                 className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3.5 text-sm font-black transition-all shadow-lg shadow-purple-600/20 hover:shadow-xl active:scale-[0.97] disabled:opacity-50"
               >
-                Nộp bài luyện
+                {analyzing ? 'Đang phân tích...' : 'Nộp bài luyện'}
               </button>
             )}
           </div>

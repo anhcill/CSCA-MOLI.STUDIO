@@ -10,6 +10,7 @@ import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import RichMathText from '@/components/common/RichMathText';
+import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
 export default function ExamPage() {
   const params = useParams();
@@ -568,6 +569,8 @@ export default function ExamPage() {
         WebkitTouchCallout: 'none',
       }}
     >
+      <AiAnalyzingOverlay open={submitting} mode={practiceMode ? 'practice' : 'exam'} />
+
       {/* Screen Capture Shield - covers content when screenshot detected */}
       {isScreenCaptured && (
         <div className="exam-capture-shield" onClick={() => setIsScreenCaptured(false)}>
