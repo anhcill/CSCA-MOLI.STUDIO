@@ -1,12 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FiCheck, FiClipboard, FiTrash2 } from 'react-icons/fi';
 import {
   parseSingleQuestionOcr,
   type ParsedSingleQuestionOcr,
 } from '@/lib/ocr-question/parseSingleQuestionOcr';
 import SingleQuestionImageOcrInput from './SingleQuestionImageOcrInput';
+import {
+  getClipboardImage,
+  useSingleQuestionImageOcr,
+} from './useSingleQuestionImageOcr';
 
 interface SingleQuestionOcrPasteProps {
   onApply: (parsed: ParsedSingleQuestionOcr) => void;
@@ -27,12 +31,22 @@ function hasParsedContent(parsed: ParsedSingleQuestionOcr | null): boolean {
 export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuestionOcrPasteProps) {
   const [ocrText, setOcrText] = useState('');
   const [applied, setApplied] = useState(false);
-  const [imageInputKey, setImageInputKey] = useState(0);
   const parsed = useMemo(
     () => (ocrText.trim() ? parseSingleQuestionOcr(ocrText) : null),
     [ocrText],
   );
   const canApply = hasParsedContent(parsed);
+  const handleOcrTextExtracted = useCallback((text: string) => {
+    setOcrText(text);
+    setApplied(false);
+  }, []);
+  const {
+    clearImageOcr,
+    fileName,
+    loading: imageOcrLoading,
+    previewUrl,
+    runImageOcr,
+  } = useSingleQuestionImageOcr({ onTextExtracted: handleOcrTextExtracted });
 
   const handleApply = () => {
     if (!parsed || !canApply) {
@@ -47,8 +61,17 @@ export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuest
   const handleClear = () => {
     setOcrText('');
     setApplied(false);
-    setImageInputKey(current => current + 1);
+    clearImageOcr();
     onClear();
+  };
+
+  const handleTextareaPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const file = getClipboardImage(event);
+    if (!file) return;
+
+    event.preventDefault();
+    setApplied(false);
+    void runImageOcr(file);
   };
 
   return (
@@ -76,11 +99,10 @@ export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuest
       </div>
 
       <SingleQuestionImageOcrInput
-        key={imageInputKey}
-        onTextExtracted={(text) => {
-          setOcrText(text);
-          setApplied(false);
-        }}
+        fileName={fileName}
+        loading={imageOcrLoading}
+        previewUrl={previewUrl}
+        onImageFile={runImageOcr}
       />
 
       <textarea
@@ -89,9 +111,10 @@ export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuest
           setOcrText(event.target.value);
           setApplied(false);
         }}
+        onPaste={handleTextareaPaste}
         rows={5}
         className="mt-3 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-mono text-gray-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-        placeholder="25. ...&#10;A. ...&#10;B. ...&#10;解析: ..."
+        placeholder={'Dán text OCR hoặc dán ảnh vào đây\n25. ...\nA. ...\nB. ...\n解析: ...'}
       />
 
       {parsed?.warnings.length ? (
@@ -117,7 +140,7 @@ export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuest
         <button
           type="button"
           onClick={handleClear}
-          disabled={!ocrText && !applied}
+          disabled={!ocrText && !applied && !fileName && !previewUrl && !imageOcrLoading}
           className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FiTrash2 size={15} />
