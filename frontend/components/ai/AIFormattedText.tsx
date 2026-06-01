@@ -25,16 +25,17 @@ function hasMathSignal(value: string) {
 
 function isLikelySectionHeading(value: string) {
   const text = stripInlineMarkdown(value);
-  if (!/[:\uFF1A]$/.test(text)) return false;
   if (text.length < 3 || text.length > 72) return false;
   if (hasMathSignal(text)) return false;
   if (/^[A-Z]\s*[:.)]/i.test(text)) return false;
-  return true;
+  if (/[:\uFF1A]$/.test(text)) return true;
+  if (/[?？]$/.test(text) && /^(vì sao|tai sao|tại sao|vi sao|cách|cach|lưu ý|luu y|nhận xét|nhan xet)/i.test(text)) return true;
+  return false;
 }
 
 function formatSectionHeading(value: string) {
   const text = stripInlineMarkdown(value).replace(/[:\uFF1A]\s*$/, '').trim();
-  return `**${text}:**`;
+  return /[?？]$/.test(text) ? `**${text}**` : `**${text}:**`;
 }
 
 function formatLeadingLabel(value: string) {
@@ -79,7 +80,7 @@ export function normalizeAIFormattedText(value: string) {
     }
 
     if (!line) {
-      pendingBullet = false;
+      if (pendingBullet) continue;
       if (out.length > 0 && out[out.length - 1] !== '') out.push('');
       continue;
     }
