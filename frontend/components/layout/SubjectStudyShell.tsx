@@ -135,7 +135,7 @@ export default function SubjectStudyShell({
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[212px] border-r border-violet-100 bg-white/95 px-4 py-5 shadow-sm xl:block">
         <Link href="/" className="mb-8 flex items-center gap-2 text-2xl font-black text-violet-600">
           <HiOutlineSparkles className="text-violet-600" />
-          MOLI
+          MOLY
         </Link>
         <nav className="space-y-1.5">
           {SIDE_LINKS.map((item) => {

@@ -316,7 +316,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-            <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" />
+            <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
 
             <style>{`
         @media print {

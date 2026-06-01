@@ -20,10 +20,12 @@ const PRACTICE_MESSAGES = [
 interface AiAnalyzingOverlayProps {
   open: boolean;
   mode?: 'exam' | 'practice';
+  compactAfterMs?: number;
 }
 
-export default function AiAnalyzingOverlay({ open, mode = 'exam' }: AiAnalyzingOverlayProps) {
+export default function AiAnalyzingOverlay({ open, mode = 'exam', compactAfterMs = 0 }: AiAnalyzingOverlayProps) {
   const [messageIndex, setMessageIndex] = useState(0);
+  const [compact, setCompact] = useState(false);
   const messages = mode === 'practice' ? PRACTICE_MESSAGES : EXAM_MESSAGES;
 
   useEffect(() => {
@@ -39,7 +41,49 @@ export default function AiAnalyzingOverlay({ open, mode = 'exam' }: AiAnalyzingO
     return () => window.clearInterval(timer);
   }, [messages.length, open]);
 
+  useEffect(() => {
+    if (!open) {
+      setCompact(false);
+      return;
+    }
+
+    if (!compactAfterMs) {
+      setCompact(false);
+      return;
+    }
+
+    setCompact(false);
+    const timer = window.setTimeout(() => setCompact(true), compactAfterMs);
+    return () => window.clearTimeout(timer);
+  }, [compactAfterMs, open]);
+
   if (!open) return null;
+
+  if (compact) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="fixed inset-x-3 top-20 z-[80] sm:left-auto sm:right-5 sm:w-[360px]"
+      >
+        <div className="rounded-2xl border border-indigo-100 bg-white/95 p-4 shadow-2xl shadow-slate-900/10 backdrop-blur-md">
+          <div className="flex items-start gap-3">
+            <div className="relative mt-0.5 h-10 w-10 shrink-0">
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-100" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-slate-900">{messages[messageIndex]}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Bạn có thể xem điểm và đáp án trước. AI xong sẽ tự hiện phân tích.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
