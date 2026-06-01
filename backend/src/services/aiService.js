@@ -80,7 +80,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
 
   await waitBetweenRequests();
 
-  const { maxTokens = BEE.maxTokens, temperature = BEE.temperature } = options;
+  const { maxTokens = BEE.maxTokens, temperature = BEE.temperature, model = BEE.model } = options;
   const apiKey = getNextKey();
 
   if (!apiKey) {
@@ -88,7 +88,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
   }
 
   const payload = {
-    model: BEE.model,
+    model,
     messages,
     max_tokens: maxTokens,
     temperature,

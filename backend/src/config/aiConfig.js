@@ -43,6 +43,9 @@ const config = {
   beeknoee: {
     apiKeys: parseApiKeys(),
     model: process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
+    ocrModel: process.env.BEEKNOEE_OCR_MODEL || process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
+    importModel: process.env.BEEKNOEE_IMPORT_MODEL || process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
+    importFallbackModel: process.env.BEEKNOEE_IMPORT_FALLBACK_MODEL || 'grok-4-1-fast-reasoning',
     baseUrl: (process.env.BEEKNOEE_BASE_URL || 'https://platform.beeknoee.com/api/v1').replace(/\/+$/, ''),
     timeout: intEnv('BEEKNOEE_TIMEOUT_MS', 90000),
     maxTokens: intEnv('BEEKNOEE_MAX_TOKENS', 4000),

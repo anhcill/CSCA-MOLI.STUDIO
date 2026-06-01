@@ -1,5 +1,6 @@
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
+const aiConfig = require("../config/aiConfig");
 const UserActivity = require("../models/UserActivity");
 const pdfParse = require("pdf-parse");
 const aiService = require("../services/aiService");
@@ -21,6 +22,45 @@ function sanitize(str) {
 function sanitizeExplanation(str) {
   if (typeof str !== "string") return str;
   return str.replace(/\0/g, "").trim();
+}
+
+function shouldTryImportFallback(error) {
+  const status = error?.response?.status;
+  return error?.message === "AI_TIMEOUT" || (Number.isFinite(status) && status >= 500);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callPdfImportAI(prompt, options) {
+  const models = [
+    aiConfig.beeknoee.importModel,
+    aiConfig.beeknoee.importFallbackModel,
+  ].filter((model, index, all) => model && all.indexOf(model) === index);
+
+  let lastError = null;
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        return await aiService.callBeeknoee(prompt, { ...options, model });
+      } catch (error) {
+        lastError = error;
+        const canRetry = shouldTryImportFallback(error);
+        if (!canRetry) throw error;
+        if (attempt < 2) {
+          await wait(800 * attempt);
+          continue;
+        }
+        if (model === models[models.length - 1]) {
+          throw error;
+        }
+        console.warn(`PDF import AI model ${model} failed, retrying fallback model.`);
+      }
+    }
+  }
+
+  throw lastError || new Error("PDF_IMPORT_AI_FAILED");
 }
 
 // ─── P1: Validate question points ──────────────────────────────────────────────
@@ -1131,7 +1171,7 @@ const AdminExamController = {
         return res.json(ruleBasedPreview);
       }
 
-      const rawAi = await aiService.callBeeknoee(buildPdfImportPrompt(truncatedText, importPreset), {
+      const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset), {
         temperature: 0.15,
         maxTokens: 6500,
       });

@@ -1,6 +1,8 @@
 const aiService = require("./aiService");
+const aiConfig = require("../config/aiConfig");
 
 const IMAGE_OCR_MAX_TOKENS = 3000;
+const BEE = aiConfig.beeknoee;
 
 function cleanOcrText(value) {
   return String(value || "")
@@ -42,7 +44,7 @@ Rules:
 async function extractSingleQuestionImageOcrText(file) {
   const raw = await aiService.callBeeknoeeMessages(
     buildSingleQuestionImageOcrMessages(file),
-    { temperature: 0.05, maxTokens: IMAGE_OCR_MAX_TOKENS },
+    { temperature: 0.05, maxTokens: IMAGE_OCR_MAX_TOKENS, model: BEE.ocrModel },
   );
 
   return cleanOcrText(raw);
