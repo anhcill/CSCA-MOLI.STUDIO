@@ -1,6 +1,8 @@
 'use client';
 
 import { FiAlertCircle, FiPlus, FiTrash2 } from 'react-icons/fi';
+import ImageUpload from '@/components/admin/ImageUpload';
+import MathInput from '@/components/admin/MathInput';
 import type {
   ImportedExamItem,
   ImportedFillBlankGroupData,
@@ -27,6 +29,33 @@ interface Props {
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500';
 const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50';
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
+
+function ImageUrlEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  onChange: (url: string) => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2">
+      <ImageUpload
+        compact
+        label={label}
+        currentImage={value || undefined}
+        onImageUploaded={onChange}
+      />
+      <input
+        value={value || ''}
+        onChange={(event) => onChange(event.target.value)}
+        className={inputClass}
+        placeholder="Hoặc dán URL ảnh"
+      />
+    </div>
+  );
+}
 
 function isSingleChoice(item: ImportedExamItem): item is ImportedQuestionData {
   return item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group';
@@ -265,6 +294,9 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
               {preview.source.fileName} - {preview.source.pages || '?'} trang - {preview.source.textLength || 0} ký tự
             </p>
           )}
+          <p className="mt-1 text-xs text-gray-500">
+            Công thức nhập bằng LaTeX, ví dụ <code className="rounded bg-gray-100 px-1">{'\\(f^{-1}(x)=\\frac{x+3}{x-2}\\)'}</code>. Ảnh chỉ dùng cho hình/biểu đồ cần upload.
+          </p>
         </div>
         <button
           type="button"
@@ -298,10 +330,17 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                     <FiTrash2 size={13} /> Bỏ mục
                   </button>
                 </div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Đoạn văn</label>
-                <textarea value={item.passageText || ''} onChange={(event) => updateReadingGroup(itemIndex, { passageText: event.target.value })} rows={4} className={inputClass} />
-                <label className="mt-3 block text-xs font-semibold text-gray-600 mb-1">URL ảnh đoạn văn</label>
-                <input value={item.passageImageUrl || ''} onChange={(event) => updateReadingGroup(itemIndex, { passageImageUrl: event.target.value })} className={inputClass} placeholder="https://..." />
+                <MathInput
+                  label="Đoạn văn"
+                  value={item.passageText || ''}
+                  onChange={(value) => updateReadingGroup(itemIndex, { passageText: value })}
+                  placeholder="Nhập đoạn văn. Công thức dùng \\frac{tử}{mẫu}, ví dụ \\(\\frac{2x+3}{x-1}\\)"
+                />
+                <ImageUrlEditor
+                  label="Ảnh đoạn văn"
+                  value={item.passageImageUrl || ''}
+                  onChange={(url) => updateReadingGroup(itemIndex, { passageImageUrl: url })}
+                />
                 <details className="mt-3 rounded-lg border border-gray-200 p-3" open>
                   <summary className="cursor-pointer text-sm font-semibold text-gray-800">Câu con đọc hiểu</summary>
                   <div className="mt-3 space-y-4">
@@ -315,11 +354,21 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                               <FiTrash2 size={12} /> Xóa câu con
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <textarea value={subQuestion.questionText || ''} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { questionText: event.target.value })} rows={2} className={inputClass} placeholder={`Câu ${subIndex + 1} (Việt/Anh)`} />
-                            <textarea value={subQuestion.questionTextCn || ''} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { questionTextCn: event.target.value })} rows={2} className={inputClass} placeholder={`Câu ${subIndex + 1} (Tiếng Trung)`} />
-                          </div>
-                          <input value={subQuestion.imageUrl || ''} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { imageUrl: event.target.value })} className={`${inputClass} mt-2`} placeholder="URL ảnh câu hỏi nếu có" />
+                          <MathInput
+                            label={`Câu con ${subIndex + 1}`}
+                            value={subQuestion.questionText || ''}
+                            onChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { questionText: value })}
+                            cnLabel="Tiếng Trung"
+                            cnValue={subQuestion.questionTextCn || ''}
+                            onCnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { questionTextCn: value })}
+                            placeholder="Nội dung câu hỏi. Phân số: \\frac{x+3}{x-2}"
+                            cnPlaceholder="Nội dung tiếng Trung"
+                          />
+                          <ImageUrlEditor
+                            label={`Ảnh câu con ${subIndex + 1}`}
+                            value={subQuestion.imageUrl || ''}
+                            onChange={(url) => updateReadingSubQuestion(itemIndex, subIndex, { imageUrl: url })}
+                          />
                           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                             {(subQuestion.answers || []).map((answer, answerIndex) => (
                               <div key={answerIndex} className="rounded-lg border border-gray-200 p-2">
@@ -329,10 +378,21 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                                     <FiTrash2 size={12} /> Xóa
                                   </button>
                                 </div>
-                                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                                  <input value={answer.text || ''} onChange={(event) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { text: event.target.value })} className={inputClass} placeholder="Việt/Anh" />
-                                  <input value={answer.textCn || ''} onChange={(event) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { textCn: event.target.value })} className={inputClass} placeholder="Tiếng Trung" />
-                                </div>
+                                <MathInput
+                                  label=""
+                                  value={answer.text || ''}
+                                  onChange={(value) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { text: value })}
+                                  cnLabel="Tiếng Trung"
+                                  cnValue={answer.textCn || ''}
+                                  onCnChange={(value) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { textCn: value })}
+                                  placeholder={`Đáp án ${IMPORT_ANSWER_KEYS[answerIndex]} (Việt/Anh)`}
+                                  cnPlaceholder={`Đáp án ${IMPORT_ANSWER_KEYS[answerIndex]} (Tiếng Trung)`}
+                                />
+                                <ImageUrlEditor
+                                  label={`Ảnh đáp án ${IMPORT_ANSWER_KEYS[answerIndex]}`}
+                                  value={answer.imageUrl || ''}
+                                  onChange={(url) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { imageUrl: url })}
+                                />
                               </div>
                             ))}
                           </div>
@@ -367,10 +427,17 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                     <FiTrash2 size={13} /> Bỏ mục
                   </button>
                 </div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Đoạn văn / ngữ cảnh</label>
-                <textarea value={item.passageText || ''} onChange={(event) => updateFillBlankGroup(itemIndex, { passageText: event.target.value })} rows={3} className={inputClass} />
-                <label className="mt-3 block text-xs font-semibold text-gray-600 mb-1">URL ảnh đoạn văn</label>
-                <input value={item.passageImageUrl || ''} onChange={(event) => updateFillBlankGroup(itemIndex, { passageImageUrl: event.target.value })} className={inputClass} placeholder="https://..." />
+                <MathInput
+                  label="Đoạn văn / ngữ cảnh"
+                  value={item.passageText || ''}
+                  onChange={(value) => updateFillBlankGroup(itemIndex, { passageText: value })}
+                  placeholder="Nhập ngữ cảnh. Công thức dùng \\frac{tử}{mẫu}"
+                />
+                <ImageUrlEditor
+                  label="Ảnh đoạn văn"
+                  value={item.passageImageUrl || ''}
+                  onChange={(url) => updateFillBlankGroup(itemIndex, { passageImageUrl: url })}
+                />
                 <details className="mt-3 rounded-lg border border-gray-200 p-3" open>
                   <summary className="cursor-pointer text-sm font-semibold text-gray-800">Pool đáp án và chỗ trống</summary>
                   <div className="mt-3 space-y-4">
@@ -384,10 +451,16 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                                 <FiTrash2 size={12} /> Xóa
                               </button>
                             </div>
-                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                              <input value={option.text || ''} onChange={(event) => updateFillBlankOption(itemIndex, optionIndex, { text: event.target.value })} className={inputClass} placeholder="Việt/Anh" />
-                              <input value={option.textCn || ''} onChange={(event) => updateFillBlankOption(itemIndex, optionIndex, { textCn: event.target.value })} className={inputClass} placeholder="Tiếng Trung" />
-                            </div>
+                            <MathInput
+                              label=""
+                              value={option.text || ''}
+                              onChange={(value) => updateFillBlankOption(itemIndex, optionIndex, { text: value })}
+                              cnLabel="Tiếng Trung"
+                              cnValue={option.textCn || ''}
+                              onCnChange={(value) => updateFillBlankOption(itemIndex, optionIndex, { textCn: value })}
+                              placeholder="Việt/Anh"
+                              cnPlaceholder="Tiếng Trung"
+                            />
                           </div>
                         ))}
                       </div>
@@ -404,9 +477,17 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                               <FiTrash2 size={12} /> Xóa
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_10rem]">
-                            <input value={subItem.questionText || ''} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { questionText: event.target.value })} className={inputClass} placeholder={`Chỗ trống ${subIndex + 1} (Việt/Anh)`} />
-                            <input value={subItem.questionTextCn || ''} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { questionTextCn: event.target.value })} className={inputClass} placeholder={`Chỗ trống ${subIndex + 1} (Tiếng Trung)`} />
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_10rem]">
+                            <MathInput
+                              label=""
+                              value={subItem.questionText || ''}
+                              onChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { questionText: value })}
+                              cnLabel="Tiếng Trung"
+                              cnValue={subItem.questionTextCn || ''}
+                              onCnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { questionTextCn: value })}
+                              placeholder={`Chỗ trống ${subIndex + 1} (Việt/Anh)`}
+                              cnPlaceholder={`Chỗ trống ${subIndex + 1} (Tiếng Trung)`}
+                            />
                             <select value={subItem.correctAnswerKey || ''} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { correctAnswerKey: event.target.value })} className={inputClass}>
                               <option value="">Đáp án</option>
                               {item.linkedOptions.map((option) => <option key={option.key} value={option.key}>{option.key}</option>)}
@@ -434,18 +515,21 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                   <FiTrash2 size={13} /> Bỏ mục
                 </button>
               </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Nội dung (Việt/Anh)</label>
-                  <textarea value={item.questionText || ''} onChange={(event) => updateSingle(itemIndex, { questionText: event.target.value })} rows={3} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Nội dung (Tiếng Trung)</label>
-                  <textarea value={item.questionTextCn || ''} onChange={(event) => updateSingle(itemIndex, { questionTextCn: event.target.value })} rows={3} className={inputClass} />
-                </div>
-              </div>
-              <label className="mt-3 block text-xs font-semibold text-gray-600 mb-1">URL ảnh câu hỏi</label>
-              <input value={item.imageUrl || ''} onChange={(event) => updateSingle(itemIndex, { imageUrl: event.target.value })} className={inputClass} placeholder="https://..." />
+              <MathInput
+                label="Nội dung câu hỏi"
+                value={item.questionText || ''}
+                onChange={(value) => updateSingle(itemIndex, { questionText: value })}
+                cnLabel="Tiếng Trung"
+                cnValue={item.questionTextCn || ''}
+                onCnChange={(value) => updateSingle(itemIndex, { questionTextCn: value })}
+                placeholder="Nội dung (Việt/Anh). Phân số: \\frac{2x+3}{x-1}"
+                cnPlaceholder="Nội dung tiếng Trung"
+              />
+              <ImageUrlEditor
+                label="Ảnh câu hỏi"
+                value={item.imageUrl || ''}
+                onChange={(url) => updateSingle(itemIndex, { imageUrl: url })}
+              />
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 {(item.answers || []).map((answer, answerIndex) => (
                   <div key={answerIndex} className="rounded-lg border border-gray-200 p-3">
@@ -455,9 +539,21 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                         <FiTrash2 size={12} /> Xóa
                       </button>
                     </div>
-                    <input value={answer.text || ''} onChange={(event) => updateSingleAnswer(itemIndex, answerIndex, { text: event.target.value })} className={inputClass} placeholder="Việt/Anh" />
-                    <input value={answer.textCn || ''} onChange={(event) => updateSingleAnswer(itemIndex, answerIndex, { textCn: event.target.value })} className={`${inputClass} mt-2`} placeholder="Tiếng Trung" />
-                    <input value={answer.imageUrl || ''} onChange={(event) => updateSingleAnswer(itemIndex, answerIndex, { imageUrl: event.target.value })} className={`${inputClass} mt-2`} placeholder="URL ảnh đáp án nếu có" />
+                    <MathInput
+                      label=""
+                      value={answer.text || ''}
+                      onChange={(value) => updateSingleAnswer(itemIndex, answerIndex, { text: value })}
+                      cnLabel="Tiếng Trung"
+                      cnValue={answer.textCn || ''}
+                      onCnChange={(value) => updateSingleAnswer(itemIndex, answerIndex, { textCn: value })}
+                      placeholder="Việt/Anh"
+                      cnPlaceholder="Tiếng Trung"
+                    />
+                    <ImageUrlEditor
+                      label={`Ảnh đáp án ${IMPORT_ANSWER_KEYS[answerIndex]}`}
+                      value={answer.imageUrl || ''}
+                      onChange={(url) => updateSingleAnswer(itemIndex, answerIndex, { imageUrl: url })}
+                    />
                   </div>
                 ))}
               </div>
@@ -485,15 +581,17 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                   </select>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Giải thích (Việt/Anh)</label>
-                  <textarea value={item.explanation || ''} onChange={(event) => updateSingle(itemIndex, { explanation: event.target.value })} rows={2} className={inputClass} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Giải thích (Tiếng Trung)</label>
-                  <textarea value={item.explanationCn || ''} onChange={(event) => updateSingle(itemIndex, { explanationCn: event.target.value })} rows={2} className={inputClass} />
-                </div>
+              <div className="mt-3">
+                <MathInput
+                  label="Giải thích"
+                  value={item.explanation || ''}
+                  onChange={(value) => updateSingle(itemIndex, { explanation: value })}
+                  cnLabel="Tiếng Trung"
+                  cnValue={item.explanationCn || ''}
+                  onCnChange={(value) => updateSingle(itemIndex, { explanationCn: value })}
+                  placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
+                  cnPlaceholder="Giải thích tiếng Trung"
+                />
               </div>
               <ItemWarnings item={item} />
             </div>

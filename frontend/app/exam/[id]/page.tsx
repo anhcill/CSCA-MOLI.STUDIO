@@ -696,9 +696,10 @@ export default function ExamPage() {
                        <FiGrid size={14} /> 
                        {currentQuestion.groupContext.type === 'reading_passage' || currentQuestion.groupContext.type === 'reading_passage_start' ? 'Đoạn văn đọc hiểu dùng chung' : 'Nội dung dùng chung'}
                    </h3>
-                   <div className="text-[17px] text-slate-800 leading-loose font-serif whitespace-pre-wrap">
-                      {currentQuestion.groupContext.text}
-                   </div>
+                   <RichMathText
+                      value={currentQuestion.groupContext.text}
+                      className="text-[17px] text-slate-800 leading-loose font-serif"
+                   />
                    {currentQuestion.groupContext.image && (
                       <img src={currentQuestion.groupContext.image} alt="Passage" className="mt-5 max-w-full rounded-xl border border-amber-100 shadow-sm" />
                    )}
@@ -707,17 +708,12 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
-                {(currentQuestion.question_text || '').split('\n').map((line: string, idx: number) => (
-                  <span key={idx}>
-                    {line}
-                    <br />
-                  </span>
-                ))}
+                <RichMathText value={currentQuestion.question_text || ''} className="text-inherit" />
                 
                 {/* Chinese / Secondary Translation if exist */}
                 {currentQuestion.question_text_cn && currentQuestion.question_text_cn !== currentQuestion.question_text && (
                   <div className="text-lg md:text-xl font-medium text-slate-500 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
-                    {currentQuestion.question_text_cn}
+                    <RichMathText value={currentQuestion.question_text_cn} className="text-inherit" />
                   </div>
                 )}
              </div>
@@ -828,12 +824,13 @@ export default function ExamPage() {
                           {isSelected ? <FiCheck strokeWidth={3} /> : letter}
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
-                          <span className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                             {answer.answer_text}
-                          </span>
+                          <RichMathText
+                            value={answer.answer_text || ''}
+                            className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
+                          />
                           {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
                             <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
-                               {answer.answer_text_cn}
+                               <RichMathText value={answer.answer_text_cn} className="text-inherit" />
                             </div>
                           )}
                           {answer.image_url && (
