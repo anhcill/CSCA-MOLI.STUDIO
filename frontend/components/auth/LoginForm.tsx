@@ -9,11 +9,13 @@ import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/a
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
+import { useLanguage } from '@/context/LanguageContext';
 import TermsModal from './TermsModal';
 
 export default function LoginForm() {
   const router = useRouter();
   const { login: setAuth, setLoading } = useAuthStore();
+  const { t, format } = useLanguage();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -27,7 +29,6 @@ export default function LoginForm() {
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
   const isFacebookEnabled = Boolean(facebookAppId);
-
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
@@ -61,14 +62,14 @@ export default function LoginForm() {
   const validateForm = () => {
     const newErrors: typeof errors = {};
     if (!formData.email) {
-      newErrors.email = 'Email là bắt buộc';
+      newErrors.email = t('auth.requiredEmail');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email không hợp lệ';
+      newErrors.email = t('auth.invalidEmail');
     }
     if (!formData.password) {
-      newErrors.password = 'Mật khẩu là bắt buộc';
+      newErrors.password = t('auth.requiredPassword');
     } else if (formData.password.length < 6) {
-      newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+      newErrors.password = t('auth.passwordMin6');
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -127,11 +128,11 @@ export default function LoginForm() {
       if (newAttempts >= 5) {
         const lockDuration = Math.min(5 * 60 * 1000, newAttempts * 60000);
         setLockedUntil(Date.now() + lockDuration);
-        setErrors({ general: `Quá nhiều lần thử. Vui lòng chờ ${Math.ceil(lockDuration / 60000)} phút.` });
+        setErrors({ general: format('auth.tooManyAttempts', { minutes: Math.ceil(lockDuration / 60000) }) });
       } else {
-        const message = error.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
+        const message = error.response?.data?.message || t('auth.loginFailed');
         const remaining = 5 - newAttempts;
-        setErrors({ general: `${message} (Còn ${remaining} lần thử)` });
+        setErrors({ general: format('auth.failedWithRemaining', { message, remaining }) });
       }
     } finally {
       setIsSubmitting(false);
@@ -165,7 +166,7 @@ export default function LoginForm() {
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      setErrors({ general: error.response?.data?.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
+      setErrors({ general: error.response?.data?.message || t('auth.googleLoginFailed') });
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -173,12 +174,12 @@ export default function LoginForm() {
   };
 
   const handleGoogleError = () => {
-    setErrors({ general: 'Đăng nhập Google thất bại. Vui lòng thử lại.' });
+    setErrors({ general: t('auth.googleLoginFailed') });
   };
 
   const handleFacebookLogin = () => {
     if (!isFacebookEnabled) {
-      setErrors({ general: 'Đăng nhập Facebook chưa được cấu hình.' });
+      setErrors({ general: t('auth.facebookLoginNotConfigured') });
       return;
     }
     if (typeof window === 'undefined') return;
@@ -250,12 +251,12 @@ export default function LoginForm() {
         } catch { /* keep fallback */ }
         router.push(getDefaultAdminRoute(effectiveUser));
       } else {
-        setOtpError(response.message || 'Mã OTP không đúng. Vui lòng thử lại.');
+        setOtpError(response.message || t('auth.otpInvalid'));
         setOtpValues(['', '', '', '', '', '']);
         otpInputRefs.current[0]?.focus();
       }
     } catch (error: any) {
-      setOtpError(error.response?.data?.message || 'Mã OTP không đúng. Vui lòng thử lại.');
+      setOtpError(error.response?.data?.message || t('auth.otpInvalid'));
       setOtpValues(['', '', '', '', '', '']);
       otpInputRefs.current[0]?.focus();
     } finally {
@@ -273,7 +274,7 @@ export default function LoginForm() {
       setOtpError('');
       setTimeout(() => otpInputRefs.current[0]?.focus(), 100);
     } catch (error: any) {
-      setOtpError(error.response?.data?.message || 'Không thể gửi lại mã. Vui lòng thử lại.');
+      setOtpError(error.response?.data?.message || t('auth.otpResendFailed'));
     } finally {
       setOtpResending(false);
     }
@@ -289,8 +290,8 @@ export default function LoginForm() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Chào mừng trở lại!</h1>
-        <p className="text-gray-600">Đăng nhập để tiếp tục học tập</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{t('auth.loginTitle')}</h1>
+        <p className="text-gray-600">{t('auth.loginSubtitle')}</p>
       </div>
 
       {/* Social Login Buttons */}
@@ -317,7 +318,7 @@ export default function LoginForm() {
             className="h-10 w-full flex items-center justify-center gap-3 px-4 bg-[#1877F2] text-white text-sm font-semibold rounded-md hover:bg-[#166FE5] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shadow-sm"
           >
             <FaFacebook className="text-base shrink-0" />
-            Đăng nhập với Facebook
+            {t('auth.facebookLogin')}
           </button>
         )}
       </div>
@@ -327,7 +328,7 @@ export default function LoginForm() {
           <div className="w-full border-t border-gray-300"></div>
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-white text-gray-500 dark:bg-gray-100">Hoặc đăng nhập bằng email</span>
+          <span className="px-2 bg-white text-gray-500 dark:bg-gray-100">{t('auth.emailLogin')}</span>
         </div>
       </div>
 
@@ -337,7 +338,7 @@ export default function LoginForm() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          Vui lòng chờ {Math.ceil((lockedUntil! - Date.now()) / 60000)} phút trước khi thử lại.
+          {format('auth.waitBeforeRetry', { minutes: Math.ceil((lockedUntil! - Date.now()) / 60000) })}
         </div>
       )}
 
@@ -350,8 +351,8 @@ export default function LoginForm() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Nhập mã xác thực</h2>
-            <p className="text-sm text-gray-500 mt-1">Mã OTP đã được gửi đến email của bạn.</p>
+            <h2 className="text-xl font-bold text-gray-900">{t('auth.otpTitle')}</h2>
+            <p className="text-sm text-gray-500 mt-1">{t('auth.otpSent')}</p>
           </div>
 
           {/* OTP Input */}
@@ -389,14 +390,14 @@ export default function LoginForm() {
 
           <div className="text-center space-y-2">
             <p className="text-sm text-gray-500">
-              Không nhận được mã?{' '}
+              {t('auth.noOtp')}{' '}
               <button
                 type="button"
                 onClick={handleResendOtp}
                 disabled={otpCountdown > 0 || otpResending}
                 className={`font-semibold ${otpCountdown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-500'}`}
               >
-                {otpCountdown > 0 ? `Gửi lại sau ${otpCountdown}s` : otpResending ? 'Đang gửi...' : 'Gửi lại mã'}
+                {otpCountdown > 0 ? format('auth.resendIn', { seconds: otpCountdown }) : otpResending ? t('auth.resending') : t('auth.resendCode')}
               </button>
             </p>
             <button
@@ -404,7 +405,7 @@ export default function LoginForm() {
               onClick={handleBackToLogin}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
-              ← Quay lại đăng nhập
+              ← {t('auth.backToLogin')}
             </button>
           </div>
         </div>
@@ -417,7 +418,7 @@ export default function LoginForm() {
         )}
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.email')}</label>
           <input
             type="email"
             id="email"
@@ -433,7 +434,7 @@ export default function LoginForm() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Mật khẩu</label>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.password')}</label>
           <input
             type="password"
             id="password"
@@ -451,9 +452,9 @@ export default function LoginForm() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-            <span className="ml-2 text-sm text-gray-600">Ghi nhớ đăng nhập</span>
+            <span className="ml-2 text-sm text-gray-600">{t('auth.remember')}</span>
           </label>
-          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">Quên mật khẩu?</Link>
+          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">{t('auth.forgot')}</Link>
         </div>
 
         <button
@@ -467,9 +468,9 @@ export default function LoginForm() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Đang đăng nhập...
+              {t('auth.loggingIn')}
             </span>
-          ) : 'Đăng nhập'}
+          ) : t('auth.login')}
         </button>
       </form>
       )}
@@ -477,28 +478,28 @@ export default function LoginForm() {
       {/* Terms and Privacy Links */}
       <div className="mt-6 pt-5 border-t border-gray-100 space-y-2">
         <p className="text-xs text-gray-500 text-center leading-relaxed">
-          Bằng việc đăng nhập, bạn đồng ý với{' '}
+          {t('auth.loginConsentPrefix')}{' '}
           <button
             type="button"
             onClick={() => { setTermsModalType('terms'); setShowTermsModal(true); }}
             className="text-indigo-600 hover:text-indigo-500 font-medium hover:underline"
           >
-            Điều khoản sử dụng
+            {t('auth.terms')}
           </button>
-          {' '}và{' '}
+          {' '}{t('auth.and')}{' '}
           <button
             type="button"
             onClick={() => { setTermsModalType('privacy'); setShowTermsModal(true); }}
             className="text-indigo-600 hover:text-indigo-500 font-medium hover:underline"
           >
-            Chính sách bảo mật
+            {t('auth.privacy')}
           </button>
-          {' '}của chúng tôi.
+          {t('auth.consentSuffix')}
         </p>
       </div>
 
       <p className="mt-6 text-center text-sm text-gray-600">
-        Chưa có tài khoản? <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">Đăng ký ngay</Link>
+        {t('auth.noAccount')} <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.registerNow')}</Link>
       </p>
 
       <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} type={termsModalType} />

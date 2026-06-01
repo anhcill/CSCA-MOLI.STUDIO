@@ -9,12 +9,14 @@ import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
+import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 import TermsModal from './TermsModal';
 
 export default function RegisterForm() {
   const router = useRouter();
   const { login: setAuth, setLoading } = useAuthStore();
+  const { t } = useLanguage();
 
   const [formData, setFormData] = useState({
     username: '',
@@ -29,7 +31,6 @@ export default function RegisterForm() {
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
   const isFacebookEnabled = Boolean(facebookAppId);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
@@ -40,26 +41,26 @@ export default function RegisterForm() {
   const validateForm = () => {
     const newErrors: typeof errors = {};
     if (!formData.username) {
-      newErrors.username = 'Tên đăng nhập là bắt buộc';
+      newErrors.username = t('auth.requiredUsername');
     } else if (formData.username.length < 3) {
-      newErrors.username = 'Tên đăng nhập phải có ít nhất 3 ký tự';
+      newErrors.username = t('auth.usernameMin3');
     } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-      newErrors.username = 'Tên đăng nhập chỉ chứa chữ cái, số và dấu gạch dưới';
+      newErrors.username = t('auth.usernameInvalid');
     }
     if (!formData.email) {
-      newErrors.email = 'Email là bắt buộc';
+      newErrors.email = t('auth.requiredEmail');
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email không hợp lệ';
+      newErrors.email = t('auth.invalidEmail');
     }
     if (!formData.password) {
-      newErrors.password = 'Mật khẩu là bắt buộc';
+      newErrors.password = t('auth.requiredPassword');
     } else if (formData.password.length < 8) {
-      newErrors.password = 'Mật khẩu phải có ít nhất 8 ký tự';
+      newErrors.password = t('auth.passwordMin8');
     }
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Vui lòng xác nhận mật khẩu';
+      newErrors.confirmPassword = t('auth.confirmRequired');
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Mật khẩu không khớp';
+      newErrors.confirmPassword = t('auth.passwordMismatch');
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -93,7 +94,7 @@ export default function RegisterForm() {
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      setErrors({ general: error.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.' });
+      setErrors({ general: error.response?.data?.message || t('auth.registerFailed') });
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -122,7 +123,7 @@ export default function RegisterForm() {
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      setErrors({ general: error.response?.data?.message || 'Đăng ký Google thất bại. Vui lòng thử lại.' });
+      setErrors({ general: error.response?.data?.message || t('auth.googleRegisterFailed') });
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -130,12 +131,12 @@ export default function RegisterForm() {
   };
 
   const handleGoogleError = () => {
-    setErrors({ general: 'Đăng ký Google thất bại. Vui lòng thử lại.' });
+    setErrors({ general: t('auth.googleRegisterFailed') });
   };
 
   const handleFacebookLogin = () => {
     if (!isFacebookEnabled) {
-      setErrors({ general: 'Đăng ký Facebook chưa được cấu hình.' });
+      setErrors({ general: t('auth.facebookRegisterNotConfigured') });
       return;
     }
     if (typeof window === 'undefined') return;
@@ -152,8 +153,8 @@ export default function RegisterForm() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tạo tài khoản mới</h1>
-        <p className="text-gray-600">Bắt đầu hành trình học tập của bạn</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('auth.registerTitle')}</h1>
+        <p className="text-gray-600">{t('auth.registerSubtitle')}</p>
       </div>
 
       {/* Social Login Buttons */}
@@ -180,7 +181,7 @@ export default function RegisterForm() {
             className="h-10 w-full flex items-center justify-center gap-3 px-4 bg-[#1877F2] text-white text-sm font-semibold rounded-md hover:bg-[#166FE5] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shadow-sm"
           >
             <FaFacebook className="text-base shrink-0" />
-            Đăng ký với Facebook
+            {t('auth.facebookRegister')}
           </button>
         )}
       </div>
@@ -190,7 +191,7 @@ export default function RegisterForm() {
           <div className="w-full border-t border-gray-300"></div>
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-white text-gray-500 dark:bg-gray-100">Hoặc đăng ký bằng email</span>
+          <span className="px-2 bg-white text-gray-500 dark:bg-gray-100">{t('auth.emailRegister')}</span>
         </div>
       </div>
 
@@ -200,7 +201,7 @@ export default function RegisterForm() {
         )}
 
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1.5">Tên đăng nhập</label>
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.username')}</label>
           <input
             type="text"
             id="username"
@@ -216,7 +217,7 @@ export default function RegisterForm() {
         </div>
 
         <div>
-          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1.5">Họ và tên <span className="text-gray-400">(Tùy chọn)</span></label>
+          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.fullName')} <span className="text-gray-400">({t('auth.optional')})</span></label>
           <input
             type="text"
             id="full_name"
@@ -226,12 +227,12 @@ export default function RegisterForm() {
             onChange={handleChange}
             disabled={isSubmitting}
             className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="Nguyễn Văn A"
+            placeholder={t('auth.fullNamePlaceholder')}
           />
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.email')}</label>
           <input
             type="email"
             id="email"
@@ -247,7 +248,7 @@ export default function RegisterForm() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Mật khẩu</label>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.password')}</label>
           <input
             type="password"
             id="password"
@@ -264,7 +265,7 @@ export default function RegisterForm() {
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">Xác nhận mật khẩu</label>
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.confirmPassword')}</label>
           <input
             type="password"
             id="confirmPassword"
@@ -282,22 +283,23 @@ export default function RegisterForm() {
         <div className="flex items-start">
           <input type="checkbox" id="terms" className="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
           <label htmlFor="terms" className="ml-2 text-sm text-gray-600">
-            Khi đăng ký, bạn đồng ý với{' '}
+            {t('auth.registerConsentPrefix')}{' '}
             <button
               type="button"
               onClick={() => { setTermsModalType('terms'); setShowTermsModal(true); }}
               className="text-indigo-600 hover:underline"
             >
-              Điều khoản sử dụng
+              {t('auth.terms')}
             </button>
-            {' '}và{' '}
+            {' '}{t('auth.and')}{' '}
             <button
               type="button"
               onClick={() => { setTermsModalType('privacy'); setShowTermsModal(true); }}
               className="text-indigo-600 hover:underline"
             >
-              Chính sách bảo mật
+              {t('auth.privacy')}
             </button>
+            {t('auth.consentSuffix')}
           </label>
         </div>
 
@@ -312,14 +314,14 @@ export default function RegisterForm() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Đang đăng ký...
+              {t('auth.registering')}
             </span>
-          ) : 'Tạo tài khoản'}
+          ) : t('auth.createAccount')}
         </button>
       </form>
 
       <p className="mt-6 text-center text-sm text-gray-600">
-        Đã có tài khoản? <Link href="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">Đăng nhập ngay</Link>
+        {t('auth.haveAccount')} <Link href="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.loginNow')}</Link>
       </p>
 
       <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} type={termsModalType} />

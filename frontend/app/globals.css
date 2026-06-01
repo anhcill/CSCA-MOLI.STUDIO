@@ -91,6 +91,151 @@ body {
     @apply bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent;
   }
 
+/* Broad dark-mode compatibility for legacy Tailwind utility classes. */
+:where(.dark) body {
+  background-color: rgb(2 6 23);
+}
+
+:where(.dark) .genz-card,
+:where(.dark) .bg-white,
+:where(.dark) .bg-white\/95,
+:where(.dark) .bg-white\/90,
+:where(.dark) .bg-white\/80,
+:where(.dark) .bg-slate-50,
+:where(.dark) .bg-gray-50 {
+  background-color: rgb(15 23 42);
+}
+
+:where(.dark) .bg-white\/70,
+:where(.dark) .bg-white\/60,
+:where(.dark) .bg-white\/50,
+:where(.dark) .bg-white\/30,
+:where(.dark) .bg-white\/20,
+:where(.dark) .bg-slate-100,
+:where(.dark) .bg-gray-100 {
+  background-color: rgb(30 41 59);
+}
+
+:where(.dark) .bg-slate-200,
+:where(.dark) .bg-gray-200 {
+  background-color: rgb(51 65 85);
+}
+
+:where(.dark) .bg-blue-50,
+:where(.dark) .bg-cyan-50,
+:where(.dark) .bg-indigo-50,
+:where(.dark) .bg-purple-50,
+:where(.dark) .bg-violet-50 {
+  background-color: rgb(30 41 59);
+}
+
+:where(.dark) .bg-red-50,
+:where(.dark) .bg-rose-50 {
+  background-color: rgb(127 29 29 / 0.22);
+}
+
+:where(.dark) .bg-amber-50,
+:where(.dark) .bg-yellow-50 {
+  background-color: rgb(120 53 15 / 0.24);
+}
+
+:where(.dark) .bg-emerald-50,
+:where(.dark) .bg-green-50 {
+  background-color: rgb(6 78 59 / 0.24);
+}
+
+:where(.dark) .from-white,
+:where(.dark) .from-slate-50,
+:where(.dark) .from-gray-50,
+:where(.dark) .from-blue-50,
+:where(.dark) .from-cyan-50,
+:where(.dark) .from-indigo-50,
+:where(.dark) .from-purple-50,
+:where(.dark) .from-violet-50 {
+  --tw-gradient-from: rgb(15 23 42) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(15 23 42 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+:where(.dark) .to-white,
+:where(.dark) .to-slate-50,
+:where(.dark) .to-gray-50,
+:where(.dark) .to-blue-50,
+:where(.dark) .to-cyan-50,
+:where(.dark) .to-indigo-50,
+:where(.dark) .to-purple-50,
+:where(.dark) .to-violet-50 {
+  --tw-gradient-to: rgb(30 41 59) var(--tw-gradient-to-position);
+}
+
+:where(.dark) .via-white,
+:where(.dark) .via-slate-50,
+:where(.dark) .via-gray-50,
+:where(.dark) .via-blue-50,
+:where(.dark) .via-cyan-50,
+:where(.dark) .via-indigo-50,
+:where(.dark) .via-purple-50,
+:where(.dark) .via-violet-50 {
+  --tw-gradient-to: rgb(30 41 59 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops:
+    var(--tw-gradient-from),
+    rgb(30 41 59) var(--tw-gradient-via-position),
+    var(--tw-gradient-to);
+}
+
+:where(.dark) .text-slate-950,
+:where(.dark) .text-slate-900,
+:where(.dark) .text-gray-950,
+:where(.dark) .text-gray-900 {
+  color: rgb(248 250 252);
+}
+
+:where(.dark) .text-slate-800,
+:where(.dark) .text-slate-700,
+:where(.dark) .text-gray-800,
+:where(.dark) .text-gray-700 {
+  color: rgb(226 232 240);
+}
+
+:where(.dark) .text-slate-600,
+:where(.dark) .text-slate-500,
+:where(.dark) .text-gray-600,
+:where(.dark) .text-gray-500,
+:where(.dark) .text-gray-400 {
+  color: rgb(148 163 184);
+}
+
+:where(.dark) .border-white\/20,
+:where(.dark) .border-slate-50,
+:where(.dark) .border-slate-100,
+:where(.dark) .border-slate-200,
+:where(.dark) .border-slate-300,
+:where(.dark) .border-gray-50,
+:where(.dark) .border-gray-100,
+:where(.dark) .border-gray-200,
+:where(.dark) .border-gray-300,
+:where(.dark) .border-blue-100,
+:where(.dark) .border-cyan-100,
+:where(.dark) .border-cyan-200,
+:where(.dark) .border-indigo-100,
+:where(.dark) .border-purple-100,
+:where(.dark) .border-violet-100 {
+  border-color: rgb(51 65 85);
+}
+
+:where(.dark) .divide-gray-50 > :not([hidden]) ~ :not([hidden]),
+:where(.dark) .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+:where(.dark) .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+:where(.dark) .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+:where(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(51 65 85);
+}
+
+:where(.dark) .placeholder-gray-400::placeholder,
+:where(.dark) .placeholder-gray-500::placeholder {
+  color: rgb(100 116 139);
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FiCheckCircle, FiPlay, FiXCircle } from 'react-icons/fi';
 import { vocabularyReviewApi, type VocabularyReviewFilters } from '@/lib/api/vocabulary';
 import type { MiniTestQuestion, MiniTestResult } from '@/lib/types/vocabulary';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Props {
   filters: VocabularyReviewFilters;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function MiniTestPanel({ filters, onSubmitted }: Props) {
+  const { t, format } = useLanguage();
   const [questions, setQuestions] = useState<MiniTestQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [result, setResult] = useState<MiniTestResult | null>(null);
@@ -26,7 +28,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       const data = await vocabularyReviewApi.getMiniTest({ ...filters, limit: 10 });
       setQuestions(data);
     } catch (err: any) {
-      setError(err.response?.status === 401 ? 'Đăng nhập để làm mini test.' : 'Không tải được mini test.');
+      setError(err.response?.status === 401 ? t('vocab.loginRequiredTest') : t('vocab.loadTestError'));
     } finally {
       setLoading(false);
     }
@@ -43,7 +45,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       setResult(data);
       onSubmitted?.();
     } catch (err) {
-      setError('Không nộp được mini test.');
+      setError(t('vocab.submitTestError'));
     } finally {
       setLoading(false);
     }
@@ -53,15 +55,15 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
     <section className="bg-white rounded-2xl border border-cyan-100 p-4 shadow-sm">
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-lg font-black text-gray-900">Mini test tu vung</h2>
-          <p className="text-sm text-gray-500">Chọn nghĩa đúng, kết quả sẽ cập nhật lịch ôn</p>
+          <h2 className="text-lg font-black text-gray-900">{t('vocab.miniTestTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('vocab.miniTestDesc')}</p>
         </div>
         <button
           onClick={startTest}
           disabled={loading}
           className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-60 sm:w-auto"
         >
-          <FiPlay /> Tao de
+          <FiPlay /> {t('vocab.createTest')}
         </button>
       </div>
 
@@ -70,7 +72,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
       {result ? (
         <div className="rounded-xl bg-gray-50 p-4">
           <p className="text-2xl font-black text-gray-900">
-            {result.score}/{result.total} cau dung
+            {format('vocab.correctCount', { score: result.score, total: result.total })}
           </p>
           <div className="mt-3 space-y-2">
             {result.results.map((item) => (
@@ -79,7 +81,7 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
                 <div>
                   <span className="font-bold text-gray-900">{item.word_cn}</span>
                   <span className="text-gray-500"> ({item.pinyin})</span>
-                  <span className="text-gray-600"> - dap an: {item.correct_answer}</span>
+                  <span className="text-gray-600"> - {t('vocab.answerLabel')} {item.correct_answer}</span>
                 </div>
               </div>
             ))}
@@ -119,12 +121,12 @@ export default function MiniTestPanel({ filters, onSubmitted }: Props) {
             disabled={loading || questions.some((q) => !answers[q.vocabulary_id])}
             className="mt-4 w-full px-4 py-3 rounded-xl bg-cyan-600 text-white font-black hover:bg-cyan-700 disabled:opacity-50"
           >
-            Nop bai
+            {t('vocab.submitTest')}
           </button>
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-gray-200 py-10 text-center text-gray-500">
-          Bấm Tạo đề để làm bài test nhanh.
+          {t('vocab.emptyTest')}
         </div>
       )}
     </section>

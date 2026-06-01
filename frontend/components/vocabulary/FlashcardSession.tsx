@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'rea
 import { FiCheck, FiChevronLeft, FiChevronRight, FiRefreshCw, FiRotateCcw, FiVolume2, FiX } from 'react-icons/fi';
 import { vocabularyReviewApi, type VocabularyReviewFilters } from '@/lib/api/vocabulary';
 import type { VocabularyReviewCard } from '@/lib/types/vocabulary';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Props {
   filters: VocabularyReviewFilters;
@@ -11,12 +12,13 @@ interface Props {
 }
 
 const QUALITY_BUTTONS = [
-  { quality: 1, label: 'Sai', icon: FiX, className: 'border-rose-200 text-rose-700 hover:bg-rose-50' },
-  { quality: 3, label: 'Khó nhớ', icon: FiRotateCcw, className: 'border-amber-200 text-amber-700 hover:bg-amber-50' },
-  { quality: 5, label: 'Đã nhớ', icon: FiCheck, className: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
+  { quality: 1, labelKey: 'vocab.wrong', icon: FiX, className: 'border-rose-200 text-rose-700 hover:bg-rose-50' },
+  { quality: 3, labelKey: 'vocab.hard', icon: FiRotateCcw, className: 'border-amber-200 text-amber-700 hover:bg-amber-50' },
+  { quality: 5, labelKey: 'vocab.remembered', icon: FiCheck, className: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' },
 ];
 
 export default function FlashcardSession({ filters, onReviewed }: Props) {
+  const { language, t } = useLanguage();
   const [cards, setCards] = useState<VocabularyReviewCard[]>([]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -31,6 +33,8 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
   const suppressNextClick = useRef(false);
 
   const current = cards[index];
+  const primaryMeaning = current ? (language === 'en' && current.word_en ? current.word_en : current.word_vn) : '';
+  const secondaryMeaning = current ? (language === 'en' ? current.word_vn : current.word_en) : '';
 
   const speakChinese = useCallback((text: string) => {
     if (!text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
@@ -122,7 +126,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       setIndex(0);
       setFlipped(false);
     } catch (err: any) {
-      setError(err.response?.status === 401 ? 'Đăng nhập để dùng flashcard.' : 'Không tải được flashcard.');
+      setError(err.response?.status === 401 ? t('vocab.loginRequiredFlashcard') : t('vocab.loadFlashcardError'));
     } finally {
       setLoading(false);
     }
@@ -142,7 +146,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       }
       setFlipped(false);
     } catch (err) {
-      setError('Không lưu được kết quả ôn tập.');
+      setError(t('vocab.saveReviewError'));
     } finally {
       setSaving(false);
     }
@@ -152,8 +156,8 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     <section className="bg-white rounded-2xl border border-cyan-100 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-black text-gray-900">Flashcard</h2>
-          <p className="text-sm text-gray-500">Lật thẻ Hán tự, pinyin, nghĩa</p>
+          <h2 className="text-lg font-black text-gray-900">{t('vocab.flashcardTitle')}</h2>
+          <p className="text-sm text-gray-500">{t('vocab.flashcardDesc')}</p>
         </div>
         <label className="inline-flex items-center gap-2 rounded-xl border border-cyan-100 px-3 py-2 text-sm font-bold text-gray-600">
           <input
@@ -162,7 +166,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
             onChange={(event) => setAutoSpeak(event.target.checked)}
             className="h-4 w-4 accent-cyan-600"
           />
-          Tự phát âm
+          {t('vocab.autoSpeak')}
         </label>
         <button
           onClick={startSession}
@@ -170,7 +174,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
           className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-xl font-bold text-sm hover:bg-cyan-700 disabled:opacity-60"
         >
           <FiRefreshCw className={loading ? 'animate-spin' : ''} />
-          Bắt đầu
+          {t('vocab.start')}
         </button>
       </div>
 
@@ -214,11 +218,11 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                   onKeyDown={(event) => event.stopPropagation()}
                   onPointerDown={(event) => event.stopPropagation()}
                   className="mt-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
-                  title="Phát âm"
+                  title={t('vocab.speak')}
                 >
                   <FiVolume2 />
                 </button>
-                <p className="mt-5 text-sm text-gray-500">Nhấn để lật thẻ</p>
+                <p className="mt-5 text-sm text-gray-500">{t('vocab.flipHint')}</p>
               </div>
             ) : (
               <div className="flex min-h-[200px] sm:min-h-[210px] flex-col items-center justify-center">
@@ -233,13 +237,13 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                     onKeyDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
-                    title="Phát âm"
+                    title={t('vocab.speak')}
                   >
                     <FiVolume2 />
                   </button>
                 </div>
-                <p className="mt-4 text-xl font-bold text-gray-900 sm:text-2xl">{current.word_vn}</p>
-                {current.word_en && <p className="mt-1 text-sm text-gray-500">{current.word_en}</p>}
+                <p className="mt-4 text-xl font-bold text-gray-900 sm:text-2xl">{primaryMeaning}</p>
+                {secondaryMeaning && <p className="mt-1 text-sm text-gray-500">{secondaryMeaning}</p>}
                 {current.example_cn && (
                   <div className="mt-5 max-w-xl border-t border-cyan-100 pt-4">
                     <p className="text-sm font-semibold text-gray-800">{current.example_cn}</p>
@@ -252,7 +256,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-500">
-              {index + 1}/{cards.length} - {current.review_state === 'new' ? 'Từ mới' : 'Đến lịch ôn'}
+              {index + 1}/{cards.length} - {current.review_state === 'new' ? t('vocab.newWord') : t('vocab.dueReview')}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -260,7 +264,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                 onClick={() => goToCard(index - 1)}
                 disabled={index === 0 || saving}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-100 text-cyan-700 hover:bg-cyan-50 disabled:opacity-35"
-                title="The truoc"
+                title={t('vocab.previousCard')}
               >
                 <FiChevronLeft />
               </button>
@@ -269,20 +273,20 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                 onClick={() => goToCard(index + 1)}
                 disabled={index >= cards.length - 1 || saving}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-100 text-cyan-700 hover:bg-cyan-50 disabled:opacity-35"
-                title="The tiep theo"
+                title={t('vocab.nextCard')}
               >
                 <FiChevronRight />
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {QUALITY_BUTTONS.map(({ quality, label, icon: Icon, className }) => (
+              {QUALITY_BUTTONS.map(({ quality, labelKey, icon: Icon, className }) => (
                 <button
                   key={quality}
                   onClick={() => submitQuality(quality)}
                   disabled={saving}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border font-bold text-sm disabled:opacity-40 ${className}`}
                 >
-                  <Icon /> {label}
+                  <Icon /> {t(labelKey)}
                 </button>
               ))}
             </div>
@@ -290,8 +294,8 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/50 py-12 text-center">
-          <p className="font-bold text-gray-800">Chưa có phiên flashcard</p>
-          <p className="text-sm text-gray-500 mt-1">Bấm Bắt đầu để lấy từ mới và từ đến lịch ôn.</p>
+          <p className="font-bold text-gray-800">{t('vocab.noSession')}</p>
+          <p className="text-sm text-gray-500 mt-1">{t('vocab.startHint')}</p>
         </div>
       )}
     </section>
