@@ -88,6 +88,12 @@ function repairOcrFractionEchoes(input: string): string {
 function normalizeFunctions(input: string): string {
   return input
     .replace(/\blog\s*_\s*([0-9A-Za-z]+)\s+/gi, '\\log_{$1} ')
+    .replace(/(^|[^\\A-Za-z])log\s*([0-9]+)\s*\/\s*([0-9]+)\s*([A-Za-z0-9\\]+)\b/gi, '$1\\log_{\\frac{$2}{$3}} $4')
+    .replace(/\blog\s*([0-9]+)\s*\/\s*([0-9]+)\s*([A-Za-z0-9\\]+)\b/gi, '\\log_{\\frac{$1}{$2}} $3')
+    .replace(/\\log\s*([0-9]+)\s*\/\s*([0-9]+)\s*([A-Za-z0-9\\]+)\b/g, '\\log_{\\frac{$1}{$2}} $3')
+    .replace(/(^|[^\\A-Za-z])log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*([0-9]+)\s+([0-9]+)(?:\s+\3\s+\4)?/gi, '$1\\log_{\\frac{$3}{$2}} $4')
+    .replace(/\blog\s*\^\s*\{?([0-9]+)\}?\s*\/\s*([0-9]+)\s+([0-9]+)(?:\s+\2\s+\3)?/gi, '\\log_{\\frac{$2}{$1}} $3')
+    .replace(/\\log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*([0-9]+)\s+([0-9]+)(?:\s+\2\s+\3)?/gi, '\\log_{\\frac{$2}{$1}} $3')
     .replace(/\blog\s+([2-9])([0-9])\b/gi, '\\log_{$1} $2')
     .replace(/\blog([0-9]+)\s+/gi, '\\log_{$1} ')
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\d)/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
@@ -160,8 +166,8 @@ function applyOcrMathRules(input: string): string {
           normalizeCombinatorics(
             normalizeDecorators(
               normalizeDegrees(
-                normalizeFunctions(
-                  normalizeOcrPowers(
+                normalizeOcrPowers(
+                  normalizeFunctions(
                     normalizeRoots(
                       repairOcrFractionEchoes(normalizeSymbols(input)),
                     ),
@@ -254,6 +260,12 @@ function buildCasesFromLines(lines: string[]): string {
   return `\\(\\begin{cases}${rows.join(' \\\\ ')}\\end{cases}\\)`;
 }
 
+function stripCaseMathDelimiters(input: string): string {
+  return input
+    .replace(/\\\(|\\\)|\\\[|\\\]/g, '')
+    .replace(/\$+/g, '');
+}
+
 function repairCaseSubscripts(input: string): string {
   const subscriptLetters = new Set(
     Array.from(input.matchAll(/\b([A-Za-z])(?:_\{?\d+\}?|\s+\d)\b/g)).map(match => match[1]),
@@ -267,7 +279,7 @@ function repairCaseSubscripts(input: string): string {
 }
 
 function splitJoinedEquations(input: string): string[] {
-  const compact = normalizeOcrSubscripts(repairCaseSubscripts(input).replace(/[{}\s]+/g, ''));
+  const compact = normalizeOcrSubscripts(repairCaseSubscripts(stripCaseMathDelimiters(input)).replace(/[{}\s]+/g, ''));
   const separated = compact.replace(
     /(=[+\-]?(?:\d+(?:\.\d+)?|[A-Za-z](?:_\{[^{}]+\})?|\\frac\{[^{}]+\}\{[^{}]+\}))(?=[A-Za-z\\])/g,
     '$1\n',
@@ -280,7 +292,7 @@ function splitJoinedEquations(input: string): string[] {
 }
 
 function buildCasesFromText(input: string): string {
-  const repairedInput = repairCaseSubscripts(input);
+  const repairedInput = repairCaseSubscripts(stripCaseMathDelimiters(input));
   const lines = repairedInput
     .split(/[;\n]+/)
     .map(line => line.trim())

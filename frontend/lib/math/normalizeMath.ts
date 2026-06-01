@@ -92,8 +92,13 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn, number) => `${prefix}\\${fn.toLowerCase()} ${number}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/(^|[^\\A-Za-z])(ln|lg|log)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
+    .replace(/(^|[^\\A-Za-z])log\s*([0-9]+)\s*\/\s*([0-9]+)\s*([A-Za-z0-9\\]+)\b/gi, '$1\\log_{\\frac{$2}{$3}} $4')
+    .replace(/(^|[^\\A-Za-z])log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*([0-9]+)\s+([0-9]+)(?:\s+\3\s+\4)?/gi, '$1\\log_{\\frac{$3}{$2}} $4')
     .replace(/(^|[^\\A-Za-z])(ln|lg|log)\s+/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
+    .replace(/\\log\s*([0-9]+)\s*\/\s*([0-9]+)\s*([A-Za-z0-9\\]+)\b/g, '\\log_{\\frac{$1}{$2}} $3')
+    .replace(/\\log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*([0-9]+)\s+([0-9]+)(?:\s+\2\s+\3)?/gi, '\\log_{\\frac{$2}{$1}} $3')
     .replace(/\\log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*1\s*\^\s*\{?([0-9]+)\}?/gi, '\\log_{\\frac{1}{$1}} $2')
+    .replace(/\\log\s+([2-9])([0-9])\b/g, '\\log_{$1} $2')
     .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
     .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}')
     .replace(/\bC\s+(\\mathbb\{[A-Z]\})\s*\(/g, 'C_{$1}(');
@@ -125,6 +130,34 @@ function findMatchingForward(input: string, openIndex: number): number {
   }
 
   return -1;
+}
+
+function isTermSeparator(input: string, index: number): boolean {
+  const char = input[index];
+  if (/[,;\n=<>]/.test(char)) return true;
+  if (char !== '+' && char !== '-') return false;
+
+  const before = input[index - 1] || '';
+  const after = input[index + 1] || '';
+  return /\s/.test(before) || /\s/.test(after);
+}
+
+function findAtomStart(input: string, end: number): number {
+  let cursor = end;
+  while (cursor > 0 && /\s/.test(input[cursor - 1])) cursor--;
+  if (cursor <= 0) return 0;
+
+  const lastChar = input[cursor - 1];
+  if (lastChar === ')' || lastChar === ']' || lastChar === '}') {
+    const groupStart = findMatchingBackward(input, cursor - 1);
+    if (groupStart >= 0) {
+      const command = input.slice(0, groupStart).match(/\\[A-Za-z]+\s*$/);
+      return command?.index !== undefined ? command.index : groupStart;
+    }
+  }
+
+  const match = input.slice(0, cursor).match(/(?:\\[A-Za-z]+|[A-Za-z0-9]+)\s*$/);
+  return match?.index ?? cursor - 1;
 }
 
 function stripOuterGroup(value: string): string {
@@ -160,6 +193,10 @@ function findNumeratorStart(input: string, end: number): number {
   if (lastChar === ')' || lastChar === ']' || lastChar === '}') {
     const groupStart = findMatchingBackward(input, end - 1);
     if (groupStart >= 0) {
+      const markerIndex = groupStart - 1;
+      if (input[markerIndex] === '^' || input[markerIndex] === '_') {
+        return findAtomStart(input, markerIndex);
+      }
       const command = input.slice(0, groupStart).match(/\\[A-Za-z]+\s*$/);
       if (command?.index !== undefined) return command.index;
       return groupStart;
@@ -172,7 +209,7 @@ function findNumeratorStart(input: string, end: number): number {
     if (char === ')' || char === ']' || char === '}') depth++;
     if (char === '(' || char === '[' || char === '{') depth--;
 
-    if (depth === 0 && /=|<|>|,|;|\n/.test(char)) {
+    if (depth === 0 && isTermSeparator(input, i)) {
       return i + 1;
     }
   }
@@ -226,7 +263,7 @@ function readDenominator(input: string, start: number): { end: number; denominat
     const char = input[end];
     if (char === '(' || char === '[' || char === '{') depth++;
     if (char === ')' || char === ']' || char === '}') depth--;
-    if (depth <= 0 && /[,;\n]/.test(char)) break;
+    if (depth <= 0 && isTermSeparator(input, end) && !(end === j && /[+\-]/.test(char))) break;
     end++;
   }
 
@@ -406,6 +443,7 @@ function wrapStandaloneFractions(input: string): string {
     if (
       whole[offset - 1] === '\\' ||
       whole[offset - 1] === '$' ||
+      latexGroupDepthAt(whole, offset) > 0 ||
       before.includes('\\(') ||
       before.includes('$') ||
       after.includes('\\)') ||
@@ -414,6 +452,18 @@ function wrapStandaloneFractions(input: string): string {
     const normalized = normalizeLatexMath(match);
     return hasBalancedMathGroups(normalized) ? `\\(${normalized}\\)` : match;
   });
+}
+
+function latexGroupDepthAt(input: string, offset: number): number {
+  let depth = 0;
+
+  for (let i = 0; i < offset; i++) {
+    if (input[i - 1] === '\\') continue;
+    if (input[i] === '{') depth++;
+    if (input[i] === '}') depth = Math.max(0, depth - 1);
+  }
+
+  return depth;
 }
 
 function wrapMathMatch(input: string, pattern: RegExp): string {
