@@ -305,6 +305,18 @@ function stringValue(value, fallback = "") {
   return String(value).trim();
 }
 
+function normalizeUploadedFileName(value) {
+  const raw = stringValue(value);
+  if (!raw || !/[ÃÂ]/.test(raw)) return raw;
+
+  try {
+    const decoded = Buffer.from(raw, "latin1").toString("utf8");
+    return decoded && !decoded.includes("�") ? decoded : raw;
+  } catch (error) {
+    return raw;
+  }
+}
+
 function normalizeImportAnswers(rawAnswers) {
   const source = rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers)
     ? Object.keys(rawAnswers).sort().map((key) => rawAnswers[key])
@@ -1157,7 +1169,7 @@ const AdminExamController = {
 
       const truncatedText = extractedText.slice(0, PDF_IMPORT_TEXT_LIMIT);
       const sourceMeta = {
-        fileName: req.file.originalname,
+        fileName: normalizeUploadedFileName(req.file.originalname),
         pages: pdfData.numpages || null,
         textLength: extractedText.length,
         truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,

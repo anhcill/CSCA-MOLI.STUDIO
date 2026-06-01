@@ -26,8 +26,17 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
   ['\u2192']: '\\to ',
   ['\u221a']: '\\sqrt{}',
   ['\u221e']: '\\infty ',
+  ['\u2205']: '\\emptyset ',
+  ['\u2208']: '\\in ',
+  ['\u2209']: '\\notin ',
+  ['\u211d']: '\\mathbb{R} ',
+  ['\u2124']: '\\mathbb{Z} ',
+  ['\u2115']: '\\mathbb{N} ',
+  ['\u2216']: '\\setminus ',
   ['\u222a']: '\\cup ',
   ['\u2229']: '\\cap ',
+  ['\u2248']: '\\approx ',
+  ['\u00b0']: '^\\circ',
   ['\u03c0']: '\\pi ',
   ['\u03b8']: '\\theta ',
   ['\u03b1']: '\\alpha ',
@@ -42,7 +51,7 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
 };
 
 const INLINE_MATH_COMMAND_RE =
-  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|infty|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Rightarrow|Leftrightarrow|to|le|ge|ne|approx)\b/;
+  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Rightarrow|Leftrightarrow|to|le|ge|ne|approx)\b/;
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 
 function mapMathCodePoint(codePoint: number): string | null {
@@ -77,15 +86,17 @@ function normalizeLooseMathSyntax(input: string): string {
       (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
     )
     .replace(/\\sqrt\{\}\s*\(([^()]+)\)/g, '\\sqrt{$1}')
-    .replace(/\\sqrt\{\}\s*((?:\\[A-Za-z]+|[A-Za-z0-9])(?:_\{[^{}]+\})?(?:\^\{[^{}]+\})?)/g, '\\sqrt{$1}')
+    .replace(/\\sqrt\{\}\s*((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:_\{[^{}]+\})?(?:\^\{[^{}]+\})?)/g, '\\sqrt{$1}')
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=\s*\^?\\circ)/gi, (_, prefix, fn, degrees) => `${prefix}\\${fn.toLowerCase()} ${degrees}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn, number) => `${prefix}\\${fn.toLowerCase()} ${number}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/(^|[^\\A-Za-z])(ln|lg|log)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
     .replace(/(^|[^\\A-Za-z])(ln|lg|log)\s+/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/\\log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*1\s*\^\s*\{?([0-9]+)\}?/gi, '\\log_{\\frac{1}{$1}} $2')
     .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
-    .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}');
+    .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}')
+    .replace(/\bC\s+(\\mathbb\{[A-Z]\})\s*\(/g, 'C_{$1}(');
 }
 
 function findMatchingBackward(input: string, closeIndex: number): number {
@@ -139,7 +150,7 @@ function isMostlyMath(value: string): boolean {
     .filter(word => !/^d[xyztun]$/i.test(word));
   if (words.length > 0) return false;
 
-  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&]/g, '');
+  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&']/g, '');
   return leftovers.length === 0;
 }
 
@@ -182,7 +193,15 @@ function splitDenominatorSuffix(raw: string): { denominator: string; suffix: str
     };
   }
 
-  return { denominator: raw.trim(), suffix: '' };
+  const trimmed = raw.trim();
+  if (/[。．]$/.test(trimmed) || (trimmed.endsWith('.') && !/\d+\.\d+$/.test(trimmed))) {
+    return {
+      denominator: trimmed.slice(0, -1).trim(),
+      suffix: trimmed.slice(-1),
+    };
+  }
+
+  return { denominator: trimmed, suffix: '' };
 }
 
 function readDenominator(input: string, start: number): { end: number; denominator: string; suffix: string } | null {
@@ -289,19 +308,35 @@ export function normalizeLatexMath(input: string): string {
 export function isLikelyLooseMathLine(input: string): boolean {
   const normalized = normalizeLatexMath(input);
   if (!normalized) return false;
-  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot|sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|infty|cup|cap|binom|circ|Rightarrow|Leftrightarrow|to|approx)\b/.test(normalized)) return false;
+  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot|sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|mathbb|infty|emptyset|in|notin|setminus|cup|cap|binom|circ|Rightarrow|Leftrightarrow|to|approx)\b/.test(normalized)) return false;
   return isMostlyMath(normalized);
 }
 
 function isMathishChar(char: string): boolean {
-  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,|\s]/.test(char);
+  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,|\s']/.test(char);
+}
+
+function hasBalancedMathGroups(input: string): boolean {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (input[i - 1] === '\\') continue;
+    if (char === '(' || char === '[' || char === '{') {
+      stack.push(char);
+    } else if (char === ')' || char === ']' || char === '}') {
+      if (stack.pop() !== pairs[char]) return false;
+    }
+  }
+
+  return stack.length === 0;
 }
 
 function normalizeLostSuperscripts(input: string): string {
   return input
     .replace(/\bf\s*\^?\s*-\s*1\s*\(/gi, 'f^{-1}(')
-    .replace(/\b([A-Za-z])([2-9])\b/g, '$1^{$2}')
-    .replace(/(^|[=+\-*/<>()\s,.;:]|\\Rightarrow\s*)([2-9])([2-9])(?=$|[=+\-*/<>()\s,.;:]|\\Rightarrow)/g, '$1$2^{$3}');
+    .replace(/\b([A-Za-z])([2-9])\b/g, '$1^{$2}');
 }
 
 function normalizeSuperscriptSyntax(input: string): string {
@@ -328,13 +363,14 @@ function wrapEqualMathInPlainText(input: string): string {
   let cursor = 0;
 
   while (cursor < input.length) {
-    const eq = input.indexOf('=', cursor);
-    if (eq === -1) break;
+    const relation = input.slice(cursor).match(/=|<|>|\\(?:le|ge|ne)\b/);
+    if (!relation || relation.index === undefined) break;
 
-    let start = eq;
+    const relationIndex = cursor + relation.index;
+    let start = relationIndex;
     while (start > cursor && isMathishChar(input[start - 1])) start--;
 
-    let end = eq + 1;
+    let end = relationIndex + relation[0].length;
     while (end < input.length && isMathishChar(input[end])) end++;
 
     const rawCandidate = input.slice(start, end);
@@ -344,9 +380,14 @@ function wrapEqualMathInPlainText(input: string): string {
     const { prefix, math } = splitLeadingListMarker(coreCandidate);
     const normalized = normalizeLatexMath(math);
 
-    if (!normalized || !normalized.includes('=') || !isMostlyMath(normalized)) {
-      out += input.slice(cursor, eq + 1);
-      cursor = eq + 1;
+    if (
+      !normalized ||
+      !/(?:=|<|>|\\(?:le|ge|ne)\b)/.test(normalized) ||
+      !isMostlyMath(normalized) ||
+      !hasBalancedMathGroups(normalized)
+    ) {
+      out += input.slice(cursor, relationIndex + relation[0].length);
+      cursor = relationIndex + relation[0].length;
       continue;
     }
 
@@ -370,7 +411,8 @@ function wrapStandaloneFractions(input: string): string {
       after.includes('\\)') ||
       after.includes('$')
     ) return match;
-    return `\\(${normalizeLatexMath(match)}\\)`;
+    const normalized = normalizeLatexMath(match);
+    return hasBalancedMathGroups(normalized) ? `\\(${normalized}\\)` : match;
   });
 }
 
@@ -431,7 +473,9 @@ function wrapCommandExpressionsInSegment(segment: string): string {
     const normalized = normalizeLatexMath(core);
 
     out += segment.slice(cursor, start);
-    out += normalized && isMostlyMath(normalized) ? `${leading}\\(${normalized}\\)${trailing}` : raw;
+    out += normalized && isMostlyMath(normalized) && hasBalancedMathGroups(normalized)
+      ? `${leading}\\(${normalized}\\)${trailing}`
+      : raw;
     cursor = end;
   }
 
@@ -459,10 +503,16 @@ function applyUndelimitedMathWraps(input: string): string {
   return wrapCommandExpressions(wrapPowerExpressions(wrapIntervalExpressions(wrapStandaloneFractions(input))));
 }
 
+function mergeAdjacentInlineMath(input: string): string {
+  return input
+    .replace(/(^|[^\w\\])-\s*\\\((\\frac[\s\S]*?)\\\)/g, '$1\\(-$2\\)')
+    .replace(/\\\)\s+\\\(/g, ' ');
+}
+
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  return normalizeMathText(input)
+  const normalized = normalizeMathText(input)
     .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
@@ -500,4 +550,6 @@ export function normalizeRichMathText(input: string): string {
         .join('');
     })
     .join('');
+
+  return mergeAdjacentInlineMath(normalized);
 }

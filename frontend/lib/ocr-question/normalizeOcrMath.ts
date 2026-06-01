@@ -17,6 +17,7 @@ const GREEK_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\u03bb/g, '\\lambda '],
   [/\u03bc/g, '\\mu '],
   [/\u03c0/g, '\\pi '],
+  [/\ud6fc/g, '\\alpha '],
 ];
 
 function cleanOcrMathInput(input: string): string {
@@ -55,15 +56,39 @@ function normalizeSymbols(input: string): string {
 
 function normalizeRoots(input: string): string {
   return input
+    .replace(
+      /\u221a\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
+      (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
+    )
+    .replace(
+      /\\sqrt\{\}\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
+      (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
+    )
     .replace(/\u221a\s*\(([^()]+)\)/g, '\\sqrt{$1}')
-    .replace(/\u221a\s*([A-Za-z0-9]+(?:\^[{]?[A-Za-z0-9]+[}]?)?)/g, '\\sqrt{$1}')
+    .replace(/\u221a\s*((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:\^[{]?[A-Za-z0-9]+[}]?)?)/g, '\\sqrt{$1}')
     .replace(/\bsqrt\s*\(([^()]+)\)/gi, '\\sqrt{$1}')
-    .replace(/\bsqrt\s+([A-Za-z0-9]+(?:\^[{]?[A-Za-z0-9]+[}]?)?)/gi, '\\sqrt{$1}');
+    .replace(/\bsqrt\s+((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:\^[{]?[A-Za-z0-9]+[}]?)?)/gi, '\\sqrt{$1}');
+}
+
+function repairOcrFractionEchoes(input: string): string {
+  return input
+    .replace(
+      /=\s*([+\-])?\s*(\d+)\s+(\d+)\s*=\s*\3\s*([+\-])?\s*\2\b/g,
+      (_, firstSign, numerator, denominator, secondSign) => {
+        const sign = firstSign || secondSign || '';
+        return `= ${sign}\\frac{${numerator}}{${denominator}}`;
+      },
+    )
+    .replace(
+      /=\s*([+\-])?\s*(\d+)\s+(\d+)(?=\s*(?:[,，;；。]|\\|$))/g,
+      (_, sign, numerator, denominator) => `= ${sign || ''}\\frac{${numerator}}{${denominator}}`,
+    );
 }
 
 function normalizeFunctions(input: string): string {
   return input
     .replace(/\blog\s*_\s*([0-9A-Za-z]+)\s+/gi, '\\log_{$1} ')
+    .replace(/\blog\s+([2-9])([0-9])\b/gi, '\\log_{$1} $2')
     .replace(/\blog([0-9]+)\s+/gi, '\\log_{$1} ')
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\d)/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([xyzt])\b/gi, (_, prefix, fn, variable) => `${prefix}\\${fn.toLowerCase()} ${variable}`)
@@ -73,6 +98,13 @@ function normalizeFunctions(input: string): string {
 
 function normalizeDegrees(input: string): string {
   return input.replace(/([0-9]+(?:\.[0-9]+)?)\s*(?:\u00b0|\u5ea6)/g, '$1^\\circ');
+}
+
+function normalizeOcrPowers(input: string): string {
+  return input.replace(
+    /(^|[=+\-*/(,]\s*)([2-9])\s+([0-9])(?=\s*(?:[=+\-*/),，。;；]|$))/g,
+    '$1$2^{$3}',
+  );
 }
 
 function normalizeDecorators(input: string): string {
@@ -129,8 +161,10 @@ function applyOcrMathRules(input: string): string {
             normalizeDecorators(
               normalizeDegrees(
                 normalizeFunctions(
-                  normalizeRoots(
-                    normalizeSymbols(input),
+                  normalizeOcrPowers(
+                    normalizeRoots(
+                      repairOcrFractionEchoes(normalizeSymbols(input)),
+                    ),
                   ),
                 ),
               ),
@@ -220,8 +254,20 @@ function buildCasesFromLines(lines: string[]): string {
   return `\\(\\begin{cases}${rows.join(' \\\\ ')}\\end{cases}\\)`;
 }
 
+function repairCaseSubscripts(input: string): string {
+  const subscriptLetters = new Set(
+    Array.from(input.matchAll(/\b([A-Za-z])(?:_\{?\d+\}?|\s+\d)\b/g)).map(match => match[1]),
+  );
+  if (!subscriptLetters.size) return input;
+
+  return input.replace(/\b([A-Za-z])\s*\^\s*\{?([0-9])\}?/g, (match, letter, index) => {
+    if (!subscriptLetters.has(letter)) return match;
+    return `${letter}_{${index}}`;
+  });
+}
+
 function splitJoinedEquations(input: string): string[] {
-  const compact = normalizeOcrSubscripts(input.replace(/[{}\s]+/g, ''));
+  const compact = normalizeOcrSubscripts(repairCaseSubscripts(input).replace(/[{}\s]+/g, ''));
   const separated = compact.replace(
     /(=[+\-]?(?:\d+(?:\.\d+)?|[A-Za-z](?:_\{[^{}]+\})?|\\frac\{[^{}]+\}\{[^{}]+\}))(?=[A-Za-z\\])/g,
     '$1\n',
@@ -234,19 +280,30 @@ function splitJoinedEquations(input: string): string[] {
 }
 
 function buildCasesFromText(input: string): string {
-  const lines = input
+  const repairedInput = repairCaseSubscripts(input);
+  const lines = repairedInput
     .split(/[;\n]+/)
     .map(line => line.trim())
     .filter(Boolean);
 
-  const joined = buildCasesFromLines(splitJoinedEquations(input));
+  const joined = buildCasesFromLines(splitJoinedEquations(repairedInput));
   if (joined) return joined;
 
-  return buildCasesFromLines(lines);
+  return buildCasesFromLines(lines.map(repairCaseSubscripts));
 }
 
 function isCaseMathCandidate(line: string): boolean {
   return /^[{}A-Za-z0-9\\()[\]^_+\-*/=<>.,|&\s]+$/.test(line);
+}
+
+function splitInlineCaseSuffix(input: string): { math: string; suffix: string } {
+  const cjkIndex = input.search(/[\u3400-\u9fff]/);
+  if (cjkIndex < 0) return { math: input, suffix: '' };
+
+  return {
+    math: input.slice(0, cjkIndex).replace(/[，,;；。.\s]+$/, '').trim(),
+    suffix: input.slice(cjkIndex).trim(),
+  };
 }
 
 function replaceBraceCaseBlocks(input: string): string {
@@ -266,11 +323,19 @@ function replaceBraceCaseBlocks(input: string): string {
     const prefix = beforeBrace.trimEnd();
     const collected: string[] = [];
     let suffix = '';
+    let hasInlineSuffix = false;
     const afterBrace = line.slice(braceIndex + 1).replace(/^\s*{+/, '').replace(/}+[\s]*$/, '').trim();
-    if (afterBrace) collected.push(afterBrace);
+    if (afterBrace) {
+      const split = splitInlineCaseSuffix(afterBrace);
+      if (split.math) collected.push(split.math);
+      if (split.suffix) {
+        suffix = split.suffix;
+        hasInlineSuffix = true;
+      }
+    }
 
     let j = i + 1;
-    for (; j < lines.length; j++) {
+    for (; !hasInlineSuffix && j < lines.length; j++) {
       const candidate = lines[j].trim();
       if (!candidate) continue;
 

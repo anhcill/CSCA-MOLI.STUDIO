@@ -1,11 +1,11 @@
-import { normalizeRichMathText } from '@/lib/math/normalizeMath';
 import type { ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
+import { inferImportedCorrectAnswer, normalizeImportedText } from './importMathCleanup';
 
 const EXPLANATION_MARKER_RE =
     /(?:^|\s)(?:\u7b54\u6848\u89e3\u6790|\u89e3\u6790|\u89e3\u7b54|\u8bf4\u660e|\u89e3|analysis|explanation|lời giải|loi giai|giải thích|giai thich)\s*[:：]\s*/i;
 
 const normalizeImportText = (value?: string) =>
-    value ? normalizeRichMathText(value) : value;
+    normalizeImportedText(value);
 
 const splitExplanationMarker = (value?: string) => {
     const text = value || '';
@@ -20,9 +20,10 @@ const splitExplanationMarker = (value?: string) => {
     };
 };
 
-const normalizeImportedQuestionMath = (question: ImportedQuestionData): ImportedQuestionData => ({
-    ...question,
-    ...(() => {
+const normalizeImportedQuestionMath = (question: ImportedQuestionData): ImportedQuestionData => {
+    const normalizedQuestion = {
+        ...question,
+        ...(() => {
         const vi = splitExplanationMarker(question.questionText);
         const cn = splitExplanationMarker(question.questionTextCn);
 
@@ -37,8 +38,14 @@ const normalizeImportedQuestionMath = (question: ImportedQuestionData): Imported
                 textCn: normalizeImportText(answer.textCn),
             })),
         };
-    })(),
-});
+        })(),
+    };
+
+    return {
+        ...normalizedQuestion,
+        correctAnswer: inferImportedCorrectAnswer(normalizedQuestion),
+    };
+};
 
 export const normalizeImportedItemsMath = (items: ImportedExamItem[] = []): ImportedExamItem[] =>
     items.map(item => {

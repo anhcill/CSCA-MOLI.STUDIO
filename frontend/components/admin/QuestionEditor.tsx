@@ -6,6 +6,7 @@ import ImageUpload from './ImageUpload';
 import MathInput from './MathInput';
 import SingleQuestionOcrPaste from './SingleQuestionOcrPaste';
 import RichMathText from '@/components/common/RichMathText';
+import { normalizeRichMathText } from '@/lib/math/normalizeMath';
 import type { ParsedSingleQuestionOcr } from '@/lib/ocr-question/parseSingleQuestionOcr';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
@@ -95,6 +96,12 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, { label: string; desc: string; 
 };
 
 const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const ADMIN_TEXTAREA_CLASS =
+  'w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:bg-white dark:text-gray-900';
+const ADMIN_INPUT_CLASS =
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:bg-white dark:text-gray-900';
+const ADMIN_SELECT_CLASS =
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:bg-white dark:text-gray-900';
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 export default function QuestionEditor({ questionNumber, initialData, initialQuestionType, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
@@ -114,6 +121,44 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
+
+  const renderMathPreview = (
+    value: string,
+    onChange: (value: string) => void,
+    title = 'Xem trước:',
+  ) => {
+    if (!value) return null;
+
+    const normalized = normalizeRichMathText(value);
+    const canApplyNormalized = Boolean(normalized && normalized !== value);
+
+    return (
+      <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-2">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <span className="block text-xs text-gray-400">{title}</span>
+          {canApplyNormalized && (
+            <button
+              type="button"
+              onClick={() => onChange(normalized)}
+              className="rounded border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              Dùng bản chuẩn hóa
+            </button>
+          )}
+        </div>
+        <RichMathText value={normalized || value} className="text-gray-800" />
+        {canApplyNormalized && (
+          <textarea
+            value={normalized}
+            onChange={event => onChange(event.target.value)}
+            rows={2}
+            className="mt-2 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 font-mono text-xs text-gray-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+            aria-label="Sửa bản chuẩn hóa"
+          />
+        )}
+      </div>
+    );
+  };
 
   const applySingleQuestionOcr = (parsed: ParsedSingleQuestionOcr) => {
     setForm(prev => ({
@@ -217,7 +262,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         value={form.passageText}
         onChange={e => set('passageText', e.target.value)}
         rows={5}
-        className="w-full px-4 py-2 border rounded-lg mb-3"
+        className={`${ADMIN_TEXTAREA_CLASS} mb-3`}
         placeholder={
           form.questionType === 'fill_blank_pool'
             ? 'Nhập đoạn văn có chỗ trống ( VD: 水在4°C时____最大。物体的____越大，惯性越大。 )'
@@ -261,7 +306,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                     opts[i] = { ...opts[i], text: e.target.value };
                     set('linkedOptions', opts);
                   }}
-                  className="flex-1 px-2 py-1 border rounded text-sm"
+                  className={`${ADMIN_INPUT_CLASS} flex-1 px-2 py-1`}
                   placeholder="Từ (Tiếng Việt)"
                 />
                 <input
@@ -272,7 +317,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                     opts[i] = { ...opts[i], textCn: e.target.value };
                     set('linkedOptions', opts);
                   }}
-                  className="flex-1 px-2 py-1 border rounded text-sm"
+                  className={`${ADMIN_INPUT_CLASS} flex-1 px-2 py-1`}
                   placeholder="词语 (中文)"
                 />
                 {form.linkedOptions.length > 2 && (
@@ -298,15 +343,10 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           value={form.questionText}
           onChange={e => set('questionText', e.target.value)}
           rows={2}
-          className="w-full px-4 py-2 border rounded-lg"
+          className={ADMIN_TEXTAREA_CLASS}
           placeholder="Nhập câu hỏi..."
         />
-        {form.questionText && (
-          <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
-            <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
-            <RichMathText value={form.questionText} className="text-gray-800" />
-          </div>
-        )}
+        {renderMathPreview(form.questionText, value => set('questionText', value))}
       </div>
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
@@ -314,15 +354,10 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           value={form.questionTextCn}
           onChange={e => set('questionTextCn', e.target.value)}
           rows={2}
-          className="w-full px-4 py-2 border rounded-lg"
+          className={ADMIN_TEXTAREA_CLASS}
           placeholder="输入中文问题..."
         />
-        {form.questionTextCn && (
-          <div className="mt-1.5 bg-gray-50 rounded-lg border border-gray-200 p-2">
-            <span className="text-xs text-gray-400 mb-1 block">Xem trước:</span>
-            <RichMathText value={form.questionTextCn} className="text-gray-800" />
-          </div>
-        )}
+        {renderMathPreview(form.questionTextCn, value => set('questionTextCn', value))}
       </div>
 
       <ImageUpload
@@ -376,7 +411,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                 const a = [...form.answers]; a[i] = { ...a[i], text: e.target.value };
                 set('answers', a);
               }}
-              className="w-full px-3 py-1 border rounded mb-1.5 text-sm"
+              className={`${ADMIN_INPUT_CLASS} mb-1.5 py-1`}
               placeholder={`Lựa chọn ${key} (Tiếng Việt)...`}
             />
             <input
@@ -386,19 +421,18 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                 const a = [...form.answers]; a[i] = { ...a[i], textCn: e.target.value };
                 set('answers', a);
               }}
-              className="w-full px-3 py-1 border rounded text-sm"
+              className={`${ADMIN_INPUT_CLASS} py-1`}
               placeholder={`选项${key} (中文)...`}
             />
 
-            {(ans.text || ans.textCn) && (
-              <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2">
-                <span className="mb-1 block text-xs text-gray-400">Xem trước đáp án:</span>
-                {ans.text && <RichMathText value={ans.text} className="text-gray-800" />}
-                {ans.textCn && ans.textCn !== ans.text && (
-                  <RichMathText value={ans.textCn} className="mt-1 text-gray-600" />
-                )}
-              </div>
-            )}
+            {ans.text && renderMathPreview(ans.text, value => {
+              const a = [...form.answers]; a[i] = { ...a[i], text: value };
+              set('answers', a);
+            }, 'Xem trước đáp án:')}
+            {ans.textCn && ans.textCn !== ans.text && renderMathPreview(ans.textCn, value => {
+              const a = [...form.answers]; a[i] = { ...a[i], textCn: value };
+              set('answers', a);
+            }, 'Xem trước đáp án Trung:')}
 
             {/* Ảnh đính kèm đáp án */}
             {ans.imageUrl && (
@@ -459,14 +493,14 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           value={form.points}
           onChange={e => set('points', Math.max(0.1, parseFloat(e.target.value) || 1))}
           min={0.1} max={100} step={0.1}
-          className="w-full px-3 py-1.5 border rounded-lg text-sm"
+          className={ADMIN_INPUT_CLASS}
         />
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
         <select value={form.difficulty}
           onChange={e => set('difficulty', e.target.value)}
-          className="w-full px-3 py-1.5 border rounded-lg text-sm">
+          className={ADMIN_SELECT_CLASS}>
           <option value="easy">Dễ</option>
           <option value="medium">Trung bình</option>
           <option value="hard">Khó</option>
@@ -478,7 +512,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           <select
             value={form.correctAnswer}
             onChange={e => set('correctAnswer', e.target.value)}
-            className="w-full px-3 py-1.5 border rounded-lg text-sm">
+            className={ADMIN_SELECT_CLASS}>
             {ANSWER_KEYS.slice(0, Math.max(4, form.answers.length)).map(k => (
               <option key={k} value={k}>{k}</option>
             ))}
