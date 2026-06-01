@@ -744,8 +744,22 @@ function buildReviewQuestionContext(questions = []) {
     .join('\n\n') || '(không có)';
 }
 
-async function askAI(question, context = {}) {
-  const { examTitle, subjectName, questions = [], userScore, questionStats } = context;
+function buildConversationHistoryContext(conversationHistory = []) {
+  if (!Array.isArray(conversationHistory)) return '(không có)';
+
+  const items = conversationHistory
+    .filter((item) => ['user', 'ai'].includes(item?.role) && typeof item?.content === 'string' && item.content.trim())
+    .slice(-8)
+    .map((item) => {
+      const role = item.role === 'user' ? 'Học sinh' : 'AI';
+      return `${role}: ${item.content.trim().slice(0, 800)}`;
+    });
+
+  return items.length ? items.join('\n') : '(không có)';
+}
+
+function buildAIChatPrompt(question, context = {}) {
+  const { examTitle, subjectName, questions = [], userScore, questionStats, conversationHistory = [] } = context;
 
   const contextText = [
     examTitle && `Đề thi: ${examTitle}`,
@@ -756,18 +770,22 @@ async function askAI(question, context = {}) {
   ].filter(Boolean).join('\n');
 
   const reviewQuestionContext = buildReviewQuestionContext(questions);
+  const conversationContext = buildConversationHistoryContext(conversationHistory);
 
-  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT có dấu.
+  return `Bạn là trợ lý AI học tập CSCA đa môn thân thiện. Trả lời bằng TIẾNG VIỆT có dấu.
 
 YÊU CẦU:
 - CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
 - Viết tự nhiên như đang nhắn tin hướng dẫn.
 - Câu hỏi ngắn → trả lời ngắn gọn.
 - Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
-- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
+- Nếu là tiếng Trung: từ mới phải ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
+- Nếu là Toán/Khoa học: dùng công thức KaTeX-compatible trong \\( ... \\), ví dụ \\( y=\\frac{2x+3}{x-1} \\). Không viết công thức thành ảnh.
+- Nếu là môn khác: giải thích đúng trọng tâm môn đó, không ép thành tiếng Trung.
 - Đưa ví dụ cụ thể trong đời thường khi cần.
 - Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
 - Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
+- Nếu học sinh hỏi tiếp bằng "ý trên", "câu đó", "giải thích kỹ hơn", hãy dựa vào lịch sử hội thoại gần đây.
 
 TRÁNH:
 - KHÔNG lặp lại câu hỏi của user.
@@ -777,8 +795,14 @@ Ngữ cảnh bài thi (nếu có):
 ${contextText || '(không có)'}
 Các câu trong bài để tham chiếu:
 ${reviewQuestionContext}
+Lịch sử hội thoại gần đây:
+${conversationContext}
 
 Câu hỏi: ${question}`;
+}
+
+async function askAI(question, context = {}) {
+  const prompt = buildAIChatPrompt(question, context);
 
   try {
     const response = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
@@ -806,40 +830,7 @@ Câu hỏi: ${question}`;
  * @param {Object} res - Express Response object (để pipe SSE)
  */
 async function askAIStream(question, context = {}, res) {
-  const { examTitle, subjectName, questions = [], userScore, questionStats } = context;
-
-  const contextText = [
-    examTitle && `Đề thi: ${examTitle}`,
-    subjectName && `Môn: ${subjectName}`,
-    userScore !== undefined && `Điểm của bạn: ${userScore}%`,
-    questions.length > 0 && `Số câu: ${questions.length}`,
-    questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
-  ].filter(Boolean).join('\n');
-
-  const reviewQuestionContext = buildReviewQuestionContext(questions);
-
-  const prompt = `Bạn là trợ lý AI học tập tiếng Trung thân thiện. Trả lời câu hỏi của học sinh bằng TIẾNG VIỆT có dấu.
-
-YÊU CẦU:
-- CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
-- Viết tự nhiên như đang nhắn tin hướng dẫn.
-- Câu hỏi ngắn → trả lời ngắn gọn.
-- Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
-- Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
-- Đưa ví dụ cụ thể trong đời thường khi cần.
-- Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
-- Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
-
-TRÁNH:
-- KHÔNG lặp lại câu hỏi của user.
-- KHÔNG bịa dữ liệu ngoài ngữ cảnh bài thi. Nếu thiếu dữ liệu, nói rõ và hướng dẫn cách tự kiểm tra.
-
-Ngữ cảnh bài thi (nếu có):
-${contextText || '(không có)'}
-Các câu trong bài để tham chiếu:
-${reviewQuestionContext}
-
-Câu hỏi: ${question}`;
+  const prompt = buildAIChatPrompt(question, context);
 
   if (isRateLimited()) {
     res.write(`data: ${JSON.stringify({ error: 'AI limit. Vui lòng thử lại sau.' })}\n\n`);

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
+import RichMathText from '@/components/common/RichMathText';
 
 interface Message {
     id: string;
@@ -22,71 +23,6 @@ const QUICK_QUESTIONS = [
     { label: 'Câu đúng', prompt: 'Hãy chọn vài câu tôi làm đúng trong bài này và giải thích dấu hiệu nhận biết để tôi nhớ lâu hơn.', emoji: '✅' },
     { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện sau bài này?', emoji: '🎯' },
 ];
-
-// Format AI response into readable paragraphs
-function formatMessage(text: string): React.ReactNode[] {
-    if (!text) return [];
-    const lines = text.split('\n').filter(l => l.trim());
-    const blocks: React.ReactNode[] = [];
-    let i = 0;
-
-    while (i < lines.length) {
-        const line = lines[i].trim();
-
-        // Skip label prefixes like "1.", "2.", "Giải thích:", etc.
-        const labelPrefix = /^(Điều kiện|Giải thích|Ví dụ|Công thức|Từ mới|Từ vựng|Lời khuyên|Kết luận|Note|Ghi chú|Phân tích)[\s:：.]/i;
-        if (line.match(/^\d+[.)]\s/) || line.match(labelPrefix)) {
-            blocks.push(
-                <p key={`label-${i}`} className="mt-3 first:mt-0 font-semibold text-purple-800 text-sm">
-                    {line.replace(/^\d+[.)]\s*/, '')}
-                </p>
-            );
-            i++;
-            continue;
-        }
-
-        // Bullet points
-        if (/^[—•\-\*]\s/.test(line)) {
-            const bulletText = line.replace(/^[—•\-\*]\s/, '');
-            if (bulletText) {
-                blocks.push(
-                    <div key={`b-${i}`} className="flex items-start gap-2 mt-1 first:mt-0 pl-2">
-                        <span className="text-purple-400 shrink-0 mt-0.5">•</span>
-                        <span className="text-gray-700 text-sm flex-1 leading-relaxed">{bulletText}</span>
-                    </div>
-                );
-            }
-            i++;
-            continue;
-        }
-
-        // Math formula lines
-        if (line.match(/[=<>≤≥√∑∏π→⇒∈∉⊂⊃]/) && !line.match(/^[A-ZÀÁ]/)) {
-            blocks.push(
-                <p key={`math-${i}`} className="mt-1 font-mono text-sm bg-purple-50 px-3 py-2 rounded-lg text-purple-900 overflow-x-auto">
-                    {line}
-                </p>
-            );
-            i++;
-            continue;
-        }
-
-        // Regular content line
-        if (line && !line.match(/^[-*•]\s*$/) && line.length > 0) {
-            const clean = line
-                .replace(/\*\*(.+?)\*\*/g, '$1')
-                .replace(/\*(.+?)\*/g, '$1')
-                .replace(/^[-•*]\s+/, '');
-
-            blocks.push(
-                <p key={`text-${i}`} className="mt-1 first:mt-0 text-sm text-gray-700 leading-relaxed">{clean}</p>
-            );
-        }
-        i++;
-    }
-
-    return blocks;
-}
 
 function ThinkingDots({ label = 'AI đang đọc bài và chuẩn bị trả lời...' }: { label?: string }) {
     return (
@@ -134,6 +70,11 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const sendMessage = async (text: string) => {
         if (!text.trim() || loading) return;
 
+        const conversationHistory = messages
+            .filter(msg => msg.id !== 'welcome' && msg.content.trim() && (msg.role === 'user' || msg.role === 'ai'))
+            .slice(-8)
+            .map(msg => ({ role: msg.role, content: msg.content }));
+
         const userMsg: Message = {
             id: Date.now().toString(),
             role: 'user',
@@ -161,6 +102,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 body: JSON.stringify({
                     question: text.trim(),
                     attemptId: attemptId,
+                    conversationHistory,
                 }),
             });
 
@@ -320,7 +262,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
                                 }`}>
                                     {msg.role === 'ai'
-                                        ? (msg.content ? formatMessage(msg.content) : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
+                                        ? (msg.content ? <RichMathText value={msg.content} className="text-gray-700" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
                                         : msg.content.split('\n').map((line, i) => (
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))

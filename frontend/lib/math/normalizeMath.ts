@@ -12,31 +12,38 @@ const MATH_RANGES: Array<[number, number, number]> = [
 ];
 
 const SYMBOL_REPLACEMENTS: Record<string, string> = {
-  '−': '-',
-  '–': '-',
-  '—': '-',
-  '≠': '\\ne ',
-  '≤': '\\le ',
-  '≥': '\\ge ',
-  '×': '\\times ',
-  '÷': '\\div ',
-  '·': '\\cdot ',
-  '±': '\\pm ',
-  '⇒': '\\Rightarrow ',
-  '→': '\\to ',
-  '√': '\\sqrt{}',
-  '∞': '\\infty ',
-  'π': '\\pi ',
-  'θ': '\\theta ',
-  'α': '\\alpha ',
-  'β': '\\beta ',
-  'γ': '\\gamma ',
-  'δ': '\\delta ',
-  'μ': '\\mu ',
-  'λ': '\\lambda ',
-  '（': '(',
-  '）': ')',
+  ['\u2212']: '-',
+  ['\u2013']: '-',
+  ['\u2014']: '-',
+  ['\u2260']: '\\ne ',
+  ['\u2264']: '\\le ',
+  ['\u2265']: '\\ge ',
+  ['\u00d7']: '\\times ',
+  ['\u00f7']: '\\div ',
+  ['\u00b7']: '\\cdot ',
+  ['\u00b1']: '\\pm ',
+  ['\u21d2']: '\\Rightarrow ',
+  ['\u2192']: '\\to ',
+  ['\u221a']: '\\sqrt{}',
+  ['\u221e']: '\\infty ',
+  ['\u222a']: '\\cup ',
+  ['\u2229']: '\\cap ',
+  ['\u03c0']: '\\pi ',
+  ['\u03b8']: '\\theta ',
+  ['\u03b1']: '\\alpha ',
+  ['\u03b2']: '\\beta ',
+  ['\u03b3']: '\\gamma ',
+  ['\u03b4']: '\\delta ',
+  ['\u03bc']: '\\mu ',
+  ['\u03bb']: '\\lambda ',
+  ['\ud6fc']: '\\alpha ',
+  ['\uff08']: '(',
+  ['\uff09']: ')',
 };
+
+const INLINE_MATH_COMMAND_RE =
+  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|infty|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Rightarrow|Leftrightarrow|to|le|ge|ne|approx)\b/;
+const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 
 function mapMathCodePoint(codePoint: number): string | null {
   for (const [start, asciiStart, length] of MATH_RANGES) {
@@ -61,6 +68,24 @@ export function normalizeMathUnicode(input: string): string {
 
 export function normalizeEscapedLatexBackslashes(input: string): string {
   return input.replace(/\\\\(?=(?:[A-Za-z]|\(|\)|\[|\]|\{|\}))/g, '\\');
+}
+
+function normalizeLooseMathSyntax(input: string): string {
+  return input
+    .replace(
+      /\\sqrt\{\}\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
+      (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
+    )
+    .replace(/\\sqrt\{\}\s*\(([^()]+)\)/g, '\\sqrt{$1}')
+    .replace(/\\sqrt\{\}\s*((?:\\[A-Za-z]+|[A-Za-z0-9])(?:_\{[^{}]+\})?(?:\^\{[^{}]+\})?)/g, '\\sqrt{$1}')
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn, number) => `${prefix}\\${fn.toLowerCase()} ${number}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
+    .replace(/(^|[^\\A-Za-z])(ln|lg|log)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
+    .replace(/(^|[^\\A-Za-z])(ln|lg|log)\s+/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
+    .replace(/\\log\s*\^\s*\{?([0-9]+)\}?\s*\/\s*1\s*\^\s*\{?([0-9]+)\}?/gi, '\\log_{\\frac{1}{$1}} $2')
+    .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
+    .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}');
 }
 
 function findMatchingBackward(input: string, closeIndex: number): number {
@@ -123,7 +148,11 @@ function findNumeratorStart(input: string, end: number): number {
 
   if (lastChar === ')' || lastChar === ']' || lastChar === '}') {
     const groupStart = findMatchingBackward(input, end - 1);
-    if (groupStart >= 0) return groupStart;
+    if (groupStart >= 0) {
+      const command = input.slice(0, groupStart).match(/\\[A-Za-z]+\s*$/);
+      if (command?.index !== undefined) return command.index;
+      return groupStart;
+    }
   }
 
   let depth = 0;
@@ -241,16 +270,20 @@ export function normalizePlainFractions(input: string): string {
 
 export function normalizeMathText(input: string): string {
   return normalizePlainFractions(
-    normalizeMathUnicode(normalizeEscapedLatexBackslashes(input)).replace(/\r\n?/g, '\n'),
+    normalizeLooseMathSyntax(
+      normalizeMathUnicode(normalizeEscapedLatexBackslashes(input)).replace(/\r\n?/g, '\n'),
+    ),
   );
 }
 
 export function normalizeLatexMath(input: string): string {
-  return normalizeLostSuperscripts(normalizeMathText(input)
-    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
-    .replace(/[ \t]*\n[ \t]*/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim());
+  return normalizeSuperscriptSyntax(
+    normalizeLostSuperscripts(normalizeMathText(input)
+      .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
+      .replace(/[ \t]*\n[ \t]*/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()),
+  );
 }
 
 export function isLikelyLooseMathLine(input: string): boolean {
@@ -269,6 +302,12 @@ function normalizeLostSuperscripts(input: string): string {
     .replace(/\bf\s*\^?\s*-\s*1\s*\(/gi, 'f^{-1}(')
     .replace(/\b([A-Za-z])([2-9])\b/g, '$1^{$2}')
     .replace(/(^|[=+\-*/<>()\s,.;:]|\\Rightarrow\s*)([2-9])([2-9])(?=$|[=+\-*/<>()\s,.;:]|\\Rightarrow)/g, '$1$2^{$3}');
+}
+
+function normalizeSuperscriptSyntax(input: string): string {
+  return input
+    .replace(/\^\s*\{\s*([^{}]+?)\s*\}/g, '^{$1}')
+    .replace(/\^\s*([+\-]?\d+|[A-Za-z]|\\[A-Za-z]+)(?![A-Za-z])/g, '^{$1}');
 }
 
 function splitLeadingListMarker(raw: string): { prefix: string; math: string } {
@@ -320,7 +359,7 @@ function wrapEqualMathInPlainText(input: string): string {
 }
 
 function wrapStandaloneFractions(input: string): string {
-  return input.replace(/\\frac\{[^{}]+\}\{[^{}]+\}/g, (match, offset, whole) => {
+  return input.replace(/\\frac\{(?:[^{}]|\{[^{}]*\})+\}\{(?:[^{}]|\{[^{}]*\})+\}/g, (match, offset, whole) => {
     const before = whole.slice(Math.max(0, offset - 3), offset);
     const after = whole.slice(offset + match.length, offset + match.length + 3);
     if (
@@ -333,6 +372,91 @@ function wrapStandaloneFractions(input: string): string {
     ) return match;
     return `\\(${normalizeLatexMath(match)}\\)`;
   });
+}
+
+function wrapMathMatch(input: string, pattern: RegExp): string {
+  return input.replace(pattern, (match, offset, whole) => {
+    const before = whole.slice(Math.max(0, offset - 3), offset);
+    const after = whole.slice(offset + match.length, offset + match.length + 3);
+    if (
+      whole[offset - 1] === '\\' ||
+      whole[offset - 1] === '$' ||
+      before.includes('\\(') ||
+      before.includes('$') ||
+      after.includes('\\)') ||
+      after.includes('$')
+    ) return match;
+
+    return `\\(${normalizeLatexMath(match)}\\)`;
+  });
+}
+
+function wrapIntervalExpressions(input: string): string {
+  const endpoint = String.raw`[+\-]?(?:\\infty|(?:\\pi|[A-Za-z0-9]+)(?:\^\{?[\w+\-]+\}?)?)`;
+  const interval = String.raw`[\[(]\s*${endpoint}\s*,\s*${endpoint}\s*[\])]`;
+  const pattern = new RegExp(`${interval}(?:\\s*\\\\cup\\s*${interval})*`, 'g');
+  return wrapMathMatch(input, pattern);
+}
+
+function wrapPowerExpressions(input: string): string {
+  return wrapMathMatch(
+    input,
+    /\b(?:[A-Za-z]|[0-9]+|\\[A-Za-z]+)\s*\^\s*(?:\{[^{}]+\}|[+\-]?\d+|[A-Za-z])\b/g,
+  );
+}
+
+function wrapCommandExpressionsInSegment(segment: string): string {
+  let out = '';
+  let cursor = 0;
+
+  while (cursor < segment.length) {
+    const rest = segment.slice(cursor);
+    const match = rest.match(INLINE_MATH_COMMAND_RE);
+    if (!match || match.index === undefined) {
+      out += rest;
+      break;
+    }
+
+    const commandIndex = cursor + match.index;
+    let start = commandIndex;
+    let end = commandIndex + match[0].length;
+
+    while (start > cursor && isMathishChar(segment[start - 1])) start--;
+    while (end < segment.length && isMathishChar(segment[end])) end++;
+
+    const raw = segment.slice(start, end);
+    const leading = raw.match(/^\s*/)?.[0] || '';
+    const trailing = raw.match(/\s*$/)?.[0] || '';
+    const core = raw.slice(leading.length, raw.length - trailing.length);
+    const normalized = normalizeLatexMath(core);
+
+    out += segment.slice(cursor, start);
+    out += normalized && isMostlyMath(normalized) ? `${leading}\\(${normalized}\\)${trailing}` : raw;
+    cursor = end;
+  }
+
+  return out;
+}
+
+function wrapCommandExpressions(input: string): string {
+  return input
+    .split(WRAPPED_MATH_RE)
+    .map(segment => {
+      if (
+        !segment ||
+        segment.startsWith('\\(') ||
+        segment.startsWith('\\[') ||
+        segment.startsWith('$$') ||
+        segment.startsWith('$')
+      ) return segment;
+
+      return wrapCommandExpressionsInSegment(segment);
+    })
+    .join('');
+}
+
+function applyUndelimitedMathWraps(input: string): string {
+  return wrapCommandExpressions(wrapPowerExpressions(wrapIntervalExpressions(wrapStandaloneFractions(input))));
 }
 
 export function normalizeRichMathText(input: string): string {
@@ -371,7 +495,7 @@ export function normalizeRichMathText(input: string): string {
             segment.startsWith('$')
           ) return segment;
 
-          return wrapStandaloneFractions(segment);
+          return applyUndelimitedMathWraps(segment);
         })
         .join('');
     })

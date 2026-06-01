@@ -674,6 +674,7 @@ async function askAI(req, res) {
     if (attemptId) {
       context = await getAttemptAIContext(userId, attemptId);
     }
+    context.conversationHistory = conversationHistory;
 
     if (aiService.isRateLimited()) {
       return res.json({
@@ -1114,6 +1115,7 @@ async function askAIStream(req, res) {
     if (attemptId) {
       context = await getAttemptAIContext(userId, attemptId);
     }
+    context.conversationHistory = conversationHistory;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
