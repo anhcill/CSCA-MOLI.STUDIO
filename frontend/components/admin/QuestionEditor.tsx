@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
 import MathInput, { renderMathDisplay } from './MathInput';
+import SingleQuestionOcrPaste from './SingleQuestionOcrPaste';
+import type { ParsedSingleQuestionOcr } from '@/lib/ocr-question/parseSingleQuestionOcr';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,26 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
+
+  const applySingleQuestionOcr = (parsed: ParsedSingleQuestionOcr) => {
+    setForm(prev => ({
+      ...prev,
+      questionType: 'single_choice',
+      questionText: parsed.questionText,
+      questionTextCn: parsed.questionTextCn,
+      answers: parsed.answers.length
+        ? parsed.answers.map(answer => ({
+          text: answer.text,
+          textCn: answer.textCn,
+          imageUrl: answer.imageUrl,
+        }))
+        : prev.answers,
+      correctAnswer: parsed.correctAnswer || prev.correctAnswer,
+      correctAnswerKey: parsed.correctAnswer || prev.correctAnswerKey,
+      explanation: parsed.explanation,
+      explanationCn: parsed.explanationCn,
+    }));
+  };
 
   const handleSave = () => {
     if (!form.questionText.trim() && !form.questionTextCn.trim()) {
@@ -514,6 +536,10 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
         {/* 1. Loại câu hỏi */}
         {renderQuestionTypeSelector()}
+
+        {form.questionType === 'single_choice' && (
+          <SingleQuestionOcrPaste onApply={applySingleQuestionOcr} />
+        )}
 
         {/* 2. Đoạn văn + Pool A-F (cho fill_blank_pool & reading_passage) */}
         {(form.questionType === 'fill_blank_pool' || form.questionType === 'reading_passage') &&

@@ -3,6 +3,11 @@ const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
 const pdfParse = require("pdf-parse");
 const aiService = require("../services/aiService");
+const {
+  buildPdfImportPrompt,
+  normalizePdfImportPreset,
+  shouldUseRuleBasedPdfParser,
+} = require("../services/pdfImportPromptService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -776,120 +781,6 @@ function normalizePdfImportResult(aiResult, sourceMeta) {
   };
 }
 
-function buildPdfImportPrompt(pdfText) {
-  return `You are an exam data parser for a Vietnamese CSCA/Chinese learning platform.
-
-Task:
-- Read the PDF text below.
-- Extract mixed exam content into three supported item types:
-  1. single_choice: normal A/B/C/D multiple choice question.
-  2. reading_group: one reading passage with multiple single-choice subQuestions.
-  3. fill_blank_group: word-bank/cloze questions with linkedOptions and blank subItems.
-- Add short Vietnamese explanations for each correct answer if possible.
-- If a question references an image, table, chart, diagram, or missing visual, set needsImage=true and write imageHint.
-- Preserve math as KaTeX-compatible LaTeX inside \\(...\\). Convert OCR/plain fractions like 2x+3/x-1, (2x+3)/(x-1), or stacked numerator/denominator text into \\frac{2x+3}{x-1}.
-- Convert math symbols to LaTeX: ≠ -> \\ne, ≤ -> \\le, ≥ -> \\ge, √ -> \\sqrt{}, superscripts like f-1(x) or f^-1(x) -> f^{-1}(x).
-- For Chinese math questions, keep Chinese words in questionTextCn but wrap only formulas, e.g. 求函数 \\(y=\\frac{2x+3}{x-1}(x\\ne1)\\) 的反函数。
-- For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).
-- If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn and do not keep it in questionText/questionTextCn or answers.
-- Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.
-- Put unsupported items such as essay/listening-only tasks into warnings, not items.
-- Return one valid JSON object only. No markdown fence. No explanation outside JSON.
-
-Required JSON schema:
-{
-  "exam": {
-    "title": "",
-    "duration": 90,
-    "totalPoints": 100
-  },
-  "items": [
-    {
-      "itemType": "single_choice",
-      "questionType": "single_choice",
-      "questionText": "",
-      "questionTextCn": "",
-      "answers": [
-        { "text": "", "textCn": "" }
-      ],
-      "correctAnswer": "A",
-      "explanation": "",
-      "explanationCn": "",
-      "points": 1,
-      "difficulty": "medium",
-      "needsImage": false,
-      "imageHint": "",
-      "reviewNotes": ""
-    },
-    {
-      "itemType": "reading_group",
-      "passageText": "",
-      "passageImageUrl": "",
-      "subQuestions": [
-        {
-          "questionType": "single_choice",
-          "questionText": "",
-          "questionTextCn": "",
-          "answers": [
-            { "text": "", "textCn": "" }
-          ],
-          "correctAnswer": "A",
-          "explanation": "",
-          "explanationCn": "",
-          "points": 1,
-          "difficulty": "medium",
-          "needsImage": false,
-          "imageHint": "",
-          "reviewNotes": ""
-        }
-      ],
-      "needsImage": false,
-      "imageHint": "",
-      "reviewNotes": ""
-    },
-    {
-      "itemType": "fill_blank_group",
-      "clozeMode": "sentences",
-      "passageText": "",
-      "passageImageUrl": "",
-      "linkedOptions": [
-        { "key": "A", "text": "", "textCn": "" },
-        { "key": "B", "text": "", "textCn": "" }
-      ],
-      "subItems": [
-        {
-          "questionText": "",
-          "questionTextCn": "",
-          "correctAnswerKey": "A",
-          "explanation": "",
-          "explanationCn": "",
-          "points": 1,
-          "difficulty": "medium"
-        }
-      ],
-      "needsImage": false,
-      "imageHint": "",
-      "reviewNotes": ""
-    }
-  ],
-  "warnings": []
-}
-
-Rules:
-- questionText is Vietnamese/English text. questionTextCn is Chinese text if available.
-- answers must contain 2 to 8 options.
-- correctAnswer must be A-H or empty if not clear.
-- reading_group must have passageText and at least 1 valid subQuestion.
-- fill_blank_group linkedOptions must be a word bank A-F/A-H. subItems use correctAnswerKey pointing to linkedOptions.
-- For fill_blank_group clozeMode: use "passage" for one paragraph with blanks, "sentences" for separate fill-blank sentences.
-- Keep explanations concise and practical.
-- Prefer Vietnamese for explanations.
-- If output is long, reduce explanation length and finish valid JSON.
-
-PDF text:
-${pdfText}`;
-}
-
 function validateImportItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return "Questions are required";
@@ -1170,6 +1061,7 @@ const AdminExamController = {
         return res.status(400).json({ message: "PDF file is required" });
       }
 
+      const importPreset = normalizePdfImportPreset(req.body?.importPreset);
       const pdfData = await pdfParse(req.file.buffer);
       const extractedText = stringValue(pdfData.text)
         .replace(/\r/g, "\n")
@@ -1189,14 +1081,17 @@ const AdminExamController = {
         pages: pdfData.numpages || null,
         textLength: extractedText.length,
         truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
+        importPreset,
       };
 
-      ruleBasedPreview = parsePdfTextWithRules(truncatedText, sourceMeta);
+      ruleBasedPreview = shouldUseRuleBasedPdfParser(importPreset)
+        ? parsePdfTextWithRules(truncatedText, sourceMeta)
+        : null;
       if (ruleBasedPreview?.items?.length >= 5) {
         return res.json(ruleBasedPreview);
       }
 
-      const rawAi = await aiService.callBeeknoee(buildPdfImportPrompt(truncatedText), {
+      const rawAi = await aiService.callBeeknoee(buildPdfImportPrompt(truncatedText, importPreset), {
         temperature: 0.15,
         maxTokens: 6500,
       });

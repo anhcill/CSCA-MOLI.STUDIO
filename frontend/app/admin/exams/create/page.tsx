@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiPlus, FiEye, FiX, FiUpload } from 'react-icons/fi';
+import { FiPlus, FiEye, FiX } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
-import PdfImportReview from '@/components/admin/pdf-import/PdfImportReview';
+import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
 import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -169,9 +169,7 @@ export default function CreateExamPage() {
     // ── Unified add-question flow (giống trang sửa đề) ──
     const [pendingQuestions, setPendingQuestions] = useState<({ _pending: true; _localId: string; _questionNumber: number; _questionType: string })[]>([]);
     const [showAddForm, setShowAddForm] = useState(false);
-    const [pdfImportFile, setPdfImportFile] = useState<File | null>(null);
     const [pdfImportPreview, setPdfImportPreview] = useState<PdfImportPreview | null>(null);
-    const [pdfImportLoading, setPdfImportLoading] = useState(false);
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
 
     // ── Computed: total question count (includes pending) ──
@@ -630,35 +628,17 @@ export default function CreateExamPage() {
         }
     };
 
-    const handlePdfImportPreview = async () => {
-        if (!currentExamId) {
-            alert('Vui lòng tạo đề thi trước khi import PDF');
-            return;
-        }
-        if (!pdfImportFile) {
-            alert('Vui lòng chọn file PDF');
-            return;
-        }
+    const handlePdfImportPreviewLoaded = (preview: PdfImportPreview) => {
+        setPdfImportPreview(preview);
 
-        try {
-            setPdfImportLoading(true);
-            const preview = await examAdminApi.previewPdfImport(pdfImportFile);
-            setPdfImportPreview(preview);
-
-            if (preview.exam?.title || preview.exam?.duration || preview.exam?.totalPoints) {
-                setExamData(prev => ({
-                    ...prev,
-                    title: prev.title || preview.exam?.title || '',
-                    duration: preview.exam?.duration || prev.duration,
-                    totalPoints: preview.exam?.totalPoints || prev.totalPoints,
-                }));
-                setExamMetadataDirty(true);
-            }
-        } catch (error: any) {
-            console.error('Error previewing PDF import:', error);
-            alert(error?.response?.data?.message || 'Phân tích PDF thất bại');
-        } finally {
-            setPdfImportLoading(false);
+        if (preview.exam?.title || preview.exam?.duration || preview.exam?.totalPoints) {
+            setExamData(prev => ({
+                ...prev,
+                title: prev.title || preview.exam?.title || '',
+                duration: preview.exam?.duration || prev.duration,
+                totalPoints: preview.exam?.totalPoints || prev.totalPoints,
+            }));
+            setExamMetadataDirty(true);
         }
     };
 
@@ -766,7 +746,6 @@ export default function CreateExamPage() {
             setReadingPassageGroups(prev => [...prev, ...localReadingGroups]);
             setFillBlankGroups(prev => [...prev, ...localFillBlankGroups]);
             setPdfImportPreview(null);
-            setPdfImportFile(null);
             alert(`Đã import ${response?.insertedCount || getImportItemsQuestionCount(importItems)} câu vào đề nháp`);
         } catch (error: any) {
             console.error('Error saving imported questions:', error);
@@ -1171,54 +1150,22 @@ export default function CreateExamPage() {
                             </div>
                         </div>
 
-                        {/* ── Inline form when adding ── */}
-                        <div className="bg-white rounded-lg shadow-md border border-gray-200 p-5 mb-6">
-                            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <FiUpload className="text-blue-600" />
-                                        <h3 className="text-lg font-bold text-gray-900">Import PDF đề thi</h3>
-                                    </div>
-                                    <p className="text-sm text-gray-500 mb-3">
-                                        Upload PDF dạng text để AI tách câu hỏi, đáp án và giải thích. Câu có hình sẽ được đánh dấu để thêm ảnh thủ công.
-                                    </p>
-                                    <input
-                                        type="file"
-                                        accept="application/pdf"
-                                        onChange={(event) => {
-                                            setPdfImportFile(event.target.files?.[0] || null);
-                                            setPdfImportPreview(null);
-                                        }}
-                                        className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
-                                    />
-                                </div>
-                                <button
-                                    onClick={handlePdfImportPreview}
-                                    disabled={pdfImportLoading || !pdfImportFile}
-                                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    <FiUpload />
-                                    <span>{pdfImportLoading ? 'Đang phân tích...' : 'Phân tích PDF'}</span>
-                                </button>
-                            </div>
-
-                            {pdfImportPreview && (
-                                <PdfImportReview
-                                    preview={pdfImportPreview}
-                                    items={pdfPreviewItems}
-                                    saving={pdfImportSaving}
-                                    onSave={savePdfImportedQuestions}
-                                    onChangeItems={(nextItems) => {
-                                        setPdfImportPreview(prev => prev ? {
-                                            ...prev,
-                                            items: nextItems,
-                                            questions: nextItems.filter((item): item is ImportedQuestionData => item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group'),
-                                        } : prev);
-                                    }}
-                                />
-                            )}
-                        </div>
-
+                        <PdfImportPanel
+                            canImport={Boolean(currentExamId)}
+                            preview={pdfImportPreview}
+                            items={pdfPreviewItems}
+                            saving={pdfImportSaving}
+                            onPreviewLoaded={handlePdfImportPreviewLoaded}
+                            onPreviewCleared={() => setPdfImportPreview(null)}
+                            onSave={savePdfImportedQuestions}
+                            onChangeItems={(nextItems) => {
+                                setPdfImportPreview(prev => prev ? {
+                                    ...prev,
+                                    items: nextItems,
+                                    questions: nextItems.filter((item): item is ImportedQuestionData => item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group'),
+                                } : prev);
+                            }}
+                        />
                         {showAddForm && pendingQuestions.map(q => (
                             <QuestionEditor
                                 key={q._localId}

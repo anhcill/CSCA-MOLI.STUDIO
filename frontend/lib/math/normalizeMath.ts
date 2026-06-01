@@ -106,10 +106,11 @@ function stripOuterGroup(value: string): string {
 
 function isMostlyMath(value: string): boolean {
   const withoutCommands = value.replace(/\\[a-zA-Z]+/g, '');
-  const words = withoutCommands.match(/[A-Za-z]{2,}/g) || [];
+  const words = (withoutCommands.match(/[A-Za-z]{2,}/g) || [])
+    .filter(word => !/^d[xyztun]$/i.test(word));
   if (words.length > 0) return false;
 
-  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|]/g, '');
+  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&]/g, '');
   return leftovers.length === 0;
 }
 
@@ -249,19 +250,19 @@ export function normalizeLatexMath(input: string): string {
 export function isLikelyLooseMathLine(input: string): boolean {
   const normalized = normalizeLatexMath(input);
   if (!normalized) return false;
-  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot)\b/.test(normalized)) return false;
+  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot|sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|infty|cup|cap|binom|circ|Rightarrow|Leftrightarrow|to|approx)\b/.test(normalized)) return false;
   return isMostlyMath(normalized);
 }
 
 function isMathishChar(char: string): boolean {
-  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,\s]/.test(char);
+  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,|\s]/.test(char);
 }
 
 function normalizeLostSuperscripts(input: string): string {
   return input
     .replace(/\bf\s*\^?\s*-\s*1\s*\(/gi, 'f^{-1}(')
     .replace(/\b([A-Za-z])([2-9])\b/g, '$1^{$2}')
-    .replace(/(^|[=+\-*/<>()\s]|\\Rightarrow\s*)([2-9])([2-9])(?=$|[=+\-*/<>()\s]|\\Rightarrow)/g, '$1$2^{$3}');
+    .replace(/(^|[=+\-*/<>()\s,.;:]|\\Rightarrow\s*)([2-9])([2-9])(?=$|[=+\-*/<>()\s,.;:]|\\Rightarrow)/g, '$1$2^{$3}');
 }
 
 function splitLeadingListMarker(raw: string): { prefix: string; math: string } {
