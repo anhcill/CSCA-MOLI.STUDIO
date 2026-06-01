@@ -5,6 +5,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { FiDivide, FiHash } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
+import { normalizeLatexMath, normalizeMathText } from '@/lib/math/normalizeMath';
 
 interface MathInputProps {
   value: string;
@@ -66,7 +67,8 @@ function shouldTreatAsMixedText(input: string): boolean {
   if (!/\s/.test(trimmed)) return false;
   if (/^\\(?:text|mathrm|operatorname)\s*\{/.test(trimmed)) return false;
 
-  const words = trimmed.match(/[A-Za-z\u00C0-\u1EF9]{2,}/g) || [];
+  const withoutCommands = trimmed.replace(/\\[a-zA-Z]+/g, '');
+  const words = withoutCommands.match(/[A-Za-z\u00C0-\u1EF9]{2,}/g) || [];
   return words.length >= 2;
 }
 
@@ -122,7 +124,7 @@ function wrapMixedMathFragments(input: string): string {
 }
 
 function formatCustomMathInput(input: string): string {
-  const trimmed = input.trim();
+  const trimmed = normalizeLatexMath(input);
   if (!trimmed) return '';
 
   return shouldTreatAsMixedText(trimmed)
@@ -144,7 +146,7 @@ export default function MathInput({
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [tab, setTab] = useState<'vi' | 'cn'>('vi');
-  const mathRef = useRef<HTMLInputElement>(null);
+  const mathRef = useRef<HTMLTextAreaElement>(null);
 
   const currentValue = tab === 'vi' ? value : (cnValue || '');
   const setCurrentValue = tab === 'vi'
@@ -268,19 +270,19 @@ export default function MathInput({
           {/* Custom input */}
           <div className="flex gap-2 items-start">
             <div className="flex-1">
-              <input
+              <textarea
                 ref={mathRef}
-                type="text"
                 value={mathInput}
                 onChange={(e) => setMathInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
                     handleInsertCustom();
                   }
                 }}
+                rows={3}
                 placeholder="Nhập công thức LaTeX, VD: \sqrt{2} hoặc x^{2}+1"
-                className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm font-mono bg-white"
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm font-mono bg-white resize-y"
               />
             </div>
             <button
@@ -353,6 +355,7 @@ export default function MathInput({
 // Also auto-detects raw LaTeX patterns like \frac{}{}, \sqrt{}, etc.
 function renderMathDisplay(text: string): string {
   if (!text) return '';
+  text = normalizeMathText(text);
 
   function safeRender(latex: string): string {
     try {
@@ -497,6 +500,7 @@ function renderMathDisplay(text: string): string {
         continue;
       }
 
+      out.push(base);
       i = j;
       continue;
     }

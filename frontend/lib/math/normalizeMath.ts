@@ -1,0 +1,372 @@
+const MATH_RANGES: Array<[number, number, number]> = [
+  [0x1d400, 65, 26],
+  [0x1d41a, 97, 26],
+  [0x1d434, 65, 26],
+  [0x1d44e, 97, 26],
+  [0x1d468, 65, 26],
+  [0x1d482, 97, 26],
+  [0x1d5a0, 65, 26],
+  [0x1d5ba, 97, 26],
+  [0x1d7ce, 48, 10],
+  [0x1d7d8, 48, 10],
+];
+
+const SYMBOL_REPLACEMENTS: Record<string, string> = {
+  '−': '-',
+  '–': '-',
+  '—': '-',
+  '≠': '\\ne ',
+  '≤': '\\le ',
+  '≥': '\\ge ',
+  '×': '\\times ',
+  '÷': '\\div ',
+  '·': '\\cdot ',
+  '±': '\\pm ',
+  '⇒': '\\Rightarrow ',
+  '→': '\\to ',
+  '√': '\\sqrt{}',
+  '∞': '\\infty ',
+  'π': '\\pi ',
+  'θ': '\\theta ',
+  'α': '\\alpha ',
+  'β': '\\beta ',
+  'γ': '\\gamma ',
+  'δ': '\\delta ',
+  'μ': '\\mu ',
+  'λ': '\\lambda ',
+  '（': '(',
+  '）': ')',
+};
+
+function mapMathCodePoint(codePoint: number): string | null {
+  for (const [start, asciiStart, length] of MATH_RANGES) {
+    if (codePoint >= start && codePoint < start + length) {
+      return String.fromCharCode(asciiStart + codePoint - start);
+    }
+  }
+
+  return null;
+}
+
+export function normalizeMathUnicode(input: string): string {
+  let out = '';
+
+  for (const char of input) {
+    const mapped = mapMathCodePoint(char.codePointAt(0) || 0);
+    out += mapped || SYMBOL_REPLACEMENTS[char] || char;
+  }
+
+  return out;
+}
+
+function findMatchingBackward(input: string, closeIndex: number): number {
+  const close = input[closeIndex];
+  const open = close === ')' ? '(' : close === ']' ? '[' : '{';
+  let depth = 0;
+
+  for (let i = closeIndex; i >= 0; i--) {
+    if (input[i] === close) depth++;
+    if (input[i] === open) depth--;
+    if (depth === 0) return i;
+  }
+
+  return -1;
+}
+
+function findMatchingForward(input: string, openIndex: number): number {
+  const open = input[openIndex];
+  const close = open === '(' ? ')' : open === '[' ? ']' : '}';
+  let depth = 0;
+
+  for (let i = openIndex; i < input.length; i++) {
+    if (input[i] === open) depth++;
+    if (input[i] === close) depth--;
+    if (depth === 0) return i;
+  }
+
+  return -1;
+}
+
+function stripOuterGroup(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length < 2) return trimmed;
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  const isWrapped =
+    (first === '(' && last === ')') ||
+    (first === '[' && last === ']') ||
+    (first === '{' && last === '}');
+
+  if (!isWrapped) return trimmed;
+
+  const match = findMatchingForward(trimmed, 0);
+  return match === trimmed.length - 1 ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
+function isMostlyMath(value: string): boolean {
+  const withoutCommands = value.replace(/\\[a-zA-Z]+/g, '');
+  const words = withoutCommands.match(/[A-Za-z]{2,}/g) || [];
+  if (words.length > 0) return false;
+
+  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|]/g, '');
+  return leftovers.length === 0;
+}
+
+function findNumeratorStart(input: string, end: number): number {
+  const lastChar = input[end - 1];
+
+  if (lastChar === ')' || lastChar === ']' || lastChar === '}') {
+    const groupStart = findMatchingBackward(input, end - 1);
+    if (groupStart >= 0) return groupStart;
+  }
+
+  let depth = 0;
+  for (let i = end - 1; i >= 0; i--) {
+    const char = input[i];
+    if (char === ')' || char === ']' || char === '}') depth++;
+    if (char === '(' || char === '[' || char === '{') depth--;
+
+    if (depth === 0 && /=|<|>|,|;|\n/.test(char)) {
+      return i + 1;
+    }
+  }
+
+  const left = input.slice(0, end);
+  if (isMostlyMath(left)) return 0;
+
+  const whitespace = left.search(/\S+\s*$/);
+  return whitespace >= 0 ? whitespace : 0;
+}
+
+function splitDenominatorSuffix(raw: string): { denominator: string; suffix: string } {
+  const condition = raw.match(/^([\s\S]*?)(\s+\([^)]*(?:\\ne|\\le|\\ge|=|<|>)[^)]*\)\s*)$/);
+  if (condition?.[1]?.trim()) {
+    return {
+      denominator: condition[1].trim(),
+      suffix: condition[2],
+    };
+  }
+
+  return { denominator: raw.trim(), suffix: '' };
+}
+
+function readDenominator(input: string, start: number): { end: number; denominator: string; suffix: string } | null {
+  let j = start;
+  while (j < input.length && /\s/.test(input[j])) j++;
+  if (j >= input.length) return null;
+
+  if (input[j] === '(' || input[j] === '[' || input[j] === '{') {
+    const end = findMatchingForward(input, j);
+    if (end < 0) return null;
+
+    return {
+      end: end + 1,
+      denominator: stripOuterGroup(input.slice(j, end + 1)),
+      suffix: '',
+    };
+  }
+
+  let depth = 0;
+  let end = j;
+  while (end < input.length) {
+    const char = input[end];
+    if (char === '(' || char === '[' || char === '{') depth++;
+    if (char === ')' || char === ']' || char === '}') depth--;
+    if (depth <= 0 && /[,;\n]/.test(char)) break;
+    end++;
+  }
+
+  const split = splitDenominatorSuffix(input.slice(j, end));
+  return {
+    end,
+    denominator: split.denominator,
+    suffix: split.suffix,
+  };
+}
+
+function isUsableOperand(value: string): boolean {
+  if (!value || value.includes('://') || value.includes('/')) return false;
+  if (!/[A-Za-z0-9\\]/.test(value)) return false;
+  return isMostlyMath(value);
+}
+
+function convertOnePlainFraction(input: string): { value: string; changed: boolean } {
+  let depth = 0;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '(' || char === '[' || char === '{') depth++;
+    if (char === ')' || char === ']' || char === '}') depth--;
+
+    if (char !== '/' || depth !== 0) continue;
+    if (input[i - 1] === '\\' || input[i - 1] === ':' || input[i - 1] === '/' || input[i + 1] === '/') continue;
+
+    let leftEnd = i;
+    while (leftEnd > 0 && /\s/.test(input[leftEnd - 1])) leftEnd--;
+
+    const numeratorStart = findNumeratorStart(input, leftEnd);
+    const numerator = stripOuterGroup(input.slice(numeratorStart, leftEnd));
+    const denominatorData = readDenominator(input, i + 1);
+    if (!denominatorData) continue;
+
+    const denominator = stripOuterGroup(denominatorData.denominator);
+    if (!isUsableOperand(numerator) || !isUsableOperand(denominator)) continue;
+
+    return {
+      value: `${input.slice(0, numeratorStart)}\\frac{${numerator}}{${denominator}}${denominatorData.suffix}${input.slice(denominatorData.end)}`,
+      changed: true,
+    };
+  }
+
+  return { value: input, changed: false };
+}
+
+export function normalizePlainFractions(input: string): string {
+  let current = input;
+
+  for (let i = 0; i < 10; i++) {
+    const next = convertOnePlainFraction(current);
+    if (!next.changed) return current;
+    current = next.value;
+  }
+
+  return current;
+}
+
+export function normalizeMathText(input: string): string {
+  return normalizePlainFractions(normalizeMathUnicode(input).replace(/\r\n?/g, '\n'));
+}
+
+export function normalizeLatexMath(input: string): string {
+  return normalizeLostSuperscripts(normalizeMathText(input)
+    .replace(/\\[ \t]+/g, ' ')
+    .replace(/[ \t]*\n[ \t]*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim());
+}
+
+export function isLikelyLooseMathLine(input: string): boolean {
+  const normalized = normalizeLatexMath(input);
+  if (!normalized) return false;
+  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot)\b/.test(normalized)) return false;
+  return isMostlyMath(normalized);
+}
+
+function isMathishChar(char: string): boolean {
+  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,\s]/.test(char);
+}
+
+function normalizeLostSuperscripts(input: string): string {
+  return input
+    .replace(/\bf\s*\^?\s*-\s*1\s*\(/gi, 'f^{-1}(')
+    .replace(/\b([A-Za-z])([2-9])\b/g, '$1^{$2}')
+    .replace(/(^|[=+\-*/<>()\s]|\\Rightarrow\s*)([2-9])([2-9])(?=$|[=+\-*/<>()\s]|\\Rightarrow)/g, '$1$2^{$3}');
+}
+
+function splitLeadingListMarker(raw: string): { prefix: string; math: string } {
+  const option = raw.match(/^(\s*(?:[A-H]|\d{1,3})[.．、]\s*(?:\\quad\s*)?)([\s\S]+)$/);
+  if (option) {
+    const prefix = option[1].replace(/\\quad\s*/g, '').replace(/\\[ \t]+/g, ' ').trimEnd();
+    return {
+      prefix: prefix ? `${prefix} ` : '',
+      math: option[2],
+    };
+  }
+
+  return { prefix: '', math: raw };
+}
+
+function wrapEqualMathInPlainText(input: string): string {
+  let out = '';
+  let cursor = 0;
+
+  while (cursor < input.length) {
+    const eq = input.indexOf('=', cursor);
+    if (eq === -1) break;
+
+    let start = eq;
+    while (start > cursor && isMathishChar(input[start - 1])) start--;
+
+    let end = eq + 1;
+    while (end < input.length && isMathishChar(input[end])) end++;
+
+    const rawCandidate = input.slice(start, end);
+    const leadingWhitespace = rawCandidate.match(/^\s*/)?.[0] || '';
+    const trailingWhitespace = rawCandidate.match(/\s*$/)?.[0] || '';
+    const coreCandidate = rawCandidate.slice(leadingWhitespace.length, rawCandidate.length - trailingWhitespace.length);
+    const { prefix, math } = splitLeadingListMarker(coreCandidate);
+    const normalized = normalizeLatexMath(math);
+
+    if (!normalized || !normalized.includes('=') || !isMostlyMath(normalized)) {
+      out += input.slice(cursor, eq + 1);
+      cursor = eq + 1;
+      continue;
+    }
+
+    out += input.slice(cursor, start);
+    out += `${leadingWhitespace}${prefix}\\(${normalized}\\)${trailingWhitespace}`;
+    cursor = end;
+  }
+
+  return out + input.slice(cursor);
+}
+
+function wrapStandaloneFractions(input: string): string {
+  return input.replace(/\\frac\{[^{}]+\}\{[^{}]+\}/g, (match, offset, whole) => {
+    const before = whole.slice(Math.max(0, offset - 3), offset);
+    const after = whole.slice(offset + match.length, offset + match.length + 3);
+    if (
+      whole[offset - 1] === '\\' ||
+      whole[offset - 1] === '$' ||
+      before.includes('\\(') ||
+      before.includes('$') ||
+      after.includes('\\)') ||
+      after.includes('$')
+    ) return match;
+    return `\\(${normalizeLatexMath(match)}\\)`;
+  });
+}
+
+export function normalizeRichMathText(input: string): string {
+  if (!input) return '';
+
+  return normalizeMathText(input)
+    .replace(/\\[ \t]+/g, ' ')
+    .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
+    .map((part) => {
+      if (!part || part.startsWith('`')) return part;
+
+      if (part.startsWith('\\(') && part.endsWith('\\)')) {
+        return `\\(${normalizeLatexMath(part.slice(2, -2))}\\)`;
+      }
+
+      if (part.startsWith('\\[') && part.endsWith('\\]')) {
+        return `\\[${normalizeLatexMath(part.slice(2, -2))}\\]`;
+      }
+
+      if (part.startsWith('$$') && part.endsWith('$$')) {
+        return `$$${normalizeLatexMath(part.slice(2, -2))}$$`;
+      }
+
+      if (part.startsWith('$') && part.endsWith('$')) {
+        return `$${normalizeLatexMath(part.slice(1, -1))}$`;
+      }
+
+      const withEqualMath = wrapEqualMathInPlainText(part);
+      return withEqualMath
+        .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g)
+        .map((segment) => {
+          if (
+            segment.startsWith('\\(') ||
+            segment.startsWith('\\[') ||
+            segment.startsWith('$$') ||
+            segment.startsWith('$')
+          ) return segment;
+
+          return wrapStandaloneFractions(segment);
+        })
+        .join('');
+    })
+    .join('');
+}

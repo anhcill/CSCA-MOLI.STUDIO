@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkMath from 'remark-math';
+import { isLikelyLooseMathLine, normalizeLatexMath, normalizeRichMathText } from '@/lib/math/normalizeMath';
 
 interface RichMathTextProps {
   value: string;
@@ -12,10 +13,12 @@ interface RichMathTextProps {
 
 function normalizeMathDelimiters(value: string) {
   const normalizeText = (text: string) =>
-    text
-      .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula) => `$$\n${formula.trim()}\n$$`)
-      .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => `$${formula}$`)
-      .replace(/(^|\n)\$\$([^\n]+?)\$\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}$$\n${formula.trim()}\n$$`);
+    autoWrapLooseMathLines(
+      normalizeRichMathText(text)
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_, formula) => `$$\n${normalizeLatexMath(formula)}\n$$`)
+        .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => `$${normalizeLatexMath(formula)}$`)
+        .replace(/(^|\n)\$\$([^\n]+?)\$\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}$$\n${normalizeLatexMath(formula)}\n$$`),
+    );
 
   return value
     .replace(/\r\n?/g, '\n')
@@ -29,6 +32,30 @@ function normalizeMathDelimiters(value: string) {
         .join('');
     })
     .join('');
+}
+
+function autoWrapLooseMathLines(text: string) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.includes('$') || !isLikelyLooseMathLine(line)) {
+      out.push(line);
+      continue;
+    }
+
+    const group = [line];
+    while (i + 1 < lines.length && !lines[i + 1].includes('$') && isLikelyLooseMathLine(lines[i + 1])) {
+      group.push(lines[i + 1]);
+      i++;
+    }
+
+    out.push(`$${normalizeLatexMath(group.join('\n'))}$`);
+  }
+
+  return out.join('\n');
 }
 
 export default function RichMathText({ value, className = '' }: RichMathTextProps) {

@@ -39,6 +39,21 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
+const PDF_EXPLANATION_MARKER_RE = /(?:^|\s)(?:\u7b54\u6848\u89e3\u6790|\u89e3\u6790|\u89e3\u7b54|\u8bf4\u660e|\u89e3|analysis|explanation|l\u1eddi gi\u1ea3i|loi giai|gi\u1ea3i th\u00edch|giai thich)\s*[:\uff1a]\s*/i;
+
+function splitPdfExplanationMarker(value) {
+  const text = stringValue(value);
+  const match = text.match(PDF_EXPLANATION_MARKER_RE);
+  if (!match || match.index === undefined) {
+    return { text, explanation: "" };
+  }
+
+  return {
+    text: text.slice(0, match.index).trim(),
+    explanation: text.slice(match.index + match[0].length).trim(),
+  };
+}
+
 function normalizeExamAccess(isPremium, vipTier) {
   const normalizedTier = vipTier && vipTier !== "basic" ? "vip" : "basic";
   const normalizedPremium =
@@ -296,8 +311,12 @@ function normalizeImportedQuestion(rawQuestion, index) {
   }
 
   const answers = normalizeImportAnswers(rawQuestion?.answers || rawQuestion?.options);
-  const questionText = stringValue(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
-  const questionTextCn = stringValue(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
+  const rawQuestionText = stringValue(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
+  const rawQuestionTextCn = stringValue(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
+  const viQuestion = splitPdfExplanationMarker(rawQuestionText);
+  const cnQuestion = splitPdfExplanationMarker(rawQuestionTextCn);
+  const questionText = viQuestion.explanation ? viQuestion.text : rawQuestionText;
+  const questionTextCn = cnQuestion.explanation ? cnQuestion.text : rawQuestionTextCn;
   const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
 
   if (!normalizedQuestion || answers.length < 2) return null;
@@ -317,8 +336,8 @@ function normalizeImportedQuestion(rawQuestion, index) {
     questionTextCn: normalizedQuestion.cn,
     imageUrl: stringValue(rawQuestion?.imageUrl),
     points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
-    explanation: stringValue(rawQuestion?.explanation),
-    explanationCn: stringValue(rawQuestion?.explanationCn || rawQuestion?.explanation_cn),
+    explanation: stringValue(rawQuestion?.explanation || viQuestion.explanation),
+    explanationCn: stringValue(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
     answers: answers.map((answer) => ({
       text: answer.text || answer.textCn,
       textCn: answer.textCn || answer.text,
@@ -671,9 +690,11 @@ function parsePdfTextWithRules(pdfText, sourceMeta) {
 
     const questionText = cleanRuleBasedTextFragment(block.slice(0, optionMatch.index));
     const afterA = block.slice(optionMatch.index).trim();
+    const detectedExplanationMatch = afterA.match(PDF_EXPLANATION_MARKER_RE);
     const explanationMatch = afterA.match(/\s(?:解析|解答|说明|答案解析)[:：]\s*/);
-    const optionsPart = explanationMatch ? afterA.slice(0, explanationMatch.index).trim() : afterA;
-    const explanation = explanationMatch ? cleanRuleBasedTextFragment(afterA.slice(explanationMatch.index + explanationMatch[0].length)) : "";
+    const activeExplanationMatch = detectedExplanationMatch || explanationMatch;
+    const optionsPart = activeExplanationMatch ? afterA.slice(0, activeExplanationMatch.index).trim() : afterA;
+    const explanation = activeExplanationMatch ? cleanRuleBasedTextFragment(afterA.slice(activeExplanationMatch.index + activeExplanationMatch[0].length)) : "";
     const optionMatches = [...optionsPart.matchAll(/(?:^|\s)([A-H])\s*[.．、]\s*/g)];
 
     if (optionMatches.length < 2) continue;
@@ -766,6 +787,11 @@ Task:
   3. fill_blank_group: word-bank/cloze questions with linkedOptions and blank subItems.
 - Add short Vietnamese explanations for each correct answer if possible.
 - If a question references an image, table, chart, diagram, or missing visual, set needsImage=true and write imageHint.
+- Preserve math as KaTeX-compatible LaTeX inside \\(...\\). Convert OCR/plain fractions like 2x+3/x-1, (2x+3)/(x-1), or stacked numerator/denominator text into \\frac{2x+3}{x-1}.
+- Convert math symbols to LaTeX: ≠ -> \\ne, ≤ -> \\le, ≥ -> \\ge, √ -> \\sqrt{}, superscripts like f-1(x) or f^-1(x) -> f^{-1}(x).
+- For Chinese math questions, keep Chinese words in questionTextCn but wrap only formulas, e.g. 求函数 \\(y=\\frac{2x+3}{x-1}(x\\ne1)\\) 的反函数。
+- For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).
+- If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn and do not keep it in questionText/questionTextCn or answers.
 - Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.
 - Put unsupported items such as essay/listening-only tasks into warnings, not items.
 - Return one valid JSON object only. No markdown fence. No explanation outside JSON.
