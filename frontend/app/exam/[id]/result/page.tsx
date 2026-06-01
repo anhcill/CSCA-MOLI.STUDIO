@@ -13,6 +13,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
 import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
+import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
 interface AnswerOption {
   key: string;
@@ -262,6 +263,8 @@ function ExamResultContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" />
+
       <style>{`
         @media print {
           .no-print { display: none !important; }

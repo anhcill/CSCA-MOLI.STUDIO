@@ -14,6 +14,7 @@ import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 
 /* ─── AI Text Formatter ──────────────────────────────────────────── */
 function parseAIExplanation(text: string): React.ReactNode[] {
@@ -315,6 +316,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+            <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" />
+
             <style>{`
         @media print {
           .no-print { display: none !important; }
