@@ -65,18 +65,19 @@ export default function AiAnalyzingOverlay({ open, mode = 'exam', compactAfterMs
         role="status"
         aria-live="polite"
         aria-busy="true"
-        className="fixed inset-x-3 top-20 z-[80] sm:left-auto sm:right-5 sm:w-[360px]"
+        className="fixed inset-x-3 top-14 z-[80] sm:left-1/2 sm:right-auto sm:w-[min(calc(100vw-2rem),760px)] sm:-translate-x-1/2"
       >
-        <div className="rounded-2xl border border-indigo-100 bg-white/95 p-4 shadow-2xl shadow-slate-900/10 backdrop-blur-md">
-          <div className="flex items-start gap-3">
-            <div className="relative mt-0.5 h-10 w-10 shrink-0">
-              <div className="absolute inset-0 rounded-full border-4 border-indigo-100" />
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin" />
+        <div className="rounded-full border border-indigo-100 bg-white/95 px-3 py-2 shadow-xl shadow-slate-900/10 backdrop-blur-md sm:px-4">
+          <div className="flex items-center gap-3">
+            <div className="relative h-8 w-8 shrink-0">
+              <div className="absolute inset-0 rounded-full border-[3px] border-indigo-100" />
+              <div className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-indigo-600 animate-spin" />
             </div>
-            <div className="min-w-0">
-              <p className="text-sm font-black text-slate-900">{messages[messageIndex]}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
-                Bạn có thể xem điểm và đáp án trước. AI xong sẽ tự hiện phân tích.
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <p className="truncate text-sm font-black text-slate-900">{messages[messageIndex]}</p>
+              <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-300 sm:block" />
+              <p className="hidden truncate text-xs font-semibold text-slate-500 sm:block">
+                Bạn vẫn xem điểm và đáp án được. AI xong sẽ tự hiện phân tích.
               </p>
             </div>
           </div>
