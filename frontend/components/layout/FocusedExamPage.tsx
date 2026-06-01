@@ -1,7 +1,10 @@
+'use client';
+
 import { FiBookOpen } from 'react-icons/fi';
 import AdminExamButton from '@/components/common/AdminExamButton';
 import ExamList from '@/components/toan/ExamList';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
+import { useLanguage } from '@/context/LanguageContext';
 
 type ColorScheme = {
   from: string;
@@ -26,6 +29,8 @@ export default function FocusedExamPage({
   colorScheme,
   adminGradientClass,
 }: FocusedExamPageProps) {
+  const { t } = useLanguage();
+
   return (
     <SubjectStudyShell
       title={title}
@@ -40,8 +45,8 @@ export default function FocusedExamPage({
               <FiBookOpen size={20} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg font-black tracking-tight text-slate-950">Danh sách đề thi</h2>
-              <p className="text-sm font-medium text-slate-500">Chọn đề và làm lại nhiều lần để theo dõi tiến bộ.</p>
+              <h2 className="text-lg font-black tracking-tight text-slate-950">{t('course.examListTitle')}</h2>
+              <p className="text-sm font-medium text-slate-500">{t('course.examListDesc')}</p>
             </div>
           </div>
           <AdminExamButton

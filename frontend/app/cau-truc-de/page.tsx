@@ -11,6 +11,7 @@ import {
   subjectMatches,
 } from '@/lib/utils/subjectScope';
 import { FiFileText, FiExternalLink, FiDownload, FiX, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface Material {
   id: number;
@@ -24,6 +25,15 @@ interface Material {
 
 const materialsCache = new Map<string, Material[]>();
 const materialsRequest = new Map<string, Promise<Material[]>>();
+
+const SUBJECT_LABEL_KEYS: Record<string, string> = {
+  '': 'common.all',
+  toan: 'subject.math',
+  'vat-ly': 'subject.physics',
+  'hoa-hoc': 'subject.chemistry',
+  'tieng-trung-xh': 'subject.chineseSoc',
+  'tieng-trung-tn': 'subject.chineseSci',
+};
 
 const extractMaterials = (payload: unknown): Material[] => {
   const rows = (payload as { data?: Material[] } | undefined)?.data;
@@ -64,6 +74,7 @@ const fetchCauTrucDeMaterials = async (subject = ''): Promise<Material[]> => {
 };
 
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true`;
 
@@ -86,11 +97,11 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
         <div className="flex items-center gap-2 ml-4 shrink-0">
           <a href={material.file_url} download target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
-            <FiDownload size={13} /> Tải về
+            <FiDownload size={13} /> {t('materials.download')}
           </a>
           <a href={material.file_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
-            <FiExternalLink size={13} /> Mở tab mới
+            <FiExternalLink size={13} /> {t('materials.openNewTab')}
           </a>
           <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors ml-1">
             <FiX size={18} />
@@ -101,7 +112,7 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
             <div className="animate-spin rounded-full h-10 w-10 border-2 border-white border-t-transparent" />
-            <p className="text-sm text-gray-300">Đang tải PDF...</p>
+            <p className="text-sm text-gray-300">{t('materials.loadingPdf')}</p>
           </div>
         )}
         <iframe src={viewerUrl} className="w-full h-full border-0" title={material.title} onLoad={() => setLoading(false)} />
@@ -112,6 +123,9 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
 
 // ── PDF Card ──────────────────────────────────────────────────────────
 function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) {
+  const { t, language } = useLanguage();
+  const dateLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN';
+
   return (
     <div className="group bg-white border border-gray-200 rounded-xl p-4 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer" onClick={() => onView(m)}>
       <div className="flex items-start gap-3">
@@ -121,16 +135,16 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-purple-700 transition-colors">{m.title}</h3>
           {m.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{m.description}</p>}
-          <p className="text-xs text-gray-400 mt-2">{new Date(m.created_at).toLocaleDateString('vi-VN')}</p>
+          <p className="text-xs text-gray-400 mt-2">{new Date(m.created_at).toLocaleDateString(dateLocale)}</p>
         </div>
         <div className="shrink-0 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
-            <FiFileText size={11} /> Xem
+            <FiFileText size={11} /> {t('common.view')}
           </button>
           <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
-            <FiDownload size={11} /> Tải
+            <FiDownload size={11} /> {t('materials.download')}
           </a>
         </div>
       </div>
@@ -140,12 +154,13 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
 
 // ── Topic Section ─────────────────────────────────────────────────────
 function TopicSection({ topic, materials, onView }: { topic: string; materials: Material[]; onView: (m: Material) => void }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(true);
   return (
     <div className="mb-7">
       <button onClick={() => setOpen(v => !v)} className="w-full flex items-center justify-between py-2 mb-3 border-b border-gray-200">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-gray-800">{topic || 'Tài liệu chung'}</span>
+          <span className="font-bold text-gray-800">{topic || t('materials.commonTopic')}</span>
           <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">{materials.length}</span>
         </div>
         {open ? <FiChevronUp className="text-gray-400" size={16} /> : <FiChevronDown className="text-gray-400" size={16} />}
@@ -161,6 +176,7 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
 
 // ── Main Page ─────────────────────────────────────────────────────────
 export default function CauTrucDePage() {
+  const { t, format } = useLanguage();
   const searchParams = useSearchParams() as unknown as URLSearchParams;
   const subjectParam = normalizeContentSubject(searchParams.get('subject'));
   const isStrictSubject = !!subjectParam;
@@ -197,12 +213,12 @@ export default function CauTrucDePage() {
       const rows = await fetchCauTrucDeMaterials(activeSubject);
       setAllMaterials(rows);
     } catch {
-      setLoadError('Tải tài liệu chưa thành công. Bạn thử lại giúp mình nhé.');
+      setLoadError(t('materials.loadError'));
       setAllMaterials(materialsCache.get(activeSubject || '__all__') || []);
     } finally {
       setLoading(false);
     }
-  }, [activeSubject]);
+  }, [activeSubject, t]);
 
   useEffect(() => {
     loadMaterials();
@@ -232,8 +248,8 @@ export default function CauTrucDePage() {
             <div className="flex items-center gap-3 mb-1">
               <span className="text-3xl">📚</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Cấu Trúc Đề</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Phân tích cấu trúc đề thi chính thức · {allMaterials.length} tài liệu</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('course.title.structure')}</h1>
+                <p className="text-sm text-gray-500 mt-0.5">{format('materials.structureDesc', { count: allMaterials.length })}</p>
               </div>
             </div>
           </div>
@@ -248,7 +264,7 @@ export default function CauTrucDePage() {
                     ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                     : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
                 }`}>
-                <span>{s.emoji}</span> {s.label}
+                <span>{s.emoji}</span> {t(SUBJECT_LABEL_KEYS[s.value] || s.label)}
               </button>
             ))}
           </div>
@@ -257,7 +273,7 @@ export default function CauTrucDePage() {
           {/* Search */}
           <div className="relative mb-7">
             <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input type="text" placeholder="Tìm kiếm tài liệu..." value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" placeholder={t('materials.searchDocs')} value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
           </div>
 
@@ -274,13 +290,13 @@ export default function CauTrucDePage() {
                 onClick={loadMaterials}
                 className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 transition-colors"
               >
-                Tải lại
+                {t('materials.reload')}
               </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">📄</div>
-              <p className="text-gray-500">{search ? 'Không tìm thấy tài liệu phù hợp' : 'Chưa có tài liệu nào cho mục này'}</p>
+              <p className="text-gray-500">{search ? t('materials.noMatch') : t('materials.noneInSection')}</p>
             </div>
           ) : (
             Array.from(grouped.entries()).map(([topic, items]) => (
@@ -294,10 +310,10 @@ export default function CauTrucDePage() {
     return (
       <>
         <SubjectStudyShell
-          title="Cấu Trúc Đề"
+          title={t('course.title.structure')}
           subjectSlug={activeSubject}
           activeSection="cau-truc-de"
-          searchPlaceholder="Tìm kiếm tài liệu..."
+          searchPlaceholder={t('materials.searchDocs')}
         >
           {pageContent}
         </SubjectStudyShell>
@@ -310,7 +326,7 @@ export default function CauTrucDePage() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <ScopedStudyTopBar title="Cấu Trúc Đề" subject={activeSubject} fallbackIcon="📚" />
+        <ScopedStudyTopBar title={t('course.title.structure')} subject={activeSubject} fallbackIcon="📚" />
         {pageContent}
       </div>
 

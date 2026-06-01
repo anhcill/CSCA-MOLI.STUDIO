@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import {
   FiBell,
@@ -19,6 +21,7 @@ import {
   getSubjectMeta,
   normalizeContentSubject,
 } from '@/lib/utils/subjectScope';
+import { useLanguage } from '@/context/LanguageContext';
 
 export type SubjectStudySection =
   | 'de-mo-phong'
@@ -42,30 +45,52 @@ interface SubjectStudyShellProps {
   showFeatureCards?: boolean;
 }
 
+const DEFAULT_SUBTITLE = 'Luyện tập theo đề, xem lịch sử điểm và để AI phân tích lộ trình cải thiện sau mỗi lần làm bài.';
+const DEFAULT_SEARCH_PLACEHOLDER = 'Tìm nhanh đề thi... (nhấn / để focus)';
+
 const QUICK_LINKS = [
-  { key: 'lich-su', icon: FiClock, label: 'Lịch sử thi', href: '/lich-su' },
-  { key: 'cau-truc-de', icon: BsJournalBookmark, label: 'Cấu trúc đề', href: '/cau-truc-de' },
-  { key: 'ly-thuyet', icon: BsLightbulb, label: 'Lý thuyết', href: '/ly-thuyet' },
-  { key: 'tu-vung', icon: BsStars, label: 'Từ vựng', href: '/tu-vung' },
-  { key: 'giai-de-chi-tiet', icon: BsGraphUp, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet' },
+  { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
+  { key: 'cau-truc-de', icon: BsJournalBookmark, labelKey: 'course.section.structure', href: '/cau-truc-de' },
+  { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+  { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
+  { key: 'giai-de-chi-tiet', icon: BsGraphUp, labelKey: 'course.section.solutions', href: '/giai-de-chi-tiet' },
 ] as const;
 
 const SIDE_LINKS = [
-  { key: 'de-mo-phong', icon: FiHome, label: 'Đề mô phỏng', href: 'exam' },
-  { key: 'lich-su', icon: FiClock, label: 'Lịch sử thi', href: '/lich-su' },
-  { key: 'ai-phan-tich', icon: BsGraphUp, label: 'AI phân tích', href: '/lo-trinh' },
-  { key: 'ly-thuyet', icon: BsLightbulb, label: 'Lý thuyết', href: '/ly-thuyet' },
-  { key: 'tu-vung', icon: BsStars, label: 'Từ vựng', href: '/tu-vung' },
-  { key: 'lo-trinh', icon: FiTrendingUp, label: 'Theo dõi tiến bộ', href: '/lo-trinh' },
-  { key: 'cai-dat', icon: FiSettings, label: 'Cài đặt', href: '/profile' },
+  { key: 'de-mo-phong', icon: FiHome, labelKey: 'course.section.mockExam', href: 'exam' },
+  { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
+  { key: 'ai-phan-tich', icon: BsGraphUp, labelKey: 'course.section.ai', href: '/lo-trinh' },
+  { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+  { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
+  { key: 'lo-trinh', icon: FiTrendingUp, labelKey: 'course.section.progress', href: '/lo-trinh' },
+  { key: 'cai-dat', icon: FiSettings, labelKey: 'course.section.settings', href: '/profile' },
 ] as const;
 
 const FEATURE_CARDS = [
-  { icon: FiFileText, title: 'Luyện tập thông minh', text: 'Hệ thống đề mô phỏng sát với đề thi thật.' },
-  { icon: FiLayers, title: 'Theo dõi tiến bộ', text: 'Xem lịch sử làm bài và phân tích điểm mạnh, điểm yếu.' },
-  { icon: HiOutlineSparkles, title: 'AI gợi ý lộ trình', text: 'Nhận gợi ý cá nhân hóa để cải thiện hiệu quả hơn.' },
-  { icon: FiEdit3, title: 'Thi thử như thật', text: 'Giao diện và thời gian thi bám sát kỳ thi chính thức.' },
+  { icon: FiFileText, titleKey: 'course.feature.practiceTitle', textKey: 'course.feature.practiceText' },
+  { icon: FiLayers, titleKey: 'course.feature.progressTitle', textKey: 'course.feature.progressText' },
+  { icon: HiOutlineSparkles, titleKey: 'course.feature.aiTitle', textKey: 'course.feature.aiText' },
+  { icon: FiEdit3, titleKey: 'course.feature.realExamTitle', textKey: 'course.feature.realExamText' },
 ] as const;
+
+const SUBJECT_LABEL_KEYS: Record<string, string> = {
+  toan: 'subject.math',
+  'vat-ly': 'subject.physics',
+  'hoa-hoc': 'subject.chemistry',
+  'tieng-trung-xh': 'subject.chineseSoc',
+  'tieng-trung-tn': 'subject.chineseSci',
+};
+
+const TITLE_KEYS: Partial<Record<SubjectStudySection, string>> = {
+  'de-mo-phong': 'course.title.mockExam',
+  'lich-su': 'course.title.history',
+  'cau-truc-de': 'course.title.structure',
+  'ly-thuyet': 'course.title.theory',
+  'tu-vung': 'course.title.vocabulary',
+  'giai-de-chi-tiet': 'course.title.solutions',
+  'lo-trinh': 'course.title.roadmap',
+  'ai-phan-tich': 'course.title.roadmap',
+};
 
 const getExamHref = (subjectSlug?: string | null) => {
   const normalizedSubject = normalizeContentSubject(subjectSlug);
@@ -80,16 +105,28 @@ const getScopedHref = (href: string, subjectSlug?: string | null) => {
 
 export default function SubjectStudyShell({
   title,
-  subtitle = 'Luyện tập theo đề, xem lịch sử điểm và để AI phân tích lộ trình cải thiện sau mỗi lần làm bài.',
+  subtitle = DEFAULT_SUBTITLE,
   subjectSlug,
   activeSection,
-  searchPlaceholder = 'Tìm nhanh đề thi... (nhấn / để focus)',
+  searchPlaceholder = DEFAULT_SEARCH_PLACEHOLDER,
   children,
   className = '',
   showFeatureCards = false,
 }: SubjectStudyShellProps) {
+  const { t, format } = useLanguage();
   const subjectMeta = getSubjectMeta(subjectSlug);
   const normalizedSubject = normalizeContentSubject(subjectSlug);
+  const subjectLabel = normalizedSubject ? t(SUBJECT_LABEL_KEYS[normalizedSubject] || normalizedSubject) : '';
+  const titleKey = TITLE_KEYS[activeSection];
+  const localizedTitle = titleKey
+    ? format(titleKey, { subject: subjectLabel || title })
+    : title;
+  const localizedSubtitle = subtitle === DEFAULT_SUBTITLE
+    ? t('course.defaultSubtitle')
+    : subtitle;
+  const localizedSearchPlaceholder = searchPlaceholder === DEFAULT_SEARCH_PLACEHOLDER
+    ? t('course.searchPlaceholder')
+    : searchPlaceholder;
 
   return (
     <div className="min-h-screen bg-[#fbfbff] text-slate-900">
@@ -115,21 +152,21 @@ export default function SubjectStudyShell({
                 }`}
               >
                 <Icon className="text-base" />
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             );
           })}
         </nav>
         <div className="absolute bottom-5 left-4 right-4 overflow-hidden rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-100 p-4">
-          <div className="mb-2 text-xs font-black text-violet-700">AI đồng hành cùng bạn</div>
+          <div className="mb-2 text-xs font-black text-violet-700">{t('course.aiCompanionTitle')}</div>
           <p className="text-[11px] font-medium leading-relaxed text-slate-500">
-            Phân tích điểm mạnh, điểm yếu và gợi ý cách cải thiện.
+            {t('course.aiCompanionDesc')}
           </p>
           <Link
             href={buildSubjectScopedHref('/lo-trinh', normalizedSubject || undefined)}
             className="mt-3 inline-flex rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-black text-white shadow-sm"
           >
-            Khám phá ngay →
+            {t('course.exploreNow')} →
           </Link>
         </div>
       </aside>
@@ -148,15 +185,15 @@ export default function SubjectStudyShell({
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-                {title} <span className="text-violet-500">⚡</span>
+                {localizedTitle} <span className="text-violet-500">⚡</span>
               </h1>
-              <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">{localizedSubtitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 lg:shrink-0">
             <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-400 shadow-sm lg:flex">
               <FiSearch />
-              <span>{searchPlaceholder}</span>
+              <span>{localizedSearchPlaceholder}</span>
             </div>
             <button
               type="button"
@@ -190,7 +227,7 @@ export default function SubjectStudyShell({
                 }`}>
                   <Icon />
                 </span>
-                <span className="text-sm font-black text-slate-800">{item.label}</span>
+                <span className="text-sm font-black text-slate-800">{t(item.labelKey)}</span>
               </Link>
             );
           })}
@@ -203,12 +240,12 @@ export default function SubjectStudyShell({
             {FEATURE_CARDS.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div key={item.titleKey} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                     <Icon />
                   </div>
-                  <div className="text-sm font-black text-slate-800">{item.title}</div>
-                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">{item.text}</p>
+                  <div className="text-sm font-black text-slate-800">{t(item.titleKey)}</div>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">{t(item.textKey)}</p>
                 </div>
               );
             })}

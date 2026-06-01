@@ -9,10 +9,12 @@ import {
   BsGraphUp,
 } from 'react-icons/bs';
 import { buildSubjectScopedHref } from '@/lib/utils/subjectScope';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
+  label?: string;
+  labelKey?: string;
   href: string;
 }
 
@@ -31,10 +33,10 @@ interface SubjectNavigationProps {
 
 const getDefaultMenuItems = (subjectSlug?: string): MenuItem[] => {
   return [
-    { icon: BsJournalBookmark, label: 'Cấu trúc đề', href: '/cau-truc-de' },
-    { icon: BsLightbulb, label: 'Lý Thuyết', href: '/ly-thuyet' },
-    { icon: BsStars, label: 'Từ vựng', href: '/tu-vung' },
-    { icon: BsGraphUp, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet' },
+    { icon: BsJournalBookmark, labelKey: 'course.section.structure', href: '/cau-truc-de' },
+    { icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+    { icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
+    { icon: BsGraphUp, labelKey: 'course.section.solutions', href: '/giai-de-chi-tiet' },
   ];
 };
 
@@ -46,6 +48,7 @@ export default function SubjectNavigation({
   menuItems,
   emoji = '📚'
 }: SubjectNavigationProps) {
+  const { t } = useLanguage();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const items = menuItems || getDefaultMenuItems(subjectSlug);
@@ -72,14 +75,14 @@ export default function SubjectNavigation({
           onClick={() => {}}
           className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-gray-900 shadow-sm bg-white"
         >
-          Kho tài liệu
+          {t('course.section.materials')}
         </button>
 
         <Link
           href={subjectSlug ? `/lich-su?subject=${subjectSlug}` : '/lich-su'}
           className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-center text-gray-500 hover:text-gray-800 hover:bg-gray-50/50"
         >
-          Lịch sử thi
+          {t('course.section.history')}
         </Link>
       </div>
 
@@ -105,7 +108,7 @@ export default function SubjectNavigation({
                     <div className={`${isActive ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-gray-200'} w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0`}>
                        <Icon className={`text-lg ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'}`} />
                     </div>
-                    <span className="font-bold">{item.label}</span>
+                    <span className="font-bold">{item.labelKey ? t(item.labelKey) : item.label}</span>
                   </Link>
                 );
               })}

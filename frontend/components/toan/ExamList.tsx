@@ -9,6 +9,7 @@ import { getHistoryStats, type HistoryStatsData } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface ExamListProps {
   subjectCode?: string;
@@ -41,6 +42,7 @@ const groupExamsByYear = (items: Exam[]) => {
 
 export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProps) {
   const router = useRouter();
+  const { t, format, language } = useLanguage();
   const user = useAuthStore((s) => s.user);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,13 +189,13 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const activeExamByYear = examTypeTab === 'regular' ? regularByYear : vipByYear;
   const activeExamMeta = examTypeTab === 'regular'
     ? {
-        title: 'Đề thường',
-        description: 'Tất cả tài khoản đều có thể làm',
+        title: t('examList.regularTitle'),
+        description: t('examList.regularDesc'),
         variant: 'regular' as const,
       }
     : {
-        title: 'Đề VIP',
-        description: 'Tài khoản VIP và Pre dùng chung bộ đề này',
+        title: t('examList.vipTitle'),
+        description: t('examList.vipDesc'),
         variant: 'vip' as const,
       };
 
@@ -233,9 +235,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     if (exams.length === 0) {
       return {
         exam: null as Exam | null,
-        title: 'Chưa có đề để luyện',
-        text: 'Bộ đề cho môn này đang được cập nhật.',
-        action: 'Xem sau',
+        title: t('examList.noExamsTitle'),
+        text: t('examList.noExamsText'),
+        action: t('examList.viewLater'),
         disabled: true,
       };
     }
@@ -245,9 +247,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     if (inProgressExam) {
       return {
         exam: inProgressExam,
-        title: 'Tiếp tục bài đang làm',
+        title: t('examList.continueTitle'),
         text: inProgressExam.title,
-        action: 'Tiếp tục',
+        action: t('examList.continueAction'),
         disabled: false,
       };
     }
@@ -256,9 +258,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     if (nextExam) {
       return {
         exam: nextExam,
-        title: 'Gợi ý hôm nay',
-        text: `Làm ${nextExam.title} để tăng tiến độ bộ đề.`,
-        action: 'Luyện ngay',
+        title: t('examList.recommendTitle'),
+        text: format('examList.recommendText', { title: nextExam.title }),
+        action: t('examList.practiceNow'),
         disabled: false,
       };
     }
@@ -269,9 +271,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     if (retryExam) {
       return {
         exam: retryExam,
-        title: 'Ôn lại điểm yếu',
-        text: `Làm lại ${retryExam.title} để cải thiện điểm thấp nhất.`,
-        action: 'Làm lại',
+        title: t('examList.retryWeakTitle'),
+        text: format('examList.retryWeakText', { title: retryExam.title }),
+        action: t('examList.retry'),
         disabled: false,
       };
     }
@@ -280,29 +282,29 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     if (lockedVipExam) {
       return {
         exam: lockedVipExam,
-        title: 'Mở khóa đề nâng cao',
-        text: 'Bạn đã hết đề miễn phí phù hợp. Mở khóa VIP để luyện tiếp.',
-        action: 'Xem gói VIP',
+        title: t('examList.unlockTitle'),
+        text: t('examList.unlockText'),
+        action: t('examList.viewVip'),
         disabled: false,
       };
     }
 
     return {
       exam: null as Exam | null,
-      title: 'Đã hoàn thành',
-      text: 'Bạn đã hoàn thành các đề hiện có trong môn này.',
-      action: 'Hoàn tất',
+      title: t('examList.completedTitle'),
+      text: t('examList.completedText'),
+      action: t('exam.completed'),
       disabled: true,
     };
-  }, [exams, isVip]);
+  }, [exams, isVip, t, format]);
 
   // Difficulty badge
   const DiffBadge = ({ level }: { level?: string }) => {
     if (!level) return null;
     const map: Record<string, { label: string; cls: string; dot: string }> = {
-      easy: { label: 'Dễ', cls: 'text-emerald-600 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
-      medium: { label: 'TB', cls: 'text-amber-600 bg-amber-50 border-amber-200', dot: 'bg-amber-500' },
-      hard: { label: 'Khó', cls: 'text-rose-600 bg-rose-50 border-rose-200', dot: 'bg-rose-500' },
+      easy: { label: t('examList.easy'), cls: 'text-emerald-600 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
+      medium: { label: t('examList.medium'), cls: 'text-amber-600 bg-amber-50 border-amber-200', dot: 'bg-amber-500' },
+      hard: { label: t('examList.hard'), cls: 'text-rose-600 bg-rose-50 border-rose-200', dot: 'bg-rose-500' },
     };
     const d = map[level] || map.medium;
     return (
@@ -321,7 +323,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       : 'text-rose-600 bg-rose-50 border-rose-200';
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold border ${color}`}>
-        📊 {Math.round(rate)}% đỗ
+        📊 {format('examList.passed', { rate: Math.round(rate) })}
       </span>
     );
   };
@@ -335,7 +337,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded ${
         improved ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'
       }`}>
-        {improved ? '↑' : '↓'} {Math.abs(diff)}đ
+        {improved ? '↑' : '↓'} {format('examList.scorePoint', { score: Math.abs(diff) })}
       </span>
     );
   };
@@ -389,7 +391,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             )}
             {exam.shuffle_mode && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-md border border-blue-200 shrink-0">
-                🔀 Xáo trộn
+                🔀 {t('examList.shuffle')}
               </span>
             )}
           </div>
@@ -397,18 +399,18 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
             <span className="flex items-center gap-1">
               <FiClock size={12} />
-              <span>{exam.duration} phút</span>
+              <span>{format('examList.minutes', { count: exam.duration })}</span>
             </span>
             <span className="flex items-center gap-1">
               <FiUsers size={12} />
-              <span>{exam.total_questions} câu</span>
+              <span>{format('examList.questions', { count: exam.total_questions })}</span>
             </span>
             <DiffBadge level={exam.overall_difficulty || exam.difficulty_level} />
             <PassRateBadge rate={exam.pass_rate} />
             {exam.publish_date && (
               <span className="flex items-center gap-1 text-gray-400">
                 <FiCalendar size={12} />
-                <span>{new Date(exam.publish_date).toLocaleDateString('vi-VN')}</span>
+                <span>{new Date(exam.publish_date).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN')}</span>
               </span>
             )}
           </div>
@@ -420,10 +422,10 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <div className="hidden md:flex flex-col items-end gap-1 mr-2">
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-medium">
-                  {attemptCount} lần
+                  {format('examList.attempts', { count: attemptCount })}
                 </span>
                 <span className={`px-2 py-0.5 rounded-md font-bold ${(exam.user_best_score || 0) >= 8 ? 'bg-emerald-100 text-emerald-700' : (exam.user_best_score || 0) >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                  {exam.user_best_score || 0} đ
+                  {format('examList.scorePoint', { score: exam.user_best_score || 0 })}
                 </span>
                 <ScoreCompare best={exam.user_best_score} last={exam.user_last_score} />
               </div>
@@ -441,11 +443,11 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             }`}
           >
             {isLocked ? (
-              <><FiLock size={15} /> Khóa</>
+              <><FiLock size={15} /> {t('examList.locked')}</>
             ) : done ? (
-              <><FiRotateCw size={15} /> Làm lại</>
+              <><FiRotateCw size={15} /> {t('examList.retry')}</>
             ) : (
-              <><FiPlayCircle size={15} /> Làm bài</>
+              <><FiPlayCircle size={15} /> {t('examList.startExam')}</>
             )}
           </button>
         </div>
@@ -491,14 +493,14 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <span className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
               isVipSection ? 'bg-white text-amber-700 border border-amber-200' : 'bg-violet-50 text-violet-700 border border-violet-100'
             }`}>
-              {count} đề
+              {format('examList.examCount', { count })}
             </span>
           </div>
         </div>
 
         {count === 0 ? (
           <div className="px-5 py-6 text-sm text-gray-400">
-            Chưa có đề phù hợp trong nhóm này.
+            {t('examList.noGroup')}
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-6">
@@ -556,19 +558,19 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           <FiSearch size={36} />
         </div>
         <p className="text-gray-500 font-semibold text-lg">
-          {hasSearch ? `Không tìm thấy đề "${search}"` : 'Không có đề thi phù hợp'}
+          {hasSearch ? format('examList.noSearch', { search }) : t('examList.noMatch')}
         </p>
         <p className="text-gray-400 text-sm mt-1">
-          {hasSearch ? 'Thử từ khóa khác' : 'Đội ngũ đang cập nhật thêm đề thi'}
+          {hasSearch ? t('examList.tryAnother') : t('examList.updating')}
         </p>
         {hasSearch && (
           <button onClick={() => setSearch('')} className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
-            Xóa tìm kiếm
+            {t('examList.clearSearch')}
           </button>
         )}
         {!hasSearch && exams.length === 0 && !loading && (
           <p className="text-xs text-gray-400 mt-3">
-            Mã môn: {subjectCode || subjectSlug || '?'}
+            {format('examList.subjectCode', { code: subjectCode || subjectSlug || '?' })}
           </p>
         )}
       </div>
@@ -584,9 +586,9 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         {/* Filter pills */}
         <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           {([
-            { value: 'all', label: 'Tất cả', emoji: '📋', count: stats.total },
-            { value: 'done', label: 'Đã làm', emoji: '✓', count: stats.done },
-            { value: 'not-done', label: 'Chưa làm', emoji: '○', count: stats.notDone },
+            { value: 'all', label: t('history.all'), emoji: '📋', count: stats.total },
+            { value: 'done', label: t('examList.done'), emoji: '✓', count: stats.done },
+            { value: 'not-done', label: t('examList.notDone'), emoji: '○', count: stats.notDone },
           ] as { value: FilterType; label: string; emoji: string; count: number }[]).map(f => (
             <button
               key={f.value}
@@ -607,8 +609,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         {/* Exam type tabs */}
         <div className="flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           {([
-            { value: 'regular', label: 'Đề thường', icon: FiPlayCircle, count: regularExams.length },
-            { value: 'vip', label: 'Đề VIP', icon: FaCrown, count: vipExams.length },
+            { value: 'regular', label: t('examList.regularTitle'), icon: FiPlayCircle, count: regularExams.length },
+            { value: 'vip', label: t('examList.vipTitle'), icon: FaCrown, count: vipExams.length },
           ] as { value: ExamTypeTab; label: string; icon: ElementType; count: number }[]).map(tab => {
             const Icon = tab.icon;
             const active = examTypeTab === tab.value;
@@ -638,15 +640,15 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
         {/* Sort */}
         <div className="flex items-center gap-1.5 sm:ml-auto">
-          <span className="text-xs text-gray-400 font-medium">Sắp xếp:</span>
+          <span className="text-xs text-gray-400 font-medium">{t('examList.sort')}</span>
           <select
             value={sort}
             onChange={e => setSort(e.target.value as SortType)}
             className="text-xs font-semibold border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-400 cursor-pointer"
           >
-            <option value="newest">Mới nhất</option>
-            <option value="oldest">Cũ nhất</option>
-            <option value="name">Theo tên</option>
+            <option value="newest">{t('examList.newest')}</option>
+            <option value="oldest">{t('examList.oldest')}</option>
+            <option value="name">{t('examList.byName')}</option>
           </select>
         </div>
 
@@ -660,20 +662,20 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
           }`}
         >
           <FiBookmark size={13} />
-          {showDone ? 'Đang ẩn đã làm' : 'Ẩn đã làm'}
+          {showDone ? t('examList.hidingDone') : t('examList.hideDone')}
         </button>
       </div>
 
       {/* ── Result count (full-width) ─────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-400">
-        <span>Tìm thấy <strong className="text-gray-600">{visibleExams.length}</strong> đề thi</span>
-        {search && <span>cho &quot;<strong className="text-gray-600">{search}</strong>&quot;</span>}
+        <span>{format('examList.foundCount', { count: visibleExams.length })}</span>
+        {search && <span>{format('examList.searchFor', { search })}</span>}
         <span className="text-gray-300">|</span>
-        <span><strong className="text-violet-600">{regularExams.length}</strong> đề thường</span>
-        <span><strong className="text-amber-600">{vipExams.length}</strong> đề VIP</span>
+        <span>{format('examList.regularCount', { count: regularExams.length })}</span>
+        <span>{format('examList.vipCount', { count: vipExams.length })}</span>
         <span className="text-gray-300">|</span>
-        <span>Đang xem <strong className={examTypeTab === 'vip' ? 'text-amber-600' : 'text-violet-600'}>{activeExamMeta.title.toLowerCase()}</strong></span>
-        {showDone && <span className="text-emerald-500">(đã ẩn đề đã làm)</span>}
+        <span>{format('examList.viewing', { type: activeExamMeta.title.toLowerCase() })}</span>
+        {showDone && <span className="text-emerald-500">{t('examList.doneHidden')}</span>}
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────── */}
@@ -687,20 +689,20 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                 <FiBarChart2 />
               </div>
-              <h3 className="text-base font-black text-slate-900">Tổng quan luyện tập</h3>
+              <h3 className="text-base font-black text-slate-900">{t('examList.progressOverview')}</h3>
             </div>
             <div className="flex flex-col items-center gap-5 sm:flex-row">
               <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-[conic-gradient(#6d4aff_var(--progress),#ede9fe_0)]" style={{ ['--progress' as string]: `${progressStats.completion}%` }}>
                 <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
                   <span className="text-3xl font-black text-slate-900">{progressStats.completion}%</span>
-                  <span className="text-xs font-bold text-slate-400">Tiến độ bộ đề</span>
+                  <span className="text-xs font-bold text-slate-400">{t('examList.setProgress')}</span>
                 </div>
               </div>
               <div className="grid flex-1 grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-3"><FiEdit3 className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.done}</div><div className="text-xs font-medium text-slate-500">Đề đã làm</div></div></div>
-                <div className="flex items-center gap-3"><FiCheckCircle className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.totalQuestions}</div><div className="text-xs font-medium text-slate-500">Câu đã luyện</div></div></div>
-                <div className="flex items-center gap-3"><FiClock className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.avgScore}</div><div className="text-xs font-medium text-slate-500">Điểm TB</div></div></div>
-                <div className="flex items-center gap-3"><FiTrendingUp className="text-emerald-500" /><div><div className="font-black text-slate-900">{progressStats.passRate}%</div><div className="text-xs font-medium text-slate-500">Tỉ lệ đạt</div></div></div>
+                <div className="flex items-center gap-3"><FiEdit3 className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.done}</div><div className="text-xs font-medium text-slate-500">{t('examList.done')}</div></div></div>
+                <div className="flex items-center gap-3"><FiCheckCircle className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.totalQuestions}</div><div className="text-xs font-medium text-slate-500">{t('examList.questionsPracticed')}</div></div></div>
+                <div className="flex items-center gap-3"><FiClock className="text-violet-500" /><div><div className="font-black text-slate-900">{progressStats.avgScore}</div><div className="text-xs font-medium text-slate-500">{t('history.avgScore')}</div></div></div>
+                <div className="flex items-center gap-3"><FiTrendingUp className="text-emerald-500" /><div><div className="font-black text-slate-900">{progressStats.passRate}%</div><div className="text-xs font-medium text-slate-500">{t('examList.passRate')}</div></div></div>
               </div>
             </div>
 
@@ -733,7 +735,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             <input
               ref={searchRef}
               type="text"
-              placeholder='Tìm nhanh đề thi... (nhấn / để focus)'
+              placeholder={t('examList.searchPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-11 pr-10 py-3 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent shadow-sm"
@@ -759,7 +761,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         <ProUpgradeModal
           isOpen={true}
           onClose={() => setVipModalExam(null)}
-          title={`Đề "${vipModalExam.title}" chỉ dành cho VIP/Pre`}
+          title={format('examList.vipOnlyTitle', { title: vipModalExam.title })}
         />
       )}
     </div>

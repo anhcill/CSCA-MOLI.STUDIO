@@ -12,6 +12,7 @@ import {
   FiTrendingUp, FiAward, FiBarChart2, FiRefreshCw,
   FiArrowRight,
 } from 'react-icons/fi';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface HistoryItem {
   id: number;
@@ -52,26 +53,26 @@ function attemptScore(item: Pick<HistoryItem, 'total_correct' | 'total_questions
   return attemptAccuracy(item) / 10;
 }
 
-function scoreBadge(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): { label: string; cls: string } {
+function scoreBadge(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>, t: (key: string) => string): { label: string; cls: string } {
   const accuracy = attemptAccuracy(item);
-  if (accuracy >= 80) return { label: 'Xuất sắc', cls: 'bg-emerald-100 text-emerald-700' };
-  if (accuracy >= 65) return { label: 'Khá', cls: 'bg-blue-100 text-blue-700' };
-  if (accuracy >= 50) return { label: 'Trung bình', cls: 'bg-yellow-100 text-yellow-700' };
-  return { label: 'Yếu', cls: 'bg-red-100 text-red-700' };
+  if (accuracy >= 80) return { label: t('history.excellent'), cls: 'bg-emerald-100 text-emerald-700' };
+  if (accuracy >= 65) return { label: t('history.good'), cls: 'bg-blue-100 text-blue-700' };
+  if (accuracy >= 50) return { label: t('history.average'), cls: 'bg-yellow-100 text-yellow-700' };
+  return { label: t('history.weak'), cls: 'bg-red-100 text-red-700' };
 }
 
-function timeAgo(ts: string) {
-  if (!ts) return 'Chưa có thời gian';
+function timeAgo(ts: string, t: (key: string) => string, format: (key: string, values: Record<string, string | number>) => string) {
+  if (!ts) return t('history.noTime');
   const time = new Date(ts).getTime();
-  if (Number.isNaN(time)) return 'Chưa có thời gian';
+  if (Number.isNaN(time)) return t('history.noTime');
   const s = Math.max(0, (Date.now() - time) / 1000);
-  if (s < 60) return 'Vừa xong';
-  if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h trước`;
+  if (s < 60) return t('history.justNow');
+  if (s < 3600) return format('history.minutesAgo', { count: Math.floor(s / 60) });
+  if (s < 86400) return format('history.hoursAgo', { count: Math.floor(s / 3600) });
   const d = Math.floor(s / 86400);
-  if (d < 30) return `${d} ngày trước`;
-  if (d < 365) return `${Math.floor(d / 30)} tháng trước`;
-  return `${Math.floor(d / 365)} năm trước`;
+  if (d < 30) return format('history.daysAgo', { count: d });
+  if (d < 365) return format('history.monthsAgo', { count: Math.floor(d / 30) });
+  return format('history.yearsAgo', { count: Math.floor(d / 365) });
 }
 
 function formatTime(seconds: number) {
@@ -100,6 +101,7 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
 
 export default function LichSuPage() {
   const { isAuthenticated } = useAuthStore();
+  const { t, format } = useLanguage();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -153,10 +155,10 @@ export default function LichSuPage() {
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-blue-100">
           <span className="text-4xl">🔒</span>
         </div>
-        <h2 className="mb-3 text-xl font-bold text-gray-900">Đăng nhập để xem lịch sử</h2>
-        <p className="mx-auto mb-6 max-w-sm text-gray-500">Theo dõi tiến trình học tập và kết quả tất cả các bài thi đã làm.</p>
+        <h2 className="mb-3 text-xl font-bold text-gray-900">{t('history.loginTitle')}</h2>
+        <p className="mx-auto mb-6 max-w-sm text-gray-500">{t('history.loginDesc')}</p>
         <Link href="/login" className="inline-block rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-3 font-bold text-white shadow-lg transition-all hover:opacity-90">
-          Đăng nhập ngay
+          {t('history.loginNow')}
         </Link>
       </div>
     );
@@ -164,10 +166,10 @@ export default function LichSuPage() {
     if (subjectParam) {
       return (
         <SubjectStudyShell
-          title="Lịch Sử Làm Bài"
+          title={t('history.title')}
           subjectSlug={subjectParam}
           activeSection="lich-su"
-          searchPlaceholder="Tìm trong lịch sử làm bài..."
+          searchPlaceholder={t('history.searchPlaceholder')}
         >
           {loginPrompt}
         </SubjectStudyShell>
@@ -194,9 +196,9 @@ export default function LichSuPage() {
               <span className="text-3xl">📅</span>
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight">Lịch Sử Làm Bài</h1>
+              <h1 className="text-2xl font-black tracking-tight">{t('history.title')}</h1>
               <p className="mt-1 text-sm text-blue-100">
-                Tất cả {history.length} lần thi · {passCount} lần đạt
+                {format('history.subtitle', { total: history.length, passed: passCount })}
               </p>
             </div>
           </div>
@@ -207,14 +209,14 @@ export default function LichSuPage() {
               className="flex items-center gap-2 rounded-xl bg-white/20 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/30 disabled:opacity-50"
             >
               <FiRefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Tải lại
+              {t('common.refresh')}
             </button>
             <Link
               href={subjectParam ? `/lich-su/thong-ke?subject=${subjectParam}` : '/lich-su/thong-ke'}
               className="flex items-center gap-2 rounded-xl bg-white/20 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/30"
             >
               <FiBarChart2 size={14} />
-              Thống kê chi tiết
+              {t('history.detailStats')}
             </Link>
           </div>
         </div>
@@ -222,10 +224,10 @@ export default function LichSuPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard icon={FiBarChart2} label="Tổng bài" value={displayFiltered.length} color="bg-indigo-500" />
-        <StatCard icon={FiTrendingUp} label="Điểm TB" value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + attemptScore(h), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
-        <StatCard icon={FiAward} label="Điểm cao nhất" value={`${displayFiltered.length ? Math.max(...displayFiltered.map(attemptScore)).toFixed(1) : '0'}/10`} color="bg-green-500" />
-        <StatCard icon={FiCheckCircle} label="Lần đạt (≥50%)" value={displayFiltered.filter(attemptPassed).length} color="bg-emerald-500" />
+        <StatCard icon={FiBarChart2} label={t('history.totalAttempts')} value={displayFiltered.length} color="bg-indigo-500" />
+        <StatCard icon={FiTrendingUp} label={t('history.avgScore')} value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + attemptScore(h), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
+        <StatCard icon={FiAward} label={t('history.bestScore')} value={`${displayFiltered.length ? Math.max(...displayFiltered.map(attemptScore)).toFixed(1) : '0'}/10`} color="bg-green-500" />
+        <StatCard icon={FiCheckCircle} label={t('history.passedAttempts')} value={displayFiltered.filter(attemptPassed).length} color="bg-emerald-500" />
       </div>
 
       {/* Filter tabs */}
@@ -248,7 +250,7 @@ export default function LichSuPage() {
                     : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-300'
                   }`}
               >
-                {s === 'ALL' ? '📋 Tất cả' : `${meta?.emoji || ''} ${s}`}
+                {s === 'ALL' ? `📋 ${t('history.all')}` : `${meta?.emoji || ''} ${s}`}
               </button>
             );
           })}
@@ -260,38 +262,38 @@ export default function LichSuPage() {
         {loading ? (
           <div className="p-10 text-center">
             <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-            <p className="text-sm text-gray-500">Đang tải lịch sử...</p>
+            <p className="text-sm text-gray-500">{t('history.loading')}</p>
           </div>
         ) : paged.length === 0 ? (
           <div className="p-10 text-center">
             <div className="mb-3 text-5xl">📭</div>
             <h3 className="mb-1 text-lg font-bold text-gray-800">
-              {history.length === 0 ? 'Chưa có bài thi nào' : 'Không có kết quả'}
+              {history.length === 0 ? t('history.emptyTitle') : t('history.noResults')}
             </h3>
             <p className="mb-5 text-sm text-gray-500">
               {history.length === 0
-                ? 'Hãy làm thử đề mô phỏng để xem kết quả tại đây.'
-                : 'Thử chọn bộ lọc khác.'}
+                ? t('history.emptyDesc')
+                : t('history.filterDesc')}
             </p>
             {history.length === 0 && (
               <Link href="/de-mo-phong" className="inline-block rounded-xl bg-indigo-600 px-6 py-2.5 font-bold text-white transition-colors hover:bg-indigo-700">
-                Làm đề ngay →
+                {t('history.startExam')} →
               </Link>
             )}
           </div>
         ) : (
           <>
             <div className="grid grid-cols-12 gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              <div className="col-span-5">Đề thi</div>
-              <div className="col-span-2 text-center">Điểm</div>
-              <div className="col-span-2 text-center">Đúng</div>
-              <div className="col-span-2 text-center">Thời gian</div>
-              <div className="col-span-1 text-center">Kết quả</div>
+              <div className="col-span-5">{t('history.exam')}</div>
+              <div className="col-span-2 text-center">{t('history.score')}</div>
+              <div className="col-span-2 text-center">{t('history.correct')}</div>
+              <div className="col-span-2 text-center">{t('history.time')}</div>
+              <div className="col-span-1 text-center">{t('history.result')}</div>
             </div>
 
             {paged.map((item) => {
               const meta = SUBJECT_META[item.subject_code] || { color: 'text-gray-700', bg: 'bg-gray-100', emoji: '📝' };
-              const badge = scoreBadge(item);
+              const badge = scoreBadge(item, t);
               const pct = Math.round(attemptAccuracy(item));
 
               return (
@@ -307,7 +309,7 @@ export default function LichSuPage() {
                         {meta.emoji} {item.subject_name || item.subject_code}
                       </span>
                       <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                        <FiClock size={10} /> {timeAgo(item.submitted_at || item.submit_time || '')}
+                        <FiClock size={10} /> {timeAgo(item.submitted_at || item.submit_time || '', t, format)}
                       </span>
                     </div>
                   </div>
@@ -344,7 +346,7 @@ export default function LichSuPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-5 py-4">
                 <p className="text-xs text-gray-500">
-                  {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, filtered.length)} / {filtered.length} bài
+                  {format('history.pageCount', { from: (page - 1) * PER_PAGE + 1, to: Math.min(page * PER_PAGE, filtered.length), total: filtered.length })}
                 </p>
                 <div className="flex gap-1">
                   <button
@@ -389,10 +391,10 @@ export default function LichSuPage() {
   if (subjectParam) {
     return (
       <SubjectStudyShell
-        title="Lịch Sử Làm Bài"
+        title={t('history.title')}
         subjectSlug={subjectParam}
         activeSection="lich-su"
-        searchPlaceholder="Tìm trong lịch sử làm bài..."
+        searchPlaceholder={t('history.searchPlaceholder')}
       >
         {historyContent}
       </SubjectStudyShell>

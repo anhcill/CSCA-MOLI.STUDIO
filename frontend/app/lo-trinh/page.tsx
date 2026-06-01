@@ -20,9 +20,11 @@ import { FiBookOpen, FiCheckCircle, FiClock, FiLock, FiPlayCircle, FiRefreshCw, 
 import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import axiosInstance from '@/lib/utils/axios';
+import { useLanguage } from '@/context/LanguageContext';
 
 export default function LoTrinhPage() {
   const { isAuthenticated } = useAuthStore();
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
   const normalizedSubject = normalizeContentSubject(subjectParam);
@@ -85,11 +87,11 @@ export default function LoTrinhPage() {
 
   if (subjectParam) {
     return (
-      <SubjectStudyShell
-        title="Lộ Trình Học Cá Nhân"
-        subjectSlug={subjectParam}
-        activeSection="lo-trinh"
-        searchPlaceholder="Tìm mốc lộ trình..."
+        <SubjectStudyShell
+          title={t('roadmap.title')}
+          subjectSlug={subjectParam}
+          activeSection="lo-trinh"
+          searchPlaceholder={t('roadmap.searchPlaceholder')}
       >
         {!mounted || loading ? (
           <div className="space-y-5 animate-pulse">
@@ -101,15 +103,15 @@ export default function LoTrinhPage() {
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
               <FiLock size={34} />
             </div>
-            <h2 className="mb-3 text-xl font-black text-slate-900">Đăng nhập để xem Lộ Trình</h2>
+            <h2 className="mb-3 text-xl font-black text-slate-900">{t('roadmap.loginTitle')}</h2>
             <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed text-slate-500">
-              AI sẽ phân tích kết quả theo môn và tạo lộ trình học tập cá nhân hóa.
+              {t('roadmap.loginDesc')}
             </p>
             <Link
               href="/login"
               className="inline-flex rounded-xl bg-violet-600 px-8 py-3 text-sm font-black text-white shadow-lg shadow-violet-500/20 transition hover:bg-violet-700"
             >
-              Đăng nhập ngay
+              {t('history.loginNow')}
             </Link>
           </div>
         ) : (
@@ -121,8 +123,8 @@ export default function LoTrinhPage() {
                     <FiTrendingUp />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black text-slate-900">Mốc tiến bộ</h2>
-                    <p className="text-sm font-medium text-slate-500">Các chặng học tập được mở theo kết quả luyện đề.</p>
+                    <h2 className="text-lg font-black text-slate-900">{t('roadmap.milestones')}</h2>
+                    <p className="text-sm font-medium text-slate-500">{t('roadmap.milestonesDesc')}</p>
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -135,7 +137,7 @@ export default function LoTrinhPage() {
                             <Icon size={16} />
                           </span>
                           <div>
-                            <span className="text-[11px] font-black uppercase text-violet-500">Chặng {i + 1}</span>
+                            <span className="text-[11px] font-black uppercase text-violet-500">{t('roadmap.stage').replace('{count}', String(i + 1))}</span>
                             <h3 className="text-sm font-black text-slate-900">{ms.title}</h3>
                           </div>
                         </div>
@@ -181,13 +183,13 @@ export default function LoTrinhPage() {
               
               <div className="relative z-10 w-full">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full shadow-inner text-xs font-bold uppercase tracking-widest border border-white/20 mb-4">
-                  <FiTrendingUp className="text-pink-400" /> Bản Đồ Học Tập
+                  <FiTrendingUp className="text-pink-400" /> {t('roadmap.heroBadge')}
                 </div>
                 <h1 className="text-4xl lg:text-5xl font-black tracking-tight mb-3">
-                  Lộ Trình Tinh Anh
+                  {t('roadmap.heroTitle')}
                 </h1>
                 <p className="text-purple-100 text-lg leading-relaxed max-w-xl">
-                  AI đang cá nhân hoá đường đi của bạn. Liên tục bứt phá các mốc điểm trong Đề Mô Phỏng để mở khoá Chặng tiếp theo.
+                  {t('roadmap.heroDesc')}
                 </p>
               </div>
 
@@ -208,16 +210,16 @@ export default function LoTrinhPage() {
                   <span className="text-5xl">🔒</span>
                 </div>
                 <h2 className="text-2xl font-black text-gray-900 mb-3 tracking-tight">
-                  Ai đó chưa đăng nhập nhỉ?
+                  {t('roadmap.guestTitle')}
                 </h2>
                 <p className="text-gray-500 mb-8 leading-relaxed max-w-sm mx-auto">
-                  Trí tuệ nhân tạo Gemini cần biết tên bạn để xếp hạng và vẽ chính xác lộ trình cá nhân hoá riêng rẽ.
+                  {t('roadmap.guestDesc')}
                 </p>
                 <Link
                   href="/login"
                   className="inline-flex items-center gap-2 px-8 py-3.5 bg-gray-900 text-white font-bold rounded-2xl hover:bg-gray-800 hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-900/20 transition-all duration-300"
                 >
-                  <FiUnlock /> Đăng nhập & Bắt đầu
+                  <FiUnlock /> {t('roadmap.loginStart')}
                 </Link>
               </div>
             ) : (
@@ -226,7 +228,7 @@ export default function LoTrinhPage() {
                 {/* 1. Milestone Timeline UI */}
                 <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-gray-100 shadow-sm p-8">
                   <h3 className="text-xl font-bold border-b border-gray-100 pb-4 mb-8 text-gray-800">
-                    Sống sót chặng đường
+                    {t('roadmap.survivalTitle')}
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     
@@ -254,7 +256,7 @@ export default function LoTrinhPage() {
                             <span className={`text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide ${
                               isComplete ? 'bg-emerald-100 text-emerald-800' : isCurrent ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-600'
                             }`}>
-                              Chặng {i + 1}
+                              {t('roadmap.stage').replace('{count}', String(i + 1))}
                             </span>
                           </div>
                             <div className="flex items-center gap-3 mb-1">
@@ -268,7 +270,7 @@ export default function LoTrinhPage() {
                             
                             {isCurrent && (
                               <button className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-indigo-700 hover:shadow-lg transition-all duration-300 active:scale-95">
-                                Tiếp tục học
+                                {t('roadmap.continueStudy')}
                               </button>
                             )}
                         </div>
@@ -279,7 +281,7 @@ export default function LoTrinhPage() {
 
                 {/* 2. Original AI Insights Dashboard */}
                 <RoadmapFocusPanel
-                  subjectLabel="tất cả môn"
+                  subjectLabel={t('roadmap.allSubjects')}
                   stats={roadmapStats}
                   studyPlan={studyPlan}
                   topicData={topicData}
@@ -314,6 +316,7 @@ function RoadmapFocusPanel({
   loading: boolean;
   onRefresh: () => void;
 }) {
+  const { t, format } = useLanguage();
   const today = studyPlan?.days?.find((day) => day.isToday) || studyPlan?.days?.[0];
   const weakTopics = topicData?.weaknesses?.slice(0, 4) || [];
 
@@ -322,10 +325,10 @@ function RoadmapFocusPanel({
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-slate-900">
-            <FiZap className="text-violet-600" /> Lộ trình cải thiện hằng ngày
+            <FiZap className="text-violet-600" /> {t('roadmap.focusTitle')}
           </h2>
           <p className="mt-1 text-sm font-medium text-slate-500">
-            Tổng hợp riêng cho {subjectLabel}: tiến độ, việc hôm nay, chủ đề yếu và đề nên làm tiếp.
+            {format('roadmap.focusDesc', { subject: subjectLabel })}
           </p>
         </div>
         <button
@@ -334,16 +337,16 @@ function RoadmapFocusPanel({
           disabled={loading}
           className="inline-flex w-fit items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"
         >
-          <FiRefreshCw className={loading ? 'animate-spin' : ''} /> Tạo lại kế hoạch
+          <FiRefreshCw className={loading ? 'animate-spin' : ''} /> {t('roadmap.regenerate')}
         </button>
       </div>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <MetricCard icon={<FiCheckCircle />} label="Đề đã làm" value={stats?.attempts || 0} />
-        <MetricCard icon={<FiTrendingUp />} label="Điểm TB" value={stats?.avgScore ? `${stats.avgScore}` : '--'} />
+        <MetricCard icon={<FiCheckCircle />} label={t('examList.done')} value={stats?.attempts || 0} />
+        <MetricCard icon={<FiTrendingUp />} label={t('history.avgScore')} value={stats?.avgScore ? `${stats.avgScore}` : '--'} />
         <MetricCard
           icon={<FiClock />}
-          label="7 ngày gần đây"
+          label={t('roadmap.recent7Days')}
           value={stats?.weeklyChange ? `${stats.weeklyChange > 0 ? '+' : ''}${stats.weeklyChange}` : '--'}
         />
       </div>
@@ -351,7 +354,7 @@ function RoadmapFocusPanel({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
         <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-black text-violet-800">
-            <FiTarget /> Hôm nay cần làm
+            <FiTarget /> {t('roadmap.todayTasks')}
           </div>
           {today ? (
             <div>
@@ -370,19 +373,19 @@ function RoadmapFocusPanel({
                   href={`/exam/${today.targetExam.id}`}
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white"
                 >
-                  <FiPlayCircle /> Làm đề gợi ý
+                  <FiPlayCircle /> {t('roadmap.suggestedExam')}
                 </Link>
               )}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-500">Làm ít nhất 1 đề để hệ thống tạo việc học hôm nay.</p>
+            <p className="text-sm font-medium text-slate-500">{t('roadmap.needOneExam')}</p>
           )}
         </div>
 
         <div className="rounded-2xl border border-slate-100 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-black text-slate-900">
-              <FiBookOpen className="text-indigo-600" /> Kế hoạch 7 ngày
+              <FiBookOpen className="text-indigo-600" /> {t('roadmap.plan7Days')}
             </h3>
             {studyPlan && <span className="text-xs font-bold text-slate-400">{studyPlan.startsAt} - {studyPlan.endsAt}</span>}
           </div>
@@ -391,47 +394,47 @@ function RoadmapFocusPanel({
               {studyPlan.days.map((day) => <MiniStudyDay key={day.day} day={day} />)}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-500">Chưa có kế hoạch 7 ngày.</p>
+            <p className="text-sm font-medium text-slate-500">{t('roadmap.noPlan')}</p>
           )}
         </div>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
-          <h3 className="mb-3 text-sm font-black text-amber-900">Chủ đề yếu cần ưu tiên</h3>
+          <h3 className="mb-3 text-sm font-black text-amber-900">{t('roadmap.weakTopics')}</h3>
           {weakTopics.length ? (
             <div className="space-y-2">
               {weakTopics.map((topic) => (
                 <div key={topic.topicId} className="rounded-xl bg-white p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-black text-slate-900">{topic.topicName}</span>
-                    <span className="text-xs font-black text-rose-600">{Math.round(topic.errorRate)}% sai</span>
+                    <span className="text-xs font-black text-rose-600">{format('roadmap.errorRate', { rate: Math.round(topic.errorRate) })}</span>
                   </div>
-                  <p className="mt-1 text-xs font-medium text-slate-500">{topic.advice || 'Ôn lại lý thuyết và luyện thêm câu cùng chủ đề.'}</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{topic.advice || t('roadmap.defaultAdvice')}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-500">Chưa đủ dữ liệu chủ đề yếu cho môn này.</p>
+            <p className="text-sm font-medium text-slate-500">{t('roadmap.noWeakTopics')}</p>
           )}
         </div>
 
         <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
-          <h3 className="mb-3 text-sm font-black text-indigo-900">Đề nên làm tiếp</h3>
+          <h3 className="mb-3 text-sm font-black text-indigo-900">{t('roadmap.nextExams')}</h3>
           {recommendations.length ? (
             <div className="space-y-2">
               {recommendations.map((exam) => (
                 <Link key={exam.examId} href={`/exam/${exam.examId}`} className="block rounded-xl bg-white p-3 transition hover:-translate-y-0.5 hover:shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-black text-slate-900">{exam.examTitle}</span>
-                    <span className="text-xs font-black text-indigo-600">{exam.totalQuestions} câu</span>
+                    <span className="text-xs font-black text-indigo-600">{format('examList.questions', { count: exam.totalQuestions })}</span>
                   </div>
                   <p className="mt-1 text-xs font-medium text-slate-500">{exam.reason?.text}</p>
                 </Link>
               ))}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-500">Chưa có đề gợi ý riêng cho môn này.</p>
+            <p className="text-sm font-medium text-slate-500">{t('roadmap.noRecommendations')}</p>
           )}
         </div>
       </div>
@@ -450,6 +453,7 @@ function MetricCard({ icon, label, value }: { icon: ReactNode; label: string; va
 }
 
 function MiniStudyDay({ day }: { day: StudyPlanDay }) {
+  const { t, format } = useLanguage();
   const tone = day.isToday
     ? 'border-violet-300 bg-violet-50 text-violet-800'
     : day.isPast
@@ -459,11 +463,11 @@ function MiniStudyDay({ day }: { day: StudyPlanDay }) {
   return (
     <div className={`min-h-[118px] rounded-xl border p-3 ${tone}`}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-black">Ngày {day.day}</span>
-        {day.isToday && <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-black text-white">Hôm nay</span>}
+        <span className="text-xs font-black">{format('roadmap.day', { count: day.day })}</span>
+        {day.isToday && <span className="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-black text-white">{t('roadmap.today')}</span>}
       </div>
       <p className="line-clamp-2 text-xs font-black leading-snug">{day.title}</p>
-      <p className="mt-2 text-[11px] font-medium opacity-70">{day.estimatedMinutes} phút</p>
+      <p className="mt-2 text-[11px] font-medium opacity-70">{format('roadmap.minutes', { count: day.estimatedMinutes })}</p>
     </div>
   );
 }

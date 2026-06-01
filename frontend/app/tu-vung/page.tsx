@@ -8,6 +8,7 @@ import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import axios from '@/lib/utils/axios';
 import VocabularyLearningPanel from '@/components/vocabulary/VocabularyLearningPanel';
 import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface VocabItem {
   id: number;
@@ -23,15 +24,24 @@ interface VocabItem {
   vip_tier?: string;
 }
 
-const SUBJECT_META: Record<string, { label: string; icon: string; color: string }> = {
-  'toan':            { label: 'Toán học',        icon: '📐', color: 'from-blue-500 to-indigo-600' },
-  'vat-ly':          { label: 'Vật Lý',          icon: '⚡', color: 'from-yellow-500 to-orange-600' },
-  'hoa-hoc':         { label: 'Hóa Học',         icon: '🧪', color: 'from-green-500 to-teal-600' },
-  'tieng-trung-xh':  { label: 'Tiếng Trung XH',  icon: '📖', color: 'from-red-500 to-rose-600' },
-  'tieng-trung-tn':  { label: 'Tiếng Trung TN',  icon: '🔬', color: 'from-purple-500 to-violet-600' },
+const SUBJECT_META: Record<string, { icon: string; color: string }> = {
+  'toan':            { icon: '📐', color: 'from-blue-500 to-indigo-600' },
+  'vat-ly':          { icon: '⚡', color: 'from-yellow-500 to-orange-600' },
+  'hoa-hoc':         { icon: '🧪', color: 'from-green-500 to-teal-600' },
+  'tieng-trung-xh':  { icon: '📖', color: 'from-red-500 to-rose-600' },
+  'tieng-trung-tn':  { icon: '🔬', color: 'from-purple-500 to-violet-600' },
+};
+
+const SUBJECT_LABEL_KEYS: Record<string, string> = {
+  toan: 'subject.math',
+  'vat-ly': 'subject.physics',
+  'hoa-hoc': 'subject.chemistry',
+  'tieng-trung-xh': 'subject.chineseSoc',
+  'tieng-trung-tn': 'subject.chineseSci',
 };
 
 function VocabularyContent() {
+  const { t, format } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const subjectParam = searchParams.get('subject');
@@ -79,7 +89,11 @@ function VocabularyContent() {
     setSelectedTopic(topic); setSelectedSubject(subject); setSearchQuery('');
   };
   const closeTopic = () => { setSelectedTopic(''); setWords([]); setSearchQuery(''); };
-  const getMeta = (subject: string) => SUBJECT_META[subject] || { label: subject, icon: '📚', color: 'from-gray-500 to-gray-600' };
+  const getMeta = (subject: string) => SUBJECT_META[subject] || { icon: '📚', color: 'from-gray-500 to-gray-600' };
+  const subjectLabel = (subject: string) => {
+    const key = SUBJECT_LABEL_KEYS[subject];
+    return key ? t(key) : subject;
+  };
 
   const exportPdf = () => {
     const params = new URLSearchParams();
@@ -118,7 +132,7 @@ function VocabularyContent() {
     return acc;
   }, {} as Record<string, typeof topics>);
 
-  const activeMeta = isStrictSubject ? getMeta(subjectParam) : null;
+  const activeMeta = isStrictSubject ? getMeta(subjectParam || '') : null;
 
   const page = (
     <div className={isStrictSubject ? '' : 'min-h-screen bg-gray-50'}>
@@ -131,19 +145,19 @@ function VocabularyContent() {
             className="flex items-center gap-2 text-gray-600 hover:text-cyan-600 font-medium transition-colors py-2"
           >
             <FiChevronLeft size={22} />
-            <span className="hidden sm:inline">Quay lại</span>
+            <span className="hidden sm:inline">{t('vocab.back')}</span>
           </button>
           <div className="pointer-events-none min-w-0 flex-1 px-2 text-center text-base font-black text-gray-800 sm:text-xl">
             {activeMeta ? (
               <>
                 <span>{activeMeta.icon}</span>
                 <span className={`truncate bg-gradient-to-r ${activeMeta.color} bg-clip-text text-transparent`}>
-                  Từ Vựng {activeMeta.label}
+                  {format('course.title.vocabulary', { subject: subjectLabel(subjectParam || '') })}
                 </span>
               </>
             ) : (
               <span className="inline-flex max-w-full items-center justify-center gap-2 truncate bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-                <FiBook /> Từ Vựng Chuyên Ngành
+                <FiBook /> {t('vocab.courseTitle')}
               </span>
             )}
           </div>
@@ -165,7 +179,7 @@ function VocabularyContent() {
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold text-gray-900 sm:text-xl">{selectedTopic}</h2>
                   <p className="text-sm text-cyan-600 font-medium flex items-center gap-1 mt-0.5">
-                    {getMeta(selectedSubject).icon} {getMeta(selectedSubject).label}
+                    {getMeta(selectedSubject).icon} {subjectLabel(selectedSubject)}
                   </p>
                 </div>
               </div>
@@ -175,7 +189,7 @@ function VocabularyContent() {
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 
                     type="text" 
-                    placeholder="Tìm từ vựng..." 
+                    placeholder={t('vocab.searchWords')}
                     value={searchQuery} 
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:border-cyan-400 focus:bg-white outline-none text-sm transition-all shadow-inner" 
@@ -189,9 +203,9 @@ function VocabularyContent() {
                 <button
                   onClick={exportPdf}
                   className="px-4 py-2.5 bg-gray-900 text-white rounded-xl font-medium text-sm hover:bg-gray-800 transition-colors shadow-sm shrink-0"
-                  title="Xuất danh sách từ vựng ra PDF"
+                  title={t('vocab.exportPdfTitle')}
                 >
-                  📄 Xuất PDF
+                  📄 {t('vocab.exportPdf')}
                 </button>
               </div>
             </div>
@@ -208,15 +222,15 @@ function VocabularyContent() {
                   <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <FiSearch className="text-gray-400 text-2xl" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">Không tìm thấy từ vựng</h3>
-                  <p className="text-gray-500">Hãy thử tìm kiếm bằng một từ khóa khác.</p>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">{t('vocab.noWordsFound')}</h3>
+                  <p className="text-gray-500">{t('vocab.tryAnotherKeyword')}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between px-2">
-                    <h3 className="font-bold text-gray-800 text-lg">Danh sách từ vựng</h3>
+                    <h3 className="font-bold text-gray-800 text-lg">{t('vocab.wordList')}</h3>
                     <span className="text-sm font-medium px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full">
-                      {words.length} từ
+                      {format('vocab.wordsCount', { count: words.length })}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -227,7 +241,7 @@ function VocabularyContent() {
                       >
                         <div className="absolute top-0 right-0 p-3 flex gap-2">
                           {word.is_premium && (
-                            <span className="inline-flex items-center justify-center w-6 h-6 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm" title="Nội dung VIP">
+                            <span className="inline-flex items-center justify-center w-6 h-6 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm" title={t('vocab.vipContent')}>
                               <FaCrown size={12} className="text-white" />
                             </span>
                           )}
@@ -286,7 +300,7 @@ function VocabularyContent() {
                   onClick={() => setSelectedSubject('')}
                   className={`shrink-0 px-4 sm:px-5 py-2.5 rounded-xl border-2 text-sm font-bold transition-all shadow-sm ${!selectedSubject ? 'border-cyan-500 bg-cyan-50 text-cyan-700 sm:scale-105' : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
                 >
-                  Tất cả môn
+                  {t('vocab.allSubjects')}
                 </button>
                 {Object.entries(SUBJECT_META).map(([key, meta]) => (
                   <button 
@@ -294,7 +308,7 @@ function VocabularyContent() {
                     onClick={() => setSelectedSubject(selectedSubject === key ? '' : key)}
                     className={`shrink-0 px-4 sm:px-5 py-2.5 rounded-xl border-2 text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${selectedSubject === key ? `border-transparent bg-gradient-to-r ${meta.color} text-white sm:scale-105` : 'border-white bg-white text-gray-600 hover:border-gray-200 hover:scale-105'}`}
                   >
-                    <span className="text-lg">{meta.icon}</span> {meta.label}
+                    <span className="text-lg">{meta.icon}</span> {subjectLabel(key)}
                   </button>
                 ))}
               </div>
@@ -307,8 +321,8 @@ function VocabularyContent() {
                 <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
                   <FiBook className="text-gray-300 text-4xl" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Chưa có từ vựng nào</h3>
-                <p className="text-gray-500">Hệ thống đang được cập nhật thêm từ vựng cho môn học này. Bạn quay lại sau nhé!</p>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">{t('vocab.noWords')}</h3>
+                <p className="text-gray-500">{t('vocab.updatingWords')}</p>
               </div>
             ) : (
               <div className="space-y-12">
@@ -321,27 +335,27 @@ function VocabularyContent() {
                           {meta.icon}
                         </div>
                         <div>
-                          <h2 className="text-2xl font-black text-gray-900">{meta.label}</h2>
-                          <p className="text-gray-500 text-sm mt-1">{subjectTopics.length} chủ đề từ vựng</p>
+                          <h2 className="text-2xl font-black text-gray-900">{subjectLabel(subject)}</h2>
+                          <p className="text-gray-500 text-sm mt-1">{format('vocab.topicsCount', { count: subjectTopics.length })}</p>
                         </div>
                       </div>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {subjectTopics.map(t => (
-                          <button 
-                            key={t.topic} 
-                            onClick={() => openTopic(t.topic, t.subject)}
+                        {subjectTopics.map(topicItem => (
+                          <button
+                            key={topicItem.topic}
+                            onClick={() => openTopic(topicItem.topic, topicItem.subject)}
                             className="group relative bg-gray-50 rounded-2xl p-5 border-2 border-transparent hover:border-cyan-400 hover:bg-white hover:shadow-xl transition-all text-left overflow-hidden flex flex-col h-full"
                           >
                             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/40 to-transparent rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-500" />
                             
                             <h3 className="font-bold text-gray-900 text-lg mb-4 pr-6 leading-tight relative z-10">
-                              {t.topic}
+                              {topicItem.topic}
                             </h3>
                             
                             <div className="mt-auto flex items-center justify-between relative z-10">
                               <span className="text-sm text-cyan-600 font-bold group-hover:text-cyan-700">
-                                Bắt đầu học
+                                {t('vocab.startLearning')}
                               </span>
                               <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors">
                                 <FiChevronRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
@@ -364,10 +378,10 @@ function VocabularyContent() {
   if (isStrictSubject) {
     return (
       <SubjectStudyShell
-        title={activeMeta ? `Từ Vựng ${activeMeta.label}` : 'Từ Vựng'}
+        title={activeMeta ? format('course.title.vocabulary', { subject: subjectLabel(subjectParam || '') }) : t('vocab.courseTitle')}
         subjectSlug={subjectParam}
         activeSection="tu-vung"
-        searchPlaceholder="Tìm từ vựng..."
+        searchPlaceholder={t('vocab.searchWords')}
       >
         {page}
       </SubjectStudyShell>

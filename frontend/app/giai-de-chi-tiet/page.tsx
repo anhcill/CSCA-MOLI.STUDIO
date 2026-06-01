@@ -15,10 +15,22 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import { isPremiumActive } from '@/lib/utils/permissions';
 import { getExamSubjectCode, getExamSubjectSlug, normalizeContentSubject } from '@/lib/utils/subjectScope';
+import { useLanguage } from '@/context/LanguageContext';
 import Link from 'next/link';
+
+const SUBJECT_CODE_LABEL_KEYS: Record<string, string> = {
+  MATH: 'subject.math',
+  PHYSICS: 'subject.physics',
+  CHEMISTRY: 'subject.chemistry',
+  CHINESE: 'subject.chineseSoc',
+  CHINESE_SOC: 'subject.chineseSoc',
+  CHINESE_SCI: 'subject.chineseSci',
+};
 
 // ── Video Modal ────────────────────────────────────────────────────────────────
 function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: string; onClose: () => void }) {
+  const { t } = useLanguage();
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', handleKey);
@@ -55,10 +67,10 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
           />
         </div>
         <div className="p-4 bg-gray-950 border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-3">
-          <span className="text-gray-400 text-sm">Bạn chưa hiểu đoạn nào? Hãy hỏi cố vấn ngay nhé.</span>
+          <span className="text-gray-400 text-sm">{t('solutions.askAdvisorHint')}</span>
           <Link href="/hoi-dap"
             className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-orange-500/30 transition-all hover:-translate-y-0.5">
-            <FiMessageSquare /> Hỏi Cố Vấn VIP
+            <FiMessageSquare /> {t('solutions.askVipAdvisor')}
           </Link>
         </div>
       </div>
@@ -68,6 +80,7 @@ function VideoModal({ videoUrl, title, onClose }: { videoUrl: string; title: str
 
 // ── Upsell Modal ───────────────────────────────────────────────────────────────
 function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () => void }) {
+  const { t } = useLanguage();
   const isPre = tier === 'premium';
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
@@ -76,22 +89,22 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
         <div className={`p-8 text-center ${isPre ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-indigo-600 to-purple-700'}`}>
           <div className="text-5xl mb-3">{isPre ? '👑' : '🔒'}</div>
           <h2 className="text-xl font-black text-white mb-1">
-            {isPre ? 'Cần tài khoản Pre' : 'Video giải đề chỉ dành cho Pre'}
+            {isPre ? t('solutions.needPreTitle') : t('solutions.preVideoTitle')}
           </h2>
           <p className="text-white/80 text-sm">
-            {isPre ? 'Video giải đề Pre độc quyền — chỉ dành cho tài khoản Pre.' : 'Video giải đề này dành cho thành viên Pre. VIP chỉ có AI phân tích.'}
+            {isPre ? t('solutions.preVideoExclusive') : t('solutions.videoPreOnly')}
           </p>
         </div>
         <div className="p-6">
           <div className="space-y-2.5 mb-6">
             {(isPre ? [
-              'Xem toàn bộ video giải đề Pre',
-              'Chat 1-1 với cố vấn chuyên gia',
-              'Phân tích AI chi tiết từng câu',
+              t('solutions.featureAllVideos'),
+              t('solutions.featureAdvisor'),
+              t('solutions.featureAiAnalysis'),
             ] : [
-              'Phân tích AI chi tiết từng câu',
-              'Truy cập đề thi cao cấp không giới hạn',
-              'Nâng cấp Pre để xem video giải đề',
+              t('solutions.featureAiAnalysis'),
+              t('solutions.featureUnlimited'),
+              t('solutions.featureUpgradeForVideo'),
             ]).map((f, i) => (
               <div key={i} className="flex items-center gap-2.5 text-sm text-gray-700">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${isPre ? 'bg-amber-500' : 'bg-indigo-500'}`}>✓</div>
@@ -101,9 +114,9 @@ function UpsellModal({ tier, onClose }: { tier: 'vip' | 'premium'; onClose: () =
           </div>
           <Link href="/vip"
             className={`block text-center py-3.5 font-bold rounded-xl text-white text-sm transition-all hover:-translate-y-0.5 shadow-lg ${isPre ? 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30' : 'bg-gradient-to-r from-indigo-600 to-purple-700 shadow-indigo-500/30'}`}>
-            {isPre ? '👑 Nâng cấp Pre ngay' : '👑 Nâng cấp Pre ngay'}
+            {t('solutions.upgradePreNow')}
           </Link>
-          <button onClick={onClose} className="w-full mt-3 py-2.5 text-gray-500 text-sm hover:text-gray-700 font-medium">Để sau</button>
+          <button onClick={onClose} className="w-full mt-3 py-2.5 text-gray-500 text-sm hover:text-gray-700 font-medium">{t('common.later')}</button>
         </div>
       </div>
     </div>
@@ -120,10 +133,13 @@ function ExamCard({
   user: any;
   onLocked: (tier: 'vip' | 'premium') => void;
 }) {
+  const { t, format } = useLanguage();
   const hasVideo = !!exam.solution_video_url;
   // Video giải đề = Premium only (cần kiểm tra expiry date)
   const allowed = isAdmin || isPremiumActive(user);
   const neededTier = 'premium';
+  const subjectKey = SUBJECT_CODE_LABEL_KEYS[(exam.subject_code || '').toUpperCase()];
+  const subjectLabel = subjectKey ? t(subjectKey) : exam.subject_name || exam.subject_code || t('common.subject');
 
   const tierBadge = exam.vip_tier === 'premium'
     ? <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold rounded-lg"><FaCrown size={8} /> Pre</span>
@@ -146,7 +162,7 @@ function ExamCard({
           <button
             onClick={() => onLocked(neededTier)}
             className={`px-5 py-2.5 text-white text-sm font-bold rounded-xl shadow-md transition-transform hover:scale-105 ${neededTier === 'premium' ? 'bg-gradient-to-r from-amber-500 to-orange-600' : 'bg-gradient-to-r from-indigo-500 to-purple-600'}`}>
-            {neededTier === 'premium' ? 'Nâng cấp Pre' : 'Nâng cấp VIP'}
+            {neededTier === 'premium' ? t('solutions.upgrade') : t('solutions.upgradeVip')}
           </button>
         </div>
       )}
@@ -156,11 +172,11 @@ function ExamCard({
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="px-2.5 py-0.5 bg-purple-50 text-purple-700 text-xs font-bold rounded-lg">
-              {exam.subject_name || exam.subject_code || 'Môn học'}
+              {subjectLabel}
             </span>
             {exam.shuffle_mode && (
               <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-lg">
-                <FiShuffle size={9} /> Xáo trộn
+                <FiShuffle size={9} /> {t('examList.shuffle')}
               </span>
             )}
             {tierBadge}
@@ -179,8 +195,8 @@ function ExamCard({
 
         {/* Meta */}
         <div className="flex items-center gap-4 mb-4 text-xs text-gray-400">
-          <span className="flex items-center gap-1.5"><FiClock size={11} /> {exam.duration} phút</span>
-          <span className="flex items-center gap-1.5"><FiAward size={11} /> {exam.total_questions || exam.question_count || 0} câu</span>
+          <span className="flex items-center gap-1.5"><FiClock size={11} /> {format('examList.minutes', { count: exam.duration })}</span>
+          <span className="flex items-center gap-1.5"><FiAward size={11} /> {format('examList.questions', { count: exam.total_questions || exam.question_count || 0 })}</span>
         </div>
 
         {/* Actions */}
@@ -190,7 +206,7 @@ function ExamCard({
               <button
                 onClick={() => onPlay(exam)}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-bold rounded-xl hover:from-purple-700 hover:to-violet-700 transition-all shadow-sm shadow-purple-500/20">
-                <FiPlay size={14} /> Xem Video
+                <FiPlay size={14} /> {t('solutions.watchVideo')}
               </button>
             ) : (
               <button
@@ -205,18 +221,18 @@ function ExamCard({
             )
           ) : (
             <div className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gray-50 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed border border-dashed border-gray-200">
-              <FiVideo size={13} /> Chưa có video
+              <FiVideo size={13} /> {t('solutions.noVideo')}
             </div>
           )}
           {isAdmin ? (
             <Link href={`/admin/exams/${exam.id}/edit`}
               className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
-              Sửa
+              {t('common.edit')}
             </Link>
           ) : (
             <Link href={`/exam/${exam.id}`}
               className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
-              Làm bài <FiChevronRight size={14} />
+              {t('examList.startExam')} <FiChevronRight size={14} />
             </Link>
           )}
         </div>
@@ -227,6 +243,7 @@ function ExamCard({
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function GiaiDeChiTietPage() {
+  const { t, format } = useLanguage();
   const { user } = useAuthStore();
   const isAdmin = hasPermission(user, 'exams.manage');
   const searchParams = useSearchParams() as unknown as URLSearchParams;
@@ -311,10 +328,11 @@ export default function GiaiDeChiTietPage() {
     if (isAdmin || isPremiumActive(user)) return filtered;
     return filtered.filter(e => !e.solution_video_url);
   }, [filtered, user, isAdmin]);
+  const pageTitle = t('course.title.solutions');
 
   const page = (
       <div className={isStrictSubject ? '' : 'min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50/20'}>
-        {!isStrictSubject && <ScopedStudyTopBar title="Giải Đề Chi Tiết" subject={activeSubject} fallbackIcon="🎥" />}
+        {!isStrictSubject && <ScopedStudyTopBar title={pageTitle} subject={activeSubject} fallbackIcon="🎥" />}
 
         {/* ── Hero ──────────────────────────────────────────────────── */}
         {!isStrictSubject && (
@@ -330,20 +348,20 @@ export default function GiaiDeChiTietPage() {
               </div>
               <div className="flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight mb-2">
-                  Giải Đề Chi Tiết
+                  {pageTitle}
                 </h1>
                 <p className="text-purple-100 text-sm sm:text-base max-w-xl">
-                  Xem video hướng dẫn giải chi tiết từng đề thi. Hướng dẫn từng bước, phương pháp giải nhanh.
+                  {t('solutions.desc')}
                   {videosOnly.length > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold text-white align-middle">
-                      {videosOnly.length} video
+                      {format('solutions.videoBadge', { count: videosOnly.length })}
                     </span>
                   )}
                 </p>
                 <div className="mt-5">
                   <Link href="/hoi-dap"
                     className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg transition-transform hover:-translate-y-1">
-                    <FiMessageSquare /> Nhắn tin Hỏi Đáp 1-1 với Cố Vấn
+                    <FiMessageSquare /> {t('solutions.askAdvisor')}
                   </Link>
                 </div>
               </div>
@@ -360,12 +378,12 @@ export default function GiaiDeChiTietPage() {
                 <FiZap className="text-indigo-600" size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-gray-900 text-sm">Có {lockedCount} video giải đề cần nâng cấp để xem</p>
-                <p className="text-gray-500 text-xs mt-0.5">Nâng cấp gói Pre để mở khóa video hướng dẫn giải đề</p>
+                <p className="font-bold text-gray-900 text-sm">{format('solutions.lockedVideos', { count: lockedCount })}</p>
+                <p className="text-gray-500 text-xs mt-0.5">{t('solutions.upgradePre')}</p>
               </div>
               <Link href="/vip"
                 className="shrink-0 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm">
-                Nâng cấp
+                {t('solutions.upgrade')}
               </Link>
             </div>
           </div>
@@ -384,7 +402,7 @@ export default function GiaiDeChiTietPage() {
                     ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                     : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
                 }`}>
-                Tất cả
+                {t('common.all')}
               </button>
               {subjects.map(s => (
                 <button key={s.code} onClick={() => handleSubjectChange(s.code)}
@@ -393,7 +411,7 @@ export default function GiaiDeChiTietPage() {
                       ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:text-purple-700'
                   }`}>
-                  {s.name}
+                  {t(SUBJECT_CODE_LABEL_KEYS[s.code] || s.name)}
                 </button>
               ))}
             </div>
@@ -401,7 +419,7 @@ export default function GiaiDeChiTietPage() {
 
             <div className="relative sm:ml-auto sm:w-64">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-              <input type="text" placeholder="Tìm kiếm đề..."
+              <input type="text" placeholder={t('solutions.searchExam')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
@@ -410,12 +428,12 @@ export default function GiaiDeChiTietPage() {
 
           {/* Stats */}
           <div className="flex items-center gap-4 mb-6 text-xs text-gray-500">
-            <span className="font-medium">Tổng cộng: <strong className="text-gray-700">{visibleExams.length} đề</strong></span>
+            <span className="font-medium">{format('solutions.totalCount', { count: visibleExams.length })}</span>
             {videosOnly.length > 0 && (isAdmin || isPremiumActive(user)) && (
-              <span className="font-medium">Có video: <strong className="text-purple-600">{videosOnly.length} đề</strong></span>
+              <span className="font-medium text-purple-600">{format('solutions.videoCount', { count: videosOnly.length })}</span>
             )}
             {lockedCount > 0 && (
-              <span className="font-medium">Đã khóa: <strong className="text-amber-600">{lockedCount} video</strong></span>
+              <span className="font-medium text-amber-600">{format('solutions.lockedCount', { count: lockedCount })}</span>
             )}
           </div>
 
@@ -432,7 +450,7 @@ export default function GiaiDeChiTietPage() {
                 <FiVideo className="text-purple-400 text-2xl" />
               </div>
               <p className="text-gray-500 font-medium">
-                {search ? 'Không tìm thấy đề thi phù hợp' : 'Chưa có đề thi nào'}
+                {search ? t('solutions.noMatch') : t('solutions.noExams')}
               </p>
             </div>
           ) : (
@@ -470,10 +488,10 @@ export default function GiaiDeChiTietPage() {
     return (
       <>
         <SubjectStudyShell
-          title="Giải Đề Chi Tiết"
+          title={pageTitle}
           subjectSlug={activeSubject}
           activeSection="giai-de-chi-tiet"
-          searchPlaceholder="Tìm kiếm đề..."
+          searchPlaceholder={t('solutions.searchExam')}
         >
           {page}
         </SubjectStudyShell>
