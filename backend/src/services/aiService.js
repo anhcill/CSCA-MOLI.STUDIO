@@ -80,7 +80,12 @@ async function callBeeknoeeMessages(messages, options = {}) {
 
   await waitBetweenRequests();
 
-  const { maxTokens = BEE.maxTokens, temperature = BEE.temperature, model = BEE.model } = options;
+  const {
+    maxTokens = BEE.maxTokens,
+    temperature = BEE.temperature,
+    model = BEE.model,
+    timeout = BEE.timeout,
+  } = options;
   const apiKey = getNextKey();
 
   if (!apiKey) {
@@ -100,7 +105,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
         `${BEE.baseUrl}/chat/completions`,
         payload,
         {
-          timeout: BEE.timeout,
+          timeout,
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,

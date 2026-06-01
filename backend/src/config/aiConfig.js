@@ -48,6 +48,7 @@ const config = {
     importFallbackModel: process.env.BEEKNOEE_IMPORT_FALLBACK_MODEL || 'grok-4-1-fast-reasoning',
     baseUrl: (process.env.BEEKNOEE_BASE_URL || 'https://platform.beeknoee.com/api/v1').replace(/\/+$/, ''),
     timeout: intEnv('BEEKNOEE_TIMEOUT_MS', 90000),
+    ocrTimeout: intEnv('BEEKNOEE_OCR_TIMEOUT_MS', intEnv('BEEKNOEE_TIMEOUT_MS', 90000)),
     maxTokens: intEnv('BEEKNOEE_MAX_TOKENS', 4000),
     examAnalysisMaxTokens: intEnv('AI_EXAM_ANALYSIS_MAX_TOKENS', 6000),
     explanationMaxTokens: intEnv('AI_EXPLANATION_MAX_TOKENS', 1800),

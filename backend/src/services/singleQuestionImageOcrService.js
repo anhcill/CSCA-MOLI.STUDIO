@@ -27,6 +27,8 @@ Rules:
 - Preserve question number, A/B/C/D options, answer marker if visible, and explanation markers like 解析, 答案解析, 解答, 说明, Lời giải, Giải thích.
 - Preserve math as clean text/LaTeX where visible: fractions, roots, powers, vectors, log/trig/lim/sum/int, systems, intervals.
 - If the image contains a stacked fraction, write it as \\frac{numerator}{denominator}.
+- If the image contains a brace system of equations, write it as \\begin{cases} row1 \\\\ row2 \\end{cases}.
+- Use single LaTeX backslashes like \\frac and \\( ... \\). Do not double-escape as \\\\frac or \\\\(.
 - If text color indicates the correct answer and the letter is visible, include a line like "答案: B". If color is ambiguous, do not guess.
 - Keep line breaks between question, options, and explanation.`;
 
@@ -44,7 +46,12 @@ Rules:
 async function extractSingleQuestionImageOcrText(file) {
   const raw = await aiService.callBeeknoeeMessages(
     buildSingleQuestionImageOcrMessages(file),
-    { temperature: 0.05, maxTokens: IMAGE_OCR_MAX_TOKENS, model: BEE.ocrModel },
+    {
+      temperature: 0.05,
+      maxTokens: IMAGE_OCR_MAX_TOKENS,
+      model: BEE.ocrModel,
+      timeout: BEE.ocrTimeout,
+    },
   );
 
   return cleanOcrText(raw);

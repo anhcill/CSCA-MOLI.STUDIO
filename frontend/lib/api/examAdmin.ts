@@ -177,7 +177,7 @@ export const examAdminApi = {
         formData.append('image', file);
         const response = await axios.post('/admin/exams/import/image/ocr', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 120000,
+            timeout: 150000,
         });
         return response.data;
     },
