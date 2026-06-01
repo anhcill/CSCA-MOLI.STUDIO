@@ -92,7 +92,9 @@ body {
   }
 
 /* Broad dark-mode compatibility for legacy Tailwind utility classes. */
-:where(.dark) body {
+:where(.dark) body,
+:where(.dark) [class~="bg-[#f8fafc]"],
+:where(.dark) [class~="bg-[#fbfbff]"] {
   background-color: rgb(2 6 23);
 }
 
@@ -101,8 +103,18 @@ body {
 :where(.dark) .bg-white\/95,
 :where(.dark) .bg-white\/90,
 :where(.dark) .bg-white\/80,
+:where(.dark) .bg-white\/75,
 :where(.dark) .bg-slate-50,
-:where(.dark) .bg-gray-50 {
+:where(.dark) .bg-slate-50\/80,
+:where(.dark) .bg-slate-50\/70,
+:where(.dark) .bg-slate-50\/60,
+:where(.dark) .bg-slate-50\/50,
+:where(.dark) .bg-gray-50,
+:where(.dark) .bg-gray-50\/80,
+:where(.dark) .bg-gray-50\/70,
+:where(.dark) .bg-gray-50\/60,
+:where(.dark) .bg-gray-50\/50,
+:where(.dark) .bg-gray-50\/40 {
   background-color: rgb(15 23 42);
 }
 
@@ -111,13 +123,27 @@ body {
 :where(.dark) .bg-white\/50,
 :where(.dark) .bg-white\/30,
 :where(.dark) .bg-white\/20,
+:where(.dark) .bg-white\/10,
+:where(.dark) .bg-white\/5,
 :where(.dark) .bg-slate-100,
+:where(.dark) .bg-slate-100\/80,
+:where(.dark) .bg-slate-100\/70,
+:where(.dark) .bg-slate-100\/60,
+:where(.dark) .bg-slate-100\/50,
 :where(.dark) .bg-gray-100 {
   background-color: rgb(30 41 59);
 }
 
 :where(.dark) .bg-slate-200,
-:where(.dark) .bg-gray-200 {
+:where(.dark) .bg-slate-200\/80,
+:where(.dark) .bg-slate-200\/70,
+:where(.dark) .bg-slate-200\/60,
+:where(.dark) .bg-slate-200\/50,
+:where(.dark) .bg-gray-200,
+:where(.dark) .bg-gray-200\/80,
+:where(.dark) .bg-gray-200\/70,
+:where(.dark) .bg-gray-200\/60,
+:where(.dark) .bg-gray-200\/50 {
   background-color: rgb(51 65 85);
 }
 
@@ -125,7 +151,12 @@ body {
 :where(.dark) .bg-cyan-50,
 :where(.dark) .bg-indigo-50,
 :where(.dark) .bg-purple-50,
-:where(.dark) .bg-violet-50 {
+:where(.dark) .bg-violet-50,
+:where(.dark) .bg-blue-100,
+:where(.dark) .bg-cyan-100,
+:where(.dark) .bg-indigo-100,
+:where(.dark) .bg-purple-100,
+:where(.dark) .bg-violet-100 {
   background-color: rgb(30 41 59);
 }
 
@@ -135,7 +166,11 @@ body {
 }
 
 :where(.dark) .bg-amber-50,
-:where(.dark) .bg-yellow-50 {
+:where(.dark) .bg-yellow-50,
+:where(.dark) .bg-orange-50,
+:where(.dark) .bg-amber-100,
+:where(.dark) .bg-yellow-100,
+:where(.dark) .bg-orange-100 {
   background-color: rgb(120 53 15 / 0.24);
 }
 
@@ -146,12 +181,30 @@ body {
 
 :where(.dark) .from-white,
 :where(.dark) .from-slate-50,
+:where(.dark) .from-slate-100,
 :where(.dark) .from-gray-50,
+:where(.dark) .from-gray-100,
 :where(.dark) .from-blue-50,
+:where(.dark) .from-blue-100,
 :where(.dark) .from-cyan-50,
+:where(.dark) .from-cyan-100,
 :where(.dark) .from-indigo-50,
+:where(.dark) .from-indigo-100,
 :where(.dark) .from-purple-50,
-:where(.dark) .from-violet-50 {
+:where(.dark) .from-purple-100,
+:where(.dark) .from-violet-50,
+:where(.dark) .from-violet-100,
+:where(.dark) .from-amber-50,
+:where(.dark) .from-amber-100,
+:where(.dark) .from-yellow-50,
+:where(.dark) .from-yellow-100,
+:where(.dark) .from-orange-50,
+:where(.dark) .from-orange-100,
+:where(.dark) .from-rose-50,
+:where(.dark) .from-red-50,
+:where(.dark) .from-pink-50,
+:where(.dark) .from-emerald-50,
+:where(.dark) .from-green-50 {
   --tw-gradient-from: rgb(15 23 42) var(--tw-gradient-from-position);
   --tw-gradient-to: rgb(15 23 42 / 0) var(--tw-gradient-to-position);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
@@ -159,23 +212,59 @@ body {
 
 :where(.dark) .to-white,
 :where(.dark) .to-slate-50,
+:where(.dark) .to-slate-100,
 :where(.dark) .to-gray-50,
+:where(.dark) .to-gray-100,
 :where(.dark) .to-blue-50,
+:where(.dark) .to-blue-100,
 :where(.dark) .to-cyan-50,
+:where(.dark) .to-cyan-100,
 :where(.dark) .to-indigo-50,
+:where(.dark) .to-indigo-100,
 :where(.dark) .to-purple-50,
-:where(.dark) .to-violet-50 {
+:where(.dark) .to-purple-100,
+:where(.dark) .to-violet-50,
+:where(.dark) .to-violet-100,
+:where(.dark) .to-amber-50,
+:where(.dark) .to-amber-100,
+:where(.dark) .to-yellow-50,
+:where(.dark) .to-yellow-100,
+:where(.dark) .to-orange-50,
+:where(.dark) .to-orange-100,
+:where(.dark) .to-rose-50,
+:where(.dark) .to-red-50,
+:where(.dark) .to-pink-50,
+:where(.dark) .to-emerald-50,
+:where(.dark) .to-green-50 {
   --tw-gradient-to: rgb(30 41 59) var(--tw-gradient-to-position);
 }
 
 :where(.dark) .via-white,
 :where(.dark) .via-slate-50,
+:where(.dark) .via-slate-100,
 :where(.dark) .via-gray-50,
+:where(.dark) .via-gray-100,
 :where(.dark) .via-blue-50,
+:where(.dark) .via-blue-100,
 :where(.dark) .via-cyan-50,
+:where(.dark) .via-cyan-100,
 :where(.dark) .via-indigo-50,
+:where(.dark) .via-indigo-100,
 :where(.dark) .via-purple-50,
-:where(.dark) .via-violet-50 {
+:where(.dark) .via-purple-100,
+:where(.dark) .via-violet-50,
+:where(.dark) .via-violet-100,
+:where(.dark) .via-amber-50,
+:where(.dark) .via-amber-100,
+:where(.dark) .via-yellow-50,
+:where(.dark) .via-yellow-100,
+:where(.dark) .via-orange-50,
+:where(.dark) .via-orange-100,
+:where(.dark) .via-rose-50,
+:where(.dark) .via-red-50,
+:where(.dark) .via-pink-50,
+:where(.dark) .via-emerald-50,
+:where(.dark) .via-green-50 {
   --tw-gradient-to: rgb(30 41 59 / 0) var(--tw-gradient-to-position);
   --tw-gradient-stops:
     var(--tw-gradient-from),
