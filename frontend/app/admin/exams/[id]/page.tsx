@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi } from '@/lib/api/examAdmin';
+import { examAdminApi, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
@@ -11,6 +11,12 @@ import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEdi
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
 import RichMathText from '@/components/common/RichMathText';
+import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
+import {
+    getImportItemsQuestionCount,
+    getImportPreviewItems,
+    validateImportedItems,
+} from '@/components/admin/pdf-import/pdfImportUtils';
 
 interface Answer {
     id: number;
@@ -281,6 +287,8 @@ export default function AdminExamDetailPage() {
     // New question form state (quick add)
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [quickAddPosition, setQuickAddPosition] = useState<number | null>(null);
+    const [pdfImportPreview, setPdfImportPreview] = useState<PdfImportPreview | null>(null);
+    const [pdfImportSaving, setPdfImportSaving] = useState(false);
 
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingExam = () => {
@@ -514,6 +522,40 @@ export default function AdminExamDetailPage() {
     };
 
     // ── Add fill blank group ──────────────────────────────────────────────────
+    const handlePdfImportPreviewLoaded = (preview: PdfImportPreview) => {
+        setPdfImportPreview(preview);
+    };
+
+    const savePdfImportedQuestions = async () => {
+        const importItems = getImportPreviewItems(pdfImportPreview);
+        if (!exam?.id || !importItems.length) return;
+
+        const validationError = validateImportedItems(importItems);
+        if (validationError) {
+            alert(validationError);
+            return;
+        }
+
+        try {
+            setPdfImportSaving(true);
+            const response = await examAdminApi.bulkImportQuestions(exam.id, importItems);
+            await loadExam();
+            setPdfImportPreview(null);
+            setShowQuickAdd(false);
+            setAddingAfterId(null);
+            setQuickAddPosition(null);
+            alert(`Da import ${response?.insertedCount || getImportItemsQuestionCount(importItems)} cau vao de`);
+        } catch (error: any) {
+            if (isMissingExamError(error)) {
+                handleMissingExam();
+                return;
+            }
+            alert(error?.response?.data?.message || 'Luu cau hoi import that bai');
+        } finally {
+            setPdfImportSaving(false);
+        }
+    };
+
     const handleAddFillBlankGroup = async (data: FillBlankGroupData) => {
         if (!exam) return;
         try {
@@ -774,6 +816,7 @@ export default function AdminExamDetailPage() {
 
     const isEditingExam = editMode === 'edit';
     const questions = isEditingExam ? localQuestions : savedQuestions;
+    const pdfPreviewItems = getImportPreviewItems(pdfImportPreview);
 
     // Compute the next question number by finding the max in localQuestions
     // (savedQuestions have real numbers from DB, pending groups track their own)
@@ -1245,6 +1288,25 @@ export default function AdminExamDetailPage() {
                             </button>
                         </div>
                     </div>
+                )}
+
+                {isEditingExam && (
+                    <PdfImportPanel
+                        canImport={Boolean(exam.id)}
+                        preview={pdfImportPreview}
+                        items={pdfPreviewItems}
+                        saving={pdfImportSaving}
+                        onPreviewLoaded={handlePdfImportPreviewLoaded}
+                        onPreviewCleared={() => setPdfImportPreview(null)}
+                        onSave={savePdfImportedQuestions}
+                        onChangeItems={(nextItems) => {
+                            setPdfImportPreview(prev => prev ? {
+                                ...prev,
+                                items: nextItems,
+                                questions: nextItems.filter((item): item is ImportedQuestionData => item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group'),
+                            } : prev);
+                        }}
+                    />
                 )}
 
                 <div className="flex items-center justify-between mb-4">
