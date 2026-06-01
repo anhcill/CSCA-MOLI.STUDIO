@@ -9,6 +9,7 @@ const adminFillBlankGroupController = require("../controllers/adminFillBlankGrou
 const officialExamController = require("../controllers/officialExamController");
 const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
 const uploadPdf = require("../middleware/pdfUploadMiddleware");
+const uploadImage = require("../middleware/uploadMiddleware");
 
 function handlePdfUpload(req, res, next) {
 	uploadPdf.single("pdf")(req, res, (error) => {
@@ -26,6 +27,22 @@ function handlePdfUpload(req, res, next) {
 	});
 }
 
+function handleImageOcrUpload(req, res, next) {
+	uploadImage.single("image")(req, res, (error) => {
+		if (!error) {
+			next();
+			return;
+		}
+
+		if (error.code === "LIMIT_FILE_SIZE") {
+			res.status(413).json({ message: "Ảnh tối đa 5MB" });
+			return;
+		}
+
+		res.status(400).json({ message: error.message || "Ảnh upload không hợp lệ" });
+	});
+}
+
 // All routes require authentication and exam management permission
 router.use(authenticate);
 router.use(authorizePermission("exams.manage"));
@@ -34,6 +51,7 @@ router.use(authorizePermission("exams.manage"));
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
 router.post("/import/pdf/preview", examWriteLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
+router.post("/import/image/ocr", examWriteLimiter, handleImageOcrUpload, AdminExamController.ocrSingleQuestionImage);
 
 // Exam CRUD — rate limited for write operations
 router.get("/", AdminExamController.getAllExams);

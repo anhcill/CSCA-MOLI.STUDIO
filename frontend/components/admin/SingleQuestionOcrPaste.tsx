@@ -6,9 +6,11 @@ import {
   parseSingleQuestionOcr,
   type ParsedSingleQuestionOcr,
 } from '@/lib/ocr-question/parseSingleQuestionOcr';
+import SingleQuestionImageOcrInput from './SingleQuestionImageOcrInput';
 
 interface SingleQuestionOcrPasteProps {
   onApply: (parsed: ParsedSingleQuestionOcr) => void;
+  onClear: () => void;
 }
 
 function hasParsedContent(parsed: ParsedSingleQuestionOcr | null): boolean {
@@ -22,9 +24,10 @@ function hasParsedContent(parsed: ParsedSingleQuestionOcr | null): boolean {
   );
 }
 
-export default function SingleQuestionOcrPaste({ onApply }: SingleQuestionOcrPasteProps) {
+export default function SingleQuestionOcrPaste({ onApply, onClear }: SingleQuestionOcrPasteProps) {
   const [ocrText, setOcrText] = useState('');
   const [applied, setApplied] = useState(false);
+  const [imageInputKey, setImageInputKey] = useState(0);
   const parsed = useMemo(
     () => (ocrText.trim() ? parseSingleQuestionOcr(ocrText) : null),
     [ocrText],
@@ -33,12 +36,19 @@ export default function SingleQuestionOcrPaste({ onApply }: SingleQuestionOcrPas
 
   const handleApply = () => {
     if (!parsed || !canApply) {
-      alert('Chua tach duoc noi dung OCR.');
+      alert('Chưa tách được nội dung OCR.');
       return;
     }
 
     onApply(parsed);
     setApplied(true);
+  };
+
+  const handleClear = () => {
+    setOcrText('');
+    setApplied(false);
+    setImageInputKey(current => current + 1);
+    onClear();
   };
 
   return (
@@ -49,21 +59,29 @@ export default function SingleQuestionOcrPaste({ onApply }: SingleQuestionOcrPas
             <FiClipboard size={16} />
           </span>
           <div>
-            <h4 className="text-sm font-bold text-amber-900">Dan OCR 1 cau</h4>
-            <p className="text-xs text-amber-800">Tu tach de bai, lua chon, dap an, giai thich.</p>
+            <h4 className="text-sm font-bold text-amber-900">Dán OCR 1 câu</h4>
+            <p className="text-xs text-amber-800">Dán ảnh hoặc text OCR để tự tách đề bài, lựa chọn, đáp án, giải thích.</p>
           </div>
         </div>
         {parsed && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-amber-900">
             <span className="rounded border border-amber-200 bg-white px-2 py-1">
-              {parsed.answers.length} lua chon
+              {parsed.answers.length} lựa chọn
             </span>
             <span className="rounded border border-amber-200 bg-white px-2 py-1">
-              Dap an: {parsed.correctAnswer || '?'}
+              Đáp án: {parsed.correctAnswer || '?'}
             </span>
           </div>
         )}
       </div>
+
+      <SingleQuestionImageOcrInput
+        key={imageInputKey}
+        onTextExtracted={(text) => {
+          setOcrText(text);
+          setApplied(false);
+        }}
+      />
 
       <textarea
         value={ocrText}
@@ -73,7 +91,7 @@ export default function SingleQuestionOcrPaste({ onApply }: SingleQuestionOcrPas
         }}
         rows={5}
         className="mt-3 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-mono text-gray-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-        placeholder="25. ...&#10;A. ...&#10;B. ...&#10;Analysis: ..."
+        placeholder="25. ...&#10;A. ...&#10;B. ...&#10;解析: ..."
       />
 
       {parsed?.warnings.length ? (
@@ -94,23 +112,20 @@ export default function SingleQuestionOcrPaste({ onApply }: SingleQuestionOcrPas
           className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FiCheck size={15} />
-          Tach vao form
+          Tách vào form
         </button>
         <button
           type="button"
-          onClick={() => {
-            setOcrText('');
-            setApplied(false);
-          }}
-          disabled={!ocrText}
+          onClick={handleClear}
+          disabled={!ocrText && !applied}
           className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <FiTrash2 size={15} />
-          Xoa OCR
+          Xóa OCR + form
         </button>
         {applied && (
           <span className="text-xs font-semibold text-green-700">
-            Da do vao form.
+            Đã đổ vào form.
           </span>
         )}
       </div>

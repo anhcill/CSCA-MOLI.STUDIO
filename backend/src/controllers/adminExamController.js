@@ -8,6 +8,9 @@ const {
   normalizePdfImportPreset,
   shouldUseRuleBasedPdfParser,
 } = require("../services/pdfImportPromptService");
+const {
+  extractSingleQuestionImageOcrText,
+} = require("../services/singleQuestionImageOcrService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -1053,6 +1056,43 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
 }
 
 const AdminExamController = {
+  async ocrSingleQuestionImage(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Cần gửi ảnh câu hỏi" });
+      }
+
+      const text = await extractSingleQuestionImageOcrText(req.file);
+      if (!text) {
+        return res.status(422).json({ message: "Không đọc được chữ từ ảnh" });
+      }
+
+      res.json({
+        text,
+        source: {
+          fileName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        },
+      });
+    } catch (error) {
+      console.error("Single question image OCR error:", error);
+
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI OCR đang bị giới hạn tạm thời",
+          retryAfter: error.retryAfter,
+        });
+      }
+
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI OCR quá thời gian" });
+      }
+
+      res.status(500).json({ message: "OCR ảnh thất bại" });
+    }
+  },
+
   async previewPdfImport(req, res) {
     let ruleBasedPreview = null;
 

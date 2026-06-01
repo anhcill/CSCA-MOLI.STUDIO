@@ -1,0 +1,118 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { FiImage, FiUpload } from 'react-icons/fi';
+import { examAdminApi } from '@/lib/api/examAdmin';
+
+interface SingleQuestionImageOcrInputProps {
+  onTextExtracted: (text: string) => void;
+}
+
+function getClipboardImage(event: React.ClipboardEvent): File | null {
+  const items = Array.from(event.clipboardData?.items || []);
+  const imageItem = items.find(item => item.type.startsWith('image/'));
+  const file = imageItem?.getAsFile();
+  return file || null;
+}
+
+export default function SingleQuestionImageOcrInput({ onTextExtracted }: SingleQuestionImageOcrInputProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [fileName, setFileName] = useState('');
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  const runImageOcr = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn ảnh hợp lệ.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ảnh tối đa 5MB.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setFileName(file.name || 'Ảnh từ clipboard');
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return URL.createObjectURL(file);
+      });
+
+      const result = await examAdminApi.ocrSingleQuestionImage(file);
+      onTextExtracted(result.text || '');
+    } catch (error: any) {
+      console.error('OCR ảnh thất bại:', error);
+      alert(error?.response?.data?.message || 'OCR ảnh thất bại.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePaste = (event: React.ClipboardEvent) => {
+    const file = getClipboardImage(event);
+    if (!file) return;
+
+    event.preventDefault();
+    void runImageOcr(file);
+  };
+
+  return (
+    <div
+      tabIndex={0}
+      onPaste={handlePaste}
+      className="mt-3 rounded-lg border border-dashed border-amber-300 bg-white p-3 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+    >
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-amber-100 text-amber-700">
+            <FiImage size={17} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Dán ảnh vào khung này hoặc chọn ảnh</p>
+            <p className="text-xs text-amber-700">Ảnh 1 câu hỏi, tối đa 5MB. OCR xong sẽ tự đưa text vào ô dưới.</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <FiUpload size={15} />
+          {loading ? 'Đang OCR ảnh...' : 'Chọn ảnh'}
+        </button>
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void runImageOcr(file);
+          event.target.value = '';
+        }}
+      />
+
+      {(previewUrl || fileName) && (
+        <div className="mt-3 flex items-center gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-2">
+          {previewUrl && (
+            <img src={previewUrl} alt="Ảnh OCR" className="h-14 w-20 rounded border border-amber-100 bg-white object-contain" />
+          )}
+          <div className="min-w-0 text-xs text-amber-800">
+            <p className="truncate font-semibold">{fileName}</p>
+            <p>{loading ? 'Đang đọc chữ và công thức...' : 'Đã lấy text OCR, kiểm tra rồi tách vào form.'}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

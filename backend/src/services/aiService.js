@@ -71,7 +71,7 @@ async function withConcurrency(fn) {
 }
 
 // ─── AI Core: Gọi Beeknoee  ───────────────────────────────────────
-async function callBeeknoee(prompt, options = {}) {
+async function callBeeknoeeMessages(messages, options = {}) {
   if (isRateLimited()) {
     const e = new Error('RATE_LIMITED');
     e.retryAfter = getRateLimitRemaining();
@@ -89,7 +89,7 @@ async function callBeeknoee(prompt, options = {}) {
 
   const payload = {
     model: BEE.model,
-    messages: [{ role: 'user', content: prompt }],
+    messages,
     max_tokens: maxTokens,
     temperature,
   };
@@ -129,6 +129,10 @@ async function callBeeknoee(prompt, options = {}) {
       throw err;
     }
   });
+}
+
+async function callBeeknoee(prompt, options = {}) {
+  return callBeeknoeeMessages([{ role: 'user', content: prompt }], options);
 }
 
 // ─── Parse JSON từ AI response ────────────────────────────────────────────────
@@ -1287,6 +1291,7 @@ TRẢ VỀ JSON:
 module.exports = {
   // Core functions
   callBeeknoee,
+  callBeeknoeeMessages,
   isRateLimited,
   getRateLimitRemaining,
   // Features

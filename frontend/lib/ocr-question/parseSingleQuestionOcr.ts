@@ -221,9 +221,9 @@ export function parseSingleQuestionOcr(input: string): ParsedSingleQuestionOcr {
   const correctAnswer = explicitAnswer || inferAnswerFromExplanation(answers, explanationText);
   const warnings: string[] = [];
 
-  if (!localizedQuestion.text && !localizedQuestion.textCn) warnings.push('Khong thay noi dung cau hoi.');
-  if (answers.length < 2) warnings.push('Khong thay du 2 lua chon.');
-  if (!correctAnswer) warnings.push('Chua suy ra dap an dung.');
+  if (!localizedQuestion.text && !localizedQuestion.textCn) warnings.push('Không thấy nội dung câu hỏi.');
+  if (answers.length < 2) warnings.push('Không thấy đủ 2 lựa chọn.');
+  if (!correctAnswer) warnings.push('Chưa suy ra đáp án đúng.');
 
   return {
     questionText: localizedQuestion.text,

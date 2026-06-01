@@ -120,6 +120,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       questionType: 'single_choice',
       questionText: parsed.questionText,
       questionTextCn: parsed.questionTextCn,
+      imageUrl: '',
       answers: parsed.answers.length
         ? parsed.answers.map(answer => ({
           text: answer.text,
@@ -131,6 +132,21 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       correctAnswerKey: parsed.correctAnswer || prev.correctAnswerKey,
       explanation: parsed.explanation,
       explanationCn: parsed.explanationCn,
+    }));
+  };
+
+  const clearSingleQuestionOcr = () => {
+    setForm(prev => ({
+      ...prev,
+      questionType: 'single_choice',
+      questionText: '',
+      questionTextCn: '',
+      imageUrl: '',
+      answers: DEFAULT_ANSWERS(),
+      correctAnswer: 'A',
+      correctAnswerKey: 'A',
+      explanation: '',
+      explanationCn: '',
     }));
   };
 
@@ -538,7 +554,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         {renderQuestionTypeSelector()}
 
         {form.questionType === 'single_choice' && (
-          <SingleQuestionOcrPaste onApply={applySingleQuestionOcr} />
+          <SingleQuestionOcrPaste onApply={applySingleQuestionOcr} onClear={clearSingleQuestionOcr} />
         )}
 
         {/* 2. Đoạn văn + Pool A-F (cho fill_blank_pool & reading_passage) */}

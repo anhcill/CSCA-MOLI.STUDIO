@@ -103,6 +103,15 @@ export interface PdfImportPreview {
     };
 }
 
+export interface SingleQuestionImageOcrResult {
+    text: string;
+    source?: {
+        fileName?: string;
+        mimeType?: string;
+        size?: number;
+    };
+}
+
 // LinkedOption cho fill_blank_pool (A-F)
 export interface LinkedOption {
     key: string;      // 'A', 'B', 'C', 'D', 'E', 'F'
@@ -160,6 +169,17 @@ export const examAdminApi = {
             timeout: 120000,
         });
         return normalizePdfImportPreviewMath(response.data);
+    },
+
+    // OCR one pasted/uploaded question image before parsing into the form
+    ocrSingleQuestionImage: async (file: File): Promise<SingleQuestionImageOcrResult> => {
+        const formData = new FormData();
+        formData.append('image', file);
+        const response = await axios.post('/admin/exams/import/image/ocr', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 120000,
+        });
+        return response.data;
     },
 
     // Save reviewed imported questions to an exam
