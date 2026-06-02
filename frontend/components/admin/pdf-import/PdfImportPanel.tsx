@@ -107,6 +107,20 @@ export default function PdfImportPanel({
             <span>{loading ? 'Đang phân tích...' : 'Phân tích PDF'}</span>
           </button>
         </div>
+
+        {loading && (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+              <div>
+                <p className="font-semibold">Äang dĂ¹ng AI phĂ¢n tĂ­ch PDF...</p>
+                <p className="mt-1 text-xs leading-relaxed text-blue-700">
+                  AI Ä‘ang tĂ¡ch cĂ¢u há»i, Ä‘Ă¡p Ă¡n, lá»i giáº£i vĂ  chá»‰nh láº¡i cĂ´ng thá»©c toĂ¡n. File dĂ i cĂ³ thá»ƒ máº¥t 1-2 phĂºt, vui lĂ²ng giá»¯ nguyĂªn trang nĂ y.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {preview && (
