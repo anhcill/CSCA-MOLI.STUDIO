@@ -9,8 +9,15 @@ function repairImportedPdfText(input: string): string {
   ));
 
   let repaired = input
+    .replace(/\$\$+/g, '')
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, '[$1)')
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, '($1)')
+    .replace(/\bC\s*(?:\u211d|R)\s*\(/g, 'C_{\\mathbb{R}}(')
+    .replace(/\bC\s*(?:\u211d|R)\b/g, 'C_{\\mathbb{R}}')
+    .replace(/\\cup|\u222a/g, '\\cup')
+    .replace(/\\cap|\u2229/g, '\\cap')
+    .replace(/\\setminus|\u2216/g, '\\setminus')
+    .replace(/\b([A-Za-z])\s*[\u20d7]+/g, '\\vec{$1}')
     .replace(/\u221a\(\s*(\d+)\s*=\s*(\d+)\s*\)\s*\/\s*\(\s*\u221a\s*\)/g, (_, total, coefficient) => {
       const remaining = Number(total) / Number(coefficient) ** 2;
       return Number.isInteger(remaining) && remaining > 1

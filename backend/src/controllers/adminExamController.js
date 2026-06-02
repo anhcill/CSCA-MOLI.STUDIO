@@ -305,6 +305,33 @@ function stringValue(value, fallback = "") {
   return String(value).trim();
 }
 
+function repairPdfImportTextArtifacts(value) {
+  const text = stringValue(value);
+  if (!text) return "";
+
+  return text
+    .replace(/\$\$+/g, "")
+    .replace(/\(\[\)\/\(([^)]*)\)\)/g, "[$1)")
+    .replace(/\(\(\)\/\(([^)]*)\)\)/g, "($1)")
+    .replace(/\bC\s*(?:\u211d|R)\s*\(/g, "C_{\\mathbb{R}}(")
+    .replace(/\bC\s*(?:\u211d|R)\b/g, "C_{\\mathbb{R}}")
+    .replace(/\\cup|\u222a/g, "\\cup")
+    .replace(/\\cap|\u2229/g, "\\cap")
+    .replace(/\\setminus|\u2216/g, "\\setminus")
+    .replace(/\b([A-Za-z])\s*[\u20d7]+/g, "\\vec{$1}")
+    .replace(/\s+([,.;:ï¼Œă€‚ï¼›ï¼ï¼‰\)Â°])/g, "$1")
+    .replace(/([ï¼ˆ\(])\s+/g, "$1")
+    .trim();
+}
+
+function withRuleBasedFallbackWarning(preview, reason) {
+  if (!preview?.items?.length) return preview;
+
+  const warnings = Array.isArray(preview.warnings) ? [...preview.warnings] : [];
+  warnings.push(reason || "AI parse failed; returned rule-based preview fallback.");
+  return { ...preview, warnings };
+}
+
 function normalizeUploadedFileName(value) {
   const raw = stringValue(value);
   if (!raw || !/[ÃÂ]/.test(raw)) return raw;
@@ -328,12 +355,12 @@ function normalizeImportAnswers(rawAnswers) {
     .slice(0, 8)
     .map((answer) => {
       if (typeof answer === "string") {
-        return { text: answer.trim(), textCn: "", imageUrl: "" };
+        return { text: repairPdfImportTextArtifacts(answer), textCn: "", imageUrl: "" };
       }
 
       return {
-        text: stringValue(answer?.text || answer?.answerText || answer?.content),
-        textCn: stringValue(answer?.textCn || answer?.answerTextCn || answer?.contentCn),
+        text: repairPdfImportTextArtifacts(answer?.text || answer?.answerText || answer?.content),
+        textCn: repairPdfImportTextArtifacts(answer?.textCn || answer?.answerTextCn || answer?.contentCn),
         imageUrl: stringValue(answer?.imageUrl),
         isCorrect: answer?.isCorrect === true,
       };
@@ -359,7 +386,15 @@ function normalizeCorrectAnswer(rawQuestion, answers) {
   }
 
   const correctIndex = answers.findIndex((answer) => answer.isCorrect === true);
-  return correctIndex >= 0 ? answerKeys[correctIndex] : "";
+  if (correctIndex >= 0) return answerKeys[correctIndex];
+
+  const explanationText = [
+    rawQuestion.explanation,
+    rawQuestion.explanationCn,
+    rawQuestion.explanation_cn,
+  ].map(repairPdfImportTextArtifacts).filter(Boolean).join(" ");
+  const inferred = inferCorrectAnswerFromExplanation(answers, explanationText);
+  return inferred || "";
 }
 
 function normalizeImportedQuestion(rawQuestion, index) {
@@ -371,12 +406,12 @@ function normalizeImportedQuestion(rawQuestion, index) {
   }
 
   const answers = normalizeImportAnswers(rawQuestion?.answers || rawQuestion?.options);
-  const rawQuestionText = stringValue(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
-  const rawQuestionTextCn = stringValue(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
+  const rawQuestionText = repairPdfImportTextArtifacts(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
+  const rawQuestionTextCn = repairPdfImportTextArtifacts(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
   const viQuestion = splitPdfExplanationMarker(rawQuestionText);
   const cnQuestion = splitPdfExplanationMarker(rawQuestionTextCn);
-  const questionText = viQuestion.explanation ? viQuestion.text : rawQuestionText;
-  const questionTextCn = cnQuestion.explanation ? cnQuestion.text : rawQuestionTextCn;
+  const questionText = repairPdfImportTextArtifacts(viQuestion.explanation ? viQuestion.text : rawQuestionText);
+  const questionTextCn = repairPdfImportTextArtifacts(cnQuestion.explanation ? cnQuestion.text : rawQuestionTextCn);
   const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
 
   if (!normalizedQuestion || answers.length < 2) return null;
@@ -384,7 +419,11 @@ function normalizeImportedQuestion(rawQuestion, index) {
   const difficulty = ["easy", "medium", "hard"].includes(rawQuestion?.difficulty)
     ? rawQuestion.difficulty
     : "medium";
-  const correctAnswer = normalizeCorrectAnswer(rawQuestion, answers);
+  const correctAnswer = normalizeCorrectAnswer({
+    ...rawQuestion,
+    explanation: rawQuestion?.explanation || viQuestion.explanation,
+    explanationCn: rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation,
+  }, answers);
   const imageHint = stringValue(rawQuestion?.imageHint || rawQuestion?.image_hint);
   const reviewNotes = stringValue(rawQuestion?.reviewNotes || rawQuestion?.review_notes);
   const combinedText = `${questionText} ${questionTextCn} ${imageHint} ${reviewNotes}`;
@@ -396,8 +435,8 @@ function normalizeImportedQuestion(rawQuestion, index) {
     questionTextCn: normalizedQuestion.cn,
     imageUrl: stringValue(rawQuestion?.imageUrl),
     points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
-    explanation: stringValue(rawQuestion?.explanation || viQuestion.explanation),
-    explanationCn: stringValue(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
+    explanation: repairPdfImportTextArtifacts(rawQuestion?.explanation || viQuestion.explanation),
+    explanationCn: repairPdfImportTextArtifacts(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
     answers: answers.map((answer) => ({
       text: answer.text || answer.textCn,
       textCn: answer.textCn || answer.text,
@@ -690,7 +729,7 @@ function normalizeRuleBasedMathLayout(rawText) {
 }
 
 function cleanRuleBasedTextFragment(rawText) {
-  return stringValue(rawText)
+  const cleaned = stringValue(rawText)
     .replace(/\s+/g, " ")
     .replace(/\b(sin|cos|tan|cot|ln|log)\s+\(/gi, "$1(")
     .replace(/√\s+/g, "√")
@@ -702,6 +741,7 @@ function cleanRuleBasedTextFragment(rawText) {
     .replace(/\s+([,.;:，。；：）\)°])/g, "$1")
     .replace(/([（\(])\s+/g, "$1")
     .trim();
+  return repairPdfImportTextArtifacts(cleaned);
 }
 
 function splitRuleBasedOptionText(rawText) {
@@ -711,7 +751,7 @@ function splitRuleBasedOptionText(rawText) {
 }
 
 function inferCorrectAnswerFromExplanation(answers, explanation) {
-  const normalizedExplanation = stringValue(explanation).replace(/\s+/g, "");
+  const normalizedExplanation = repairPdfImportTextArtifacts(explanation).replace(/\s+/g, "");
   if (!normalizedExplanation) return "";
 
   const explicitAnswer = normalizedExplanation.match(/(?:答案|正确答案|故选|应选|选)[:：为是]*([A-H])/i);
@@ -719,15 +759,41 @@ function inferCorrectAnswerFromExplanation(answers, explanation) {
     return explicitAnswer[1].toUpperCase();
   }
 
-  const candidates = answers
-    .map((answer, index) => ({
-      key: String.fromCharCode(65 + index),
-      text: stringValue(answer.textCn || answer.text).replace(/\s+/g, ""),
-    }))
-    .filter((answer) => answer.text && answer.text.length >= 2);
+  const scoreAnswer = (answerText) => {
+    if (!answerText) return 0;
 
-  const matches = candidates.filter((answer) => normalizedExplanation.includes(answer.text));
-  return matches.length === 1 ? matches[0].key : "";
+    const escaped = answerText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const boundary = "(?:$|[)\\]}\\uFF09\\uFF0C\\u3002\\uFF1B;,.\\u4E2A\\u500B]|\\b)";
+    const strongMarker = new RegExp(`(?:=|=>|->|:|\\uFF1A|\\u4E3A|\\u5F97|\\u5171|\\u662F|\\u5373|\\u6700\\u5C0F\\u503C\\u4E3A|\\u6700\\u5927\\u503C\\u4E3A)${escaped}${boundary}`);
+    if (strongMarker.test(normalizedExplanation)) return 5;
+
+    const sentenceConclusion = new RegExp(`(?:\\u7B54\\u6848|\\u7ED3\\u679C|\\u89E3\\u5F97|\\u6545|\\u6240\\u4EE5|\\u56E0\\u6B64)[^\\u3002\\uFF1B;,.]{0,24}${escaped}${boundary}`);
+    if (sentenceConclusion.test(normalizedExplanation)) return 4;
+
+    if (answerText.length >= 2 && new RegExp(`${escaped}${boundary}`).test(normalizedExplanation)) return 2;
+    return 0;
+  };
+
+  const candidates = answers
+    .map((answer, index) => {
+      const values = [
+        repairPdfImportTextArtifacts(answer.textCn || answer.text),
+        repairPdfImportTextArtifacts(answer.text || answer.textCn),
+      ]
+        .map((value) => value.replace(/\s+/g, ""))
+        .filter(Boolean);
+
+      return {
+        key: String.fromCharCode(65 + index),
+        score: Math.max(0, ...values.map(scoreAnswer)),
+      };
+    })
+    .filter((answer) => answer.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length) return "";
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score) return "";
+  return candidates[0].key;
 }
 
 function parsePdfTextWithRules(pdfText, sourceMeta) {
@@ -1179,9 +1245,6 @@ const AdminExamController = {
       ruleBasedPreview = shouldUseRuleBasedPdfParser(importPreset)
         ? parsePdfTextWithRules(truncatedText, sourceMeta)
         : null;
-      if (ruleBasedPreview?.items?.length >= 5) {
-        return res.json(ruleBasedPreview);
-      }
 
       const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset), {
         temperature: 0.15,
@@ -1191,7 +1254,10 @@ const AdminExamController = {
 
       if (!aiResult) {
         if (ruleBasedPreview?.items?.length) {
-          return res.json(ruleBasedPreview);
+          return res.json(withRuleBasedFallbackWarning(
+            ruleBasedPreview,
+            "AI did not return valid JSON; returned rule-based preview fallback.",
+          ));
         }
 
         return res.status(502).json({
@@ -1203,6 +1269,13 @@ const AdminExamController = {
       const normalized = normalizePdfImportResult(aiResult, sourceMeta);
 
       if (normalized.items.length === 0) {
+        if (ruleBasedPreview?.items?.length) {
+          return res.json(withRuleBasedFallbackWarning(
+            ruleBasedPreview,
+            "AI returned no valid questions; returned rule-based preview fallback.",
+          ));
+        }
+
         return res.status(422).json({
           message: "No valid supported questions were found in this PDF.",
           ...normalized,
@@ -1214,6 +1287,13 @@ const AdminExamController = {
       console.error("Preview PDF import error:", error);
 
       if (error.message === "RATE_LIMITED") {
+        if (ruleBasedPreview?.items?.length) {
+          return res.json(withRuleBasedFallbackWarning(
+            ruleBasedPreview,
+            "AI is rate limited; returned rule-based preview fallback.",
+          ));
+        }
+
         return res.status(429).json({
           message: "AI is rate limited. Please try again later.",
           retryAfter: error.retryAfter || aiService.getRateLimitRemaining?.(),
@@ -1222,7 +1302,10 @@ const AdminExamController = {
 
       if (error.message === "AI_TIMEOUT") {
         if (ruleBasedPreview?.items?.length) {
-          return res.json(ruleBasedPreview);
+          return res.json(withRuleBasedFallbackWarning(
+            ruleBasedPreview,
+            "AI timed out; returned rule-based preview fallback.",
+          ));
         }
 
         return res.status(504).json({
