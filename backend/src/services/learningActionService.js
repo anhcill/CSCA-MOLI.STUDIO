@@ -13,6 +13,26 @@ const normalizeEntityType = (type) => {
   throw error;
 };
 
+const SUBJECT_CONTENT_SLUG_BY_CODE = {
+  MATH: "toan",
+  PHYSICS: "vat-ly",
+  CHEMISTRY: "hoa-hoc",
+  CHINESE: "tieng-trung-xh",
+  CHINESE_SOC: "tieng-trung-xh",
+  CHINESE_SCI: "tieng-trung-tn",
+};
+
+const normalizeSubjectCode = (subjectCode) => {
+  const normalized = String(subjectCode || "").trim().toUpperCase();
+  return normalized || null;
+};
+
+const getContentSubjectSlug = (subjectCode) => {
+  const normalized = normalizeSubjectCode(subjectCode);
+  if (!normalized) return null;
+  return SUBJECT_CONTENT_SLUG_BY_CODE[normalized] || String(subjectCode || "").trim();
+};
+
 async function getWeakTopics(userId, limit = 5, subjectCode = null) {
   const params = [userId, limit];
   const subjectFilter = subjectCode ? "AND s.code = $3" : "";
@@ -359,13 +379,16 @@ async function getNextLessons(userId, subjectCode = null) {
   const weakTopics = await getWeakTopics(userId, 5, subjectCode);
   if (!weakTopics.length) return [];
 
-  const params = [weakTopics.map((topic) => topic.subject_code), weakTopics.map((topic) => topic.topic_name)];
+  const subjectCodes = weakTopics.map((topic) => topic.subject_code);
+  const contentSubjects = weakTopics.map((topic) => getContentSubjectSlug(topic.subject_code)).filter(Boolean);
+  const topicNames = weakTopics.map((topic) => topic.topic_name);
+  const params = [subjectCodes, contentSubjects, topicNames];
   const materials = await db.query(
     `
       SELECT id, title, description, category, subject, topic, file_type, is_premium
       FROM materials
       WHERE is_active = TRUE
-        AND (subject = ANY($1::text[]) OR topic = ANY($2::text[]))
+        AND (subject = ANY($1::text[]) OR subject = ANY($2::text[]) OR topic = ANY($3::text[]))
       ORDER BY created_at DESC
       LIMIT 12
     `,
@@ -377,12 +400,12 @@ async function getNextLessons(userId, subjectCode = null) {
       SELECT subject, topic, COUNT(*)::int AS word_count
       FROM vocabulary_items
       WHERE is_active = TRUE
-        AND topic = ANY($1::text[])
+        AND (subject = ANY($1::text[]) OR subject = ANY($2::text[]) OR topic = ANY($3::text[]))
       GROUP BY subject, topic
       ORDER BY word_count DESC
       LIMIT 8
     `,
-    [weakTopics.map((topic) => topic.topic_name)],
+    params,
   );
 
   return weakTopics.map((topic) => ({
@@ -391,8 +414,12 @@ async function getNextLessons(userId, subjectCode = null) {
     subjectCode: topic.subject_code,
     subjectName: topic.subject_name,
     errorPercentage: Number(topic.error_percentage),
-    materials: materials.rows.filter((m) => m.topic === topic.topic_name || m.subject === topic.subject_code).slice(0, 3),
-    vocabulary: vocabulary.rows.filter((v) => v.topic === topic.topic_name).slice(0, 2),
+    materials: materials.rows
+      .filter((m) => m.topic === topic.topic_name || m.subject === topic.subject_code || m.subject === getContentSubjectSlug(topic.subject_code))
+      .slice(0, 3),
+    vocabulary: vocabulary.rows
+      .filter((v) => v.topic === topic.topic_name || v.subject === topic.subject_code || v.subject === getContentSubjectSlug(topic.subject_code))
+      .slice(0, 2),
   }));
 }
 
@@ -405,6 +432,8 @@ async function getActionSummary(userId, subjectCode = null) {
     subjectJoin = "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id";
     subjectFilter = `AND s.code = $${wrongParams.length}`;
   }
+  const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
+  const contentSubject = getContentSubjectSlug(subjectCode);
 
   const [weakTopics, wrongCount, bookmarks, notes, nextLessons] = await Promise.all([
     getWeakTopics(userId, 5, subjectCode),
@@ -423,8 +452,54 @@ async function getActionSummary(userId, subjectCode = null) {
       `,
       wrongParams,
     ),
-    db.query(`SELECT COUNT(*)::int AS count FROM user_bookmarks WHERE user_id = $1`, [userId]),
-    db.query(`SELECT COUNT(*)::int AS count FROM user_question_notes WHERE user_id = $1`, [userId]),
+    normalizedSubjectCode
+      ? db.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM user_bookmarks b
+          WHERE b.user_id = $1
+            AND (
+              (b.entity_type = 'question' AND EXISTS (
+                SELECT 1
+                FROM questions q
+                JOIN exams e ON e.id = q.exam_id
+                JOIN subjects s ON s.id = e.subject_id
+                WHERE q.id = b.entity_id AND s.code = $2
+              ))
+              OR (b.entity_type = 'exam' AND EXISTS (
+                SELECT 1
+                FROM exams e
+                JOIN subjects s ON s.id = e.subject_id
+                WHERE e.id = b.entity_id AND s.code = $2
+              ))
+              OR (b.entity_type = 'material' AND EXISTS (
+                SELECT 1
+                FROM materials m
+                WHERE m.id = b.entity_id AND (m.subject = $2 OR m.subject = $3)
+              ))
+              OR (b.entity_type = 'vocabulary' AND EXISTS (
+                SELECT 1
+                FROM vocabulary_items v
+                WHERE v.id = b.entity_id AND (v.subject = $2 OR v.subject = $3)
+              ))
+            )
+        `,
+        [userId, normalizedSubjectCode, contentSubject],
+      )
+      : db.query(`SELECT COUNT(*)::int AS count FROM user_bookmarks WHERE user_id = $1`, [userId]),
+    normalizedSubjectCode
+      ? db.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM user_question_notes n
+          JOIN questions q ON q.id = n.question_id
+          JOIN exams e ON e.id = q.exam_id
+          JOIN subjects s ON s.id = e.subject_id
+          WHERE n.user_id = $1 AND s.code = $2
+        `,
+        [userId, normalizedSubjectCode],
+      )
+      : db.query(`SELECT COUNT(*)::int AS count FROM user_question_notes WHERE user_id = $1`, [userId]),
     getNextLessons(userId, subjectCode),
   ]);
 

@@ -3,6 +3,7 @@ const ExamAttempt = require("../models/ExamAttempt");
 const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
 const { checkVipAccess } = require("../middleware/authMiddleware");
+const insightService = require("../services/insightService");
 
 function sanitizeQuestionForAttempt(question) {
   const {
@@ -466,6 +467,10 @@ const examController = {
           attemptId: parsedAttemptId,
           score: result.total_score,
           status: result.status,
+        });
+
+        insightService.onExamSubmitted(req.user.id, parsedAttemptId).catch((err) => {
+          console.error("Failed to update learning insights after submit:", err);
         });
       }
 

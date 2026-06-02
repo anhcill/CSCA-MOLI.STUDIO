@@ -113,7 +113,8 @@ async function getTimeAnalysis(req, res) {
 async function getRecommendations(req, res) {
   try {
     const userId = req.user.id;
-    const data = await insightService.recommendNextExams(userId);
+    const { subject } = req.query;
+    const data = await insightService.recommendNextExams(userId, subject || null);
 
     return res.json({
       success: true,
@@ -145,7 +146,7 @@ async function getStudyPlan(req, res) {
     }
 
     // Thử lấy plan đang active
-    const existing = await insightService.getActiveStudyPlan(userId);
+    const existing = await insightService.getActiveStudyPlan(userId, subject || null);
 
     if (existing) {
       return res.json({

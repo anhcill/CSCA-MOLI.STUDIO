@@ -55,7 +55,7 @@ export default function LoTrinhPage() {
         axiosInstance.get('/users/roadmap', { params: subjectCode ? { subject: subjectCode } : undefined }),
         getStudyPlan(subjectCode, forcePlan),
         getTopicAnalysis(subjectCode),
-        getRecommendations(),
+        getRecommendations(subjectCode),
       ]);
 
       if (roadmapRes.status === 'fulfilled' && roadmapRes.value.data?.success) {
@@ -65,9 +65,7 @@ export default function LoTrinhPage() {
       if (planRes.status === 'fulfilled') setStudyPlan(planRes.value);
       if (topicsRes.status === 'fulfilled') setTopicData(topicsRes.value);
       if (recRes.status === 'fulfilled') {
-        setRecommendations(
-          (recRes.value.recommendations || []).filter((item) => !subjectCode || item.subjectCode === subjectCode).slice(0, 3),
-        );
+        setRecommendations((recRes.value.recommendations || []).slice(0, 3));
       }
     } finally {
       setLoading(false);

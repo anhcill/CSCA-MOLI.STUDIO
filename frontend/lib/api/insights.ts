@@ -326,8 +326,10 @@ export async function getTimeAnalysis(): Promise<TimeData> {
   return res.data.data;
 }
 
-export async function getRecommendations(): Promise<RecommendationsData> {
-  const res = await axios.get(`${BASE}/recommendations`);
+export async function getRecommendations(subject?: string): Promise<RecommendationsData> {
+  const res = await axios.get(`${BASE}/recommendations`, {
+    params: subject ? { subject } : undefined,
+  });
   return res.data.data;
 }
 

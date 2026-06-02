@@ -18,6 +18,7 @@
  */
 
 const { pool } = require("../config/database");
+const STUDY_PLAN_TITLE_PREFIX = "Kế hoạch 7 ngày";
 
 // ─── Utility helpers ──────────────────────────────────────────────────────────
 
@@ -42,6 +43,11 @@ function medianScore(scores) {
   return sorted.length % 2 !== 0
     ? sorted[mid]
     : round2((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function normalizeSubjectCode(subjectCode) {
+  const normalized = String(subjectCode || "").trim().toUpperCase();
+  return normalized || null;
 }
 
 // ─── 1. OVERVIEW ──────────────────────────────────────────────────────────────
@@ -669,9 +675,10 @@ async function analyzeTimeManagement(userId) {
  * @param {number} userId
  * @returns {Promise<Object>}
  */
-async function recommendNextExams(userId) {
+async function recommendNextExams(userId, subjectCode = null) {
   const client = await pool.connect();
   try {
+    const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
     // Lấy user info để kiểm tra VIP
     const userQuery = `SELECT is_vip FROM users WHERE id = $1`;
     const userResult = await client.query(userQuery, [userId]);
@@ -691,10 +698,11 @@ async function recommendNextExams(userId) {
       JOIN question_topics qt ON uts.topic_id = qt.id
       JOIN subjects s ON uts.subject_id = s.id
       WHERE uts.user_id = $1
+        AND ($2::text IS NULL OR s.code = $2)
       ORDER BY uts.error_percentage DESC
       LIMIT 3
     `;
-    const weakResult = await client.query(weakTopicsQuery, [userId]);
+    const weakResult = await client.query(weakTopicsQuery, [userId, normalizedSubjectCode]);
     const weakTopics = weakResult.rows;
 
     // Lấy đề thi chưa làm hoặc chưa làm gần đây
@@ -715,6 +723,7 @@ async function recommendNextExams(userId) {
       WHERE e.status = 'published'
         AND e.deleted_at IS NULL
         AND ($2 = true OR e.is_premium = false)
+        AND ($3::text IS NULL OR s.code = $3)
         AND e.id NOT IN (
           SELECT ea.exam_id
           FROM exam_attempts ea
@@ -733,6 +742,7 @@ async function recommendNextExams(userId) {
     const availableResult = await client.query(availableExamsQuery, [
       userId,
       isVip,
+      normalizedSubjectCode,
     ]);
 
     // Nếu không đủ đề, lấy thêm đề đã làm rồi nhưng score thấp
@@ -754,13 +764,14 @@ async function recommendNextExams(userId) {
       JOIN exams e ON ea.exam_id = e.id
       JOIN subjects s ON e.subject_id = s.id
       WHERE ea.user_id = $1 AND ea.status = 'completed'
+        AND ($2::text IS NULL OR s.code = $2)
       GROUP BY e.id, e.title, e.code, e.total_questions, e.duration,
                e.difficulty_level, e.is_premium, s.id, s.code, s.name
       HAVING MAX(ea.total_score) < 70
       ORDER BY MAX(ea.total_score) ASC
       LIMIT 3
     `;
-    const lowScoreResult = await client.query(lowScoreExamsQuery, [userId]);
+    const lowScoreResult = await client.query(lowScoreExamsQuery, [userId, normalizedSubjectCode]);
 
     const buildReason = (topic) => {
       if (topic) {
@@ -808,7 +819,10 @@ async function recommendNextExams(userId) {
         reason: { type: "low_score", text: `Làm lại - điểm cao nhất ${e.best_score}`, topicId: null, topicName: null },
         priority: 3,
       })),
-    ].slice(0, 6);
+    ].reduce((unique, exam) => {
+      if (!unique.some((item) => item.id === exam.id)) unique.push(exam);
+      return unique;
+    }, []).slice(0, 6);
 
     // Lưu recommendations vào DB
     if (recommendations.length > 0) {
@@ -868,6 +882,7 @@ async function recommendNextExams(userId) {
  * @returns {Promise<Object>}
  */
 async function generateStudyPlan(userId, subjectCode = null) {
+  subjectCode = normalizeSubjectCode(subjectCode);
   const client = await pool.connect();
   try {
     // Lấy 3 chủ đề yếu nhất
@@ -1038,16 +1053,16 @@ async function generateStudyPlan(userId, subjectCode = null) {
       estimatedMinutes: 120,
     });
 
-    const planTitle = `Kế hoạch 7 ngày${subjectCode ? ` - ${subjectCode}` : ""}`;
+    const planTitle = `${STUDY_PLAN_TITLE_PREFIX}${subjectCode ? ` - ${subjectCode}` : ""}`;
 
     await client.query("BEGIN");
     await client.query(
       `
         UPDATE user_study_plans
         SET is_active = false, updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = $1 AND is_active = true
+        WHERE user_id = $1 AND is_active = true AND title = $2
       `,
-      [userId],
+      [userId, planTitle],
     );
     await client.query(
       `
@@ -1148,17 +1163,20 @@ async function getFullAnalysis(userId) {
 /**
  * Lấy lịch học đang active
  * @param {number} userId
+ * @param {string|null} subjectCode
  * @returns {Promise<Object|null>}
  */
-async function getActiveStudyPlan(userId) {
+async function getActiveStudyPlan(userId, subjectCode = null) {
+  const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
+  const planTitle = `${STUDY_PLAN_TITLE_PREFIX}${normalizedSubjectCode ? ` - ${normalizedSubjectCode}` : ""}`;
   const query = `
     SELECT id, title, data, starts_at, ends_at, created_at
     FROM user_study_plans
-    WHERE user_id = $1 AND is_active = true
+    WHERE user_id = $1 AND is_active = true AND title = $2
     ORDER BY created_at DESC
     LIMIT 1
   `;
-  const result = await pool.query(query, [userId]);
+  const result = await pool.query(query, [userId, planTitle]);
   if (result.rows.length === 0) return null;
 
   const plan = result.rows[0];
@@ -1230,12 +1248,7 @@ async function onExamSubmitted(userId, attemptId) {
       WHERE ea.id = $2
       ON CONFLICT (user_id, metric_type)
       DO UPDATE SET
-        data = user_learning_patterns.data ||
-          jsonb_build_object(
-            'last_score', ea.total_score,
-            'last_exam', e.title,
-            'last_date', ea.submit_time
-          ),
+        data = user_learning_patterns.data || EXCLUDED.data,
         updated_at = CURRENT_TIMESTAMP
     `;
     await client.query(updateTrendQuery, [userId, attemptId]);
@@ -1249,11 +1262,9 @@ async function onExamSubmitted(userId, attemptId) {
         $1,
         CURRENT_DATE,
         1,
+        COALESCE(COUNT(*), 0),
         COALESCE(SUM(
           CASE WHEN ua.is_correct THEN 1 ELSE 0 END
-        ), 0),
-        COALESCE(SUM(
-          CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END
         ), 0),
         COALESCE(SUM(
           CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END
