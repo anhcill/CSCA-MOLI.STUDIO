@@ -768,6 +768,12 @@ const VIETNAMESE_OPTION_LABEL_RE = /^(?:\(([A-H])\)|([A-H])[\.)])\s*(.*)$/i;
 const VIETNAMESE_TRAILING_ANSWER_KEY_RE = /(?:^|\n)\s*(\d{1,3})\s*[\.)]\s*([A-H])\s*(?=\n|$)/gi;
 const RULE_IMPORT_ANSWER_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const RULE_IMPORT_MISSING_OPTION_TEXT = "Option content was not extracted from Word/PDF. Edit this answer in the preview.";
+const CHINESE_SOCIAL_ANSWER_RE = /Answer\s*:\s*([A-H])/i;
+const CHINESE_SOCIAL_EXPLANATION_RE = /Explanation(?:\s*(?:中文|Chinese))?\s*[:：]?\s*/i;
+const CHINESE_SOCIAL_OPTION_LABEL_RE = /[（(]\s*([A-H])\s*[）)]/gi;
+const CHINESE_SOCIAL_GROUP_POOL_RE = /(?:^|\n)\s*(?:第\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*(?:题)?\s*[:：]\s*([^\n]*(?:[（(]\s*[A-H]\s*[）)][^\n]*)+)/gi;
+const CHINESE_SOCIAL_READING_GROUP_RE = /(?:^|\n)\s*第\s*(\d{1,3})\s*-\s*(\d{1,3})\s*题\s*[:：]?\s*/gi;
+const CHINESE_SOCIAL_SECTION_READING_RE = /(?:^|\n)\s*(?:VI|Ⅵ)[.．]\s*阅读理解/i;
 
 function getSequentialVietnameseQuestionMatches(text) {
   const matches = [];
@@ -881,6 +887,202 @@ function buildMissingVietnameseAnswers() {
   }));
 }
 
+function normalizeChineseSocialText(rawText) {
+  return normalizeRuleBasedMathLayout(rawText)
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseChineseSocialQuestionMatches(text) {
+  const matches = [];
+  const questionRe = /(^|[\n。])\s*(\d{1,3})\.\s*/g;
+
+  for (const match of text.matchAll(questionRe)) {
+    const questionNumber = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(questionNumber) || questionNumber > PDF_IMPORT_MAX_QUESTIONS) continue;
+    matches.push({
+      index: match.index + match[1].length,
+      bodyStart: match.index + match[0].length,
+      questionNumber,
+    });
+  }
+
+  return matches;
+}
+
+function parseChineseSocialOptions(text) {
+  const matches = [...stringValue(text).matchAll(CHINESE_SOCIAL_OPTION_LABEL_RE)];
+  if (matches.length < 2) return { answers: [], firstOptionIndex: -1 };
+
+  const answers = [];
+  for (let i = 0; i < matches.length; i++) {
+    const key = stringValue(matches[i][1]).toUpperCase();
+    const start = matches[i].index + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const optionText = cleanRuleBasedTextFragment(text.slice(start, end));
+    if (key && optionText) {
+      answers.push({ key, text: optionText });
+    }
+  }
+
+  answers.sort((a, b) => RULE_IMPORT_ANSWER_KEYS.indexOf(a.key) - RULE_IMPORT_ANSWER_KEYS.indexOf(b.key));
+  return { answers: answers.map((answer) => ({ text: "", textCn: answer.text })), firstOptionIndex: matches[0].index };
+}
+
+function getChineseSocialPoolMap(text) {
+  const poolMap = new Map();
+
+  for (const match of text.matchAll(CHINESE_SOCIAL_GROUP_POOL_RE)) {
+    const start = Number.parseInt(match[1], 10);
+    const end = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+    const { answers } = parseChineseSocialOptions(match[3]);
+    if (answers.length < 2) continue;
+
+    for (let questionNumber = start; questionNumber <= end; questionNumber++) {
+      poolMap.set(questionNumber, answers);
+    }
+  }
+
+  return poolMap;
+}
+
+function normalizeChineseSocialQuestionText(text) {
+  return cleanRuleBasedTextFragment(text)
+    .replace(/\bOptions\s*[:：]\s*$/i, "")
+    .replace(/^中文\s*[:：]\s*/i, "中文：")
+    .trim();
+}
+
+function parseChineseSocialQuestionBlock(block, questionNumber, poolMap) {
+  const answerMatch = block.match(CHINESE_SOCIAL_ANSWER_RE);
+  const correctAnswer = answerMatch?.[1]?.toUpperCase() || "";
+  const answerIndex = answerMatch?.index ?? -1;
+  const questionAndOptions = (answerIndex >= 0 ? block.slice(0, answerIndex) : block).trim();
+  const explanationIndex = block.search(CHINESE_SOCIAL_EXPLANATION_RE);
+  const explanation = explanationIndex >= 0
+    ? cleanRuleBasedTextFragment(block.slice(explanationIndex).replace(CHINESE_SOCIAL_EXPLANATION_RE, ""))
+    : "";
+  const parsedOptions = parseChineseSocialOptions(questionAndOptions);
+  const answers = parsedOptions.answers.length >= 2
+    ? parsedOptions.answers
+    : (poolMap.get(questionNumber) || []);
+  const questionTextSource = parsedOptions.firstOptionIndex >= 0
+    ? questionAndOptions.slice(0, parsedOptions.firstOptionIndex)
+    : questionAndOptions;
+  const questionText = normalizeChineseSocialQuestionText(questionTextSource);
+
+  if (!questionText || answers.length < 2) return null;
+
+  return {
+    itemType: "single_choice",
+    questionType: "single_choice",
+    questionText: "",
+    questionTextCn: questionText,
+    answers,
+    correctAnswer,
+    explanation: "",
+    explanationCn: explanation,
+    points: 1,
+    difficulty: "medium",
+    subQuestionNumber: questionNumber,
+    needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
+    imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Question may reference an image/table/chart in the file. Add image manually before publishing." : "",
+    reviewNotes: correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
+  };
+}
+
+function parseChineseSocialQuestions(text, poolMap) {
+  const questionMatches = parseChineseSocialQuestionMatches(text);
+  const items = [];
+
+  for (let i = 0; i < questionMatches.length; i++) {
+    const match = questionMatches[i];
+    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : text.length;
+    const block = text.slice(match.bodyStart, end).trim();
+    const item = parseChineseSocialQuestionBlock(block, match.questionNumber, poolMap);
+    if (item) items.push(item);
+  }
+
+  return items;
+}
+
+function parseChineseSocialReadingGroups(text, poolMap) {
+  const groupMatches = [...text.matchAll(CHINESE_SOCIAL_READING_GROUP_RE)].map((match) => ({
+    index: match.index,
+    bodyStart: match.index + match[0].length,
+    startQuestion: Number.parseInt(match[1], 10),
+    endQuestion: Number.parseInt(match[2], 10),
+  })).filter((match) => Number.isFinite(match.startQuestion) && Number.isFinite(match.endQuestion));
+  const groups = [];
+
+  for (let i = 0; i < groupMatches.length; i++) {
+    const groupMatch = groupMatches[i];
+    const segmentEnd = i + 1 < groupMatches.length ? groupMatches[i + 1].index : text.length;
+    const segment = text.slice(groupMatch.bodyStart, segmentEnd).trim();
+    const questionMatches = parseChineseSocialQuestionMatches(segment);
+    if (!questionMatches.length) continue;
+
+    const passageText = cleanRuleBasedTextFragment(segment.slice(0, questionMatches[0].index));
+    const subQuestions = [];
+    for (let questionIndex = 0; questionIndex < questionMatches.length; questionIndex++) {
+      const questionMatch = questionMatches[questionIndex];
+      const questionEnd = questionIndex + 1 < questionMatches.length ? questionMatches[questionIndex + 1].index : segment.length;
+      const block = segment.slice(questionMatch.bodyStart, questionEnd).trim();
+      const question = parseChineseSocialQuestionBlock(block, questionMatch.questionNumber, poolMap);
+      if (question) {
+        subQuestions.push({ ...question, itemType: undefined });
+      }
+    }
+
+    if (passageText && subQuestions.length) {
+      groups.push({
+        itemType: "reading_group",
+        passageText,
+        subQuestions,
+        needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(passageText),
+        imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(passageText) ? "Reading passage may reference a visual in the file. Add image manually before publishing." : "",
+        reviewNotes: "",
+      });
+    } else {
+      groups.push(...subQuestions.map((question) => ({ ...question, itemType: "single_choice" })));
+    }
+  }
+
+  return groups;
+}
+
+function parseChineseSocialTextWithRules(rawText, sourceMeta) {
+  const text = normalizeChineseSocialText(rawText);
+  if (!CHINESE_SOCIAL_ANSWER_RE.test(text)) return null;
+
+  const poolMap = getChineseSocialPoolMap(text);
+  const readingSectionMatch = text.match(CHINESE_SOCIAL_SECTION_READING_RE);
+  const mainText = readingSectionMatch?.index >= 0 ? text.slice(0, readingSectionMatch.index) : text;
+  const readingText = readingSectionMatch?.index >= 0 ? text.slice(readingSectionMatch.index) : "";
+  const items = [
+    ...parseChineseSocialQuestions(mainText, poolMap),
+    ...parseChineseSocialReadingGroups(readingText, poolMap),
+  ];
+
+  if (!items.length) return null;
+
+  return normalizePdfImportResult({
+    exam: {
+      title: sourceMeta?.fileName ? String(sourceMeta.fileName).replace(/\.(pdf|docx?|doc)$/i, "") : "Imported exam",
+      duration: 90,
+      totalPoints: Math.max(items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0), 1),
+    },
+    items,
+    warnings: [
+      "This preview used the fast Chinese social-science parser. Please review reading passages and pooled options before saving.",
+    ],
+  }, sourceMeta);
+}
+
 function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
   const text = normalizeRuleBasedMathLayout(rawText)
     .replace(/\r/g, "\n")
@@ -954,6 +1156,9 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
 function parsePdfTextWithRules(pdfText, sourceMeta) {
   const vietnamesePreview = parseVietnameseChoiceTextWithRules(pdfText, sourceMeta);
   if (vietnamesePreview?.items?.length) return vietnamesePreview;
+
+  const chineseSocialPreview = parseChineseSocialTextWithRules(pdfText, sourceMeta);
+  if (chineseSocialPreview?.items?.length) return chineseSocialPreview;
 
   const text = normalizeRuleBasedMathLayout(pdfText)
     .replace(/\n+/g, " ")
