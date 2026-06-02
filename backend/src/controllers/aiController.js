@@ -221,13 +221,12 @@ async function getAttemptAIContext(userId, attemptId) {
  * Phân tích kết quả 1 bài thi cụ thể (hiển thị ngay sau khi nộp bài)
  */
 async function analyzeExamResult(req, res) {
+  let chargedLedger = null;
   try {
     const userId = req.user.id;
     const { attemptId } = req.params;
-
-    if (!canUseAIFeatures(req.user)) {
-      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
-    }
+    const isVip = canUseAIFeatures(req.user);
+    const useCoins = req.query.useCoins === 'true' || req.body?.useCoins === true || req.body?.useCoins === 'true';
 
     if (!attemptId) {
       return res.status(400).json({ success: false, message: 'Thiếu attemptId' });
@@ -277,6 +276,30 @@ async function analyzeExamResult(req, res) {
         previousAttempt,
         aiAnalysis: cacheResult.rows[0].data,
       });
+    }
+
+    if (!isVip) {
+      if (!useCoins) {
+        return res.status(403).json({
+          success: false,
+          message: 'Cần nâng cấp Premium/VIP hoặc dùng 50 Xu để phân tích.',
+          code: 'PREMIUM_REQUIRED',
+          cost: 50,
+        });
+      }
+
+      const [currentCoins, reservedCoins] = await Promise.all([
+        coinService.getBalance(userId),
+        coinService.getReservedPaymentCoins(userId),
+      ]);
+      if (Math.max(0, currentCoins - reservedCoins) < 50) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không đủ 50 Xu.',
+          code: 'INSUFFICIENT_COINS',
+          cost: 50,
+        });
+      }
     }
 
     // Nếu AI đang bận thì trả sớm, không tải chi tiết toàn bộ câu hỏi.
@@ -399,6 +422,13 @@ async function analyzeExamResult(req, res) {
       aiAnalysis = await analysisPromise;
     }
 
+    if (!isVip && !fromInflight) {
+      chargedLedger = await coinService.debit(userId, 50, 'ai_exam_analysis', {
+        description: 'Dùng 50 xu để phân tích bài thi bằng AI',
+        metadata: { insightType: INSIGHT_TYPES.examAnalysis, attemptId: String(attemptId) },
+      });
+    }
+
     // Lưu vào DB cache để lần sau không phải gọi AI lại
     try {
       if (!fromInflight) {
@@ -418,9 +448,28 @@ async function analyzeExamResult(req, res) {
       attempt: attemptPayload,
       previousAttempt,
       aiAnalysis,
+      coin_charged: Boolean(chargedLedger),
+      coin_balance: chargedLedger?.balance_after,
     });
   } catch (error) {
+    if (chargedLedger) {
+      await coinService.credit(req.user.id, Math.abs(Number(chargedLedger.amount) || 50), 'ai_exam_analysis_refund', {
+        description: 'Hoàn xu do phân tích bài thi bằng AI thất bại',
+        metadata: { originalLedgerId: chargedLedger.id, insightType: INSIGHT_TYPES.examAnalysis, attemptId: String(req.params?.attemptId || '') },
+        idempotencyKey: `ai_exam_analysis_refund:${chargedLedger.id}`,
+      }).catch(refundError => {
+        console.error('AI exam coin refund failed:', refundError);
+      });
+    }
     console.error('analyzeExamResult error:', error);
+    if (error.status) {
+      return res.status(error.status).json({
+        success: false,
+        message: error.message || 'Lỗi phân tích bài thi',
+        code: error.code,
+        cost: 50,
+      });
+    }
     res.status(500).json({ success: false, message: 'Lỗi phân tích bài thi' });
   }
 }
@@ -834,28 +883,26 @@ async function analyzeUserPerformance(req, res) {
     const userId = req.user.id;
     const isVip = canUseAIFeatures(req.user);
     const useCoins = req.query.useCoins === 'true';
+    const skipCache = req._skipAnalysisCache === true;
 
     const memKey = `ai:full_analysis:${userId}`;
 
-    if (aiService.isRateLimited()) {
-      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(),
-        'Hệ thống AI đang tạm thời bận.');
-    }
-
-    const memCached = cache.get(memKey);
+    const memCached = skipCache ? null : cache.get(memKey);
     if (memCached) {
       return res.json({ success: true, cached: true, cacheSource: 'memory', cacheAge: memCached.cacheAge, data: memCached.data });
     }
 
-    const cached = await db.query(
-      `SELECT data, created_at FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis'
-       AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1`,
-      [userId],
-    );
-    if (cached.rows.length > 0) {
-      const age = Math.floor((Date.now() - new Date(cached.rows[0].created_at)) / 60000);
-      cache.set(memKey, { data: cached.rows[0].data, cacheAge: age }, TTL.VERY_LONG);
-      return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: cached.rows[0].data });
+    if (!skipCache) {
+      const cached = await db.query(
+        `SELECT data, created_at FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis'
+         AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      if (cached.rows.length > 0) {
+        const age = Math.floor((Date.now() - new Date(cached.rows[0].created_at)) / 60000);
+        cache.set(memKey, { data: cached.rows[0].data, cacheAge: age }, TTL.VERY_LONG);
+        return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: cached.rows[0].data });
+      }
     }
 
     // Nếu không có cache, user phải là VIP hoặc trả 50 Xu
@@ -876,6 +923,11 @@ async function analyzeUserPerformance(req, res) {
       }
 
       // Coin charge happens after analysis succeeds.
+    }
+
+    if (aiService.isRateLimited()) {
+      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(),
+        'Hệ thống AI đang tạm thời bận.');
     }
 
     if (inFlightRequests.has(userId)) {
@@ -1059,12 +1111,14 @@ async function refreshAnalysis(req, res) {
       const remainMin = Math.ceil((cooldownUntil - Date.now()) / 60000);
       return res.json({ success: false, rateLimited: true, message: `Đợi ${remainMin} phút.` });
     }
+
+    if (aiService.isRateLimited()) {
+      return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
+    }
+
     userCooldowns.set(userId, Date.now() + REFRESH_COOLDOWN_MS);
     cache.del(`ai:full_analysis:${userId}`);
-    await db.query(
-      `DELETE FROM ai_insights WHERE user_id = $1 AND insight_type = 'full_analysis'`,
-      [userId],
-    );
+    req._skipAnalysisCache = true;
     await analyzeUserPerformance(req, res);
   } catch (error) {
     console.error('refreshAnalysis error:', error);
