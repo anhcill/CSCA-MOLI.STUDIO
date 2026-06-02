@@ -31,6 +31,15 @@
   font-size: 1.05em;
 }
 
+.admin-question-preview-math {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.admin-question-preview-math .katex {
+  font-size: 1.12em;
+}
+
 /* Preset button hover effect */
 .math-preset-btn:hover .katex {
   transform: scale(1.1);

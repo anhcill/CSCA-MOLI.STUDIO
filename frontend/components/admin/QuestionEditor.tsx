@@ -131,11 +131,12 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
     const normalized = normalizeRichMathText(value);
     const canApplyNormalized = Boolean(normalized && normalized !== value);
+    const editorRows = Math.min(6, Math.max(2, value.split('\n').length));
 
     return (
-      <div className="mt-1.5 rounded-lg border border-gray-200 bg-gray-50 p-2">
+      <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <span className="block text-xs text-gray-400">{title}</span>
+          <span className="block text-xs font-semibold text-gray-500">{title}</span>
           {canApplyNormalized && (
             <button
               type="button"
@@ -146,16 +147,16 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
             </button>
           )}
         </div>
-        <RichMathText value={normalized || value} className="text-gray-800" />
-        {canApplyNormalized && (
-          <textarea
-            value={normalized}
-            onChange={event => onChange(event.target.value)}
-            rows={2}
-            className="mt-2 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 font-mono text-xs text-gray-800 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            aria-label="Sửa bản chuẩn hóa"
-          />
-        )}
+        <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
+          <RichMathText value={normalized || value} className="admin-question-preview-math text-gray-900" />
+        </div>
+        <textarea
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          rows={editorRows}
+          className="mt-2 w-full rounded-md border border-gray-200 bg-white px-3 py-2 font-mono text-sm leading-6 text-gray-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 dark:bg-white dark:text-gray-900"
+          aria-label="Sua nhanh noi dung preview"
+        />
       </div>
     );
   };

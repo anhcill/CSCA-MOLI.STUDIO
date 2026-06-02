@@ -51,8 +51,10 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
 };
 
 const INLINE_MATH_COMMAND_RE =
-  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Rightarrow|Leftrightarrow|to|le|ge|ne|approx)\b/;
+  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)\b/;
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
+const LATEX_COMMAND_BOUNDARY_RE =
+  /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
 
 function mapMathCodePoint(codePoint: number): string | null {
   for (const [start, asciiStart, length] of MATH_RANGES) {
@@ -81,6 +83,20 @@ export function normalizeEscapedLatexBackslashes(input: string): string {
 
 function normalizeLooseMathSyntax(input: string): string {
   return input
+    .replace(/([=:\uff1a]\s*)\$\$(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
+    .replace(LATEX_COMMAND_BOUNDARY_RE, (match, command: string, offset: number, whole: string) => {
+      const commandText = whole.slice(offset + 1);
+      if (
+        (command === 'in' && commandText.startsWith('infty')) ||
+        (command === 'le' && commandText.startsWith('leq')) ||
+        (command === 'ge' && commandText.startsWith('geq')) ||
+        (command === 'ne' && commandText.startsWith('neq'))
+      ) {
+        return match;
+      }
+
+      return `\\${command} `;
+    })
     .replace(
       /\\sqrt\{\}\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
       (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
@@ -89,6 +105,7 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(/\\sqrt\{\}\s*((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:_\{[^{}]+\})?(?:\^\{[^{}]+\})?)/g, '\\sqrt{$1}')
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=\s*\^?\\circ)/gi, (_, prefix, fn, degrees) => `${prefix}\\${fn.toLowerCase()} ${degrees}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)\s+([0-9]+)\s*(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn, number) => `${prefix}\\${fn.toLowerCase()} ${number}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)([0-9]+)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn, number) => `${prefix}\\${fn.toLowerCase()} ${number}`)
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/(^|[^\\A-Za-z])(ln|lg|log)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
@@ -333,13 +350,13 @@ export function normalizeMathText(input: string): string {
 }
 
 export function normalizeLatexMath(input: string): string {
-  return normalizeSuperscriptSyntax(
+  return escapeSetLiteralBraces(normalizeSuperscriptSyntax(
     normalizeLostSuperscripts(normalizeMathText(input)
       .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
       .replace(/[ \t]*\n[ \t]*/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()),
-  );
+  ));
 }
 
 export function isLikelyLooseMathLine(input: string): boolean {
@@ -368,6 +385,49 @@ function hasBalancedMathGroups(input: string): boolean {
   }
 
   return stack.length === 0;
+}
+
+function escapeSetLiteralBraces(input: string): string {
+  let out = '';
+  let cursor = 0;
+
+  while (cursor < input.length) {
+    const openIndex = input.indexOf('{', cursor);
+    if (openIndex < 0) {
+      out += input.slice(cursor);
+      break;
+    }
+
+    const before = input[openIndex - 1] || '';
+    if (before === '\\' || before === '_' || before === '^') {
+      out += input.slice(cursor, openIndex + 1);
+      cursor = openIndex + 1;
+      continue;
+    }
+
+    const closeIndex = findMatchingForward(input, openIndex);
+    if (closeIndex < 0) {
+      out += input.slice(cursor);
+      break;
+    }
+
+    const content = input.slice(openIndex + 1, closeIndex);
+    const looksLikeSetLiteral =
+      /[,;\uff0c\uff1b]/.test(content) &&
+      !/[{}]/.test(content) &&
+      /\S/.test(content);
+
+    if (!looksLikeSetLiteral) {
+      out += input.slice(cursor, closeIndex + 1);
+      cursor = closeIndex + 1;
+      continue;
+    }
+
+    out += `${input.slice(cursor, openIndex)}\\{${content}\\}`;
+    cursor = closeIndex + 1;
+  }
+
+  return out;
 }
 
 function normalizeLostSuperscripts(input: string): string {
