@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
 import * as THREE from 'three';
 import {
@@ -689,67 +689,87 @@ function MolyPlushPet({
   facing: PetPosition;
 }) {
   const isStar = variant === 'star';
+  const id = useId().replace(/:/g, '');
+  const headGradient = `moly-head-${variant}-${id}`;
+  const accentGradient = `moly-accent-${variant}-${id}`;
+  const eyeGradient = `moly-eye-${variant}-${id}`;
+  const softShadow = `moly-shadow-${variant}-${id}`;
 
   return (
     <div
       className={`moli-plush-shell relative h-20 w-20 ${walking ? 'moli-plush-walking' : ''}`}
       style={{ '--moli-dir': facing === 'left' ? '-1' : '1' } as CSSProperties}
     >
-      <div className="absolute bottom-1 left-1/2 h-3 w-12 -translate-x-1/2 rounded-full bg-slate-900/15 blur-sm" />
+      <svg className="h-full w-full overflow-visible" viewBox="0 0 80 80" role="img" aria-label={isStar ? 'Moly công chúa sao' : 'Moly thỏ tim'}>
+        <defs>
+          <radialGradient id={headGradient} cx="34%" cy="24%" r="75%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="58%" stopColor={isStar ? '#eef8ff' : '#fff1f8'} />
+            <stop offset="100%" stopColor={isStar ? '#bddfff' : '#ffd7e9'} />
+          </radialGradient>
+          <linearGradient id={accentGradient} x1="0%" x2="100%" y1="0%" y2="100%">
+            <stop offset="0%" stopColor={isStar ? '#ffffff' : '#ffd4e9'} />
+            <stop offset="52%" stopColor={isStar ? '#bfe6ff' : '#f7a6cd'} />
+            <stop offset="100%" stopColor={isStar ? '#69aee9' : '#c9efff'} />
+          </linearGradient>
+          <radialGradient id={eyeGradient} cx="34%" cy="28%" r="72%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="32%" stopColor={isStar ? '#8bd9ff' : '#6fc7ff'} />
+            <stop offset="72%" stopColor={isStar ? '#3f4bbd' : '#0d5598'} />
+            <stop offset="100%" stopColor={isStar ? '#36135e' : '#082b5f'} />
+          </radialGradient>
+          <filter id={softShadow} x="-30%" y="-30%" width="160%" height="170%">
+            <feDropShadow dx="0" dy="8" stdDeviation="4" floodColor={isStar ? '#2563eb' : '#ec4899'} floodOpacity="0.2" />
+          </filter>
+        </defs>
 
-      {isStar ? (
-        <>
-          <div className="absolute left-[8px] top-[18px] h-12 w-8 -rotate-12 rounded-[999px] bg-gradient-to-b from-sky-100 via-sky-300 to-blue-400 shadow-[inset_0_5px_10px_rgba(255,255,255,0.75)]" />
-          <div className="absolute right-[8px] top-[18px] h-12 w-8 rotate-12 rounded-[999px] bg-gradient-to-b from-sky-100 via-sky-300 to-blue-400 shadow-[inset_0_5px_10px_rgba(255,255,255,0.75)]" />
-          <div className="absolute right-[2px] top-[12px] h-8 w-8 rounded-[18px] bg-gradient-to-br from-sky-200 to-blue-500 shadow-lg">
-            <div className="absolute left-2 top-2 h-4 w-4 rotate-45 rounded-[3px] border-2 border-white/80" />
-            <div className="absolute right-1 top-3 h-2 w-2 rounded-full bg-white/65" />
-          </div>
-          <div className="absolute left-1/2 top-[12px] h-[52px] w-[58px] -translate-x-1/2 rounded-[30px] bg-gradient-to-br from-white via-sky-50 to-blue-100 shadow-[0_13px_24px_rgba(37,99,235,0.22),inset_0_6px_10px_rgba(255,255,255,0.9)]" />
-          <div className="absolute left-[18px] top-[5px] h-9 w-11 -rotate-[18deg] rounded-[28px] bg-gradient-to-br from-white via-sky-100 to-sky-300 shadow-[inset_0_5px_9px_rgba(255,255,255,0.9)]" />
-          <div className="absolute left-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-indigo-950 via-fuchsia-700 to-pink-400 shadow-inner">
-            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
-          </div>
-          <div className="absolute right-[20px] top-[33px] h-3 w-5 rounded-b-full border-b-[3px] border-blue-950" />
-          <div className="absolute left-[13px] top-[42px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
-          <div className="absolute right-[16px] top-[42px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
-          <div className="absolute left-[37px] top-[42px] h-3 w-4 rounded-b-full border-b-[3px] border-rose-900" />
-          <div className="absolute left-[18px] top-[18px] h-4 w-4 rotate-45 rounded-[3px] bg-white shadow-sm before:absolute before:left-1 before:top-1 before:h-2 before:w-2 before:rounded-full before:bg-sky-300" />
-          <div
-            className="absolute left-[26px] top-[56px] h-8 w-8 bg-gradient-to-b from-sky-200 to-blue-400 shadow-md"
-            style={{ clipPath: 'polygon(50% 0, 94% 100%, 6% 100%)' }}
-          />
-          <div className="absolute left-[20px] top-[57px] h-2 w-8 rounded-full bg-white/70" />
-          <div className="absolute left-[14px] top-[55px] h-3 w-6 -rotate-[24deg] rounded-full bg-white shadow-sm" />
-          <div className="absolute right-[14px] top-[55px] h-3 w-6 rotate-[24deg] rounded-full bg-white shadow-sm" />
-        </>
-      ) : (
-        <>
-          <div className="absolute left-[12px] top-[0px] h-12 w-5 -rotate-[24deg] rounded-full bg-gradient-to-b from-white to-slate-100 shadow-[inset_0_4px_8px_rgba(255,255,255,0.9)]" />
-          <div className="absolute right-[12px] top-[0px] h-12 w-5 rotate-[24deg] rounded-full bg-gradient-to-b from-white to-slate-100 shadow-[inset_0_4px_8px_rgba(255,255,255,0.9)]" />
-          <div className="absolute left-[17px] top-[8px] h-8 w-2.5 -rotate-[24deg] rounded-full bg-pink-100" />
-          <div className="absolute right-[17px] top-[8px] h-8 w-2.5 rotate-[24deg] rounded-full bg-pink-100" />
-          <div className="absolute left-1/2 top-[14px] h-[54px] w-[58px] -translate-x-1/2 rounded-[31px] bg-gradient-to-br from-white via-pink-50 to-pink-100 shadow-[0_13px_24px_rgba(236,72,153,0.18),inset_0_6px_10px_rgba(255,255,255,0.9)]" />
-          <div className="absolute left-[27px] top-[4px] h-4 w-4 rotate-45 rounded-[4px] bg-pink-300 shadow-md before:absolute before:-left-1 before:top-0 before:h-4 before:w-4 before:rounded-full before:bg-pink-300 after:absolute after:left-0 after:-top-1 after:h-4 after:w-4 after:rounded-full after:bg-pink-300" />
-          <div className="absolute left-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-white via-sky-300 to-blue-800 shadow-inner">
-            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
-          </div>
-          <div className="absolute right-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-white via-sky-300 to-blue-800 shadow-inner">
-            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
-          </div>
-          <div className="absolute left-[14px] top-[29px] h-[2px] w-3 -rotate-12 rounded-full bg-blue-950" />
-          <div className="absolute right-[14px] top-[29px] h-[2px] w-3 rotate-12 rounded-full bg-blue-950" />
-          <div className="absolute left-[39px] top-[45px] h-3 w-4 rounded-b-full border-b-[3px] border-rose-900" />
-          <div className="absolute left-[17px] top-[45px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
-          <div className="absolute right-[17px] top-[45px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
-          <div className="absolute left-[22px] top-[58px] h-6 w-9 rounded-b-[18px] rounded-t-md bg-white shadow-md">
-            <div className="absolute bottom-1 left-1 h-[2px] w-7 rounded-full bg-sky-200" />
-          </div>
-          <div className="absolute left-[8px] top-[16px] h-14 w-16 -rotate-12 rounded-[50%] border-2 border-white/70" />
-          <div className="absolute left-[4px] top-[52px] h-4 w-7 -rotate-[36deg] rounded-full bg-pink-100 shadow-sm" />
-          <div className="absolute right-[7px] top-[54px] h-4 w-7 rotate-[36deg] rounded-full bg-pink-100 shadow-sm" />
-        </>
-      )}
+        <ellipse cx="40" cy="73" rx="22" ry="5" fill="#0f172a" opacity="0.12" />
+
+        {isStar ? (
+          <>
+            <path d="M16 35c-8 8-8 24 0 31 9 8 21 1 20-11-.8-11-10-25-20-20Z" fill={`url(#${accentGradient})`} filter={`url(#${softShadow})`} />
+            <path d="M63 17c8 3 12 11 9 18-3 8-13 10-20 5-7-5-6-17 1-21 3-2 6-3 10-2Z" fill={`url(#${accentGradient})`} filter={`url(#${softShadow})`} />
+            <ellipse cx="40" cy="39" rx="29" ry="27" fill={`url(#${headGradient})`} filter={`url(#${softShadow})`} />
+            <path d="M18 29c8-16 34-22 44-3-11-5-34-1-44 3Z" fill={`url(#${accentGradient})`} opacity="0.95" />
+            <path d="M25 12c12-7 28-2 34 10-12-5-29 0-42 11 1-9 3-17 8-21Z" fill={`url(#${accentGradient})`} />
+            <path d="M22 30c8-3 18-2 28 1-9 3-19 4-31 1l3-2Z" fill="#ffffff" opacity="0.45" />
+            <path d="M20 22l3 5 5 2-5 3-3 5-3-5-5-3 5-2 3-5Z" fill="#ffffff" stroke="#7ec9ff" strokeWidth="1.5" />
+            <circle cx="28" cy="39" r="9" fill={`url(#${eyeGradient})`} />
+            <circle cx="25" cy="36" r="3.2" fill="#ffffff" />
+            <circle cx="31" cy="42" r="1.2" fill="#ffffff" opacity="0.9" />
+            <path d="M49 39c3 4 8 4 11 0" fill="none" stroke="#23346f" strokeLinecap="round" strokeWidth="3" />
+            <ellipse cx="22" cy="50" rx="5" ry="3" fill="#f9a8d4" opacity="0.72" />
+            <ellipse cx="58" cy="50" rx="5" ry="3" fill="#f9a8d4" opacity="0.68" />
+            <path d="M36 50c3 5 9 5 12 0" fill="none" stroke="#7f1d1d" strokeLinecap="round" strokeWidth="3" />
+            <path d="M38 57l-10 17h24L42 57h-4Z" fill={`url(#${accentGradient})`} filter={`url(#${softShadow})`} />
+            <path d="M33 60h14" stroke="#ffffff" strokeLinecap="round" strokeWidth="2" opacity="0.8" />
+            <path d="M40 62l2 4 4 1-4 2-2 4-2-4-4-2 4-1 2-4Z" fill="#fff5b8" stroke="#d8b640" strokeWidth="1" />
+          </>
+        ) : (
+          <>
+            <path d="M24 8c-7 1-8 25-2 36 2 4 8 3 9-1 3-12 1-34-7-35Z" fill="#ffffff" filter={`url(#${softShadow})`} />
+            <path d="M56 8c7 1 8 25 2 36-2 4-8 3-9-1-3-12-1-34 7-35Z" fill="#ffffff" filter={`url(#${softShadow})`} />
+            <path d="M25 15c-3 4-3 16 0 25" stroke="#ffd4e8" strokeLinecap="round" strokeWidth="5" opacity="0.9" />
+            <path d="M55 15c3 4 3 16 0 25" stroke="#ffd4e8" strokeLinecap="round" strokeWidth="5" opacity="0.9" />
+            <ellipse cx="40" cy="41" rx="29" ry="28" fill={`url(#${headGradient})`} filter={`url(#${softShadow})`} />
+            <path d="M34 13c3-7 12-7 15 0 7-1 11 6 7 12-5 7-20 6-27 0-5-5-1-12 5-12Z" fill="#f9b8d5" filter={`url(#${softShadow})`} />
+            <circle cx="29" cy="41" r="9" fill={`url(#${eyeGradient})`} />
+            <circle cx="51" cy="41" r="9" fill={`url(#${eyeGradient})`} />
+            <circle cx="26" cy="37" r="3.2" fill="#ffffff" />
+            <circle cx="48" cy="37" r="3.2" fill="#ffffff" />
+            <circle cx="33" cy="45" r="1.2" fill="#ffffff" opacity="0.9" />
+            <circle cx="55" cy="45" r="1.2" fill="#ffffff" opacity="0.9" />
+            <path d="M21 35c2-3 5-4 8-4" stroke="#1f3b78" strokeLinecap="round" strokeWidth="2" />
+            <path d="M59 35c-2-3-5-4-8-4" stroke="#1f3b78" strokeLinecap="round" strokeWidth="2" />
+            <ellipse cx="24" cy="52" rx="5" ry="3" fill="#f9a8d4" opacity="0.78" />
+            <ellipse cx="56" cy="52" rx="5" ry="3" fill="#f9a8d4" opacity="0.72" />
+            <path d="M37 51c3 4 8 4 11 0" fill="none" stroke="#7f1d1d" strokeLinecap="round" strokeWidth="3" />
+            <path d="M30 61c7 6 18 6 25 0l4 13H26l4-13Z" fill="#ffffff" filter={`url(#${softShadow})`} />
+            <path d="M30 68c8 3 18 3 26 0" stroke="#9ee8ff" strokeLinecap="round" strokeWidth="2" />
+            <path d="M14 24c18 0 27 13 26 35" fill="none" stroke="#ffffff" strokeLinecap="round" strokeWidth="2" opacity="0.7" />
+          </>
+        )}
+      </svg>
     </div>
   );
 }
