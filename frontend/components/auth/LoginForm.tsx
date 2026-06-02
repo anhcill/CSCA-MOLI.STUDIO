@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CredentialResponse, GoogleLogin } from '@react-oauth/google';
-import { FaFacebook } from 'react-icons/fa';
+import { CredentialResponse } from '@react-oauth/google';
 import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
+import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 
 export default function LoginForm() {
@@ -177,6 +177,10 @@ export default function LoginForm() {
     setErrors({ general: t('auth.googleLoginFailed') });
   };
 
+  const handleGoogleNotConfigured = () => {
+    setErrors({ general: t('auth.googleLoginNotConfigured') });
+  };
+
   const handleFacebookLogin = () => {
     if (!isFacebookEnabled) {
       setErrors({ general: t('auth.facebookLoginNotConfigured') });
@@ -292,44 +296,6 @@ export default function LoginForm() {
       <div className="text-center mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{t('auth.loginTitle')}</h1>
         <p className="text-gray-600">{t('auth.loginSubtitle')}</p>
-      </div>
-
-      {/* Social Login Buttons */}
-      <div className="mb-4 sm:mb-6 space-y-3 w-full max-w-[320px] mx-auto">
-        <div className="flex w-full justify-center">
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={handleGoogleError}
-            useOneTap={false}
-            theme="outline"
-            size="large"
-            text="signin_with"
-            shape="rectangular"
-            logo_alignment="center"
-            width={320}
-          />
-        </div>
-
-        {isFacebookEnabled && (
-          <button
-            type="button"
-            onClick={handleFacebookLogin}
-            disabled={isSubmitting}
-            className="h-10 w-full flex items-center justify-center gap-3 px-4 bg-[#1877F2] text-white text-sm font-semibold rounded-md hover:bg-[#166FE5] hover:-translate-y-px transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 shadow-sm"
-          >
-            <FaFacebook className="text-base shrink-0" />
-            {t('auth.facebookLogin')}
-          </button>
-        )}
-      </div>
-
-      <div className="relative mb-6">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-300"></div>
-        </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-2 bg-white text-gray-500 dark:bg-gray-100">{t('auth.emailLogin')}</span>
-        </div>
       </div>
 
       {isLocked && (
@@ -472,6 +438,16 @@ export default function LoginForm() {
             </span>
           ) : t('auth.login')}
         </button>
+
+        <SocialAuthButtons
+          dividerLabel={t('auth.socialLogin')}
+          disabled={isSubmitting || isLocked}
+          googleText="signin_with"
+          onGoogleSuccess={handleGoogleSuccess}
+          onGoogleError={handleGoogleError}
+          onGoogleNotConfigured={handleGoogleNotConfigured}
+          onFacebookClick={handleFacebookLogin}
+        />
       </form>
       )}
 
