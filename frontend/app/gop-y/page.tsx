@@ -316,9 +316,9 @@ export default function StudentQAPage() {
       </main>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
               <div>
                 <h2 className="font-black text-gray-900">Gửi góp ý cho admin</h2>
                 <p className="mt-0.5 text-xs text-gray-400">Có thể gửi chữ, ảnh minh họa hoặc cả hai.</p>
