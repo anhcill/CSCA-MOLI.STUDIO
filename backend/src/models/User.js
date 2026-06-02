@@ -1,6 +1,12 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
 
+const normalizeSubscriptionTier = (tier) => {
+  const value = String(tier || "").trim().toLowerCase();
+  if (value === "premium" || value === "pre") return "premium";
+  return "vip";
+};
+
 /**
  * User Model
  * Handles all database operations related to users
@@ -369,10 +375,11 @@ class User {
    */
   static async updateVipStatus(id, durationDays, tier = 'vip') {
     try {
+      const normalizedTier = normalizeSubscriptionTier(tier);
       // durationDays === null or < 0 → VIP vĩnh viễn (vip_expires_at = NULL, is_vip = TRUE)
       // durationDays === 0     → giữ nguyên vip_expires_at, chỉ update tier
       // durationDays > 0      → cộng dồn
-      const params = [id, tier];
+      const params = [id, normalizedTier];
       let expiresAtExpr;
       if (durationDays === null || durationDays < 0) {
         expiresAtExpr = 'NULL';

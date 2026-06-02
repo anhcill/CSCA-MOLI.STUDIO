@@ -1,21 +1,23 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 
 export default function AuthSessionSync() {
-  const { isAuthenticated, setUser, logout, setTokens, token, refreshToken } = useAuthStore();
+  const { isAuthenticated, setUser, logout, setTokens, refreshToken } = useAuthStore();
   const syncedRef = useRef(false);
+  const lastSyncRef = useRef(0);
 
   useEffect(() => {
     useAuthStore.persist.rehydrate();
   }, []);
 
-  useEffect(() => {
-    if (!isAuthenticated || syncedRef.current) return;
-    syncedRef.current = true;
-
+  const syncSession = useCallback((force = false) => {
+    if (!isAuthenticated) return;
+    const now = Date.now();
+    if (!force && now - lastSyncRef.current < 30000) return;
+    lastSyncRef.current = now;
     getCurrentUser()
       .then((response) => {
         if (response?.success && response?.data?.user) {
@@ -31,7 +33,27 @@ export default function AuthSessionSync() {
           logout();
         }
       });
-  }, [isAuthenticated, setUser, logout]);
+  }, [isAuthenticated, setUser, logout, setTokens, refreshToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || syncedRef.current) return;
+    syncedRef.current = true;
+    syncSession(true);
+  }, [isAuthenticated, syncSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === 'undefined') return;
+    const onFocus = () => syncSession(false);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') syncSession(false);
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isAuthenticated, syncSession]);
 
   return null;
 }

@@ -3,6 +3,12 @@ const emailService = require('../services/emailService');
 const UserActivity = require('../models/UserActivity');
 const DeviceSessionService = require('../services/deviceSessionService');
 
+const normalizeTier = (tier) => {
+  const value = String(tier || '').trim().toLowerCase();
+  if (value === 'premium' || value === 'pre') return 'premium';
+  return 'vip';
+};
+
 const AdminVipController = {
   /**
    * GET /api/admin/vip/users
@@ -108,10 +114,10 @@ const AdminVipController = {
         pkgId = pkgRes.rows[0].id;
         pkgName = pkgRes.rows[0].name;
         pkgDays = pkgRes.rows[0].duration_days;
-        pkgTier = pkgRes.rows[0].tier || 'vip';
+        pkgTier = normalizeTier(pkgRes.rows[0].tier);
       } else if (durationDays && parseInt(durationDays, 10) >= 1) {
         pkgDays = parseInt(durationDays, 10);
-        pkgTier = ['vip', 'premium'].includes(tier) ? tier : 'vip';
+        pkgTier = normalizeTier(tier);
         pkgName = `Gói ${pkgTier === 'premium' ? 'Pre' : 'VIP'} ${pkgDays} ngày`;
       } else {
         return res.status(400).json({ success: false, message: 'Cần cung cấp packageId hoặc durationDays.' });

@@ -2,6 +2,28 @@ const jwt = require("jsonwebtoken");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
 
+const getFreshAuthUser = async (userId) => {
+  const { rows } = await db.query(
+    `SELECT id, email, role, is_active, is_vip, subscription_tier, vip_expires_at
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId],
+  );
+  return rows[0] || null;
+};
+
+const buildRequestUser = (decoded, freshUser) => ({
+  id: freshUser.id,
+  email: freshUser.email || decoded.email,
+  role: freshUser.role || decoded.role || "student",
+  jti: decoded.jti,
+  exp: decoded.exp,
+  is_vip: freshUser.is_vip === true,
+  vip_expires_at: freshUser.vip_expires_at || null,
+  subscription_tier: freshUser.subscription_tier || "basic",
+});
+
 /**
  * Auth Middleware
  * Verifies the JWT, checks blacklist, and attaches decoded payload to req.user.
@@ -58,16 +80,15 @@ const authMiddleware = async (req, res, next) => {
         ).catch(() => {}); // non-blocking
       }
 
-      req.user = {
-        id: decoded.id,
-        email: decoded.email,
-        role: decoded.role || "student",
-        jti: decoded.jti,
-        exp: decoded.exp,
-        is_vip: decoded.is_vip === true,
-        vip_expires_at: decoded.vip_expires_at || null,
-        subscription_tier: decoded.subscription_tier || 'basic',
-      };
+      const freshUser = await getFreshAuthUser(decoded.id);
+      if (!freshUser) {
+        return res.status(401).json({ success: false, message: "User not found" });
+      }
+      if (freshUser.is_active === false) {
+        return res.status(403).json({ success: false, message: "Account disabled" });
+      }
+
+      req.user = buildRequestUser(decoded, freshUser);
 
       next();
     } catch (error) {
@@ -200,10 +221,10 @@ const authorizeAnyPermission = (...permissions) => {
 };
 
 /**
- * Optional authentication — does NOT fail if token is absent.
- * ✅ P1 fix: No DB query.
+ * Optional authentication does not fail if token is absent.
+ * Hydrates VIP/Pre fields from DB so manual grants work with old tokens.
  */
-const optionalAuth = (req, res, next) => {
+const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) return next();
@@ -214,14 +235,10 @@ const optionalAuth = (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       if (decoded.id) {
-        req.user = {
-          id: decoded.id,
-          email: decoded.email,
-          role: decoded.role || "student",
-          is_vip: decoded.is_vip === true,
-          vip_expires_at: decoded.vip_expires_at || null,
-          subscription_tier: decoded.subscription_tier || 'basic',
-        };
+        const freshUser = await getFreshAuthUser(decoded.id);
+        if (freshUser && freshUser.is_active !== false) {
+          req.user = buildRequestUser(decoded, freshUser);
+        }
       }
     } catch {
       // Invalid/expired token — just continue without user

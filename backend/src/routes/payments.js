@@ -369,19 +369,23 @@ async function updateVipStatusForPayment(userId, durationDays, tier) {
     return await User.updateVipStatus(userId, durationDays, tier);
   } catch (err) {
     console.error('[SePay] User.updateVipStatus failed, using direct fallback:', err.message);
+    const normalizedTier = String(tier || '').toLowerCase() === 'premium' || String(tier || '').toLowerCase() === 'pre'
+      ? 'premium'
+      : 'vip';
     const days = Number.parseInt(durationDays, 10);
     const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
     const fallbackRes = await db.query(
       `UPDATE users
        SET is_vip = TRUE,
+           subscription_tier = $3,
            vip_expires_at = CASE
              WHEN $2::int > 0 THEN GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + ($2::int * INTERVAL '1 day')
              ELSE vip_expires_at
            END,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, is_vip, vip_expires_at`,
-      [userId, safeDays]
+       RETURNING id, is_vip, vip_expires_at, subscription_tier`,
+      [userId, safeDays, normalizedTier]
     );
     return fallbackRes.rows[0] || null;
   }
