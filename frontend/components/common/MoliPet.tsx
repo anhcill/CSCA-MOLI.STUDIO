@@ -465,7 +465,7 @@ function MolyThreeCat({
 
   if (!webglOk) {
     return (
-      <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-cyan-200 via-white to-pink-200 text-lg font-black text-slate-800 shadow-inner">
+      <div className="flex h-20 w-20 items-center justify-center text-lg font-black text-cyan-700 drop-shadow-[0_10px_18px_rgba(15,23,42,0.22)]">
         =^.^=
       </div>
     );
@@ -1025,7 +1025,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             setOpen((value) => !value);
             setMinimized(false);
           }}
-          className={`relative flex h-20 w-20 touch-none items-center justify-center rounded-[28px] bg-white/90 shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-[3px] ${theme.ring} backdrop-blur transition hover:-translate-y-1 dark:bg-slate-900/90 ${dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
+          className={`relative flex h-20 w-20 touch-none items-center justify-center overflow-visible bg-transparent p-0 drop-shadow-[0_16px_26px_rgba(15,23,42,0.28)] transition hover:-translate-y-1 focus-visible:outline-none ${dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
           title="Keo de di chuyen, bam de mo"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
