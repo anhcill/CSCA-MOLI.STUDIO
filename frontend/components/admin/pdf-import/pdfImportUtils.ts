@@ -1,4 +1,10 @@
-import type { ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
+import type {
+  ImportedExamItem,
+  ImportedFillBlankGroupData,
+  ImportedQuestionData,
+  ImportedReadingGroupData,
+  PdfImportPreview,
+} from '@/lib/api/examAdmin';
 
 export const IMPORT_ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
@@ -117,6 +123,38 @@ export const createEmptyImportedQuestion = (): ImportedQuestionData => ({
   answers: [createEmptyImportedAnswer(), createEmptyImportedAnswer()],
   correctAnswer: '',
   difficulty: 'medium',
+});
+
+export const createEmptyImportedReadingGroup = (): ImportedReadingGroupData => ({
+  itemType: 'reading_group',
+  passageText: '',
+  passageImageUrl: '',
+  subQuestions: [createEmptyImportedQuestion()],
+});
+
+export const createEmptyImportedFillBlankSubItem = (
+  subQuestionNumber = 1,
+): ImportedFillBlankGroupData['subItems'][number] => ({
+  questionText: '',
+  questionTextCn: '',
+  points: 1,
+  explanation: '',
+  explanationCn: '',
+  correctAnswerKey: '',
+  difficulty: 'medium',
+  subQuestionNumber,
+});
+
+export const createEmptyImportedFillBlankGroup = (): ImportedFillBlankGroupData => ({
+  itemType: 'fill_blank_group',
+  clozeMode: 'sentences',
+  passageText: '',
+  passageImageUrl: '',
+  linkedOptions: [
+    { key: 'A', text: '', textCn: '' },
+    { key: 'B', text: '', textCn: '' },
+  ],
+  subItems: [createEmptyImportedFillBlankSubItem()],
 });
 
 export const getNextOptionKey = (usedKeys: string[]) => {

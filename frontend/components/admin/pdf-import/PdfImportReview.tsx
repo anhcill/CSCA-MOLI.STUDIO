@@ -13,7 +13,10 @@ import type {
 import {
   IMPORT_ANSWER_KEYS,
   createEmptyImportedAnswer,
+  createEmptyImportedFillBlankGroup,
+  createEmptyImportedFillBlankSubItem,
   createEmptyImportedQuestion,
+  createEmptyImportedReadingGroup,
   getImportItemsQuestionCount,
   getNextOptionKey,
 } from './pdfImportUtils';
@@ -73,6 +76,37 @@ function ItemWarnings({ item }: { item: Pick<ImportedQuestionData, 'imageHint' |
   );
 }
 
+type NewImportedItemType = 'single_choice' | 'reading_group' | 'fill_blank_group';
+
+function createImportedItem(type: NewImportedItemType): ImportedExamItem {
+  if (type === 'reading_group') return createEmptyImportedReadingGroup();
+  if (type === 'fill_blank_group') return createEmptyImportedFillBlankGroup();
+  return createEmptyImportedQuestion();
+}
+
+function AddItemButtons({
+  label,
+  onAdd,
+}: {
+  label: string;
+  onAdd: (type: NewImportedItemType) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold text-gray-500">{label}</span>
+      <button type="button" onClick={() => onAdd('single_choice')} className={tinyButtonClass}>
+        <FiPlus size={12} /> Trắc nghiệm
+      </button>
+      <button type="button" onClick={() => onAdd('reading_group')} className={tinyButtonClass}>
+        <FiPlus size={12} /> Đọc hiểu
+      </button>
+      <button type="button" onClick={() => onAdd('fill_blank_group')} className={tinyButtonClass}>
+        <FiPlus size={12} /> Điền từ
+      </button>
+    </div>
+  );
+}
+
 function formatSourceSummary(source: PdfImportPreview['source']) {
   if (!source) return '';
 
@@ -101,6 +135,16 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
   const removeItem = (index: number) => {
     if (!confirm('Xóa mục này khỏi danh sách import?')) return;
     onChangeItems(items.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const addItem = (type: NewImportedItemType) => {
+    onChangeItems([...items, createImportedItem(type)]);
+  };
+
+  const insertItemAfter = (index: number, type: NewImportedItemType) => {
+    const nextItems = [...items];
+    nextItems.splice(index + 1, 0, createImportedItem(type));
+    onChangeItems(nextItems);
   };
 
   const updateSingle = (index: number, updates: Partial<ImportedQuestionData>) => {
@@ -272,19 +316,7 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
       if (item.itemType !== 'fill_blank_group') return null;
       return {
         ...item,
-        subItems: [
-          ...item.subItems,
-          {
-            questionText: '',
-            questionTextCn: '',
-            points: 1,
-            explanation: '',
-            explanationCn: '',
-            correctAnswerKey: '',
-            difficulty: 'medium',
-            subQuestionNumber: item.subItems.length + 1,
-          },
-        ],
+        subItems: [...item.subItems, createEmptyImportedFillBlankSubItem(item.subItems.length + 1)],
       };
     });
   };
@@ -312,14 +344,17 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
             Công thức nhập bằng LaTeX, ví dụ <code className="rounded bg-gray-100 px-1">{'\\(f^{-1}(x)=\\frac{x+3}{x-2}\\)'}</code>. Ảnh chỉ dùng cho hình/biểu đồ cần upload.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving || items.length === 0}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-        >
-          {saving ? 'Đang lưu...' : `Lưu ${questionCount} câu vào đề`}
-        </button>
+        <div className="flex flex-col gap-2 md:items-end">
+          <AddItemButtons label="Thêm mục" onAdd={addItem} />
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || items.length === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            {saving ? 'Đang lưu...' : `Lưu ${questionCount} câu vào đề`}
+          </button>
+        </div>
       </div>
 
       {!!preview.warnings?.length && (
@@ -338,11 +373,14 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
           if (item.itemType === 'reading_group') {
             return (
               <div key={itemIndex} className="py-4 first:pt-0 last:pb-0">
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="font-semibold text-gray-900">Đọc hiểu - {item.subQuestions.length} câu</h4>
-                  <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
-                    <FiTrash2 size={13} /> Bỏ mục
-                  </button>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                    <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
+                      <FiTrash2 size={13} /> Bỏ mục
+                    </button>
+                  </div>
                 </div>
                 <MathInput
                   label="Đoạn văn"
@@ -410,14 +448,42 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                               </div>
                             ))}
                           </div>
-                          <div className="mt-2 flex flex-wrap items-end gap-2">
-                            <button type="button" onClick={() => addReadingSubAnswer(itemIndex, subIndex)} disabled={(subQuestion.answers || []).length >= IMPORT_ANSWER_KEYS.length} className={tinyButtonClass}>
-                              <FiPlus size={12} /> Thêm đáp án
-                            </button>
-                            <select value={subQuestion.correctAnswer || ''} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { correctAnswer: event.target.value })} className={`${inputClass} max-w-xs`}>
-                              <option value="">Chọn đáp án đúng</option>
-                              {subAnswerKeys.map((key) => <option key={key} value={key}>{key}</option>)}
-                            </select>
+                          <button type="button" onClick={() => addReadingSubAnswer(itemIndex, subIndex)} disabled={(subQuestion.answers || []).length >= IMPORT_ANSWER_KEYS.length} className={`${tinyButtonClass} mt-2`}>
+                            <FiPlus size={12} /> Thêm đáp án
+                          </button>
+                          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
+                              <select value={subQuestion.correctAnswer || ''} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { correctAnswer: event.target.value })} className={inputClass}>
+                                <option value="">Chọn đáp án</option>
+                                {subAnswerKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
+                              <input type="number" min="0.1" step="0.1" value={subQuestion.points || 1} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { points: Number.parseFloat(event.target.value) || 1 })} className={inputClass} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
+                              <select value={subQuestion.difficulty || 'medium'} onChange={(event) => updateReadingSubQuestion(itemIndex, subIndex, { difficulty: event.target.value })} className={inputClass}>
+                                <option value="easy">Dễ</option>
+                                <option value="medium">Trung bình</option>
+                                <option value="hard">Khó</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="mt-3">
+                            <MathInput
+                              label="Giải thích"
+                              value={subQuestion.explanation || ''}
+                              onChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { explanation: value })}
+                              cnLabel="Tiếng Trung"
+                              cnValue={subQuestion.explanationCn || ''}
+                              onCnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { explanationCn: value })}
+                              placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
+                              cnPlaceholder="Giải thích tiếng Trung"
+                              defaultTab="cn"
+                            />
                           </div>
                         </div>
                       );
@@ -435,11 +501,21 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
           if (item.itemType === 'fill_blank_group') {
             return (
               <div key={itemIndex} className="py-4 first:pt-0 last:pb-0">
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="font-semibold text-gray-900">Điền từ - {item.subItems.length} chỗ trống</h4>
-                  <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
-                    <FiTrash2 size={13} /> Bỏ mục
-                  </button>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                    <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
+                      <FiTrash2 size={13} /> Bỏ mục
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-3 max-w-xs">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Dạng điền từ</label>
+                  <select value={item.clozeMode || 'sentences'} onChange={(event) => updateFillBlankGroup(itemIndex, { clozeMode: event.target.value as ImportedFillBlankGroupData['clozeMode'] })} className={inputClass}>
+                    <option value="sentences">Từng câu</option>
+                    <option value="passage">Đoạn văn có chỗ trống</option>
+                  </select>
                 </div>
                 <MathInput
                   label="Đoạn văn / ngữ cảnh"
@@ -491,7 +567,7 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                               <FiTrash2 size={12} /> Xóa
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_10rem]">
+                          <div className="grid grid-cols-1 gap-3">
                             <MathInput
                               label=""
                               value={subItem.questionText || ''}
@@ -502,10 +578,40 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
                               placeholder={`Chỗ trống ${subIndex + 1} (Việt/Anh)`}
                               cnPlaceholder={`Chỗ trống ${subIndex + 1} (Tiếng Trung)`}
                             />
-                            <select value={subItem.correctAnswerKey || ''} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { correctAnswerKey: event.target.value })} className={inputClass}>
-                              <option value="">Đáp án</option>
-                              {item.linkedOptions.map((option) => <option key={option.key} value={option.key}>{option.key}</option>)}
-                            </select>
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Đáp án đúng</label>
+                              <select value={subItem.correctAnswerKey || ''} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { correctAnswerKey: event.target.value })} className={inputClass}>
+                                <option value="">Đáp án</option>
+                                {item.linkedOptions.map((option) => <option key={option.key} value={option.key}>{option.key}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
+                              <input type="number" min="0.1" step="0.1" value={subItem.points || 1} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { points: Number.parseFloat(event.target.value) || 1 })} className={inputClass} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1">Độ khó</label>
+                              <select value={subItem.difficulty || 'medium'} onChange={(event) => updateFillBlankSubItem(itemIndex, subIndex, { difficulty: event.target.value })} className={inputClass}>
+                                <option value="easy">Dễ</option>
+                                <option value="medium">Trung bình</option>
+                                <option value="hard">Khó</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="mt-3">
+                            <MathInput
+                              label="Giải thích"
+                              value={subItem.explanation || ''}
+                              onChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { explanation: value })}
+                              cnLabel="Tiếng Trung"
+                              cnValue={subItem.explanationCn || ''}
+                              onCnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { explanationCn: value })}
+                              placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
+                              cnPlaceholder="Giải thích tiếng Trung"
+                              defaultTab="cn"
+                            />
                           </div>
                         </div>
                       ))}
@@ -523,11 +629,14 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
           const answerKeys = IMPORT_ANSWER_KEYS.slice(0, item.answers?.length || 0);
           return (
             <div key={itemIndex} className="py-4 first:pt-0 last:pb-0">
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h4 className="font-semibold text-gray-900">Câu {itemIndex + 1}</h4>
-                <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
-                  <FiTrash2 size={13} /> Bỏ mục
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                  <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
+                    <FiTrash2 size={13} /> Bỏ mục
+                  </button>
+                </div>
               </div>
               <MathInput
                 label="Nội dung câu hỏi"
