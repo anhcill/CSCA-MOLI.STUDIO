@@ -202,8 +202,12 @@ export default function OfficialExamAdminPage() {
   };
 
   const updateRegistration = async (registrationId: number, status: string) => {
-    await officialExamAdminApi.updateRegistrationStatus(examId, registrationId, { status });
-    await loadOperationalData();
+    try {
+      await officialExamAdminApi.updateRegistrationStatus(examId, registrationId, { status });
+      await loadOperationalData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không thể cập nhật trạng thái đăng ký');
+    }
   };
 
   const createRoom = async () => {
@@ -354,7 +358,14 @@ export default function OfficialExamAdminPage() {
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           <button onClick={() => updateRegistration(reg.id, 'approved')} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Duyệt</button>
-                          <button onClick={() => updateRegistration(reg.id, 'checked_in')} className="rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">Check-in</button>
+                          <button
+                            onClick={() => updateRegistration(reg.id, 'checked_in')}
+                            disabled={!reg.room_id}
+                            title={!reg.room_id ? 'Cần phân phòng trước khi check-in' : undefined}
+                            className="rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Check-in
+                          </button>
                           <button onClick={() => updateRegistration(reg.id, 'no_show')} className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">Vắng</button>
                           <button onClick={() => updateRegistration(reg.id, 'cancelled')} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100">Hủy</button>
                         </div>

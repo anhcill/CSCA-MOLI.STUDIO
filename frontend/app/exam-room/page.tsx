@@ -186,7 +186,10 @@ export default function ExamRoomPage() {
     const loading = registrationLoading[exam.id];
     const status = registration?.status;
     const approved = status === 'approved' || status === 'checked_in';
-    const canCancel = status === 'registered' || status === 'approved';
+    const startMs = exam.start_time ? new Date(exam.start_time).getTime() : null;
+    const hasStarted = !!startMs && now >= startMs;
+    const canRegister = (!status || status === 'cancelled') && !hasStarted;
+    const canCancel = (status === 'registered' || status === 'approved') && !hasStarted;
 
     return (
       <div className={`rounded-2xl border ${registrationClass(status)} ${compact ? 'p-3' : 'p-4'} space-y-3`}>
@@ -212,7 +215,7 @@ export default function ExamRoomPage() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          {!status || status === 'cancelled' ? (
+          {canRegister ? (
             <button
               type="button"
               onClick={() => handleRegister(exam.id)}

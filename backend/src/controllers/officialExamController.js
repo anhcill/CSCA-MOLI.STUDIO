@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { pool } = require("../config/database");
+const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
 
 function parsePositiveInt(value) {
@@ -22,6 +23,29 @@ function emitExamMonitor(req, examId, event, payload) {
 
 function certificateCode() {
   return `CSCA-${new Date().getFullYear()}-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
+}
+
+function clearLobbyCache() {
+  cache.del("exams:lobby");
+}
+
+async function findFirstAvailableSeat(client, roomId, capacity, registrationId = null) {
+  const result = await client.query(
+    `SELECT seats.seat_number
+     FROM generate_series(1, $2::int) AS seats(seat_number)
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM exam_room_students ers
+       WHERE ers.room_id = $1
+         AND ers.seat_number = seats.seat_number
+         AND ers.registration_id <> COALESCE($3::bigint, -1)
+     )
+     ORDER BY seat_number
+     LIMIT 1`,
+    [roomId, capacity, registrationId],
+  );
+
+  return result.rows[0]?.seat_number || null;
 }
 
 async function getRegistrationForUser(client, examId, userId) {
@@ -111,6 +135,7 @@ const officialExamController = {
       }
 
       await client.query("COMMIT");
+      clearLobbyCache();
 
       UserActivity.log(req.user.id, "exam_register", {
         examId,
@@ -131,21 +156,45 @@ const officialExamController = {
   },
 
   async cancelRegistration(req, res) {
+    const client = await pool.connect();
     try {
       const examId = parsePositiveInt(req.params.examId);
       if (!examId) return res.status(400).json({ success: false, message: "ID ky thi khong hop le" });
 
-      const result = await pool.query(
-        `UPDATE exam_registrations
-         SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
-         WHERE exam_id = $1 AND user_id = $2 AND status IN ('registered', 'approved')
-         RETURNING *`,
+      await client.query("BEGIN");
+
+      const existing = await client.query(
+        `SELECT er.*, e.start_time
+         FROM exam_registrations er
+         JOIN exams e ON e.id = er.exam_id
+         WHERE er.exam_id = $1
+           AND er.user_id = $2
+           AND er.status IN ('registered', 'approved')
+         FOR UPDATE OF er`,
         [examId, req.user.id],
       );
 
-      if (!result.rows[0]) {
+      if (!existing.rows[0]) {
+        await client.query("ROLLBACK");
         return res.status(404).json({ success: false, message: "Khong tim thay dang ky co the huy" });
       }
+
+      if (existing.rows[0].start_time && new Date(existing.rows[0].start_time) <= new Date()) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "Ky thi da bat dau, khong the huy dang ky" });
+      }
+
+      const result = await client.query(
+        `UPDATE exam_registrations
+         SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [existing.rows[0].id],
+      );
+
+      await client.query("DELETE FROM exam_room_students WHERE registration_id = $1", [existing.rows[0].id]);
+      await client.query("COMMIT");
+      clearLobbyCache();
 
       UserActivity.log(req.user.id, "exam_cancel_registration", {
         examId,
@@ -157,8 +206,11 @@ const officialExamController = {
 
       return res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       console.error("Cancel registration error:", error);
       return res.status(500).json({ success: false, message: "Loi huy dang ky" });
+    } finally {
+      client.release();
     }
   },
 
@@ -264,6 +316,7 @@ const officialExamController = {
   },
 
   async updateRegistrationStatus(req, res) {
+    const client = await pool.connect();
     try {
       const examId = parsePositiveInt(req.params.examId);
       const registrationId = parsePositiveInt(req.params.registrationId);
@@ -275,12 +328,33 @@ const officialExamController = {
         return res.status(400).json({ success: false, message: "Du lieu trang thai khong hop le" });
       }
 
-      const result = await pool.query(
+      await client.query("BEGIN");
+
+      const registrationCheck = await client.query(
+        `SELECT er.id, ers.room_id
+         FROM exam_registrations er
+         LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
+         WHERE er.id = $1 AND er.exam_id = $2
+         FOR UPDATE OF er`,
+        [registrationId, examId],
+      );
+
+      if (!registrationCheck.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ success: false, message: "Khong tim thay dang ky" });
+      }
+
+      if (status === "checked_in" && !registrationCheck.rows[0].room_id) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "Can phan phong truoc khi check-in" });
+      }
+
+      const result = await client.query(
         `UPDATE exam_registrations
          SET status = $1,
              note = COALESCE($2, note),
-             approved_by = CASE WHEN $1 = 'approved' THEN $3 ELSE approved_by END,
-             approved_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE approved_at END,
+             approved_by = CASE WHEN $1 IN ('approved', 'checked_in') THEN COALESCE(approved_by, $3) ELSE approved_by END,
+             approved_at = CASE WHEN $1 IN ('approved', 'checked_in') THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
              cancelled_at = CASE WHEN $1 = 'cancelled' THEN NOW() ELSE cancelled_at END,
              updated_at = NOW()
          WHERE id = $4 AND exam_id = $5
@@ -288,9 +362,12 @@ const officialExamController = {
         [status, note, req.user.id, registrationId, examId],
       );
 
-      if (!result.rows[0]) {
-        return res.status(404).json({ success: false, message: "Khong tim thay dang ky" });
+      if (status === "cancelled") {
+        await client.query("DELETE FROM exam_room_students WHERE registration_id = $1", [registrationId]);
       }
+
+      await client.query("COMMIT");
+      clearLobbyCache();
 
       UserActivity.log(req.user.id, "admin.update_exam_registration", {
         examId,
@@ -303,8 +380,11 @@ const officialExamController = {
 
       return res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       console.error("Update registration status error:", error);
       return res.status(500).json({ success: false, message: "Loi cap nhat dang ky" });
+    } finally {
+      client.release();
     }
   },
 
@@ -468,9 +548,20 @@ const officialExamController = {
         return res.status(404).json({ success: false, message: "Dang ky khong hop le" });
       }
 
+      const existingAssignment = await client.query(
+        `SELECT room_id, seat_number
+         FROM exam_room_students
+         WHERE registration_id = $1
+         FOR UPDATE`,
+        [registrationId],
+      );
+      const currentAssignment = existingAssignment.rows[0] || null;
+
       const countResult = await client.query(
-        `SELECT COUNT(*)::int AS count FROM exam_room_students WHERE room_id = $1`,
-        [roomId],
+        `SELECT COUNT(*)::int AS count
+         FROM exam_room_students
+         WHERE room_id = $1 AND registration_id <> $2`,
+        [roomId, registrationId],
       );
       if (countResult.rows[0].count >= room.capacity) {
         await client.query("ROLLBACK");
@@ -478,14 +569,19 @@ const officialExamController = {
       }
 
       let seatNumber = requestedSeat;
+      if (seatNumber && seatNumber > room.capacity) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "So ghe vuot qua suc chua phong" });
+      }
+      if (!seatNumber && Number(currentAssignment?.room_id) === Number(roomId) && currentAssignment.seat_number) {
+        seatNumber = currentAssignment.seat_number;
+      }
       if (!seatNumber) {
-        const seatResult = await client.query(
-          `SELECT COALESCE(MAX(seat_number), 0) + 1 AS next_seat
-           FROM exam_room_students
-           WHERE room_id = $1`,
-          [roomId],
-        );
-        seatNumber = seatResult.rows[0].next_seat;
+        seatNumber = await findFirstAvailableSeat(client, roomId, room.capacity, registrationId);
+      }
+      if (!seatNumber) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ success: false, message: "Phong thi khong con ghe trong" });
       }
 
       const assigned = await client.query(
@@ -590,7 +686,12 @@ const officialExamController = {
         if (roomIndex >= rooms.length) break;
 
         const room = rooms[roomIndex];
-        const seatNumber = room.assigned_count + 1;
+        const seatNumber = await findFirstAvailableSeat(client, room.id, room.capacity, reg.id);
+        if (!seatNumber) {
+          room.assigned_count = room.capacity;
+          roomIndex++;
+          continue;
+        }
         await client.query(
           `INSERT INTO exam_room_students (room_id, registration_id, seat_number, assigned_by)
            VALUES ($1, $2, $3, $4)`,
