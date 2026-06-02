@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
 import {
   FiChevronDown,
@@ -39,6 +39,13 @@ interface PetMessage {
 
 const SETTINGS_KEY = 'moli_pet_settings_v1';
 const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
+const POSITION_KEY = 'moli_pet_position_v1';
+const PET_FRAME_SIZE = 104;
+
+interface PetPoint {
+  x: number;
+  y: number;
+}
 
 const COLOR_THEMES: Record<PetColor, {
   label: string;
@@ -188,6 +195,39 @@ const readSettings = (position: PetPosition) => {
   }
 };
 
+const clampPetPoint = (point: PetPoint): PetPoint => {
+  if (typeof window === 'undefined') return point;
+  const padding = 12;
+  const maxX = Math.max(padding, window.innerWidth - PET_FRAME_SIZE - padding);
+  const maxY = Math.max(84, window.innerHeight - PET_FRAME_SIZE - padding);
+  return {
+    x: Math.min(Math.max(padding, point.x), maxX),
+    y: Math.min(Math.max(84, point.y), maxY),
+  };
+};
+
+const getInitialPetPoint = (position: PetPosition): PetPoint => {
+  if (typeof window === 'undefined') return { x: 20, y: 520 };
+  const fallback = clampPetPoint({
+    x: position === 'right' ? window.innerWidth - PET_FRAME_SIZE - 20 : 20,
+    y: window.innerHeight - PET_FRAME_SIZE - 28,
+  });
+
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(POSITION_KEY) || '{}');
+    if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      return clampPetPoint({ x: saved.x, y: saved.y });
+    }
+  } catch {}
+
+  return fallback;
+};
+
+const savePetPoint = (point: PetPoint) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(POSITION_KEY, JSON.stringify(clampPetPoint(point)));
+};
+
 const getFirstName = (name?: string) => {
   const trimmed = name?.trim();
   if (!trimmed) return 'bạn';
@@ -209,32 +249,52 @@ function PetFace({ color, mood }: { color: PetColor; mood: PetMood }) {
   const theme = COLOR_THEMES[color];
   const sleepy = mood === 'sleepy';
   const focus = mood === 'focus';
+  const happy = mood === 'happy';
 
   return (
-    <div className="relative h-20 w-20">
-      <div className="absolute inset-[-18px] animate-pulse opacity-80">
+    <div className="moli-float relative h-24 w-24">
+      <div className="pointer-events-none absolute inset-[-20px] opacity-70">
         <Lottie animationData={sparkleAnimation} loop autoplay />
       </div>
-      <div className={`absolute left-2 top-1 h-7 w-7 rotate-[-22deg] rounded-full bg-gradient-to-br ${theme.body} shadow-sm`} />
-      <div className={`absolute right-2 top-1 h-7 w-7 rotate-[22deg] rounded-full bg-gradient-to-br ${theme.body} shadow-sm`} />
-      <div className={`absolute inset-x-2 top-4 h-16 rounded-[28px] bg-gradient-to-br ${theme.body} shadow-lg ring-4 ${theme.ring}`}>
-        <div className={`absolute left-4 top-2 h-4 w-4 rounded-full ${theme.accent} opacity-80`} />
-        <div className="absolute left-5 top-7 flex gap-5">
-          <span className={`${sleepy ? 'h-1 w-4 rounded-full' : 'h-3 w-3 rounded-full'} block bg-slate-900`} />
-          <span className={`${sleepy ? 'h-1 w-4 rounded-full' : 'h-3 w-3 rounded-full'} block bg-slate-900`} />
+      <div className="moli-shadow absolute bottom-0 left-1/2 h-4 w-16 -translate-x-1/2 rounded-full bg-slate-900/18 blur-sm" />
+      <div className={`moli-ear-left absolute left-4 top-1 h-9 w-8 -rotate-[28deg] rounded-[70%_70%_50%_50%] bg-gradient-to-br ${theme.body} shadow-md ring-2 ring-white/70`} />
+      <div className={`moli-ear-right absolute right-4 top-1 h-9 w-8 rotate-[28deg] rounded-[70%_70%_50%_50%] bg-gradient-to-br ${theme.body} shadow-md ring-2 ring-white/70`} />
+      <div className={`absolute left-1/2 top-4 h-[74px] w-[82px] -translate-x-1/2 rounded-[34px] bg-gradient-to-br ${theme.body} shadow-[0_16px_36px_rgba(15,23,42,0.25)] ring-4 ${theme.ring}`}>
+        <div className="absolute inset-x-3 top-2 h-8 rounded-full bg-white/24 blur-[1px]" />
+        <div className={`absolute left-4 top-4 h-5 w-5 rounded-full ${theme.accent} opacity-80 shadow-inner`} />
+        <div className="absolute right-4 top-4 h-2.5 w-5 rotate-[-18deg] rounded-full bg-white/60" />
+        <div className="absolute left-[18px] top-9 flex gap-6">
+          <span
+            className={[
+              'moli-blink block bg-slate-950 shadow-[0_1px_0_rgba(255,255,255,0.45)]',
+              sleepy ? 'h-1.5 w-5 rounded-full' : happy ? 'h-3 w-4 rounded-b-full border-b-4 border-slate-950 bg-transparent' : 'h-4 w-3 rounded-full',
+            ].join(' ')}
+          />
+          <span
+            className={[
+              'moli-blink block bg-slate-950 shadow-[0_1px_0_rgba(255,255,255,0.45)]',
+              sleepy ? 'h-1.5 w-5 rounded-full' : happy ? 'h-3 w-4 rounded-b-full border-b-4 border-slate-950 bg-transparent' : 'h-4 w-3 rounded-full',
+            ].join(' ')}
+          />
         </div>
-        <div className="absolute left-1/2 top-11 -translate-x-1/2">
+        <div className="absolute left-1/2 top-[54px] -translate-x-1/2">
           {focus ? (
             <div className="h-1.5 w-7 rounded-full bg-slate-900" />
           ) : sleepy ? (
             <div className="h-2 w-5 rounded-b-full border-b-2 border-slate-900" />
+          ) : happy ? (
+            <div className="h-4 w-8 rounded-b-full border-b-[5px] border-slate-950" />
           ) : (
-            <div className="h-4 w-8 rounded-b-full border-b-4 border-slate-900" />
+            <div className="h-3 w-6 rounded-b-full border-b-4 border-slate-950" />
           )}
         </div>
-        <div className="absolute bottom-2 left-4 h-2 w-2 rounded-full bg-white/70" />
-        <div className="absolute bottom-2 right-4 h-2 w-2 rounded-full bg-white/70" />
+        <div className="absolute left-3 top-[53px] h-3 w-4 rounded-full bg-rose-300/70 blur-[1px]" />
+        <div className="absolute right-3 top-[53px] h-3 w-4 rounded-full bg-rose-300/70 blur-[1px]" />
       </div>
+      <div className={`moli-hand-left absolute left-1 top-12 h-5 w-4 -rotate-12 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
+      <div className={`moli-hand-right absolute right-1 top-12 h-5 w-4 rotate-12 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
+      <div className={`moli-foot-left absolute bottom-3 left-7 h-4 w-5 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
+      <div className={`moli-foot-right absolute bottom-3 right-7 h-4 w-5 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
     </div>
   );
 }
@@ -251,7 +311,17 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<PetMessage[]>([]);
+  const [petPoint, setPetPoint] = useState<PetPoint | null>(null);
+  const [dragging, setDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef({
+    pointerId: null as number | null,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+    moved: false,
+  });
 
   const theme = COLOR_THEMES[settings.color];
   const userName = getFirstName(user?.display_name || user?.full_name || user?.username);
@@ -261,6 +331,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     const nextSettings = readSettings(defaultPosition);
     const hiddenUntil = Number(window.localStorage.getItem(HIDDEN_UNTIL_KEY) || 0);
     setSettings(nextSettings);
+    setPetPoint(getInitialPetPoint(nextSettings.position));
     setHidden(hiddenUntil > Date.now());
     setMessages([
       {
@@ -282,14 +353,108 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages, open]);
 
-  if (!mounted || hidden) return null;
+  useEffect(() => {
+    if (!mounted) return;
+    const handleResize = () => {
+      setPetPoint((current) => {
+        if (!current) return current;
+        const next = clampPetPoint(current);
+        savePetPoint(next);
+        return next;
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [mounted]);
 
-  const sideClass = settings.position === 'right' ? 'right-3 sm:right-5' : 'left-3 sm:left-5';
-  const panelSideClass = settings.position === 'right' ? 'right-0' : 'left-0';
-  const bubbleSideClass = settings.position === 'right' ? 'right-20' : 'left-20';
+  if (!mounted) return null;
+
+  const restorePet = () => {
+    window.localStorage.removeItem(HIDDEN_UNTIL_KEY);
+    setHidden(false);
+    setPetPoint((current) => current || getInitialPetPoint(settings.position));
+    setOpen(true);
+    setMinimized(false);
+  };
+
+  if (hidden) {
+    return (
+      <button
+        type="button"
+        onClick={restorePet}
+        aria-label="Hien MoliPet"
+        className="fixed bottom-5 left-4 z-[65] rounded-2xl border border-cyan-100 bg-white/95 px-4 py-3 text-sm font-black text-cyan-700 shadow-xl backdrop-blur hover:bg-cyan-50 dark:border-slate-700 dark:bg-slate-900 dark:text-cyan-200"
+        title="Bật lại MoliPet"
+      >
+        Hiện MoliPet
+      </button>
+    );
+  }
+
+  if (!petPoint) return null;
+
+  const dockedRight = petPoint.x > window.innerWidth / 2;
+  const panelSideClass = dockedRight ? 'right-0' : 'left-0';
+  const bubbleSideClass = dockedRight ? 'right-24' : 'left-24';
+  const panelVerticalClass = petPoint.y < 360 ? 'top-24' : 'bottom-28';
+  const containerStyle: CSSProperties = { left: petPoint.x, top: petPoint.y };
 
   const updateSettings = (patch: Partial<MoliPetSettings>) => {
     setSettings((current) => ({ ...current, ...patch }));
+  };
+
+  const movePetToSide = (position: PetPosition) => {
+    const nextPoint = clampPetPoint({
+      x: position === 'right' ? window.innerWidth - PET_FRAME_SIZE - 20 : 20,
+      y: petPoint.y,
+    });
+    updateSettings({ position });
+    setPetPoint(nextPoint);
+    savePetPoint(nextPoint);
+  };
+
+  const handlePetPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: petPoint.x,
+      originY: petPoint.y,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+  };
+
+  const handlePetPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      drag.moved = true;
+    }
+    setPetPoint(clampPetPoint({ x: drag.originX + deltaX, y: drag.originY + deltaY }));
+  };
+
+  const handlePetPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (drag.pointerId !== event.pointerId) return;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can already be gone after a browser cancel.
+    }
+    const nextPoint = clampPetPoint({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY,
+    });
+    setPetPoint(nextPoint);
+    savePetPoint(nextPoint);
+    updateSettings({ position: nextPoint.x > window.innerWidth / 2 ? 'right' : 'left' });
+    dragRef.current.pointerId = null;
+    setDragging(false);
   };
 
   const hideForDay = () => {
@@ -345,10 +510,52 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   };
 
   return (
-    <div className={`fixed bottom-5 z-[65] ${sideClass}`}>
+    <div className="fixed z-[65] h-[104px] w-[104px] select-none" style={containerStyle}>
+      <style>{`
+        @keyframes moli-float {
+          0%, 100% { transform: translateY(0) rotate(-1deg); }
+          50% { transform: translateY(-8px) rotate(1deg); }
+        }
+        @keyframes moli-shadow {
+          0%, 100% { transform: translateX(-50%) scale(1); opacity: .22; }
+          50% { transform: translateX(-50%) scale(.82); opacity: .12; }
+        }
+        @keyframes moli-blink {
+          0%, 91%, 100% { transform: scaleY(1); }
+          94%, 96% { transform: scaleY(.12); }
+        }
+        @keyframes moli-ear-left {
+          0%, 100% { transform: rotate(-28deg); }
+          50% { transform: rotate(-18deg) translateY(-1px); }
+        }
+        @keyframes moli-ear-right {
+          0%, 100% { transform: rotate(28deg); }
+          50% { transform: rotate(18deg) translateY(-1px); }
+        }
+        @keyframes moli-hand-left {
+          0%, 100% { transform: rotate(-14deg) translateY(0); }
+          50% { transform: rotate(-34deg) translateY(-3px); }
+        }
+        @keyframes moli-hand-right {
+          0%, 100% { transform: rotate(14deg) translateY(0); }
+          50% { transform: rotate(34deg) translateY(-3px); }
+        }
+        .moli-float { animation: moli-float 3.2s ease-in-out infinite; transform-origin: center bottom; }
+        .moli-shadow { animation: moli-shadow 3.2s ease-in-out infinite; }
+        .moli-blink { animation: moli-blink 5.2s ease-in-out infinite; transform-origin: center; }
+        .moli-ear-left { animation: moli-ear-left 4s ease-in-out infinite; transform-origin: bottom center; }
+        .moli-ear-right { animation: moli-ear-right 4s ease-in-out infinite; transform-origin: bottom center; }
+        .moli-hand-left { animation: moli-hand-left 3.4s ease-in-out infinite; transform-origin: right center; }
+        .moli-hand-right { animation: moli-hand-right 3.4s ease-in-out infinite; transform-origin: left center; }
+        @media (prefers-reduced-motion: reduce) {
+          .moli-float, .moli-shadow, .moli-blink, .moli-ear-left, .moli-ear-right, .moli-hand-left, .moli-hand-right {
+            animation: none;
+          }
+        }
+      `}</style>
       {open && !minimized && (
         <section
-          className={`absolute bottom-24 ${panelSideClass} w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900`}
+          className={`absolute ${panelVerticalClass} ${panelSideClass} w-[min(372px,calc(100vw-24px))] overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95`}
           aria-label="MoliPet"
         >
           <div className={`flex items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
@@ -413,7 +620,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => updateSettings({ position: settings.position === 'left' ? 'right' : 'left' })}
+                  onClick={() => movePetToSide(settings.position === 'left' ? 'right' : 'left')}
                   className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 >
                   Góc {settings.position === 'left' ? 'trái' : 'phải'}
@@ -486,7 +693,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         </button>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex h-full w-full items-end justify-center gap-1">
         {minimized && open && (
           <button
             type="button"
@@ -499,15 +706,24 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         )}
         <button
           type="button"
+          onPointerDown={handlePetPointerDown}
+          onPointerMove={handlePetPointerMove}
+          onPointerUp={handlePetPointerUp}
+          onPointerCancel={handlePetPointerUp}
           onClick={() => {
+            if (dragRef.current.moved) {
+              dragRef.current.moved = false;
+              return;
+            }
             setOpen((value) => !value);
             setMinimized(false);
           }}
-          className={`relative flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-2xl ring-4 ${theme.ring} transition hover:-translate-y-1 dark:bg-slate-900`}
+          className={`relative flex h-24 w-24 touch-none items-center justify-center rounded-[34px] bg-white/90 shadow-[0_20px_52px_rgba(15,23,42,0.24)] ring-4 ${theme.ring} backdrop-blur transition hover:-translate-y-1 dark:bg-slate-900/90 ${dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
+          title="Keo de di chuyen, bam de mo"
           aria-label={open ? 'Đóng MoliPet' : 'Mở MoliPet'}
         >
           <PetFace color={settings.color} mood={settings.mood} />
-          <span className={`absolute -right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full text-white shadow-lg ${theme.button}`}>
+          <span className={`absolute -right-1 top-1 flex h-9 w-9 items-center justify-center rounded-2xl text-white shadow-lg ${theme.button}`}>
             <FiMessageCircle size={16} />
           </span>
         </button>
