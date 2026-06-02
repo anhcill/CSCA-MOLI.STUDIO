@@ -234,8 +234,8 @@ export default function MathInput({
           value={currentValue}
           onChange={handleRawInput}
           placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : placeholder}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y font-mono"
+          rows={4}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base leading-relaxed resize-y font-mono"
         />
 
         {/* Math toolbar button */}
@@ -340,7 +340,7 @@ export default function MathInput({
       {currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
-          <RichMathText value={currentValue} className="text-gray-800" />
+          <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
         </div>
       )}
 

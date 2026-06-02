@@ -5,11 +5,14 @@ const ANSWER_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 function repairImportedPdfText(input: string): string {
   const subscriptLetters = Array.from(new Set(
-    Array.from(input.matchAll(/\b([A-Za-z])(?:\s+(?:n|\d)|_\{?(?:n|\d)\}?)\b/g)).map(match => match[1]),
+    Array.from(input.matchAll(/(^|[\s([{=+\-*/<>≤≥,;:])([A-Za-z])(?:\s+(?:n|\d)|_\{?(?:n|\d)\}?)\b/g)).map(match => match[2]),
   ));
 
   let repaired = input
     .replace(/\$\$+/g, '')
+    .replace(/([A-Za-z\u00C0-\u1EF9])\s+n\s+([\u00C0-\u1EF9])/g, '$1 n$2')
+    .replace(/([A-Za-z\u00C0-\u1EF9])_\{n\}([A-Za-z\u00C0-\u1EF9])/g, '$1 n$2')
+    .replace(/([A-Za-z\u00C0-\u1EF9])_n([A-Za-z\u00C0-\u1EF9])/g, '$1 n$2')
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, '[$1)')
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, '($1)')
     .replace(/\bC\s*(?:\u211d|R)\s*\(/g, 'C_{\\mathbb{R}}(')
@@ -33,7 +36,8 @@ function repairImportedPdfText(input: string): string {
         return `\\sqrt{${leftTerm}+${rightTerm}}=\\sqrt{${total}}`;
       },
     )
-    .replace(/\b([A-Za-z])\s+([0-9n])\b/g, '$1_{$2}')
+    .replace(/(^|[\s([{=+\-*/<>≤≥,;:])([A-Za-z])\s+([0-9n])(?=$|[\s)\]},.;:+\-*/=<>≤≥])/g, '$1$2_{$3}')
+    .replace(/(\d)\s*o\b/g, '$1°')
     .replace(/\bf\s*[′']\s*\(/g, "f'(")
     .replace(/\s+([,.;:，。；：）)\]])/g, '$1')
     .replace(/([（(\[])\s+/g, '$1');

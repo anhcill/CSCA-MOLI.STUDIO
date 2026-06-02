@@ -261,6 +261,9 @@ function repairPdfImportTextArtifacts(value) {
 
   return text
     .replace(/\$\$+/g, "")
+    .replace(/([A-Za-z\u00C0-\u1EF9])\s+n\s+([\u00C0-\u1EF9])/g, "$1 n$2")
+    .replace(/([A-Za-z\u00C0-\u1EF9])_\{n\}([A-Za-z\u00C0-\u1EF9])/g, "$1 n$2")
+    .replace(/([A-Za-z\u00C0-\u1EF9])_n([A-Za-z\u00C0-\u1EF9])/g, "$1 n$2")
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, "[$1)")
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, "($1)")
     .replace(/\bC\s*(?:\u211d|R)\s*\(/g, "C_{\\mathbb{R}}(")
@@ -269,6 +272,7 @@ function repairPdfImportTextArtifacts(value) {
     .replace(/\\cap|\u2229/g, "\\cap")
     .replace(/\\setminus|\u2216/g, "\\setminus")
     .replace(/\b([A-Za-z])\s*[\u20d7]+/g, "\\vec{$1}")
+    .replace(/(\d)\s*o\b/g, "$1°")
     .replace(/\s+([,.;:ï¼Œă€‚ï¼›ï¼ï¼‰\)Â°])/g, "$1")
     .replace(/([ï¼ˆ\(])\s+/g, "$1")
     .trim();
