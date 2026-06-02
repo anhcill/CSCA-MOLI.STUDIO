@@ -122,11 +122,11 @@ export default function ContactPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.success === false) {
-        throw new Error(data.message || 'Khong gui duoc tin nhan.');
+        throw new Error(data.message || 'Không gửi được tin nhắn.');
       }
       setSubmitted(true);
     } catch (error: any) {
-      setSubmitError(error.message || 'Khong gui duoc tin nhan. Vui long thu lai sau.');
+      setSubmitError(error.message || 'Không gửi được tin nhắn. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
     }

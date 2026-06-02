@@ -59,20 +59,20 @@ class EmailService {
 
     const safeName = this.escapeHtml(name);
     const safeEmail = this.escapeHtml(email);
-    const safePhone = this.escapeHtml(phone || 'Khong cung cap');
-    const safeSubject = this.escapeHtml(subject || 'Lien he tu website');
+    const safePhone = this.escapeHtml(phone || 'Không cung cấp');
+    const safeSubject = this.escapeHtml(subject || 'Liên hệ từ website');
     const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
 
     const html = this._wrapper({
-      title: 'Tin nhan lien he moi',
+      title: 'Tin nhắn liên hệ mới',
       emoji: '📩',
       content: `
-        <h2 style="margin:0 0 16px;font-size:20px">Tin nhan lien he moi</h2>
+        <h2 style="margin:0 0 16px;font-size:20px">Tin nhắn liên hệ mới</h2>
         <table style="width:100%;border-collapse:collapse;margin:0 0 22px">
-          <tr><td style="padding:8px 0;color:#666;width:120px">Ho ten</td><td style="padding:8px 0;font-weight:700">${safeName}</td></tr>
+          <tr><td style="padding:8px 0;color:#666;width:120px">Họ tên</td><td style="padding:8px 0;font-weight:700">${safeName}</td></tr>
           <tr><td style="padding:8px 0;color:#666">Email</td><td style="padding:8px 0"><a href="mailto:${safeEmail}" style="color:#667eea">${safeEmail}</a></td></tr>
-          <tr><td style="padding:8px 0;color:#666">Dien thoai</td><td style="padding:8px 0">${safePhone}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Chu de</td><td style="padding:8px 0">${safeSubject}</td></tr>
+          <tr><td style="padding:8px 0;color:#666">Điện thoại</td><td style="padding:8px 0">${safePhone}</td></tr>
+          <tr><td style="padding:8px 0;color:#666">Chủ đề</td><td style="padding:8px 0">${safeSubject}</td></tr>
         </table>
         <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:18px;color:#333">
           ${safeMessage}
@@ -83,13 +83,13 @@ class EmailService {
       sender: { email: this.senderEmail, name: this.senderName },
       to: [{ email: to }],
       replyTo: { email, name },
-      subject: `[MOLI.STUDIO] ${subject || 'Tin nhan lien he moi'}`,
+      subject: `[MOLI.STUDIO] ${subject || 'Tin nhắn liên hệ mới'}`,
       htmlContent: html,
       textContent: [
-        `Ho ten: ${name}`,
+        `Họ tên: ${name}`,
         `Email: ${email}`,
-        `Dien thoai: ${phone || 'Khong cung cap'}`,
-        `Chu de: ${subject || 'Lien he tu website'}`,
+        `Điện thoại: ${phone || 'Không cung cấp'}`,
+        `Chủ đề: ${subject || 'Liên hệ từ website'}`,
         '',
         message,
       ].join('\n'),

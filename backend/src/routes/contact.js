@@ -14,7 +14,7 @@ const contactLimiter = rateLimit({
   skip: (req) => req.method === 'OPTIONS',
   message: {
     success: false,
-    message: 'Ban da gui qua nhieu tin nhan. Vui long thu lai sau.',
+    message: 'Bạn đã gửi quá nhiều tin nhắn. Vui lòng thử lại sau.',
   },
 });
 
@@ -26,23 +26,23 @@ router.post('/', contactLimiter, async (req, res) => {
     const name = clean(req.body.name, 120);
     const email = clean(req.body.email, 160);
     const phone = clean(req.body.phone, 40);
-    const subject = clean(req.body.subject, 160) || 'Lien he tu website';
+    const subject = clean(req.body.subject, 160) || 'Liên hệ từ website';
     const message = clean(req.body.message, 4000);
     const honeypot = clean(req.body.website, 200);
 
     if (honeypot) {
-      return res.status(200).json({ success: true, message: 'Da nhan tin nhan.' });
+      return res.status(200).json({ success: true, message: 'Đã nhận tin nhắn.' });
     }
 
     if (!name || !email || !message) {
       return res.status(400).json({
         success: false,
-        message: 'Vui long nhap ho ten, email va noi dung tin nhan.',
+        message: 'Vui lòng nhập họ tên, email và nội dung tin nhắn.',
       });
     }
 
     if (!isEmail(email)) {
-      return res.status(400).json({ success: false, message: 'Email khong hop le.' });
+      return res.status(400).json({ success: false, message: 'Email không hợp lệ.' });
     }
 
     await emailService.sendContactMessage({
@@ -54,12 +54,12 @@ router.post('/', contactLimiter, async (req, res) => {
       message,
     });
 
-    res.json({ success: true, message: 'Da gui tin nhan lien he.' });
+    res.json({ success: true, message: 'Đã gửi tin nhắn liên hệ.' });
   } catch (error) {
     console.error('Contact form email error:', error?.response?.data || error.message);
     res.status(500).json({
       success: false,
-      message: 'Khong gui duoc tin nhan. Vui long thu lai sau.',
+      message: 'Không gửi được tin nhắn. Vui lòng thử lại sau.',
     });
   }
 });
