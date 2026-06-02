@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FiUpload } from 'react-icons/fi';
+import { FiAlertCircle, FiUpload } from 'react-icons/fi';
 import { examAdminApi, ImportedExamItem, PdfImportPreview } from '@/lib/api/examAdmin';
 import { PDF_IMPORT_PRESETS, PdfImportPreset } from '@/lib/pdf-import/presets';
 import PdfImportReview from './PdfImportReview';
@@ -17,6 +17,14 @@ interface PdfImportPanelProps {
   onSave: () => void;
 }
 
+function getPdfImportErrorMessage(error: any) {
+  if (error?.code === 'ECONNABORTED') {
+    return 'Phân tích PDF quá lâu. Vui lòng thử file ngắn hơn hoặc chọn preset Auto/Math để dùng parser nhanh.';
+  }
+
+  return error?.response?.data?.message || 'Phân tích file thất bại. Vui lòng thử lại hoặc chọn PDF/Word có text rõ hơn.';
+}
+
 export default function PdfImportPanel({
   canImport,
   preview,
@@ -30,6 +38,7 @@ export default function PdfImportPanel({
   const [file, setFile] = useState<File | null>(null);
   const [preset, setPreset] = useState<PdfImportPreset>('auto');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handlePreview = async () => {
     if (!canImport) {
@@ -44,11 +53,12 @@ export default function PdfImportPanel({
 
     try {
       setLoading(true);
+      setErrorMessage('');
       const nextPreview = await examAdminApi.previewPdfImport(file, preset);
       onPreviewLoaded(nextPreview);
     } catch (error: any) {
       console.error('Error previewing PDF import:', error);
-      alert(error?.response?.data?.message || 'Phân tích PDF thất bại');
+      setErrorMessage(getPdfImportErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -60,10 +70,10 @@ export default function PdfImportPanel({
         <div>
           <div className="flex items-center gap-2 mb-2">
             <FiUpload className="text-blue-600" />
-            <h3 className="text-lg font-bold text-gray-900">Import OCR/PDF đa môn</h3>
+            <h3 className="text-lg font-bold text-gray-900">Import OCR/PDF/Word đa môn</h3>
           </div>
           <p className="text-sm text-gray-500">
-            Upload PDF dạng text hoặc đã OCR để AI tách câu hỏi, đáp án và giải thích. PDF scan ảnh thuần vẫn cần OCR ảnh ở bước sau.
+            Upload PDF dạng text, PDF đã OCR hoặc Word .doc/.docx để AI tách câu hỏi, đáp án và giải thích. PDF scan ảnh thuần vẫn cần OCR ảnh ở bước sau.
           </p>
         </div>
 
@@ -89,9 +99,10 @@ export default function PdfImportPanel({
           <div className="flex-1">
             <input
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(event) => {
                 setFile(event.target.files?.[0] || null);
+                setErrorMessage('');
                 onPreviewCleared();
               }}
               className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
@@ -108,14 +119,23 @@ export default function PdfImportPanel({
           </button>
         </div>
 
+        {errorMessage && !loading && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div className="flex items-start gap-2">
+              <FiAlertCircle className="mt-0.5 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
               <div>
-                <p className="font-semibold">Äang dĂ¹ng AI phĂ¢n tĂ­ch PDF...</p>
+                <p className="font-semibold">Đang dùng AI phân tích PDF...</p>
                 <p className="mt-1 text-xs leading-relaxed text-blue-700">
-                  AI Ä‘ang tĂ¡ch cĂ¢u há»i, Ä‘Ă¡p Ă¡n, lá»i giáº£i vĂ  chá»‰nh láº¡i cĂ´ng thá»©c toĂ¡n. File dĂ i cĂ³ thá»ƒ máº¥t 1-2 phĂºt, vui lĂ²ng giá»¯ nguyĂªn trang nĂ y.
+                  AI đang tách câu hỏi, đáp án, lời giải và chỉnh lại công thức toán. File dài có thể mất vài phút, vui lòng giữ nguyên trang này.
                 </p>
               </div>
             </div>

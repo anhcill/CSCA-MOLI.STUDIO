@@ -73,6 +73,20 @@ function ItemWarnings({ item }: { item: Pick<ImportedQuestionData, 'imageHint' |
   );
 }
 
+function formatSourceSummary(source: PdfImportPreview['source']) {
+  if (!source) return '';
+
+  const parts = [source.fileName || 'File import'];
+  if (source.fileType === 'pdf' || source.pages) {
+    parts.push(`${source.pages || '?'} trang`);
+  } else if (source.fileType) {
+    parts.push(source.fileType.toUpperCase());
+  }
+  parts.push(`${source.textLength || 0} ký tự`);
+
+  return parts.join(' - ');
+}
+
 export default function PdfImportReview({ preview, items, saving, onSave, onChangeItems }: Props) {
   const questionCount = getImportItemsQuestionCount(items);
 
@@ -291,7 +305,7 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
           </p>
           {preview.source && (
             <p className="text-xs text-gray-500">
-              {preview.source.fileName} - {preview.source.pages || '?'} trang - {preview.source.textLength || 0} ký tự
+              {formatSourceSummary(preview.source)}
             </p>
           )}
           <p className="mt-1 text-xs text-gray-500">

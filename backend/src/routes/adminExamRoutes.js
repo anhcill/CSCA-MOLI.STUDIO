@@ -19,11 +19,11 @@ function handlePdfUpload(req, res, next) {
 		}
 
 		if (error.code === "LIMIT_FILE_SIZE") {
-			res.status(413).json({ message: "PDF must be 25MB or smaller" });
+			res.status(413).json({ message: "File must be 25MB or smaller" });
 			return;
 		}
 
-		res.status(400).json({ message: error.message || "Invalid PDF upload" });
+		res.status(400).json({ message: error.message || "Invalid import file upload" });
 	});
 }
 

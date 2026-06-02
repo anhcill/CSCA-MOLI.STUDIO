@@ -3,6 +3,8 @@ const { cache } = require("../config/cache");
 const aiConfig = require("../config/aiConfig");
 const UserActivity = require("../models/UserActivity");
 const pdfParse = require("pdf-parse");
+const mammoth = require("mammoth");
+const WordExtractor = require("word-extractor");
 const aiService = require("../services/aiService");
 const {
   buildPdfImportPrompt,
@@ -34,6 +36,8 @@ function wait(ms) {
 }
 
 async function callPdfImportAI(prompt, options) {
+  const { attemptsPerModel = 2, ...aiOptions } = options || {};
+  const maxAttemptsPerModel = Math.max(1, Math.min(3, Number.parseInt(attemptsPerModel, 10) || 2));
   const models = [
     aiConfig.beeknoee.importModel,
     aiConfig.beeknoee.importFallbackModel,
@@ -41,9 +45,9 @@ async function callPdfImportAI(prompt, options) {
 
   let lastError = null;
   for (const model of models) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
       try {
-        return await aiService.callBeeknoee(prompt, { ...options, model });
+        return await aiService.callBeeknoee(prompt, { ...aiOptions, model });
       } catch (error) {
         lastError = error;
         const canRetry = shouldTryImportFallback(error);
@@ -221,6 +225,61 @@ const PDF_IMPORT_TEXT_LIMIT = 60000;
 const PDF_IMPORT_MAX_QUESTIONS = 120;
 const PDF_IMPORT_IMAGE_HINT_RE = /(hinh|anh|bieu do|do thi|so do|figure|image|diagram|chart|map|graph|picture|看图|图|图片|图表)/i;
 
+const wordExtractor = new WordExtractor();
+
+function getImportFileExtension(file) {
+  return String(file?.originalname || "").toLowerCase().split(".").pop();
+}
+
+function getImportFileType(file) {
+  const extension = getImportFileExtension(file);
+  if (extension === "pdf") return "pdf";
+  if (extension === "doc") return "doc";
+  if (extension === "docx") return "docx";
+  return "";
+}
+
+async function extractImportFileText(file) {
+  const fileType = getImportFileType(file);
+
+  if (fileType === "pdf") {
+    const pdfData = await pdfParse(file.buffer);
+    return {
+      text: pdfData.text,
+      pages: pdfData.numpages || null,
+      fileType,
+    };
+  }
+
+  if (fileType === "docx") {
+    const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+    return {
+      text: docxData.value,
+      pages: null,
+      fileType,
+      warnings: Array.isArray(docxData.messages)
+        ? docxData.messages.map((message) => message.message).filter(Boolean)
+        : [],
+    };
+  }
+
+  if (fileType === "doc") {
+    const docData = await wordExtractor.extract(file.buffer);
+    return {
+      text: [
+        docData.getBody(),
+        docData.getTextboxes?.(),
+        docData.getFootnotes?.(),
+        docData.getEndnotes?.(),
+      ].filter(Boolean).join("\n"),
+      pages: null,
+      fileType,
+    };
+  }
+
+  throw new Error("UNSUPPORTED_IMPORT_FILE");
+}
+
 function stripAiNoise(raw) {
   return String(raw || "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
@@ -330,6 +389,16 @@ function withRuleBasedFallbackWarning(preview, reason) {
   const warnings = Array.isArray(preview.warnings) ? [...preview.warnings] : [];
   warnings.push(reason || "AI parse failed; returned rule-based preview fallback.");
   return { ...preview, warnings };
+}
+
+function getPdfImportFallbackReason(error) {
+  if (error?.message === "RATE_LIMITED") {
+    return "AI is rate limited; returned rule-based preview fallback.";
+  }
+  if (error?.message === "AI_TIMEOUT") {
+    return "AI timed out; returned rule-based preview fallback.";
+  }
+  return "AI parse failed; returned rule-based preview fallback.";
 }
 
 function normalizeUploadedFileName(value) {
@@ -1216,12 +1285,12 @@ const AdminExamController = {
 
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "PDF file is required" });
+        return res.status(400).json({ message: "PDF or Word .doc/.docx file is required" });
       }
 
       const importPreset = normalizePdfImportPreset(req.body?.importPreset);
-      const pdfData = await pdfParse(req.file.buffer);
-      const extractedText = stringValue(pdfData.text)
+      const importFile = await extractImportFileText(req.file);
+      const extractedText = stringValue(importFile.text)
         .replace(/\r/g, "\n")
         .replace(/[ \t]+/g, " ")
         .replace(/\n{3,}/g, "\n\n")
@@ -1229,17 +1298,18 @@ const AdminExamController = {
 
       if (extractedText.length < 120) {
         return res.status(400).json({
-          message: "PDF does not contain enough selectable text. Please use a text PDF or enter questions manually.",
+          message: "File does not contain enough readable text. Please use a text PDF, a Word .doc/.docx file, or enter questions manually.",
         });
       }
 
       const truncatedText = extractedText.slice(0, PDF_IMPORT_TEXT_LIMIT);
       const sourceMeta = {
         fileName: normalizeUploadedFileName(req.file.originalname),
-        pages: pdfData.numpages || null,
+        pages: importFile.pages || null,
         textLength: extractedText.length,
         truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
         importPreset,
+        fileType: importFile.fileType,
       };
 
       ruleBasedPreview = shouldUseRuleBasedPdfParser(importPreset)
@@ -1249,6 +1319,8 @@ const AdminExamController = {
       const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset), {
         temperature: 0.15,
         maxTokens: 6500,
+        timeout: 90000,
+        attemptsPerModel: 1,
       });
       const aiResult = parseAiJsonObject(rawAi);
 
@@ -1284,16 +1356,13 @@ const AdminExamController = {
 
       res.json(normalized);
     } catch (error) {
-      console.error("Preview PDF import error:", error);
+      console.error("Preview file import error:", error);
+
+      if (ruleBasedPreview?.items?.length) {
+        return res.json(withRuleBasedFallbackWarning(ruleBasedPreview, getPdfImportFallbackReason(error)));
+      }
 
       if (error.message === "RATE_LIMITED") {
-        if (ruleBasedPreview?.items?.length) {
-          return res.json(withRuleBasedFallbackWarning(
-            ruleBasedPreview,
-            "AI is rate limited; returned rule-based preview fallback.",
-          ));
-        }
-
         return res.status(429).json({
           message: "AI is rate limited. Please try again later.",
           retryAfter: error.retryAfter || aiService.getRateLimitRemaining?.(),
@@ -1301,23 +1370,23 @@ const AdminExamController = {
       }
 
       if (error.message === "AI_TIMEOUT") {
-        if (ruleBasedPreview?.items?.length) {
-          return res.json(withRuleBasedFallbackWarning(
-            ruleBasedPreview,
-            "AI timed out; returned rule-based preview fallback.",
-          ));
-        }
-
         return res.status(504).json({
           message: "AI took too long to parse this PDF. Please try a shorter PDF.",
         });
       }
 
-      if (error.message === "Chi cho phep upload file PDF") {
+      if (
+        error.message === "Chi cho phep upload file PDF" ||
+        error.message === "Chi cho phep upload file PDF hoac Word .doc/.docx"
+      ) {
         return res.status(400).json({ message: error.message });
       }
 
-      res.status(500).json({ message: "Failed to preview PDF import" });
+      if (error.message === "UNSUPPORTED_IMPORT_FILE") {
+        return res.status(400).json({ message: "Only PDF and Word .doc/.docx files are supported." });
+      }
+
+      res.status(500).json({ message: "Failed to preview import file" });
     }
   },
 
