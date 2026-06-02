@@ -19,7 +19,7 @@ interface PdfImportPanelProps {
 
 function getPdfImportErrorMessage(error: any) {
   if (error?.code === 'ECONNABORTED') {
-    return 'Phân tích PDF quá lâu. Vui lòng thử file ngắn hơn hoặc chọn preset Auto/Math để dùng parser nhanh.';
+    return 'Phân tích file quá lâu. Vui lòng thử file ngắn hơn hoặc chọn preset Auto/Math để dùng parser nhanh.';
   }
 
   return error?.response?.data?.message || 'Phân tích file thất bại. Vui lòng thử lại hoặc chọn PDF/Word có text rõ hơn.';
@@ -115,7 +115,7 @@ export default function PdfImportPanel({
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             <FiUpload />
-            <span>{loading ? 'Đang phân tích...' : 'Phân tích PDF'}</span>
+            <span>{loading ? 'Đang phân tích...' : 'Phân tích PDF/Word'}</span>
           </button>
         </div>
 
@@ -133,9 +133,9 @@ export default function PdfImportPanel({
             <div className="flex items-start gap-3">
               <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
               <div>
-                <p className="font-semibold">Đang dùng AI phân tích PDF...</p>
+                <p className="font-semibold">Đang dùng AI phân tích file...</p>
                 <p className="mt-1 text-xs leading-relaxed text-blue-700">
-                  AI đang tách câu hỏi, đáp án, lời giải và chỉnh lại công thức toán. File dài có thể mất vài phút, vui lòng giữ nguyên trang này.
+                  AI đang tách câu hỏi, đáp án, lời giải và chỉnh lại công thức. File PDF/Word dài có thể mất vài phút, vui lòng giữ nguyên trang này.
                 </p>
               </div>
             </div>

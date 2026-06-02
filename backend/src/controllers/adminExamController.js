@@ -91,7 +91,7 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
-const PDF_EXPLANATION_MARKER_RE = /(?:^|\s)(?:\u7b54\u6848\u89e3\u6790|\u89e3\u6790|\u89e3\u7b54|\u8bf4\u660e|\u89e3|analysis|explanation|l\u1eddi gi\u1ea3i|loi giai|gi\u1ea3i th\u00edch|giai thich)\s*[:\uff1a]\s*/i;
+const PDF_EXPLANATION_MARKER_RE = /(?:^|\s)(?:\u7b54\u6848\u89e3\u6790|\u89e3\u6790|\u89e3\u91ca|\u89e3\u7b54|\u8bf4\u660e|\u89e3|analysis|explanation|l\u1eddi gi\u1ea3i|loi giai|gi\u1ea3i th\u00edch|giai thich)\s*[:\uff1a]\s*/i;
 
 function splitPdfExplanationMarker(value) {
   const text = stringValue(value);
@@ -822,6 +822,11 @@ function splitRuleBasedOptionText(rawText) {
 function inferCorrectAnswerFromExplanation(answers, explanation) {
   const normalizedExplanation = repairPdfImportTextArtifacts(explanation).replace(/\s+/g, "");
   if (!normalizedExplanation) return "";
+
+  const unicodeExplicitAnswer = normalizedExplanation.match(/(?:\u7b54\u6848|\u6b63\u786e\u7b54\u6848|\u6545\u9009|\u5e94\u9009|\u9009)[:\uff1a\u4e3a\u662f]*([A-H])/i);
+  if (unicodeExplicitAnswer?.[1]) {
+    return unicodeExplicitAnswer[1].toUpperCase();
+  }
 
   const explicitAnswer = normalizedExplanation.match(/(?:答案|正确答案|故选|应选|选)[:：为是]*([A-H])/i);
   if (explicitAnswer?.[1]) {
