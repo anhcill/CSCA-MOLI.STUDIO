@@ -929,11 +929,11 @@ function parseChineseSocialOptions(text) {
   }
 
   answers.sort((a, b) => RULE_IMPORT_ANSWER_KEYS.indexOf(a.key) - RULE_IMPORT_ANSWER_KEYS.indexOf(b.key));
-  return { answers: answers.map((answer) => ({ text: "", textCn: answer.text })), firstOptionIndex: matches[0].index };
+  return { answers: answers.map((answer) => ({ key: answer.key, text: "", textCn: answer.text })), firstOptionIndex: matches[0].index };
 }
 
-function getChineseSocialPoolMap(text) {
-  const poolMap = new Map();
+function getChineseSocialPoolGroups(text) {
+  const poolGroups = [];
 
   for (const match of text.matchAll(CHINESE_SOCIAL_GROUP_POOL_RE)) {
     const start = Number.parseInt(match[1], 10);
@@ -942,10 +942,24 @@ function getChineseSocialPoolMap(text) {
     const { answers } = parseChineseSocialOptions(match[3]);
     if (answers.length < 2) continue;
 
-    for (let questionNumber = start; questionNumber <= end; questionNumber++) {
-      poolMap.set(questionNumber, answers);
-    }
+    poolGroups.push({
+      startQuestion: start,
+      endQuestion: end,
+      linkedOptions: answers,
+    });
   }
+
+  return poolGroups;
+}
+
+function getChineseSocialPoolMap(poolGroups) {
+  const poolMap = new Map();
+
+  poolGroups.forEach((group) => {
+    for (let questionNumber = group.startQuestion; questionNumber <= group.endQuestion; questionNumber++) {
+      poolMap.set(questionNumber, group.linkedOptions);
+    }
+  });
 
   return poolMap;
 }
@@ -995,15 +1009,77 @@ function parseChineseSocialQuestionBlock(block, questionNumber, poolMap) {
   };
 }
 
-function parseChineseSocialQuestions(text, poolMap) {
+function getChineseSocialQuestionBlocks(text) {
   const questionMatches = parseChineseSocialQuestionMatches(text);
+  return questionMatches.map((match, index) => {
+    const end = index + 1 < questionMatches.length ? questionMatches[index + 1].index : text.length;
+    return {
+      questionNumber: match.questionNumber,
+      block: text.slice(match.bodyStart, end).trim(),
+    };
+  });
+}
+
+function buildChineseSocialFillBlankGroup(poolGroup, questionBlocks, poolMap) {
+  const subItems = questionBlocks
+    .filter((questionBlock) => (
+      questionBlock.questionNumber >= poolGroup.startQuestion &&
+      questionBlock.questionNumber <= poolGroup.endQuestion
+    ))
+    .map((questionBlock) => {
+      const parsedQuestion = parseChineseSocialQuestionBlock(questionBlock.block, questionBlock.questionNumber, poolMap);
+      if (!parsedQuestion?.correctAnswer) return null;
+
+      return {
+        questionText: "",
+        questionTextCn: parsedQuestion.questionTextCn,
+        explanation: "",
+        explanationCn: parsedQuestion.explanationCn,
+        correctAnswerKey: parsedQuestion.correctAnswer,
+        points: parsedQuestion.points || 1,
+        difficulty: parsedQuestion.difficulty || "medium",
+        subQuestionNumber: questionBlock.questionNumber,
+      };
+    })
+    .filter(Boolean);
+
+  if (!subItems.length) return null;
+
+  return {
+    itemType: "fill_blank_group",
+    clozeMode: "sentences",
+    linkedOptions: poolGroup.linkedOptions,
+    subItems,
+    needsImage: subItems.some((item) => PDF_IMPORT_IMAGE_HINT_RE.test(`${item.questionText} ${item.questionTextCn}`)),
+    imageHint: "",
+    reviewNotes: subItems.length !== poolGroup.endQuestion - poolGroup.startQuestion + 1
+      ? "Some pooled fill-blank questions could not be parsed. Review this group before saving."
+      : "",
+  };
+}
+
+function parseChineseSocialQuestions(text, poolGroups, poolMap) {
+  const questionBlocks = getChineseSocialQuestionBlocks(text);
+  const poolGroupByStart = new Map(poolGroups.map((group) => [group.startQuestion, group]));
+  const pooledQuestionNumbers = new Set();
+  poolGroups.forEach((group) => {
+    for (let questionNumber = group.startQuestion; questionNumber <= group.endQuestion; questionNumber++) {
+      pooledQuestionNumbers.add(questionNumber);
+    }
+  });
   const items = [];
 
-  for (let i = 0; i < questionMatches.length; i++) {
-    const match = questionMatches[i];
-    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : text.length;
-    const block = text.slice(match.bodyStart, end).trim();
-    const item = parseChineseSocialQuestionBlock(block, match.questionNumber, poolMap);
+  for (const questionBlock of questionBlocks) {
+    const poolGroup = poolGroupByStart.get(questionBlock.questionNumber);
+    if (poolGroup) {
+      const group = buildChineseSocialFillBlankGroup(poolGroup, questionBlocks, poolMap);
+      if (group) items.push(group);
+      continue;
+    }
+
+    if (pooledQuestionNumbers.has(questionBlock.questionNumber)) continue;
+
+    const item = parseChineseSocialQuestionBlock(questionBlock.block, questionBlock.questionNumber, poolMap);
     if (item) items.push(item);
   }
 
@@ -1059,12 +1135,13 @@ function parseChineseSocialTextWithRules(rawText, sourceMeta) {
   const text = normalizeChineseSocialText(rawText);
   if (!CHINESE_SOCIAL_ANSWER_RE.test(text)) return null;
 
-  const poolMap = getChineseSocialPoolMap(text);
+  const poolGroups = getChineseSocialPoolGroups(text);
+  const poolMap = getChineseSocialPoolMap(poolGroups);
   const readingSectionMatch = text.match(CHINESE_SOCIAL_SECTION_READING_RE);
   const mainText = readingSectionMatch?.index >= 0 ? text.slice(0, readingSectionMatch.index) : text;
   const readingText = readingSectionMatch?.index >= 0 ? text.slice(readingSectionMatch.index) : "";
   const items = [
-    ...parseChineseSocialQuestions(mainText, poolMap),
+    ...parseChineseSocialQuestions(mainText, poolGroups, poolMap),
     ...parseChineseSocialReadingGroups(readingText, poolMap),
   ];
 
