@@ -11,6 +11,36 @@ const { getAuthorizationContext } = require("../services/rbacService");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const getGooglePayloadFromCredential = async (credential) => {
+  const ticket = await googleClient.verifyIdToken({
+    idToken: credential,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+  return ticket.getPayload();
+};
+
+const getGooglePayloadFromAccessToken = async (accessToken) => {
+  const tokenInfo = await googleClient.getTokenInfo(accessToken);
+  const audience = tokenInfo.audience || tokenInfo.aud;
+  const validAudience = Array.isArray(audience)
+    ? audience.includes(process.env.GOOGLE_CLIENT_ID)
+    : audience === process.env.GOOGLE_CLIENT_ID;
+
+  if (!validAudience) {
+    throw new Error("Invalid Google token audience");
+  }
+
+  const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error("Google userinfo request failed");
+  }
+
+  return response.json();
+};
+
 // ─── Rate limiting (in-memory, dùng Redis nếu scale) ─────────────────────────
 const loginAttempts = new Map(); // email -> { count, lastAttempt }
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -648,6 +678,16 @@ const parseFacebookState = (state, fallbackUrl) => {
   return fallbackUrl;
 };
 
+const getOAuthConfig = async (req, res) => {
+  return res.json({
+    success: true,
+    data: {
+      googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+      facebookEnabled: Boolean(process.env.FACEBOOK_APP_ID),
+    },
+  });
+};
+
 const buildRedirectWithHash = (baseUrl, params) => {
   const cleanBase = baseUrl.split('#')[0];
   const hash = new URLSearchParams(params).toString();
@@ -834,9 +874,9 @@ const facebookAuthCallback = async (req, res) => {
 // ─── Google OAuth ─────────────────────────────────────────────────────────────
 const googleAuth = async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, accessToken } = req.body;
 
-    if (!credential) {
+    if (!credential && !accessToken) {
       return res
         .status(400)
         .json({
@@ -848,11 +888,9 @@ const googleAuth = async (req, res) => {
     // Verify Google token
     let payload;
     try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
+      payload = credential
+        ? await getGooglePayloadFromCredential(credential)
+        : await getGooglePayloadFromAccessToken(accessToken);
     } catch (err) {
       return res
         .status(401)
@@ -860,8 +898,9 @@ const googleAuth = async (req, res) => {
     }
 
     const { sub: googleId, email, name, picture, email_verified } = payload;
+    const isGoogleEmailVerified = email_verified === true || email_verified === 'true';
 
-    if (!email_verified) {
+    if (!isGoogleEmailVerified) {
       return res
         .status(400)
         .json({ success: false, message: "Email Google chưa được xác thực" });
@@ -1231,6 +1270,7 @@ module.exports = {
   getCurrentUser,
   logout,
   refreshToken,
+  getOAuthConfig,
   googleAuth,
   facebookAuthStart,
   facebookAuthCallback,

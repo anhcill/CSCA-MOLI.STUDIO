@@ -92,8 +92,11 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
 /**
  * Google OAuth authentication
  */
-export const googleAuth = async (credential: string): Promise<AuthResponse> => {
-  const response = await axios.post('/auth/google', { credential });
+export const googleAuth = async (
+  auth: string | { credential?: string; accessToken?: string }
+): Promise<AuthResponse> => {
+  const payload = typeof auth === 'string' ? { credential: auth } : auth;
+  const response = await axios.post('/auth/google', payload);
   return response.data;
 };
 

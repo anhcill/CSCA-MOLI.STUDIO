@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CredentialResponse } from '@react-oauth/google';
 import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -29,8 +28,6 @@ export default function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
-  const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
-  const isFacebookEnabled = Boolean(facebookAppId);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
@@ -101,14 +98,14 @@ export default function RegisterForm() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
-    if (!credentialResponse.credential) return;
+  const handleGoogleAccessToken = async (accessToken: string) => {
+    if (!accessToken) return;
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
 
     try {
-      const response = await googleAuth(credentialResponse.credential);
+      const response = await googleAuth({ accessToken });
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
@@ -139,10 +136,6 @@ export default function RegisterForm() {
   };
 
   const handleFacebookLogin = () => {
-    if (!isFacebookEnabled) {
-      setErrors({ general: t('auth.facebookRegisterNotConfigured') });
-      return;
-    }
     if (typeof window === 'undefined') return;
 
     setIsSubmitting(true);
@@ -288,8 +281,7 @@ export default function RegisterForm() {
         <SocialAuthButtons
           dividerLabel={t('auth.socialRegister')}
           disabled={isSubmitting}
-          googleText="signup_with"
-          onGoogleSuccess={handleGoogleSuccess}
+          onGoogleAccessToken={handleGoogleAccessToken}
           onGoogleError={handleGoogleError}
           onGoogleNotConfigured={handleGoogleNotConfigured}
           onFacebookClick={handleFacebookLogin}

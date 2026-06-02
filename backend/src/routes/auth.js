@@ -10,6 +10,7 @@ router.post("/login", validateLogin, authController.login);
 router.get("/me", authenticate, authController.getCurrentUser);
 router.post("/logout", authenticate, authController.logout);
 router.post("/refresh", authController.refreshToken);
+router.get("/oauth-config", authController.getOAuthConfig);
 router.post("/google", authController.googleAuth);
 router.get("/facebook", authController.facebookAuthStart);
 router.get("/facebook/callback", authController.facebookAuthCallback);

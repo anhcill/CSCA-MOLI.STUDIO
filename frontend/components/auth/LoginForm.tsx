@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CredentialResponse } from '@react-oauth/google';
 import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -27,8 +26,6 @@ export default function LoginForm() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
-  const facebookAppId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '';
-  const isFacebookEnabled = Boolean(facebookAppId);
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
@@ -140,15 +137,15 @@ export default function LoginForm() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
-    if (!credentialResponse.credential) return;
+  const handleGoogleAccessToken = async (accessToken: string) => {
+    if (!accessToken) return;
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
     setLoginAttempts(0);
 
     try {
-      const response = await googleAuth(credentialResponse.credential);
+      const response = await googleAuth({ accessToken });
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
@@ -182,10 +179,6 @@ export default function LoginForm() {
   };
 
   const handleFacebookLogin = () => {
-    if (!isFacebookEnabled) {
-      setErrors({ general: t('auth.facebookLoginNotConfigured') });
-      return;
-    }
     if (typeof window === 'undefined') return;
 
     setIsSubmitting(true);
@@ -442,8 +435,7 @@ export default function LoginForm() {
         <SocialAuthButtons
           dividerLabel={t('auth.socialLogin')}
           disabled={isSubmitting || isLocked}
-          googleText="signin_with"
-          onGoogleSuccess={handleGoogleSuccess}
+          onGoogleAccessToken={handleGoogleAccessToken}
           onGoogleError={handleGoogleError}
           onGoogleNotConfigured={handleGoogleNotConfigured}
           onFacebookClick={handleFacebookLogin}
