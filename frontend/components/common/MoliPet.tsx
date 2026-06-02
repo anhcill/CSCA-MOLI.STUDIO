@@ -333,35 +333,40 @@ function MolyThreeCat({
     const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.42 });
     const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
 
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 32, 24), bodyMaterial);
-    body.scale.set(1.03, 0.86, 0.9);
-    body.position.set(0, -0.38, 0);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 32, 24), bodyMaterial);
+    body.scale.set(0.96, 0.76, 0.86);
+    body.position.set(0, -0.52, 0);
     root.add(body);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.92, 36, 28), bodyMaterial);
-    head.scale.set(1.04, 0.92, 0.86);
-    head.position.set(0, 0.34, 0.08);
+    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 16), whiteMaterial);
+    belly.scale.set(1.18, 0.78, 0.2);
+    belly.position.set(0, -0.48, 0.64);
+    root.add(belly);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.96, 36, 28), bodyMaterial);
+    head.scale.set(1.06, 0.98, 0.9);
+    head.position.set(0, 0.38, 0.08);
     root.add(head);
 
-    const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 16), whiteMaterial);
-    muzzle.scale.set(1.35, 0.66, 0.22);
-    muzzle.position.set(0, 0.11, 0.82);
+    const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 16), whiteMaterial);
+    muzzle.scale.set(1.42, 0.68, 0.2);
+    muzzle.position.set(0, 0.08, 0.86);
     root.add(muzzle);
 
     const makeEar = (x: number, rotationZ: number) => {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.76, 4), bodyMaterial);
-      ear.position.set(x, 1.05, 0.02);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.7, 5), bodyMaterial);
+      ear.position.set(x, 1.12, 0.02);
       ear.rotation.set(0, 0, rotationZ);
       root.add(ear);
 
-      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.42, 4), innerEarMaterial);
-      inner.position.set(x * 0.99, 0.99, 0.16);
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 5), innerEarMaterial);
+      inner.position.set(x * 0.99, 1.05, 0.17);
       inner.rotation.set(0, 0, rotationZ);
       inner.scale.set(0.86, 0.86, 0.2);
       root.add(inner);
     };
-    makeEar(-0.58, 0.36);
-    makeEar(0.58, -0.36);
+    makeEar(-0.6, 0.3);
+    makeEar(0.6, -0.3);
 
     const tailCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0.68, -0.3, -0.16),
@@ -372,57 +377,61 @@ function MolyThreeCat({
     const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.07, 8), bodyMaterial);
     root.add(tail);
 
-    const eyeScaleY = mood === 'sleepy' ? 0.16 : mood === 'happy' ? 0.58 : 1;
+    const eyeScaleY = mood === 'sleepy' ? 0.18 : mood === 'happy' ? 0.72 : 1;
     const makeEye = (x: number) => {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), blackMaterial);
-      eye.scale.set(1, eyeScaleY, 0.45);
-      eye.position.set(x, 0.42, 0.86);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 16), blackMaterial);
+      eye.scale.set(0.9, eyeScaleY, 0.42);
+      eye.position.set(x, 0.48, 0.9);
       root.add(eye);
-      const shine = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), whiteMaterial);
-      shine.position.set(x - 0.025, 0.47, 0.93);
+      const shine = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), whiteMaterial);
+      shine.position.set(x - 0.035, 0.54, 0.98);
       root.add(shine);
     };
-    makeEye(-0.31);
-    makeEye(0.31);
+    makeEye(-0.34);
+    makeEye(0.34);
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.12, 3), blackMaterial);
-    nose.position.set(0, 0.22, 0.98);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.1, 3), blackMaterial);
+    nose.position.set(0, 0.2, 1.02);
     nose.rotation.z = Math.PI;
     nose.scale.set(1, 0.8, 0.5);
     root.add(nose);
 
     const makeLine = (x: number, y: number, z: number, length: number, angle: number, material = blackMaterial) => {
-      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, length, 8), material);
+      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, length, 8), material);
       line.position.set(x, y, z);
       line.rotation.z = Math.PI / 2 + angle;
       root.add(line);
       return line;
     };
 
-    [-0.14, 0.14].forEach((x) => makeLine(x, 0.11, 1, 0.18, x < 0 ? -0.62 : 0.62));
+    [-0.12, 0.12].forEach((x) => makeLine(x, 0.11, 1.02, 0.14, x < 0 ? -0.7 : 0.7));
     [-0.52, 0.52].forEach((side) => {
-      makeLine(side, 0.17, 0.92, 0.48, side < 0 ? 0.18 : -0.18);
-      makeLine(side, 0.04, 0.94, 0.52, 0);
-      makeLine(side, -0.09, 0.92, 0.46, side < 0 ? -0.18 : 0.18);
+      makeLine(side, 0.11, 0.96, 0.36, side < 0 ? 0.12 : -0.12);
+      makeLine(side, -0.02, 0.98, 0.38, side < 0 ? -0.08 : 0.08);
     });
 
-    [-0.42, 0.42].forEach((x) => {
-      const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), cheekMaterial);
-      cheek.scale.set(1.25, 0.62, 0.18);
-      cheek.position.set(x, 0.02, 0.9);
+    [-0.45, 0.45].forEach((x) => {
+      const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), cheekMaterial);
+      cheek.scale.set(1.28, 0.58, 0.14);
+      cheek.position.set(x, 0.08, 0.9);
       root.add(cheek);
     });
 
     const paws: THREE.Mesh[] = [];
-    [-0.42, 0.42].forEach((x) => {
+    [-0.34, 0.34].forEach((x) => {
       const paw = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), accentMaterial);
-      paw.scale.set(1.1, 0.55, 0.72);
-      paw.position.set(x, -0.9, 0.42);
+      paw.scale.set(1.05, 0.58, 0.68);
+      paw.position.set(x, -0.86, 0.48);
       root.add(paw);
       paws.push(paw);
     });
 
-    root.position.y = 0.04;
+    const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), accentMaterial);
+    forehead.scale.set(0.8, 0.28, 0.16);
+    forehead.position.set(0, 0.82, 0.86);
+    root.add(forehead);
+
+    root.position.y = 0.0;
     scene.add(root);
     scene.add(new THREE.AmbientLight(0xffffff, 1.7));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.7);
@@ -442,8 +451,8 @@ function MolyThreeCat({
       root.position.y = 0.04 + (walking ? Math.abs(bounce) * 0.12 : Math.sin(t * 2.6) * 0.045);
       root.rotation.z = (walking ? bounce * 0.055 : Math.sin(t * 2.1) * 0.028) * (facing === 'left' ? -1 : 1);
       tail.rotation.z = Math.sin(t * (walking ? 8 : 3.3)) * 0.18;
-      paws[0].position.y = -0.9 + (walking ? Math.max(0, bounce) * 0.12 : 0);
-      paws[1].position.y = -0.9 + (walking ? Math.max(0, -bounce) * 0.12 : 0);
+      paws[0].position.y = -0.86 + (walking ? Math.max(0, bounce) * 0.12 : 0);
+      paws[1].position.y = -0.86 + (walking ? Math.max(0, -bounce) * 0.12 : 0);
       renderer.render(scene, camera);
       frameId = window.requestAnimationFrame(animate);
     };
@@ -939,6 +948,14 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                 >
                   Di dao {settings.motion ? 'bat' : 'tat'}
                 </button>
+                <button
+                  type="button"
+                  onClick={hideForDay}
+                  className="col-span-3 flex items-center justify-center gap-2 rounded-xl border border-rose-100 bg-white px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-900 dark:text-rose-300"
+                >
+                  <FiEyeOff size={14} />
+                  An pet hom nay
+                </button>
               </div>
             </div>
           )}
@@ -1037,7 +1054,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         <button
           type="button"
           onClick={hideForDay}
-          className="mb-2 rounded-full border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:bg-slate-50 hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+          className="hidden"
           title="Tắt MolyPet hôm nay"
         >
           <FiEyeOff />
