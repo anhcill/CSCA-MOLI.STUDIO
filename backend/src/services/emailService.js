@@ -43,6 +43,61 @@ class EmailService {
     }
   }
 
+  escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async sendContactMessage({ to, name, email, phone, subject, message }) {
+    if (!this.apiKey) {
+      throw new Error('BREVO_API_KEY not configured');
+    }
+
+    const safeName = this.escapeHtml(name);
+    const safeEmail = this.escapeHtml(email);
+    const safePhone = this.escapeHtml(phone || 'Khong cung cap');
+    const safeSubject = this.escapeHtml(subject || 'Lien he tu website');
+    const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
+
+    const html = this._wrapper({
+      title: 'Tin nhan lien he moi',
+      emoji: '📩',
+      content: `
+        <h2 style="margin:0 0 16px;font-size:20px">Tin nhan lien he moi</h2>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 22px">
+          <tr><td style="padding:8px 0;color:#666;width:120px">Ho ten</td><td style="padding:8px 0;font-weight:700">${safeName}</td></tr>
+          <tr><td style="padding:8px 0;color:#666">Email</td><td style="padding:8px 0"><a href="mailto:${safeEmail}" style="color:#667eea">${safeEmail}</a></td></tr>
+          <tr><td style="padding:8px 0;color:#666">Dien thoai</td><td style="padding:8px 0">${safePhone}</td></tr>
+          <tr><td style="padding:8px 0;color:#666">Chu de</td><td style="padding:8px 0">${safeSubject}</td></tr>
+        </table>
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:18px;color:#333">
+          ${safeMessage}
+        </div>`,
+    });
+
+    const response = await this.client.post('/smtp/email', {
+      sender: { email: this.senderEmail, name: this.senderName },
+      to: [{ email: to }],
+      replyTo: { email, name },
+      subject: `[MOLI.STUDIO] ${subject || 'Tin nhan lien he moi'}`,
+      htmlContent: html,
+      textContent: [
+        `Ho ten: ${name}`,
+        `Email: ${email}`,
+        `Dien thoai: ${phone || 'Khong cung cap'}`,
+        `Chu de: ${subject || 'Lien he tu website'}`,
+        '',
+        message,
+      ].join('\n'),
+    });
+
+    return response.data;
+  }
+
   // ─── Shared HTML wrapper ────────────────────────────────────────────────────
   _wrapper({ title, emoji, content }) {
     return `<!DOCTYPE html>

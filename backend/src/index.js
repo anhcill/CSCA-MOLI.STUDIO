@@ -219,6 +219,7 @@ app.use("/api/notifications", require("./routes/notifications")); // Notificatio
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
 app.use("/api/coupons", require("./routes/couponRoutes")); // Coupons (validate & apply)
+app.use("/api/contact", require("./routes/contact")); // Public contact form
 app.use("/api/admin/coupons", require("./routes/adminCouponRoutes")); // Admin Coupon Management
 app.use("/api/admin/gamification", require("./routes/adminGamificationRoutes")); // Admin game/rank/wallet control
 app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users

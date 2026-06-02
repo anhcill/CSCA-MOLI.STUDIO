@@ -20,12 +20,15 @@ interface FormErrors {
   message?: string;
 }
 
+const CONTACT_EMAIL = 'ducanhle28072003@gmail.com';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/+$/, '');
+
 const CONTACT_CHANNELS = [
   {
     icon: FiMail,
     label: 'Email',
-    value: 'support@csca.edu.vn',
-    href: 'mailto:support@csca.edu.vn',
+    value: CONTACT_EMAIL,
+    href: `mailto:${CONTACT_EMAIL}`,
     color: 'text-red-500 bg-red-50 border-red-100',
     hover: 'hover:bg-red-50',
   },
@@ -94,6 +97,7 @@ export default function ContactPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const handleChange = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -108,9 +112,24 @@ export default function ContactPage() {
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setLoading(false);
-    setSubmitted(true);
+    setSubmitError('');
+
+    try {
+      const response = await fetch(`${API_URL}/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, website: '' }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.success === false) {
+        throw new Error(data.message || 'Khong gui duoc tin nhan.');
+      }
+      setSubmitted(true);
+    } catch (error: any) {
+      setSubmitError(error.message || 'Khong gui duoc tin nhan. Vui long thu lai sau.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -174,7 +193,7 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 font-medium">Hỗ trợ</p>
-                    <p className="text-sm text-gray-800">support@csca.edu.vn</p>
+                    <p className="text-sm text-gray-800">{CONTACT_EMAIL}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -220,6 +239,12 @@ export default function ContactPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                  {submitError && (
+                    <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                      {submitError}
+                    </div>
+                  )}
+                  <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
