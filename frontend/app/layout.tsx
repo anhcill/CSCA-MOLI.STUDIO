@@ -97,11 +97,6 @@ export default function RootLayout({
               "name": "CSCA MOLI.STUDIO",
               "url": SITE_URL,
               "description": "Nền tảng ôn thi CSCA, học bổng CSC và du học Trung Quốc cho học sinh Việt Nam",
-              "potentialAction": {
-                "@type": "SearchAction",
-                "target": `${SITE_URL}/search?q={search_term_string}`,
-                "query-input": "required name=search_term_string"
-              },
               "publisher": {
                 "@type": "Organization",
                 "name": "CSCA MOLI.STUDIO",
