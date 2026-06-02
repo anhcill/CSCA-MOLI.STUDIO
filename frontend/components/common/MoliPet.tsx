@@ -2,6 +2,7 @@
 
 import { type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
+import * as THREE from 'three';
 import {
   FiChevronDown,
   FiChevronUp,
@@ -41,7 +42,7 @@ interface PetMessage {
 const SETTINGS_KEY = 'moli_pet_settings_v1';
 const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
 const POSITION_KEY = 'moli_pet_position_v1';
-const PET_FRAME_SIZE = 104;
+const PET_FRAME_SIZE = 88;
 
 interface PetPoint {
   x: number;
@@ -88,6 +89,13 @@ const COLOR_THEMES: Record<PetColor, {
     soft: 'bg-amber-50 border-amber-100 text-amber-800',
     ring: 'ring-amber-200/70',
   },
+};
+
+const PET_3D_PALETTES: Record<PetColor, { body: number; accent: number; innerEar: number; cheek: number }> = {
+  ocean: { body: 0x38d5f4, accent: 0x7dd3fc, innerEar: 0xf9a8d4, cheek: 0xfb7185 },
+  berry: { body: 0xf472b6, accent: 0xf9a8d4, innerEar: 0xfda4af, cheek: 0xfb7185 },
+  leaf: { body: 0x34d399, accent: 0xa3e635, innerEar: 0xf9a8d4, cheek: 0xfb7185 },
+  sun: { body: 0xfbbf24, accent: 0xfdba74, innerEar: 0xfca5a5, cheek: 0xfb7185 },
 };
 
 const MOODS: Record<PetMood, { label: string; hint: string }> = {
@@ -278,6 +286,194 @@ const getStudyContext = (pathname: string | null) => {
   return { subject, pageType };
 };
 
+function MolyThreeCat({
+  color,
+  mood,
+  walking,
+  facing,
+}: {
+  color: PetColor;
+  mood: PetMood;
+  walking: boolean;
+  facing: PetPosition;
+}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const [webglOk, setWebglOk] = useState(true);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const palette = PET_3D_PALETTES[color];
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1.85, 1.85, 1.85, -1.85, 0.1, 20);
+    camera.position.set(0, 0.15, 6);
+    camera.lookAt(0, 0.15, 0);
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
+    } catch {
+      setWebglOk(false);
+      return;
+    }
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(80, 80, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.className = 'h-full w-full';
+    mount.appendChild(renderer.domElement);
+    setWebglOk(true);
+
+    const root = new THREE.Group();
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: palette.body, roughness: 0.46, metalness: 0.04 });
+    const accentMaterial = new THREE.MeshStandardMaterial({ color: palette.accent, roughness: 0.5 });
+    const innerEarMaterial = new THREE.MeshStandardMaterial({ color: palette.innerEar, roughness: 0.6 });
+    const cheekMaterial = new THREE.MeshStandardMaterial({ color: palette.cheek, roughness: 0.55 });
+    const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.42 });
+    const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.78, 32, 24), bodyMaterial);
+    body.scale.set(1.03, 0.86, 0.9);
+    body.position.set(0, -0.38, 0);
+    root.add(body);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.92, 36, 28), bodyMaterial);
+    head.scale.set(1.04, 0.92, 0.86);
+    head.position.set(0, 0.34, 0.08);
+    root.add(head);
+
+    const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 16), whiteMaterial);
+    muzzle.scale.set(1.35, 0.66, 0.22);
+    muzzle.position.set(0, 0.11, 0.82);
+    root.add(muzzle);
+
+    const makeEar = (x: number, rotationZ: number) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.76, 4), bodyMaterial);
+      ear.position.set(x, 1.05, 0.02);
+      ear.rotation.set(0, 0, rotationZ);
+      root.add(ear);
+
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.42, 4), innerEarMaterial);
+      inner.position.set(x * 0.99, 0.99, 0.16);
+      inner.rotation.set(0, 0, rotationZ);
+      inner.scale.set(0.86, 0.86, 0.2);
+      root.add(inner);
+    };
+    makeEar(-0.58, 0.36);
+    makeEar(0.58, -0.36);
+
+    const tailCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.68, -0.3, -0.16),
+      new THREE.Vector3(1.12, -0.04, -0.08),
+      new THREE.Vector3(0.95, 0.46, 0.02),
+      new THREE.Vector3(0.7, 0.22, 0.1),
+    ]);
+    const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.07, 8), bodyMaterial);
+    root.add(tail);
+
+    const eyeScaleY = mood === 'sleepy' ? 0.16 : mood === 'happy' ? 0.58 : 1;
+    const makeEye = (x: number) => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), blackMaterial);
+      eye.scale.set(1, eyeScaleY, 0.45);
+      eye.position.set(x, 0.42, 0.86);
+      root.add(eye);
+      const shine = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), whiteMaterial);
+      shine.position.set(x - 0.025, 0.47, 0.93);
+      root.add(shine);
+    };
+    makeEye(-0.31);
+    makeEye(0.31);
+
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.12, 3), blackMaterial);
+    nose.position.set(0, 0.22, 0.98);
+    nose.rotation.z = Math.PI;
+    nose.scale.set(1, 0.8, 0.5);
+    root.add(nose);
+
+    const makeLine = (x: number, y: number, z: number, length: number, angle: number, material = blackMaterial) => {
+      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, length, 8), material);
+      line.position.set(x, y, z);
+      line.rotation.z = Math.PI / 2 + angle;
+      root.add(line);
+      return line;
+    };
+
+    [-0.14, 0.14].forEach((x) => makeLine(x, 0.11, 1, 0.18, x < 0 ? -0.62 : 0.62));
+    [-0.52, 0.52].forEach((side) => {
+      makeLine(side, 0.17, 0.92, 0.48, side < 0 ? 0.18 : -0.18);
+      makeLine(side, 0.04, 0.94, 0.52, 0);
+      makeLine(side, -0.09, 0.92, 0.46, side < 0 ? -0.18 : 0.18);
+    });
+
+    [-0.42, 0.42].forEach((x) => {
+      const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), cheekMaterial);
+      cheek.scale.set(1.25, 0.62, 0.18);
+      cheek.position.set(x, 0.02, 0.9);
+      root.add(cheek);
+    });
+
+    const paws: THREE.Mesh[] = [];
+    [-0.42, 0.42].forEach((x) => {
+      const paw = new THREE.Mesh(new THREE.SphereGeometry(0.21, 18, 14), accentMaterial);
+      paw.scale.set(1.1, 0.55, 0.72);
+      paw.position.set(x, -0.9, 0.42);
+      root.add(paw);
+      paws.push(paw);
+    });
+
+    root.position.y = 0.04;
+    scene.add(root);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.7));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.7);
+    keyLight.position.set(2.4, 3.2, 5);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(0x9beafe, 1.6);
+    rimLight.position.set(-2, 1.2, 2);
+    scene.add(rimLight);
+
+    let frameId = 0;
+    const start = performance.now();
+    const animate = () => {
+      const t = (performance.now() - start) / 1000;
+      const pace = walking ? 9.2 : 2.8;
+      const bounce = Math.sin(t * pace);
+      root.scale.x = facing === 'left' ? -1 : 1;
+      root.position.y = 0.04 + (walking ? Math.abs(bounce) * 0.12 : Math.sin(t * 2.6) * 0.045);
+      root.rotation.z = (walking ? bounce * 0.055 : Math.sin(t * 2.1) * 0.028) * (facing === 'left' ? -1 : 1);
+      tail.rotation.z = Math.sin(t * (walking ? 8 : 3.3)) * 0.18;
+      paws[0].position.y = -0.9 + (walking ? Math.max(0, bounce) * 0.12 : 0);
+      paws[1].position.y = -0.9 + (walking ? Math.max(0, -bounce) * 0.12 : 0);
+      renderer.render(scene, camera);
+      frameId = window.requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
+      scene.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.geometry.dispose();
+        const material = object.material;
+        if (Array.isArray(material)) material.forEach((item) => item.dispose());
+        else material.dispose();
+      });
+      renderer.dispose();
+    };
+  }, [color, facing, mood, walking]);
+
+  if (!webglOk) {
+    return (
+      <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-cyan-200 via-white to-pink-200 text-lg font-black text-slate-800 shadow-inner">
+        =^.^=
+      </div>
+    );
+  }
+
+  return <div ref={mountRef} className="h-20 w-20" aria-hidden="true" />;
+}
+
 function PetFace({
   color,
   mood,
@@ -289,60 +485,12 @@ function PetFace({
   walking?: boolean;
   facing?: PetPosition;
 }) {
-  const theme = COLOR_THEMES[color];
-  const sleepy = mood === 'sleepy';
-  const focus = mood === 'focus';
-  const happy = mood === 'happy';
-
   return (
-    <div
-      className={`moli-float relative h-24 w-24 ${walking ? 'moli-walking' : ''}`}
-      style={{ '--moli-dir': facing === 'left' ? '-1' : '1' } as CSSProperties}
-    >
-      <div className="pointer-events-none absolute inset-[-20px] opacity-70">
+    <div className="relative h-20 w-20">
+      <div className="pointer-events-none absolute inset-[-14px] opacity-50">
         <Lottie animationData={sparkleAnimation} loop autoplay />
       </div>
-      <div className="moli-shadow absolute bottom-0 left-1/2 h-4 w-16 -translate-x-1/2 rounded-full bg-slate-900/18 blur-sm" />
-      <div className={`moli-tail absolute right-1 top-12 h-5 w-8 rotate-12 rounded-full bg-gradient-to-br ${theme.body} shadow-md ring-2 ring-white/60`} />
-      <div className={`moli-ear-left absolute left-4 top-1 h-9 w-8 -rotate-[28deg] rounded-[70%_70%_50%_50%] bg-gradient-to-br ${theme.body} shadow-md ring-2 ring-white/70`} />
-      <div className={`moli-ear-right absolute right-4 top-1 h-9 w-8 rotate-[28deg] rounded-[70%_70%_50%_50%] bg-gradient-to-br ${theme.body} shadow-md ring-2 ring-white/70`} />
-      <div className={`moli-body absolute left-1/2 top-4 h-[74px] w-[82px] -translate-x-1/2 rounded-[34px] bg-gradient-to-br ${theme.body} shadow-[0_16px_36px_rgba(15,23,42,0.25)] ring-4 ${theme.ring}`}>
-        <div className="absolute inset-x-3 top-2 h-8 rounded-full bg-white/24 blur-[1px]" />
-        <div className="moli-heart absolute -right-1 top-2 h-3 w-3 rotate-45 rounded-[2px] bg-rose-300 shadow-sm before:absolute before:-left-1 before:top-0 before:h-3 before:w-3 before:rounded-full before:bg-rose-300 after:absolute after:left-0 after:-top-1 after:h-3 after:w-3 after:rounded-full after:bg-rose-300" />
-        <div className={`absolute left-4 top-4 h-5 w-5 rounded-full ${theme.accent} opacity-80 shadow-inner`} />
-        <div className="absolute right-4 top-4 h-2.5 w-5 rotate-[-18deg] rounded-full bg-white/60" />
-        <div className="absolute left-[18px] top-9 flex gap-6">
-          <span
-            className={[
-              'moli-blink block bg-slate-950 shadow-[0_1px_0_rgba(255,255,255,0.45)]',
-              sleepy ? 'h-1.5 w-5 rounded-full' : happy ? 'h-3 w-4 rounded-b-full border-b-4 border-slate-950 bg-transparent' : 'h-4 w-3 rounded-full',
-            ].join(' ')}
-          />
-          <span
-            className={[
-              'moli-blink block bg-slate-950 shadow-[0_1px_0_rgba(255,255,255,0.45)]',
-              sleepy ? 'h-1.5 w-5 rounded-full' : happy ? 'h-3 w-4 rounded-b-full border-b-4 border-slate-950 bg-transparent' : 'h-4 w-3 rounded-full',
-            ].join(' ')}
-          />
-        </div>
-        <div className="absolute left-1/2 top-[54px] -translate-x-1/2">
-          {focus ? (
-            <div className="h-1.5 w-7 rounded-full bg-slate-900" />
-          ) : sleepy ? (
-            <div className="h-2 w-5 rounded-b-full border-b-2 border-slate-900" />
-          ) : happy ? (
-            <div className="h-4 w-8 rounded-b-full border-b-[5px] border-slate-950" />
-          ) : (
-            <div className="h-3 w-6 rounded-b-full border-b-4 border-slate-950" />
-          )}
-        </div>
-        <div className="absolute left-3 top-[53px] h-3 w-4 rounded-full bg-rose-300/70 blur-[1px]" />
-        <div className="absolute right-3 top-[53px] h-3 w-4 rounded-full bg-rose-300/70 blur-[1px]" />
-      </div>
-      <div className={`moli-hand-left absolute left-1 top-12 h-5 w-4 -rotate-12 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
-      <div className={`moli-hand-right absolute right-1 top-12 h-5 w-4 rotate-12 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
-      <div className={`moli-foot-left absolute bottom-3 left-7 h-4 w-5 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
-      <div className={`moli-foot-right absolute bottom-3 right-7 h-4 w-5 rounded-full bg-gradient-to-br ${theme.body} shadow-md`} />
+      <MolyThreeCat color={color} mood={mood} walking={walking} facing={facing} />
     </div>
   );
 }
@@ -503,9 +651,9 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   if (!petPoint) return null;
 
   const dockedRight = petPoint.x > window.innerWidth / 2;
-  const panelSideClass = dockedRight ? 'right-0' : 'left-0';
-  const bubbleSideClass = dockedRight ? 'right-24' : 'left-24';
-  const panelVerticalClass = petPoint.y < 360 ? 'top-24' : 'bottom-28';
+  const panelSideClass = dockedRight ? 'sm:right-0 sm:left-auto' : 'sm:left-0 sm:right-auto';
+  const bubbleSideClass = dockedRight ? 'right-20' : 'left-20';
+  const panelVerticalClass = petPoint.y < 360 ? 'sm:top-20 sm:bottom-auto' : 'sm:bottom-24 sm:top-auto';
   const containerStyle: CSSProperties = {
     left: petPoint.x,
     top: petPoint.y,
@@ -629,7 +777,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   };
 
   return (
-    <div className="fixed z-[65] h-[104px] w-[104px] select-none" style={containerStyle}>
+    <div className="fixed z-[65] h-[88px] w-[88px] select-none" style={containerStyle}>
       <style>{`
         @keyframes moli-float {
           0%, 100% { transform: scaleX(var(--moli-dir, 1)) translateY(0) rotate(-1deg); }
@@ -703,10 +851,10 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
       `}</style>
       {open && !minimized && (
         <section
-          className={`absolute ${panelVerticalClass} ${panelSideClass} w-[min(372px,calc(100vw-24px))] overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95`}
+          className={`fixed bottom-[104px] left-3 right-3 flex max-h-[calc(100dvh-116px)] w-auto flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-auto sm:w-[min(372px,calc(100vw-24px))] ${panelVerticalClass} ${panelSideClass} dark:border-slate-700 dark:bg-slate-900/95`}
           aria-label="MolyPet"
         >
-          <div className={`flex items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
+          <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
             <div className="flex min-w-0 items-center gap-3">
               <PetFace color={settings.color} mood={settings.mood} />
               <div className="min-w-0">
@@ -728,7 +876,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
           </div>
 
           {settingsOpen && (
-            <div className="border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+            <div className="shrink-0 border-b border-slate-100 bg-slate-50 p-3 sm:p-4 dark:border-slate-700 dark:bg-slate-800">
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-300">
                 Tên pet
                 <input
@@ -795,7 +943,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             </div>
           )}
 
-          <div className="max-h-[260px] space-y-2 overflow-y-auto px-4 py-3">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
@@ -822,7 +970,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             <div ref={messagesEndRef} />
           </div>
 
-          <form onSubmit={sendMessage} className="flex items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-700">
+          <form onSubmit={sendMessage} className="flex shrink-0 items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-700">
             <input
               value={input}
               maxLength={600}
@@ -877,12 +1025,12 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             setOpen((value) => !value);
             setMinimized(false);
           }}
-          className={`relative flex h-24 w-24 touch-none items-center justify-center rounded-[34px] bg-white/90 shadow-[0_20px_52px_rgba(15,23,42,0.24)] ring-4 ${theme.ring} backdrop-blur transition hover:-translate-y-1 dark:bg-slate-900/90 ${dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
+          className={`relative flex h-20 w-20 touch-none items-center justify-center rounded-[28px] bg-white/90 shadow-[0_18px_42px_rgba(15,23,42,0.22)] ring-[3px] ${theme.ring} backdrop-blur transition hover:-translate-y-1 dark:bg-slate-900/90 ${dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
           title="Keo de di chuyen, bam de mo"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
           <PetFace color={settings.color} mood={settings.mood} walking={walking} facing={facing} />
-          <span className={`absolute -right-1 top-1 flex h-9 w-9 items-center justify-center rounded-2xl text-white shadow-lg ${theme.button}`}>
+          <span className={`absolute -right-1 top-1 flex h-8 w-8 items-center justify-center rounded-2xl text-white shadow-lg ${theme.button}`}>
             <FiMessageCircle size={16} />
           </span>
         </button>
