@@ -167,7 +167,7 @@ export default function UserProfileCard({ userId, anchorRef, onClose }: Props) {
   const cardContent = (
     <div
       ref={cardRef}
-      className="fixed z-[9999] w-[340px] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-visible animate-in fade-in zoom-in-95 duration-200"
+      className="fixed z-[9999] w-[min(340px,calc(100vw-24px))] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-visible animate-in fade-in zoom-in-95 duration-200"
       style={{ top: pos.top, left: pos.left }}
     >
       {loading ? (

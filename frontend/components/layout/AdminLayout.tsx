@@ -299,14 +299,14 @@ export default function AdminLayout({ children, title, description }: AdminLayou
       {/* ── Main Content ─────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center gap-4">
+        <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center gap-3 sm:px-6 sm:py-4 sm:gap-4">
           <button onClick={() => setSidebarOpen(true)}
             className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-600">
             <FiActivity size={18} />
           </button>
 
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-slate-900">{title}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-bold text-slate-900 sm:text-xl">{title}</h1>
             {description && <p className="text-sm text-slate-500 mt-0.5">{description}</p>}
           </div>
 
@@ -323,7 +323,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 sm:p-6">
           {children}
         </main>
       </div>

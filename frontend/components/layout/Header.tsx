@@ -173,7 +173,7 @@ export default function Header() {
           </div>
 
           {/* Right Side Icons & Actions */}
-          <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
             <Link href="/vip" className="hidden items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 px-4 py-2 text-xs font-extrabold text-white shadow-md shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/20 xl:flex">
               <FaCrown className="text-white" size={12} />
               <span>{t('nav.upgrade')}</span>
@@ -271,7 +271,7 @@ export default function Header() {
                 )}
               </div>
             ) : mounted ? (
-              <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 sm:flex">
                 <Link href="/login" className="rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 sm:px-4 sm:py-2">
                   {t('nav.login')}
                 </Link>

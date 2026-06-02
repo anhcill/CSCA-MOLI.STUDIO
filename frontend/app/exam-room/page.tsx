@@ -246,7 +246,7 @@ export default function ExamRoomPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] relative flex flex-col">
+    <div className="min-h-screen overflow-x-hidden bg-[#f8fafc] relative flex flex-col">
       {/* Background Decorators */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-rose-200/40 to-orange-200/40 blur-[100px] rounded-full mix-blend-multiply pointer-events-none" />
       <div className="absolute top-1/4 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-indigo-100/40 to-purple-200/40 blur-[100px] rounded-full mix-blend-multiply pointer-events-none" />

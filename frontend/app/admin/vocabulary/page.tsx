@@ -351,7 +351,7 @@ export default function AdminVocabularyPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6">
         <VocabularyReviewStats />
 
         {/* Filters */}
@@ -440,7 +440,8 @@ export default function AdminVocabularyPage() {
         ) : (
           <>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="text-left px-4 py-3 text-gray-600 font-semibold">Từ Hán</th>
@@ -498,6 +499,7 @@ export default function AdminVocabularyPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
             {/* Pagination */}
@@ -533,7 +535,7 @@ export default function AdminVocabularyPage() {
               <button onClick={() => setShowBulk(false)} className="text-gray-400 hover:text-gray-600"><FiX size={20} /></button>
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
                   <select value={bulkSubject} onChange={e => setBulkSubject(e.target.value)} className="w-full border rounded-lg px-3 py-2">
@@ -611,7 +613,7 @@ export default function AdminVocabularyPage() {
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><FiX size={20} /></button>
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Từ Hán</label>
                   <input value={formData.word_cn} onChange={e => setFormData({ ...formData, word_cn: e.target.value })}

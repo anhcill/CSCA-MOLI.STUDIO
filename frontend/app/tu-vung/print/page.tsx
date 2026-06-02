@@ -104,7 +104,8 @@ function PrintContent() {
         </div>
 
         {topic ? (
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full min-w-[640px] border-collapse text-sm print:min-w-0">
             <thead>
               <tr className="bg-cyan-600">
                 <th className="border border-gray-300 px-4 py-3 text-white font-black text-center w-16">#</th>
@@ -126,13 +127,15 @@ function PrintContent() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
           Object.entries(grouped).map(([topicName, topicWords]) => (
             <div key={topicName} className="mb-8">
               <h2 className="text-base font-bold text-gray-800 bg-gray-100 px-3 py-2 rounded mb-2 border-l-4 border-blue-500">
                 {topicName} <span className="text-gray-400 font-normal text-xs">({topicWords.length} từ)</span>
               </h2>
-              <table className="w-full border-collapse text-sm">
+              <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full min-w-[640px] border-collapse text-sm print:min-w-0">
                 <thead>
                   <tr className="bg-cyan-600">
                     <th className="border border-gray-300 px-3 py-2 text-white font-black text-xs text-center w-8">#</th>
@@ -154,6 +157,7 @@ function PrintContent() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ))
         )}

@@ -486,7 +486,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
   // ── Điểm & Độ khó ──────────────────────────────────────────────────────────
   const renderMeta = () => (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm</label>
         <input

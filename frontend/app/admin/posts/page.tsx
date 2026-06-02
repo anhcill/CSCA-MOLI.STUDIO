@@ -125,7 +125,8 @@ export default function AdminPostsPage() {
                 ) : (
                     <>
                         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[560px] text-sm">
                                 <thead className="bg-gray-50 border-b border-gray-200">
                                     <tr>
                                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 w-8">#</th>
@@ -189,6 +190,7 @@ export default function AdminPostsPage() {
                                     ))}
                                 </tbody>
                             </table>
+                          </div>
                         </div>
 
                         {/* Pagination */}
