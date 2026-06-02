@@ -169,7 +169,7 @@ function checkMoliPetLimit(userId) {
     return {
       allowed: false,
       retryAfter: Math.ceil((nextAllowedAt - now) / 1000),
-      message: 'Moli nghe kip khong noi kip. Doi vai giay roi nhan tiep nhe.',
+      message: 'Moly nghe kip khong noi kip. Doi vai giay roi nhan tiep nhe.',
     };
   }
 
@@ -178,7 +178,7 @@ function checkMoliPetLimit(userId) {
     return {
       allowed: false,
       retryAfter: Math.ceil((state.windowStart + MOLI_PET_WINDOW_MS - now) / 1000),
-      message: `Hom nay Moli da chat du ${MOLI_PET_MAX_PER_WINDOW} tin roi. Mai minh noi tiep nhe.`,
+      message: `Hom nay Moly da chat du ${MOLI_PET_MAX_PER_WINDOW} tin roi. Mai minh noi tiep nhe.`,
     };
   }
 
@@ -826,7 +826,7 @@ async function askMoliPet(req, res) {
   let petLockUserId = null;
   try {
     const userId = req.user.id;
-    const { message, page, petName, mood, conversationHistory } = req.body || {};
+    const { message, page, pageType, subject, routeHint, localTime, petName, mood, conversationHistory } = req.body || {};
     const trimmedMessage = String(message || '').trim();
 
     if (trimmedMessage.length < 2) {
@@ -845,7 +845,7 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: 3,
-        answer: 'Moli dang tra loi tin truoc. Doi minh mot xiu nhe.',
+        answer: 'Moly dang tra loi tin truoc. Doi minh mot xiu nhe.',
       });
     }
     petLockUserId = userId;
@@ -865,19 +865,27 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: aiService.getRateLimitRemaining(),
-        answer: 'Moli dang bi ket noi cham. Thu lai sau mot chut nhe.',
+        answer: 'Moly dang bi ket noi cham. Thu lai sau mot chut nhe.',
       });
     }
 
     const displayName = req.user.full_name || req.user.display_name || req.user.username || 'ban';
-    const safePetName = String(petName || 'Moli').trim().slice(0, 24) || 'Moli';
+    const safePetName = String(petName || 'Moly').trim().slice(0, 24) || 'Moly';
     const safeMood = String(mood || 'friendly').trim().slice(0, 32) || 'friendly';
     const safePage = String(page || '').trim().slice(0, 120);
+    const safePageType = String(pageType || '').trim().slice(0, 80);
+    const safeSubject = String(subject || '').trim().slice(0, 80);
+    const safeRouteHint = String(routeHint || '').trim().slice(0, 240);
+    const safeLocalTime = String(localTime || '').trim().slice(0, 80);
 
     const result = await aiService.askMoliPet(trimmedMessage, {
       petName: safePetName,
       userName: displayName,
       page: safePage,
+      pageType: safePageType,
+      subject: safeSubject,
+      routeHint: safeRouteHint,
+      localTime: safeLocalTime,
       mood: safeMood,
       conversationHistory: normalizeMoliPetHistory(conversationHistory),
     });
@@ -899,7 +907,7 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: error.retryAfter || aiService.getRateLimitRemaining(),
-        answer: 'Moli dang ban xiu. Ban thu lai sau nhe.',
+        answer: 'Moly dang ban xiu. Ban thu lai sau nhe.',
       });
     }
     return res.status(500).json({ success: false, message: 'Loi MoliPet chat.' });
