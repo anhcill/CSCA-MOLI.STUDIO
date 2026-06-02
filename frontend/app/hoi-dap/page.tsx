@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getCurrentUser } from '@/lib/api/auth';
-import { canChatInstructor } from '@/lib/utils/permissions';
 import { qaApi, Ticket } from '@/lib/api/qaApi';
 import {
   FiAlertCircle,
@@ -17,11 +16,12 @@ import {
   FiRefreshCw,
   FiSearch,
   FiSend,
+  FiTag,
   FiX,
 } from 'react-icons/fi';
-import { FaCrown } from 'react-icons/fa';
 
 type StatusFilter = 'all' | 'pending' | 'answered' | 'closed';
+type FeedbackCategory = 'question' | 'issue' | 'feature_request' | 'upgrade_request' | 'experience' | 'other';
 
 const statusMeta: Record<Ticket['status'], { label: string; className: string; icon: React.ElementType }> = {
   pending: { label: 'Đang chờ', className: 'bg-amber-50 text-amber-700 border-amber-200', icon: FiClock },
@@ -29,12 +29,41 @@ const statusMeta: Record<Ticket['status'], { label: string; className: string; i
   closed: { label: 'Đã đóng', className: 'bg-gray-100 text-gray-600 border-gray-200', icon: FiX },
 };
 
+const categoryMeta: Record<string, { label: string; className: string }> = {
+  question: { label: 'Câu hỏi', className: 'bg-sky-50 text-sky-700 border-sky-200' },
+  issue: { label: 'Báo lỗi', className: 'bg-rose-50 text-rose-700 border-rose-200' },
+  feature_request: { label: 'Đề xuất tính năng', className: 'bg-violet-50 text-violet-700 border-violet-200' },
+  upgrade_request: { label: 'Muốn nâng cấp', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  experience: { label: 'Trải nghiệm', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  other: { label: 'Khác', className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  exam_question: { label: 'Câu hỏi bài học', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+};
+
+const categoryOptions: Array<{ value: FeedbackCategory; label: string; desc: string }> = [
+  { value: 'question', label: 'Câu hỏi', desc: 'Thắc mắc khi học hoặc dùng web' },
+  { value: 'issue', label: 'Báo lỗi', desc: 'Lỗi đề, lỗi giao diện, lỗi thanh toán' },
+  { value: 'feature_request', label: 'Đề xuất tính năng', desc: 'Ý tưởng giúp học tốt hơn' },
+  { value: 'upgrade_request', label: 'Muốn nâng cấp', desc: 'Nhu cầu thêm gói, môn, nội dung' },
+  { value: 'experience', label: 'Trải nghiệm', desc: 'Chia sẻ cảm nhận khi dùng web' },
+  { value: 'other', label: 'Khác', desc: 'Nội dung khác cần admin xem' },
+];
+
 function StatusBadge({ status }: { status: Ticket['status'] }) {
   const meta = statusMeta[status] || statusMeta.pending;
   const Icon = meta.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
       <Icon size={12} />
+      {meta.label}
+    </span>
+  );
+}
+
+function CategoryBadge({ category }: { category?: string }) {
+  const meta = categoryMeta[category || 'other'] || categoryMeta.other;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
+      <FiTag size={12} />
       {meta.label}
     </span>
   );
@@ -57,14 +86,12 @@ export default function StudentQAPage() {
   const [showForm, setShowForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<FeedbackCategory>('question');
   const [content, setContent] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const loadedRef = useRef(false);
-
-  const isPremium = canChatInstructor(authUser);
-  const isVip = authUser?.is_vip || authUser?.subscription_tier === 'vip';
+  const loadedUserRef = useRef<number | null>(null);
 
   const counts = useMemo(() => ({
     all: tickets.length,
@@ -90,7 +117,7 @@ export default function StudentQAPage() {
       const data = await qaApi.getMyTickets();
       setTickets(data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Không tải được danh sách câu hỏi.');
+      setError(err.response?.data?.message || 'Không tải được danh sách góp ý.');
     } finally {
       setLoading(false);
     }
@@ -112,14 +139,15 @@ export default function StudentQAPage() {
   }, [authUser?.id, setUser]);
 
   useEffect(() => {
-    if (isPremium && !loadedRef.current) {
-      loadedRef.current = true;
+    if (authUser?.id && loadedUserRef.current !== authUser.id) {
+      loadedUserRef.current = authUser.id;
       loadTickets();
     }
-  }, [isPremium]);
+  }, [authUser?.id]);
 
   const closeForm = () => {
     setShowForm(false);
+    setCategory('question');
     setContent('');
     setImage(null);
     setError('');
@@ -128,7 +156,7 @@ export default function StudentQAPage() {
   const submitQuestion = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!content.trim() && !image) {
-      setError('Vui lòng nhập nội dung hoặc đính kèm ảnh câu hỏi.');
+      setError('Vui lòng nhập nội dung góp ý, câu hỏi hoặc đính kèm ảnh.');
       return;
     }
 
@@ -141,7 +169,7 @@ export default function StudentQAPage() {
         imageUrl = uploadRes.data?.url || uploadRes.url;
       }
       await qaApi.createTicket({
-        category: 'exam_question',
+        category,
         content: content.trim(),
         imageUrl,
         referenceUrl: typeof window !== 'undefined' ? window.location.href : undefined,
@@ -149,7 +177,7 @@ export default function StudentQAPage() {
       closeForm();
       await loadTickets();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Gửi câu hỏi thất bại.');
+      setError(err.response?.data?.message || 'Gửi góp ý thất bại.');
     } finally {
       setSubmitting(false);
     }
@@ -174,46 +202,11 @@ export default function StudentQAPage() {
           <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
             <FiMessageSquare className="mx-auto mb-4 text-indigo-500" size={42} />
             <h1 className="text-xl font-black text-gray-900">Cần đăng nhập</h1>
-            <p className="mt-2 text-sm text-gray-500">Đăng nhập để gửi câu hỏi 1:1 cho giảng viên.</p>
+            <p className="mt-2 text-sm text-gray-500">Đăng nhập để gửi câu hỏi, báo lỗi hoặc góp ý cho admin.</p>
             <Link href="/login" className="mt-6 inline-flex rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white hover:bg-indigo-700">
               Đăng nhập
             </Link>
           </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (!isPremium) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="mx-auto max-w-5xl px-4 py-10">
-          <section className="rounded-2xl border border-amber-200 bg-white p-8 shadow-sm">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-              <div className="max-w-2xl">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
-                  <FaCrown size={12} />
-                  Dành cho tài khoản Pre
-                </div>
-                <h1 className="text-2xl font-black text-gray-900">Hỏi giảng viên 1:1</h1>
-                <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Gửi câu hỏi bằng chữ hoặc ảnh đề bài, giảng viên sẽ trả lời trực tiếp trong một hội thoại riêng.
-                  VIP và Pre dùng chung đề, riêng Pre có thêm video giải đề và hỏi giảng viên.
-                </p>
-                {isVip && (
-                  <p className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">
-                    <FiAlertCircle size={15} />
-                    Bạn đang dùng VIP, cần nâng lên Pre để dùng tính năng này.
-                  </p>
-                )}
-              </div>
-              <Link href="/vip" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-black text-white hover:bg-amber-600">
-                <FaCrown size={14} />
-                Nâng cấp Pre
-              </Link>
-            </div>
-          </section>
         </main>
       </div>
     );
@@ -225,16 +218,23 @@ export default function StudentQAPage() {
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">Hỏi giảng viên</h1>
-            <p className="mt-1 text-sm text-gray-500">Theo dõi toàn bộ câu hỏi 1:1 của bạn với giảng viên.</p>
+            <h1 className="text-2xl font-black text-gray-900">Góp ý & hỗ trợ</h1>
+            <p className="mt-1 text-sm text-gray-500">Gửi câu hỏi, báo lỗi, chia sẻ trải nghiệm hoặc đề xuất nâng cấp để admin xử lý.</p>
           </div>
           <button
             onClick={() => setShowForm(true)}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-indigo-700"
           >
             <FiPlus size={16} />
-            Câu hỏi mới
+            Gửi góp ý
           </button>
+        </div>
+
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+          <FiAlertCircle className="mt-0.5 shrink-0" size={17} />
+          <p>
+            Admin sẽ đọc nội dung tại đây để biết người dùng đang vướng gì, muốn thêm gì hoặc cần nâng cấp phần nào.
+          </p>
         </div>
 
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -265,7 +265,7 @@ export default function StudentQAPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="flex-1 text-sm outline-none"
-            placeholder="Tìm trong nội dung câu hỏi..."
+            placeholder="Tìm trong nội dung góp ý..."
           />
           <button onClick={loadTickets} className="rounded-lg p-2 text-gray-400 hover:bg-gray-50 hover:text-indigo-600">
             <FiRefreshCw size={16} />
@@ -277,10 +277,10 @@ export default function StudentQAPage() {
         {filteredTickets.length === 0 ? (
           <section className="rounded-2xl border border-dashed border-gray-200 bg-white py-16 text-center">
             <FiMessageSquare className="mx-auto mb-3 text-gray-300" size={44} />
-            <h2 className="font-black text-gray-800">Chưa có câu hỏi phù hợp</h2>
-            <p className="mt-1 text-sm text-gray-400">Tạo câu hỏi mới khi bạn cần giảng viên giải thích thêm.</p>
+            <h2 className="font-black text-gray-800">Chưa có góp ý phù hợp</h2>
+            <p className="mt-1 text-sm text-gray-400">Gửi nội dung mới khi bạn có câu hỏi, thắc mắc hoặc đề xuất nâng cấp.</p>
             <button onClick={() => setShowForm(true)} className="mt-5 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700">
-              Đặt câu hỏi
+              Gửi góp ý
             </button>
           </section>
         ) : (
@@ -298,12 +298,13 @@ export default function StudentQAPage() {
                   <div className="min-w-0 flex-1">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <StatusBadge status={ticket.status} />
+                      <CategoryBadge category={ticket.category} />
                       <span className="text-xs text-gray-400">{formatDate(ticket.updated_at || ticket.created_at)}</span>
                       <span className="ml-auto text-xs font-semibold text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100">
                         Mở hội thoại
                       </span>
                     </div>
-                    <p className="line-clamp-2 font-semibold text-gray-900">{ticket.content || '(Bạn đã gửi ảnh đề bài)'}</p>
+                    <p className="line-clamp-2 font-semibold text-gray-900">{ticket.content || '(Bạn đã gửi ảnh đính kèm)'}</p>
                     <p className="mt-2 text-xs text-gray-400">{ticket.reply_count || 0} phản hồi</p>
                   </div>
                 </div>
@@ -318,20 +319,38 @@ export default function StudentQAPage() {
           <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <div>
-                <h2 className="font-black text-gray-900">Gửi câu hỏi cho giảng viên</h2>
-                <p className="mt-0.5 text-xs text-gray-400">Có thể gửi chữ, ảnh đề bài hoặc cả hai.</p>
+                <h2 className="font-black text-gray-900">Gửi góp ý cho admin</h2>
+                <p className="mt-0.5 text-xs text-gray-400">Có thể gửi chữ, ảnh minh họa hoặc cả hai.</p>
               </div>
               <button onClick={closeForm} className="rounded-lg p-2 text-gray-400 hover:bg-gray-50">
                 <FiX size={18} />
               </button>
             </div>
             <form onSubmit={submitQuestion} className="space-y-4 p-5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {categoryOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setCategory(option.value)}
+                    className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                      category === option.value
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-800'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-200'
+                    }`}
+                  >
+                    <span className="block text-sm font-black">{option.label}</span>
+                    <span className="mt-0.5 block text-xs text-gray-400">{option.desc}</span>
+                  </button>
+                ))}
+              </div>
+
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 rows={5}
                 className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
-                placeholder="Nhập câu hỏi, phần chưa hiểu, hoặc yêu cầu giảng viên giải thích..."
+                placeholder="Nhập câu hỏi, lỗi gặp phải, trải nghiệm khi dùng web hoặc đề xuất bạn muốn admin bổ sung..."
               />
 
               {image ? (
@@ -348,7 +367,7 @@ export default function StudentQAPage() {
               ) : (
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-sm font-bold text-gray-500 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
                   <FiImage size={18} />
-                  Đính kèm ảnh đề bài
+                  Đính kèm ảnh minh họa
                   <input type="file" accept="image/*" className="hidden" onChange={(event) => setImage(event.target.files?.[0] || null)} />
                 </label>
               )}
@@ -364,7 +383,7 @@ export default function StudentQAPage() {
                 >
                   <span className="inline-flex items-center gap-2">
                     {submitting ? <FiRefreshCw className="animate-spin" size={15} /> : <FiSend size={15} />}
-                    {submitting ? 'Đang gửi...' : 'Gửi câu hỏi'}
+                    {submitting ? 'Đang gửi...' : 'Gửi góp ý'}
                   </span>
                 </button>
               </div>

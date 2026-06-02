@@ -50,7 +50,7 @@ const MAIN_NAV_BOTTOM = [
   { id: 'games', labelKey: 'nav.games', href: '/games', icon: FaGamepad },
   { id: 'docs', labelKey: 'nav.docs', href: '/tailieu', icon: FiFileText },
   { id: 'forum', labelKey: 'nav.forum', href: '/forum', icon: FiMessageSquare },
-  { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FaCrown },
+  { id: 'qa', labelKey: 'nav.qa', href: '/hoi-dap', icon: FiHelpCircle },
   { id: 'blog', labelKey: 'nav.blog', href: '/blog', icon: FiBookOpen },
 ];
 

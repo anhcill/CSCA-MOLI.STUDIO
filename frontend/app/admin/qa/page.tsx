@@ -12,6 +12,7 @@ import {
   FiRefreshCw,
   FiSearch,
   FiSend,
+  FiTag,
   FiTrash2,
   FiX,
 } from 'react-icons/fi';
@@ -24,12 +25,32 @@ const statusMeta: Record<Ticket['status'], { label: string; className: string; i
   closed: { label: 'Đã đóng', className: 'bg-gray-100 text-gray-600 border-gray-200', icon: FiArchive },
 };
 
+const categoryMeta: Record<string, { label: string; className: string }> = {
+  question: { label: 'Câu hỏi', className: 'bg-sky-50 text-sky-700 border-sky-200' },
+  issue: { label: 'Báo lỗi', className: 'bg-rose-50 text-rose-700 border-rose-200' },
+  feature_request: { label: 'Đề xuất tính năng', className: 'bg-violet-50 text-violet-700 border-violet-200' },
+  upgrade_request: { label: 'Muốn nâng cấp', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  experience: { label: 'Trải nghiệm', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  other: { label: 'Khác', className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  exam_question: { label: 'Câu hỏi bài học', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+};
+
 function StatusBadge({ status }: { status: Ticket['status'] }) {
   const meta = statusMeta[status] || statusMeta.pending;
   const Icon = meta.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
       <Icon size={12} />
+      {meta.label}
+    </span>
+  );
+}
+
+function CategoryBadge({ category }: { category?: string }) {
+  const meta = categoryMeta[category || 'other'] || categoryMeta.other;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${meta.className}`}>
+      <FiTag size={12} />
       {meta.label}
     </span>
   );
@@ -89,7 +110,7 @@ export default function AdminQADashboard() {
         content: selectedTicket.content,
         image_url: selectedTicket.image_url,
         created_at: selectedTicket.created_at,
-        sender_name: selectedTicket.author_name || 'Học viên',
+        sender_name: selectedTicket.author_name || 'Người dùng',
         sender_avatar: selectedTicket.author_avatar,
       },
       ...(selectedTicket.replies || []),
@@ -118,7 +139,7 @@ export default function AdminQADashboard() {
         }
       }
     } catch (error: any) {
-      setLoadError(error.response?.data?.message || 'Không tải được danh sách câu hỏi.');
+      setLoadError(error.response?.data?.message || 'Không tải được danh sách góp ý.');
     } finally {
       setLoading(false);
     }
@@ -171,7 +192,7 @@ export default function AdminQADashboard() {
           content: currentContent,
           image_url: previewUrl,
           created_at: new Date().toISOString(),
-          sender_name: 'Giảng viên',
+          sender_name: 'Admin CSCA',
         },
       ],
     } : ticket);
@@ -188,9 +209,9 @@ export default function AdminQADashboard() {
 
       await qaApi.adminReplyTicket(selectedTicket.id, { content: currentContent, imageUrl });
       await Promise.all([loadTickets(true), refreshSelectedTicket()]);
-      showToast('Đã gửi trả lời cho học viên.');
+      showToast('Đã gửi phản hồi cho người dùng.');
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Gửi trả lời thất bại.');
+      showToast(error.response?.data?.message || 'Gửi phản hồi thất bại.');
       await refreshSelectedTicket().catch(() => {});
     } finally {
       setIsSubmitting(false);
@@ -222,7 +243,7 @@ export default function AdminQADashboard() {
   };
 
   return (
-    <AdminLayout title="Hỏi Giảng Viên" description="Quản lý hội thoại 1:1 của học viên Pre">
+    <AdminLayout title="Góp Ý Người Dùng" description="Quản lý câu hỏi, báo lỗi, trải nghiệm và yêu cầu nâng cấp">
       <div className="relative h-[calc(100vh-132px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
         {toast && (
           <div className="absolute right-4 top-4 z-30 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
@@ -261,7 +282,7 @@ export default function AdminQADashboard() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
-                  placeholder="Tìm học viên, email, nội dung..."
+                  placeholder="Tìm người dùng, email, nội dung..."
                 />
               </div>
             </div>
@@ -269,7 +290,7 @@ export default function AdminQADashboard() {
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
                 <FiInbox size={16} />
-                {filteredTickets.length} hội thoại
+                {filteredTickets.length} góp ý
               </div>
               <button
                 onClick={() => loadTickets(true)}
@@ -286,7 +307,7 @@ export default function AdminQADashboard() {
               ) : loading && tickets.length === 0 ? (
                 <div className="p-6 text-center text-sm text-gray-400">Đang tải...</div>
               ) : filteredTickets.length === 0 ? (
-                <div className="p-8 text-center text-sm text-gray-400">Không có hội thoại phù hợp.</div>
+                <div className="p-8 text-center text-sm text-gray-400">Không có góp ý phù hợp.</div>
               ) : (
                 filteredTickets.map((ticket) => (
                   <button
@@ -303,15 +324,18 @@ export default function AdminQADashboard() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-bold text-gray-900">
-                            {ticket.author_name || ticket.author_email || 'Học viên'}
+                            {ticket.author_name || ticket.author_email || 'Người dùng'}
                           </p>
                           <span className="shrink-0 text-[11px] text-gray-400">{formatTime(ticket.updated_at || ticket.created_at)}</span>
                         </div>
                         <p className="mt-1 line-clamp-2 text-sm text-gray-500">
-                          {ticket.content || '(Học viên gửi ảnh)'}
+                          {ticket.content || '(Người dùng gửi ảnh)'}
                         </p>
                         <div className="mt-3 flex items-center justify-between gap-2">
-                          <StatusBadge status={ticket.status} />
+                          <div className="flex flex-wrap gap-1.5">
+                            <StatusBadge status={ticket.status} />
+                            <CategoryBadge category={ticket.category} />
+                          </div>
                           <span className="text-xs text-gray-400">{ticket.reply_count || 0} tin</span>
                         </div>
                       </div>
@@ -326,7 +350,7 @@ export default function AdminQADashboard() {
             {!selectedTicket ? (
               <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
                 <FiInbox size={54} className="mb-3 opacity-40" />
-                <p className="text-sm font-semibold">Chọn một hội thoại để trả lời học viên.</p>
+                <p className="text-sm font-semibold">Chọn một góp ý để phản hồi người dùng.</p>
               </div>
             ) : (
               <>
@@ -334,9 +358,10 @@ export default function AdminQADashboard() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
                       <h2 className="truncate text-base font-black text-gray-900">
-                        {selectedTicket.author_name || selectedTicket.author_email || 'Học viên'}
+                        {selectedTicket.author_name || selectedTicket.author_email || 'Người dùng'}
                       </h2>
                       <StatusBadge status={selectedTicket.status} />
+                      <CategoryBadge category={selectedTicket.category} />
                     </div>
                     <p className="mt-1 text-xs text-gray-400">
                       {selectedTicket.author_email || 'Không có email'} · Tạo lúc {formatTime(selectedTicket.created_at)}
@@ -379,7 +404,7 @@ export default function AdminQADashboard() {
                               : 'rounded-bl-md border border-gray-200 bg-white text-gray-800'
                           }`}>
                             <div className={`mb-1 text-xs font-bold ${isAdmin ? 'text-indigo-100' : 'text-gray-500'}`}>
-                              {isAdmin ? 'Giảng viên' : selectedTicket.author_name || 'Học viên'}
+                              {isAdmin ? 'Admin CSCA' : selectedTicket.author_name || 'Người dùng'}
                             </div>
                             {message.content && <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>}
                             {message.image_url && (
@@ -433,7 +458,7 @@ export default function AdminQADashboard() {
                           }}
                           rows={1}
                           className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:border-indigo-400 focus:bg-white"
-                          placeholder="Trả lời học viên... Enter để gửi, Shift+Enter để xuống dòng"
+                          placeholder="Phản hồi người dùng... Enter để gửi, Shift+Enter để xuống dòng"
                         />
                         <button
                           disabled={isSubmitting || (!content.trim() && !image)}

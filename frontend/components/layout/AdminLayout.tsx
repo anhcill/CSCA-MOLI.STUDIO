@@ -127,7 +127,7 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
-        label: 'Hỏi-Đáp VIP',
+        label: 'Góp ý người dùng',
         icon: FiHelpCircle,
         href: '/admin/qa',
         permission: 'admin.dashboard.view',
