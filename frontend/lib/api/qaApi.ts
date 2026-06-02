@@ -51,9 +51,30 @@ export const qaApi = {
         return res.data;
     },
 
+    // --- FEEDBACK APIs ---
+    createFeedbackTicket: async (data: { category: string; referenceUrl?: string; content: string; imageUrl?: string }) => {
+        const res = await api.post('/qa/feedback', data);
+        return res.data;
+    },
+
+    getMyFeedbackTickets: async () => {
+        const res = await api.get('/qa/feedback/my-tickets');
+        return res.data.data as Ticket[];
+    },
+
+    getFeedbackDetail: async (id: number) => {
+        const res = await api.get(`/qa/feedback/${id}`);
+        return res.data.data as Ticket;
+    },
+
+    replyToFeedbackTicket: async (id: number, data: { content: string; imageUrl?: string }) => {
+        const res = await api.post(`/qa/feedback/${id}/reply`, data);
+        return res.data;
+    },
+
     // --- ADMIN APIs ---
-    adminGetAllTickets: async (statusFilter?: string) => {
-        const res = await api.get('/admin/qa/tickets', { params: { status: statusFilter } });
+    adminGetAllTickets: async (statusFilter?: string, type?: 'qa' | 'feedback') => {
+        const res = await api.get('/admin/qa/tickets', { params: { status: statusFilter, type } });
         return res.data.data as Ticket[];
     },
 

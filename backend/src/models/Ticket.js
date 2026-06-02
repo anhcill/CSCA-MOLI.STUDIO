@@ -46,19 +46,22 @@ const Ticket = {
     return result.rows[0];
   },
 
-  async getUserTickets(userId) {
+  async getUserTickets(userId, categories = null) {
+    const params = [userId];
     const query = `
       SELECT t.*,
         (SELECT COUNT(*) FROM support_replies WHERE ticket_id = t.id) as reply_count
       FROM support_tickets t
       WHERE user_id = $1
+      ${Array.isArray(categories) && categories.length > 0 ? "AND category = ANY($2)" : ""}
       ORDER BY updated_at DESC, created_at DESC
     `;
-    const result = await pool.query(query, [userId]);
+    if (Array.isArray(categories) && categories.length > 0) params.push(categories);
+    const result = await pool.query(query, params);
     return result.rows;
   },
 
-  async getById(ticketId, userId = null, isAdmin = false) {
+  async getById(ticketId, userId = null, isAdmin = false, categories = null) {
     // If not admin, ensure user_id matches
     let query = `
       SELECT t.*, u.full_name as author_name, u.avatar_url as author_avatar, u.email as author_email
@@ -68,8 +71,12 @@ const Ticket = {
     `;
     const params = [ticketId];
     if (!isAdmin) {
-      query += ` AND t.user_id = $2`;
+      query += ` AND t.user_id = $${params.length + 1}`;
       params.push(userId);
+    }
+    if (Array.isArray(categories) && categories.length > 0) {
+      query += ` AND t.category = ANY($${params.length + 1})`;
+      params.push(categories);
     }
     const ticketRes = await pool.query(query, params);
     if (ticketRes.rows.length === 0) return null;
@@ -117,7 +124,9 @@ const Ticket = {
     return result.rows[0];
   },
 
-  async getAllForAdmin(statusFilter = 'all') {
+  async getAllForAdmin(statusFilter = 'all', categories = null) {
+    const params = [];
+    const conditions = [];
     let query = `
       SELECT t.*, u.full_name as author_name, u.email as author_email,
         (SELECT COUNT(*) FROM support_replies WHERE ticket_id = t.id) as reply_count
@@ -125,11 +134,17 @@ const Ticket = {
       JOIN users u ON t.user_id = u.id
     `;
     if (statusFilter !== 'all') {
-      query += ` WHERE t.status = $1`;
+      params.push(statusFilter);
+      conditions.push(`t.status = $${params.length}`);
+    }
+    if (Array.isArray(categories) && categories.length > 0) {
+      params.push(categories);
+      conditions.push(`t.category = ANY($${params.length})`);
+    }
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(" AND ")}`;
     }
     query += ` ORDER BY t.updated_at DESC, t.created_at DESC`;
-    
-    const params = statusFilter !== 'all' ? [statusFilter] : [];
     const result = await pool.query(query, params);
     return result.rows;
   },

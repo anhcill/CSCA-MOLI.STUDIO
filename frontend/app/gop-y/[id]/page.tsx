@@ -92,11 +92,11 @@ export default function StudentQADetailPage() {
 
   const loadDetail = async () => {
     try {
-      const data = await qaApi.getTicketDetail(ticketId);
+      const data = await qaApi.getFeedbackDetail(ticketId);
       setTicket(data);
     } catch {
-      alert('Không tìm thấy câu hỏi hoặc bạn không có quyền xem.');
-      router.push('/hoi-dap');
+      alert('Không tìm thấy góp ý hoặc bạn không có quyền xem.');
+      router.push('/gop-y');
     }
   };
 
@@ -161,7 +161,7 @@ export default function StudentQADetailPage() {
         const uploadRes = await qaApi.uploadImage(currentImage);
         imageUrl = uploadRes.data?.url || uploadRes.url;
       }
-      await qaApi.replyToTicket(ticketId, { content: currentContent, imageUrl });
+      await qaApi.replyToFeedbackTicket(ticketId, { content: currentContent, imageUrl });
       loadDetail();
     } catch {
       alert('Lỗi khi gửi tin nhắn.');
@@ -179,7 +179,7 @@ export default function StudentQADetailPage() {
           <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-500 animate-spin" />
           <div className="absolute inset-0 flex items-center justify-center text-lg">💬</div>
         </div>
-        <p className="text-gray-400 font-medium mt-4">Đang tải cuộc trò chuyện...</p>
+        <p className="text-gray-400 font-medium mt-4">Đang tải hội thoại...</p>
       </div>
     );
   }
@@ -193,14 +193,14 @@ export default function StudentQADetailPage() {
       {/* ── Back bar (replaces full Header for more chat space) ── */}
       <div className="shrink-0 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-2.5 z-20 flex items-center gap-3">
         <Link
-          href="/hoi-dap"
+          href="/gop-y"
           className="flex items-center gap-1.5 text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group"
         >
           <FiChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
           <span>Quay lại</span>
         </Link>
         <span className="text-gray-300">|</span>
-        <span className="text-sm font-bold text-gray-700">Hỏi Đáp Cùng Cố Vấn</span>
+        <span className="text-sm font-bold text-gray-700">Góp Ý & Hỗ Trợ</span>
       </div>
 
       {/* ── Main layout ── */}
@@ -211,7 +211,7 @@ export default function StudentQADetailPage() {
           <div className="p-5 border-b border-gray-100">
             <h3 className="font-bold text-gray-700 text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-1 h-4 bg-indigo-500 rounded-full" />
-              Thông tin câu hỏi
+              Thông tin góp ý
             </h3>
             <div className="flex items-center gap-3 mb-4">
               <img
@@ -220,7 +220,7 @@ export default function StudentQADetailPage() {
                 className="w-10 h-10 rounded-full ring-2 ring-indigo-100 shadow-sm"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-900 truncate">{ticket.author_name || 'Học viên'}</p>
+                <p className="text-sm font-bold text-gray-900 truncate">{ticket.author_name || 'Người dùng'}</p>
                 <p className="text-xs text-gray-400">{new Date(ticket.created_at).toLocaleDateString('vi-VN')}</p>
               </div>
             </div>
@@ -232,18 +232,18 @@ export default function StudentQADetailPage() {
               {ticket.status === 'pending' ? (
                 <><span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" /> Đang chờ phản hồi</>
               ) : ticket.status === 'answered' ? (
-                <><FiCheckCircle size={11} /> Cố vấn đã trả lời</>
+                <><FiCheckCircle size={11} /> Admin đã phản hồi</>
               ) : 'Đã đóng'}
             </span>
           </div>
 
           <div className="p-5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Câu hỏi gốc</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Nội dung gốc</p>
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-3">{ticket.content}</p>
             {ticket.image_url && (
               <img
                 src={ticket.image_url}
-                alt="Đề bài"
+                alt="Đính kèm"
                 className="w-full rounded-2xl border border-gray-100 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => window.open(ticket.image_url as string, '_blank')}
               />
@@ -274,12 +274,12 @@ export default function StudentQADetailPage() {
                   <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${isClosed ? 'bg-gray-400' : 'bg-emerald-400'}`} />
                 </div>
                 <div>
-                  <h2 className="font-black text-gray-900 text-sm tracking-tight">Cố Vấn CSCA</h2>
+                  <h2 className="font-black text-gray-900 text-sm tracking-tight">Admin CSCA</h2>
                   <p className="text-xs text-gray-400 flex items-center gap-1">
                     {isClosed
                       ? <><span className="w-1.5 h-1.5 bg-gray-400 rounded-full" /> Đã kết thúc</>
                       : isPending
-                        ? <><span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" /> Đang xử lý câu hỏi của bạn...</>
+                        ? <><span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" /> Đang xử lý nội dung của bạn...</>
                         : <><span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" /> Đang hoạt động</>
                     }
                   </p>
@@ -315,14 +315,14 @@ export default function StudentQADetailPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="font-black text-gray-800 text-lg mb-1">Đang chờ cố vấn phản hồi</p>
+                  <p className="font-black text-gray-800 text-lg mb-1">Đang chờ admin phản hồi</p>
                   <p className="text-gray-400 text-sm max-w-xs leading-relaxed">
-                    Cố vấn sẽ trả lời trong vòng 2-4 giờ làm việc.<br />Bạn có thể nhắn thêm thông tin bên dưới.
+                    Admin sẽ phản hồi trong vòng 2-4 giờ làm việc.<br />Bạn có thể nhắn thêm thông tin bên dưới.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-indigo-500 bg-indigo-50 px-4 py-2 rounded-full border border-indigo-100">
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
-                  Câu hỏi đã được gửi thành công
+                  Nội dung đã được gửi thành công
                 </div>
               </div>
             )}
@@ -371,7 +371,7 @@ export default function StudentQADetailPage() {
                         {/* Sender name (only show first in group) */}
                         {ri === 0 || group.items[ri - 1]?.sender_id !== reply.sender_id ? (
                           <span className={`text-[11px] font-bold mb-1 px-1 ${isMe ? 'text-indigo-500' : 'text-gray-500'}`}>
-                            {reply.is_admin_reply ? 'Cố Vấn CSCA' : 'Bạn'}
+                            {reply.is_admin_reply ? 'Admin CSCA' : 'Bạn'}
                           </span>
                         ) : null}
 
@@ -412,7 +412,7 @@ export default function StudentQADetailPage() {
               </div>
             ))}
 
-            {/* Typing indicator when student sent message but advisor hasn't replied yet */}
+            {/* Typing indicator when user sent a message and admin has not replied yet */}
             {isPending && (ticket.replies?.length || 0) === 0 && (
               <div className="pt-2">
                 <TypingDots />
@@ -466,7 +466,7 @@ export default function StudentQADetailPage() {
                       }
                     }}
                     className="w-full px-4 py-3 bg-gray-50/80 border border-gray-200 rounded-2xl text-sm resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-300 focus:bg-white outline-none transition-all placeholder:text-gray-400 leading-relaxed"
-                    placeholder="Nhắn cho cố vấn... (Enter để gửi)"
+                    placeholder="Nhắn cho admin... (Enter để gửi)"
                     rows={1}
                     style={{ maxHeight: '120px', minHeight: '46px' }}
                   />

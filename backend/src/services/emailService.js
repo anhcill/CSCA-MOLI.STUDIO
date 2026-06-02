@@ -335,8 +335,8 @@ class EmailService {
   // ─────────────────────────────────────────────────────────────────────────────
   // 8. Mail thông báo Cố vấn đã trả lời câu hỏi
   // ─────────────────────────────────────────────────────────────────────────────
-  async sendQaReplyEmail({ email, name, ticketId, preview, advisorName }) {
-    const ticketUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hoi-dap/${ticketId}`;
+  async sendQaReplyEmail({ email, name, ticketId, preview, advisorName, ticketUrl: customTicketUrl }) {
+    const ticketUrl = customTicketUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hoi-dap/${ticketId}`;
     const previewText = preview ? `"${preview.substring(0, 120)}${preview.length > 120 ? '...' : ''}"` : 'Cố vấn đã gửi tin nhắn mới cho bạn.';
 
     const content = `

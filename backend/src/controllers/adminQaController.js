@@ -3,12 +3,17 @@ const emailService = require("../services/emailService");
 const pool = require("../config/database");
 
 const hasText = (value) => String(value || "").trim().length > 0;
+const QA_CATEGORIES = ["exam_question"];
+const FEEDBACK_CATEGORIES = ["question", "issue", "feature_request", "upgrade_request", "experience", "other", "general"];
+
+const categoriesForType = (type) => (type === "feedback" ? FEEDBACK_CATEGORIES : QA_CATEGORIES);
+const isFeedbackTicket = (ticket) => FEEDBACK_CATEGORIES.includes(ticket?.category);
 
 const adminQaController = {
   async getAllTickets(req, res) {
     try {
-      const { status } = req.query;
-      const tickets = await Ticket.getAllForAdmin(status || "all");
+      const { status, type } = req.query;
+      const tickets = await Ticket.getAllForAdmin(status || "all", categoriesForType(type));
       res.json({ success: true, data: tickets });
     } catch (error) {
       console.error("Admin Get Tickets Error:", error);
@@ -62,7 +67,8 @@ const adminQaController = {
           const owner = ownerRes.rows[0];
           if (!owner) return;
 
-          const advisorName = req.user.full_name || "Giảng viên CSCA";
+          const feedback = isFeedbackTicket(ticket);
+          const advisorName = req.user.full_name || (feedback ? "Admin CSCA" : "Giảng viên CSCA");
           const preview = String(content || "Đã gửi ảnh đính kèm.");
 
           emailService.sendQaReplyEmail({
@@ -71,6 +77,7 @@ const adminQaController = {
             ticketId: id,
             preview,
             advisorName,
+            ticketUrl: `${process.env.FRONTEND_URL || "http://localhost:3000"}${feedback ? "/gop-y" : "/hoi-dap"}/${id}`,
           }).catch((err) => console.error("QA reply email error:", err.message));
 
           await pool.query(
@@ -78,9 +85,9 @@ const adminQaController = {
              VALUES ($1, 'qa_reply', $2, $3, $4, false)`,
             [
               owner.id,
-              "Giảng viên đã trả lời câu hỏi của bạn",
+              feedback ? "Admin đã phản hồi góp ý của bạn" : "Giảng viên đã trả lời câu hỏi của bạn",
               `${advisorName}: "${preview.substring(0, 100)}${preview.length > 100 ? "..." : ""}"`,
-              `/hoi-dap/${id}`,
+              feedback ? `/gop-y/${id}` : `/hoi-dap/${id}`,
             ],
           );
         } catch (notifErr) {
