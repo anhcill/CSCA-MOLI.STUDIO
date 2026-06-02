@@ -27,6 +27,7 @@ router.post('/practice',        aiController.getPracticeRecommendations); // POS
 // 🚀 FEATURE 5: Chatbot hỏi đáp
 router.post('/ask',             aiController.askAI);
 router.post('/ask-stream',      aiController.askAIStream);
+router.post('/moli-pet',        aiController.askMoliPet);
 
 // 🧠 FEATURE 6: Phân tích tiến bộ
 router.get('/progress',         aiController.analyzeProgress);           // GET /api/ai/progress

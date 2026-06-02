@@ -13,6 +13,12 @@ const AI_CHAT_WINDOW_MS = 60 * 1000;
 const AI_CHAT_MAX_PER_WINDOW = 12;
 const AI_CHAT_MIN_INTERVAL_MS = 2500;
 const AI_CHAT_MAX_QUESTION_LENGTH = 3000;
+const moliPetWindows = new Map();
+const moliPetInFlightUsers = new Set();
+const MOLI_PET_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MOLI_PET_MAX_PER_WINDOW = Number.parseInt(process.env.MOLI_PET_DAILY_LIMIT, 10) || 20;
+const MOLI_PET_MIN_INTERVAL_MS = Number.parseInt(process.env.MOLI_PET_MIN_INTERVAL_MS, 10) || 3000;
+const MOLI_PET_MAX_MESSAGE_LENGTH = Number.parseInt(process.env.MOLI_PET_MAX_MESSAGE_LENGTH, 10) || 600;
 const INSIGHT_TYPES = {
   fullAnalysis: 'full_analysis',
   examAnalysis: 'exam_analysis',
@@ -138,6 +144,60 @@ function checkAIChatSpam(userId) {
   state.lastAt = now;
   chatWindows.set(userId, state);
   return { allowed: true };
+}
+
+function tryStartMoliPet(userId) {
+  if (moliPetInFlightUsers.has(userId)) return false;
+  moliPetInFlightUsers.add(userId);
+  return true;
+}
+
+function finishMoliPet(userId) {
+  moliPetInFlightUsers.delete(userId);
+}
+
+function checkMoliPetLimit(userId) {
+  const now = Date.now();
+  const current = moliPetWindows.get(userId) || { windowStart: now, count: 0, lastAt: 0 };
+  const state = now - current.windowStart >= MOLI_PET_WINDOW_MS
+    ? { windowStart: now, count: 0, lastAt: current.lastAt || 0 }
+    : current;
+
+  const nextAllowedAt = state.lastAt + MOLI_PET_MIN_INTERVAL_MS;
+  if (state.lastAt && now < nextAllowedAt) {
+    moliPetWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((nextAllowedAt - now) / 1000),
+      message: 'Moli nghe kip khong noi kip. Doi vai giay roi nhan tiep nhe.',
+    };
+  }
+
+  if (state.count >= MOLI_PET_MAX_PER_WINDOW) {
+    moliPetWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((state.windowStart + MOLI_PET_WINDOW_MS - now) / 1000),
+      message: `Hom nay Moli da chat du ${MOLI_PET_MAX_PER_WINDOW} tin roi. Mai minh noi tiep nhe.`,
+    };
+  }
+
+  state.count += 1;
+  state.lastAt = now;
+  moliPetWindows.set(userId, state);
+  return {
+    allowed: true,
+    remaining: Math.max(0, MOLI_PET_MAX_PER_WINDOW - state.count),
+    limit: MOLI_PET_MAX_PER_WINDOW,
+  };
+}
+
+function normalizeMoliPetHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history.slice(-6).map((item) => ({
+    role: item?.role === 'assistant' ? 'assistant' : 'user',
+    content: String(item?.content || '').trim().slice(0, 500),
+  })).filter((item) => item.content);
 }
 
 async function getAttemptAIContext(userId, attemptId) {
@@ -762,6 +822,92 @@ async function askAI(req, res) {
  * GET /api/ai/progress
  * So sánh kết quả giữa các lần thi
  */
+async function askMoliPet(req, res) {
+  let petLockUserId = null;
+  try {
+    const userId = req.user.id;
+    const { message, page, petName, mood, conversationHistory } = req.body || {};
+    const trimmedMessage = String(message || '').trim();
+
+    if (trimmedMessage.length < 2) {
+      return res.status(400).json({ success: false, message: 'Tin nhan qua ngan.' });
+    }
+
+    if (trimmedMessage.length > MOLI_PET_MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Tin nhan qua dai. Toi da ${MOLI_PET_MAX_MESSAGE_LENGTH} ky tu.`,
+      });
+    }
+
+    if (!tryStartMoliPet(userId)) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: 3,
+        answer: 'Moli dang tra loi tin truoc. Doi minh mot xiu nhe.',
+      });
+    }
+    petLockUserId = userId;
+
+    const petLimit = checkMoliPetLimit(userId);
+    if (!petLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: petLimit.retryAfter,
+        answer: petLimit.message,
+      });
+    }
+
+    if (aiService.isRateLimited()) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: aiService.getRateLimitRemaining(),
+        answer: 'Moli dang bi ket noi cham. Thu lai sau mot chut nhe.',
+      });
+    }
+
+    const displayName = req.user.full_name || req.user.display_name || req.user.username || 'ban';
+    const safePetName = String(petName || 'Moli').trim().slice(0, 24) || 'Moli';
+    const safeMood = String(mood || 'friendly').trim().slice(0, 32) || 'friendly';
+    const safePage = String(page || '').trim().slice(0, 120);
+
+    const result = await aiService.askMoliPet(trimmedMessage, {
+      petName: safePetName,
+      userName: displayName,
+      page: safePage,
+      mood: safeMood,
+      conversationHistory: normalizeMoliPetHistory(conversationHistory),
+    });
+
+    return res.json({
+      success: true,
+      answer: result.answer,
+      timestamp: result.timestamp,
+      error: result.error || false,
+      quota: {
+        limit: petLimit.limit,
+        remaining: petLimit.remaining,
+      },
+    });
+  } catch (error) {
+    console.error('askMoliPet error:', error);
+    if (error.message === 'RATE_LIMITED') {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        retryAfter: error.retryAfter || aiService.getRateLimitRemaining(),
+        answer: 'Moli dang ban xiu. Ban thu lai sau nhe.',
+      });
+    }
+    return res.status(500).json({ success: false, message: 'Loi MoliPet chat.' });
+  } finally {
+    if (petLockUserId) finishMoliPet(petLockUserId);
+  }
+}
+
 async function analyzeProgress(req, res) {
   try {
     const userId = req.user.id;
@@ -1279,6 +1425,7 @@ module.exports = {
   getPracticeRecommendations,
   askAI,
   askAIStream,
+  askMoliPet,
   analyzeProgress,
   recommendNextExam,
   analyzeUserPerformance,

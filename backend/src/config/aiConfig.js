@@ -55,6 +55,7 @@ const config = {
     essayMaxTokens: intEnv('AI_ESSAY_MAX_TOKENS', 3000),
     lessonMaxTokens: intEnv('AI_LESSON_MAX_TOKENS', 3000),
     chatMaxTokens: intEnv('AI_CHAT_MAX_TOKENS', 2200),
+    petChatMaxTokens: intEnv('MOLI_PET_MAX_TOKENS', 700),
     temperature: floatEnv('BEEKNOEE_TEMPERATURE', 0.3),
     delayBetweenRequests: intEnv('AI_REQUEST_SPACING_MS', 300),
     maxConcurrent: intEnv('AI_MAX_CONCURRENT', 3),

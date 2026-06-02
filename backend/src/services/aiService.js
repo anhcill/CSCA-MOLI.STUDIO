@@ -829,6 +829,68 @@ async function askAI(question, context = {}) {
  * @param {Object} context  - Ngữ cảnh (attemptData, questions, etc.)
  * @param {Object} res - Express Response object (để pipe SSE)
  */
+function buildMoliPetPrompt(message, context = {}) {
+  const {
+    petName = 'Moli',
+    userName = 'ban',
+    page = '/',
+    mood = 'friendly',
+    conversationHistory = [],
+  } = context;
+  const history = buildConversationHistoryContext(conversationHistory);
+
+  return `Ban la ${petName}, mot pet hoc tap de thuong cua CSCA MOLI.STUDIO.
+Tra loi bang tieng Viet co dau, tu nhien, am ap, ngan gon.
+
+Tinh cach:
+- De thuong, hoi tham user, dong vien hoc tap.
+- Noi nhu ban dong hanh nho, khong noi dai.
+- Neu user hoi bai hoc, hay goi y cach lam tung buoc nhung khong lam thay toan bo khi user chi muon tu luyen.
+- Neu user hoi ngoai hoc tap, van tra loi lich su, ngan gon, an toan.
+- Khong noi minh la AI model. Khong nhac quota/model/key.
+
+Gioi han:
+- Toi da 4 cau ngan.
+- Khong dung markdown phuc tap.
+- Khong bia thong tin ca nhan cua user.
+
+Ngu canh:
+- Ten user: ${userName || 'ban'}
+- Trang hien tai: ${page || '/'}
+- Tam trang pet: ${mood || 'friendly'}
+- Lich su gan day:
+${history || '(khong co)'}
+
+User noi: ${message}`;
+}
+
+async function askMoliPet(message, context = {}) {
+  const prompt = buildMoliPetPrompt(message, context);
+  const model = BEE.importFallbackModel || BEE.importModel || BEE.model;
+  const maxTokens = Math.min(BEE.petChatMaxTokens || 700, 900);
+
+  try {
+    const response = await callBeeknoee(prompt, {
+      model,
+      temperature: 0.55,
+      maxTokens,
+      timeout: Math.min(BEE.timeout || 90000, 45000),
+    });
+    return {
+      answer: response,
+      model,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (err) {
+    if (err.message === 'RATE_LIMITED') throw err;
+    return {
+      answer: 'Moli dang hoi met xiu. Ban cho minh mot chut roi noi tiep nhe.',
+      timestamp: new Date().toISOString(),
+      error: true,
+    };
+  }
+}
+
 async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
 
@@ -1327,6 +1389,7 @@ module.exports = {
   getPracticeRecommendations,
   askAI,
   askAIStream,
+  askMoliPet,
   analyzeProgress,
   recommendNextExam,
   generateFullAnalysis,
