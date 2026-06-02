@@ -20,6 +20,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 type PetColor = 'ocean' | 'berry' | 'leaf' | 'sun';
 type PetMood = 'friendly' | 'happy' | 'focus' | 'sleepy';
 type PetPosition = 'left' | 'right';
+type PetVariant = 'cat' | 'star' | 'bunny';
 
 interface MoliPetSettings {
   name: string;
@@ -28,6 +29,7 @@ interface MoliPetSettings {
   position: PetPosition;
   showBubble: boolean;
   motion: boolean;
+  variant: PetVariant;
 }
 
 interface MoliPetProps {
@@ -96,6 +98,33 @@ const PET_3D_PALETTES: Record<PetColor, { body: number; accent: number; innerEar
   berry: { body: 0xf472b6, accent: 0xf9a8d4, innerEar: 0xfda4af, cheek: 0xfb7185 },
   leaf: { body: 0x34d399, accent: 0xa3e635, innerEar: 0xf9a8d4, cheek: 0xfb7185 },
   sun: { body: 0xfbbf24, accent: 0xfdba74, innerEar: 0xfca5a5, cheek: 0xfb7185 },
+};
+
+const PET_VARIANTS: Record<PetVariant, { label: string; body: number; accent: number; innerEar: number; cheek: number; swatch: string }> = {
+  cat: {
+    label: 'Mèo xanh',
+    body: 0x38d5f4,
+    accent: 0x7dd3fc,
+    innerEar: 0xf9a8d4,
+    cheek: 0xfb7185,
+    swatch: 'from-cyan-200 via-sky-300 to-cyan-500',
+  },
+  star: {
+    label: 'Công chúa sao',
+    body: 0xf8fbff,
+    accent: 0x9ed8ff,
+    innerEar: 0xc7e7ff,
+    cheek: 0xf9a8d4,
+    swatch: 'from-white via-sky-200 to-blue-400',
+  },
+  bunny: {
+    label: 'Thỏ tim',
+    body: 0xfffbff,
+    accent: 0xf9b8d5,
+    innerEar: 0xfbd5e6,
+    cheek: 0xf9a8d4,
+    swatch: 'from-white via-pink-200 to-sky-200',
+  },
 };
 
 const MOODS: Record<PetMood, { label: string; hint: string }> = {
@@ -184,6 +213,7 @@ const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   position,
   showBubble: true,
   motion: true,
+  variant: 'cat',
 });
 
 const readSettings = (position: PetPosition) => {
@@ -201,6 +231,7 @@ const readSettings = (position: PetPosition) => {
       position: saved.position === 'right' || saved.position === 'left' ? saved.position : defaults.position,
       showBubble: typeof saved.showBubble === 'boolean' ? saved.showBubble : defaults.showBubble,
       motion: typeof saved.motion === 'boolean' ? saved.motion : defaults.motion,
+      variant: PET_VARIANTS[saved.variant as PetVariant] ? saved.variant : defaults.variant,
     } as MoliPetSettings;
   } catch {
     return getDefaultSettings(position);
@@ -288,11 +319,13 @@ const getStudyContext = (pathname: string | null) => {
 
 function MolyThreeCat({
   color,
+  variant,
   mood,
   walking,
   facing,
 }: {
   color: PetColor;
+  variant: PetVariant;
   mood: PetMood;
   walking: boolean;
   facing: PetPosition;
@@ -304,7 +337,7 @@ function MolyThreeCat({
     const mount = mountRef.current;
     if (!mount) return;
 
-    const palette = PET_3D_PALETTES[color];
+    const palette = variant === 'cat' ? PET_3D_PALETTES[color] : PET_VARIANTS[variant];
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1.85, 1.85, 1.85, -1.85, 0.1, 20);
     camera.position.set(0, 0.15, 6);
@@ -332,20 +365,24 @@ function MolyThreeCat({
     const cheekMaterial = new THREE.MeshStandardMaterial({ color: palette.cheek, roughness: 0.55 });
     const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.42 });
     const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+    const blueEyeMaterial = new THREE.MeshStandardMaterial({ color: 0x2477c7, roughness: 0.36, metalness: 0.08 });
+    const mouthMaterial = new THREE.MeshStandardMaterial({ color: 0x6b1725, roughness: 0.48 });
+    const goldMaterial = new THREE.MeshStandardMaterial({ color: 0xf5cf58, roughness: 0.36, metalness: 0.12 });
+    const lineMaterial = new THREE.MeshStandardMaterial({ color: 0x243b62, roughness: 0.46 });
 
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.7, 32, 24), bodyMaterial);
-    body.scale.set(0.96, 0.76, 0.86);
-    body.position.set(0, -0.52, 0);
+    body.scale.set(variant === 'cat' ? 0.96 : 0.74, variant === 'cat' ? 0.76 : 0.92, 0.86);
+    body.position.set(0, variant === 'cat' ? -0.52 : -0.6, 0);
     root.add(body);
 
     const belly = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 16), whiteMaterial);
-    belly.scale.set(1.18, 0.78, 0.2);
-    belly.position.set(0, -0.48, 0.64);
+    belly.scale.set(variant === 'cat' ? 1.18 : 0.9, variant === 'cat' ? 0.78 : 0.98, 0.2);
+    belly.position.set(0, variant === 'cat' ? -0.48 : -0.58, 0.64);
     root.add(belly);
 
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.96, 36, 28), bodyMaterial);
-    head.scale.set(1.06, 0.98, 0.9);
-    head.position.set(0, 0.38, 0.08);
+    head.scale.set(variant === 'star' ? 1.08 : 1.06, variant === 'bunny' ? 1.04 : 0.98, 0.9);
+    head.position.set(0, variant === 'cat' ? 0.38 : 0.34, 0.08);
     root.add(head);
 
     const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 16), whiteMaterial);
@@ -353,7 +390,7 @@ function MolyThreeCat({
     muzzle.position.set(0, 0.08, 0.86);
     root.add(muzzle);
 
-    const makeEar = (x: number, rotationZ: number) => {
+    const makeCatEar = (x: number, rotationZ: number) => {
       const ear = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.7, 5), bodyMaterial);
       ear.position.set(x, 1.12, 0.02);
       ear.rotation.set(0, 0, rotationZ);
@@ -365,30 +402,112 @@ function MolyThreeCat({
       inner.scale.set(0.86, 0.86, 0.2);
       root.add(inner);
     };
-    makeEar(-0.6, 0.3);
-    makeEar(0.6, -0.3);
 
-    const tailCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.68, -0.3, -0.16),
-      new THREE.Vector3(1.12, -0.04, -0.08),
-      new THREE.Vector3(0.95, 0.46, 0.02),
-      new THREE.Vector3(0.7, 0.22, 0.1),
-    ]);
-    const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.07, 8), bodyMaterial);
+    if (variant === 'cat') {
+      makeCatEar(-0.6, 0.3);
+      makeCatEar(0.6, -0.3);
+    } else if (variant === 'star') {
+      [-0.52, 0.52].forEach((x) => {
+        const sideHair = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 16), accentMaterial);
+        sideHair.scale.set(0.75, 1.85, 0.54);
+        sideHair.position.set(x, 0.2, 0.08);
+        sideHair.rotation.z = x < 0 ? -0.2 : 0.2;
+        root.add(sideHair);
+      });
+      const bang = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 16), accentMaterial);
+      bang.scale.set(1.35, 0.72, 0.34);
+      bang.position.set(-0.08, 0.98, 0.36);
+      bang.rotation.z = -0.28;
+      root.add(bang);
+      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 16), accentMaterial);
+      bun.scale.set(0.96, 0.84, 0.72);
+      bun.position.set(0.76, 0.78, 0.02);
+      root.add(bun);
+      const starGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.12), whiteMaterial);
+      starGem.position.set(-0.36, 0.72, 0.9);
+      starGem.rotation.z = 0.3;
+      root.add(starGem);
+    } else {
+      [-0.35, 0.35].forEach((x) => {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 16), whiteMaterial);
+        ear.scale.set(0.72, 2.05, 0.45);
+        ear.position.set(x, 1.18, 0.02);
+        ear.rotation.z = x < 0 ? -0.28 : 0.28;
+        root.add(ear);
+        const inner = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), innerEarMaterial);
+        inner.scale.set(0.62, 1.64, 0.24);
+        inner.position.set(x, 1.17, 0.18);
+        inner.rotation.z = ear.rotation.z;
+        root.add(inner);
+      });
+      const heart = new THREE.Group();
+      const lobeLeft = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), innerEarMaterial);
+      const lobeRight = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), innerEarMaterial);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.24, 3), innerEarMaterial);
+      lobeLeft.position.set(-0.06, 0.03, 0);
+      lobeRight.position.set(0.06, 0.03, 0);
+      tip.position.set(0, -0.08, 0);
+      tip.rotation.z = Math.PI;
+      heart.add(lobeLeft, lobeRight, tip);
+      heart.position.set(0.12, 1.1, 0.64);
+      heart.rotation.z = -0.1;
+      root.add(heart);
+    }
+
+    const tail = new THREE.Group();
+    if (variant === 'cat') {
+      const tailCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0.68, -0.3, -0.16),
+        new THREE.Vector3(1.12, -0.04, -0.08),
+        new THREE.Vector3(0.95, 0.46, 0.02),
+        new THREE.Vector3(0.7, 0.22, 0.1),
+      ]);
+      tail.add(new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.07, 8), bodyMaterial));
+    } else if (variant === 'star') {
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 24, 16), accentMaterial);
+      orb.scale.set(1.05, 0.96, 0.76);
+      orb.position.set(0.86, 0.36, 0.02);
+      tail.add(orb);
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), whiteMaterial);
+      star.position.set(0.92, 0.42, 0.25);
+      tail.add(star);
+    } else {
+      const ringCurve = new THREE.EllipseCurve(0, 0, 0.98, 1.18, 0.18, Math.PI * 1.55);
+      const points = ringCurve.getPoints(42).map((point) => new THREE.Vector3(point.x, point.y, -0.24));
+      const ring = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 42, 0.011, 6), whiteMaterial);
+      ring.position.set(0.03, 0.33, 0);
+      ring.rotation.x = 0.1;
+      tail.add(ring);
+    }
     root.add(tail);
 
     const eyeScaleY = mood === 'sleepy' ? 0.18 : mood === 'happy' ? 0.72 : 1;
     const makeEye = (x: number) => {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 16), blackMaterial);
-      eye.scale.set(0.9, eyeScaleY, 0.42);
-      eye.position.set(x, 0.48, 0.9);
+      const eyeSize = variant === 'bunny' ? 0.19 : 0.14;
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeSize, 24, 18), variant === 'bunny' ? blueEyeMaterial : blackMaterial);
+      eye.scale.set(variant === 'bunny' ? 1.05 : 0.9, eyeScaleY, 0.42);
+      eye.position.set(x, variant === 'bunny' ? 0.44 : 0.48, 0.9);
       root.add(eye);
       const shine = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), whiteMaterial);
-      shine.position.set(x - 0.035, 0.54, 0.98);
+      shine.position.set(x - 0.035, variant === 'bunny' ? 0.53 : 0.54, 0.98);
       root.add(shine);
+      if (variant === 'bunny') {
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), blackMaterial);
+        pupil.scale.set(0.9, 1, 0.24);
+        pupil.position.set(x, 0.42, 1.02);
+        root.add(pupil);
+      }
     };
-    makeEye(-0.34);
-    makeEye(0.34);
+    if (variant === 'star') {
+      makeEye(-0.34);
+      const wink = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.24, 8), lineMaterial);
+      wink.position.set(0.34, 0.48, 0.94);
+      wink.rotation.z = Math.PI / 2 - 0.18;
+      root.add(wink);
+    } else {
+      makeEye(-0.34);
+      makeEye(0.34);
+    }
 
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.1, 3), blackMaterial);
     nose.position.set(0, 0.2, 1.02);
@@ -404,11 +523,19 @@ function MolyThreeCat({
       return line;
     };
 
-    [-0.12, 0.12].forEach((x) => makeLine(x, 0.11, 1.02, 0.14, x < 0 ? -0.7 : 0.7));
-    [-0.52, 0.52].forEach((side) => {
-      makeLine(side, 0.11, 0.96, 0.36, side < 0 ? 0.12 : -0.12);
-      makeLine(side, -0.02, 0.98, 0.38, side < 0 ? -0.08 : 0.08);
-    });
+    if (variant === 'cat') {
+      [-0.12, 0.12].forEach((x) => makeLine(x, 0.11, 1.02, 0.14, x < 0 ? -0.7 : 0.7));
+      [-0.52, 0.52].forEach((side) => {
+        makeLine(side, 0.11, 0.96, 0.36, side < 0 ? 0.12 : -0.12);
+        makeLine(side, -0.02, 0.98, 0.38, side < 0 ? -0.08 : 0.08);
+      });
+    } else {
+      const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), mouthMaterial);
+      mouth.scale.set(1, 0.55, 0.2);
+      mouth.position.set(0.02, 0.03, 1.02);
+      root.add(mouth);
+      makeLine(-0.18, 0.72, 0.9, 0.16, -0.18, lineMaterial);
+    }
 
     [-0.45, 0.45].forEach((x) => {
       const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), cheekMaterial);
@@ -426,10 +553,45 @@ function MolyThreeCat({
       paws.push(paw);
     });
 
-    const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), accentMaterial);
-    forehead.scale.set(0.8, 0.28, 0.16);
-    forehead.position.set(0, 0.82, 0.86);
-    root.add(forehead);
+    if (variant === 'star') {
+      const dress = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.62, 5), accentMaterial);
+      dress.position.set(0, -0.82, 0.44);
+      dress.rotation.z = Math.PI;
+      dress.scale.set(1, 0.86, 0.32);
+      root.add(dress);
+      const badge = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), goldMaterial);
+      badge.position.set(0, -0.44, 0.88);
+      badge.rotation.z = 0.3;
+      root.add(badge);
+      [-0.66, 0.66].forEach((x) => {
+        const arm = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), bodyMaterial);
+        arm.scale.set(1.15, 0.48, 0.52);
+        arm.position.set(x, -0.35, 0.54);
+        arm.rotation.z = x < 0 ? 0.32 : -0.32;
+        root.add(arm);
+      });
+    } else if (variant === 'bunny') {
+      const dress = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), whiteMaterial);
+      dress.scale.set(1, 0.42, 0.18);
+      dress.position.set(0, -0.85, 0.62);
+      root.add(dress);
+      const trim = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.018, 8, 48), accentMaterial);
+      trim.scale.set(1, 0.28, 0.2);
+      trim.position.set(0, -0.82, 0.68);
+      root.add(trim);
+      const wand = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 8), whiteMaterial);
+      wand.position.set(-0.62, -0.38, 0.72);
+      wand.rotation.z = -0.72;
+      root.add(wand);
+      const wandStar = new THREE.Mesh(new THREE.OctahedronGeometry(0.08), accentMaterial);
+      wandStar.position.set(-0.82, -0.1, 0.82);
+      root.add(wandStar);
+    } else {
+      const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), accentMaterial);
+      forehead.scale.set(0.8, 0.28, 0.16);
+      forehead.position.set(0, 0.82, 0.86);
+      root.add(forehead);
+    }
 
     root.position.y = 0.0;
     scene.add(root);
@@ -470,7 +632,7 @@ function MolyThreeCat({
       });
       renderer.dispose();
     };
-  }, [color, facing, mood, walking]);
+  }, [color, facing, mood, variant, walking]);
 
   if (!webglOk) {
     return (
@@ -485,11 +647,13 @@ function MolyThreeCat({
 
 function PetFace({
   color,
+  variant,
   mood,
   walking = false,
   facing = 'right',
 }: {
   color: PetColor;
+  variant: PetVariant;
   mood: PetMood;
   walking?: boolean;
   facing?: PetPosition;
@@ -499,7 +663,7 @@ function PetFace({
       <div className="pointer-events-none absolute inset-[-14px] opacity-50">
         <Lottie animationData={sparkleAnimation} loop autoplay />
       </div>
-      <MolyThreeCat color={color} mood={mood} walking={walking} facing={facing} />
+      <MolyThreeCat color={color} variant={variant} mood={mood} walking={walking} facing={facing} />
     </div>
   );
 }
@@ -648,8 +812,8 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
       <button
         type="button"
         onClick={restorePet}
-        aria-label="Hien MolyPet"
-        className="fixed bottom-5 left-4 z-[65] rounded-2xl border border-cyan-100 bg-white/95 px-4 py-3 text-sm font-black text-cyan-700 shadow-xl backdrop-blur hover:bg-cyan-50 dark:border-slate-700 dark:bg-slate-900 dark:text-cyan-200"
+        aria-label="Hiện MolyPet"
+        className="fixed bottom-4 left-3 z-[65] rounded-xl border border-cyan-100 bg-white/95 px-3 py-2 text-xs font-black text-cyan-700 shadow-lg backdrop-blur hover:bg-cyan-50 sm:bottom-5 sm:left-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-cyan-200"
         title="Bật lại MolyPet"
       >
         Hiện MolyPet
@@ -865,7 +1029,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         >
           <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
             <div className="flex min-w-0 items-center gap-3">
-              <PetFace color={settings.color} mood={settings.mood} />
+              <PetFace color={settings.color} variant={settings.variant} mood={settings.mood} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-black">{settings.name}</p>
                 <p className="text-xs font-medium opacity-75">{MOODS[settings.mood].hint}</p>
@@ -904,6 +1068,24 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                     onClick={() => updateSettings({ color })}
                     className={`h-9 rounded-xl bg-gradient-to-br ${COLOR_THEMES[color].body} ring-offset-2 ${settings.color === color ? 'ring-2 ring-slate-900 dark:ring-white' : ''}`}
                   />
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {(Object.keys(PET_VARIANTS) as PetVariant[]).map((variant) => (
+                  <button
+                    key={variant}
+                    type="button"
+                    title={PET_VARIANTS[variant].label}
+                    onClick={() => updateSettings({ variant })}
+                    className={`rounded-xl border px-2 py-2 text-xs font-bold transition ${
+                      settings.variant === variant
+                        ? `${theme.soft} dark:border-slate-500 dark:bg-slate-700 dark:text-white`
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className={`mb-1 block h-5 rounded-lg bg-gradient-to-br ${PET_VARIANTS[variant].swatch}`} />
+                    {PET_VARIANTS[variant].label}
+                  </button>
                 ))}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -946,7 +1128,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
                   }`}
                 >
-                  Di dao {settings.motion ? 'bat' : 'tat'}
+                  Đi dạo {settings.motion ? 'bật' : 'tắt'}
                 </button>
                 <button
                   type="button"
@@ -954,7 +1136,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                   className="col-span-3 flex items-center justify-center gap-2 rounded-xl border border-rose-100 bg-white px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-900 dark:text-rose-300"
                 >
                   <FiEyeOff size={14} />
-                  An pet hom nay
+                  Ẩn pet hôm nay
                 </button>
               </div>
             </div>
@@ -1046,7 +1228,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
           title="Keo de di chuyen, bam de mo"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
-          <PetFace color={settings.color} mood={settings.mood} walking={walking} facing={facing} />
+          <PetFace color={settings.color} variant={settings.variant} mood={settings.mood} walking={walking} facing={facing} />
           <span className={`absolute -right-1 top-1 flex h-8 w-8 items-center justify-center rounded-2xl text-white shadow-lg ${theme.button}`}>
             <FiMessageCircle size={16} />
           </span>
