@@ -658,12 +658,98 @@ function PetFace({
   walking?: boolean;
   facing?: PetPosition;
 }) {
+  if (variant !== 'cat') {
+    return (
+      <div className="relative h-20 w-20">
+        <div className="pointer-events-none absolute inset-[-14px] opacity-45">
+          <Lottie animationData={sparkleAnimation} loop autoplay />
+        </div>
+        <MolyPlushPet variant={variant} walking={walking} facing={facing} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-20 w-20">
       <div className="pointer-events-none absolute inset-[-14px] opacity-50">
         <Lottie animationData={sparkleAnimation} loop autoplay />
       </div>
       <MolyThreeCat color={color} variant={variant} mood={mood} walking={walking} facing={facing} />
+    </div>
+  );
+}
+
+function MolyPlushPet({
+  variant,
+  walking,
+  facing,
+}: {
+  variant: Exclude<PetVariant, 'cat'>;
+  walking: boolean;
+  facing: PetPosition;
+}) {
+  const isStar = variant === 'star';
+
+  return (
+    <div
+      className={`moli-plush-shell relative h-20 w-20 ${walking ? 'moli-plush-walking' : ''}`}
+      style={{ '--moli-dir': facing === 'left' ? '-1' : '1' } as CSSProperties}
+    >
+      <div className="absolute bottom-1 left-1/2 h-3 w-12 -translate-x-1/2 rounded-full bg-slate-900/15 blur-sm" />
+
+      {isStar ? (
+        <>
+          <div className="absolute left-[8px] top-[18px] h-12 w-8 -rotate-12 rounded-[999px] bg-gradient-to-b from-sky-100 via-sky-300 to-blue-400 shadow-[inset_0_5px_10px_rgba(255,255,255,0.75)]" />
+          <div className="absolute right-[8px] top-[18px] h-12 w-8 rotate-12 rounded-[999px] bg-gradient-to-b from-sky-100 via-sky-300 to-blue-400 shadow-[inset_0_5px_10px_rgba(255,255,255,0.75)]" />
+          <div className="absolute right-[2px] top-[12px] h-8 w-8 rounded-[18px] bg-gradient-to-br from-sky-200 to-blue-500 shadow-lg">
+            <div className="absolute left-2 top-2 h-4 w-4 rotate-45 rounded-[3px] border-2 border-white/80" />
+            <div className="absolute right-1 top-3 h-2 w-2 rounded-full bg-white/65" />
+          </div>
+          <div className="absolute left-1/2 top-[12px] h-[52px] w-[58px] -translate-x-1/2 rounded-[30px] bg-gradient-to-br from-white via-sky-50 to-blue-100 shadow-[0_13px_24px_rgba(37,99,235,0.22),inset_0_6px_10px_rgba(255,255,255,0.9)]" />
+          <div className="absolute left-[18px] top-[5px] h-9 w-11 -rotate-[18deg] rounded-[28px] bg-gradient-to-br from-white via-sky-100 to-sky-300 shadow-[inset_0_5px_9px_rgba(255,255,255,0.9)]" />
+          <div className="absolute left-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-indigo-950 via-fuchsia-700 to-pink-400 shadow-inner">
+            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
+          </div>
+          <div className="absolute right-[20px] top-[33px] h-3 w-5 rounded-b-full border-b-[3px] border-blue-950" />
+          <div className="absolute left-[13px] top-[42px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
+          <div className="absolute right-[16px] top-[42px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
+          <div className="absolute left-[37px] top-[42px] h-3 w-4 rounded-b-full border-b-[3px] border-rose-900" />
+          <div className="absolute left-[18px] top-[18px] h-4 w-4 rotate-45 rounded-[3px] bg-white shadow-sm before:absolute before:left-1 before:top-1 before:h-2 before:w-2 before:rounded-full before:bg-sky-300" />
+          <div
+            className="absolute left-[26px] top-[56px] h-8 w-8 bg-gradient-to-b from-sky-200 to-blue-400 shadow-md"
+            style={{ clipPath: 'polygon(50% 0, 94% 100%, 6% 100%)' }}
+          />
+          <div className="absolute left-[20px] top-[57px] h-2 w-8 rounded-full bg-white/70" />
+          <div className="absolute left-[14px] top-[55px] h-3 w-6 -rotate-[24deg] rounded-full bg-white shadow-sm" />
+          <div className="absolute right-[14px] top-[55px] h-3 w-6 rotate-[24deg] rounded-full bg-white shadow-sm" />
+        </>
+      ) : (
+        <>
+          <div className="absolute left-[12px] top-[0px] h-12 w-5 -rotate-[24deg] rounded-full bg-gradient-to-b from-white to-slate-100 shadow-[inset_0_4px_8px_rgba(255,255,255,0.9)]" />
+          <div className="absolute right-[12px] top-[0px] h-12 w-5 rotate-[24deg] rounded-full bg-gradient-to-b from-white to-slate-100 shadow-[inset_0_4px_8px_rgba(255,255,255,0.9)]" />
+          <div className="absolute left-[17px] top-[8px] h-8 w-2.5 -rotate-[24deg] rounded-full bg-pink-100" />
+          <div className="absolute right-[17px] top-[8px] h-8 w-2.5 rotate-[24deg] rounded-full bg-pink-100" />
+          <div className="absolute left-1/2 top-[14px] h-[54px] w-[58px] -translate-x-1/2 rounded-[31px] bg-gradient-to-br from-white via-pink-50 to-pink-100 shadow-[0_13px_24px_rgba(236,72,153,0.18),inset_0_6px_10px_rgba(255,255,255,0.9)]" />
+          <div className="absolute left-[27px] top-[4px] h-4 w-4 rotate-45 rounded-[4px] bg-pink-300 shadow-md before:absolute before:-left-1 before:top-0 before:h-4 before:w-4 before:rounded-full before:bg-pink-300 after:absolute after:left-0 after:-top-1 after:h-4 after:w-4 after:rounded-full after:bg-pink-300" />
+          <div className="absolute left-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-white via-sky-300 to-blue-800 shadow-inner">
+            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
+          </div>
+          <div className="absolute right-[19px] top-[30px] h-5 w-5 rounded-full bg-gradient-to-br from-white via-sky-300 to-blue-800 shadow-inner">
+            <div className="absolute left-1 top-1 h-2 w-2 rounded-full bg-white" />
+          </div>
+          <div className="absolute left-[14px] top-[29px] h-[2px] w-3 -rotate-12 rounded-full bg-blue-950" />
+          <div className="absolute right-[14px] top-[29px] h-[2px] w-3 rotate-12 rounded-full bg-blue-950" />
+          <div className="absolute left-[39px] top-[45px] h-3 w-4 rounded-b-full border-b-[3px] border-rose-900" />
+          <div className="absolute left-[17px] top-[45px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
+          <div className="absolute right-[17px] top-[45px] h-2 w-3 rounded-full bg-pink-300/80 blur-[1px]" />
+          <div className="absolute left-[22px] top-[58px] h-6 w-9 rounded-b-[18px] rounded-t-md bg-white shadow-md">
+            <div className="absolute bottom-1 left-1 h-[2px] w-7 rounded-full bg-sky-200" />
+          </div>
+          <div className="absolute left-[8px] top-[16px] h-14 w-16 -rotate-12 rounded-[50%] border-2 border-white/70" />
+          <div className="absolute left-[4px] top-[52px] h-4 w-7 -rotate-[36deg] rounded-full bg-pink-100 shadow-sm" />
+          <div className="absolute right-[7px] top-[54px] h-4 w-7 rotate-[36deg] rounded-full bg-pink-100 shadow-sm" />
+        </>
+      )}
     </div>
   );
 }
@@ -1002,8 +1088,20 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
           0%, 100% { transform: translateX(0) translateY(0) rotate(4deg); }
           50% { transform: translateX(4px) translateY(2px) rotate(-12deg); }
         }
+        @keyframes moli-plush-float {
+          0%, 100% { transform: scaleX(var(--moli-dir, 1)) translateY(0) rotate(-1deg); }
+          50% { transform: scaleX(var(--moli-dir, 1)) translateY(-6px) rotate(1deg); }
+        }
+        @keyframes moli-plush-walk {
+          0%, 100% { transform: scaleX(var(--moli-dir, 1)) translateY(0) rotate(-2deg); }
+          25% { transform: scaleX(var(--moli-dir, 1)) translateY(-5px) rotate(2deg); }
+          50% { transform: scaleX(var(--moli-dir, 1)) translateY(-1px) rotate(-1deg); }
+          75% { transform: scaleX(var(--moli-dir, 1)) translateY(-6px) rotate(2deg); }
+        }
         .moli-float { animation: moli-float 3.2s ease-in-out infinite; transform-origin: center bottom; }
         .moli-walking { animation: moli-walk-bob .52s ease-in-out infinite; }
+        .moli-plush-shell { animation: moli-plush-float 3s ease-in-out infinite; transform-origin: center bottom; }
+        .moli-plush-walking { animation: moli-plush-walk .52s ease-in-out infinite; }
         .moli-shadow { animation: moli-shadow 3.2s ease-in-out infinite; }
         .moli-blink { animation: moli-blink 5.2s ease-in-out infinite; transform-origin: center; }
         .moli-ear-left { animation: moli-ear-left 4s ease-in-out infinite; transform-origin: bottom center; }
@@ -1017,7 +1115,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         .moli-walking .moli-hand-left { animation-duration: .52s; }
         .moli-walking .moli-hand-right { animation-duration: .52s; animation-direction: reverse; }
         @media (prefers-reduced-motion: reduce) {
-          .moli-float, .moli-shadow, .moli-blink, .moli-ear-left, .moli-ear-right, .moli-hand-left, .moli-hand-right, .moli-tail, .moli-body, .moli-foot-left, .moli-foot-right {
+          .moli-float, .moli-plush-shell, .moli-shadow, .moli-blink, .moli-ear-left, .moli-ear-right, .moli-hand-left, .moli-hand-right, .moli-tail, .moli-body, .moli-foot-left, .moli-foot-right {
             animation: none;
           }
         }
