@@ -19,9 +19,25 @@ const PORT = process.env.PORT || 5000;
 // Trust proxy (for rate limiting behind Vercel/Railway proxies)
 app.set("trust proxy", 1);
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://csca-moli-studio.vercel.app',
+  'https://molystudio.online',
+  'https://www.molystudio.online',
+  'https://*.molystudio.online',
+  'https://moli.studio',
+  'https://www.moli.studio',
+  'https://*.moli.studio',
+];
+
+// Allow FRONTEND_URL env var to add extra origins ( Railway/Vercel deployments )
+const extraOrigins = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean);
+const frameAncestorOrigins = [...new Set([...ALLOWED_ORIGINS, ...extraOrigins])];
+
 // Security headers + CSP
 app.use(
   helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -41,7 +57,7 @@ app.use(
         ],
         connectSrc: [
           "'self'",
-          process.env.FRONTEND_URL || "http://localhost:3000",
+          ...frameAncestorOrigins,
           "https://*.vercel.app",
           "https://*.molystudio.online",
           "https://*.moli.studio",
@@ -51,7 +67,7 @@ app.use(
         // Cho phép frontend nhúng PDF từ backend vào iframe
         frameAncestors: [
           "'self'",
-          process.env.FRONTEND_URL || "http://localhost:3000",
+          ...frameAncestorOrigins,
         ],
         objectSrc: ["'none'"],
       },
@@ -60,20 +76,6 @@ app.use(
     frameguard: false,
   }),
 );
-
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'https://csca-moli-studio.vercel.app',
-  'https://molystudio.online',
-  'https://www.molystudio.online',
-  'https://*.molystudio.online',
-  'https://moli.studio',
-  'https://www.moli.studio',
-  'https://*.moli.studio',
-];
-
-// Allow FRONTEND_URL env var to add extra origins ( Railway/Vercel deployments )
-const extraOrigins = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean);
 
 // Dynamic origin validator: matches against allowed list, supports subdomains
 const corsOriginValidator = (origin, callback) => {

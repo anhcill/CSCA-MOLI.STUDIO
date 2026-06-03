@@ -110,6 +110,7 @@ async function streamPdf(res, id, disposition, user) {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(title || "document")}.pdf"`);
       res.setHeader("Cache-Control", "public, max-age=1800");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
       if (headers["content-length"]) res.setHeader("Content-Length", headers["content-length"]);
       upstream.pipe(res);
