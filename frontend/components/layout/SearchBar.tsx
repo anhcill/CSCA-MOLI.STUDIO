@@ -97,6 +97,7 @@ export default function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Load recent on open
   useEffect(() => {
@@ -109,23 +110,47 @@ export default function SearchBar() {
     if (currentDebounce) {
       clearTimeout(currentDebounce);
     }
-    if (!q.trim()) { setResults(null); setLoading(false); return; }
-    setLoading(true);
+    abortRef.current?.abort();
+
+    const term = q.trim();
+    if (term.length < 2) {
+      setResults(null);
+      setLoading(false);
+      return;
+    }
+
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setLoading(true);
       try {
-        const res = await axios.get(`/search?q=${encodeURIComponent(q)}`);
+        const res = await axios.get('/search', {
+          params: { q: term, quick: 'true', limit: 5 },
+          signal: controller.signal,
+        });
         setResults(res.data.results);
-      } catch {
+      } catch (err: any) {
+        if (err?.code === 'ERR_CANCELED' || controller.signal.aborted) return;
         setResults(null);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          abortRef.current = null;
+        }
       }
-    }, 300);
+    }, 250);
   }, []);
 
   useEffect(() => {
     search(query);
   }, [query, search]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // Click outside → close
   useEffect(() => {

@@ -13,9 +13,14 @@ router.get("/", async (req, res) => {
       });
 
     const pattern = `%${q}%`;
-    const limit = Math.min(parseInt(req.query.limit) || 5, 50);
-    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
-    const type = req.query.type || "all"; // all | materials | vocabulary | exams | posts
+    const prefixPattern = `${q}%`;
+    const requestedType = String(req.query.type || "all");
+    const quick = req.query.quick === "true" || requestedType === "quick";
+    const type = requestedType === "quick" ? "all" : requestedType; // all | materials | vocabulary | exams | posts | quick
+    const limit = quick
+      ? Math.min(parseInt(req.query.limit) || 4, 5)
+      : Math.min(parseInt(req.query.limit) || 5, 50);
+    const offset = quick ? 0 : Math.max(parseInt(req.query.offset) || 0, 0);
 
     const run = (fn) => (type === "all" || type === fn ? true : false);
 
@@ -26,9 +31,13 @@ router.get("/", async (req, res) => {
          FROM materials
          WHERE (is_active IS NULL OR is_active = TRUE)
            AND (title ILIKE $1 OR description ILIKE $1 OR topic ILIKE $1)
-         ORDER BY title
+         ORDER BY CASE
+           WHEN title ILIKE $4 THEN 0
+           WHEN topic ILIKE $4 THEN 1
+           ELSE 2
+         END, title
          LIMIT $2 OFFSET $3`,
-            [pattern, limit, offset],
+            [pattern, limit, offset, prefixPattern],
           )
         : Promise.resolve({ rows: [] }),
 
@@ -39,9 +48,14 @@ router.get("/", async (req, res) => {
          FROM vocabulary_items
          WHERE (is_active IS NULL OR is_active = TRUE)
            AND (word_cn ILIKE $1 OR pinyin ILIKE $1 OR word_vn ILIKE $1 OR word_en ILIKE $1 OR topic ILIKE $1)
-         ORDER BY word_vn
+         ORDER BY CASE
+           WHEN word_cn ILIKE $4 THEN 0
+           WHEN pinyin ILIKE $4 THEN 1
+           WHEN word_vn ILIKE $4 THEN 2
+           ELSE 3
+         END, word_vn
          LIMIT $2 OFFSET $3`,
-              [pattern, limit, offset],
+              [pattern, limit, offset, prefixPattern],
             )
             .catch(() => ({ rows: [] }))
         : Promise.resolve({ rows: [] }),
@@ -53,14 +67,14 @@ router.get("/", async (req, res) => {
          FROM exams e
          LEFT JOIN subjects s ON e.subject_id = s.id
          WHERE e.status = 'published' AND e.title ILIKE $1
-         ORDER BY e.title
+         ORDER BY CASE WHEN e.title ILIKE $4 THEN 0 ELSE 1 END, e.title
          LIMIT $2 OFFSET $3`,
-              [pattern, limit, offset],
+              [pattern, limit, offset, prefixPattern],
             )
             .catch(() => ({ rows: [] }))
         : Promise.resolve({ rows: [] }),
 
-      run("posts")
+      !quick && run("posts")
         ? db
             .query(
               `SELECT p.id, p.content, p.created_at,
