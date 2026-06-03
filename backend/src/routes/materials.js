@@ -5,6 +5,7 @@ const https = require("https");
 const http = require("http");
 const { v2: cloudinary } = require("cloudinary");
 const materialsController = require("../controllers/materialsController");
+const { extractPdfWebContent } = require("../services/materialContentService");
 const {
   authenticate,
   authorizePermission,
@@ -23,6 +24,18 @@ const db = require("../config/database");
     );
     await db.query(
       `ALTER TABLE materials ADD COLUMN IF NOT EXISTS uploaded_by INTEGER`,
+    );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_text TEXT`,
+    );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_html TEXT`,
+    );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_source VARCHAR(30) DEFAULT 'file'`,
+    );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb`,
     );
     // silent init
   } catch (e) {
@@ -137,10 +150,27 @@ router.post(
         stream.end(req.file.buffer);
       });
 
+      let webContent = null;
+      let parseWarning = null;
+      try {
+        webContent = await extractPdfWebContent(req.file.buffer);
+      } catch (parseError) {
+        parseWarning = "Không chuyển được PDF sang nội dung web, vẫn giữ file PDF.";
+        console.warn("[materials] PDF content extraction failed:", parseError.message);
+      }
+
       res.json({
         success: true,
-        data: { url: result.secure_url, publicId: result.public_id },
-        message: "Upload PDF thành công",
+        data: {
+          url: result.secure_url,
+          publicId: result.public_id,
+          content_text: webContent?.contentText || "",
+          content_html: webContent?.contentHtml || "",
+          content_meta: webContent?.meta || {},
+          content_source: webContent?.contentHtml ? "pdf_extract" : "file",
+        },
+        warnings: parseWarning ? [parseWarning] : [],
+        message: webContent?.contentHtml ? "Upload PDF và chuyển sang bài web thành công" : "Upload PDF thành công",
       });
     } catch (error) {
       console.error("PDF upload error:", error);

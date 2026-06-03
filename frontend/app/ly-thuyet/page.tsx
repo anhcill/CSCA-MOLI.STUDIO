@@ -18,9 +18,13 @@ interface Material {
   title: string;
   description: string;
   file_url: string;
+  file_type?: string;
   subject: string;
   topic: string;
   created_at: string;
+  content_html?: string;
+  content_text?: string;
+  content_source?: string;
 }
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
@@ -31,6 +35,28 @@ const SUBJECT_LABEL_KEYS: Record<string, string> = {
   'tieng-trung-xh': 'subject.chineseSoc',
   'tieng-trung-tn': 'subject.chineseSci',
 };
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function textToHtml(value?: string) {
+  return (value || '')
+    .split(/\n{2,}/)
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => `<p>${escapeHtml(block).replace(/\n/g, '<br />')}</p>`)
+    .join('');
+}
+
+function hasWebContent(material?: Material | null) {
+  return Boolean(material?.content_html || material?.content_text);
+}
 
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
   const { t } = useLanguage();
@@ -96,17 +122,22 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-emerald-700 transition-colors">{m.title}</h3>
           {m.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{m.description}</p>}
-          <p className="text-xs text-gray-400 mt-2">{new Date(m.created_at).toLocaleDateString(dateLocale)}</p>
+          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+            <span>{new Date(m.created_at).toLocaleDateString(dateLocale)}</span>
+            {hasWebContent(m) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">Web</span>}
+          </div>
         </div>
         <div className="shrink-0 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button className="flex items-center gap-1 px-3 py-1.5 bg-emerald-700 text-white text-xs font-medium rounded-lg hover:bg-emerald-800 transition-colors"
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
             <FiBook size={11} /> {t('common.view')}
           </button>
-          <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
-            <FiDownload size={11} /> {t('materials.download')}
-          </a>
+          {m.file_url && (
+            <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+              <FiDownload size={11} /> {t('materials.download')}
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -178,7 +209,11 @@ export default function LyThuyetPage() {
   }), [allMaterials, activeSubject, search]);
 
   useEffect(() => {
-    if (!viewing && filtered.length > 0) setViewing(filtered[0]);
+    if (filtered.length === 0) {
+      setViewing(null);
+      return;
+    }
+    if (!viewing || !filtered.some(m => m.id === viewing.id)) setViewing(filtered[0]);
   }, [filtered, viewing]);
 
   useEffect(() => {
@@ -237,25 +272,40 @@ export default function LyThuyetPage() {
                   {viewing.topic && <p className="text-xs text-gray-300 truncate">{viewing.topic}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <a href={viewing.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiDownload size={13} /> {t('materials.download')}</a>
-                  <a href={viewing.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
+                  {viewing.file_url && (
+                    <>
+                      <a href={viewing.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiDownload size={13} /> {t('materials.download')}</a>
+                      <a href={viewing.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="relative h-[72vh] bg-gray-800">
-                {!viewerLoaded && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
-                    <div className="animate-spin rounded-full h-10 w-10 border-2 border-white border-t-transparent" />
-                    <p className="text-sm text-gray-300">{t('materials.loadingDoc')}</p>
-                  </div>
-                )}
-                <iframe
-                  src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true` : viewing.file_url}
-                  className="w-full h-full border-0"
-                  title={viewing.title}
-                  onLoad={() => setViewerLoaded(true)}
-                  onError={() => setUseGoogleViewer(true)}
+              {hasWebContent(viewing) ? (
+                <article
+                  className="max-h-[72vh] overflow-y-auto bg-white px-5 py-6 text-sm leading-7 text-gray-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_p]:mb-4 [&_li]:mb-2 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6"
+                  dangerouslySetInnerHTML={{ __html: viewing.content_html || textToHtml(viewing.content_text) }}
                 />
-              </div>
+              ) : viewing.file_url ? (
+                <div className="relative h-[72vh] bg-gray-800">
+                  {!viewerLoaded && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
+                      <div className="animate-spin rounded-full h-10 w-10 border-2 border-white border-t-transparent" />
+                      <p className="text-sm text-gray-300">{t('materials.loadingDoc')}</p>
+                    </div>
+                  )}
+                  <iframe
+                    src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true` : viewing.file_url}
+                    className="w-full h-full border-0"
+                    title={viewing.title}
+                    onLoad={() => setViewerLoaded(true)}
+                    onError={() => setUseGoogleViewer(true)}
+                  />
+                </div>
+              ) : (
+                <div className="bg-white px-5 py-12 text-center text-sm text-gray-500">
+                  {t('materials.none')}
+                </div>
+              )}
             </section>
           )}
 

@@ -30,7 +30,7 @@ router.get("/", async (req, res) => {
             `SELECT id, title, description, category, subject, topic
          FROM materials
          WHERE (is_active IS NULL OR is_active = TRUE)
-           AND (title ILIKE $1 OR description ILIKE $1 OR topic ILIKE $1)
+           AND (title ILIKE $1 OR description ILIKE $1 OR topic ILIKE $1 OR content_text ILIKE $1)
          ORDER BY CASE
            WHEN title ILIKE $4 THEN 0
            WHEN topic ILIKE $4 THEN 1

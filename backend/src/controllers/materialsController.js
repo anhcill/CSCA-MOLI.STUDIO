@@ -1,6 +1,7 @@
 const db = require("../config/database");
 const { checkVipAccess } = require("../middleware/authMiddleware");
 const UserActivity = require("../models/UserActivity");
+const { prepareMaterialContent } = require("../services/materialContentService");
 
 // GET /api/materials?category=cau-truc-de&subject=toan&topic=...&limit=20&offset=0
 exports.getMaterials = async (req, res) => {
@@ -54,28 +55,47 @@ exports.createMaterial = async (req, res) => {
       subject,
       topic,
       is_premium,
+      content_text,
+      content_html,
+      content_meta,
     } = req.body;
 
-    if (!title || !file_url || !category) {
+    const preparedContent = prepareMaterialContent({
+      content_text,
+      content_html,
+      content_meta,
+      file_type,
+    });
+    const normalizedFileUrl = String(file_url || "").trim();
+
+    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml)) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu thông tin bắt buộc (title, file_url, category)",
+        message: "Thiếu thông tin bắt buộc (title, category, file_url hoặc nội dung web)",
       });
     }
 
     const result = await db.query(
-      `INSERT INTO materials (title, description, file_url, file_type, category, subject, topic, uploaded_by, is_active, is_premium)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9) RETURNING *`,
+      `INSERT INTO materials (
+         title, description, file_url, file_type, category, subject, topic,
+         uploaded_by, is_active, is_premium, content_text, content_html, content_source, content_meta
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12, $13::jsonb)
+       RETURNING *`,
       [
         title,
         description,
-        file_url,
+        normalizedFileUrl,
         file_type,
         category,
         subject,
         topic || null,
         req.user.id,
         is_premium === true,
+        preparedContent.contentText,
+        preparedContent.contentHtml,
+        preparedContent.contentSource,
+        JSON.stringify(preparedContent.contentMeta),
       ],
     );
 
@@ -105,20 +125,45 @@ exports.updateMaterial = async (req, res) => {
       topic,
       is_active,
       is_premium,
+      content_text,
+      content_html,
+      content_meta,
     } = req.body;
 
+    const preparedContent = prepareMaterialContent({
+      content_text,
+      content_html,
+      content_meta,
+      file_type: req.body.file_type || "pdf",
+    });
+    const normalizedFileUrl = String(file_url || "").trim();
+
+    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml)) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu thông tin bắt buộc (title, category, file_url hoặc nội dung web)",
+      });
+    }
+
     const result = await db.query(
-      `UPDATE materials SET title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6, is_active=$7, is_premium=$8, updated_at=NOW()
-       WHERE id=$9 RETURNING *`,
+      `UPDATE materials SET
+         title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6,
+         is_active=$7, is_premium=$8, content_text=$9, content_html=$10,
+         content_source=$11, content_meta=$12::jsonb, updated_at=NOW()
+       WHERE id=$13 RETURNING *`,
       [
         title,
         description,
-        file_url,
+        normalizedFileUrl,
         category,
         subject,
         topic || null,
         is_active !== false,
         is_premium === true ? true : null,
+        preparedContent.contentText,
+        preparedContent.contentHtml,
+        preparedContent.contentSource,
+        JSON.stringify(preparedContent.contentMeta),
         id,
       ],
     );

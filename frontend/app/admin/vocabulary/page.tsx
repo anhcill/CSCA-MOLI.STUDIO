@@ -291,8 +291,15 @@ export default function AdminVocabularyPage() {
       setShowBulk(false);
       setBulkText('');
       loadData();
+      const summary = res.data?.data;
+      const details = [
+        skipped.length ? `Dòng lỗi trên trình duyệt: ${skipped.join(', ')}` : '',
+        summary?.invalidRows?.length ? `Dòng thiếu dữ liệu: ${summary.invalidRows.join(', ')}` : '',
+        summary?.skippedDuplicates ? `Từ trùng đã bỏ qua: ${summary.skippedDuplicates}` : '',
+        summary?.reactivated ? `Từ đã khôi phục: ${summary.reactivated}` : '',
+      ].filter(Boolean);
       const msg = res.data?.message || `Import thành công ${words.length} từ!`;
-      alert(skipped.length ? `${msg}\nBỏ qua dòng lỗi: ${skipped.join(', ')}` : msg);
+      alert(details.length ? `${msg}\n${details.join('\n')}` : msg);
     } catch (e: any) {
       alert(e.response?.data?.message || 'Lỗi import');
     } finally {

@@ -16,9 +16,14 @@ interface Material {
   file_type: string;
   category: string;
   subject: string;
+  topic?: string;
   is_active: boolean;
   created_at: string;
   is_premium?: boolean;
+  content_text?: string;
+  content_html?: string;
+  content_source?: string;
+  content_meta?: Record<string, any>;
 }
 
 const CATEGORIES = [
@@ -61,6 +66,9 @@ export default function AdminMaterialsPage() {
     subject: 'toan',
     topic: '',
     is_premium: false,
+    content_text: '',
+    content_html: '',
+    content_meta: {} as Record<string, any>,
   });
 
   // Wait for auth to hydrate before checking
@@ -115,8 +123,14 @@ export default function AdminMaterialsPage() {
       });
 
       setUploadedUrl(res.data.data.url);
-      setFormData(prev => ({ ...prev, file_url: res.data.data.url }));
-      alert('Upload PDF thành công!');
+      setFormData(prev => ({
+        ...prev,
+        file_url: res.data.data.url,
+        content_text: res.data.data.content_text || prev.content_text,
+        content_html: '',
+        content_meta: res.data.data.content_meta || {},
+      }));
+      alert(res.data?.message || 'Upload PDF thành công!');
     } catch (error) {
       console.error('Upload error:', error);
       alert('Lỗi khi upload PDF');
@@ -126,8 +140,8 @@ export default function AdminMaterialsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.title || !formData.file_url || !formData.category) {
-      alert('Vui lòng điền đầy đủ thông tin');
+    if (!formData.title || !formData.category || (!formData.file_url && !formData.content_text.trim())) {
+      alert('Vui lòng nhập tiêu đề, danh mục và upload PDF hoặc nhập nội dung web');
       return;
     }
 
@@ -154,10 +168,13 @@ export default function AdminMaterialsPage() {
       file_url: material.file_url,
       category: material.category,
       subject: material.subject || 'toan',
-      topic: (material as any).topic || '',
+      topic: material.topic || '',
       is_premium: material.is_premium || false,
+      content_text: material.content_text || '',
+      content_html: material.content_html || '',
+      content_meta: material.content_meta || {},
     });
-    setUploadedUrl(material.file_url);
+    setUploadedUrl(material.file_url || '');
     setShowModal(true);
   };
 
@@ -183,6 +200,9 @@ export default function AdminMaterialsPage() {
       subject: 'toan',
       topic: '',
       is_premium: false,
+      content_text: '',
+      content_html: '',
+      content_meta: {},
     });
     setUploadedUrl('');
     setEditingId(null);
@@ -246,7 +266,7 @@ export default function AdminMaterialsPage() {
               <tbody className="divide-y divide-gray-100">
                 {materials.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-gray-500 text-sm">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500 text-sm">
                       Chưa có tài liệu nào
                     </td>
                   </tr>
@@ -255,8 +275,8 @@ export default function AdminMaterialsPage() {
                     <tr key={material.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-red-50 rounded flex items-center justify-center text-red-500 text-xs">
-                            PDF
+                          <div className={`w-8 h-8 rounded flex items-center justify-center text-xs ${material.content_html ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+                            {material.content_html ? 'WEB' : 'PDF'}
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">{material.title}</p>
@@ -346,7 +366,7 @@ export default function AdminMaterialsPage() {
               {/* Upload PDF */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload PDF <span className="text-red-500">*</span>
+                  Upload PDF <span className="text-gray-400 font-normal text-xs">(tùy chọn nếu nhập nội dung web)</span>
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                   {uploadedUrl ? (
@@ -414,6 +434,24 @@ export default function AdminMaterialsPage() {
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nội dung web <span className="text-gray-400 font-normal text-xs">(PDF upload sẽ tự điền, có thể sửa lại)</span>
+                </label>
+                <textarea
+                  value={formData.content_text}
+                  onChange={e => setFormData(prev => ({ ...prev, content_text: e.target.value, content_html: '' }))}
+                  placeholder="Nhập hoặc chỉnh nội dung lý thuyết hiển thị trên web..."
+                  rows={8}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+                />
+                {formData.content_text && (
+                  <p className="mt-1 text-xs text-green-600">
+                    Nội dung này sẽ được chuyển thành bài học web khi lưu.
+                  </p>
+                )}
               </div>
 
               {/* Category & Subject */}
@@ -486,7 +524,7 @@ export default function AdminMaterialsPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleSubmit}
-                  disabled={!formData.title || !formData.file_url || uploading}
+                  disabled={!formData.title || (!formData.file_url && !formData.content_text.trim()) || uploading}
                   className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {editingId ? 'Cập Nhật' : 'Tạo Tài Liệu'}

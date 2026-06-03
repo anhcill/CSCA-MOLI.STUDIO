@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const pool = require("../config/database");
 const Ticket = require("../models/Ticket");
+const { seedLaunchTheoryMaterials } = require("../services/materialSeedService");
+const { seedLaunchVocabulary } = require("../services/vocabularySeedService");
 
 /**
  * Run database optimizations - Add indexes for better performance
@@ -144,6 +146,10 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_vocab_search ON vocabulary_items(word_cn, pinyin, word_vn) WHERE is_active = TRUE`,
     );
+    const vocabSeed = await seedLaunchVocabulary(pool);
+    if (!vocabSeed.skipped && vocabSeed.inserted > 0) {
+      console.log(`✅ Seeded ${vocabSeed.inserted} launch vocabulary items`);
+    }
 
     // Allow decimal scoring for exam setup and per-question points.
     await pool.query(`
@@ -233,12 +239,26 @@ async function runOptimizations() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await pool.query(`
+      ALTER TABLE materials
+      ADD COLUMN IF NOT EXISTS topic VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS vip_tier VARCHAR(20) DEFAULT 'basic',
+      ADD COLUMN IF NOT EXISTS content_text TEXT,
+      ADD COLUMN IF NOT EXISTS content_html TEXT,
+      ADD COLUMN IF NOT EXISTS content_source VARCHAR(30) DEFAULT 'file',
+      ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb
+    `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_subject ON materials(subject)`,
     );
+    const theorySeed = await seedLaunchTheoryMaterials(pool);
+    if (!theorySeed.skipped && theorySeed.inserted > 0) {
+      console.log(`✅ Seeded ${theorySeed.inserted} launch theory materials`);
+    }
 
     // Roadmap milestones managed by admin
     await pool.query(`

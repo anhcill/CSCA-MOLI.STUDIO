@@ -58,8 +58,9 @@ function VocabularyContent() {
   useEffect(() => { loadTopics(); }, [selectedSubject]);
 
   useEffect(() => {
-    if (selectedTopic || searchQuery) loadWords();
-  }, [selectedTopic, searchQuery]);
+    if (selectedTopic || searchQuery.trim()) loadWords();
+    else setWords([]);
+  }, [selectedSubject, selectedTopic, searchQuery]);
 
   const loadWords = async () => {
     try {
@@ -314,8 +315,70 @@ function VocabularyContent() {
               </div>
             )}
 
+            <div className="relative mx-auto mb-8 max-w-2xl">
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder={t('vocab.searchWords')}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-10 text-sm shadow-sm outline-none transition-all focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <FiX size={16} />
+                </button>
+              )}
+            </div>
+
             {loading ? (
               <div className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto" /></div>
+            ) : searchQuery.trim() ? (
+              words.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center border border-gray-100 shadow-sm">
+                  <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FiSearch className="text-gray-400 text-2xl" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">{t('vocab.noWordsFound')}</h3>
+                  <p className="text-gray-500">{t('vocab.tryAnotherKeyword')}</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-2">
+                    <h3 className="font-bold text-gray-800 text-lg">{t('vocab.wordList')}</h3>
+                    <span className="text-sm font-medium px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full">
+                      {format('vocab.wordsCount', { count: words.length })}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {words.map((word) => (
+                      <button
+                        key={word.id}
+                        onClick={() => openTopic(word.topic, word.subject)}
+                        className="group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all text-left"
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-3xl font-black text-gray-900 group-hover:text-cyan-700">{word.word_cn}</p>
+                            <p className="mt-1 text-base text-cyan-600 font-semibold italic">{word.pinyin}</p>
+                          </div>
+                          {word.is_premium && (
+                            <span className="inline-flex items-center justify-center w-7 h-7 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-sm" title={t('vocab.vipContent')}>
+                              <FaCrown size={12} className="text-white" />
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-gray-800">{word.word_vn}</p>
+                        {word.word_en && <p className="mt-1 text-sm text-gray-500">{word.word_en}</p>}
+                        <div className="mt-4 flex items-center justify-between text-xs font-bold text-cyan-700">
+                          <span>{subjectLabel(word.subject)} · {word.topic}</span>
+                          <FiChevronRight size={16} />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
             ) : topics.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 sm:p-16 text-center border border-gray-100 shadow-sm max-w-2xl mx-auto mt-10">
                 <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">

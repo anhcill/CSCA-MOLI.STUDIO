@@ -62,6 +62,8 @@ async function fetchQuizQuestions(limit, modeType) {
       LEFT JOIN exams e ON e.id = q.exam_id
       WHERE q.question_type IN ('single_choice', 'true_false', 'reading_item', 'fill_blank_item')
         AND q.deleted_at IS NULL
+        AND COALESCE(e.is_premium, FALSE) = FALSE
+        AND COALESCE(e.vip_tier, 'basic') = 'basic'
         ${difficultyClause}
       GROUP BY q.id, e.title
       HAVING COUNT(a.id) >= 2 AND MAX(CASE WHEN a.is_correct THEN 1 ELSE 0 END) = 1
@@ -91,6 +93,7 @@ async function fetchVocabularyQuestions(limit) {
     `SELECT id, word_cn, pinyin, word_vn, word_en, topic
      FROM vocabulary_items
      WHERE is_active = TRUE
+       AND (is_premium = FALSE OR is_premium IS NULL)
      ORDER BY random()
      LIMIT $1`,
     [limit],
@@ -99,7 +102,12 @@ async function fetchVocabularyQuestions(limit) {
   if (words.rows.length === 0) return [];
 
   const distractors = await db.query(
-    `SELECT word_vn FROM vocabulary_items WHERE is_active = TRUE ORDER BY random() LIMIT $1`,
+    `SELECT word_vn
+     FROM vocabulary_items
+     WHERE is_active = TRUE
+       AND (is_premium = FALSE OR is_premium IS NULL)
+     ORDER BY random()
+     LIMIT $1`,
     [Math.max(40, limit * 4)],
   );
   const pool = distractors.rows.map((row) => row.word_vn).filter(Boolean);
@@ -137,8 +145,7 @@ async function fetchVocabularyQuestions(limit) {
 async function buildQuestions(mode) {
   const limit = Math.max(1, Math.min(Number(mode.question_count) || 10, 30));
   if (mode.mode_type === "vocabulary") {
-    const vocab = await fetchVocabularyQuestions(limit);
-    return vocab.length > 0 ? vocab : fetchQuizQuestions(limit, "quiz");
+    return fetchVocabularyQuestions(limit);
   }
   if (mode.mode_type === "mixed") {
     const vocabCount = Math.ceil(limit / 2);

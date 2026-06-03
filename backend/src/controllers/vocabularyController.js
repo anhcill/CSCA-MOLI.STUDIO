@@ -1,6 +1,55 @@
 const db = require("../config/database");
 const UserActivity = require("../models/UserActivity");
 
+function cleanText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeKey(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function vocabularyKey(wordCn, subject) {
+  return `${normalizeKey(subject)}::${normalizeKey(wordCn)}`;
+}
+
+function normalizeVocabularyPayload(raw = {}) {
+  const vipTier = cleanText(raw.vip_tier) || "basic";
+  return {
+    word_cn: cleanText(raw.word_cn),
+    pinyin: cleanText(raw.pinyin),
+    word_vn: cleanText(raw.word_vn),
+    word_en: cleanText(raw.word_en) || null,
+    subject: cleanText(raw.subject),
+    topic: cleanText(raw.topic),
+    example_cn: cleanText(raw.example_cn) || null,
+    example_vn: cleanText(raw.example_vn) || null,
+    is_premium: raw.is_premium === true || vipTier !== "basic",
+    vip_tier: vipTier,
+  };
+}
+
+async function findVocabularyDuplicate(client, wordCn, subject, excludeId = null) {
+  const params = [wordCn, subject];
+  let excludeClause = "";
+  if (excludeId) {
+    params.push(excludeId);
+    excludeClause = ` AND id <> $${params.length}`;
+  }
+
+  const result = await client.query(
+    `SELECT id, word_cn, pinyin, word_vn, subject, topic, is_active
+     FROM vocabulary_items
+     WHERE LOWER(TRIM(word_cn)) = LOWER(TRIM($1))
+       AND subject = $2
+       ${excludeClause}
+     ORDER BY is_active DESC, id ASC
+     LIMIT 1`,
+    params,
+  );
+  return result.rows[0] || null;
+}
+
 // GET /api/vocabulary?subject=toan&topic=&search=&limit=20&offset=0&is_premium=true&vip_tier=premium
 exports.getVocabulary = async (req, res) => {
   try {
@@ -82,16 +131,44 @@ exports.getTopics = async (req, res) => {
 // POST /api/vocabulary (admin only)
 exports.createVocabulary = async (req, res) => {
   try {
+    const payload = normalizeVocabularyPayload(req.body);
     const {
       word_cn, pinyin, word_vn, word_en, subject, topic,
       example_cn, example_vn, is_premium, vip_tier,
-    } = req.body;
+    } = payload;
 
     if (!word_cn || !pinyin || !word_vn || !subject || !topic) {
       return res.status(400).json({
         success: false,
         message: "Thiếu thông tin bắt buộc: từ Hán, pinyin, nghĩa tiếng Việt, môn, chủ đề",
       });
+    }
+
+    const duplicate = await findVocabularyDuplicate(db, word_cn, subject);
+    if (duplicate?.is_active) {
+      return res.status(409).json({
+        success: false,
+        code: "VOCABULARY_DUPLICATE",
+        message: `Từ "${word_cn}" đã tồn tại trong môn này`,
+        duplicate,
+      });
+    }
+
+    if (duplicate) {
+      const restored = await db.query(
+        `UPDATE vocabulary_items SET
+           word_cn=$1, pinyin=$2, word_vn=$3, word_en=$4, subject=$5, topic=$6,
+           example_cn=$7, example_vn=$8, is_active=TRUE, is_premium=$9, vip_tier=$10,
+           created_by=$11, updated_at=NOW()
+         WHERE id=$12 RETURNING *`,
+        [
+          word_cn, pinyin, word_vn, word_en, subject, topic,
+          example_cn, example_vn, is_premium, vip_tier, req.user.id, duplicate.id,
+        ],
+      );
+
+      UserActivity.log(req.user.id, 'admin.create_vocabulary', { vocabularyId: restored.rows[0].id, word_cn, restored: true, ip: req.ip, userAgent: req.headers['user-agent'] });
+      return res.status(200).json({ success: true, data: restored.rows[0], message: "Đã khôi phục từ vựng đã xóa" });
     }
 
     const result = await db.query(
@@ -116,10 +193,24 @@ exports.createVocabulary = async (req, res) => {
 exports.updateVocabulary = async (req, res) => {
   try {
     const { id } = req.params;
+    const payload = normalizeVocabularyPayload(req.body);
     const {
       word_cn, pinyin, word_vn, word_en, subject, topic,
-      example_cn, example_vn, is_active, is_premium, vip_tier,
-    } = req.body;
+      example_cn, example_vn, is_premium, vip_tier,
+    } = payload;
+    const { is_active } = req.body;
+
+    if (word_cn && subject) {
+      const duplicate = await findVocabularyDuplicate(db, word_cn, subject, id);
+      if (duplicate?.is_active) {
+        return res.status(409).json({
+          success: false,
+          code: "VOCABULARY_DUPLICATE",
+          message: `Từ "${word_cn}" đã tồn tại trong môn này`,
+          duplicate,
+        });
+      }
+    }
 
     const result = await db.query(
       `UPDATE vocabulary_items SET
@@ -261,10 +352,82 @@ exports.bulkCreate = async (req, res) => {
     const client = await db.pool.connect();
     try {
       await client.query("BEGIN");
+      const normalized = [];
+      const invalidRows = [];
+      const inputDuplicates = [];
+      const seen = new Set();
+
+      words.forEach((raw, index) => {
+        const item = normalizeVocabularyPayload(raw);
+        const line = index + 1;
+        if (!item.word_cn || !item.pinyin || !item.word_vn || !item.subject || !item.topic) {
+          invalidRows.push(line);
+          return;
+        }
+        const key = vocabularyKey(item.word_cn, item.subject);
+        if (seen.has(key)) {
+          inputDuplicates.push({ line, word_cn: item.word_cn, subject: item.subject, reason: "input_duplicate" });
+          return;
+        }
+        seen.add(key);
+        normalized.push({ ...item, line, key });
+      });
+
       let inserted = 0;
-      for (const w of words) {
-        if (!w.word_cn || !w.pinyin || !w.word_vn || !w.subject || !w.topic)
+      let reactivated = 0;
+      const duplicates = [...inputDuplicates];
+      const subjects = [...new Set(normalized.map((item) => item.subject))];
+      const wordKeys = [...new Set(normalized.map((item) => normalizeKey(item.word_cn)))];
+      const existingMap = new Map();
+
+      if (subjects.length > 0 && wordKeys.length > 0) {
+        const existing = await client.query(
+          `SELECT id, word_cn, pinyin, word_vn, subject, topic, is_active,
+                  LOWER(TRIM(word_cn)) AS normalized_word
+           FROM vocabulary_items
+           WHERE subject = ANY($1::text[])
+             AND LOWER(TRIM(word_cn)) = ANY($2::text[])`,
+          [subjects, wordKeys],
+        );
+        existing.rows.forEach((row) => {
+          existingMap.set(vocabularyKey(row.normalized_word, row.subject), row);
+        });
+      }
+
+      for (const w of normalized) {
+        const existing = existingMap.get(w.key);
+        if (existing?.is_active) {
+          duplicates.push({ line: w.line, id: existing.id, word_cn: existing.word_cn, subject: existing.subject, topic: existing.topic, reason: "existing" });
           continue;
+        }
+
+        if (existing) {
+          await client.query(
+            `UPDATE vocabulary_items SET
+               word_cn=$1, pinyin=$2, word_vn=$3, word_en=$4, subject=$5, topic=$6,
+               example_cn=$7, example_vn=$8, is_active=TRUE, is_premium=$9, vip_tier=$10,
+               created_by=$11, updated_at=NOW()
+             WHERE id=$12`,
+            [
+              w.word_cn,
+              w.pinyin,
+              w.word_vn,
+              w.word_en,
+              w.subject,
+              w.topic,
+              w.example_cn,
+              w.example_vn,
+              w.is_premium,
+              w.vip_tier,
+              req.user.id,
+              existing.id,
+            ],
+          );
+          reactivated++;
+          existingMap.set(w.key, { ...existing, is_active: true });
+          continue;
+        }
+
         const result = await client.query(
           `INSERT INTO vocabulary_items (word_cn, pinyin, word_vn, word_en, subject, topic, example_cn, example_vn, is_premium, vip_tier, created_by)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -274,21 +437,37 @@ exports.bulkCreate = async (req, res) => {
             w.word_cn,
             w.pinyin,
             w.word_vn,
-            w.word_en || null,
+            w.word_en,
             w.subject,
             w.topic,
-            w.example_cn || null,
-            w.example_vn || null,
-            w.is_premium || false,
-            w.vip_tier || 'basic',
+            w.example_cn,
+            w.example_vn,
+            w.is_premium,
+            w.vip_tier,
             req.user.id,
           ],
         );
-        if (result.rows.length > 0) inserted++;
+        if (result.rows.length > 0) {
+          inserted++;
+          existingMap.set(w.key, { id: result.rows[0].id, word_cn: w.word_cn, subject: w.subject, topic: w.topic, is_active: true });
+        } else {
+          duplicates.push({ line: w.line, word_cn: w.word_cn, subject: w.subject, reason: "conflict" });
+        }
       }
       await client.query("COMMIT");
-      UserActivity.log(req.user.id, 'admin.bulk_create_vocabulary', { count: inserted, ip: req.ip, userAgent: req.headers['user-agent'] });
-      res.json({ success: true, message: `Đã import ${inserted} từ` });
+      UserActivity.log(req.user.id, 'admin.bulk_create_vocabulary', { count: inserted, reactivated, duplicates: duplicates.length, invalid: invalidRows.length, ip: req.ip, userAgent: req.headers['user-agent'] });
+      res.json({
+        success: true,
+        data: {
+          created: inserted,
+          reactivated,
+          skippedInvalid: invalidRows.length,
+          skippedDuplicates: duplicates.length,
+          invalidRows,
+          duplicates: duplicates.slice(0, 50),
+        },
+        message: `Đã import ${inserted} từ, khôi phục ${reactivated}, bỏ qua ${duplicates.length} trùng và ${invalidRows.length} dòng lỗi`,
+      });
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
