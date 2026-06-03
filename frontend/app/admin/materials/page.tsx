@@ -41,6 +41,8 @@ const SUBJECTS = [
   { value: 'tieng-trung-tn', label: 'Tiếng Trung TN' },
 ];
 
+const MAX_MATERIAL_UPLOAD_MB = 100;
+
 export default function AdminMaterialsPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
@@ -103,8 +105,8 @@ export default function AdminMaterialsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 20 * 1024 * 1024) {
-      alert('File không được lớn hơn 20MB');
+    if (file.size > MAX_MATERIAL_UPLOAD_MB * 1024 * 1024) {
+      alert(`File không được lớn hơn ${MAX_MATERIAL_UPLOAD_MB}MB`);
       return;
     }
 
@@ -120,6 +122,7 @@ export default function AdminMaterialsPage() {
 
       const res = await axios.post('/materials/upload-pdf', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000,
       });
 
       setUploadedUrl(res.data.data.url);
@@ -396,7 +399,7 @@ export default function AdminMaterialsPage() {
                   ) : (
                     <>
                       <FiUpload className="mx-auto text-gray-400 mb-2" size={32} />
-                      <p className="text-sm text-gray-600 mb-2">Click để chọn file PDF (tối đa 20MB)</p>
+                      <p className="text-sm text-gray-600 mb-2">Click để chọn file PDF (tối đa {MAX_MATERIAL_UPLOAD_MB}MB)</p>
                       <input
                         type="file"
                         accept="application/pdf"

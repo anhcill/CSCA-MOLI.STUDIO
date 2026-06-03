@@ -50,10 +50,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const MAX_MATERIAL_UPLOAD_MB = Number(process.env.MATERIAL_UPLOAD_MAX_MB || 100);
+
 // Multer: memory storage for PDF upload
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB for PDFs
+  limits: { fileSize: MAX_MATERIAL_UPLOAD_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ["application/pdf", "image/jpeg", "image/png"];
     if (allowed.includes(file.mimetype)) cb(null, true);
