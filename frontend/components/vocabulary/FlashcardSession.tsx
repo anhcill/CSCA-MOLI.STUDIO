@@ -25,51 +25,142 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [speechError, setSpeechError] = useState('');
+  const [speaking, setSpeaking] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const dragStartX = useRef<number | null>(null);
   const dragOffsetRef = useRef(0);
   const suppressNextClick = useRef(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechRequestRef = useRef(0);
 
   const current = cards[index];
   const primaryMeaning = current ? (language === 'en' && current.word_en ? current.word_en : current.word_vn) : '';
   const secondaryMeaning = current ? (language === 'en' ? current.word_vn : current.word_en) : '';
 
-  const speakChinese = useCallback((text: string) => {
-    if (!text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  const getChineseVoice = useCallback((voices: SpeechSynthesisVoice[]) => (
+    voices.find((voice) => voice.lang.toLowerCase() === 'zh-cn') ||
+    voices.find((voice) => voice.lang.toLowerCase().startsWith('zh')) ||
+    voices.find((voice) => /chinese|mandarin|普通话|中文/i.test(voice.name))
+  ), []);
 
-    window.speechSynthesis.cancel();
+  const loadSpeechVoices = useCallback(() => new Promise<SpeechSynthesisVoice[]>((resolve) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      resolve([]);
+      return;
+    }
 
+    const synth = window.speechSynthesis;
+    const readyVoices = synth.getVoices();
+    if (readyVoices.length) {
+      resolve(readyVoices);
+      return;
+    }
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      synth.removeEventListener('voiceschanged', finish);
+      resolve(synth.getVoices());
+    };
+
+    synth.addEventListener('voiceschanged', finish);
+    window.setTimeout(finish, 900);
+  }), []);
+
+  const stopSpeech = useCallback(() => {
+    speechRequestRef.current += 1;
+    utteranceRef.current = null;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeaking(false);
+  }, []);
+
+  const speakChinese = useCallback(async (text: string) => {
+    if (!text) return;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      setSpeechError(t('vocab.speechUnsupported'));
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+    const requestId = speechRequestRef.current + 1;
+    speechRequestRef.current = requestId;
+    synth.cancel();
+    synth.resume();
+    const voices = await loadSpeechVoices();
+    if (speechRequestRef.current !== requestId) return;
+    synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     utterance.rate = 0.85;
     utterance.pitch = 1;
 
-    const chineseVoice = window.speechSynthesis
-      .getVoices()
-      .find((voice) => voice.lang.toLowerCase().startsWith('zh'));
-
+    const chineseVoice = getChineseVoice(voices);
     if (chineseVoice) {
       utterance.voice = chineseVoice;
     }
 
-    window.speechSynthesis.speak(utterance);
-  }, []);
+    utterance.onstart = () => {
+      setSpeaking(true);
+      setSpeechError('');
+    };
+    utterance.onend = () => {
+      if (speechRequestRef.current !== requestId) return;
+      if (utteranceRef.current === utterance) {
+        utteranceRef.current = null;
+      }
+      setSpeaking(false);
+    };
+    utterance.onerror = (event) => {
+      if (speechRequestRef.current !== requestId) return;
+      if (utteranceRef.current === utterance) {
+        utteranceRef.current = null;
+      }
+      setSpeaking(false);
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        setSpeechError(t('vocab.speechFailed'));
+      }
+    };
+
+    utteranceRef.current = utterance;
+    setSpeechError('');
+    setSpeaking(true);
+    synth.speak(utterance);
+
+    window.setTimeout(() => {
+      if (speechRequestRef.current !== requestId) return;
+      if (synth.paused) synth.resume();
+    }, 120);
+  }, [getChineseVoice, loadSpeechVoices, t]);
 
   useEffect(() => {
     if (!autoSpeak || !current?.word_cn) return;
 
     const timer = window.setTimeout(() => {
-      speakChinese(current.word_cn);
+      void speakChinese(current.word_cn);
     }, 250);
 
     return () => window.clearTimeout(timer);
   }, [autoSpeak, current?.id, current?.word_cn, speakChinese]);
 
+  useEffect(() => () => {
+    speechRequestRef.current += 1;
+    utteranceRef.current = null;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
   const goToCard = (nextIndex: number) => {
     const boundedIndex = Math.max(0, Math.min(nextIndex, cards.length - 1));
     if (boundedIndex === index) return;
+    stopSpeech();
+    setSpeechError('');
     setIndex(boundedIndex);
     setFlipped(false);
   };
@@ -121,6 +212,8 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     try {
       setLoading(true);
       setError('');
+      setSpeechError('');
+      stopSpeech();
       const queue = await vocabularyReviewApi.getQueue({ ...filters, limit: 20 });
       setCards(queue);
       setIndex(0);
@@ -136,6 +229,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
     if (!current) return;
     try {
       setSaving(true);
+      stopSpeech();
       await vocabularyReviewApi.recordReview(current.id, quality);
       onReviewed?.();
       if (index + 1 >= cards.length) {
@@ -144,6 +238,7 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
       } else {
         setIndex((value) => value + 1);
       }
+      setSpeechError('');
       setFlipped(false);
     } catch (err) {
       setError(t('vocab.saveReviewError'));
@@ -163,7 +258,11 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
           <input
             type="checkbox"
             checked={autoSpeak}
-            onChange={(event) => setAutoSpeak(event.target.checked)}
+            onChange={(event) => {
+              const nextAutoSpeak = event.target.checked;
+              setAutoSpeak(nextAutoSpeak);
+              if (!nextAutoSpeak) stopSpeech();
+            }}
             className="h-4 w-4 accent-cyan-600"
           />
           {t('vocab.autoSpeak')}
@@ -213,15 +312,18 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    speakChinese(current.word_cn);
+                    void speakChinese(current.word_cn);
                   }}
                   onKeyDown={(event) => event.stopPropagation()}
                   onPointerDown={(event) => event.stopPropagation()}
-                  className="mt-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
-                  title={t('vocab.speak')}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  className={`mt-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50 ${speaking ? 'animate-pulse' : ''}`}
+                  title={speaking ? t('vocab.speaking') : t('vocab.speak')}
+                  aria-label={t('vocab.speak')}
                 >
                   <FiVolume2 />
                 </button>
+                {speechError && <p className="mt-3 text-xs font-semibold text-amber-700">{speechError}</p>}
                 <p className="mt-5 text-sm text-gray-500">{t('vocab.flipHint')}</p>
               </div>
             ) : (
@@ -232,16 +334,19 @@ export default function FlashcardSession({ filters, onReviewed }: Props) {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      speakChinese(current.word_cn);
+                      void speakChinese(current.word_cn);
                     }}
                     onKeyDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50"
-                    title={t('vocab.speak')}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-white text-cyan-700 shadow-sm hover:bg-cyan-50 ${speaking ? 'animate-pulse' : ''}`}
+                    title={speaking ? t('vocab.speaking') : t('vocab.speak')}
+                    aria-label={t('vocab.speak')}
                   >
                     <FiVolume2 />
                   </button>
                 </div>
+                {speechError && <p className="mt-3 text-xs font-semibold text-amber-700">{speechError}</p>}
                 <p className="mt-4 text-xl font-bold text-gray-900 sm:text-2xl">{primaryMeaning}</p>
                 {secondaryMeaning && <p className="mt-1 text-sm text-gray-500">{secondaryMeaning}</p>}
                 {current.example_cn && (
