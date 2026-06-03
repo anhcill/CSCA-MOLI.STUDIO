@@ -17,6 +17,7 @@ interface MathInputProps {
   onCnChange?: (value: string) => void;
   cnPlaceholder?: string;
   defaultTab?: 'vi' | 'cn';
+  showInlinePreview?: boolean;
 }
 
 const PRESET_TEMPLATES = [
@@ -143,6 +144,7 @@ export default function MathInput({
   onCnChange,
   cnPlaceholder,
   defaultTab = 'vi',
+  showInlinePreview = true,
 }: MathInputProps) {
   const [showMath, setShowMath] = useState(false);
   const [mathInput, setMathInput] = useState('');
@@ -349,7 +351,7 @@ export default function MathInput({
       )}
 
       {/* Inline preview of current value */}
-      {currentValue && (
+      {showInlinePreview && currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
           <div className="mb-2 flex justify-end">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FiAlertCircle, FiUpload } from 'react-icons/fi';
 import { examAdminApi, ImportedExamItem, PdfImportPreview } from '@/lib/api/examAdmin';
 import { PDF_IMPORT_PRESETS, PdfImportPreset } from '@/lib/pdf-import/presets';
@@ -14,10 +14,14 @@ interface PdfImportPanelProps {
   onPreviewLoaded: (preview: PdfImportPreview) => void;
   onPreviewCleared: () => void;
   onChangeItems: (items: ImportedExamItem[]) => void;
-  onSave: () => void;
+  onSave: (items?: ImportedExamItem[]) => void;
 }
 
 function getPdfImportErrorMessage(error: any) {
+  if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
+    return 'Đã dừng phân tích file. Nếu file nặng, thử lại hoặc tách PDF ngắn hơn.';
+  }
+
   if (error?.code === 'ECONNABORTED') {
     return 'Phân tích file quá lâu. Vui lòng thử file ngắn hơn hoặc chọn preset Auto/Math để dùng parser nhanh.';
   }
@@ -39,6 +43,28 @@ export default function PdfImportPanel({
   const [preset, setPreset] = useState<PdfImportPreset>('auto');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const activeRequestRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timedOutRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const clearPreviewTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  const handleCancelPreview = () => {
+    abortRef.current?.abort();
+  };
 
   const handlePreview = async () => {
     if (!canImport) {
@@ -51,16 +77,45 @@ export default function PdfImportPanel({
       return;
     }
 
+    abortRef.current?.abort();
+    clearPreviewTimer();
+
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    timedOutRef.current = false;
+    timeoutRef.current = setTimeout(() => {
+      timedOutRef.current = true;
+      controller.abort();
+    }, 240000);
+
     try {
       setLoading(true);
       setErrorMessage('');
-      const nextPreview = await examAdminApi.previewPdfImport(file, preset);
-      onPreviewLoaded(nextPreview);
-    } catch (error: any) {
-      console.error('Error previewing PDF import:', error);
-      setErrorMessage(getPdfImportErrorMessage(error));
-    } finally {
+      const nextPreview = await examAdminApi.previewPdfImport(file, preset, controller.signal);
+      if (activeRequestRef.current !== requestId || controller.signal.aborted) return;
+
       setLoading(false);
+      window.setTimeout(() => {
+        if (activeRequestRef.current === requestId) {
+          onPreviewLoaded(nextPreview);
+        }
+      }, 0);
+    } catch (error: any) {
+      if (activeRequestRef.current !== requestId) return;
+      console.error('Error previewing PDF import:', error);
+      if (timedOutRef.current) {
+        setErrorMessage('Phân tích file quá lâu nên đã tự dừng. Thử tách file ngắn hơn hoặc chạy lại sau.');
+      } else {
+        setErrorMessage(getPdfImportErrorMessage(error));
+      }
+    } finally {
+      if (activeRequestRef.current === requestId) {
+        clearPreviewTimer();
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
   };
 
@@ -101,6 +156,7 @@ export default function PdfImportPanel({
               type="file"
               accept="application/pdf,.pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(event) => {
+                if (loading) handleCancelPreview();
                 setFile(event.target.files?.[0] || null);
                 setErrorMessage('');
                 onPreviewCleared();
@@ -117,6 +173,15 @@ export default function PdfImportPanel({
             <FiUpload />
             <span>{loading ? 'Đang phân tích...' : 'Phân tích PDF/Word'}</span>
           </button>
+          {loading && (
+            <button
+              type="button"
+              onClick={handleCancelPreview}
+              className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Dừng
+            </button>
+          )}
         </div>
 
         {errorMessage && !loading && (

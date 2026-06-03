@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
+import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
@@ -526,8 +526,8 @@ export default function AdminExamDetailPage() {
         setPdfImportPreview(preview);
     };
 
-    const savePdfImportedQuestions = async () => {
-        const importItems = getImportPreviewItems(pdfImportPreview);
+    const savePdfImportedQuestions = async (itemsOverride?: ImportedExamItem[]) => {
+        const importItems = itemsOverride?.length ? itemsOverride : getImportPreviewItems(pdfImportPreview);
         if (!exam?.id || !importItems.length) return;
 
         const validationError = validateImportedItems(importItems);

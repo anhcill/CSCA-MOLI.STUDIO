@@ -642,8 +642,8 @@ export default function CreateExamPage() {
         }
     };
 
-    const savePdfImportedQuestions = async () => {
-        const importItems = getImportPreviewItems(pdfImportPreview);
+    const savePdfImportedQuestions = async (itemsOverride?: ImportedExamItem[]) => {
+        const importItems = itemsOverride?.length ? itemsOverride : getImportPreviewItems(pdfImportPreview);
         if (!currentExamId || !importItems.length) return;
 
         const validationError = validateImportedItems(importItems);

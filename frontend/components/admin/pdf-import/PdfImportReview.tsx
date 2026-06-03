@@ -1,8 +1,9 @@
 'use client';
 
+import { useEffect, useState, type ComponentProps } from 'react';
 import { FiAlertCircle, FiPlus, FiTrash2 } from 'react-icons/fi';
 import ImageUpload from '@/components/admin/ImageUpload';
-import MathInput from '@/components/admin/MathInput';
+import BaseMathInput from '@/components/admin/MathInput';
 import type {
   ImportedExamItem,
   ImportedFillBlankGroupData,
@@ -25,13 +26,17 @@ interface Props {
   preview: PdfImportPreview;
   items: ImportedExamItem[];
   saving: boolean;
-  onSave: () => void;
+  onSave: (items?: ImportedExamItem[]) => void;
   onChangeItems: (items: ImportedExamItem[]) => void;
 }
 
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500';
 const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50';
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
+
+function MathInput(props: ComponentProps<typeof BaseMathInput>) {
+  return <BaseMathInput {...props} showInlinePreview={false} />;
+}
 
 function ImageUrlEditor({
   label,
@@ -121,7 +126,14 @@ function formatSourceSummary(source: PdfImportPreview['source']) {
   return parts.join(' - ');
 }
 
-export default function PdfImportReview({ preview, items, saving, onSave, onChangeItems }: Props) {
+export default function PdfImportReview({ preview, items: sourceItems, saving, onSave, onChangeItems }: Props) {
+  const [draftItems, setDraftItems] = useState<ImportedExamItem[]>(sourceItems);
+  const items = draftItems;
+
+  useEffect(() => {
+    setDraftItems(sourceItems);
+  }, [preview, sourceItems]);
+
   const questionCount = getImportItemsQuestionCount(items);
 
   const updateItem = (index: number, updater: (item: ImportedExamItem) => ImportedExamItem | null) => {
@@ -129,22 +141,27 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
     const updated = updater(nextItems[index]);
     if (!updated) return;
     nextItems[index] = updated;
-    onChangeItems(nextItems);
+    setDraftItems(nextItems);
   };
 
   const removeItem = (index: number) => {
     if (!confirm('Xóa mục này khỏi danh sách import?')) return;
-    onChangeItems(items.filter((_, itemIndex) => itemIndex !== index));
+    setDraftItems(items.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const addItem = (type: NewImportedItemType) => {
-    onChangeItems([...items, createImportedItem(type)]);
+    setDraftItems([...items, createImportedItem(type)]);
   };
 
   const insertItemAfter = (index: number, type: NewImportedItemType) => {
     const nextItems = [...items];
     nextItems.splice(index + 1, 0, createImportedItem(type));
-    onChangeItems(nextItems);
+    setDraftItems(nextItems);
+  };
+
+  const handleSave = () => {
+    onChangeItems(items);
+    onSave(items);
   };
 
   const updateSingle = (index: number, updates: Partial<ImportedQuestionData>) => {
@@ -348,7 +365,7 @@ export default function PdfImportReview({ preview, items, saving, onSave, onChan
           <AddItemButtons label="Thêm mục" onAdd={addItem} />
           <button
             type="button"
-            onClick={onSave}
+            onClick={handleSave}
             disabled={saving || items.length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
           >
