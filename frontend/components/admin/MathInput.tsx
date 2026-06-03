@@ -359,7 +359,7 @@ export default function MathInput({
               className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100"
             >
               {editingPreview ? <FiCheck size={12} /> : <FiEdit2 size={12} />}
-              {editingPreview ? 'Xong' : 'Sua'}
+              {editingPreview ? 'Xong' : 'Sửa'}
             </button>
           </div>
           {editingPreview ? (
