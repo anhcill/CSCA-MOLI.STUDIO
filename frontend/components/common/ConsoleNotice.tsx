@@ -19,10 +19,10 @@ MOLY.STUDIO
 `;
 
 const CONSOLE_WARNING = [
-  'CANH BAO BAO MAT',
-  'Console nay chi danh cho lap trinh vien MOLY.STUDIO.',
-  'Cam hanh vi gian lan, can thiep request, sua diem, lay dap an, bypass goi, hoac khai thac he thong.',
-  'Moi hanh vi bat thuong co the bi ghi nhan va khoa tai khoan.',
+  'CẢNH BÁO BẢO MẬT',
+  'Console này chỉ dành cho lập trình viên MOLY.STUDIO.',
+  'Cấm hành vi gian lận, can thiệp request, sửa điểm, lấy đáp án, bypass gói hoặc khai thác hệ thống.',
+  'Mọi hành vi bất thường có thể bị ghi nhận và khóa tài khoản.',
 ].join('\n');
 
 export default function ConsoleNotice() {
