@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { FiCheck, FiDivide, FiEdit2, FiHash } from 'react-icons/fi';
+import { FiDivide, FiHash } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
 import { normalizeLatexMath, normalizeMathText } from '@/lib/math/normalizeMath';
 
@@ -43,18 +43,6 @@ const PRESET_TEMPLATES = [
   { symbol: '·', label: 'Nhân', formula: '\\cdot' },
   { symbol: '÷', label: 'Chia', formula: '\\div' },
 ];
-
-function renderMath(latex: string, displayMode = false): string {
-  try {
-    return katex.renderToString(latex, {
-      displayMode,
-      throwOnError: false,
-      errorColor: '#dc2626',
-    });
-  } catch {
-    return `<span style="color:#dc2626">Lỗi: ${latex}</span>`;
-  }
-}
 
 function insertMathIntoText(text: string, latex: string): string {
   const formatted = formatCustomMathInput(latex);
@@ -152,11 +140,9 @@ export default function MathInput({
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
-  const [editingPreview, setEditingPreview] = useState(false);
   const [draftValue, setDraftValue] = useState(value || '');
   const [draftCnValue, setDraftCnValue] = useState(cnValue || '');
   const mathRef = useRef<HTMLTextAreaElement>(null);
-  const previewEditRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDraftRef = useRef({ vi: value || '', cn: cnValue || '' });
   const lastCommittedRef = useRef({ vi: value || '', cn: cnValue || '' });
@@ -255,12 +241,6 @@ export default function MathInput({
       mathRef.current.focus();
     }
   }, [showMath]);
-
-  useEffect(() => {
-    if (editingPreview && previewEditRef.current) {
-      previewEditRef.current.focus();
-    }
-  }, [editingPreview]);
 
   useEffect(() => {
     if (mathInput.trim()) {
@@ -368,9 +348,11 @@ export default function MathInput({
         {/* Math toolbar button */}
         <button
           type="button"
-          onClick={() => setShowMath(!showMath)}
+          onClick={() => setShowMath((isOpen) => !isOpen)}
           className="absolute top-2 right-2 p-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-700 transition-colors"
           title="Chèn công thức toán học"
+          aria-expanded={showMath}
+          aria-controls="math-formula-panel"
         >
           <FiDivide size={16} />
         </button>
@@ -378,7 +360,10 @@ export default function MathInput({
 
       {/* Math formula panel */}
       {showMath && (
-        <div className="border-2 border-purple-300 rounded-xl bg-purple-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div
+          id="math-formula-panel"
+          className="border-2 border-purple-300 rounded-xl bg-purple-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200"
+        >
           <div className="flex items-center gap-2 mb-2">
             <FiDivide className="text-purple-600" size={16} />
             <span className="text-sm font-semibold text-purple-700">
@@ -396,10 +381,9 @@ export default function MathInput({
                 className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-white border border-gray-200 hover:border-purple-400 hover:bg-purple-100 transition-colors"
                 title={`${t.label}: ${t.formula}`}
               >
-                <span
-                  className="text-base leading-none"
-                  dangerouslySetInnerHTML={{ __html: renderMath(t.formula, false) }}
-                />
+                <span className="text-base leading-none font-semibold text-purple-800">
+                  {t.symbol}
+                </span>
               </button>
             ))}
           </div>
@@ -467,41 +451,7 @@ export default function MathInput({
       {showInlinePreview && currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
-          <div className="mb-2 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setEditingPreview((isEditing) => !isEditing)}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100"
-            >
-              {editingPreview ? <FiCheck size={12} /> : <FiEdit2 size={12} />}
-              {editingPreview ? 'Xong' : 'Sửa'}
-            </button>
-          </div>
-          {editingPreview ? (
-            <textarea
-              ref={previewEditRef}
-              value={currentValue}
-              onChange={(event) => handleCurrentValueChange(event.target.value)}
-              rows={4}
-              className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 font-mono text-sm leading-relaxed text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-              placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : placeholder}
-            />
-          ) : (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setEditingPreview(true)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  setEditingPreview(true);
-                }
-              }}
-              className="cursor-text rounded-md border border-transparent p-1 text-left hover:border-blue-200 hover:bg-white"
-            >
-              <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
-            </div>
-          )}
+          <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
         </div>
       )}
 
