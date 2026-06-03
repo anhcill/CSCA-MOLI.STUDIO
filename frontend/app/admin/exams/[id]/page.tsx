@@ -1615,16 +1615,16 @@ export default function AdminExamDetailPage() {
                                                                 : 'border-gray-200 bg-gray-50'
                                                             }`}
                                                     >
-                                                        <span className={`font-bold text-sm flex-shrink-0 ${a.is_correct ? 'text-green-700' : 'text-gray-500'}`}>
+                                                        <span className={`font-bold text-base leading-7 flex-shrink-0 ${a.is_correct ? 'text-green-700' : 'text-gray-500'}`}>
                                                             {a.answer_key}.
                                                         </span>
-                                                        <div className="flex-1 text-sm">
+                                                        <div className="flex-1 text-base leading-7">
                                                             <RichMathText
                                                                 value={a.answer_text}
-                                                                className={a.is_correct ? 'font-medium text-green-800' : 'text-gray-700'}
+                                                                className={a.is_correct ? 'text-base font-medium leading-7 text-green-800' : 'text-base leading-7 text-gray-700'}
                                                             />
                                                             {a.answer_text_cn && a.answer_text_cn !== a.answer_text && (
-                                                                <RichMathText value={a.answer_text_cn} className="mt-0.5 text-gray-500" />
+                                                                <RichMathText value={a.answer_text_cn} className="mt-0.5 text-base leading-7 text-gray-500" />
                                                             )}
                                                             {a.image_url && (
                                                                 <img src={a.image_url} alt={a.answer_key} className="mt-1 max-h-16 rounded border border-gray-200" />
