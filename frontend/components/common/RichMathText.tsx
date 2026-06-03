@@ -1,7 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkMath from 'remark-math';
@@ -60,9 +60,9 @@ function autoWrapLooseMathLines(text: string) {
 }
 
 function RichMathText({ value, className = '' }: RichMathTextProps) {
-  if (!value) return null;
+  const markdown = useMemo(() => (value ? normalizeMathDelimiters(value) : ''), [value]);
 
-  const markdown = normalizeMathDelimiters(value);
+  if (!value) return null;
 
   return (
     <div className={`rich-math-text text-sm leading-relaxed ${className}`}>

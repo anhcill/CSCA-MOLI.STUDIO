@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { FiDivide, FiHash } from 'react-icons/fi';
+import { FiDivide, FiHash, FiRefreshCw } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
-import { normalizeLatexMath, normalizeMathText } from '@/lib/math/normalizeMath';
+import {
+  normalizeAdminMathInputText,
+  normalizeLatexMath,
+  normalizeMathText,
+  repairMathFormatArtifacts,
+} from '@/lib/math/normalizeMath';
 
 interface MathInputProps {
   value: string;
@@ -151,6 +156,17 @@ export default function MathInput({
   const onCnChangeRef = useRef(onCnChange);
 
   const currentValue = tab === 'vi' ? draftValue : draftCnValue;
+  const deferredCurrentValue = useDeferredValue(currentValue);
+  const deferredMathInput = useDeferredValue(mathInput);
+  const currentRepairCandidate = useMemo(
+    () => repairMathFormatArtifacts(currentValue),
+    [currentValue],
+  );
+  const repairedPreviewValue = useMemo(
+    () => repairMathFormatArtifacts(deferredCurrentValue),
+    [deferredCurrentValue],
+  );
+  const canRepairCurrentValue = Boolean(currentValue && currentRepairCandidate !== currentValue);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -243,13 +259,17 @@ export default function MathInput({
   }, [showMath]);
 
   useEffect(() => {
-    if (mathInput.trim()) {
-      const html = renderMathDisplay(formatCustomMathInput(mathInput));
-      setPreviewHtml(html);
-    } else {
+    if (!showMath || !deferredMathInput.trim()) {
       setPreviewHtml('');
+      return;
     }
-  }, [mathInput]);
+
+    const previewTimer = window.setTimeout(() => {
+      setPreviewHtml(renderMathDisplay(formatCustomMathInput(deferredMathInput)));
+    }, 80);
+
+    return () => window.clearTimeout(previewTimer);
+  }, [deferredMathInput, showMath]);
 
   const handleInsertPreset = (formula: string) => {
     const wrapped = displayMath(formula);
@@ -271,8 +291,11 @@ export default function MathInput({
       setDraftCnValue(newVal);
     }
     scheduleCommit(tab, newVal);
-    setMathInput('');
-    setShowMath(false);
+    startTransition(() => {
+      setMathInput('');
+      setPreviewHtml('');
+      setShowMath(false);
+    });
   };
 
   const handleCurrentValueChange = (nextValue: string) => {
@@ -286,6 +309,12 @@ export default function MathInput({
 
   const handleRawInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     handleCurrentValueChange(e.target.value);
+  };
+
+  const handleRepairFormat = () => {
+    const repairedValue = normalizeAdminMathInputText(currentValue);
+    if (!repairedValue || repairedValue === currentValue) return;
+    handleCurrentValueChange(repairedValue);
   };
 
   return (
@@ -357,6 +386,18 @@ export default function MathInput({
           <FiDivide size={16} />
         </button>
       </div>
+
+      {canRepairCurrentValue && (
+        <button
+          type="button"
+          onClick={handleRepairFormat}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+          title="Tự sửa lỗi format OCR/PDF như $$, khoảng tập hợp, \\cup, C ℝ"
+        >
+          <FiRefreshCw size={13} />
+          Tự sửa format
+        </button>
+      )}
 
       {/* Math formula panel */}
       {showMath && (
@@ -451,7 +492,7 @@ export default function MathInput({
       {showInlinePreview && currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
-          <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
+          <RichMathText value={repairedPreviewValue} className="text-base leading-relaxed text-gray-800" />
         </div>
       )}
 

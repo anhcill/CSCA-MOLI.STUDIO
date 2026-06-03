@@ -55,6 +55,20 @@ const INLINE_MATH_COMMAND_RE =
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_BOUNDARY_RE =
   /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
+const SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE =
+  String.raw`[+\-]?(?:\\infty|\u221e|\d+(?:[.,]\d+)?|[A-Za-z](?:_\{[^{}]+\})?)`;
+const SIMPLE_INTERVAL_RE_SOURCE =
+  String.raw`[\[(]\s*${SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE}\s*,\s*${SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE}\s*[\])]`;
+const SIMPLE_INTERVAL_CHAIN_RE_SOURCE =
+  String.raw`${SIMPLE_INTERVAL_RE_SOURCE}(?:\s*(?:\\cup|\\cap|\u222a|\u2229)\s*${SIMPLE_INTERVAL_RE_SOURCE})*`;
+const ESCAPED_INTERVAL_ASSIGNMENT_RE = new RegExp(
+  String.raw`\b([A-Za-z](?:_\{[^{}]+\})?)\s*=\s*\\\(\s*(${SIMPLE_INTERVAL_CHAIN_RE_SOURCE})\s*\\\)`,
+  'g',
+);
+const INTERVAL_ASSIGNMENT_RE = new RegExp(
+  String.raw`\b([A-Za-z](?:_\{[^{}]+\})?)\s*=\s*(${SIMPLE_INTERVAL_CHAIN_RE_SOURCE})`,
+  'g',
+);
 
 function mapMathCodePoint(codePoint: number): string | null {
   for (const [start, asciiStart, length] of MATH_RANGES) {
@@ -79,6 +93,50 @@ export function normalizeMathUnicode(input: string): string {
 
 export function normalizeEscapedLatexBackslashes(input: string): string {
   return input.replace(/\\\\(?=(?:[A-Za-z]|\(|\)|\[|\]|\{|\}))/g, '\\');
+}
+
+function normalizeSetOperators(input: string): string {
+  return input
+    .replace(/\\cup|\u222a/g, '\\cup')
+    .replace(/\\cap|\u2229/g, '\\cap')
+    .replace(/\\setminus|\u2216/g, '\\setminus');
+}
+
+function wrapIntervalAssignments(input: string): string {
+  return input.replace(INTERVAL_ASSIGNMENT_RE, (match, variable, intervals, offset: number, whole: string) => {
+    const before = whole.slice(Math.max(0, offset - 2), offset);
+    const after = whole.slice(offset + match.length, offset + match.length + 2);
+    if (before === '\\(' || before.endsWith('$') || after === '\\)') return match;
+
+    return `\\(${variable}=${intervals}\\)`;
+  });
+}
+
+export function repairMathFormatArtifacts(
+  input: string,
+  options: { wrapIntervalAssignments?: boolean } = {},
+): string {
+  if (!input) return '';
+  const shouldWrapIntervalAssignments = options.wrapIntervalAssignments ?? true;
+
+  const repaired = normalizeSetOperators(normalizeEscapedLatexBackslashes(input))
+    .replace(/([=:\uff1a]\s*)\$\$+(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
+    .replace(/\(\[\)\/\(([^)]*)\)\)/g, '[$1)')
+    .replace(/\(\(\)\/\(([^)]*)\)\)/g, '($1)')
+    .replace(/\bC\s*(?:\u211d|\\mathbb\{R\})\s*\(/g, 'C_{\\mathbb{R}}(')
+    .replace(/\bC\s+R\s*\(/g, 'C_{\\mathbb{R}}(')
+    .replace(/\bC\s*(?:\u211d|\\mathbb\{R\})\b/g, 'C_{\\mathbb{R}}')
+    .replace(/\bC\s+R\b/g, 'C_{\\mathbb{R}}');
+
+  const withIntervalAssignments = shouldWrapIntervalAssignments
+    ? wrapIntervalAssignments(repaired.replace(ESCAPED_INTERVAL_ASSIGNMENT_RE, (_, variable, intervals) => (
+      `\\(${variable}=${normalizeSetOperators(intervals.trim())}\\)`
+    )))
+    : repaired;
+
+  return withIntervalAssignments
+    .replace(/\s+([,.;:\uff0c\u3002\uff1b\uff1a\uff09)\]])/g, '$1')
+    .replace(/([\uff08(\[])\s+/g, '$1');
 }
 
 function normalizeLooseMathSyntax(input: string): string {
@@ -344,7 +402,7 @@ export function normalizePlainFractions(input: string): string {
 export function normalizeMathText(input: string): string {
   return normalizePlainFractions(
     normalizeLooseMathSyntax(
-      normalizeMathUnicode(normalizeEscapedLatexBackslashes(input)).replace(/\r\n?/g, '\n'),
+      normalizeMathUnicode(repairMathFormatArtifacts(input, { wrapIntervalAssignments: false })).replace(/\r\n?/g, '\n'),
     ),
   );
 }
@@ -622,7 +680,7 @@ function mergeAdjacentInlineMath(input: string): string {
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const normalized = normalizeMathText(input)
+  const normalized = normalizeMathText(repairMathFormatArtifacts(input))
     .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
@@ -662,4 +720,10 @@ export function normalizeRichMathText(input: string): string {
     .join('');
 
   return mergeAdjacentInlineMath(normalized);
+}
+
+export function normalizeAdminMathInputText(input: string): string {
+  if (!input) return '';
+
+  return normalizeRichMathText(repairMathFormatArtifacts(input));
 }
