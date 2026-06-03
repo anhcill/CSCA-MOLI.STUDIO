@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { FiDivide, FiHash } from 'react-icons/fi';
+import { FiCheck, FiDivide, FiEdit2, FiHash } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
 import { normalizeLatexMath, normalizeMathText } from '@/lib/math/normalizeMath';
 
@@ -148,7 +148,9 @@ export default function MathInput({
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
+  const [editingPreview, setEditingPreview] = useState(false);
   const mathRef = useRef<HTMLTextAreaElement>(null);
+  const previewEditRef = useRef<HTMLTextAreaElement>(null);
 
   const currentValue = tab === 'vi' ? value : (cnValue || '');
   const setCurrentValue = tab === 'vi'
@@ -166,6 +168,12 @@ export default function MathInput({
       mathRef.current.focus();
     }
   }, [showMath]);
+
+  useEffect(() => {
+    if (editingPreview && previewEditRef.current) {
+      previewEditRef.current.focus();
+    }
+  }, [editingPreview]);
 
   useEffect(() => {
     if (mathInput.trim()) {
@@ -190,8 +198,12 @@ export default function MathInput({
     setShowMath(false);
   };
 
+  const handleCurrentValueChange = (nextValue: string) => {
+    setCurrentValue(nextValue);
+  };
+
   const handleRawInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setCurrentValue(e.target.value);
+    handleCurrentValueChange(e.target.value);
   };
 
   return (
@@ -340,7 +352,41 @@ export default function MathInput({
       {currentValue && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
-          <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setEditingPreview((isEditing) => !isEditing)}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              {editingPreview ? <FiCheck size={12} /> : <FiEdit2 size={12} />}
+              {editingPreview ? 'Xong' : 'Sua'}
+            </button>
+          </div>
+          {editingPreview ? (
+            <textarea
+              ref={previewEditRef}
+              value={currentValue}
+              onChange={(event) => handleCurrentValueChange(event.target.value)}
+              rows={4}
+              className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 font-mono text-sm leading-relaxed text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : placeholder}
+            />
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setEditingPreview(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setEditingPreview(true);
+                }
+              }}
+              className="cursor-text rounded-md border border-transparent p-1 text-left hover:border-blue-200 hover:bg-white"
+            >
+              <RichMathText value={currentValue} className="text-base leading-relaxed text-gray-800" />
+            </div>
+          )}
         </div>
       )}
 
