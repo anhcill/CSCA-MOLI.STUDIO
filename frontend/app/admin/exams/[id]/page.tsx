@@ -288,6 +288,12 @@ export default function AdminExamDetailPage() {
     // Saving states
     const [savingQuestionId, setSavingQuestionId] = useState<number | null>(null);
     const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [pendingDeleteItem, setPendingDeleteItem] = useState<
+        | { type: 'question'; questionId: number }
+        | { type: 'group'; group: SavedQuestionGroup }
+        | null
+    >(null);
+    const [deleteItemError, setDeleteItemError] = useState('');
     const [showDeleteExamConfirm, setShowDeleteExamConfirm] = useState(false);
     const [deletingExam, setDeletingExam] = useState(false);
     const [deleteExamError, setDeleteExamError] = useState('');
@@ -649,42 +655,53 @@ export default function AdminExamDetailPage() {
         }
     };
 
-    const handleDeleteGroup = async (group: SavedQuestionGroup) => {
-        if (!exam) return;
-        if (!confirm('Xóa toàn bộ nhóm câu hỏi này?')) return;
-
-        try {
-            setDeletingId(group.id);
-            if (group.question_type === 'fill_blank_pool') {
-                await examAdminApi.deleteFillBlankGroup(exam.id, group.id);
-            } else {
-                await examAdminApi.deleteReadingPassageGroup(exam.id, group.id);
-            }
-            await loadExam();
-        } catch (error: any) {
-            alert('Lỗi xóa nhóm câu hỏi: ' + (error.response?.data?.message || error.message));
-        } finally {
-            setDeletingId(null);
-        }
+    const handleDeleteGroup = (group: SavedQuestionGroup) => {
+        setDeleteItemError('');
+        setPendingDeleteItem({ type: 'group', group });
     };
 
-    const handleDeleteQuestion = async (questionId: number) => {
-        if (!confirm('Xóa câu hỏi này?')) return;
+    const handleDeleteQuestion = (questionId: number) => {
+        setDeleteItemError('');
+        setPendingDeleteItem({ type: 'question', questionId });
+    };
+
+    const confirmDeleteItem = async () => {
+        if (!pendingDeleteItem || deletingId !== null) return;
+
         try {
-            setDeletingId(questionId);
-            await examAdminApi.deleteQuestion(questionId);
-            const updated = savedQuestions.filter(q => isPendingQuestion(q) || q.id !== questionId);
-            setSavedQuestions(updated);
-            setLocalQuestions(updated);
-            if (exam) setExam({ ...exam, total_questions: exam.total_questions - 1 });
+            setDeleteItemError('');
+
+            if (pendingDeleteItem.type === 'group') {
+                if (!exam) return;
+
+                const group = pendingDeleteItem.group;
+                setDeletingId(group.id);
+                if (group.question_type === 'fill_blank_pool') {
+                    await examAdminApi.deleteFillBlankGroup(exam.id, group.id);
+                } else {
+                    await examAdminApi.deleteReadingPassageGroup(exam.id, group.id);
+                }
+                await loadExam();
+            } else {
+                const questionId = pendingDeleteItem.questionId;
+                setDeletingId(questionId);
+                await examAdminApi.deleteQuestion(questionId);
+                const updated = savedQuestions.filter(q => isPendingQuestion(q) || q.id !== questionId);
+                setSavedQuestions(updated);
+                setLocalQuestions(updated);
+                if (exam) setExam({ ...exam, total_questions: exam.total_questions - 1 });
+            }
+
+            setPendingDeleteItem(null);
         } catch (error: any) {
-            alert('Lỗi xóa câu hỏi: ' + (error.response?.data?.message || ''));
+            setDeleteItemError(error.response?.data?.message || error.message || 'Xóa thất bại.');
         } finally {
             setDeletingId(null);
         }
     };
 
     const [showConfirmExit, setShowConfirmExit] = useState(false);
+    const [navigateAfterExit, setNavigateAfterExit] = useState(false);
 
     // ── Toggle edit mode ──────────────────────────────────────────────────────
     const enterEditMode = () => {
@@ -693,10 +710,12 @@ export default function AdminExamDetailPage() {
     };
 
     const exitEditMode = () => {
+        setNavigateAfterExit(false);
         setShowConfirmExit(true);
     };
 
     const handleConfirmExit = () => {
+        const shouldNavigate = navigateAfterExit;
         setEditMode('view');
         setLocalQuestions([...savedQuestions]);
         setEditingQuestionId(null);
@@ -704,6 +723,25 @@ export default function AdminExamDetailPage() {
         setAddingAfterId(null);
         setQuickAddPosition(null);
         setShowConfirmExit(false);
+        setNavigateAfterExit(false);
+        if (shouldNavigate) {
+            router.push('/admin/exams');
+        }
+    };
+
+    const closeConfirmExit = () => {
+        setShowConfirmExit(false);
+        setNavigateAfterExit(false);
+    };
+
+    const handleBackToExams = () => {
+        if (editMode === 'edit') {
+            setNavigateAfterExit(true);
+            setShowConfirmExit(true);
+            return;
+        }
+
+        router.push('/admin/exams');
     };
 
     // ── Toggle exam settings ──────────────────────────────────────────────────
@@ -713,16 +751,6 @@ export default function AdminExamDetailPage() {
             if (exam) setExam({ ...exam, status });
         } catch {
             alert('Lỗi đổi trạng thái');
-        }
-    };
-
-    const handleDeleteExam = async () => {
-        if (!confirm(`Xóa đề thi "${exam?.title}"? Hành động này không thể hoàn tác!`)) return;
-        try {
-            await examAdminApi.deleteExam(Number(id));
-            router.push('/admin/exams');
-        } catch (error: any) {
-            alert('Lỗi xóa đề thi: ' + (error.response?.data?.message || ''));
         }
     };
 
@@ -881,15 +909,7 @@ export default function AdminExamDetailPage() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => {
-                                    if (editMode === 'edit') {
-                                        if (confirm('Bạn đang trong chế độ sửa. Thoát sẽ làm mất các thay đổi chưa lưu. Vẫn thoát?')) {
-                                            router.push('/admin/exams');
-                                        }
-                                    } else {
-                                        router.push('/admin/exams');
-                                    }
-                                }}
+                                onClick={handleBackToExams}
                                 className="text-gray-500 hover:text-gray-800 transition-colors"
                             >
                                 <FiChevronLeft size={22} />
@@ -1811,6 +1831,52 @@ export default function AdminExamDetailPage() {
                 )}
             </main>
 
+            {/* Delete question/group modal */}
+            {pendingDeleteItem && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+                    onClick={(event) => {
+                        if (deletingId === null && event.target === event.currentTarget) {
+                            setPendingDeleteItem(null);
+                        }
+                    }}
+                >
+                    <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-900">
+                            {pendingDeleteItem.type === 'group' ? 'Xóa nhóm câu hỏi?' : 'Xóa câu hỏi?'}
+                        </h3>
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            {pendingDeleteItem.type === 'group'
+                                ? 'Toàn bộ câu con trong nhóm này sẽ bị xóa khỏi đề.'
+                                : 'Câu hỏi này sẽ bị xóa khỏi đề.'}
+                        </p>
+                        {deleteItemError && (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {deleteItemError}
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPendingDeleteItem(null)}
+                                disabled={deletingId !== null}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDeleteItem}
+                                disabled={deletingId !== null}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {deletingId !== null ? 'Đang xóa...' : 'Xóa'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Delete exam modal */}
             {showDeleteExamConfirm && (
                 <div
@@ -1857,7 +1923,7 @@ export default function AdminExamDetailPage() {
             {showConfirmExit && (
                 <div
                     className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
-                    onClick={(e) => { if (e.target === e.currentTarget) setShowConfirmExit(false); }}
+                    onClick={(e) => { if (e.target === e.currentTarget) closeConfirmExit(); }}
                 >
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-gray-900 mb-2">Thoát chế độ sửa?</h3>
@@ -1867,7 +1933,7 @@ export default function AdminExamDetailPage() {
                         <div className="flex gap-3 justify-end">
                             <button
                                 type="button"
-                                onClick={() => setShowConfirmExit(false)}
+                                onClick={closeConfirmExit}
                                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
                             >
                                 Hủy
