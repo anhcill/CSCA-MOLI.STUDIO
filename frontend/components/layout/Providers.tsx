@@ -5,6 +5,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import AuthSessionSync from '@/components/auth/AuthSessionSync';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LanguageProvider } from '@/context/LanguageContext';
+import ConsoleNotice from '@/components/common/ConsoleNotice';
 import { getGoogleOAuthClientId, isGoogleOAuthConfigured } from '@/lib/utils/googleOAuth';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         <GoogleOAuthProvider clientId={clientId}>
             <ThemeProvider>
                 <LanguageProvider>
+                    <ConsoleNotice />
                     <AuthSessionSync />
                     {children}
                 </LanguageProvider>
