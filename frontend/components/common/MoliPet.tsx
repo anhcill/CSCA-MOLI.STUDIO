@@ -660,13 +660,17 @@ function PetFace({
   mood,
   walking = false,
   facing = 'right',
+  waving = false,
 }: {
   color: PetColor;
   variant: PetVariant;
   mood: PetMood;
   walking?: boolean;
   facing?: PetPosition;
+  waving?: boolean;
 }) {
+  const waveSideClass = facing === 'left' ? 'left-1' : 'right-1';
+
   if (variant !== 'cat') {
     return (
       <div className="relative h-20 w-20">
@@ -674,6 +678,7 @@ function PetFace({
           <Lottie animationData={sparkleAnimation} loop autoplay />
         </div>
         <MolyPlushPet variant={variant} walking={walking} facing={facing} />
+        {waving && <WavePaw sideClass={waveSideClass} />}
       </div>
     );
   }
@@ -684,7 +689,23 @@ function PetFace({
         <Lottie animationData={sparkleAnimation} loop autoplay />
       </div>
       <MolyThreeCat color={color} variant={variant} mood={mood} walking={walking} facing={facing} />
+      {waving && <WavePaw sideClass={waveSideClass} />}
     </div>
+  );
+}
+
+function WavePaw({ sideClass }: { sideClass: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`moli-wave-paw pointer-events-none absolute top-8 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-cyan-100 shadow-[0_8px_18px_rgba(14,165,233,0.28)] ${sideClass}`}
+    >
+      <span className="relative h-3.5 w-3.5 rounded-full bg-white">
+        <span className="absolute -top-1 left-0.5 h-1.5 w-1.5 rounded-full bg-white" />
+        <span className="absolute -top-1 left-2 h-1.5 w-1.5 rounded-full bg-white" />
+        <span className="absolute left-1 top-1.5 h-1.5 w-2 rounded-full bg-cyan-300/80" />
+      </span>
+    </span>
   );
 }
 
@@ -814,6 +835,9 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const userName = getFirstName(user?.display_name || user?.full_name || user?.username);
   const routeHint = useMemo(() => getRouteHint(pathname), [pathname]);
   const studyContext = useMemo(() => getStudyContext(pathname), [pathname]);
+  const isVocabularyRoute = pathname?.includes('tu-vung') ?? false;
+  const petMood = isVocabularyRoute ? 'happy' : settings.mood;
+  const showHintBubble = settings.showBubble && !open && !isVocabularyRoute;
 
   useEffect(() => {
     const nextSettings = readSettings(defaultPosition);
@@ -1127,10 +1151,17 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
           50% { transform: scaleX(var(--moli-dir, 1)) translateY(-1px) rotate(-1deg); }
           75% { transform: scaleX(var(--moli-dir, 1)) translateY(-6px) rotate(2deg); }
         }
+        @keyframes moli-wave-paw {
+          0%, 100% { transform: rotate(-12deg) translateY(0); }
+          25% { transform: rotate(18deg) translateY(-2px); }
+          50% { transform: rotate(-18deg) translateY(0); }
+          75% { transform: rotate(16deg) translateY(-2px); }
+        }
         .moli-float { animation: moli-float 3.2s ease-in-out infinite; transform-origin: center bottom; }
         .moli-walking { animation: moli-walk-bob .52s ease-in-out infinite; }
         .moli-plush-shell { animation: moli-plush-float 3s ease-in-out infinite; transform-origin: center bottom; }
         .moli-plush-walking { animation: moli-plush-walk .52s ease-in-out infinite; }
+        .moli-wave-paw { animation: moli-wave-paw 1.18s ease-in-out infinite; transform-origin: 50% 100%; }
         .moli-shadow { animation: moli-shadow 3.2s ease-in-out infinite; }
         .moli-blink { animation: moli-blink 5.2s ease-in-out infinite; transform-origin: center; }
         .moli-ear-left { animation: moli-ear-left 4s ease-in-out infinite; transform-origin: bottom center; }
@@ -1144,7 +1175,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         .moli-walking .moli-hand-left { animation-duration: .52s; }
         .moli-walking .moli-hand-right { animation-duration: .52s; animation-direction: reverse; }
         @media (prefers-reduced-motion: reduce) {
-          .moli-float, .moli-plush-shell, .moli-shadow, .moli-blink, .moli-ear-left, .moli-ear-right, .moli-hand-left, .moli-hand-right, .moli-tail, .moli-body, .moli-foot-left, .moli-foot-right {
+          .moli-float, .moli-plush-shell, .moli-shadow, .moli-blink, .moli-ear-left, .moli-ear-right, .moli-hand-left, .moli-hand-right, .moli-tail, .moli-body, .moli-foot-left, .moli-foot-right, .moli-wave-paw {
             animation: none;
           }
         }
@@ -1156,7 +1187,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         >
           <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
             <div className="flex min-w-0 items-center gap-3">
-              <PetFace color={settings.color} variant={settings.variant} mood={settings.mood} />
+              <PetFace color={settings.color} variant={settings.variant} mood={petMood} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-black">{settings.name}</p>
                 <p className="text-xs font-medium opacity-75">{MOODS[settings.mood].hint}</p>
@@ -1316,7 +1347,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         </section>
       )}
 
-      {settings.showBubble && !open && (
+      {showHintBubble && (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -1355,7 +1386,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
           title="Keo de di chuyen, bam de mo"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
-          <PetFace color={settings.color} variant={settings.variant} mood={settings.mood} walking={walking} facing={facing} />
+          <PetFace color={settings.color} variant={settings.variant} mood={petMood} walking={walking} facing={facing} waving={isVocabularyRoute && !open} />
           <span className={`absolute -right-1 top-1 flex h-8 w-8 items-center justify-center rounded-2xl text-white shadow-lg ${theme.button}`}>
             <FiMessageCircle size={16} />
           </span>
