@@ -11,6 +11,29 @@ const coinService = require('../services/coinService');
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
+const TIER_RANK = { basic: 0, vip: 1, premium: 2 };
+
+function normalizeTier(value) {
+  const tier = String(value || '').trim().toLowerCase();
+  if (tier === 'premium' || tier === 'pre') return 'premium';
+  if (tier === 'vip') return 'vip';
+  return 'basic';
+}
+
+function isActiveVipLike(user) {
+  if (!user) return false;
+  const userTier = normalizeTier(user.subscription_tier);
+  const hasTier = user.is_vip === true || userTier === 'vip' || userTier === 'premium';
+  const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
+  return hasTier && notExpired;
+}
+
+function getActiveTier(user) {
+  if (!isActiveVipLike(user)) return 'basic';
+  const userTier = normalizeTier(user.subscription_tier);
+  if (userTier !== 'basic') return userTier;
+  return user?.is_vip ? 'vip' : 'basic';
+}
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
 const rateLimitMap = new Map();
@@ -661,17 +684,24 @@ router.post('/create', authenticate, async (req, res) => {
     }
 
     const pkg = pkgRes.rows[0];
+    const normalizedPackageTier = normalizeTier(pkg.tier || 'vip');
+    const tier = normalizedPackageTier === 'basic' ? 'vip' : normalizedPackageTier;
 
-    // Kiểm tra xem người dùng có VIP vĩnh viễn chưa
+    // Block payment for an active same-tier or lower-tier package.
     const userCheck = await db.query(
-      `SELECT is_vip, vip_expires_at, COALESCE(coins, 0) AS coins FROM users WHERE id = $1`,
+      `SELECT is_vip, vip_expires_at, subscription_tier, COALESCE(coins, 0) AS coins FROM users WHERE id = $1`,
       [userId]
     );
     const user = userCheck.rows[0];
-    if (user && user.is_vip && user.vip_expires_at === null) {
-      return res.status(400).json({
+    const activeTier = getActiveTier(user);
+    if (TIER_RANK[activeTier] >= TIER_RANK[tier]) {
+      return res.status(409).json({
         success: false,
-        message: 'Bạn đã có VIP vĩnh viễn, không cần đăng ký thêm.',
+        code: 'PACKAGE_ALREADY_ACTIVE',
+        message: activeTier === 'premium'
+          ? 'Bạn đang có gói Pre đang hoạt động, không cần mua thêm gói này.'
+          : 'Bạn đang có gói VIP đang hoạt động, không cần mua thêm gói VIP.',
+        currentTier: activeTier,
       });
     }
 
@@ -680,7 +710,6 @@ router.post('/create', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Giá gói không hợp lệ.' });
     }
 
-    const tier = pkg.tier || 'vip';
     const orderId = `CSCA${userId}T${Date.now()}`;
 
     let finalAmount = Number(pkg.price);

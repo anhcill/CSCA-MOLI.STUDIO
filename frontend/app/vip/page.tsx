@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { getVipDisplay } from '@/lib/utils/permissions';
+import { getVipDisplay, type TierLevel } from '@/lib/utils/permissions';
 import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
 import { FiArrowLeft, FiLoader, FiTag, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
@@ -42,6 +42,8 @@ interface Discount {
   package_id: number;
 }
 
+const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
+
 function deriveColor(pkg: VipPackage) {
   const isPre = isPrePackage(pkg);
   if (isPre) {
@@ -65,6 +67,17 @@ function isFreePackage(pkg: VipPackage) {
 
 function isPrePackage(pkg: VipPackage) {
   return pkg.tier === 'premium' || pkg.tier === 'pre' || /pre|premium/i.test(pkg.name);
+}
+
+function getPackageTier(pkg: VipPackage): TierLevel {
+  if (isFreePackage(pkg)) return 'basic';
+  if (isPrePackage(pkg)) return 'premium';
+  return 'vip';
+}
+
+function isPackageCovered(pkg: VipPackage, userTier: TierLevel) {
+  const packageTier = getPackageTier(pkg);
+  return packageTier !== 'basic' && TIER_RANK[userTier] >= TIER_RANK[packageTier];
 }
 
 function getPackageDisplayName(pkg: VipPackage) {
@@ -109,6 +122,10 @@ export default function VipPricingPage() {
   const handleCheckout = (pkg: VipPackage) => {
     if (!isAuthenticated) {
       router.push('/login?redirect=/vip');
+      return;
+    }
+    const activeTier = user ? getVipDisplay(user).tier : 'basic';
+    if (isPackageCovered(pkg, activeTier)) {
       return;
     }
     const params = new URLSearchParams({ package_id: String(pkg.id) });
@@ -306,6 +323,7 @@ export default function VipPricingPage() {
                       freePkgs.map(pkg => (
                         <PlanCard
                           key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          userTier={userTier}
                           onCheckout={handleCheckout}
                           discount={null}
                           onApplyCoupon={handleApplyCoupon}
@@ -374,6 +392,7 @@ export default function VipPricingPage() {
                       return (
                         <PlanCard
                           key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          userTier={userTier}
                           onCheckout={handleCheckout}
                           discount={discount}
                           onApplyCoupon={handleApplyCoupon}
@@ -390,6 +409,7 @@ export default function VipPricingPage() {
                       return (
                         <PlanCard
                           key={pkg.id} pkg={pkg} isVip={!!isVip}
+                          userTier={userTier}
                           onCheckout={handleCheckout}
                           discount={discount}
                           onApplyCoupon={handleApplyCoupon}
@@ -489,9 +509,10 @@ export default function VipPricingPage() {
   );
 }
 
-function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg, onSelectPkg }: {
+function PlanCard({ pkg, isVip, userTier, onCheckout, discount, onApplyCoupon, selectedPkg, onSelectPkg }: {
   pkg: VipPackage;
   isVip: boolean;
+  userTier: TierLevel;
   onCheckout: (p: VipPackage) => void;
   discount?: Discount | null;
   onApplyCoupon?: (p: VipPackage) => void;
@@ -501,6 +522,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
   const colors = deriveColor(pkg);
   const isPre = isPrePackage(pkg);
   const isFree = isFreePackage(pkg);
+  const packageCovered = isPackageCovered(pkg, userTier);
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');
@@ -633,9 +655,12 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
         </div>
 
         <button
-          onClick={(e) => { e.stopPropagation(); onCheckout(pkg); }}
+          onClick={(e) => { e.stopPropagation(); if (!packageCovered) onCheckout(pkg); }}
+          disabled={packageCovered}
           className={`w-full mt-auto py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
-            ${isPre
+            ${packageCovered
+              ? 'bg-gray-300 cursor-not-allowed shadow-none'
+              : isPre
               ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
               : isFree
               ? 'bg-gradient-to-r from-gray-400 to-slate-500 hover:from-gray-500 hover:to-slate-600'
@@ -643,6 +668,7 @@ function PlanCard({ pkg, isVip, onCheckout, discount, onApplyCoupon, selectedPkg
             }`}
         >
           {isFree ? 'Miễn phí'
+            : packageCovered ? 'Đã có gói này'
             : !isVip ? 'Nâng cấp ngay'
             : isPre ? 'Nâng cấp lên Pre'
             : 'Gia hạn ngay'}

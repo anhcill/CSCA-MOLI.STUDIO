@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import axios from '@/lib/utils/axios';
 import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
+import { getTierLevel, type TierLevel } from '@/lib/utils/permissions';
 import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy, FaCheckCircle } from 'react-icons/fa';
 import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
 
@@ -18,7 +19,7 @@ interface DbPackage {
   features: string[];
 }
 
-function derivePackageUI(pkg: DbPackage) {
+function derivePackageUI(pkg: DbPackage): { tier: Exclude<TierLevel, 'basic'>; color: string } {
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   return {
     tier: isPre ? 'premium' : 'vip',
@@ -47,6 +48,7 @@ const PAYMENT_METHODS = [
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
+const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
 
 // ── QR Payment Screen ──────────────────────────────────────────────────────────
 function BankTransferScreen({
@@ -296,15 +298,15 @@ function CheckoutContent() {
         const pkgs: DbPackage[] = res.data.data || [];
 
         // Ẩn gói mà user đã có (hoặc cấp thấp hơn cấp hiện tại)
-        const userTier = user?.subscription_tier;
+        const userTier = getTierLevel(user);
         const filteredPkgs = pkgs.filter(pkg => {
           if (userTier === 'premium') {
             // Premium không thấy gói premium và vip
-            return pkg.tier !== 'premium' && pkg.tier !== 'vip';
+            return TIER_RANK[userTier] < TIER_RANK[derivePackageUI(pkg).tier];
           }
           if (userTier === 'vip') {
             // VIP không thấy gói vip (nhưng vẫn thấy premium)
-            return pkg.tier !== 'vip';
+            return TIER_RANK[userTier] < TIER_RANK[derivePackageUI(pkg).tier];
           }
           return true;
         });
@@ -312,7 +314,14 @@ function CheckoutContent() {
         setAllPackages(filteredPkgs);
         if (urlPackageId) {
           const found = filteredPkgs.find(p => p.id === parseInt(urlPackageId));
-          if (found) setSelectedPkg(found);
+          const fallback = filteredPkgs[0] || null;
+          setSelectedPkg(found || fallback);
+          if (!found) {
+            setError('Tài khoản của bạn đã có gói này hoặc gói cao hơn.');
+            if (!fallback) router.push('/vip');
+          } else {
+            setError('');
+          }
         } else if (filteredPkgs.length > 0) {
           setSelectedPkg(filteredPkgs[0]);
         } else {
@@ -323,7 +332,7 @@ function CheckoutContent() {
       .catch(() => setAllPackages([]))
       .finally(() => setPkgLoading(false));
     if (urlMethod) setSelectedMethod(urlMethod);
-  }, [isAuthenticated, urlPackageId, urlMethod, router, user?.subscription_tier]);
+  }, [isAuthenticated, urlPackageId, urlMethod, router, user?.is_vip, user?.subscription_tier, user?.vip_expires_at]);
 
   const userCoins = Math.max(0, Number(user?.coins || 0));
   const baseAmount = selectedPkg ? Number(selectedPkg.price) : 0;
@@ -353,6 +362,14 @@ function CheckoutContent() {
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
     if (couponMismatchError) { setError(couponMismatchError); return; }
+    const currentTier = getTierLevel(user);
+    const selectedTier = derivePackageUI(selectedPkg).tier;
+    if (TIER_RANK[currentTier] >= TIER_RANK[selectedTier]) {
+      setError(currentTier === 'premium'
+        ? 'Bạn đang có gói Pre đang hoạt động, không cần mua thêm gói này.'
+        : 'Bạn đang có gói VIP đang hoạt động, không cần mua thêm gói VIP.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -422,6 +439,10 @@ function CheckoutContent() {
       </div>
     );
   }
+
+  const currentTier = getTierLevel(user);
+  const selectedTier: TierLevel = selectedPkg ? derivePackageUI(selectedPkg).tier : 'basic';
+  const currentTierCoversSelectedPkg = selectedPkg ? TIER_RANK[currentTier] >= TIER_RANK[selectedTier] : false;
 
   // ── SELECT SCREEN ──
   return (
@@ -694,12 +715,14 @@ function CheckoutContent() {
       <div className="space-y-3">
         <button
           onClick={handleProceed}
-          disabled={!selectedPkg || loading}
+          disabled={!selectedPkg || loading || currentTierCoversSelectedPkg}
           className={`w-full flex flex-wrap items-center justify-center gap-2 px-5 py-4 sm:gap-3 sm:px-8 rounded-2xl text-white font-black text-base sm:text-lg shadow-2xl transition-all
-            ${!selectedPkg || loading ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl hover:shadow-indigo-200 active:scale-[0.99]'}`}
+            ${!selectedPkg || loading || currentTierCoversSelectedPkg ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl hover:shadow-indigo-200 active:scale-[0.99]'}`}
         >
           {loading ? (
             <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
+          ) : currentTierCoversSelectedPkg ? (
+            'Gói này đã được kích hoạt'
           ) : selectedPkg ? (
             <>
               <span>{`${payableAmount.toLocaleString('vi-VN')}đ`}</span>
