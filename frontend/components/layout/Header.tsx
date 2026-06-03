@@ -31,6 +31,7 @@ import NotificationBell from './NotificationBell';
 import MessageBadge from './MessageBadge';
 import DailyQuestsBtn from './DailyQuestsBtn';
 import ThemeToggle from './ThemeToggle';
+import DailyQuestBanner from './DailyQuestBanner';
 
 const COURSE_ITEMS = [
   { id: 'math', labelKey: 'subject.math', href: '/mon/toan' },
@@ -103,6 +104,7 @@ export default function Header() {
     }`;
 
   return (
+    <>
     <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'}`}>
       <div className="container mx-auto overflow-visible px-4 md:px-6">
         {/* Top Row: Logo, Nav, Search, Actions */}
@@ -437,5 +439,7 @@ export default function Header() {
         </div>
       </div>
     </header>
+    <DailyQuestBanner />
+    </>
   );
 }

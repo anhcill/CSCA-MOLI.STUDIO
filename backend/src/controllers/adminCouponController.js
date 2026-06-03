@@ -5,6 +5,10 @@ const PROMOTION_THEMES = new Set(['gold', 'violet', 'emerald', 'rose', 'blue']);
 
 function normalizeOptionalDate(value) {
   if (!value) return null;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) && !/[zZ]|[+-]\d{2}:\d{2}$/.test(value)) {
+    const date = new Date(`${value}:00+07:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -172,8 +176,8 @@ const AdminCouponController = {
           min_order_amount || 0,
           max_uses || null,
           user_limit || 1,
-          valid_from ? new Date(valid_from) : null,
-          valid_until ? new Date(valid_until) : null,
+          normalizeOptionalDate(valid_from),
+          normalizeOptionalDate(valid_until),
           is_active !== false,
           applicable_packages || null,
           applicable_tiers || ['all'],
@@ -238,8 +242,8 @@ const AdminCouponController = {
         min_order_amount: { sql: `min_order_amount = $${idx++}`, val: min_order_amount != null ? Number(min_order_amount) : null },
         max_uses: { sql: `max_uses = $${idx++}`, val: max_uses != null ? Number(max_uses) : null },
         user_limit: { sql: `user_limit = $${idx++}`, val: user_limit != null ? Number(user_limit) : null },
-        valid_from: { sql: `valid_from = $${idx++}`, val: valid_from ? new Date(valid_from) : null },
-        valid_until: { sql: `valid_until = $${idx++}`, val: valid_until ? new Date(valid_until) : null },
+        valid_from: { sql: `valid_from = $${idx++}`, val: normalizeOptionalDate(valid_from) },
+        valid_until: { sql: `valid_until = $${idx++}`, val: normalizeOptionalDate(valid_until) },
         is_active: { sql: `is_active = $${idx++}`, val: typeof is_active === 'boolean' ? is_active : undefined },
         applicable_packages: { sql: `applicable_packages = $${idx++}`, val: normalizedPackages },
         applicable_tiers: { sql: `applicable_tiers = $${idx++}`, val: normalizedTiers },

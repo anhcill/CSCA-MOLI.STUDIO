@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Banner from '@/components/layout/Banner';
 import Header from '@/components/layout/Header';
 import HomeContent from '@/components/layout/HomeContent';
-import DailyQuestBanner from '@/components/layout/DailyQuestBanner';
 
 export const metadata: Metadata = {
   title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
@@ -29,8 +28,6 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
-      {/* Daily Quests Banner */}
-      <DailyQuestBanner />
       {/* Hero Banner — full width, no padding */}
       <Banner />
       {/* All homepage sections */}
