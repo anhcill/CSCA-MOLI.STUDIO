@@ -1,6 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import { memo } from 'react';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkMath from 'remark-math';
@@ -58,7 +59,7 @@ function autoWrapLooseMathLines(text: string) {
   return out.join('\n');
 }
 
-export default function RichMathText({ value, className = '' }: RichMathTextProps) {
+function RichMathText({ value, className = '' }: RichMathTextProps) {
   if (!value) return null;
 
   const markdown = normalizeMathDelimiters(value);
@@ -87,3 +88,5 @@ export default function RichMathText({ value, className = '' }: RichMathTextProp
     </div>
   );
 }
+
+export default memo(RichMathText);

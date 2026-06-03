@@ -18,6 +18,7 @@ interface MathInputProps {
   cnPlaceholder?: string;
   defaultTab?: 'vi' | 'cn';
   showInlinePreview?: boolean;
+  commitDelayMs?: number;
 }
 
 const PRESET_TEMPLATES = [
@@ -145,19 +146,103 @@ export default function MathInput({
   cnPlaceholder,
   defaultTab = 'vi',
   showInlinePreview = true,
+  commitDelayMs = 0,
 }: MathInputProps) {
   const [showMath, setShowMath] = useState(false);
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
   const [editingPreview, setEditingPreview] = useState(false);
+  const [draftValue, setDraftValue] = useState(value || '');
+  const [draftCnValue, setDraftCnValue] = useState(cnValue || '');
   const mathRef = useRef<HTMLTextAreaElement>(null);
   const previewEditRef = useRef<HTMLTextAreaElement>(null);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDraftRef = useRef({ vi: value || '', cn: cnValue || '' });
+  const lastCommittedRef = useRef({ vi: value || '', cn: cnValue || '' });
+  const dirtyDraftRef = useRef({ vi: false, cn: false });
+  const onChangeRef = useRef(onChange);
+  const onCnChangeRef = useRef(onCnChange);
 
-  const currentValue = tab === 'vi' ? value : (cnValue || '');
-  const setCurrentValue = tab === 'vi'
-    ? onChange
-    : (onCnChange || (() => {}));
+  const currentValue = tab === 'vi' ? draftValue : draftCnValue;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onCnChangeRef.current = onCnChange;
+  }, [onChange, onCnChange]);
+
+  useEffect(() => {
+    const nextValue = value || '';
+    lastCommittedRef.current.vi = nextValue;
+    if (!dirtyDraftRef.current.vi || latestDraftRef.current.vi === nextValue) {
+      dirtyDraftRef.current.vi = false;
+      latestDraftRef.current.vi = nextValue;
+      setDraftValue(nextValue);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const nextValue = cnValue || '';
+    lastCommittedRef.current.cn = nextValue;
+    if (!dirtyDraftRef.current.cn || latestDraftRef.current.cn === nextValue) {
+      dirtyDraftRef.current.cn = false;
+      latestDraftRef.current.cn = nextValue;
+      setDraftCnValue(nextValue);
+    }
+  }, [cnValue]);
+
+  const clearCommitTimer = () => {
+    if (commitTimerRef.current) {
+      clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+  };
+
+  const commitDraftValue = (targetTab: 'vi' | 'cn', nextValue = latestDraftRef.current[targetTab]) => {
+    if (lastCommittedRef.current[targetTab] === nextValue) {
+      dirtyDraftRef.current[targetTab] = false;
+      return;
+    }
+    lastCommittedRef.current[targetTab] = nextValue;
+    dirtyDraftRef.current[targetTab] = false;
+    if (targetTab === 'vi') {
+      onChangeRef.current(nextValue);
+    } else {
+      onCnChangeRef.current?.(nextValue);
+    }
+  };
+
+  const scheduleCommit = (targetTab: 'vi' | 'cn', nextValue: string) => {
+    latestDraftRef.current[targetTab] = nextValue;
+    dirtyDraftRef.current[targetTab] = true;
+    clearCommitTimer();
+    if (commitDelayMs <= 0) {
+      commitDraftValue(targetTab, nextValue);
+      return;
+    }
+    commitTimerRef.current = setTimeout(() => {
+      commitDraftValue(targetTab, nextValue);
+      commitTimerRef.current = null;
+    }, commitDelayMs);
+  };
+
+  const flushCurrentDraft = () => {
+    clearCommitTimer();
+    commitDraftValue(tab);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearCommitTimer();
+      const latestDraft = latestDraftRef.current;
+      if (lastCommittedRef.current.vi !== latestDraft.vi) {
+        onChangeRef.current(latestDraft.vi);
+      }
+      if (lastCommittedRef.current.cn !== latestDraft.cn) {
+        onCnChangeRef.current?.(latestDraft.cn);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (cnLabel && defaultTab === 'cn') {
@@ -189,19 +274,34 @@ export default function MathInput({
   const handleInsertPreset = (formula: string) => {
     const wrapped = displayMath(formula);
     const newVal = currentValue ? `${currentValue} ${wrapped}` : wrapped;
-    setCurrentValue(newVal);
+    if (tab === 'vi') {
+      setDraftValue(newVal);
+    } else {
+      setDraftCnValue(newVal);
+    }
+    scheduleCommit(tab, newVal);
   };
 
   const handleInsertCustom = () => {
     if (!mathInput.trim()) return;
     const newVal = insertMathIntoText(currentValue, mathInput);
-    setCurrentValue(newVal);
+    if (tab === 'vi') {
+      setDraftValue(newVal);
+    } else {
+      setDraftCnValue(newVal);
+    }
+    scheduleCommit(tab, newVal);
     setMathInput('');
     setShowMath(false);
   };
 
   const handleCurrentValueChange = (nextValue: string) => {
-    setCurrentValue(nextValue);
+    if (tab === 'vi') {
+      setDraftValue(nextValue);
+    } else {
+      setDraftCnValue(nextValue);
+    }
+    scheduleCommit(tab, nextValue);
   };
 
   const handleRawInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -209,7 +309,14 @@ export default function MathInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          flushCurrentDraft();
+        }
+      }}
+    >
       {(label || (tab === 'cn' && cnLabel)) && (
         <label className="block text-sm font-medium text-gray-700">
           {tab === 'cn' && cnLabel ? cnLabel : label}
@@ -220,7 +327,10 @@ export default function MathInput({
         <div className="flex gap-2 mb-1">
           <button
             type="button"
-            onClick={() => setTab('vi')}
+            onClick={() => {
+              flushCurrentDraft();
+              setTab('vi');
+            }}
             className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${
               tab === 'vi'
                 ? 'bg-blue-600 text-white'
@@ -231,7 +341,10 @@ export default function MathInput({
           </button>
           <button
             type="button"
-            onClick={() => setTab('cn')}
+            onClick={() => {
+              flushCurrentDraft();
+              setTab('cn');
+            }}
             className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${
               tab === 'cn'
                 ? 'bg-red-600 text-white'

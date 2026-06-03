@@ -35,7 +35,7 @@ const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
 
 function MathInput(props: ComponentProps<typeof BaseMathInput>) {
-  return <BaseMathInput {...props} showInlinePreview={false} />;
+  return <BaseMathInput {...props} commitDelayMs={350} />;
 }
 
 function ImageUrlEditor({

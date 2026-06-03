@@ -248,6 +248,12 @@ export default function AdminExamDetailPage() {
     const { id } = useParams();
     const router = useRouter();
     const { user, isAuthenticated } = useAuthStore();
+    const authPermissionKey = [
+        user?.id || '',
+        user?.role || '',
+        (user?.roles || []).join(','),
+        (user?.permissions || []).join(','),
+    ].join('|');
 
     const [exam, setExam] = useState<Exam | null>(null);
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
@@ -307,7 +313,7 @@ export default function AdminExamDetailPage() {
             return;
         }
         loadExam();
-    }, [id, isAuthenticated, user]);
+    }, [id, isAuthenticated, authPermissionKey]);
 
     const loadExam = async () => {
         try {
