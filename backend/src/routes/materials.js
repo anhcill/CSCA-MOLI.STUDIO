@@ -51,6 +51,7 @@ cloudinary.config({
 });
 
 const MAX_MATERIAL_UPLOAD_MB = Number(process.env.MATERIAL_UPLOAD_MAX_MB || 100);
+const MAX_SYNC_PDF_PARSE_MB = Number(process.env.MATERIAL_SYNC_PARSE_MAX_MB || 12);
 
 // Multer: memory storage for PDF upload
 const upload = multer({
@@ -145,9 +146,19 @@ router.post(
           .status(400)
           .json({ success: false, message: "Không có file" });
 
+      const uploadOptions = {
+        folder: "csca/materials",
+        resource_type: "raw",
+        format: "pdf",
+        access_mode: "public",
+        type: "upload",
+      };
       const result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "csca/materials", resource_type: "raw", format: "pdf", access_mode: "public", type: "upload" },
+        const useLargeStream = req.file.size > 20 * 1024 * 1024 && typeof cloudinary.uploader.upload_large_stream === "function";
+        const uploadFn = useLargeStream ? cloudinary.uploader.upload_large_stream : cloudinary.uploader.upload_stream;
+        const stream = uploadFn.call(
+          cloudinary.uploader,
+          useLargeStream ? { ...uploadOptions, chunk_size: 6 * 1024 * 1024 } : uploadOptions,
           (err, r) => (err ? reject(err) : resolve(r)),
         );
         stream.end(req.file.buffer);
@@ -155,11 +166,16 @@ router.post(
 
       let webContent = null;
       let parseWarning = null;
-      try {
-        webContent = await extractPdfWebContent(req.file.buffer);
-      } catch (parseError) {
-        parseWarning = "Không chuyển được PDF sang nội dung web, vẫn giữ file PDF.";
-        console.warn("[materials] PDF content extraction failed:", parseError.message);
+      const fileSizeMb = req.file.size / (1024 * 1024);
+      if (fileSizeMb <= MAX_SYNC_PDF_PARSE_MB) {
+        try {
+          webContent = await extractPdfWebContent(req.file.buffer);
+        } catch (parseError) {
+          parseWarning = "Không chuyển được PDF sang nội dung web, vẫn giữ file PDF.";
+          console.warn("[materials] PDF content extraction failed:", parseError.message);
+        }
+      } else {
+        parseWarning = `File ${fileSizeMb.toFixed(1)}MB đã upload xong; bỏ qua chuyển PDF sang web để tránh timeout.`;
       }
 
       res.json({
@@ -169,7 +185,7 @@ router.post(
           publicId: result.public_id,
           content_text: webContent?.contentText || "",
           content_html: webContent?.contentHtml || "",
-          content_meta: webContent?.meta || {},
+          content_meta: webContent?.meta || { uploadBytes: req.file.size, skippedSyncParse: fileSizeMb > MAX_SYNC_PDF_PARSE_MB },
           content_source: webContent?.contentHtml ? "pdf_extract" : "file",
         },
         warnings: parseWarning ? [parseWarning] : [],

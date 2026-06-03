@@ -351,8 +351,8 @@ function MolyThreeCat({
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(80, 80, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));
+    renderer.setSize(96, 96, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.className = 'h-full w-full';
     mount.appendChild(renderer.domElement);
@@ -363,7 +363,9 @@ function MolyThreeCat({
     const accentMaterial = new THREE.MeshStandardMaterial({ color: palette.accent, roughness: 0.5 });
     const innerEarMaterial = new THREE.MeshStandardMaterial({ color: palette.innerEar, roughness: 0.6 });
     const cheekMaterial = new THREE.MeshStandardMaterial({ color: palette.cheek, roughness: 0.55 });
-    const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.42 });
+    const blackMaterial = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.36 });
+    const faceInkMaterial = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+    const faceWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
     const blueEyeMaterial = new THREE.MeshStandardMaterial({ color: 0x2477c7, roughness: 0.36, metalness: 0.08 });
     const mouthMaterial = new THREE.MeshStandardMaterial({ color: 0x6b1725, roughness: 0.48 });
@@ -483,14 +485,20 @@ function MolyThreeCat({
 
     const eyeScaleY = mood === 'sleepy' ? 0.18 : mood === 'happy' ? 0.72 : 1;
     const makeEye = (x: number) => {
-      const eyeSize = variant === 'bunny' ? 0.19 : 0.14;
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeSize, 24, 18), variant === 'bunny' ? blueEyeMaterial : blackMaterial);
-      eye.scale.set(variant === 'bunny' ? 1.05 : 0.9, eyeScaleY, 0.42);
-      eye.position.set(x, variant === 'bunny' ? 0.44 : 0.48, 0.9);
+      const isCat = variant === 'cat';
+      const eyeSize = variant === 'bunny' ? 0.19 : isCat ? 0.165 : 0.14;
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeSize, 28, 20), variant === 'bunny' ? blueEyeMaterial : isCat ? faceInkMaterial : blackMaterial);
+      eye.scale.set(variant === 'bunny' ? 1.05 : isCat ? 0.94 : 0.9, eyeScaleY, isCat ? 0.48 : 0.42);
+      eye.position.set(x, variant === 'bunny' ? 0.44 : isCat ? 0.49 : 0.48, isCat ? 0.94 : 0.9);
       root.add(eye);
-      const shine = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), whiteMaterial);
-      shine.position.set(x - 0.035, variant === 'bunny' ? 0.53 : 0.54, 0.98);
+      const shine = new THREE.Mesh(new THREE.SphereGeometry(isCat ? 0.05 : 0.04, 12, 8), isCat ? faceWhiteMaterial : whiteMaterial);
+      shine.position.set(x - (isCat ? 0.045 : 0.035), variant === 'bunny' ? 0.53 : isCat ? 0.565 : 0.54, isCat ? 1.06 : 0.98);
       root.add(shine);
+      if (isCat) {
+        const lowerShine = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), faceWhiteMaterial);
+        lowerShine.position.set(x + 0.045, 0.45, 1.065);
+        root.add(lowerShine);
+      }
       if (variant === 'bunny') {
         const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), blackMaterial);
         pupil.scale.set(0.9, 1, 0.24);
@@ -509,14 +517,15 @@ function MolyThreeCat({
       makeEye(0.34);
     }
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.1, 3), blackMaterial);
-    nose.position.set(0, 0.2, 1.02);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(variant === 'cat' ? 0.085 : 0.065, variant === 'cat' ? 0.12 : 0.1, 3), variant === 'cat' ? faceInkMaterial : blackMaterial);
+    nose.position.set(0, 0.2, variant === 'cat' ? 1.08 : 1.02);
     nose.rotation.z = Math.PI;
-    nose.scale.set(1, 0.8, 0.5);
+    nose.scale.set(variant === 'cat' ? 1.08 : 1, 0.8, variant === 'cat' ? 0.58 : 0.5);
     root.add(nose);
 
-    const makeLine = (x: number, y: number, z: number, length: number, angle: number, material = blackMaterial) => {
-      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, length, 8), material);
+    const makeLine = (x: number, y: number, z: number, length: number, angle: number, material: THREE.Material = blackMaterial) => {
+      const radius = variant === 'cat' ? 0.011 : 0.007;
+      const line = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), material);
       line.position.set(x, y, z);
       line.rotation.z = Math.PI / 2 + angle;
       root.add(line);
@@ -524,10 +533,10 @@ function MolyThreeCat({
     };
 
     if (variant === 'cat') {
-      [-0.12, 0.12].forEach((x) => makeLine(x, 0.11, 1.02, 0.14, x < 0 ? -0.7 : 0.7));
+      [-0.12, 0.12].forEach((x) => makeLine(x, 0.11, 1.09, 0.14, x < 0 ? -0.7 : 0.7, faceInkMaterial));
       [-0.52, 0.52].forEach((side) => {
-        makeLine(side, 0.11, 0.96, 0.36, side < 0 ? 0.12 : -0.12);
-        makeLine(side, -0.02, 0.98, 0.38, side < 0 ? -0.08 : 0.08);
+        makeLine(side, 0.11, 1.04, 0.39, side < 0 ? 0.12 : -0.12, faceInkMaterial);
+        makeLine(side, -0.02, 1.055, 0.4, side < 0 ? -0.08 : 0.08, faceInkMaterial);
       });
     } else {
       const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), mouthMaterial);

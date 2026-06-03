@@ -55,6 +55,9 @@ export default function AdminMaterialsPage() {
   // Upload states
   const [uploading, setUploading] = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadFileName, setUploadFileName] = useState('');
 
   // Filter
   const [filterCategory, setFilterCategory] = useState('');
@@ -117,12 +120,22 @@ export default function AdminMaterialsPage() {
 
     try {
       setUploading(true);
+      setUploadProgress(0);
+      setUploadFileName(file.name);
+      setUploadStatus('Đang gửi file lên server...');
       const formData = new FormData();
       formData.append('file', file);
 
       const res = await axios.post('/materials/upload-pdf', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 180000,
+        timeout: 300000,
+        onUploadProgress: (event) => {
+          const total = event.total || file.size;
+          if (!total) return;
+          const percent = Math.min(100, Math.round((event.loaded / total) * 100));
+          setUploadProgress(percent);
+          setUploadStatus(percent >= 100 ? 'Đã gửi file, đang chuyển sang kho lưu trữ...' : `Đang upload ${percent}%`);
+        },
       });
 
       setUploadedUrl(res.data.data.url);
@@ -133,10 +146,15 @@ export default function AdminMaterialsPage() {
         content_html: '',
         content_meta: res.data.data.content_meta || {},
       }));
-      alert(res.data?.message || 'Upload PDF thành công!');
-    } catch (error) {
+      setUploadProgress(100);
+      setUploadStatus('Upload xong');
+      const warnings = Array.isArray(res.data?.warnings) ? res.data.warnings.join('\n') : '';
+      alert(`${res.data?.message || 'Upload PDF thành công!'}${warnings ? `\n${warnings}` : ''}`);
+    } catch (error: any) {
       console.error('Upload error:', error);
-      alert('Lỗi khi upload PDF');
+      const message = error.response?.data?.message || error.message || 'Lỗi khi upload PDF';
+      setUploadStatus(message);
+      alert(message);
     } finally {
       setUploading(false);
     }
@@ -389,6 +407,9 @@ export default function AdminMaterialsPage() {
                       <button
                         onClick={() => {
                           setUploadedUrl('');
+                          setUploadProgress(0);
+                          setUploadStatus('');
+                          setUploadFileName('');
                           setFormData(prev => ({ ...prev, file_url: '' }));
                         }}
                         className="text-xs text-red-600 hover:underline"
@@ -407,7 +428,18 @@ export default function AdminMaterialsPage() {
                         disabled={uploading}
                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer"
                       />
-                      {uploading && <p className="text-xs text-purple-600 mt-2">Đang upload...</p>}
+                      {uploading && (
+                        <div className="mt-3 text-left">
+                          <div className="flex items-center justify-between gap-3 text-xs text-purple-700">
+                            <span className="truncate">{uploadFileName || 'Đang upload PDF...'}</span>
+                            <span className="font-semibold">{uploadProgress}%</span>
+                          </div>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-purple-100">
+                            <div className="h-full rounded-full bg-purple-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                          </div>
+                          <p className="mt-2 text-xs text-purple-600">{uploadStatus || 'Đang upload...'}</p>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
