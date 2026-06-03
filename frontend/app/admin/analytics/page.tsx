@@ -186,7 +186,7 @@ export default function AdminPerformanceAnalyticsPage() {
                   <Bar dataKey="examsCreated" name="Đề đã tạo" fill="#7c3aed" />
                   <Bar dataKey="publishedExams" name="Đề xuất bản" fill="#10b981" />
                   <Bar dataKey="deleteRequests" name="Yêu cầu xóa" fill="#f59e0b" />
-                  <Bar dataKey="softDeletedExams" name="Xóa mềm" fill="#ef4444" />
+                  <Bar dataKey="softDeletedExams" name="Xóa tạm" fill="#ef4444" />
                 </BarChart>
               </ResponsiveContainer>
             ) : <EmptyText />}
@@ -297,7 +297,7 @@ export default function AdminPerformanceAnalyticsPage() {
         </ChartCard>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <ChartCard title="Yêu cầu xóa và thùng rác mềm" icon={<FiFileText />}>
+          <ChartCard title="Yêu cầu xóa và xóa tạm" icon={<FiFileText />}>
             <div className="space-y-3">
               {performance.deletionRequests.map((item) => (
                 <div key={`${item.examId}-${item.deleteRequestedAt || item.deletedAt || 'pending'}`} className="rounded-xl border border-gray-100 p-3">
@@ -305,13 +305,13 @@ export default function AdminPerformanceAnalyticsPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-gray-900">#{item.examId} · {item.title}</p>
                       <p className="text-xs text-gray-500">
-                        {item.deletionStatus === 'requested' ? `Người yêu cầu: ${item.requestedByName || 'Không rõ'}` : `Người xóa mềm: ${item.deletedByName || 'Không rõ'}`}
+                        {item.deletionStatus === 'requested' ? `Người yêu cầu: ${item.requestedByName || 'Không rõ'}` : `Người xóa tạm: ${item.deletedByName || 'Không rõ'}`}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-black ${
                       item.deletionStatus === 'requested' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
                     }`}>
-                      {item.deletionStatus === 'requested' ? 'Chờ duyệt' : 'Đã xóa mềm'}
+                      {item.deletionStatus === 'requested' ? 'Chờ duyệt' : 'Đã xóa tạm'}
                     </span>
                   </div>
                   {(item.deleteRequestReason || item.deleteReason) && (

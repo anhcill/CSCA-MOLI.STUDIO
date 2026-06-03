@@ -217,7 +217,7 @@ export default function ExamsPage() {
     };
 
     const handleRestoreExam = async (examId: number) => {
-        if (!confirm('Khôi phục đề này khỏi thùng rác mềm?')) return;
+        if (!confirm('Khôi phục đề này khỏi danh sách xóa tạm?')) return;
         try {
             const result = await examAdminApi.restoreExam(examId);
             alert(result?.message || 'Đã khôi phục đề thi.');
@@ -362,7 +362,7 @@ export default function ExamsPage() {
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
                         ...(isSuperAdminUser ? [
                             { value: 'delete-requests' as ExamFilter, label: 'Chờ duyệt xóa', emoji: '⚠', count: examCounts.deleteRequests },
-                            { value: 'trash' as ExamFilter, label: 'Thùng rác mềm', emoji: '↩', count: examCounts.trash },
+                            { value: 'trash' as ExamFilter, label: 'Xóa tạm', emoji: '↩', count: examCounts.trash },
                         ] : []),
                     ] as { value: ExamFilter; label: string; emoji: string; count: number }[]).map(tab => (
                         <button
@@ -434,7 +434,7 @@ export default function ExamsPage() {
                                                     <div className="mt-1 text-xs font-bold text-amber-700">Chờ admin tổng duyệt xóa{exam.delete_requested_by_name ? ` - ${exam.delete_requested_by_name}` : ''}</div>
                                                 )}
                                                 {exam.deleted_at && (
-                                                    <div className="mt-1 text-xs font-bold text-red-700">Đã xóa mềm{exam.deleted_by_name ? ` - ${exam.deleted_by_name}` : ''}</div>
+                                                    <div className="mt-1 text-xs font-bold text-red-700">Đã xóa tạm{exam.deleted_by_name ? ` - ${exam.deleted_by_name}` : ''}</div>
                                                 )}
                                                 {(exam.delete_request_reason || exam.delete_reason) && (
                                                     <div className="mt-1 max-w-md truncate text-xs text-gray-500">Lý do: {exam.delete_request_reason || exam.delete_reason}</div>
@@ -531,7 +531,7 @@ export default function ExamsPage() {
                                                     <button
                                                         onClick={() => handleApproveDelete(exam.id)}
                                                         className="text-emerald-600 hover:text-emerald-800"
-                                                        title="Đồng ý xóa mềm đề"
+                                                        title="Đồng ý xóa tạm đề"
                                                     >
                                                         <FiCheck size={18} />
                                                     </button>
@@ -566,7 +566,7 @@ export default function ExamsPage() {
                                                 <button
                                                     onClick={() => handleDeleteExam(exam.id)}
                                                     className="text-red-600 hover:text-red-800"
-                                                    title="Xóa mềm hoặc gửi yêu cầu xóa"
+                                                    title="Xóa tạm hoặc gửi yêu cầu xóa"
                                                 >
                                                     <FiTrash2 size={18} />
                                                 </button>

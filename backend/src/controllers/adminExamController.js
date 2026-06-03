@@ -465,8 +465,8 @@ const AdminExamController = {
       }
 
       const exam = examResult.rows[0];
-      if (exam.deleted_at) {
-        return res.status(400).json({ message: "Đề thi này đã nằm trong thùng rác mềm." });
+      if (exam.deleted_at || exam.deletion_status === "soft_deleted") {
+        return res.status(400).json({ message: "Đề thi này đã nằm trong danh sách xóa tạm." });
       }
 
       const hasAttempts = Number(exam.attempts_count || 0) > 0;
@@ -527,7 +527,7 @@ const AdminExamController = {
       });
 
       res.json({
-        message: "Đề đã được chuyển vào thùng rác mềm. Dữ liệu câu hỏi, lượt thi và đáp án vẫn được giữ để có thể khôi phục.",
+        message: "Đề đã được chuyển vào danh sách xóa tạm. Dữ liệu câu hỏi, lượt thi và đáp án vẫn được giữ để có thể khôi phục.",
         exam: result.rows[0],
       });
     } catch (error) {
@@ -539,7 +539,7 @@ const AdminExamController = {
   async restoreExam(req, res) {
     try {
       if (!isSuperAdmin(req)) {
-        return res.status(403).json({ message: "Chỉ admin tổng được khôi phục đề đã xóa mềm." });
+        return res.status(403).json({ message: "Chỉ admin tổng được khôi phục đề đã xóa tạm." });
       }
 
       const { examId } = req.params;
@@ -582,7 +582,7 @@ const AdminExamController = {
   // Permanently delete an exam that is already in soft trash.
   async permanentDeleteExam(req, res) {
     if (!isSuperAdmin(req)) {
-      return res.status(403).json({ message: "Chỉ admin tổng được xóa vĩnh viễn đề trong thùng rác mềm." });
+      return res.status(403).json({ message: "Chỉ admin tổng được xóa vĩnh viễn đề trong danh sách xóa tạm." });
     }
 
     const { examId } = req.params;
@@ -605,9 +605,9 @@ const AdminExamController = {
       }
 
       const exam = examResult.rows[0];
-      if (!exam.deleted_at) {
+      if (!exam.deleted_at && exam.deletion_status !== "soft_deleted") {
         await client.query("ROLLBACK");
-        return res.status(400).json({ message: "Chỉ có thể xóa vĩnh viễn đề đã nằm trong thùng rác mềm." });
+        return res.status(400).json({ message: "Chỉ có thể xóa vĩnh viễn đề đã nằm trong danh sách xóa tạm." });
       }
 
       const stats = {};
@@ -717,7 +717,7 @@ const AdminExamController = {
       });
 
       return res.json({
-        message: "Đã xóa vĩnh viễn đề thi khỏi thùng rác mềm.",
+        message: "Đã xóa vĩnh viễn đề thi khỏi danh sách xóa tạm.",
         exam: deletedExam.rows[0],
         deletedRows: stats,
       });
@@ -785,7 +785,7 @@ const AdminExamController = {
       });
 
       res.json({
-        message: "Đã duyệt yêu cầu xóa. Đề đã được chuyển vào thùng rác mềm.",
+        message: "Đã duyệt yêu cầu xóa. Đề đã được chuyển vào danh sách xóa tạm.",
         exam: result.rows[0],
       });
     } catch (error) {
@@ -1625,7 +1625,7 @@ const AdminExamController = {
       const offset = (page - 1) * limit;
       const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash' | undefined (all)
 
-      const conditions = ['e.deleted_at IS NULL'];
+      const conditions = ["e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'"];
       if (type === 'phong-thi') {
         conditions.push('e.start_time IS NOT NULL');
       } else if (type === 'tu-do') {
@@ -1639,9 +1639,9 @@ const AdminExamController = {
         conditions.push("e.deletion_status = 'requested'");
       } else if (type === 'trash') {
         if (!isSuperAdmin(req)) {
-          return res.status(403).json({ message: "Chỉ admin tổng được xem thùng rác mềm." });
+          return res.status(403).json({ message: "Chỉ admin tổng được xem danh sách xóa tạm." });
         }
-        conditions[0] = 'e.deleted_at IS NOT NULL';
+        conditions[0] = "e.deleted_at IS NOT NULL OR e.deletion_status = 'soft_deleted'";
       }
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
@@ -1853,12 +1853,12 @@ const AdminExamController = {
   async getCounts(req, res) {
     try {
       const [total, phongThi, tuDo, moPhong, deleteRequests, trash] = await Promise.all([
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NOT NULL'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = false'),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND start_time IS NULL AND is_simulated = true'),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted'"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NOT NULL"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = false"),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = true"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND deletion_status = 'requested'"),
-        pool.query('SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NOT NULL'),
+        pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NOT NULL OR deletion_status = 'soft_deleted'"),
       ]);
       res.json({
         all: parseInt(total.rows[0].count),
