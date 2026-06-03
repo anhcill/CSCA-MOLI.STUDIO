@@ -12,7 +12,7 @@ import {
   FiChevronRight, FiX, FiCheck, FiAlertCircle, FiClock, FiTag
 } from 'react-icons/fi';
 
-type Tab = 'list' | 'form';
+type Tab = 'list' | 'form' | 'promotion';
 type Filter = 'all' | 'active' | 'expired';
 
 interface CouponStats {
@@ -64,18 +64,103 @@ interface CreateForm {
   applicable_tiers: string[];
 }
 
+interface PromotionBanner {
+  id: number;
+  title: string;
+  content: string;
+  coupon_code: string | null;
+  cta_text: string | null;
+  badge_text: string | null;
+  theme: 'gold' | 'violet' | 'emerald' | 'rose' | 'blue';
+  placement: string;
+  priority: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+interface PromotionForm {
+  title: string;
+  content: string;
+  coupon_code: string;
+  cta_text: string;
+  badge_text: string;
+  theme: PromotionBanner['theme'];
+  priority: string;
+  starts_at: string;
+  ends_at: string;
+  is_active: boolean;
+}
+
+const emptyPromotionForm: PromotionForm = {
+  title: '',
+  content: '',
+  coupon_code: '',
+  cta_text: 'Dùng mã ngay',
+  badge_text: 'Ưu đãi đang mở',
+  theme: 'gold',
+  priority: '0',
+  starts_at: '',
+  ends_at: '',
+  is_active: true,
+};
+
+function getPromotionTheme(theme: PromotionBanner['theme']) {
+  switch (theme) {
+    case 'violet':
+      return {
+        shell: 'from-violet-700 via-fuchsia-600 to-pink-500',
+        badge: 'bg-white/20 text-white ring-white/25',
+        button: 'bg-white text-violet-700 hover:bg-violet-50',
+        glow: 'bg-fuchsia-300',
+      };
+    case 'emerald':
+      return {
+        shell: 'from-emerald-700 via-teal-600 to-cyan-500',
+        badge: 'bg-white/20 text-white ring-white/25',
+        button: 'bg-white text-emerald-700 hover:bg-emerald-50',
+        glow: 'bg-teal-300',
+      };
+    case 'rose':
+      return {
+        shell: 'from-rose-700 via-pink-600 to-orange-500',
+        badge: 'bg-white/20 text-white ring-white/25',
+        button: 'bg-white text-rose-700 hover:bg-rose-50',
+        glow: 'bg-pink-300',
+      };
+    case 'blue':
+      return {
+        shell: 'from-blue-700 via-indigo-600 to-sky-500',
+        badge: 'bg-white/20 text-white ring-white/25',
+        button: 'bg-white text-blue-700 hover:bg-blue-50',
+        glow: 'bg-sky-300',
+      };
+    default:
+      return {
+        shell: 'from-amber-500 via-orange-500 to-rose-500',
+        badge: 'bg-white/25 text-white ring-white/30',
+        button: 'bg-white text-orange-700 hover:bg-amber-50',
+        glow: 'bg-amber-200',
+      };
+  }
+}
+
 export default function AdminCouponsPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
 
   const [stats, setStats] = useState<CouponStats | null>(null);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [promotions, setPromotions] = useState<PromotionBanner[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('list');
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [editingPromotion, setEditingPromotion] = useState<PromotionBanner | null>(null);
 
   // Create form
   const [form, setForm] = useState<CreateForm>({
@@ -87,6 +172,9 @@ export default function AdminCouponsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [promotionForm, setPromotionForm] = useState<PromotionForm>(emptyPromotionForm);
+  const [promotionSaving, setPromotionSaving] = useState(false);
+  const [promotionError, setPromotionError] = useState('');
 
   // ── Permissions check ──────────────────────────────────────────────
   useEffect(() => {
@@ -126,9 +214,20 @@ export default function AdminCouponsPage() {
     }
   };
 
+  const loadPromotions = async () => {
+    try {
+      const res = await axios.get('/admin/coupons/promotions');
+      setPromotions(res.data.data || []);
+    } catch (err) {
+      console.error('Error loading promotions', err);
+      setPromotions([]);
+    }
+  };
+
   useEffect(() => {
     loadStats();
     loadCoupons();
+    loadPromotions();
   }, []);
 
   const handleSearch = () => {
@@ -271,6 +370,90 @@ export default function AdminCouponsPage() {
     }
   };
 
+  const resetPromotionForm = () => {
+    setEditingPromotion(null);
+    setPromotionError('');
+    setPromotionForm(emptyPromotionForm);
+  };
+
+  const toDateTimeInput = (value: string | null) => value ? value.slice(0, 16) : '';
+
+  const openPromotionEdit = (promotion: PromotionBanner) => {
+    setTab('promotion');
+    setEditingPromotion(promotion);
+    setPromotionError('');
+    setPromotionForm({
+      title: promotion.title || '',
+      content: promotion.content || '',
+      coupon_code: promotion.coupon_code || '',
+      cta_text: promotion.cta_text || 'Dùng mã ngay',
+      badge_text: promotion.badge_text || '',
+      theme: promotion.theme || 'gold',
+      priority: String(promotion.priority || 0),
+      starts_at: toDateTimeInput(promotion.starts_at),
+      ends_at: toDateTimeInput(promotion.ends_at),
+      is_active: promotion.is_active,
+    });
+  };
+
+  const buildPromotionPayload = () => ({
+    title: promotionForm.title.trim(),
+    content: promotionForm.content.trim(),
+    coupon_code: promotionForm.coupon_code.trim().toUpperCase() || null,
+    cta_text: promotionForm.cta_text.trim() || 'Dùng mã ngay',
+    badge_text: promotionForm.badge_text.trim() || null,
+    theme: promotionForm.theme,
+    placement: 'checkout',
+    priority: parseInt(promotionForm.priority) || 0,
+    starts_at: promotionForm.starts_at || null,
+    ends_at: promotionForm.ends_at || null,
+    is_active: promotionForm.is_active,
+  });
+
+  const savePromotion = async () => {
+    setPromotionError('');
+    if (!promotionForm.title.trim() || !promotionForm.content.trim()) {
+      setPromotionError('Tiêu đề và nội dung quảng cáo là bắt buộc');
+      return;
+    }
+
+    setPromotionSaving(true);
+    try {
+      const payload = buildPromotionPayload();
+      if (editingPromotion) {
+        await axios.put(`/admin/coupons/promotions/${editingPromotion.id}`, payload);
+      } else {
+        await axios.post('/admin/coupons/promotions', payload);
+      }
+      resetPromotionForm();
+      loadPromotions();
+    } catch (err: any) {
+      setPromotionError(err.response?.data?.message || 'Lỗi lưu quảng cáo khuyến mãi');
+    } finally {
+      setPromotionSaving(false);
+    }
+  };
+
+  const togglePromotionActive = async (promotion: PromotionBanner) => {
+    try {
+      await axios.put(`/admin/coupons/promotions/${promotion.id}`, { is_active: !promotion.is_active });
+      loadPromotions();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi cập nhật quảng cáo');
+    }
+  };
+
+  const deletePromotion = async (promotion: PromotionBanner) => {
+    if (!confirm(`Xóa quảng cáo "${promotion.title}"?`)) return;
+    try {
+      await axios.delete(`/admin/coupons/promotions/${promotion.id}`);
+      if (editingPromotion?.id === promotion.id) resetPromotionForm();
+      loadPromotions();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi xóa quảng cáo');
+    }
+  };
+
   const fmtCurrency = (n: number) => `${(n || 0).toLocaleString('vi-VN')} đ`;
   const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('vi-VN') : '—';
 
@@ -330,7 +513,7 @@ export default function AdminCouponsPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setTab('list'); setEditingCoupon(null); setForm({
+              onClick={() => { setTab('list'); setEditingCoupon(null); setEditingPromotion(null); setForm({
                 code: '', description: '',
                 discount_type: 'percentage', discount_value: '',
                 min_order_amount: '', max_uses: '', user_limit: '1',
@@ -344,7 +527,7 @@ export default function AdminCouponsPage() {
               Danh sách
             </button>
             <button
-              onClick={() => { setTab('form'); setEditingCoupon(null); setForm({
+              onClick={() => { setTab('form'); setEditingCoupon(null); setEditingPromotion(null); setForm({
                 code: '', description: '',
                 discount_type: 'percentage', discount_value: '',
                 min_order_amount: '', max_uses: '', user_limit: '1',
@@ -357,9 +540,17 @@ export default function AdminCouponsPage() {
             >
               <FiPlus size={14} className="inline mr-1" /> Tạo mã mới
             </button>
+            <button
+              onClick={() => { setTab('promotion'); setEditingCoupon(null); resetPromotionForm(); }}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                tab === 'promotion' ? 'bg-amber-500 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <FiGift size={14} className="inline mr-1" /> Quảng cáo KM
+            </button>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { loadStats(); loadCoupons(pagination.page); }}
+            <button onClick={() => { loadStats(); loadCoupons(pagination.page); loadPromotions(); }}
               className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors" title="Làm mới">
               <FiRefreshCw size={16} />
             </button>
@@ -529,6 +720,282 @@ export default function AdminCouponsPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Promotion Tab ─────────────────────────────────────── */}
+        {tab === 'promotion' && (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
+                <FiGift size={18} className="text-amber-500" />
+                {editingPromotion ? `Sửa quảng cáo: ${editingPromotion.title}` : 'Viết quảng cáo khuyến mãi'}
+              </h3>
+
+              {promotionError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-center gap-2">
+                  <FiAlertCircle size={16} />
+                  {promotionError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Tiêu đề banner <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    value={promotionForm.title}
+                    onChange={e => setPromotionForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="VD: Giảm 30% tuần ra mắt"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Badge nhỏ</label>
+                  <input
+                    value={promotionForm.badge_text}
+                    onChange={e => setPromotionForm(f => ({ ...f, badge_text: e.target.value }))}
+                    placeholder="VD: Chỉ trong tuần này"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mã giảm giá</label>
+                  <input
+                    list="coupon-code-options"
+                    value={promotionForm.coupon_code}
+                    onChange={e => setPromotionForm(f => ({ ...f, coupon_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
+                    placeholder="VD: LAUNCH30"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase"
+                  />
+                  <datalist id="coupon-code-options">
+                    {coupons.map(coupon => (
+                      <option key={coupon.id} value={coupon.code}>
+                        {coupon.description || coupon.code}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    Nội dung quảng cáo <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={promotionForm.content}
+                    onChange={e => setPromotionForm(f => ({ ...f, content: e.target.value }))}
+                    rows={4}
+                    placeholder="VD: Nâng cấp hôm nay để mở toàn bộ đề, OCR và học tập thông minh với giá tốt hơn."
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-y"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Chữ nút</label>
+                  <input
+                    value={promotionForm.cta_text}
+                    onChange={e => setPromotionForm(f => ({ ...f, cta_text: e.target.value }))}
+                    placeholder="Dùng mã ngay"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ưu tiên</label>
+                  <input
+                    type="number"
+                    value={promotionForm.priority}
+                    onChange={e => setPromotionForm(f => ({ ...f, priority: e.target.value }))}
+                    placeholder="0"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Màu banner</label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {([
+                      ['gold', 'Vàng cam'],
+                      ['violet', 'Tím hồng'],
+                      ['emerald', 'Xanh ngọc'],
+                      ['rose', 'Hồng cam'],
+                      ['blue', 'Xanh dương'],
+                    ] as const).map(([theme, label]) => (
+                      <button
+                        key={theme}
+                        type="button"
+                        onClick={() => setPromotionForm(f => ({ ...f, theme }))}
+                        className={`rounded-xl border-2 px-3 py-2 text-xs font-bold transition-all ${
+                          promotionForm.theme === theme
+                            ? 'border-amber-500 bg-amber-50 text-amber-700'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Bắt đầu</label>
+                  <input
+                    type="datetime-local"
+                    value={promotionForm.starts_at}
+                    onChange={e => setPromotionForm(f => ({ ...f, starts_at: e.target.value }))}
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Kết thúc</label>
+                  <input
+                    type="datetime-local"
+                    value={promotionForm.ends_at}
+                    onChange={e => setPromotionForm(f => ({ ...f, ends_at: e.target.value }))}
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => setPromotionForm(f => ({ ...f, is_active: !f.is_active }))}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold transition-colors ${
+                      promotionForm.is_active
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-gray-200 bg-gray-50 text-gray-500'
+                    }`}
+                  >
+                    {promotionForm.is_active ? <FiCheck size={15} /> : <FiX size={15} />}
+                    {promotionForm.is_active ? 'Đang bật' : 'Đang tắt'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-6 pt-5 border-t">
+                {editingPromotion && (
+                  <button
+                    onClick={resetPromotionForm}
+                    className="px-5 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors text-sm"
+                  >
+                    Hủy sửa
+                  </button>
+                )}
+                <button
+                  onClick={savePromotion}
+                  disabled={promotionSaving}
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all text-sm disabled:opacity-60"
+                >
+                  {promotionSaving ? 'Đang lưu...' : (editingPromotion ? 'Lưu quảng cáo' : 'Tạo quảng cáo')}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="font-black text-gray-900">Xem trước trên checkout</h3>
+                  <span className="text-xs font-bold text-gray-400">placement: checkout</span>
+                </div>
+                {(() => {
+                  const theme = getPromotionTheme(promotionForm.theme);
+                  return (
+                    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${theme.shell} p-5 text-white shadow-xl`}>
+                      <div className={`absolute -right-10 -top-10 h-28 w-28 rounded-full ${theme.glow} opacity-30 blur-2xl`} />
+                      <div className="relative space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1 ${theme.badge}`}>
+                            {promotionForm.badge_text || 'Ưu đãi MOLY'}
+                          </span>
+                          {promotionForm.coupon_code && (
+                            <span className="rounded-full bg-black/20 px-3 py-1 font-mono text-xs font-black">
+                              {promotionForm.coupon_code}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-2xl font-black leading-tight">{promotionForm.title || 'Tiêu đề khuyến mãi'}</h4>
+                        <p className="text-sm leading-relaxed text-white/85">
+                          {promotionForm.content || 'Nội dung quảng cáo sẽ hiển thị tại đây.'}
+                        </p>
+                        <button type="button" className={`rounded-xl px-4 py-2 text-sm font-black shadow-sm ${theme.button}`}>
+                          {promotionForm.cta_text || 'Dùng mã ngay'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="border-b px-5 py-4">
+                  <h3 className="font-black text-gray-900">Banner đã tạo</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {promotions.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-gray-400">
+                      <FiGift size={28} className="mx-auto mb-2 opacity-30" />
+                      Chưa có quảng cáo khuyến mãi
+                    </div>
+                  ) : promotions.map(promotion => {
+                    const activeWindow = (!promotion.starts_at || new Date(promotion.starts_at) <= new Date()) &&
+                      (!promotion.ends_at || new Date(promotion.ends_at) >= new Date());
+                    return (
+                      <div key={promotion.id} className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-black text-gray-900 truncate">{promotion.title}</h4>
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                promotion.is_active && activeWindow
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {promotion.is_active && activeWindow ? 'Đang chạy' : 'Ẩn'}
+                              </span>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-xs text-gray-500">{promotion.content}</p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-400">
+                              {promotion.coupon_code && <span className="font-mono font-bold text-amber-600">{promotion.coupon_code}</span>}
+                              <span>Ưu tiên {promotion.priority || 0}</span>
+                              <span>Đến {fmtDate(promotion.ends_at)}</span>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              onClick={() => openPromotionEdit(promotion)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Sửa"
+                            >
+                              <FiEdit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => togglePromotionActive(promotion)}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                promotion.is_active ? 'text-orange-600 hover:bg-orange-50' : 'text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                              title={promotion.is_active ? 'Tắt' : 'Bật'}
+                            >
+                              {promotion.is_active ? <FiX size={15} /> : <FiCheck size={15} />}
+                            </button>
+                            <button
+                              onClick={() => deletePromotion(promotion)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Xóa"
+                            >
+                              <FiTrash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

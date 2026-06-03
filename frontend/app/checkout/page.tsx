@@ -19,6 +19,19 @@ interface DbPackage {
   features: string[];
 }
 
+interface PromotionBanner {
+  id: number;
+  title: string;
+  content: string;
+  coupon_code: string | null;
+  cta_text: string | null;
+  badge_text: string | null;
+  theme: 'gold' | 'violet' | 'emerald' | 'rose' | 'blue';
+  ends_at: string | null;
+  discount_type?: 'percentage' | 'fixed' | null;
+  discount_value?: number | null;
+}
+
 function derivePackageUI(pkg: DbPackage): { tier: Exclude<TierLevel, 'basic'>; color: string } {
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   return {
@@ -49,6 +62,46 @@ const PAYMENT_METHODS = [
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
 const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
+
+function getPromotionTheme(theme: PromotionBanner['theme']) {
+  switch (theme) {
+    case 'violet':
+      return {
+        shell: 'from-violet-700 via-fuchsia-600 to-pink-500',
+        ring: 'ring-fuchsia-200',
+        button: 'bg-white text-violet-700 hover:bg-violet-50',
+        glow: 'bg-fuchsia-300',
+      };
+    case 'emerald':
+      return {
+        shell: 'from-emerald-700 via-teal-600 to-cyan-500',
+        ring: 'ring-emerald-200',
+        button: 'bg-white text-emerald-700 hover:bg-emerald-50',
+        glow: 'bg-teal-300',
+      };
+    case 'rose':
+      return {
+        shell: 'from-rose-700 via-pink-600 to-orange-500',
+        ring: 'ring-rose-200',
+        button: 'bg-white text-rose-700 hover:bg-rose-50',
+        glow: 'bg-pink-300',
+      };
+    case 'blue':
+      return {
+        shell: 'from-blue-700 via-indigo-600 to-sky-500',
+        ring: 'ring-blue-200',
+        button: 'bg-white text-blue-700 hover:bg-blue-50',
+        glow: 'bg-sky-300',
+      };
+    default:
+      return {
+        shell: 'from-amber-500 via-orange-500 to-rose-500',
+        ring: 'ring-amber-200',
+        button: 'bg-white text-orange-700 hover:bg-amber-50',
+        glow: 'bg-amber-200',
+      };
+  }
+}
 
 // ── QR Payment Screen ──────────────────────────────────────────────────────────
 function BankTransferScreen({
@@ -254,6 +307,7 @@ function CheckoutContent() {
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
   const [couponMismatchError, setCouponMismatchError] = useState('');
   const [useCoins, setUseCoins] = useState(false);
+  const [promotion, setPromotion] = useState<PromotionBanner | null>(null);
 
   // Re-validate coupon whenever package or coupon code changes
   useEffect(() => {
@@ -276,6 +330,12 @@ function CheckoutContent() {
         setCouponMismatchError(err.response?.data?.message || 'Mã không hợp lệ');
       });
   }, [appliedCouponCode, selectedPkg]);
+
+  useEffect(() => {
+    axios.get('/coupons/promotion?placement=checkout')
+      .then(res => setPromotion(res.data.data || null))
+      .catch(() => setPromotion(null));
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -489,6 +549,49 @@ function CheckoutContent() {
           ))}
         </div>
       </div>
+
+      {promotion && (
+        <div className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${getPromotionTheme(promotion.theme).shell} p-5 text-white shadow-2xl ring-4 ${getPromotionTheme(promotion.theme).ring} sm:p-6`}>
+          <div className={`absolute -right-12 -top-12 h-36 w-36 rounded-full ${getPromotionTheme(promotion.theme).glow} opacity-35 blur-3xl`} />
+          <div className="absolute -bottom-16 left-8 h-32 w-32 rounded-full bg-white/20 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1 ring-white/25">
+                  <FaGift size={12} />
+                  {promotion.badge_text || 'Ưu đãi MOLY'}
+                </span>
+                {promotion.coupon_code && (
+                  <span className="rounded-full bg-black/20 px-3 py-1 font-mono text-xs font-black">
+                    {promotion.coupon_code}
+                  </span>
+                )}
+              </div>
+              <div>
+                <h2 className="text-2xl font-black leading-tight sm:text-3xl">{promotion.title}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/85">{promotion.content}</p>
+              </div>
+              {promotion.ends_at && (
+                <p className="text-xs font-semibold text-white/75">
+                  Kết thúc {new Date(promotion.ends_at).toLocaleDateString('vi-VN')}
+                </p>
+              )}
+            </div>
+            {promotion.coupon_code && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAppliedCouponCode(promotion.coupon_code);
+                  setCouponMismatchError('');
+                }}
+                className={`shrink-0 rounded-2xl px-5 py-3 text-sm font-black shadow-lg transition-colors ${getPromotionTheme(promotion.theme).button}`}
+              >
+                {appliedCouponCode === promotion.coupon_code ? 'Đã áp dụng' : (promotion.cta_text || 'Dùng mã ngay')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Step 1: Package */}
       <div>

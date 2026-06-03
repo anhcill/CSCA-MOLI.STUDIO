@@ -2,6 +2,49 @@ const db = require('../config/database');
 
 const CouponController = {
   /**
+   * GET /api/coupons/promotion?placement=checkout
+   * Get active promotion banner (public)
+   */
+  async getActivePromotion(req, res) {
+    try {
+      const placement = typeof req.query.placement === 'string' && req.query.placement.trim()
+        ? req.query.placement.trim()
+        : 'checkout';
+
+      const result = await db.query(
+        `SELECT pb.id, pb.title, pb.content, pb.coupon_code, pb.cta_text, pb.badge_text,
+                pb.theme, pb.placement, pb.ends_at, pb.priority,
+                c.discount_type, c.discount_value
+         FROM promotion_banners pb
+         LEFT JOIN coupons c ON UPPER(c.code) = UPPER(pb.coupon_code)
+         WHERE pb.placement = $1
+           AND pb.is_active = TRUE
+           AND (pb.starts_at IS NULL OR pb.starts_at <= NOW())
+           AND (pb.ends_at IS NULL OR pb.ends_at >= NOW())
+           AND (
+             pb.coupon_code IS NULL
+             OR pb.coupon_code = ''
+             OR (
+               c.id IS NOT NULL
+               AND c.is_active = TRUE
+               AND (c.valid_from IS NULL OR c.valid_from <= NOW())
+               AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+               AND (c.max_uses IS NULL OR c.used_count < c.max_uses)
+             )
+           )
+         ORDER BY pb.priority DESC, pb.updated_at DESC, pb.created_at DESC
+         LIMIT 1`,
+        [placement]
+      );
+
+      res.json({ success: true, data: result.rows[0] || null });
+    } catch (err) {
+      console.error('get active promotion error:', err);
+      res.status(500).json({ success: false, message: 'Lỗi lấy khuyến mãi' });
+    }
+  },
+
+  /**
    * GET /api/coupons/validate?code=XXX&package_id=1
    * Validate coupon and calculate discount (public)
    */

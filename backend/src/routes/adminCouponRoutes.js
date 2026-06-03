@@ -8,6 +8,10 @@ router.use(authenticate);
 router.use(authorizePermission('users.manage'));
 
 router.get('/stats', AdminCouponController.getStats);
+router.get('/promotions', AdminCouponController.getPromotions);
+router.post('/promotions', AdminCouponController.createPromotion);
+router.put('/promotions/:id', AdminCouponController.updatePromotion);
+router.delete('/promotions/:id', AdminCouponController.deletePromotion);
 router.get('/:id/usage', AdminCouponController.getUsage);
 router.get('/', AdminCouponController.getAll);
 router.post('/', AdminCouponController.create);

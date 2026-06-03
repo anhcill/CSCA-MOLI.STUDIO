@@ -52,6 +52,27 @@ async function runOptimizations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupon_usages_coupon ON coupon_usages(coupon_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_coupon_usages_user ON coupon_usages(user_id)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS promotion_banners (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(160) NOT NULL,
+        content TEXT NOT NULL,
+        coupon_code VARCHAR(50),
+        cta_text VARCHAR(80) DEFAULT 'Dùng mã ngay',
+        badge_text VARCHAR(80),
+        theme VARCHAR(30) DEFAULT 'gold',
+        placement VARCHAR(50) DEFAULT 'checkout',
+        priority INTEGER DEFAULT 0,
+        starts_at TIMESTAMP,
+        ends_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_promotion_banners_active ON promotion_banners(placement, is_active, priority DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_promotion_banners_coupon ON promotion_banners(UPPER(coupon_code))`);
 
     // Forum tables
     await pool.query(`
