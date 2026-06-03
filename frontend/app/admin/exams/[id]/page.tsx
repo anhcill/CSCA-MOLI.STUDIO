@@ -288,6 +288,9 @@ export default function AdminExamDetailPage() {
     // Saving states
     const [savingQuestionId, setSavingQuestionId] = useState<number | null>(null);
     const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [showDeleteExamConfirm, setShowDeleteExamConfirm] = useState(false);
+    const [deletingExam, setDeletingExam] = useState(false);
+    const [deleteExamError, setDeleteExamError] = useState('');
     const [reordering, setReordering] = useState(false);
 
     // New question form state (quick add)
@@ -723,6 +726,27 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const openDeleteExamConfirm = () => {
+        setDeleteExamError('');
+        setShowDeleteExamConfirm(true);
+    };
+
+    const confirmDeleteExam = async () => {
+        if (deletingExam) return;
+
+        try {
+            setDeletingExam(true);
+            setDeleteExamError('');
+            await examAdminApi.deleteExam(Number(id));
+            setShowDeleteExamConfirm(false);
+            router.push('/admin/exams');
+        } catch (error: any) {
+            setDeleteExamError(error.response?.data?.message || 'Xóa đề thi thất bại.');
+        } finally {
+            setDeletingExam(false);
+        }
+    };
+
     const handleToggleDownload = async () => {
         if (!exam) return;
         try {
@@ -911,8 +935,9 @@ export default function AdminExamDetailPage() {
                                         <option value="archived">📦 Lưu trữ</option>
                                     </select>
                                     <button
-                                        onClick={handleDeleteExam}
-                                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+                                        onClick={openDeleteExamConfirm}
+                                        disabled={deletingExam}
+                                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         <FiTrash2 size={16} /> Xóa đề
                                     </button>
@@ -1785,6 +1810,48 @@ export default function AdminExamDetailPage() {
                     </div>
                 )}
             </main>
+
+            {/* Delete exam modal */}
+            {showDeleteExamConfirm && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+                    onClick={(event) => {
+                        if (!deletingExam && event.target === event.currentTarget) {
+                            setShowDeleteExamConfirm(false);
+                        }
+                    }}
+                >
+                    <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-900">Xóa tạm đề thi?</h3>
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            Đề <span className="font-semibold text-gray-900">{exam?.title}</span> sẽ được đưa vào danh sách xóa tạm. Nếu đề đã public hoặc đã có lượt thi, hệ thống có thể chuyển thành yêu cầu xóa để admin tổng duyệt.
+                        </p>
+                        {deleteExamError && (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {deleteExamError}
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteExamConfirm(false)}
+                                disabled={deletingExam}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDeleteExam}
+                                disabled={deletingExam}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {deletingExam ? 'Đang xóa...' : 'Xóa tạm'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Confirm exit modal */}
             {showConfirmExit && (
