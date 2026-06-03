@@ -108,7 +108,20 @@ export default function ExamsPage() {
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
     const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
+    const [examAction, setExamAction] = useState<{ type: 'delete' | 'approve' | 'reject'; exam: Exam } | null>(null);
+    const [examActionReason, setExamActionReason] = useState('');
+    const [examActionError, setExamActionError] = useState('');
+    const [examActionBusy, setExamActionBusy] = useState(false);
+    const [restoreExam, setRestoreExam] = useState<Exam | null>(null);
+    const [restoreError, setRestoreError] = useState('');
+    const [restoring, setRestoring] = useState(false);
+    const [permanentDeleteExam, setPermanentDeleteExam] = useState<Exam | null>(null);
+    const [permanentDeleteConfirmText, setPermanentDeleteConfirmText] = useState('');
+    const [permanentDeleteReason, setPermanentDeleteReason] = useState('');
+    const [permanentDeleteError, setPermanentDeleteError] = useState('');
+    const [permanentDeleting, setPermanentDeleting] = useState(false);
     const isSuperAdminUser = hasPermission(user, 'admin.super');
+    const isTemporarilyDeletedExam = (exam: Exam) => Boolean(exam.deleted_at || exam.deletion_status === 'soft_deleted');
 
     const loadExamCounts = async () => {
         try {
@@ -168,18 +181,38 @@ export default function ExamsPage() {
         loadExams();
     };
 
-    const handleDeleteExam = async (examId: number) => {
-        const reason = window.prompt(
-            'Nhập lý do xóa/lưu trữ đề thi. Nếu đề đã public hoặc đã có lượt thi, hệ thống sẽ gửi yêu cầu xóa để admin tổng duyệt.'
-        );
-        if (reason === null) return;
+    const openExamAction = (type: 'delete' | 'approve' | 'reject', exam: Exam) => {
+        setExamAction({ type, exam });
+        setExamActionReason('');
+        setExamActionError('');
+    };
+
+    const closeExamAction = () => {
+        if (examActionBusy) return;
+        setExamAction(null);
+        setExamActionReason('');
+        setExamActionError('');
+    };
+
+    const confirmExamAction = async () => {
+        if (!examAction || examActionBusy) return;
 
         try {
-            const result = await examAdminApi.deleteExam(examId, reason.trim());
-            alert(result?.message || 'Đã xử lý yêu cầu xóa đề thi.');
+            setExamActionBusy(true);
+            setExamActionError('');
+            if (examAction.type === 'delete') {
+                await examAdminApi.deleteExam(examAction.exam.id, examActionReason.trim());
+            } else if (examAction.type === 'approve') {
+                await examAdminApi.approveDeleteRequest(examAction.exam.id, examActionReason.trim());
+            } else {
+                await examAdminApi.rejectDeleteRequest(examAction.exam.id, examActionReason.trim());
+            }
+            closeExamAction();
             refreshExamData();
         } catch (error: any) {
-            alert(error.response?.data?.message || 'Xóa đề thi thất bại');
+            setExamActionError(error.response?.data?.message || 'Thao tác thất bại.');
+        } finally {
+            setExamActionBusy(false);
         }
     };
 
@@ -192,52 +225,65 @@ export default function ExamsPage() {
         }
     };
 
-    const handleApproveDelete = async (examId: number) => {
-        const reason = window.prompt('Lý do admin tổng duyệt xóa đề này? Có thể để trống.');
-        if (reason === null) return;
+    const openRestoreExam = (exam: Exam) => {
+        setRestoreExam(exam);
+        setRestoreError('');
+    };
+
+    const closeRestoreExam = () => {
+        if (restoring) return;
+        setRestoreExam(null);
+        setRestoreError('');
+    };
+
+    const handleRestoreExam = async () => {
+        if (!restoreExam || restoring) return;
+
         try {
-            const result = await examAdminApi.approveDeleteRequest(examId, reason.trim());
-            alert(result?.message || 'Đã duyệt yêu cầu xóa đề.');
+            setRestoring(true);
+            setRestoreError('');
+            await examAdminApi.restoreExam(restoreExam.id);
+            closeRestoreExam();
             refreshExamData();
         } catch (error: any) {
-            alert(error.response?.data?.message || 'Duyệt yêu cầu xóa thất bại');
+            setRestoreError(error.response?.data?.message || 'Khôi phục đề thi thất bại.');
+        } finally {
+            setRestoring(false);
         }
     };
 
-    const handleRejectDelete = async (examId: number) => {
-        const reason = window.prompt('Lý do từ chối xóa đề này? Có thể để trống.');
-        if (reason === null) return;
-        try {
-            const result = await examAdminApi.rejectDeleteRequest(examId, reason.trim());
-            alert(result?.message || 'Đã từ chối yêu cầu xóa đề.');
-            refreshExamData();
-        } catch (error: any) {
-            alert(error.response?.data?.message || 'Từ chối yêu cầu xóa thất bại');
-        }
+    const openPermanentDeleteExam = (exam: Exam) => {
+        setPermanentDeleteExam(exam);
+        setPermanentDeleteConfirmText('');
+        setPermanentDeleteReason('');
+        setPermanentDeleteError('');
     };
 
-    const handleRestoreExam = async (examId: number) => {
-        if (!confirm('Khôi phục đề này khỏi danh sách xóa tạm?')) return;
-        try {
-            const result = await examAdminApi.restoreExam(examId);
-            alert(result?.message || 'Đã khôi phục đề thi.');
-            refreshExamData();
-        } catch (error: any) {
-            alert(error.response?.data?.message || 'Khôi phục đề thi thất bại');
-        }
+    const closePermanentDeleteExam = () => {
+        if (permanentDeleting) return;
+        setPermanentDeleteExam(null);
+        setPermanentDeleteConfirmText('');
+        setPermanentDeleteReason('');
+        setPermanentDeleteError('');
     };
 
-    const handlePermanentDeleteExam = async (examId: number) => {
-        const confirmation = window.prompt(`Xóa VĨNH VIỄN đề #${examId}? Nhập XOA VINH VIEN để xác nhận.`);
-        if (confirmation !== 'XOA VINH VIEN') return;
-        const reason = window.prompt('Lý do xóa vĩnh viễn? Có thể để trống.');
-        if (reason === null) return;
+    const confirmPermanentDeleteExam = async () => {
+        if (!permanentDeleteExam || permanentDeleting) return;
+        if (permanentDeleteConfirmText.trim() !== 'XOA VINH VIEN') {
+            setPermanentDeleteError('Nhập XOA VINH VIEN để xác nhận.');
+            return;
+        }
+
         try {
-            const result = await examAdminApi.permanentDeleteExam(examId, reason.trim());
-            alert(result?.message || 'Đã xóa vĩnh viễn đề thi.');
+            setPermanentDeleting(true);
+            setPermanentDeleteError('');
+            await examAdminApi.permanentDeleteExam(permanentDeleteExam.id, permanentDeleteReason.trim());
+            closePermanentDeleteExam();
             refreshExamData();
         } catch (error: any) {
-            alert(error.response?.data?.message || 'Xóa vĩnh viễn đề thi thất bại');
+            setPermanentDeleteError(error.response?.data?.message || 'Xóa vĩnh viễn đề thi thất bại.');
+        } finally {
+            setPermanentDeleting(false);
         }
     };
 
@@ -433,7 +479,7 @@ export default function ExamsPage() {
                                                 {exam.deletion_status === 'requested' && !exam.deleted_at && (
                                                     <div className="mt-1 text-xs font-bold text-amber-700">Chờ admin tổng duyệt xóa{exam.delete_requested_by_name ? ` - ${exam.delete_requested_by_name}` : ''}</div>
                                                 )}
-                                                {exam.deleted_at && (
+                                                {isTemporarilyDeletedExam(exam) && (
                                                     <div className="mt-1 text-xs font-bold text-red-700">Đã xóa tạm{exam.deleted_by_name ? ` - ${exam.deleted_by_name}` : ''}</div>
                                                 )}
                                                 {(exam.delete_request_reason || exam.delete_reason) && (
@@ -529,14 +575,14 @@ export default function ExamsPage() {
                                             {isSuperAdminUser && exam.deletion_status === 'requested' && !exam.deleted_at && (
                                                 <>
                                                     <button
-                                                        onClick={() => handleApproveDelete(exam.id)}
+                                                        onClick={() => openExamAction('approve', exam)}
                                                         className="text-emerald-600 hover:text-emerald-800"
                                                         title="Đồng ý xóa tạm đề"
                                                     >
                                                         <FiCheck size={18} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleRejectDelete(exam.id)}
+                                                        onClick={() => openExamAction('reject', exam)}
                                                         className="text-amber-600 hover:text-amber-800"
                                                         title="Không đồng ý xóa đề"
                                                     >
@@ -544,17 +590,17 @@ export default function ExamsPage() {
                                                     </button>
                                                 </>
                                             )}
-                                            {isSuperAdminUser && exam.deleted_at && (
+                                            {isSuperAdminUser && isTemporarilyDeletedExam(exam) && (
                                                 <>
                                                     <button
-                                                        onClick={() => handleRestoreExam(exam.id)}
+                                                        onClick={() => openRestoreExam(exam)}
                                                         className="text-emerald-600 hover:text-emerald-800"
                                                         title="Khôi phục đề"
                                                     >
                                                         <FiRotateCcw size={18} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handlePermanentDeleteExam(exam.id)}
+                                                        onClick={() => openPermanentDeleteExam(exam)}
                                                         className="text-red-700 hover:text-red-900"
                                                         title="Xóa vĩnh viễn đề thi"
                                                     >
@@ -562,9 +608,9 @@ export default function ExamsPage() {
                                                     </button>
                                                 </>
                                             )}
-                                            {!exam.deleted_at && exam.deletion_status !== 'requested' && (
+                                            {!isTemporarilyDeletedExam(exam) && exam.deletion_status !== 'requested' && (
                                                 <button
-                                                    onClick={() => handleDeleteExam(exam.id)}
+                                                    onClick={() => openExamAction('delete', exam)}
                                                     className="text-red-600 hover:text-red-800"
                                                     title="Xóa tạm hoặc gửi yêu cầu xóa"
                                                 >
@@ -605,6 +651,174 @@ export default function ExamsPage() {
                     </div>
                 </div>
             </div>
+
+            {examAction && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) closeExamAction();
+                    }}
+                >
+                    <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-900">
+                            {examAction.type === 'delete'
+                                ? 'Xóa tạm đề thi?'
+                                : examAction.type === 'approve'
+                                    ? 'Duyệt yêu cầu xóa?'
+                                    : 'Từ chối yêu cầu xóa?'}
+                        </h3>
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            Đề <span className="font-semibold text-gray-900">#{examAction.exam.id} - {examAction.exam.title}</span>
+                        </p>
+                        <label className="mb-1 block text-xs font-semibold text-gray-600">
+                            {examAction.type === 'reject' ? 'Lý do từ chối' : 'Lý do'}
+                        </label>
+                        <textarea
+                            value={examActionReason}
+                            onChange={(event) => setExamActionReason(event.target.value)}
+                            rows={3}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                            placeholder="Có thể để trống"
+                            disabled={examActionBusy}
+                        />
+                        {examActionError && (
+                            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {examActionError}
+                            </div>
+                        )}
+                        <div className="mt-5 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeExamAction}
+                                disabled={examActionBusy}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmExamAction}
+                                disabled={examActionBusy}
+                                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                    examAction.type === 'reject'
+                                        ? 'bg-amber-600 hover:bg-amber-700'
+                                        : examAction.type === 'approve'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                                            : 'bg-red-600 hover:bg-red-700'
+                                }`}
+                            >
+                                {examActionBusy
+                                    ? 'Đang xử lý...'
+                                    : examAction.type === 'delete'
+                                        ? 'Xóa tạm'
+                                        : examAction.type === 'approve'
+                                            ? 'Duyệt'
+                                            : 'Từ chối'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {restoreExam && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) closeRestoreExam();
+                    }}
+                >
+                    <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-900">Khôi phục đề thi?</h3>
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            Đề <span className="font-semibold text-gray-900">#{restoreExam.id} - {restoreExam.title}</span> sẽ được đưa ra khỏi danh sách xóa tạm.
+                        </p>
+                        {restoreError && (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {restoreError}
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeRestoreExam}
+                                disabled={restoring}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleRestoreExam}
+                                disabled={restoring}
+                                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {restoring ? 'Đang khôi phục...' : 'Khôi phục'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {permanentDeleteExam && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) closePermanentDeleteExam();
+                    }}
+                >
+                    <div className="mx-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-900">Xóa vĩnh viễn đề?</h3>
+                        <p className="mb-4 text-sm leading-6 text-gray-600">
+                            Đề <span className="font-semibold text-gray-900">#{permanentDeleteExam.id} - {permanentDeleteExam.title}</span> sẽ bị xóa vĩnh viễn khỏi hệ thống.
+                        </p>
+                        <label className="mb-1 block text-xs font-semibold text-gray-600">
+                            Nhập XOA VINH VIEN để xác nhận
+                        </label>
+                        <input
+                            value={permanentDeleteConfirmText}
+                            onChange={(event) => {
+                                setPermanentDeleteConfirmText(event.target.value);
+                                setPermanentDeleteError('');
+                            }}
+                            className="mb-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                            placeholder="XOA VINH VIEN"
+                            disabled={permanentDeleting}
+                        />
+                        <label className="mb-1 block text-xs font-semibold text-gray-600">Lý do xóa vĩnh viễn</label>
+                        <textarea
+                            value={permanentDeleteReason}
+                            onChange={(event) => setPermanentDeleteReason(event.target.value)}
+                            rows={3}
+                            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                            placeholder="Có thể để trống"
+                            disabled={permanentDeleting}
+                        />
+                        {permanentDeleteError && (
+                            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {permanentDeleteError}
+                            </div>
+                        )}
+                        <div className="mt-5 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closePermanentDeleteExam}
+                                disabled={permanentDeleting}
+                                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmPermanentDeleteExam}
+                                disabled={permanentDeleting}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {permanentDeleting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }
