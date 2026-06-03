@@ -17,6 +17,8 @@ interface PdfImportPanelProps {
   onSave: (items?: ImportedExamItem[]) => void;
 }
 
+const PREVIEW_TIMEOUT_MS = 240000;
+
 function getPdfImportErrorMessage(error: any) {
   if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
     return 'Đã dừng phân tích file. Nếu file nặng, thử lại hoặc tách PDF ngắn hơn.';
@@ -27,6 +29,22 @@ function getPdfImportErrorMessage(error: any) {
   }
 
   return error?.response?.data?.message || 'Phân tích file thất bại. Vui lòng thử lại hoặc chọn PDF/Word có text rõ hơn.';
+}
+
+function getPreviewProgress(elapsedMs: number) {
+  const ratio = Math.min(elapsedMs / PREVIEW_TIMEOUT_MS, 1);
+  const percent = Math.min(92, Math.round(8 + ratio * 84));
+
+  if (ratio < 0.08) {
+    return { percent: Math.max(percent, 10), label: 'Đang tải file lên...' };
+  }
+  if (ratio < 0.25) {
+    return { percent: Math.max(percent, 24), label: 'Đang trích text/OCR từ PDF...' };
+  }
+  if (ratio < 0.72) {
+    return { percent: Math.max(percent, 42), label: 'AI đang tách câu hỏi, đáp án và lời giải...' };
+  }
+  return { percent, label: 'Đang chuẩn hóa công thức và dựng bản xem trước...' };
 }
 
 export default function PdfImportPanel({
@@ -43,15 +61,19 @@ export default function PdfImportPanel({
   const [preset, setPreset] = useState<PdfImportPreset>('auto');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState('');
   const activeRequestRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timedOutRef = useRef(false);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     };
   }, []);
 
@@ -64,6 +86,26 @@ export default function PdfImportPanel({
 
   const handleCancelPreview = () => {
     abortRef.current?.abort();
+  };
+
+  const stopProgress = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  };
+
+  const startProgress = () => {
+    stopProgress();
+    const startedAt = Date.now();
+    const firstStep = getPreviewProgress(0);
+    setProgress(firstStep.percent);
+    setProgressLabel(firstStep.label);
+    progressIntervalRef.current = setInterval(() => {
+      const nextStep = getPreviewProgress(Date.now() - startedAt);
+      setProgress(nextStep.percent);
+      setProgressLabel(nextStep.label);
+    }, 700);
   };
 
   const handlePreview = async () => {
@@ -88,14 +130,18 @@ export default function PdfImportPanel({
     timeoutRef.current = setTimeout(() => {
       timedOutRef.current = true;
       controller.abort();
-    }, 240000);
+    }, PREVIEW_TIMEOUT_MS);
 
     try {
+      startProgress();
       setLoading(true);
       setErrorMessage('');
       const nextPreview = await examAdminApi.previewPdfImport(file, preset, controller.signal);
       if (activeRequestRef.current !== requestId || controller.signal.aborted) return;
 
+      stopProgress();
+      setProgress(100);
+      setProgressLabel('Hoàn tất, đang dựng bản xem trước...');
       setLoading(false);
       window.setTimeout(() => {
         if (activeRequestRef.current === requestId) {
@@ -113,6 +159,7 @@ export default function PdfImportPanel({
     } finally {
       if (activeRequestRef.current === requestId) {
         clearPreviewTimer();
+        stopProgress();
         abortRef.current = null;
         setLoading(false);
       }
@@ -197,8 +244,18 @@ export default function PdfImportPanel({
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
-              <div>
-                <p className="font-semibold">Đang dùng AI phân tích file...</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">Đang dùng AI phân tích file...</p>
+                  <span className="shrink-0 text-xs font-bold text-blue-700">{progress}%</span>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all duration-700 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-xs font-semibold text-blue-700">{progressLabel}</p>
                 <p className="mt-1 text-xs leading-relaxed text-blue-700">
                   AI đang tách câu hỏi, đáp án, lời giải và chỉnh lại công thức. File PDF/Word dài có thể mất vài phút, vui lòng giữ nguyên trang này.
                 </p>
