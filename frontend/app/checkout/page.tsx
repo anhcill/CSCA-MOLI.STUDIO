@@ -372,7 +372,7 @@ function CheckoutContent() {
             return TIER_RANK[userTier] < TIER_RANK[derivePackageUI(pkg).tier];
           }
           return true;
-        });
+        }).sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
 
         setAllPackages(filteredPkgs);
         if (urlPackageId) {
@@ -596,6 +596,9 @@ function CheckoutContent() {
         </div>
       )}
 
+      <div className="rounded-3xl border border-gray-100 bg-white p-4 shadow-xl shadow-indigo-100/60 sm:p-6 lg:p-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+          <div className="space-y-6">
       {/* Step 1: Package */}
       <div>
         <div className="flex items-center gap-2 mb-4">
@@ -619,7 +622,7 @@ function CheckoutContent() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {allPackages.map(pkg => {
               const ui = derivePackageUI(pkg);
               const selected = selectedPkg?.id === pkg.id;
@@ -752,6 +755,9 @@ function CheckoutContent() {
         </div>
       )}
 
+          </div>
+
+          <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
       {/* Order summary */}
       {selectedPkg && (
         <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 sm:p-6 text-white space-y-4 shadow-2xl">
@@ -858,6 +864,9 @@ function CheckoutContent() {
           <FiArrowLeft size={16} /> Quay lại bảng giá
         </button>
       </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -865,10 +874,10 @@ function CheckoutContent() {
 export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50 px-3 py-6 pt-20 sm:px-4 sm:py-12 sm:pt-28">
-      <div className="w-full max-w-3xl mx-auto">
+      <div className="w-full max-w-7xl mx-auto">
         <div className="bg-white shadow-2xl rounded-3xl sm:rounded-[2rem] overflow-hidden border border-gray-100">
           <div className="h-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500" />
-          <div className="p-4 sm:p-10">
+          <div className="p-4 sm:p-8 lg:p-10">
             <Suspense fallback={
               <div className="flex justify-center items-center py-24">
                 <FiLoader size={40} className="animate-spin text-indigo-600" />

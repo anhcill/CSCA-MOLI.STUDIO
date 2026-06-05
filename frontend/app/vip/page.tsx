@@ -194,7 +194,8 @@ export default function VipPricingPage() {
     setCouponError('');
   };
 
-  const paidPkgs = packages.filter(p => !isFreePackage(p));
+  const paidPkgs = [...packages.filter(p => !isFreePackage(p))]
+    .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
 
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
