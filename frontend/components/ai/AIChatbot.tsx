@@ -184,7 +184,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     };
 
     return (
-        <div className="flex h-[min(720px,calc(100dvh-140px))] min-h-[420px] flex-col sm:min-h-[500px]">
+        <div className="flex h-[calc(100dvh-190px)] min-h-[360px] w-full min-w-0 max-h-[720px] flex-col overflow-hidden sm:h-[min(720px,calc(100dvh-140px))] sm:min-h-[500px]">
 
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between gap-3 rounded-t-2xl border-b border-gray-100 bg-white px-3 py-3 sm:px-6 sm:py-4">
@@ -231,12 +231,12 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             </div>
 
             {/* Main content: Messages + Quick Questions Sidebar */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex min-h-0 flex-1 overflow-hidden">
 
                 {/* Messages Area */}
-                <div className="flex-1 space-y-4 overflow-y-auto bg-gray-50/50 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-5">
+                <div className="min-w-0 flex-1 space-y-4 overflow-y-auto bg-gray-50/50 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-5">
                     {messages.map(msg => (
-                        <div key={msg.id} className={`flex gap-2 sm:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                        <div key={msg.id} className={`flex w-full min-w-0 gap-2 sm:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
 
                             {/* Avatar */}
                             <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:h-9 sm:w-9 ${
@@ -250,19 +250,19 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                             </div>
 
                             {/* Bubble */}
-                            <div className="max-w-[88%] sm:max-w-[75%]">
+                            <div className="min-w-0 max-w-[calc(100%-2.5rem)] sm:max-w-[75%]">
                                 {/* Sender name */}
                                 <p className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-right text-blue-600' : 'text-purple-600'}`}>
                                     {msg.role === 'user' ? 'Bạn' : 'Trợ lý AI'}
                                 </p>
 
-                                <div className={`break-words rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:px-5 sm:py-3.5 ${
+                                <div className={`min-w-0 overflow-hidden break-words [overflow-wrap:anywhere] rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm sm:px-5 sm:py-3.5 ${
                                     msg.role === 'user'
                                         ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-tr-sm'
                                         : 'bg-white text-gray-800 rounded-tl-sm border border-gray-100'
                                 }`}>
                                     {msg.role === 'ai'
-                                        ? (msg.content ? <AIFormattedText value={msg.content} className="text-gray-700" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
+                                        ? (msg.content ? <AIFormattedText value={msg.content} className="min-w-0 overflow-x-auto text-gray-700 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
                                         : msg.content.split('\n').map((line, i) => (
                                             <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
                                         ))
@@ -349,7 +349,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             </div>
 
             {/* Input Area */}
-            <div className="shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 py-3 sm:px-6 sm:py-4">
+            <div className="shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:px-6 sm:py-4">
                 <div className="flex items-end gap-2 sm:gap-3">
                     <textarea
                         ref={inputRef}
@@ -364,7 +364,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         placeholder="Nhập câu hỏi cho AI..."
                         maxLength={3000}
                         rows={2}
-                        className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-purple-500 sm:px-4 sm:py-3"
+                        className="min-w-0 flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-purple-500 sm:px-4 sm:py-3"
                         style={{ maxHeight: '120px' }}
                     />
                     <button

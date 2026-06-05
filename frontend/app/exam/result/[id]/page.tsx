@@ -285,10 +285,10 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                     <FiPrinter size={14} /> Xuất PDF
                 </button>
             </div>
-            <main className="container mx-auto px-4 py-6 max-w-[1360px]">
+            <main className="container mx-auto max-w-[1360px] px-3 py-4 sm:px-4 sm:py-6">
 
                 {/* Tab Navigation */}
-                <div className="flex gap-2 mb-6 no-print">
+                <div className="no-print mb-4 flex gap-2 overflow-x-auto pb-1 sm:mb-6">
                     {[
                         { key: 'result', label: '📊 Kết quả', icon: FiBarChart2 },
                         { key: 'review', label: '📝 Xem lại bài', icon: FiPrinter },
@@ -299,7 +299,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                 setActiveTab(tab.key as any);
                                 if (tab.key === 'review') setReviewStarted(false);
                             }}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
+                            className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
                                 activeTab === tab.key
                                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
                                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-purple-50 hover:text-purple-650 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-800 dark:hover:text-purple-400'
@@ -607,7 +607,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                 {/* ── TAB: CHATBOT AI ── */}
                 {activeTab === 'chat' && (
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+                    <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl sm:rounded-2xl">
                         <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
                     </div>
                 )}
@@ -705,10 +705,10 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={loading ? undefined : onClose}>
-            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-bold text-lg text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 no-print sm:items-center sm:p-4" onClick={loading ? undefined : onClose}>
+            <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-h-[80vh] sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-4 sm:p-6">
+                    <h3 className="min-w-0 pr-3 text-base font-bold text-gray-900 sm:text-lg">
                         Phân tích câu {question.question_number || question.sub_question_number}
                     </h3>
                     {!loading && (
@@ -717,15 +717,15 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                         </button>
                     )}
                 </div>
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                     {/* Câu hỏi */}
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
                         <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-                        <p className="text-sm text-gray-800">{questionText}</p>
+                        <p className="break-words text-sm text-gray-800 [overflow-wrap:anywhere]">{questionText}</p>
                     </div>
 
                     {/* Đáp án */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className={answerBoxClass}>
                             <p className={answerLabelClass}>{answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}</p>
                             <p className={answerTextClass}>
@@ -748,12 +748,12 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                                 <p className="text-xs font-bold text-purple-700 mb-3 flex items-center gap-1.5">
                                     <FiCpu size={12} /> 🤖 AI phân tích
                                 </p>
-                                <AIFormattedText value={explanation.answer} className="text-gray-700" />
+                                <AIFormattedText value={explanation.answer} className="min-w-0 overflow-x-auto text-gray-700 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
                             </div>
                             {(question.explanation || question.explanation_cn) && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                     <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
-                                    <RichMathText value={question.explanation || question.explanation_cn || ''} className="text-blue-800" />
+                                    <RichMathText value={question.explanation || question.explanation_cn || ''} className="min-w-0 overflow-x-auto text-blue-800 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
                                 </div>
                             )}
                         </div>
@@ -768,7 +768,7 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                         </div>
                     )}
                 </div>
-                <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
+                <div className="flex justify-end gap-3 border-t border-gray-100 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
                     {!loading && (
                         <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
                             Đóng
