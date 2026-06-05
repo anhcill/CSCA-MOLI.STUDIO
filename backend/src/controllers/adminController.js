@@ -125,6 +125,19 @@ const AdminController = {
                 ? Math.min(Math.max(parsedLimit, 1), 100)
                 : 20;
             const offset = (page - 1) * limit;
+            const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+            const usersParams = [limit, offset, ADMIN_ROLE_CODES];
+            const countParams = [];
+            let usersWhereClause = '';
+            let countWhereClause = '';
+
+            if (search) {
+                const searchPattern = `%${search}%`;
+                usersParams.push(searchPattern);
+                countParams.push(searchPattern);
+                usersWhereClause = `WHERE (u.full_name ILIKE $${usersParams.length} OR u.email ILIKE $${usersParams.length})`;
+                countWhereClause = 'WHERE (u.full_name ILIKE $1 OR u.email ILIKE $1)';
+            }
 
                         const usersQuery = `
                 SELECT
@@ -145,16 +158,17 @@ const AdminController = {
                 FROM users u
                 LEFT JOIN user_roles ur ON ur.user_id = u.id
                 LEFT JOIN roles r ON r.id = ur.role_id
+                ${usersWhereClause}
                 GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
                 ORDER BY u.created_at DESC
                 LIMIT $1 OFFSET $2
             `;
 
-            const countQuery = 'SELECT COUNT(*) as count FROM users';
+            const countQuery = `SELECT COUNT(*) as count FROM users u ${countWhereClause}`;
 
             const [usersResult, countResult] = await Promise.all([
-                pool.query(usersQuery, [limit, offset, ADMIN_ROLE_CODES]),
-                pool.query(countQuery)
+                pool.query(usersQuery, usersParams),
+                pool.query(countQuery, countParams)
             ]);
 
             const totalUsers = parseInt(countResult.rows[0].count);

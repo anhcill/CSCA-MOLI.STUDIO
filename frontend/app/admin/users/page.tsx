@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -143,6 +143,7 @@ export default function AdminUsersPage() {
   const [activityPage, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityPagination, setActivityPagination] = useState<ActivityPagination>({ currentPage: 1, totalPages: 1, totalActivities: 0, limit: 20 });
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
@@ -157,10 +158,17 @@ export default function AdminUsersPage() {
     loadUsers(1);
   }, [isAuthenticated, user, router]);
 
-  const loadUsers = async (page = 1) => {
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
+  const loadUsers = async (page = 1, query = search) => {
     try {
       setLoading(true);
-      const data = await adminApi.getUsers({ page, limit: 20, search: search || undefined });
+      const normalizedSearch = query.trim();
+      const data = await adminApi.getUsers({ page, limit: 20, search: normalizedSearch || undefined });
       setUsers(data.users || []);
       setPagination(data.pagination || { currentPage: 1, totalPages: 1, totalUsers: 0, limit: 20 });
     } catch {
@@ -172,13 +180,8 @@ export default function AdminUsersPage() {
 
   const handleSearch = (q: string) => {
     setSearch(q);
-    loadUsersWithDelay(q);
-  };
-
-  let searchTimeout: ReturnType<typeof setTimeout>;
-  const loadUsersWithDelay = (q: string) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => loadUsers(1), 400);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => loadUsers(1, q), 400);
   };
 
   const handleToggleStatus = async (u: User) => {
