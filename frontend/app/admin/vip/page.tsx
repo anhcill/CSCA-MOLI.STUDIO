@@ -65,6 +65,9 @@ interface VipPackage {
   tier: string;
   duration_days: number;
   price: number;
+  original_price?: number | null;
+  price_note?: string | null;
+  original_price_note?: string | null;
   description: string;
   features: string[];
   is_active: boolean;
@@ -150,12 +153,12 @@ export default function AdminVipPage() {
 
   // ── Package edit modal ─────────────────────────────────
   const [editingPkg, setEditingPkg] = useState<VipPackage | null>(null);
-  const [pkgForm, setPkgForm] = useState({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
+  const [pkgForm, setPkgForm] = useState({ name: '', tier: 'vip', duration_days: '', price: '', original_price: '', price_note: '', original_price_note: '', description: '', features: '' });
   const [pkgSaving, setPkgSaving] = useState(false);
 
   // ── Create package modal ────────────────────────────────
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
+  const [createForm, setCreateForm] = useState({ name: '', tier: 'vip', duration_days: '90', price: '', original_price: '', price_note: '', original_price_note: '', description: '', features: '' });
   const [createSaving, setCreateSaving] = useState(false);
 
   // ── Comparison tab ──────────────────────────────────────
@@ -321,6 +324,9 @@ export default function AdminVipPage() {
       tier: pkg.tier || 'vip',
       duration_days: String(pkg.duration_days),
       price: String(pkg.price),
+      original_price: pkg.original_price ? String(pkg.original_price) : '',
+      price_note: pkg.price_note || '',
+      original_price_note: pkg.original_price_note || '',
       description: pkg.description || '',
       features: (pkg.features || []).join('\n'),
     });
@@ -336,6 +342,9 @@ export default function AdminVipPage() {
         tier: pkgForm.tier,
         duration_days: parseInt(pkgForm.duration_days),
         price: parseInt(pkgForm.price),
+        original_price: pkgForm.original_price ? parseInt(pkgForm.original_price) : null,
+        price_note: pkgForm.price_note,
+        original_price_note: pkgForm.original_price_note,
         description: pkgForm.description,
         features,
       });
@@ -359,11 +368,14 @@ export default function AdminVipPage() {
         tier: createForm.tier,
         duration_days: parseInt(createForm.duration_days),
         price: parseInt(createForm.price),
+        original_price: createForm.original_price ? parseInt(createForm.original_price) : null,
+        price_note: createForm.price_note,
+        original_price_note: createForm.original_price_note,
         description: createForm.description,
         features,
       });
       setShowCreateModal(false);
-      setCreateForm({ name: '', tier: 'vip', duration_days: '', price: '', description: '', features: '' });
+      setCreateForm({ name: '', tier: 'vip', duration_days: '90', price: '', original_price: '', price_note: '', original_price_note: '', description: '', features: '' });
       loadPackages();
       alert('Đã tạo gói VIP!');
     } catch (err: any) {
@@ -767,7 +779,15 @@ export default function AdminVipPage() {
                             {pkg.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </div>
-                        <p className="text-2xl font-black text-violet-600 mb-1">{fmtCurrency(pkg.price)}</p>
+                        <div className="mb-1 flex flex-wrap items-baseline gap-2">
+                          <p className="text-2xl font-black text-violet-600">{fmtCurrency(pkg.price)}</p>
+                          {pkg.original_price && pkg.original_price > pkg.price && (
+                            <span className="text-sm font-bold text-gray-400 line-through">{fmtCurrency(pkg.original_price)}</span>
+                          )}
+                        </div>
+                        {pkg.price_note && (
+                          <p className="text-xs font-semibold text-emerald-600 mb-1">{pkg.price_note}</p>
+                        )}
                         <p className="text-xs text-gray-500 mb-3">{pkg.duration_days} ngày</p>
                         {pkg.description && (
                           <p className="text-sm text-gray-600 mb-3 line-clamp-2">{pkg.description}</p>
@@ -947,7 +967,7 @@ export default function AdminVipPage() {
       {/* ── Edit Package Modal ───────────────────────────────── */}
       {editingPkg && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="text-lg font-bold text-gray-900">Sửa gói VIP</h2>
               <button onClick={() => setEditingPkg(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">✕</button>
@@ -966,7 +986,7 @@ export default function AdminVipPage() {
                   <option value="premium">Pre — Video + Cố vấn</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Số ngày *</label>
                   <input type="number" value={pkgForm.duration_days} onChange={e => setPkgForm(f => ({ ...f, duration_days: e.target.value }))}
@@ -977,6 +997,26 @@ export default function AdminVipPage() {
                   <input type="number" value={pkgForm.price} onChange={e => setPkgForm(f => ({ ...f, price: e.target.value }))}
                     className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Giá gốc gạch bỏ</label>
+                  <input type="number" value={pkgForm.original_price} onChange={e => setPkgForm(f => ({ ...f, original_price: e.target.value }))}
+                    placeholder="900000"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Note giá sale</label>
+                  <input type="text" value={pkgForm.price_note} onChange={e => setPkgForm(f => ({ ...f, price_note: e.target.value }))}
+                    placeholder="188.000đ môn Toán / 122.000đ Lý-Hoá"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Note giá gốc</label>
+                <input type="text" value={pkgForm.original_price_note} onChange={e => setPkgForm(f => ({ ...f, original_price_note: e.target.value }))}
+                  placeholder="200.000đ môn Toán / 150.000đ môn Vật Lý hoặc Hoá"
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mô tả</label>
@@ -1007,7 +1047,7 @@ export default function AdminVipPage() {
       {/* ── Create Package Modal ──────────────────────────────── */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="text-lg font-bold text-gray-900">Thêm gói VIP mới</h2>
               <button onClick={() => setShowCreateModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">✕</button>
@@ -1027,7 +1067,7 @@ export default function AdminVipPage() {
                   <option value="premium">Pre — Video + Cố vấn</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">Số ngày *</label>
                   <input type="number" value={createForm.duration_days} onChange={e => setCreateForm(f => ({ ...f, duration_days: e.target.value }))}
@@ -1040,6 +1080,26 @@ export default function AdminVipPage() {
                     placeholder="199000"
                     className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Giá gốc gạch bỏ</label>
+                  <input type="number" value={createForm.original_price} onChange={e => setCreateForm(f => ({ ...f, original_price: e.target.value }))}
+                    placeholder="900000"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">Note giá sale</label>
+                  <input type="text" value={createForm.price_note} onChange={e => setCreateForm(f => ({ ...f, price_note: e.target.value }))}
+                    placeholder="188.000đ môn Toán / 122.000đ Lý-Hoá"
+                    className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Note giá gốc</label>
+                <input type="text" value={createForm.original_price_note} onChange={e => setCreateForm(f => ({ ...f, original_price_note: e.target.value }))}
+                  placeholder="200.000đ môn Toán / 150.000đ môn Vật Lý hoặc Hoá"
+                  className="w-full border rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mô tả</label>

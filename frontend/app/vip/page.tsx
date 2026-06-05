@@ -14,6 +14,9 @@ interface VipPackage {
   tier: string;
   duration_days: number;
   price: number;
+  original_price?: number | null;
+  price_note?: string | null;
+  original_price_note?: string | null;
   description: string;
   features: string[];
   is_active: boolean;
@@ -45,6 +48,19 @@ interface Discount {
 const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
 
 function deriveColor(pkg: VipPackage) {
+  const name = pkg.name.toLowerCase();
+  if (name.includes('mini')) {
+    return { gradient: 'from-slate-500 to-gray-700', border: 'border-slate-300', tag: 'bg-slate-600 text-white', icon: 'text-slate-500', headerBg: 'bg-gradient-to-r from-slate-500 to-gray-700' };
+  }
+  if (name.includes('tự nhiên')) {
+    return { gradient: 'from-sky-600 to-emerald-600', border: 'border-sky-300', tag: 'bg-sky-600 text-white', icon: 'text-sky-500', headerBg: 'bg-gradient-to-r from-sky-600 to-emerald-600' };
+  }
+  if (name.includes('xã hội')) {
+    return { gradient: 'from-rose-500 to-orange-500', border: 'border-rose-300', tag: 'bg-rose-600 text-white', icon: 'text-rose-500', headerBg: 'bg-gradient-to-r from-rose-500 to-orange-500' };
+  }
+  if (name.includes('premium')) {
+    return { gradient: 'from-teal-700 to-emerald-700', border: 'border-teal-300', tag: 'bg-teal-700 text-white', icon: 'text-teal-600', headerBg: 'bg-gradient-to-r from-teal-700 to-emerald-700' };
+  }
   const isPre = isPrePackage(pkg);
   if (isPre) {
     return pkg.duration_days >= 300
@@ -82,11 +98,11 @@ function isPackageCovered(pkg: VipPackage, userTier: TierLevel) {
 
 function getPackageDisplayName(pkg: VipPackage) {
   if (isFreePackage(pkg)) return 'Gói Miễn phí';
-  if (isPrePackage(pkg)) return 'Gói Pre';
-  return 'Gói VIP';
+  return pkg.name;
 }
 
 function getPackageDescription(pkg: VipPackage) {
+  if (pkg.description) return pkg.description;
   if (isFreePackage(pkg)) return 'Truy cập đề thi cơ bản miễn phí';
   if (isPrePackage(pkg)) return 'Bao gồm đề VIP, video giải đề và hỗ trợ cố vấn 1-1';
   return 'Đề thi cao cấp, AI phân tích kết quả và lịch sử thi chi tiết';
@@ -178,10 +194,7 @@ export default function VipPricingPage() {
     setCouponError('');
   };
 
-  // Lọc gói theo tier
-  const freePkgs = packages.filter(isFreePackage);
-  const vipPkgs = packages.filter(p => !isFreePackage(p) && !isPrePackage(p) && (p.tier === 'vip' || /vip/i.test(p.name)));
-  const premiumPkgs = packages.filter(isPrePackage);
+  const paidPkgs = packages.filter(p => !isFreePackage(p));
 
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
@@ -290,104 +303,19 @@ export default function VipPricingPage() {
               </div>
             </div>
 
-            {/* VIP + Premium Plans — all side by side in one row */}
-            {(vipPkgs.length > 0 || premiumPkgs.length > 0) && (
+            {/* Paid packages */}
+            {paidPkgs.length > 0 && (
               <div className="mb-10">
-                {/* Section header */}
-                <div className="flex items-center justify-center gap-6 mb-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-gray-300 rounded-lg flex items-center justify-center">
-                      <span className="text-white text-[10px] font-black">F</span>
-                    </div>
-                    <span className="text-base font-black text-gray-700">Miễn phí</span>
+                <div className="mb-6 flex flex-col items-center gap-2 text-center">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700">
+                    <FiTag size={15} />
+                    4 gói nạp - mỗi gói dùng 3 tháng
                   </div>
-                  <div className="w-px h-5 bg-gray-300" />
-                  <div className="flex items-center gap-2">
-                    <FaCrown className="text-indigo-500" size={18} />
-                    <span className="text-base font-black text-gray-700">VIP</span>
-                    <span className="text-xs text-gray-400 font-medium">— Đề thi cao cấp + AI</span>
-                  </div>
-                  <div className="w-px h-5 bg-gray-300" />
-                  <div className="flex items-center gap-2">
-                    <FaStar className="text-amber-500" size={18} />
-                    <span className="text-base font-black text-gray-700">Pre</span>
-                    <span className="text-xs text-gray-400 font-medium">— Đề thi + Video giải đề + Hỏi đáp giảng viên</span>
-                  </div>
+                  <p className="text-sm font-medium text-gray-500">Giá gốc được gạch bỏ, giá sale là giá thanh toán hiện tại.</p>
                 </div>
 
-                {/* Combined grid: Free + VIP + Pre all equal width */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
-                  {/* Free — left */}
-                  <div className="flex flex-col">
-                    {freePkgs.length > 0 ? (
-                      freePkgs.map(pkg => (
-                        <PlanCard
-                          key={pkg.id} pkg={pkg} isVip={!!isVip}
-                          userTier={userTier}
-                          onCheckout={handleCheckout}
-                          discount={null}
-                          onApplyCoupon={handleApplyCoupon}
-                          selectedPkg={selectedPkg}
-                          onSelectPkg={setSelectedPkg}
-                        />
-                      ))
-                    ) : (
-                      /* Hardcoded Free card when no free package in DB */
-                      <div className="bg-white rounded-2xl shadow-lg border-2 border-gray-200 overflow-hidden flex flex-col h-full hover:shadow-xl transition-all duration-300">
-                        <div className="bg-gradient-to-r from-gray-400 to-slate-500 p-4 text-white pt-6 text-center flex flex-col items-center">
-                          <div className="relative w-full text-center flex flex-col items-center">
-                            <h3 className="text-lg font-black">Gói Miễn phí</h3>
-                            <p className="text-white/70 text-xs mt-0.5">Không giới hạn thời gian</p>
-                          </div>
-                          <div className="mt-3 flex items-baseline justify-center gap-1">
-                            <span className="text-3xl font-black">0</span>
-                            <span className="text-white/70 text-xs">đ</span>
-                          </div>
-                          <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2 text-center">
-                            Truy cập đề thi cơ bản miễn phí
-                          </p>
-                        </div>
-                        <div className="p-4 flex flex-col flex-1">
-                          <ul className="space-y-2.5 flex-1 mt-2">
-                            {/* Real features */}
-                            {[
-                              'Đề thi cơ bản miễn phí',
-                              'Xem kết quả sau thi',
-                              'Theo dõi lịch sử thi',
-                            ].map((feat, i) => (
-                              <li key={i} className="flex items-start gap-2.5">
-                                <FaCheckCircle size={16} className="text-gray-400 mt-0.5 shrink-0" />
-                                <span className="text-sm font-medium text-gray-700 leading-snug">{feat}</span>
-                              </li>
-                            ))}
-                            {/* Disabled features */}
-                            {[
-                              'Truy cập tất cả đề thi VIP / Pre',
-                              'AI phân tích kết quả bài thi',
-                              'Video giải đề chi tiết từng câu',
-                              'Đội ngũ cố vấn hỗ trợ 1-1',
-                              'Gợi ý đề tiếp theo phù hợp',
-                              'Lộ trình học cá nhân hóa'
-                            ].map((feat, i) => (
-                              <li key={`d-${i}`} className="flex items-start gap-2.5 opacity-50">
-                                <span className="text-gray-300 font-bold mt-0.5 shrink-0">—</span>
-                                <span className="text-sm font-medium text-gray-400 leading-snug">{feat}</span>
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="mb-4 pt-5 mt-auto" />
-                          <div className="pt-5 mt-auto">
-                            <div className="py-3.5 rounded-xl text-center text-sm font-black text-white bg-gradient-to-r from-gray-400 to-slate-500 shadow-md">
-                              Miễn phí — Không cần đăng ký
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {/* VIP — middle */}
-                  <div className="flex flex-col">
-                    {vipPkgs.map(pkg => {
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4 items-stretch">
+                    {paidPkgs.map(pkg => {
                       const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
                       return (
                         <PlanCard
@@ -401,24 +329,6 @@ export default function VipPricingPage() {
                         />
                       );
                     })}
-                  </div>
-                  {/* Premium — right */}
-                  <div className="flex flex-col">
-                    {premiumPkgs.map(pkg => {
-                      const discount = appliedDiscount?.package_id === pkg.id ? appliedDiscount : null;
-                      return (
-                        <PlanCard
-                          key={pkg.id} pkg={pkg} isVip={!!isVip}
-                          userTier={userTier}
-                          onCheckout={handleCheckout}
-                          discount={discount}
-                          onApplyCoupon={handleApplyCoupon}
-                          selectedPkg={selectedPkg}
-                          onSelectPkg={setSelectedPkg}
-                        />
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
             )}
@@ -553,6 +463,17 @@ function PlanCard({ pkg, isVip, userTier, onCheckout, discount, onApplyCoupon, s
 
   const isSelected = selectedPkg?.id === pkg.id;
   const isUnselected = selectedPkg && !isSelected;
+  const salePrice = Number(pkg.price) || 0;
+  const originalPrice = Number(pkg.original_price) || 0;
+  const hasSalePrice = originalPrice > salePrice;
+  const salePercent = hasSalePrice ? Math.round((1 - salePrice / originalPrice) * 100) : 0;
+  const displayPrice = discount ? discount.final_amount : salePrice;
+  const crossedPrice = discount ? salePrice : hasSalePrice ? originalPrice : null;
+  const badgeText = discount
+    ? `-${discount.discount_amount.toLocaleString('vi-VN')}đ`
+    : hasSalePrice
+      ? `-${salePercent}%`
+      : '';
 
   return (
     <div
@@ -579,25 +500,32 @@ function PlanCard({ pkg, isVip, userTier, onCheckout, discount, onApplyCoupon, s
             </div>
           )}
         </div>
-        <div className="mt-3 flex items-baseline justify-center gap-1">
-          {discount ? (
-            <>
-              <span className="text-lg font-black line-through text-white/50">
-                {pkg.price.toLocaleString('vi-VN')}
+        <div className="mt-4 flex flex-col items-center gap-1.5">
+          <div className="flex items-baseline justify-center gap-1">
+            <span className="text-4xl font-black tracking-normal">{displayPrice.toLocaleString('vi-VN')}</span>
+            <span className="text-base font-bold text-white/80">đ</span>
+          </div>
+          {crossedPrice !== null && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="text-base font-black line-through text-white/55">
+                {crossedPrice.toLocaleString('vi-VN')}đ
               </span>
-              <span className="text-3xl font-black">
-                {discount.final_amount.toLocaleString('vi-VN')}
-              </span>
-              <span className="text-white/70 text-xs">đ</span>
-              <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded-lg text-[10px] font-bold text-white">
-                -{discount.discount_amount.toLocaleString('vi-VN')}đ
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-3xl font-black">{pkg.price.toLocaleString('vi-VN')}</span>
-              <span className="text-white/70 text-xs">đ</span>
-            </>
+              {badgeText && (
+                <span className="rounded-2xl border border-white/70 bg-white px-3 py-1 text-sm font-black text-orange-500 shadow-sm">
+                  {badgeText}
+                </span>
+              )}
+            </div>
+          )}
+          {pkg.price_note && (
+            <p className="max-w-[220px] text-center text-[10px] font-bold leading-snug text-white/90">
+              {pkg.price_note}
+            </p>
+          )}
+          {pkg.original_price_note && (
+            <p className="max-w-[220px] text-center text-[9px] leading-snug text-white/55">
+              Giá gốc: {pkg.original_price_note}
+            </p>
           )}
         </div>
         <p className="text-white/70 text-[10px] mt-1.5 min-h-[30px] line-clamp-2 text-center">

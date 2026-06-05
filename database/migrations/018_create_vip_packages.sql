@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS vip_packages (
     tier VARCHAR(20) NOT NULL DEFAULT 'vip', -- 'vip' hoặc 'premium'
     duration_days INTEGER NOT NULL,
     price INTEGER NOT NULL DEFAULT 0,
+    original_price INTEGER,
+    price_note TEXT,
+    original_price_note TEXT,
     description TEXT,
     features TEXT[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,

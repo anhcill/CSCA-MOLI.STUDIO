@@ -15,6 +15,9 @@ interface DbPackage {
   tier?: string;
   duration_days: number;
   price: number;
+  original_price?: number | null;
+  price_note?: string | null;
+  original_price_note?: string | null;
   description: string;
   features: string[];
 }
@@ -355,7 +358,7 @@ function CheckoutContent() {
     }
     axios.get('/vip/packages')
       .then(res => {
-        const pkgs: DbPackage[] = res.data.data || [];
+        const pkgs: DbPackage[] = (res.data.data || []).filter((pkg: DbPackage) => Number(pkg.price) > 0);
 
         // Ẩn gói mà user đã có (hoặc cấp thấp hơn cấp hiện tại)
         const userTier = getTierLevel(user);
@@ -620,6 +623,8 @@ function CheckoutContent() {
             {allPackages.map(pkg => {
               const ui = derivePackageUI(pkg);
               const selected = selectedPkg?.id === pkg.id;
+              const hasSalePrice = !!pkg.original_price && pkg.original_price > pkg.price;
+              const salePercent = hasSalePrice ? Math.round((1 - pkg.price / Number(pkg.original_price)) * 100) : 0;
               return (
                 <button
                   key={pkg.id}
@@ -641,6 +646,13 @@ function CheckoutContent() {
                       <span className="text-3xl font-black sm:text-4xl">{pkg.price.toLocaleString('vi-VN')}</span>
                       <span className="text-sm text-white/70">đ</span>
                     </div>
+                    {hasSalePrice && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-black line-through text-white/55">{Number(pkg.original_price).toLocaleString('vi-VN')}đ</span>
+                        <span className="rounded-2xl border border-white/70 bg-white px-2.5 py-0.5 text-xs font-black text-orange-500">-{salePercent}%</span>
+                      </div>
+                    )}
+                    {pkg.price_note && <p className="mt-1.5 text-[10px] font-bold leading-snug text-white/85">{pkg.price_note}</p>}
                   </div>
                   <div className="p-5 bg-white">
                     <ul className="space-y-2">
@@ -780,7 +792,12 @@ function CheckoutContent() {
                   </div>
                 </div>
               ) : (
-                <span className="text-xl sm:text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
+                <div className="space-y-1">
+                  {selectedPkg.original_price && selectedPkg.original_price > selectedPkg.price && (
+                    <span className="block text-sm font-black text-gray-500 line-through">{selectedPkg.original_price.toLocaleString('vi-VN')}đ</span>
+                  )}
+                  <span className="block text-xl sm:text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
+                </div>
               )}
             </div>
           </div>

@@ -737,7 +737,10 @@ async function runOptimizations() {
     // Add tier column if missing
     await pool.query(`
       ALTER TABLE vip_packages
-      ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'vip'
+      ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'vip',
+      ADD COLUMN IF NOT EXISTS original_price INTEGER,
+      ADD COLUMN IF NOT EXISTS price_note TEXT,
+      ADD COLUMN IF NOT EXISTS original_price_note TEXT
     `);
 
     // Seed default VIP packages if none exist
@@ -747,11 +750,11 @@ async function runOptimizations() {
     const pkgCount = await pool.query('SELECT COUNT(*)::int FROM vip_packages');
     if (pkgCount.rows[0].count === 0) {
       await pool.query(`
-        INSERT INTO vip_packages (name, tier, duration_days, price, description, features, sort_order) VALUES
-        ('Gói VIP 30 ngày', 'vip', 30, 199000, 'Truy cập đề thi VIP + giải đề chi tiết', ARRAY['Truy cập đề thi VIP', 'Giải đề chi tiết', 'Hỗ trợ ưu tiên'], 1),
-        ('Gói VIP 180 ngày', 'vip', 180, 499000, 'Tiết kiệm 56% - truy cập đầy đủ trong 6 tháng', ARRAY['Truy cập đề thi VIP', 'Giải đề chi tiết', 'Phân tích kết quả nâng cao', 'Hỗ trợ 24/7'], 2),
-        ('Gói Pre 90 ngày', 'premium', 90, 249000, 'Tất cả tính năng VIP + AI phân tích + Video giải đề độc quyền', ARRAY['Tất cả tính năng VIP', 'Phân tích kết quả bằng AI', 'Video giải đề độc quyền', 'Hỗ trợ cố vấn 1-1'], 3),
-        ('Gói Pre 365 ngày', 'premium', 365, 699000, 'Gói năm - tiết kiệm nhất, truy cập toàn bộ tính năng Pre', ARRAY['Tất cả tính năng VIP', 'Phân tích kết quả bằng AI', 'Video giải đề độc quyền', 'Tư vấn trực tiếp 1-1', 'Lộ trình cá nhân hóa'], 4)
+        INSERT INTO vip_packages (name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, sort_order) VALUES
+        ('Premium', 'premium', 90, 866000, 900000, NULL, NULL, 'Truy cập full 6 môn: Toán, Vật Lý, Hoá học, Tiếng Trung Tự Nhiên, Tiếng Trung Xã Hội', ARRAY['Truy cập toàn bộ đề, đáp án và lời giải chi tiết của tất cả các môn', 'Truy cập toàn bộ Từ vựng và Lý thuyết của tất cả các môn học', 'Giải đề CSCA mới nhất', 'Tải về tài liệu liên quan', 'Xem lại lịch sử làm bài và đáp án chi tiết', 'AI phân tích lỗi sai, đáp án và đề xuất lộ trình học bổ sung'], 1),
+        ('Gói Tự Nhiên', 'vip', 90, 488000, 550000, NULL, NULL, 'Tiếng Trung Tự Nhiên + Toán + Lý/Hoá', ARRAY['Truy cập toàn bộ đề, đáp án và lời giải chi tiết của Toán + TTTN + Lý/Hoá', 'Truy cập toàn bộ Từ vựng và Lý thuyết của Toán + TTTN + Lý/Hoá', 'Giải đề CSCA mới nhất của Toán + TTTN + Lý/Hoá', 'Tải về tài liệu liên quan đến Toán + TTTN + Lý/Hoá', 'Xem lại lịch sử làm bài và đáp án chi tiết', 'AI phân tích lỗi sai, đáp án và đề xuất lộ trình học bổ sung'], 2),
+        ('Gói Xã Hội', 'vip', 90, 333000, 400000, NULL, NULL, 'Tiếng Trung Xã Hội + Toán', ARRAY['Truy cập toàn bộ đề, đáp án và lời giải chi tiết của Toán và TTXH', 'Truy cập toàn bộ Từ vựng và Lý thuyết của Toán và TTXH', 'Giải đề CSCA mới nhất của Toán và TTXH', 'Tải về tài liệu liên quan đến Toán và TTXH', 'Xem lại lịch sử làm bài và đáp án chi tiết', 'AI phân tích lỗi sai, đáp án và đề xuất lộ trình học bổ sung'], 3),
+        ('Gói Mini', 'vip', 90, 188000, 200000, '188.000đ môn Toán / 122.000đ môn Vật Lý hoặc Hoá', '200.000đ môn Toán / 150.000đ môn Vật Lý hoặc Hoá', '1 trong 3 môn Toán / Lý / Hoá', ARRAY['Truy cập các đề miễn phí trên web', 'Download tài liệu có hạn', 'Hỏi trên diễn đàn', 'Xem lại lịch sử làm bài', 'Truy cập Lý thuyết và Từ vựng có hạn'], 4)
       `);
     }
 
@@ -866,6 +869,7 @@ async function runOptimizations() {
       "032_upsert_light_external_games.sql",
       "033_upsert_hot_external_games.sql",
       "034_replace_relaxing_external_games.sql",
+      "035_upsert_3_month_vip_packages.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(
