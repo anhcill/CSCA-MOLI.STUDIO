@@ -50,6 +50,26 @@ export function isVipActive(user: User | null | undefined): boolean {
   return (isVip || hasTier) && notExpired;
 }
 
+function normalizeSubjectCode(subjectCode?: string | null): string {
+  return String(subjectCode || '').trim().toUpperCase();
+}
+
+function getAllowedSubjects(user: User | null | undefined): string[] {
+  if (!isVipActive(user)) return [];
+  if (user?.subscription_tier === 'premium') return ['*'];
+  const subjects = Array.isArray(user?.vip_allowed_subjects)
+    ? user.vip_allowed_subjects.map(normalizeSubjectCode).filter(Boolean)
+    : [];
+  return subjects.length > 0 ? Array.from(new Set(subjects)) : ['*'];
+}
+
+export function canAccessSubject(user: User | null | undefined, subjectCode?: string | null): boolean {
+  const subjects = getAllowedSubjects(user);
+  if (!subjectCode) return subjects.length > 0;
+  const normalized = normalizeSubjectCode(subjectCode);
+  return subjects.includes('*') || subjects.includes(normalized);
+}
+
 // ─── Check Premium access (AI + Video + Chat) ─────────────────────────────────────
 export function isPremiumActive(user: User | null | undefined): boolean {
   if (!user) return false;
@@ -85,10 +105,12 @@ export function getTierLevel(user: User | null | undefined): TierLevel {
 }
 
 // ─── Check if user can access content at given tier ──────────────────────────
-export function canAccessContent(user: User | null | undefined, contentTier: TierLevel): boolean {
+export function canAccessContent(user: User | null | undefined, contentTier: TierLevel, subjectCode?: string | null): boolean {
   const userTier = getTierLevel(user);
   const tierOrder: TierLevel[] = ['basic', 'vip', 'premium'];
-  return tierOrder.indexOf(userTier) >= tierOrder.indexOf(contentTier);
+  if (tierOrder.indexOf(userTier) < tierOrder.indexOf(contentTier)) return false;
+  if (contentTier === 'basic') return true;
+  return canAccessSubject(user, subjectCode);
 }
 
 // ─── Display helpers ─────────────────────────────────────────────────────────
