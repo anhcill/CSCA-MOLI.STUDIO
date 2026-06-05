@@ -1636,7 +1636,10 @@ const AdminExamController = {
       const limit = parseInt(req.query.limit) || 20;
       const offset = (page - 1) * limit;
       const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash' | undefined (all)
+      const subject = typeof req.query.subject === "string" ? req.query.subject.trim() : "";
 
+      const params = [];
+      let idx = 1;
       const conditions = ["e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'"];
       if (type === 'phong-thi') {
         conditions.push('e.start_time IS NOT NULL');
@@ -1653,16 +1656,23 @@ const AdminExamController = {
         if (!isSuperAdmin(req)) {
           return res.status(403).json({ message: "Chỉ admin tổng được xem danh sách xóa tạm." });
         }
-        conditions[0] = "e.deleted_at IS NOT NULL OR e.deletion_status = 'soft_deleted'";
+        conditions[0] = "(e.deleted_at IS NOT NULL OR e.deletion_status = 'soft_deleted')";
+      }
+      if (subject) {
+        conditions.push(`EXISTS (SELECT 1 FROM subjects subject_filter WHERE subject_filter.id = e.subject_id AND subject_filter.code = $${idx++})`);
+        params.push(subject);
       }
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await pool.query(
         `SELECT COUNT(*) as total FROM exams e ${whereClause}`,
+        params,
       );
       const totalExams = parseInt(countResult.rows[0].total);
       const totalPages = Math.ceil(totalExams / limit);
+      const limitParam = idx++;
+      const offsetParam = idx++;
 
       // Get exams with subject info
       const examsResult = await pool.query(
@@ -1701,8 +1711,8 @@ const AdminExamController = {
                 ${whereClause}
                 GROUP BY e.id, s.name, s.code, requester.full_name, deleter.full_name
                 ORDER BY e.created_at DESC
-                LIMIT $1 OFFSET $2`,
-        [limit, offset],
+                LIMIT $${limitParam} OFFSET $${offsetParam}`,
+        [...params, limit, offset],
       );
 
       res.json({
@@ -1864,13 +1874,21 @@ const AdminExamController = {
   // GET /api/admin/exams/counts - Get exam counts by type
   async getCounts(req, res) {
     try {
-      const [total, phongThi, tuDo, moPhong, deleteRequests, trash] = await Promise.all([
+      const [total, phongThi, tuDo, moPhong, deleteRequests, trash, bySubject] = await Promise.all([
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted'"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NOT NULL"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = false"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND COALESCE(deletion_status, 'none') <> 'soft_deleted' AND start_time IS NULL AND is_simulated = true"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NULL AND deletion_status = 'requested'"),
         pool.query("SELECT COUNT(*)::int as count FROM exams WHERE deleted_at IS NOT NULL OR deletion_status = 'soft_deleted'"),
+        pool.query(`
+          SELECT s.id as subject_id, s.name as subject_name, s.code as subject_code, COUNT(e.id)::int as count
+          FROM subjects s
+          JOIN exams e ON e.subject_id = s.id
+          WHERE e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'
+          GROUP BY s.id, s.name, s.code
+          ORDER BY s.name ASC
+        `),
       ]);
       res.json({
         all: parseInt(total.rows[0].count),
@@ -1879,6 +1897,12 @@ const AdminExamController = {
         moPhong: parseInt(moPhong.rows[0].count),
         deleteRequests: parseInt(deleteRequests.rows[0].count),
         trash: parseInt(trash.rows[0].count),
+        bySubject: bySubject.rows.map((row) => ({
+          subjectId: row.subject_id,
+          subjectName: row.subject_name,
+          subjectCode: row.subject_code,
+          count: parseInt(row.count),
+        })),
       });
     } catch (error) {
       console.error("Get exam counts error:", error);

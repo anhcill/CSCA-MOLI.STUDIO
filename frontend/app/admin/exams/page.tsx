@@ -54,6 +54,14 @@ interface ExamCounts {
     moPhong: number;
     deleteRequests: number;
     trash: number;
+    bySubject?: SubjectCount[];
+}
+
+interface SubjectCount {
+    subjectId: number;
+    subjectName: string;
+    subjectCode: string;
+    count: number;
 }
 
 interface ExamStats {
@@ -104,6 +112,7 @@ export default function ExamsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<ExamFilter>('all');
+    const [subjectFilter, setSubjectFilter] = useState('');
     const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, deleteRequests: 0, trash: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
@@ -159,13 +168,13 @@ export default function ExamsPage() {
         loadExamCounts();
         loadStats();
         loadExams();
-    }, [isAuthenticated, user, router, pagination.currentPage, filterType]);
+    }, [isAuthenticated, user, router, pagination.currentPage, filterType, subjectFilter]);
 
     const loadExams = async () => {
         try {
             setLoading(true);
             const typeParam = filterType === 'all' ? undefined : filterType;
-            const data = await examAdminApi.getAllExams(pagination.currentPage, pagination.limit, typeParam);
+            const data = await examAdminApi.getAllExams(pagination.currentPage, pagination.limit, typeParam, subjectFilter || undefined);
             setExams(data.exams);
             setPagination(data.pagination);
         } catch (error) {
@@ -292,6 +301,11 @@ export default function ExamsPage() {
         setPagination(prev => ({ ...prev, currentPage: 1 }));
         loadExamCounts();
         loadStats();
+    };
+
+    const handleSubjectFilterChange = (subjectCode: string) => {
+        setSubjectFilter(subjectCode);
+        setPagination(prev => ({ ...prev, currentPage: 1 }));
     };
 
     if (loading) {
@@ -423,6 +437,36 @@ export default function ExamsPage() {
                             <span>{tab.emoji}</span> {tab.label}
                             <span className={`text-xs font-bold ${filterType === tab.value ? 'opacity-80' : 'opacity-60'}`}>
                                 ({tab.count})
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Subject Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        onClick={() => handleSubjectFilterChange('')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                            subjectFilter === ''
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:text-emerald-700'
+                        }`}
+                    >
+                        Tất cả môn
+                    </button>
+                    {(examCounts.bySubject || []).map(subject => (
+                        <button
+                            key={subject.subjectCode}
+                            onClick={() => handleSubjectFilterChange(subject.subjectCode)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                subjectFilter === subject.subjectCode
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:text-emerald-700'
+                            }`}
+                        >
+                            {subject.subjectName}
+                            <span className={`font-bold ${subjectFilter === subject.subjectCode ? 'opacity-80' : 'opacity-60'}`}>
+                                ({subject.count})
                             </span>
                         </button>
                     ))}

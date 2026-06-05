@@ -213,9 +213,9 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash') => {
+    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string) => {
         const response = await axios.get('/admin/exams', {
-            params: { page, limit, ...(type ? { type } : {}) }
+            params: { page, limit, ...(type ? { type } : {}), ...(subject ? { subject } : {}) }
         });
         return response.data;
     },
