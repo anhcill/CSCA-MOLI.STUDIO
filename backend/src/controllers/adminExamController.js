@@ -391,7 +391,7 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
       // P0: destructure titleCn, descriptionCn
-      const { title, titleCn, duration, totalPoints, description, difficulty_level, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, difficulty_level, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -403,6 +403,18 @@ const AdminExamController = {
       // P1: sanitize all text fields + P0: handle titleCn/descriptionCn
       if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(sanitize(title)); }
       if (titleCn !== undefined) { updates.push(`title_cn = $${idx++}`); params.push(titleCn ? sanitize(titleCn) : null); }
+      if (subjectId !== undefined) {
+        const parsedSubjectId = Number.parseInt(subjectId, 10);
+        if (!Number.isInteger(parsedSubjectId) || parsedSubjectId <= 0) {
+          return res.status(400).json({ message: "Subject not found" });
+        }
+        const subjectCheck = await pool.query("SELECT id FROM subjects WHERE id = $1", [parsedSubjectId]);
+        if (subjectCheck.rows.length === 0) {
+          return res.status(400).json({ message: "Subject not found" });
+        }
+        updates.push(`subject_id = $${idx++}`);
+        params.push(parsedSubjectId);
+      }
       if (duration !== undefined) { updates.push(`duration = $${idx++}`); params.push(duration); }
       if (parsedTotalPoints !== undefined) { updates.push(`total_points = $${idx++}`); params.push(parsedTotalPoints); }
       if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description ? sanitize(description) : null); }
@@ -1879,7 +1891,13 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
 
-      const examResult = await pool.query("SELECT * FROM exams WHERE id = $1 AND deleted_at IS NULL", [examId]);
+      const examResult = await pool.query(
+        `SELECT e.*, s.name as subject_name, s.code as subject_code
+         FROM exams e
+         LEFT JOIN subjects s ON e.subject_id = s.id
+         WHERE e.id = $1 AND e.deleted_at IS NULL`,
+        [examId],
+      );
       if (examResult.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
       }

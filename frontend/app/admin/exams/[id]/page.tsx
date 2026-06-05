@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
+import axios from '@/lib/utils/axios';
 import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
@@ -70,7 +71,9 @@ interface Exam {
     id: number;
     title: string;
     title_cn?: string;
+    subject_id?: number;
     subject_name?: string;
+    subject_code?: string;
     duration: number;
     total_points: number;
     total_questions: number;
@@ -83,6 +86,12 @@ interface Exam {
     solution_description?: string;
     shuffle_mode?: boolean;
     vip_tier?: string;
+}
+
+interface Subject {
+    id: number;
+    name: string;
+    code: string;
 }
 
 type EditMode = 'view' | 'edit';
@@ -256,6 +265,7 @@ export default function AdminExamDetailPage() {
     ].join('|');
 
     const [exam, setExam] = useState<Exam | null>(null);
+    const [subjects, setSubjects] = useState<Subject[]>([]);
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<EditMode>('view');
@@ -274,6 +284,7 @@ export default function AdminExamDetailPage() {
     const [editingMeta, setEditingMeta] = useState(false);
     const [metaForm, setMetaForm] = useState({
         title: '', titleCn: '', duration: 90,
+        subjectId: 0,
         totalPoints: 100, description: '', allow_download: true,
         is_premium: false, shuffle_mode: false, solution_video_url: '',
         solution_description: '', vip_tier: 'basic', is_simulated: false,
@@ -322,7 +333,19 @@ export default function AdminExamDetailPage() {
             return;
         }
         loadExam();
+        loadSubjects();
     }, [id, isAuthenticated, authPermissionKey]);
+
+    const loadSubjects = async () => {
+        try {
+            const response = await axios.get('/subjects');
+            const payload = response?.data?.data ?? response?.data;
+            setSubjects(Array.isArray(payload) ? payload : []);
+        } catch (error) {
+            console.error('Error fetching subjects:', error);
+            setSubjects([]);
+        }
+    };
 
     const loadExam = async () => {
         try {
@@ -338,6 +361,7 @@ export default function AdminExamDetailPage() {
                 setMetaForm({
                     title: data.exam.title || '',
                     titleCn: data.exam.title_cn || '',
+                    subjectId: data.exam.subject_id || 0,
                     duration: data.exam.duration || 90,
                     totalPoints: data.exam.total_points || 100,
                     description: data.exam.description || '',
@@ -370,11 +394,16 @@ export default function AdminExamDetailPage() {
 
     const handleSaveMeta = async () => {
         if (!exam) return;
+        if (!metaForm.subjectId) {
+            alert('Vui lòng chọn môn học');
+            return;
+        }
         try {
             setSavingMeta(true);
             await examAdminApi.updateExam(exam.id, {
                 title: metaForm.title,
                 titleCn: metaForm.titleCn,
+                subjectId: metaForm.subjectId,
                 duration: metaForm.duration,
                 totalPoints: metaForm.totalPoints,
                 description: metaForm.description,
@@ -386,8 +415,10 @@ export default function AdminExamDetailPage() {
                 vip_tier: metaForm.vip_tier,
                 is_simulated: metaForm.is_simulated,
             });
+            const selectedSubject = subjects.find(subject => subject.id === metaForm.subjectId);
             setExam({ ...exam, title: metaForm.title, duration: metaForm.duration,
-                total_points: metaForm.totalPoints, allow_download: metaForm.allow_download,
+                subject_id: metaForm.subjectId, subject_name: selectedSubject?.name || exam.subject_name,
+                subject_code: selectedSubject?.code || exam.subject_code, total_points: metaForm.totalPoints, allow_download: metaForm.allow_download,
                 is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated });
@@ -999,6 +1030,19 @@ export default function AdminExamDetailPage() {
                                         <input type="text" value={metaForm.titleCn}
                                             onChange={e => handleMetaChange('titleCn', e.target.value)}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
+                                        <select
+                                            value={metaForm.subjectId}
+                                            onChange={e => handleMetaChange('subjectId', parseInt(e.target.value))}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        >
+                                            <option value={0}>Chọn môn học...</option>
+                                            {subjects.map(subject => (
+                                                <option key={subject.id} value={subject.id}>{subject.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian (phút)</label>
