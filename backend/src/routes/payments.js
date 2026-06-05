@@ -8,11 +8,14 @@ const emailService = require('../services/emailService');
 const { authenticate } = require('../middleware/authMiddleware');
 const db = require('../config/database');
 const coinService = require('../services/coinService');
+const {
+  canAccessSubject,
+  hasAllSubjects,
+  resolveSelectedSubjects,
+} = require('../utils/vipEntitlements');
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
-const TIER_RANK = { basic: 0, vip: 1, premium: 2 };
-
 function normalizeTier(value) {
   const tier = String(value || '').trim().toLowerCase();
   if (tier === 'premium' || tier === 'pre') return 'premium';
@@ -33,6 +36,34 @@ function getActiveTier(user) {
   const userTier = normalizeTier(user.subscription_tier);
   if (userTier !== 'basic') return userTier;
   return user?.is_vip ? 'vip' : 'basic';
+}
+
+function isPackageEntitlementCovered(user, targetTier, selectedSubjects) {
+  const activeTier = getActiveTier(user);
+  if (activeTier === 'basic') return false;
+  if (activeTier === 'premium') return true;
+  if (normalizeTier(targetTier) === 'premium') return false;
+
+  const subjects = Array.isArray(selectedSubjects) ? selectedSubjects : [];
+  if (hasAllSubjects(subjects)) return false;
+  return subjects.length > 0 && subjects.every(subject => canAccessSubject(user, subject));
+}
+
+function getSubjectPriceMapValue(map, subjectCode) {
+  if (!map || !subjectCode) return null;
+  const value = map[subjectCode] ?? map[String(subjectCode).toUpperCase()];
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getEffectivePackagePrice(pkg, selectedSubjects) {
+  const selected = Array.isArray(selectedSubjects) && selectedSubjects.length === 1 ? selectedSubjects[0] : null;
+  return getSubjectPriceMapValue(pkg?.subject_prices, selected) || Number(pkg?.price || 0);
+}
+
+function getEffectiveOriginalPrice(pkg, selectedSubjects) {
+  const selected = Array.isArray(selectedSubjects) && selectedSubjects.length === 1 ? selectedSubjects[0] : null;
+  return getSubjectPriceMapValue(pkg?.subject_original_prices, selected) || Number(pkg?.original_price || 0) || null;
 }
 
 // ── In-memory rate limiter (simple, per IP) ────────────────────────────────────
@@ -316,6 +347,51 @@ function getStoredDiscountDetails(transaction) {
   };
 }
 
+async function getPackageEntitlement(packageId) {
+  if (!packageId) return null;
+  const result = await db.query(
+    `SELECT id, name, COALESCE(tier, 'vip') AS tier, allowed_subjects, requires_subject_choice
+     FROM vip_packages
+     WHERE id = $1`,
+    [packageId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getEntitlementForTransaction(transaction) {
+  const meta = getStoredPaymentMeta(transaction);
+  const pkg = await getPackageEntitlement(transaction.package_id);
+  const fallbackTier = transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip';
+
+  if (!pkg) {
+    return {
+      tier: fallbackTier,
+      allowedSubjects: ['*'],
+      packageId: transaction.package_id || null,
+      transactionId: transaction.id,
+      source: 'payment',
+    };
+  }
+
+  let allowedSubjects;
+  try {
+    allowedSubjects = resolveSelectedSubjects(pkg, meta.selectedSubjectCode);
+  } catch (error) {
+    if (error.code !== 'SUBJECT_REQUIRED') throw error;
+    allowedSubjects = Array.isArray(pkg.allowed_subjects) && pkg.allowed_subjects.length > 0
+      ? pkg.allowed_subjects
+      : ['*'];
+  }
+
+  return {
+    tier: normalizeTier(pkg.tier || fallbackTier),
+    allowedSubjects,
+    packageId: pkg.id,
+    transactionId: transaction.id,
+    source: 'payment',
+  };
+}
+
 async function getReservedCoins(userId, client = db) {
   const reservedRes = await client.query(
     `SELECT COALESCE(SUM(
@@ -353,7 +429,7 @@ async function applyCoinSpend(transaction) {
 async function getPaymentUser(userId) {
   try {
     const userRes = await db.query(
-      `SELECT id, email, username, full_name, vip_expires_at, subscription_tier
+      `SELECT id, email, username, full_name, vip_expires_at, subscription_tier, vip_package_id, vip_allowed_subjects
        FROM users
        WHERE id = $1`,
       [userId]
@@ -362,7 +438,7 @@ async function getPaymentUser(userId) {
   } catch (err) {
     console.error('[SePay] Full payment user lookup failed, using fallback:', err.message);
     const fallbackRes = await db.query(
-      `SELECT id, email, username, full_name, vip_expires_at
+      `SELECT id, email, username, full_name, vip_expires_at, vip_package_id, vip_allowed_subjects
        FROM users
        WHERE id = $1`,
       [userId]
@@ -387,28 +463,35 @@ async function markTransactionCompletedFallback(transaction, payload) {
   }
 }
 
-async function updateVipStatusForPayment(userId, durationDays, tier) {
+async function updateVipStatusForPayment(userId, durationDays, tier, entitlementOptions = {}) {
   try {
-    return await User.updateVipStatus(userId, durationDays, tier);
+    return await User.grantVipEntitlement(userId, durationDays, tier, entitlementOptions);
   } catch (err) {
-    console.error('[SePay] User.updateVipStatus failed, using direct fallback:', err.message);
+    console.error('[Payment] User.grantVipEntitlement failed, using direct fallback:', err.message);
     const normalizedTier = String(tier || '').toLowerCase() === 'premium' || String(tier || '').toLowerCase() === 'pre'
       ? 'premium'
       : 'vip';
     const days = Number.parseInt(durationDays, 10);
     const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
+    const fallbackSubjects = normalizedTier === 'premium'
+      ? ['*']
+      : (Array.isArray(entitlementOptions.allowedSubjects) && entitlementOptions.allowedSubjects.length > 0
+        ? entitlementOptions.allowedSubjects
+        : ['*']);
     const fallbackRes = await db.query(
       `UPDATE users
        SET is_vip = TRUE,
            subscription_tier = $3,
+           vip_package_id = COALESCE($4, vip_package_id),
+           vip_allowed_subjects = $5,
            vip_expires_at = CASE
              WHEN $2::int > 0 THEN GREATEST(COALESCE(vip_expires_at, NOW()), NOW()) + ($2::int * INTERVAL '1 day')
              ELSE vip_expires_at
            END,
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, is_vip, vip_expires_at, subscription_tier`,
-      [userId, safeDays, normalizedTier]
+       RETURNING id, is_vip, vip_expires_at, subscription_tier, vip_package_id, vip_allowed_subjects`,
+      [userId, safeDays, normalizedTier, entitlementOptions.packageId || null, fallbackSubjects]
     );
     return fallbackRes.rows[0] || null;
   }
@@ -420,11 +503,8 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
     console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
   });
 
-  const tier = transaction.package_id
-    ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-    : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-
-  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
+  const entitlement = await getEntitlementForTransaction(transaction);
+  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, entitlement.tier, entitlement);
   const updatedUser = await getPaymentUser(transaction.user_id);
   if (!updatedUser) {
     throw new Error(`Payment user not found: ${transaction.user_id}`);
@@ -464,8 +544,8 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
     }),
   ]).catch(err => console.error('Payment email error:', err.message));
 
-  console.log(`[Payment] ✅ Bank transfer completed: user=${transaction.user_id}, tx=${transaction.transaction_code}, tier=${tier}`);
-  return { updatedUser, tier };
+  console.log(`[Payment] Bank transfer completed: user=${transaction.user_id}, tx=${transaction.transaction_code}, tier=${entitlement.tier}`);
+  return { updatedUser, tier: entitlement.tier };
 }
 
 async function completeZeroAmountTransaction(transaction, providerPayload = {}) {
@@ -474,11 +554,8 @@ async function completeZeroAmountTransaction(transaction, providerPayload = {}) 
     console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
   });
 
-  const tier = transaction.package_id
-    ? (await db.query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-    : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-
-  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, tier);
+  const entitlement = await getEntitlementForTransaction(transaction);
+  await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, entitlement.tier, entitlement);
   const updatedUser = await getPaymentUser(transaction.user_id);
   if (!updatedUser) {
     throw new Error(`Payment user not found: ${transaction.user_id}`);
@@ -519,7 +596,7 @@ async function completeZeroAmountTransaction(transaction, providerPayload = {}) 
     }),
   ]).catch(err => console.error('Zero amount payment email error:', err.message));
 
-  return { updatedUser, tier };
+  return { updatedUser, tier: entitlement.tier };
 }
 
 function getSePayApiToken() {
@@ -641,7 +718,7 @@ router.post('/create', authenticate, async (req, res) => {
       });
     }
 
-    const { package_id, payment_method = 'momo', coupon_code, idempotency_key, use_coins, coins_to_use } = req.body;
+    const { package_id, payment_method = 'momo', coupon_code, idempotency_key, use_coins, coins_to_use, selected_subject_code } = req.body;
     const userId = req.user.id;
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -675,7 +752,7 @@ router.post('/create', authenticate, async (req, res) => {
 
     // Lấy gói từ DB
     const pkgRes = await db.query(
-      `SELECT id, name, tier, duration_days, price, is_active FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+      `SELECT id, name, tier, duration_days, price, original_price, subject_prices, subject_original_prices, is_active, allowed_subjects, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
       [pkgId]
     );
 
@@ -686,15 +763,25 @@ router.post('/create', authenticate, async (req, res) => {
     const pkg = pkgRes.rows[0];
     const normalizedPackageTier = normalizeTier(pkg.tier || 'vip');
     const tier = normalizedPackageTier === 'basic' ? 'vip' : normalizedPackageTier;
+    let selectedSubjects;
+    try {
+      selectedSubjects = resolveSelectedSubjects(pkg, selected_subject_code);
+    } catch (subjectErr) {
+      return res.status(400).json({
+        success: false,
+        code: subjectErr.code || 'INVALID_SUBJECT',
+        message: subjectErr.message || 'Mon hoc khong hop le.',
+      });
+    }
 
     // Block payment for an active same-tier or lower-tier package.
     const userCheck = await db.query(
-      `SELECT is_vip, vip_expires_at, subscription_tier, COALESCE(coins, 0) AS coins FROM users WHERE id = $1`,
+      `SELECT is_vip, vip_expires_at, subscription_tier, vip_allowed_subjects, COALESCE(coins, 0) AS coins FROM users WHERE id = $1`,
       [userId]
     );
     const user = userCheck.rows[0];
     const activeTier = getActiveTier(user);
-    if (TIER_RANK[activeTier] >= TIER_RANK[tier]) {
+    if (isPackageEntitlementCovered(user, tier, selectedSubjects)) {
       return res.status(409).json({
         success: false,
         code: 'PACKAGE_ALREADY_ACTIVE',
@@ -705,14 +792,17 @@ router.post('/create', authenticate, async (req, res) => {
       });
     }
 
+    const effectivePrice = getEffectivePackagePrice(pkg, selectedSubjects);
+    const effectiveOriginalPrice = getEffectiveOriginalPrice(pkg, selectedSubjects);
+
     // Sanitize: đảm bảo giá là số dương
-    if (typeof pkg.price !== 'number' || pkg.price <= 0) {
+    if (!Number.isFinite(effectivePrice) || effectivePrice <= 0) {
       return res.status(400).json({ success: false, message: 'Giá gói không hợp lệ.' });
     }
 
     const orderId = `CSCA${userId}T${Date.now()}`;
 
-    let finalAmount = Number(pkg.price);
+    let finalAmount = Number(effectivePrice);
     let discountAmount = 0;
     let appliedCoupon = null;
 
@@ -744,7 +834,7 @@ router.post('/create', authenticate, async (req, res) => {
           if (c.applicable_tiers && c.applicable_tiers.length > 0 && !c.applicable_tiers.includes('all')) {
             applicable = applicable && c.applicable_tiers.includes(pkgTier);
           }
-          if (c.min_order_amount && c.min_order_amount > pkg.price) {
+          if (c.min_order_amount && c.min_order_amount > effectivePrice) {
             applicable = false;
           }
 
@@ -763,15 +853,15 @@ router.post('/create', authenticate, async (req, res) => {
             }
 
             if (c.discount_type === 'percentage') {
-              discountAmount = Math.floor(pkg.price * c.discount_value / 100);
+              discountAmount = Math.floor(effectivePrice * c.discount_value / 100);
               if (c.max_discount_amount) {
                 discountAmount = Math.min(discountAmount, c.max_discount_amount);
               }
             } else {
-              discountAmount = Math.min(Number(c.discount_value), pkg.price);
+              discountAmount = Math.min(Number(c.discount_value), effectivePrice);
             }
-            discountAmount = Math.min(Math.max(0, discountAmount), Number(pkg.price));
-            finalAmount = Math.max(0, Math.round(pkg.price - discountAmount));
+            discountAmount = Math.min(Math.max(0, discountAmount), Number(effectivePrice));
+            finalAmount = Math.max(0, Math.round(effectivePrice - discountAmount));
             appliedCoupon = c;
           }
         }
@@ -809,10 +899,13 @@ router.post('/create', authenticate, async (req, res) => {
         coinsUsed,
         coinValueVnd: COIN_VALUE_VND,
         coinDiscountAmount,
-        originalAmount: Number(pkg.price),
+        originalAmount: Number(effectivePrice),
+        originalListAmount: effectiveOriginalPrice,
         couponDiscountAmount: discountAmount,
         finalAmount,
         paymentMethodRequested: payment_method,
+        selectedSubjectCode: selectedSubjects.length === 1 && selectedSubjects[0] !== '*' ? selectedSubjects[0] : null,
+        grantedSubjects: selectedSubjects,
       };
 
       transaction = await Transaction.create({
@@ -839,7 +932,7 @@ router.post('/create', authenticate, async (req, res) => {
     if (finalAmount <= 0) {
       const { updatedUser } = await completeZeroAmountTransaction(transaction, {
         couponCode: appliedCoupon?.code || coupon_code?.trim() || null,
-        originalAmount: Number(pkg.price),
+        originalAmount: Number(effectivePrice),
         couponDiscountAmount: discountAmount,
         coinDiscountAmount,
         coinsUsed,
@@ -857,11 +950,13 @@ router.post('/create', authenticate, async (req, res) => {
           amount: 0,
           vip_expires_at: updatedUser?.vip_expires_at || null,
           subscription_tier: updatedUser?.subscription_tier || tier,
+          vip_allowed_subjects: updatedUser?.vip_allowed_subjects || selectedSubjects,
+          selected_subject_code: selectedSubjects.length === 1 && selectedSubjects[0] !== '*' ? selectedSubjects[0] : null,
         },
         appliedCoupon: appliedCoupon ? {
           code: appliedCoupon.code,
           discount_amount: discountAmount,
-          original_amount: pkg.price,
+          original_amount: effectivePrice,
           final_amount: 0,
         } : null,
         appliedCoins: coinsUsed > 0 ? {
@@ -897,7 +992,7 @@ router.post('/create', authenticate, async (req, res) => {
         appliedCoupon: appliedCoupon ? {
           code: appliedCoupon.code,
           discount_amount: discountAmount,
-          original_amount: pkg.price,
+          original_amount: effectivePrice,
           final_amount: finalAmount,
         } : null,
         appliedCoins: coinsUsed > 0 ? {
@@ -934,7 +1029,7 @@ router.post('/create', authenticate, async (req, res) => {
       appliedCoupon: appliedCoupon ? {
         code: appliedCoupon.code,
         discount_amount: discountAmount,
-        original_amount: pkg.price,
+          original_amount: effectivePrice,
         final_amount: finalAmount,
       } : null,
       appliedCoins: coinsUsed > 0 ? {
@@ -996,7 +1091,7 @@ router.post('/momo-webhook', async (req, res) => {
         try { Object.assign(extra, JSON.parse(Buffer.from(extraData || '', 'base64').toString('ascii'))); } catch (e) {}
 
         const durationDays = extra.durationDays || transaction.package_duration;
-        const tier = extra.tier || 'vip';
+        const entitlement = await getEntitlementForTransaction(transaction);
 
         // ── Increment coupon usage CHỈ khi thành công ──────────────────────
         await applyCoinSpend(transaction);
@@ -1004,8 +1099,7 @@ router.post('/momo-webhook', async (req, res) => {
           console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
         });
 
-        // Update user VIP with tier
-        await User.updateVipStatus(transaction.user_id, durationDays, tier);
+        await updateVipStatusForPayment(transaction.user_id, durationDays, entitlement.tier, entitlement);
         const updatedUser = await User.findById(transaction.user_id);
         const vipExpires = updatedUser?.vip_expires_at || null;
 
@@ -1013,7 +1107,7 @@ router.post('/momo-webhook', async (req, res) => {
           status: 'completed',
           payment_channel: 'momo',
           trans_id: transId ? String(transId) : null,
-          raw_response: req.body,
+          raw_response: { ...getStoredPaymentMeta(transaction), momoWebhook: req.body },
           paid_at: new Date(),
           vip_expires_at: vipExpires,
         });
@@ -1101,10 +1195,8 @@ router.post('/vnpay-webhook', async (req, res) => {
           console.error('[Payment] Coupon usage update failed, continuing payment completion:', err.message);
         });
 
-        const tier = transaction.package_id
-          ? (await require('../config/database').query(`SELECT COALESCE(tier,'vip') as tier FROM vip_packages WHERE id = $1`, [transaction.package_id])).rows[0]?.tier || 'vip'
-          : (transaction.package_name?.toLowerCase().includes('pre') ? 'premium' : 'vip');
-        await User.updateVipStatus(transaction.user_id, transaction.package_duration, tier);
+        const entitlement = await getEntitlementForTransaction(transaction);
+        await updateVipStatusForPayment(transaction.user_id, transaction.package_duration, entitlement.tier, entitlement);
         const updatedUser = await User.findById(transaction.user_id);
         const vipExpires = updatedUser?.vip_expires_at || null;
 
@@ -1112,7 +1204,7 @@ router.post('/vnpay-webhook', async (req, res) => {
           status: 'completed',
           payment_channel: 'vnpay',
           trans_id: vnp_TransactionNo ? String(vnp_TransactionNo) : null,
-          raw_response: req.body,
+          raw_response: { ...getStoredPaymentMeta(transaction), vnpayWebhook: req.body },
           paid_at: new Date(),
           vip_expires_at: vipExpires,
         });

@@ -50,7 +50,7 @@ const CouponController = {
    */
   async validate(req, res) {
     try {
-      const { code, package_id } = req.query;
+      const { code, package_id, selected_subject_code } = req.query;
       if (!code) {
         return res.status(400).json({ success: false, message: 'Thiếu mã coupon' });
       }
@@ -88,14 +88,18 @@ const CouponController = {
 
       if (package_id) {
         const pkg = await db.query(
-          `SELECT id, name, price, duration_days FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+          `SELECT id, name, price, duration_days, subject_prices FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
           [package_id]
         );
         if (!pkg.rows[0]) {
           return res.status(404).json({ success: false, message: 'Gói VIP không tồn tại' });
         }
 
-        originalAmount = pkg.rows[0].price;
+        const subjectCode = String(selected_subject_code || '').trim().toUpperCase();
+        const subjectPrice = subjectCode ? Number(pkg.rows[0].subject_prices?.[subjectCode]) : 0;
+        originalAmount = Number.isFinite(subjectPrice) && subjectPrice > 0
+          ? subjectPrice
+          : pkg.rows[0].price;
         packageName = pkg.rows[0].name;
 
         // Check package applicability

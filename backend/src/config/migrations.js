@@ -661,6 +661,8 @@ async function runOptimizations() {
     await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'basic',
+      ADD COLUMN IF NOT EXISTS vip_package_id INTEGER,
+      ADD COLUMN IF NOT EXISTS vip_allowed_subjects TEXT[] DEFAULT '{}',
       ADD COLUMN IF NOT EXISTS full_name_edit VARCHAR(255)
     `);
     // Sync full_name_edit từ full_name cho users hiện tại
@@ -725,6 +727,10 @@ async function runOptimizations() {
         tier VARCHAR(20) NOT NULL DEFAULT 'vip',
         duration_days INTEGER NOT NULL,
         price INTEGER NOT NULL DEFAULT 0,
+        subject_prices JSONB DEFAULT '{}',
+        subject_original_prices JSONB DEFAULT '{}',
+        allowed_subjects TEXT[] DEFAULT '{}',
+        requires_subject_choice BOOLEAN DEFAULT FALSE,
         description TEXT,
         features TEXT[] DEFAULT '{}',
         is_active BOOLEAN DEFAULT TRUE,
@@ -740,7 +746,11 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS tier VARCHAR(20) DEFAULT 'vip',
       ADD COLUMN IF NOT EXISTS original_price INTEGER,
       ADD COLUMN IF NOT EXISTS price_note TEXT,
-      ADD COLUMN IF NOT EXISTS original_price_note TEXT
+      ADD COLUMN IF NOT EXISTS original_price_note TEXT,
+      ADD COLUMN IF NOT EXISTS subject_prices JSONB DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS subject_original_prices JSONB DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS allowed_subjects TEXT[] DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS requires_subject_choice BOOLEAN DEFAULT FALSE
     `);
 
     // Seed default VIP packages if none exist
@@ -757,6 +767,34 @@ async function runOptimizations() {
         ('Gói Mini', 'vip', 90, 188000, 200000, '188.000đ môn Toán / 122.000đ môn Vật Lý hoặc Hoá', '200.000đ môn Toán / 150.000đ môn Vật Lý hoặc Hoá', '1 trong 3 môn Toán / Lý / Hoá', ARRAY['Truy cập các đề miễn phí trên web', 'Download tài liệu có hạn', 'Hỏi trên diễn đàn', 'Xem lại lịch sử làm bài', 'Truy cập Lý thuyết và Từ vựng có hạn'], 4)
       `);
     }
+
+    await pool.query(`
+      UPDATE vip_packages
+      SET allowed_subjects = CASE
+            WHEN COALESCE(tier, 'vip') IN ('premium', 'pre') OR LOWER(name) LIKE '%premium%' THEN ARRAY['*']::text[]
+            WHEN LOWER(name) LIKE '%mini%' OR sort_order = 4 THEN ARRAY['MATH','PHYSICS','CHEMISTRY']::text[]
+            WHEN sort_order = 2 THEN ARRAY['MATH','PHYSICS','CHEMISTRY','CHINESE_SCI']::text[]
+            WHEN sort_order = 3 THEN ARRAY['MATH','CHINESE_SOC']::text[]
+            ELSE allowed_subjects
+          END,
+          requires_subject_choice = CASE
+            WHEN LOWER(name) LIKE '%mini%' OR sort_order = 4 THEN TRUE
+            ELSE FALSE
+          END,
+          subject_prices = CASE
+            WHEN LOWER(name) LIKE '%mini%' OR sort_order = 4
+              THEN '{"MATH":188000,"PHYSICS":122000,"CHEMISTRY":122000}'::jsonb
+            ELSE COALESCE(subject_prices, '{}'::jsonb)
+          END,
+          subject_original_prices = CASE
+            WHEN LOWER(name) LIKE '%mini%' OR sort_order = 4
+              THEN '{"MATH":200000,"PHYSICS":150000,"CHEMISTRY":150000}'::jsonb
+            ELSE COALESCE(subject_original_prices, '{}'::jsonb)
+          END,
+          updated_at = NOW()
+      WHERE name IN ('Premium', 'Gói Tự Nhiên', 'Gói Xã Hội', 'Gói Mini')
+         OR sort_order IN (1, 2, 3, 4)
+    `);
 
     // VIP features comparison table
     await pool.query(`
@@ -870,6 +908,7 @@ async function runOptimizations() {
       "033_upsert_hot_external_games.sql",
       "034_replace_relaxing_external_games.sql",
       "035_upsert_3_month_vip_packages.sql",
+      "036_vip_package_entitlements.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

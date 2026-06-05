@@ -125,8 +125,6 @@ const PAYMENT_METHODS = [
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
-const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
-
 function getPromotionTheme(theme: PromotionBanner['theme']) {
   switch (theme) {
     case 'violet':
@@ -372,7 +370,8 @@ function CheckoutContent() {
   // Re-validate coupon whenever package or coupon code changes
   useEffect(() => {
     if (!appliedCouponCode || !selectedPkg) return;
-    axios.get(`/coupons/validate?code=${encodeURIComponent(appliedCouponCode)}&package_id=${selectedPkg.id}`)
+    const subjectQuery = selectedSubjectCode ? `&selected_subject_code=${encodeURIComponent(selectedSubjectCode)}` : '';
+    axios.get(`/coupons/validate?code=${encodeURIComponent(appliedCouponCode)}&package_id=${selectedPkg.id}${subjectQuery}`)
       .then(res => {
         if (res.data.success) {
           setAppliedCouponInfo({
@@ -389,7 +388,19 @@ function CheckoutContent() {
         setAppliedCouponInfo(null);
         setCouponMismatchError(err.response?.data?.message || 'Mã không hợp lệ');
       });
-  }, [appliedCouponCode, selectedPkg]);
+  }, [appliedCouponCode, selectedPkg, selectedSubjectCode]);
+
+  useEffect(() => {
+    if (!selectedPkg || !packageRequiresSubjectChoice(selectedPkg)) {
+      setSelectedSubjectCode('');
+      return;
+    }
+    const subjects = getPackageSubjects(selectedPkg).filter(code => code !== '*');
+    if (!subjects.includes(selectedSubjectCode)) {
+      const firstAvailable = subjects.find(subject => !canAccessSubject(user, subject)) || subjects[0] || '';
+      setSelectedSubjectCode(firstAvailable);
+    }
+  }, [selectedPkg, selectedSubjectCode, user]);
 
   useEffect(() => {
     axios.get('/coupons/promotion?placement=checkout')
@@ -417,19 +428,9 @@ function CheckoutContent() {
       .then(res => {
         const pkgs: DbPackage[] = (res.data.data || []).filter((pkg: DbPackage) => Number(pkg.price) > 0);
 
-        // Ẩn gói mà user đã có (hoặc cấp thấp hơn cấp hiện tại)
-        const userTier = getTierLevel(user);
-        const filteredPkgs = pkgs.filter(pkg => {
-          if (userTier === 'premium') {
-            // Premium không thấy gói premium và vip
-            return TIER_RANK[userTier] < TIER_RANK[derivePackageUI(pkg).tier];
-          }
-          if (userTier === 'vip') {
-            // VIP không thấy gói vip (nhưng vẫn thấy premium)
-            return TIER_RANK[userTier] < TIER_RANK[derivePackageUI(pkg).tier];
-          }
-          return true;
-        }).sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+        const filteredPkgs = pkgs
+          .filter(pkg => !packageFullyCoveredByUser(user, pkg))
+          .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
 
         setAllPackages(filteredPkgs);
         if (urlPackageId) {
@@ -455,7 +456,8 @@ function CheckoutContent() {
   }, [isAuthenticated, urlPackageId, urlMethod, router, user?.is_vip, user?.subscription_tier, user?.vip_expires_at]);
 
   const userCoins = Math.max(0, Number(user?.coins || 0));
-  const baseAmount = selectedPkg ? Number(selectedPkg.price) : 0;
+  const baseAmount = selectedPkg ? getSubjectPrice(selectedPkg, selectedSubjectCode) : 0;
+  const baseOriginalAmount = selectedPkg ? getSubjectOriginalPrice(selectedPkg, selectedSubjectCode) : null;
   const subtotalAfterCoupon = selectedPkg ? Number(appliedCouponInfo?.final_amount ?? baseAmount) : 0;
   const maxCoinUse = selectedPkg
     ? Math.min(userCoins, Math.floor((subtotalAfterCoupon * MAX_COIN_DISCOUNT_RATIO) / COIN_VALUE_VND))
@@ -482,12 +484,12 @@ function CheckoutContent() {
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
     if (couponMismatchError) { setError(couponMismatchError); return; }
-    const currentTier = getTierLevel(user);
-    const selectedTier = derivePackageUI(selectedPkg).tier;
-    if (TIER_RANK[currentTier] >= TIER_RANK[selectedTier]) {
-      setError(currentTier === 'premium'
-        ? 'Bạn đang có gói Pre đang hoạt động, không cần mua thêm gói này.'
-        : 'Bạn đang có gói VIP đang hoạt động, không cần mua thêm gói VIP.');
+    if (packageRequiresSubjectChoice(selectedPkg) && !selectedSubjectCode) {
+      setError('Vui lòng chọn môn học cho gói này.');
+      return;
+    }
+    if (selectedEntitlementCovered(user, selectedPkg, selectedSubjectCode)) {
+      setError('Tài khoản đã có quyền cho gói/môn này.');
       return;
     }
     setLoading(true);
@@ -497,9 +499,10 @@ function CheckoutContent() {
         package_id: selectedPkg.id,
         payment_method: selectedMethod,
         coupon_code: appliedCouponCode,
+        selected_subject_code: selectedSubjectCode || undefined,
         use_coins: useCoins,
         coins_to_use: useCoins ? maxCoinUse : 0,
-        idempotency_key: `${selectedPkg.id}_${selectedMethod}_${useCoins ? maxCoinUse : 0}_${Date.now()}`,
+        idempotency_key: `${selectedPkg.id}_${selectedSubjectCode || 'all'}_${selectedMethod}_${useCoins ? maxCoinUse : 0}_${Date.now()}`,
       });
       if (res.data.success) {
         if (res.data.appliedCoupon) {
@@ -560,9 +563,9 @@ function CheckoutContent() {
     );
   }
 
-  const currentTier = getTierLevel(user);
-  const selectedTier: TierLevel = selectedPkg ? derivePackageUI(selectedPkg).tier : 'basic';
-  const currentTierCoversSelectedPkg = selectedPkg ? TIER_RANK[currentTier] >= TIER_RANK[selectedTier] : false;
+  const currentTierCoversSelectedPkg = selectedPkg ? selectedEntitlementCovered(user, selectedPkg, selectedSubjectCode) : false;
+  const needsSubjectChoice = packageRequiresSubjectChoice(selectedPkg);
+  const selectedSubjectMissing = needsSubjectChoice && !selectedSubjectCode;
   const promotionTheme = promotion ? getPromotionTheme(promotion.theme) : null;
 
   // ── SELECT SCREEN ──
@@ -736,6 +739,56 @@ function CheckoutContent() {
         )}
       </div>
 
+      {selectedPkg && needsSubjectChoice && (
+        <div>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">2</div>
+            <h2 className="text-lg font-black text-gray-900">Chọn môn học</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {getPackageSubjects(selectedPkg).filter(code => code !== '*').map(subject => {
+              const selected = selectedSubjectCode === subject;
+              const covered = canAccessSubject(user, subject);
+              const price = getSubjectPrice(selectedPkg, subject);
+              const original = getSubjectOriginalPrice(selectedPkg, subject);
+              return (
+                <button
+                  key={subject}
+                  type="button"
+                  onClick={() => !covered && setSelectedSubjectCode(subject)}
+                  disabled={covered}
+                  className={`rounded-2xl border p-4 text-left transition-all ${
+                    selected
+                      ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-100'
+                      : covered
+                        ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-70'
+                        : 'border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-gray-950">{SUBJECT_OPTIONS[subject]?.label || subject}</p>
+                      <p className="mt-1 text-xs font-semibold text-gray-500">
+                        {covered ? 'Đã có quyền' : 'Mở đúng môn này'}
+                      </p>
+                    </div>
+                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300 bg-white'}`}>
+                      {selected && <FiCheck size={13} className="text-white" />}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <span className="text-xl font-black text-gray-950">{price.toLocaleString('vi-VN')}đ</span>
+                    {original && original > price && (
+                      <span className="text-xs font-bold text-gray-400 line-through">{original.toLocaleString('vi-VN')}đ</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Step 2: Payment method */}
       <div>
         <div className="flex items-center gap-2 mb-4">
@@ -834,10 +887,15 @@ function CheckoutContent() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black text-gray-950 sm:text-base">{selectedPkg.name}</p>
                   <p className="text-xs font-semibold text-gray-500">{selectedPkg.duration_days} ngày sử dụng</p>
+                  {selectedSubjectCode && (
+                    <p className="mt-0.5 text-xs font-bold text-indigo-600">
+                      {SUBJECT_OPTIONS[selectedSubjectCode]?.label || selectedSubjectCode}
+                    </p>
+                  )}
                 </div>
               </div>
-              {selectedPkg.original_price && selectedPkg.original_price > selectedPkg.price && (
-                <span className="shrink-0 text-sm font-bold text-gray-400 line-through">{selectedPkg.original_price.toLocaleString('vi-VN')}đ</span>
+              {baseOriginalAmount && baseOriginalAmount > baseAmount && (
+                <span className="shrink-0 text-sm font-bold text-gray-400 line-through">{baseOriginalAmount.toLocaleString('vi-VN')}đ</span>
               )}
             </div>
           </div>
@@ -882,14 +940,16 @@ function CheckoutContent() {
           <div className="space-y-3 pt-1">
             <button
               onClick={handleProceed}
-              disabled={loading || currentTierCoversSelectedPkg}
+              disabled={loading || currentTierCoversSelectedPkg || selectedSubjectMissing}
               className={`flex w-full flex-wrap items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-black text-white shadow-lg transition-all sm:gap-3
-                ${loading || currentTierCoversSelectedPkg ? 'cursor-not-allowed bg-gray-300 shadow-none' : 'bg-gray-950 hover:bg-gray-800 hover:shadow-gray-200 active:scale-[0.99]'}`}
+                ${loading || currentTierCoversSelectedPkg || selectedSubjectMissing ? 'cursor-not-allowed bg-gray-300 shadow-none' : 'bg-gray-950 hover:bg-gray-800 hover:shadow-gray-200 active:scale-[0.99]'}`}
             >
               {loading ? (
                 <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
               ) : currentTierCoversSelectedPkg ? (
                 'Gói này đã được kích hoạt'
+              ) : selectedSubjectMissing ? (
+                'Chọn môn học để tiếp tục'
               ) : (
                 <>
                   <span>{payableAmount <= 0 ? 'Kích hoạt gói' : 'Tiến hành thanh toán'}</span>

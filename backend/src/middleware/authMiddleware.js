@@ -1,12 +1,43 @@
 const jwt = require("jsonwebtoken");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
+const { canAccessVipContent } = require("../utils/vipEntitlements");
 
 const getFreshAuthUser = async (userId) => {
   const { rows } = await db.query(
-    `SELECT id, email, role, is_active, is_vip, subscription_tier, vip_expires_at
-     FROM users
-     WHERE id = $1
+    `WITH active AS (
+       SELECT
+         e.user_id,
+         BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre') OR '*' = ANY(e.allowed_subjects)) AS has_all,
+         BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre')) AS has_premium,
+         MAX(e.expires_at) AS max_expires_at,
+         (ARRAY_AGG(e.package_id ORDER BY e.created_at DESC, e.id DESC))[1] AS latest_package_id,
+         ARRAY_AGG(DISTINCT subject) FILTER (WHERE subject IS NOT NULL AND subject <> '*') AS subjects
+       FROM user_vip_entitlements e
+       LEFT JOIN LATERAL UNNEST(e.allowed_subjects) AS subject ON true
+       WHERE e.user_id = $1
+         AND e.is_active = true
+         AND (e.expires_at IS NULL OR e.expires_at > NOW())
+       GROUP BY e.user_id
+     )
+     SELECT
+       u.id, u.email, u.role, u.is_active,
+       CASE WHEN active.user_id IS NOT NULL THEN true ELSE u.is_vip END AS is_vip,
+       CASE
+         WHEN active.user_id IS NULL THEN COALESCE(u.subscription_tier, 'basic')
+         WHEN active.has_premium THEN 'premium'
+         ELSE 'vip'
+       END AS subscription_tier,
+       CASE WHEN active.user_id IS NOT NULL THEN active.max_expires_at ELSE u.vip_expires_at END AS vip_expires_at,
+       CASE WHEN active.user_id IS NOT NULL THEN active.latest_package_id ELSE u.vip_package_id END AS vip_package_id,
+       CASE
+         WHEN active.user_id IS NULL THEN COALESCE(u.vip_allowed_subjects, ARRAY[]::text[])
+         WHEN active.has_all THEN ARRAY['*']::text[]
+         ELSE COALESCE(active.subjects, ARRAY[]::text[])
+       END AS vip_allowed_subjects
+     FROM users u
+     LEFT JOIN active ON active.user_id = u.id
+     WHERE u.id = $1
      LIMIT 1`,
     [userId],
   );
@@ -22,6 +53,8 @@ const buildRequestUser = (decoded, freshUser) => ({
   is_vip: freshUser.is_vip === true,
   vip_expires_at: freshUser.vip_expires_at || null,
   subscription_tier: freshUser.subscription_tier || "basic",
+  vip_package_id: freshUser.vip_package_id || null,
+  vip_allowed_subjects: freshUser.vip_allowed_subjects || [],
 });
 
 /**
@@ -254,15 +287,17 @@ const optionalAuth = async (req, res, next) => {
  * Checks if a user object represents an active VIP member.
  * VIP only has AI analysis (no video/chat).
  */
-const checkVipAccess = (user) => {
+const checkVipAccess = (user, subjectCode = null) => {
   if (!user) return false;
   const isVip =
     user.is_vip === true ||
     user.subscription_tier === 'vip' ||
     user.subscription_tier === 'premium';
   const notExpired = !user.vip_expires_at || new Date(user.vip_expires_at) > new Date();
-  return isVip && notExpired;
+  return isVip && notExpired && canAccessVipContent(user, 'vip', subjectCode);
 };
+
+const checkVipContentAccess = canAccessVipContent;
 
 /**
  * Premium = VIP + Video giải đề + Chat giảng viên
@@ -306,6 +341,7 @@ module.exports = {
   authorizePermission,
   authorizeAnyPermission,
   checkVipAccess,
+  checkVipContentAccess,
   checkPremiumAccess,
   canUseAIFeatures,
   canWatchVideoExplanation,

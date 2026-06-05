@@ -26,8 +26,10 @@ export interface User {
   bio?: string;
   target_score?: number;
   is_vip?: boolean;
-  subscription_tier?: 'vip' | 'premium' | null;
+  subscription_tier?: 'basic' | 'vip' | 'premium' | null;
   vip_expires_at?: string;
+  vip_package_id?: number | null;
+  vip_allowed_subjects?: string[];
   created_at?: string;
   is_verified?: boolean;
   is_active?: boolean;

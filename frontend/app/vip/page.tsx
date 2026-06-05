@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { getVipDisplay, type TierLevel } from '@/lib/utils/permissions';
+import { canAccessSubject, getVipDisplay, type TierLevel } from '@/lib/utils/permissions';
 import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
 import { FiArrowLeft, FiLoader, FiTag, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
@@ -17,6 +17,8 @@ interface VipPackage {
   original_price?: number | null;
   price_note?: string | null;
   original_price_note?: string | null;
+  allowed_subjects?: string[];
+  requires_subject_choice?: boolean;
   description: string;
   features: string[];
   is_active: boolean;
@@ -44,8 +46,6 @@ interface Discount {
   final_amount: number;
   package_id: number;
 }
-
-const TIER_RANK: Record<TierLevel, number> = { basic: 0, vip: 1, premium: 2 };
 
 function deriveColor(pkg: VipPackage) {
   const name = pkg.name.toLowerCase();
@@ -91,9 +91,20 @@ function getPackageTier(pkg: VipPackage): TierLevel {
   return 'vip';
 }
 
-function isPackageCovered(pkg: VipPackage, userTier: TierLevel) {
+function getPackageSubjects(pkg: VipPackage) {
+  return Array.isArray(pkg.allowed_subjects)
+    ? pkg.allowed_subjects.map(subject => String(subject || '').trim().toUpperCase()).filter(Boolean)
+    : [];
+}
+
+function isPackageCovered(pkg: VipPackage, user: any) {
+  const userTier = getVipDisplay(user).tier;
   const packageTier = getPackageTier(pkg);
-  return packageTier !== 'basic' && TIER_RANK[userTier] >= TIER_RANK[packageTier];
+  if (packageTier === 'basic') return false;
+  if (userTier === 'premium') return true;
+  if (packageTier === 'premium') return false;
+  const subjects = getPackageSubjects(pkg).filter(subject => subject !== '*');
+  return subjects.length > 0 && subjects.every(subject => canAccessSubject(user, subject));
 }
 
 function getPackageDisplayName(pkg: VipPackage) {
@@ -140,8 +151,7 @@ export default function VipPricingPage() {
       router.push('/login?redirect=/vip');
       return;
     }
-    const activeTier = user ? getVipDisplay(user).tier : 'basic';
-    if (isPackageCovered(pkg, activeTier)) {
+    if (user && isPackageCovered(pkg, user)) {
       return;
     }
     const params = new URLSearchParams({ package_id: String(pkg.id) });
@@ -321,7 +331,7 @@ export default function VipPricingPage() {
                       return (
                         <PlanCard
                           key={pkg.id} pkg={pkg} isVip={!!isVip}
-                          userTier={userTier}
+                          user={user}
                           onCheckout={handleCheckout}
                           discount={discount}
                           onApplyCoupon={handleApplyCoupon}
@@ -420,10 +430,10 @@ export default function VipPricingPage() {
   );
 }
 
-function PlanCard({ pkg, isVip, userTier, onCheckout, discount, onApplyCoupon, selectedPkg, onSelectPkg }: {
+function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selectedPkg, onSelectPkg }: {
   pkg: VipPackage;
   isVip: boolean;
-  userTier: TierLevel;
+  user: any;
   onCheckout: (p: VipPackage) => void;
   discount?: Discount | null;
   onApplyCoupon?: (p: VipPackage) => void;
@@ -433,7 +443,7 @@ function PlanCard({ pkg, isVip, userTier, onCheckout, discount, onApplyCoupon, s
   const colors = deriveColor(pkg);
   const isPre = isPrePackage(pkg);
   const isFree = isFreePackage(pkg);
-  const packageCovered = isPackageCovered(pkg, userTier);
+  const packageCovered = user ? isPackageCovered(pkg, user) : false;
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');

@@ -2,6 +2,8 @@ const db = require('../config/database');
 const emailService = require('../services/emailService');
 const UserActivity = require('../models/UserActivity');
 const DeviceSessionService = require('../services/deviceSessionService');
+const User = require('../models/User');
+const { resolveSelectedSubjects } = require('../utils/vipEntitlements');
 
 const normalizeTier = (tier) => {
   const value = String(tier || '').trim().toLowerCase();
@@ -80,7 +82,7 @@ const AdminVipController = {
    */
   async grantVip(req, res) {
     try {
-      const { email, durationDays, reason, packageId, tier } = req.body;
+      const { email, durationDays, reason, packageId, tier, selectedSubjectCode, selected_subject_code } = req.body;
       const adminId = req.user.id;
       const adminName = req.user.full_name || `Admin#${adminId}`;
 
@@ -101,20 +103,21 @@ const AdminVipController = {
       const userObj = userRes.rows[0];
       const userId = userObj.id;
 
-      let pkgId = null, pkgName = null, pkgDays = null, pkgTier = 'vip';
+      let pkgId = null, pkgName = null, pkgDays = null, pkgTier = 'vip', pkg = null;
 
       if (packageId) {
         const pkgRes = await db.query(
-          `SELECT id, name, duration_days, COALESCE(tier, 'vip') as tier FROM vip_packages WHERE id = $1`,
+          `SELECT id, name, duration_days, COALESCE(tier, 'vip') as tier, allowed_subjects, requires_subject_choice FROM vip_packages WHERE id = $1`,
           [packageId]
         );
         if (!pkgRes.rows[0]) {
           return res.status(400).json({ success: false, message: 'Gói VIP không tồn tại.' });
         }
-        pkgId = pkgRes.rows[0].id;
-        pkgName = pkgRes.rows[0].name;
-        pkgDays = pkgRes.rows[0].duration_days;
-        pkgTier = normalizeTier(pkgRes.rows[0].tier);
+        pkg = pkgRes.rows[0];
+        pkgId = pkg.id;
+        pkgName = pkg.name;
+        pkgDays = pkg.duration_days;
+        pkgTier = normalizeTier(pkg.tier);
       } else if (durationDays && parseInt(durationDays, 10) >= 1) {
         pkgDays = parseInt(durationDays, 10);
         pkgTier = normalizeTier(tier);
@@ -124,6 +127,19 @@ const AdminVipController = {
       }
 
       // Cập nhật VIP với tier chính xác
+      let allowedSubjects = ['*'];
+      if (pkg) {
+        try {
+          allowedSubjects = resolveSelectedSubjects(pkg, selectedSubjectCode || selected_subject_code);
+        } catch (subjectErr) {
+          return res.status(400).json({
+            success: false,
+            code: subjectErr.code || 'INVALID_SUBJECT',
+            message: subjectErr.message || 'Mon hoc khong hop le.',
+          });
+        }
+      }
+
       const result = await db.query(
         `UPDATE users
          SET is_vip = TRUE,
@@ -137,6 +153,12 @@ const AdminVipController = {
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 
       const grantedUser = result.rows[0];
+      const entitlementUser = await User.grantVipEntitlement(userId, pkgDays, pkgTier, {
+        packageId: pkgId,
+        allowedSubjects,
+        source: 'manual',
+      });
+      Object.assign(grantedUser, entitlementUser || {});
 
       // Gửi email kích hoạt VIP
       const name = grantedUser.full_name || userObj.username || 'bạn';
@@ -193,6 +215,13 @@ const AdminVipController = {
       if (!result.rows[0]) return res.status(404).json({ success: false, message: 'User không tồn tại' });
 
       // Revoke ALL active sessions for this user → tokens become invalid immediately
+      await db.query(
+        `UPDATE user_vip_entitlements
+         SET is_active = FALSE, updated_at = NOW()
+         WHERE user_id = $1 AND is_active = TRUE`,
+        [userId]
+      ).catch(err => console.error('[VIP] revoke entitlement error:', err.message));
+
       await DeviceSessionService.removeAllUserSessions(userId);
 
       UserActivity.log(req.user.id, 'admin.revoke_vip', { userId, ip: req.ip, userAgent: req.headers['user-agent'] });

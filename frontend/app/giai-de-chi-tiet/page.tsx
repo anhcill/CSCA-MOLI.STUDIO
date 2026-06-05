@@ -12,8 +12,7 @@ import { FaCrown } from 'react-icons/fa';
 import axios from '@/lib/utils/axios';
 import { Exam } from '@/lib/api/exams';
 import { useAuthStore } from '@/lib/store/authStore';
-import { hasPermission } from '@/lib/utils/permissions';
-import { isPremiumActive } from '@/lib/utils/permissions';
+import { canAccessContent, hasPermission, isPremiumActive, type TierLevel } from '@/lib/utils/permissions';
 import { getExamSubjectCode, getExamSubjectSlug, normalizeContentSubject } from '@/lib/utils/subjectScope';
 import { useLanguage } from '@/context/LanguageContext';
 import Link from 'next/link';
@@ -25,6 +24,12 @@ const SUBJECT_CODE_LABEL_KEYS: Record<string, string> = {
   CHINESE: 'subject.chineseSoc',
   CHINESE_SOC: 'subject.chineseSoc',
   CHINESE_SCI: 'subject.chineseSci',
+};
+
+const getExamTier = (exam: Exam & { vip_tier?: string }): TierLevel => {
+  if (exam.vip_tier === 'premium' || exam.vip_tier === 'pre') return 'premium';
+  if (exam.vip_tier === 'vip' || exam.is_premium === true) return 'vip';
+  return 'basic';
 };
 
 // ── Video Modal ────────────────────────────────────────────────────────────────
@@ -137,7 +142,9 @@ function ExamCard({
   const hasVideo = !!exam.solution_video_url;
   // Video giải đề = Premium only (cần kiểm tra expiry date)
   const allowed = isAdmin || isPremiumActive(user);
-  const neededTier = 'premium';
+  const examTier = getExamTier(exam);
+  const canOpenExam = isAdmin || canAccessContent(user, examTier, exam.subject_code);
+  const neededTier = hasVideo ? 'premium' : examTier === 'premium' ? 'premium' : 'vip';
   const subjectKey = SUBJECT_CODE_LABEL_KEYS[(exam.subject_code || '').toUpperCase()];
   const subjectLabel = subjectKey ? t(subjectKey) : exam.subject_name || exam.subject_code || t('common.subject');
 
@@ -229,6 +236,13 @@ function ExamCard({
               className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">
               {t('common.edit')}
             </Link>
+          ) : !canOpenExam ? (
+            <button
+              type="button"
+              onClick={() => onLocked(examTier === 'premium' ? 'premium' : 'vip')}
+              className="flex items-center gap-1 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-bold rounded-xl hover:border-amber-300 transition-colors">
+              <FiLock size={14} /> {t('solutions.upgradeVip')}
+            </button>
           ) : (
             <Link href={`/exam/${exam.id}`}
               className="flex items-center gap-1 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:border-purple-300 hover:text-purple-600 transition-colors">

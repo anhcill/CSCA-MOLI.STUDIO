@@ -2,7 +2,7 @@ const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
 const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
-const { checkVipAccess } = require("../middleware/authMiddleware");
+const { checkVipContentAccess } = require("../middleware/authMiddleware");
 const insightService = require("../services/insightService");
 
 function sanitizeQuestionForAttempt(question) {
@@ -21,6 +21,24 @@ function sanitizeQuestionForAttempt(question) {
       const { is_correct, ...safeAnswer } = answer;
       return safeAnswer;
     }),
+  };
+}
+
+function getRequiredVipTier(exam) {
+  const tier = String(exam?.vip_tier || '').trim().toLowerCase();
+  if (tier === 'premium' || tier === 'pre') return 'premium';
+  if (tier === 'vip') return 'vip';
+  return exam?.is_premium ? 'vip' : 'basic';
+}
+
+function buildVipAccessError(requiredTier) {
+  return {
+    success: false,
+    message: requiredTier === 'premium'
+      ? "Noi dung nay chi danh cho thanh vien Premium"
+      : "Noi dung nay chi danh cho thanh vien VIP dung mon",
+    code: requiredTier === 'premium' ? "PREMIUM_REQUIRED" : "VIP_REQUIRED",
+    is_vip_required: true,
   };
 }
 
@@ -101,14 +119,9 @@ const examController = {
         });
       }
 
-      // VIP check: premium exams require active VIP
-      if (exam.is_premium && !checkVipAccess(req.user)) {
-        return res.status(403).json({
-          success: false,
-          message: "Nội dung này chỉ dành cho thành viên VIP",
-          code: "VIP_REQUIRED",
-          is_vip_required: true,
-        });
+      const requiredTier = getRequiredVipTier(exam);
+      if (!checkVipContentAccess(req.user, requiredTier, exam.subject_code)) {
+        return res.status(403).json(buildVipAccessError(requiredTier));
       }
 
       exam.questions = (exam.questions || []).map(sanitizeQuestionForAttempt);
@@ -146,13 +159,9 @@ const examController = {
         });
       }
 
-      if (exam.is_premium && !checkVipAccess(req.user)) {
-        return res.status(403).json({
-          success: false,
-          message: "Noi dung nay chi danh cho thanh vien VIP",
-          code: "VIP_REQUIRED",
-          is_vip_required: true,
-        });
+      const requiredTier = getRequiredVipTier(exam);
+      if (!checkVipContentAccess(req.user, requiredTier, exam.subject_code)) {
+        return res.status(403).json(buildVipAccessError(requiredTier));
       }
 
       res.json({
@@ -259,14 +268,9 @@ const examController = {
         });
       }
 
-      // VIP check: premium exams require active VIP
-      if (exam.is_premium && !checkVipAccess(req.user)) {
-        return res.status(403).json({
-          success: false,
-          message: "Nội dung này chỉ dành cho thành viên VIP",
-          code: "VIP_REQUIRED",
-          is_vip_required: true,
-        });
+      const requiredTier = getRequiredVipTier(exam);
+      if (!checkVipContentAccess(req.user, requiredTier, exam.subject_code)) {
+        return res.status(403).json(buildVipAccessError(requiredTier));
       }
 
       if (exam.start_time) {

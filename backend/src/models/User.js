@@ -1,5 +1,6 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
+const { ALL_SUBJECTS, normalizeSubjectList } = require("../utils/vipEntitlements");
 
 const normalizeSubscriptionTier = (tier) => {
   const value = String(tier || "").trim().toLowerCase();
@@ -21,7 +22,46 @@ class User {
   static async findById(id) {
     try {
       const result = await db.query(
-        "SELECT id, username, email, full_name, full_name as display_name, avatar, avatar_url, role, bio, phone, study_goal, target_score, is_verified, is_active, is_vip, subscription_tier, vip_expires_at, COALESCE(coins, 0)::int AS coins, COALESCE(current_streak, 0)::int AS current_streak, COALESCE(longest_streak, 0)::int AS longest_streak, COALESCE(exp, 0)::int AS exp, created_at, updated_at FROM users WHERE id = $1",
+        `WITH active AS (
+           SELECT
+             e.user_id,
+             BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre') OR '*' = ANY(e.allowed_subjects)) AS has_all,
+             BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre')) AS has_premium,
+             MAX(e.expires_at) AS max_expires_at,
+             (ARRAY_AGG(e.package_id ORDER BY e.created_at DESC, e.id DESC))[1] AS latest_package_id,
+             ARRAY_AGG(DISTINCT subject) FILTER (WHERE subject IS NOT NULL AND subject <> '*') AS subjects
+           FROM user_vip_entitlements e
+           LEFT JOIN LATERAL UNNEST(e.allowed_subjects) AS subject ON true
+           WHERE e.user_id = $1
+             AND e.is_active = true
+             AND (e.expires_at IS NULL OR e.expires_at > NOW())
+           GROUP BY e.user_id
+         )
+         SELECT
+           u.id, u.username, u.email, u.full_name, u.full_name as display_name,
+           u.avatar, u.avatar_url, u.role, u.bio, u.phone, u.study_goal, u.target_score,
+           u.is_verified, u.is_active,
+           CASE WHEN active.user_id IS NOT NULL THEN true ELSE u.is_vip END AS is_vip,
+           CASE
+             WHEN active.user_id IS NULL THEN COALESCE(u.subscription_tier, 'basic')
+             WHEN active.has_premium THEN 'premium'
+             ELSE 'vip'
+           END AS subscription_tier,
+           CASE WHEN active.user_id IS NOT NULL THEN active.max_expires_at ELSE u.vip_expires_at END AS vip_expires_at,
+           CASE WHEN active.user_id IS NOT NULL THEN active.latest_package_id ELSE u.vip_package_id END AS vip_package_id,
+           CASE
+             WHEN active.user_id IS NULL THEN COALESCE(u.vip_allowed_subjects, ARRAY[]::text[])
+             WHEN active.has_all THEN ARRAY['*']::text[]
+             ELSE COALESCE(active.subjects, ARRAY[]::text[])
+           END AS vip_allowed_subjects,
+           COALESCE(u.coins, 0)::int AS coins,
+           COALESCE(u.current_streak, 0)::int AS current_streak,
+           COALESCE(u.longest_streak, 0)::int AS longest_streak,
+           COALESCE(u.exp, 0)::int AS exp,
+           u.created_at, u.updated_at
+         FROM users u
+         LEFT JOIN active ON active.user_id = u.id
+         WHERE u.id = $1`,
         [id]
       );
       return result.rows[0] || null;
@@ -40,7 +80,7 @@ class User {
       // Include password for auth comparison — callers must NOT forward this to clients
       const result = await db.query(
         `SELECT id, username, email, password, full_name, avatar, avatar_url, role, bio,
-                is_active, is_verified, google_id, oauth_provider, is_vip, subscription_tier, vip_expires_at
+                is_active, is_verified, google_id, oauth_provider, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
          FROM users WHERE email = $1`,
         [email]
       );
@@ -58,7 +98,7 @@ class User {
   static async findByUsername(username) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, role, bio, is_active, is_vip, vip_expires_at
+        `SELECT id, username, email, full_name, avatar, role, bio, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
          FROM users WHERE username = $1`,
         [username]
       );
@@ -76,7 +116,7 @@ class User {
   static async findByGoogleId(googleId) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id, is_vip, subscription_tier, vip_expires_at
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, google_id, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
          FROM users WHERE google_id = $1`,
         [googleId]
       );
@@ -94,7 +134,7 @@ class User {
   static async findByFacebookId(facebookId) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, facebook_id, is_vip, subscription_tier, vip_expires_at
+        `SELECT id, username, email, full_name, avatar, avatar_url, role, is_active, facebook_id, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
          FROM users WHERE facebook_id = $1`,
         [facebookId]
       );
@@ -129,7 +169,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, avatar, is_active)
          VALUES ($1, $2, $3, $4, $5, 'google', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -180,7 +220,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, full_name, avatar_url, facebook_id, oauth_provider, email_verified, avatar, is_active)
          VALUES ($1, $2, $3, $4, $5, 'facebook', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -221,7 +261,7 @@ class User {
       const result = await db.query(
         `INSERT INTO users (username, email, password, full_name, role, avatar)
          VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -261,7 +301,7 @@ class User {
          SET google_id = $1, oauth_provider = 'google', email_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [googleId, avatarUrl, userId]
       );
       return result.rows[0];
@@ -284,7 +324,7 @@ class User {
          SET facebook_id = $1, oauth_provider = 'facebook', email_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [facebookId, avatarUrl, userId]
       );
       return result.rows[0];
@@ -373,6 +413,112 @@ class User {
    * @param {string} tier - Subscription tier ('vip' or 'premium')
    * @returns {Object} Updated user
    */
+  static async recalculateVipSummary(id, client = db) {
+    const summary = await client.query(
+      `WITH active AS (
+         SELECT
+           e.user_id,
+           BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre') OR '*' = ANY(e.allowed_subjects)) AS has_all,
+           BOOL_OR(COALESCE(e.tier, 'vip') IN ('premium', 'pre')) AS has_premium,
+           MAX(e.expires_at) AS max_expires_at,
+           (ARRAY_AGG(e.package_id ORDER BY e.created_at DESC, e.id DESC))[1] AS latest_package_id,
+           ARRAY_AGG(DISTINCT subject) FILTER (WHERE subject IS NOT NULL AND subject <> '*') AS subjects
+         FROM user_vip_entitlements e
+         LEFT JOIN LATERAL UNNEST(e.allowed_subjects) AS subject ON true
+         WHERE e.user_id = $1
+           AND e.is_active = true
+           AND (e.expires_at IS NULL OR e.expires_at > NOW())
+         GROUP BY e.user_id
+       )
+       UPDATE users u
+       SET is_vip = true,
+           subscription_tier = CASE WHEN active.has_premium THEN 'premium' ELSE 'vip' END,
+           vip_expires_at = active.max_expires_at,
+           vip_package_id = active.latest_package_id,
+           vip_allowed_subjects = CASE
+             WHEN active.has_all THEN ARRAY['*']::text[]
+             ELSE COALESCE(active.subjects, ARRAY[]::text[])
+           END,
+           updated_at = NOW()
+       FROM active
+       WHERE u.id = $1
+       RETURNING u.id, u.is_vip, u.vip_expires_at, u.subscription_tier, u.vip_package_id, u.vip_allowed_subjects`,
+      [id]
+    );
+
+    if (summary.rows[0]) return summary.rows[0];
+
+    const cleared = await client.query(
+      `UPDATE users
+       SET is_vip = false,
+           subscription_tier = 'basic',
+           vip_expires_at = NULL,
+           vip_package_id = NULL,
+           vip_allowed_subjects = ARRAY[]::text[],
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, is_vip, vip_expires_at, subscription_tier, vip_package_id, vip_allowed_subjects`,
+      [id]
+    );
+    return cleared.rows[0] || null;
+  }
+
+  static async grantVipEntitlement(id, durationDays, tier = 'vip', options = {}) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const normalizedTier = normalizeSubscriptionTier(tier);
+      const safeSubjects = normalizedTier === 'premium'
+        ? [ALL_SUBJECTS]
+        : normalizeSubjectList(options.allowedSubjects || options.allowed_subjects);
+      const allowedSubjects = safeSubjects.length > 0 ? safeSubjects : [ALL_SUBJECTS];
+
+      let expiresAt = null;
+      if (durationDays === null || durationDays < 0) {
+        expiresAt = null;
+      } else if (durationDays === 0) {
+        const existing = await client.query(
+          `SELECT vip_expires_at FROM users WHERE id = $1 FOR UPDATE`,
+          [id]
+        );
+        expiresAt = existing.rows[0]?.vip_expires_at || null;
+      } else {
+        const safeDays = parseInt(durationDays, 10);
+        if (!Number.isFinite(safeDays) || safeDays <= 0) {
+          throw new Error('Invalid VIP duration');
+        }
+        expiresAt = new Date(Date.now() + safeDays * 24 * 60 * 60 * 1000);
+      }
+
+      const entitlement = await client.query(
+        `INSERT INTO user_vip_entitlements (
+           user_id, package_id, transaction_id, tier, allowed_subjects, starts_at, expires_at, source
+         )
+         VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
+         RETURNING id`,
+        [
+          id,
+          options.packageId || options.package_id || null,
+          options.transactionId || options.transaction_id || null,
+          normalizedTier,
+          allowedSubjects,
+          expiresAt,
+          options.source || 'payment',
+        ]
+      );
+
+      const result = await User.recalculateVipSummary(id, client);
+      await client.query('COMMIT');
+      return { ...result, entitlement_id: entitlement.rows[0]?.id || null };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   static async updateVipStatus(id, durationDays, tier = 'vip') {
     try {
       const normalizedTier = normalizeSubscriptionTier(tier);

@@ -8,7 +8,7 @@ const VipPackageController = {
   async getPackages(req, res) {
     try {
       const result = await db.query(
-        `SELECT id, name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, is_active, sort_order, created_at
+        `SELECT id, name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, is_active, sort_order, created_at
          FROM vip_packages
          WHERE is_active = TRUE
          ORDER BY sort_order ASC, price ASC`
@@ -27,7 +27,7 @@ const VipPackageController = {
   async getAllPackages(req, res) {
     try {
       const result = await db.query(
-        `SELECT id, name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, is_active, sort_order, created_at
+        `SELECT id, name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, is_active, sort_order, created_at
          FROM vip_packages
          ORDER BY sort_order ASC, price ASC`
       );
@@ -44,17 +44,17 @@ const VipPackageController = {
    */
   async createPackage(req, res) {
     try {
-      const { name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, sort_order } = req.body;
+      const { name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, sort_order } = req.body;
 
       if (!name || !tier || !duration_days || price === undefined) {
         return res.status(400).json({ success: false, message: 'Thiếu trường bắt buộc' });
       }
 
       const result = await db.query(
-        `INSERT INTO vip_packages (name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO vip_packages (name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
-        [name, tier, duration_days, price, original_price || null, price_note || null, original_price_note || null, description || '', features || [], sort_order || 0]
+        [name, tier, duration_days, price, original_price || null, price_note || null, original_price_note || null, subject_prices || {}, subject_original_prices || {}, allowed_subjects || [], requires_subject_choice === true, description || '', features || [], sort_order || 0]
       );
 
       res.json({ success: true, message: 'Đã tạo gói VIP', data: result.rows[0] });
@@ -71,7 +71,7 @@ const VipPackageController = {
   async updatePackage(req, res) {
     try {
       const { id } = req.params;
-      const { name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, is_active, sort_order } = req.body;
+      const { name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, is_active, sort_order } = req.body;
 
       const fields = [];
       const values = [];
@@ -84,6 +84,10 @@ const VipPackageController = {
       if (original_price !== undefined) { fields.push(`original_price = $${idx++}`); values.push(original_price || null); }
       if (price_note !== undefined) { fields.push(`price_note = $${idx++}`); values.push(price_note || null); }
       if (original_price_note !== undefined) { fields.push(`original_price_note = $${idx++}`); values.push(original_price_note || null); }
+      if (subject_prices !== undefined) { fields.push(`subject_prices = $${idx++}`); values.push(subject_prices || {}); }
+      if (subject_original_prices !== undefined) { fields.push(`subject_original_prices = $${idx++}`); values.push(subject_original_prices || {}); }
+      if (allowed_subjects !== undefined) { fields.push(`allowed_subjects = $${idx++}`); values.push(Array.isArray(allowed_subjects) ? allowed_subjects : []); }
+      if (requires_subject_choice !== undefined) { fields.push(`requires_subject_choice = $${idx++}`); values.push(requires_subject_choice === true); }
       if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
       if (features !== undefined) { fields.push(`features = $${idx++}`); values.push(features); }
       if (is_active !== undefined) { fields.push(`is_active = $${idx++}`); values.push(is_active); }

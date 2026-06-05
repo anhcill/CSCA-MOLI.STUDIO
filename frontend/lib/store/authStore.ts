@@ -26,9 +26,26 @@ function syncVipFromToken(user: User | null, token: string | null): User | null 
       ? payload.vip_expires_at
       : undefined;
   const subscription_tier = typeof payload.subscription_tier === 'string' ? payload.subscription_tier : user.subscription_tier;
+  const vipPackageId = typeof payload.vip_package_id === 'number' ? payload.vip_package_id : user.vip_package_id;
+  const vipAllowedSubjects = Array.isArray(payload.vip_allowed_subjects)
+    ? payload.vip_allowed_subjects.filter((item): item is string => typeof item === 'string')
+    : user.vip_allowed_subjects;
 
-  if (user.is_vip !== isVip || user.vip_expires_at !== vipExpiresAt || user.subscription_tier !== subscription_tier) {
-    return { ...user, is_vip: isVip, vip_expires_at: vipExpiresAt, subscription_tier: subscription_tier as any };
+  if (
+    user.is_vip !== isVip ||
+    user.vip_expires_at !== vipExpiresAt ||
+    user.subscription_tier !== subscription_tier ||
+    user.vip_package_id !== vipPackageId ||
+    JSON.stringify(user.vip_allowed_subjects || []) !== JSON.stringify(vipAllowedSubjects || [])
+  ) {
+    return {
+      ...user,
+      is_vip: isVip,
+      vip_expires_at: vipExpiresAt,
+      subscription_tier: subscription_tier as any,
+      vip_package_id: vipPackageId,
+      vip_allowed_subjects: vipAllowedSubjects,
+    };
   }
   return user;
 }

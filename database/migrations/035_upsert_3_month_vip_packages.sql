@@ -4,12 +4,16 @@
 ALTER TABLE vip_packages
   ADD COLUMN IF NOT EXISTS original_price INTEGER,
   ADD COLUMN IF NOT EXISTS price_note TEXT,
-  ADD COLUMN IF NOT EXISTS original_price_note TEXT;
+  ADD COLUMN IF NOT EXISTS original_price_note TEXT,
+  ADD COLUMN IF NOT EXISTS subject_prices JSONB DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS subject_original_prices JSONB DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS allowed_subjects TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS requires_subject_choice BOOLEAN DEFAULT false;
 
-WITH desired(name, tier, duration_days, price, original_price, price_note, original_price_note, description, features, sort_order) AS (
+WITH desired(name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, sort_order) AS (
   VALUES
     (
-      'Premium', 'premium', 90, 866000, 900000, NULL::text, NULL::text,
+      'Premium', 'premium', 90, 866000, 900000, NULL::text, NULL::text, '{}'::jsonb, '{}'::jsonb, ARRAY['*']::text[], false,
       'Truy cập full 6 môn: Toán, Vật Lý, Hoá học, Tiếng Trung Tự Nhiên, Tiếng Trung Xã Hội',
       ARRAY[
         'Truy cập toàn bộ đề, đáp án và lời giải chi tiết của tất cả các môn',
@@ -22,7 +26,7 @@ WITH desired(name, tier, duration_days, price, original_price, price_note, origi
       1
     ),
     (
-      'Gói Tự Nhiên', 'vip', 90, 488000, 550000, NULL::text, NULL::text,
+      'Gói Tự Nhiên', 'vip', 90, 488000, 550000, NULL::text, NULL::text, '{}'::jsonb, '{}'::jsonb, ARRAY['MATH','PHYSICS','CHEMISTRY','CHINESE_SCI']::text[], false,
       'Tiếng Trung Tự Nhiên + Toán + Lý/Hoá',
       ARRAY[
         'Truy cập toàn bộ đề, đáp án và lời giải chi tiết của Toán + TTTN + Lý/Hoá',
@@ -35,7 +39,7 @@ WITH desired(name, tier, duration_days, price, original_price, price_note, origi
       2
     ),
     (
-      'Gói Xã Hội', 'vip', 90, 333000, 400000, NULL::text, NULL::text,
+      'Gói Xã Hội', 'vip', 90, 333000, 400000, NULL::text, NULL::text, '{}'::jsonb, '{}'::jsonb, ARRAY['MATH','CHINESE_SOC']::text[], false,
       'Tiếng Trung Xã Hội + Toán',
       ARRAY[
         'Truy cập toàn bộ đề, đáp án và lời giải chi tiết của Toán và TTXH',
@@ -51,6 +55,9 @@ WITH desired(name, tier, duration_days, price, original_price, price_note, origi
       'Gói Mini', 'vip', 90, 188000, 200000,
       '188.000đ môn Toán / 122.000đ môn Vật Lý hoặc Hoá',
       '200.000đ môn Toán / 150.000đ môn Vật Lý hoặc Hoá',
+      '{"MATH":188000,"PHYSICS":122000,"CHEMISTRY":122000}'::jsonb,
+      '{"MATH":200000,"PHYSICS":150000,"CHEMISTRY":150000}'::jsonb,
+      ARRAY['MATH','PHYSICS','CHEMISTRY']::text[], true,
       '1 trong 3 môn Toán / Lý / Hoá',
       ARRAY[
         'Truy cập các đề miễn phí trên web',
@@ -70,6 +77,10 @@ updated AS (
       original_price = d.original_price,
       price_note = d.price_note,
       original_price_note = d.original_price_note,
+      subject_prices = d.subject_prices,
+      subject_original_prices = d.subject_original_prices,
+      allowed_subjects = d.allowed_subjects,
+      requires_subject_choice = d.requires_subject_choice,
       description = d.description,
       features = d.features,
       sort_order = d.sort_order,
@@ -81,10 +92,10 @@ updated AS (
 )
 INSERT INTO vip_packages (
   name, tier, duration_days, price, original_price, price_note,
-  original_price_note, description, features, is_active, sort_order
+  original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, is_active, sort_order
 )
 SELECT d.name, d.tier, d.duration_days, d.price, d.original_price, d.price_note,
-       d.original_price_note, d.description, d.features, TRUE, d.sort_order
+       d.original_price_note, d.subject_prices, d.subject_original_prices, d.allowed_subjects, d.requires_subject_choice, d.description, d.features, TRUE, d.sort_order
 FROM desired d
 WHERE NOT EXISTS (SELECT 1 FROM updated u WHERE u.name = d.name);
 

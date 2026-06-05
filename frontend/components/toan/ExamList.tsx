@@ -7,7 +7,7 @@ import { FaCrown } from 'react-icons/fa';
 import examApi, { Exam, SUBJECT_SLUG_TO_CODE } from '@/lib/api/exams';
 import { getHistoryStats, type HistoryStatsData } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
-import { isVipActive } from '@/lib/utils/permissions';
+import { canAccessContent, type TierLevel } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -22,6 +22,12 @@ type ExamTypeTab = 'regular' | 'vip';
 
 const isVipExam = (exam: Exam) =>
   exam.is_premium === true || (!!exam.vip_tier && exam.vip_tier !== 'basic');
+
+const getExamTier = (exam: Exam): TierLevel => {
+  if (exam.vip_tier === 'premium' || exam.vip_tier === 'pre') return 'premium';
+  if (exam.vip_tier === 'vip' || exam.is_premium === true) return 'vip';
+  return 'basic';
+};
 
 const getAttemptCount = (exam: Exam) => {
   const count = Number(exam.user_attempt_count ?? 0);
@@ -53,7 +59,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortType>('newest');
   const [showDone, setShowDone] = useState(false);
-  const isVip = isVipActive(user);
+  const canAccessExam = (exam: Exam) => canAccessContent(user, getExamTier(exam), exam.subject_code);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,7 +123,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
   };
 
   const handleExamClick = (exam: Exam) => {
-    if (isVipExam(exam) && !isVip) {
+    if (isVipExam(exam) && !canAccessExam(exam)) {
       setVipModalExam({ title: exam.title, id: exam.id });
       return;
     }
@@ -126,7 +132,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
 
   const handleMakeExam = (exam: Exam, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isVipExam(exam) && !isVip) {
+    if (isVipExam(exam) && !canAccessExam(exam)) {
       setVipModalExam({ title: exam.title, id: exam.id });
       return;
     }
@@ -242,7 +248,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       };
     }
 
-    const accessibleExams = exams.filter(exam => !isVipExam(exam) || isVip);
+    const accessibleExams = exams.filter(exam => !isVipExam(exam) || canAccessExam(exam));
     const inProgressExam = accessibleExams.find(exam => exam.in_progress_attempt);
     if (inProgressExam) {
       return {
@@ -278,7 +284,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       };
     }
 
-    const lockedVipExam = exams.find(isVipExam);
+    const lockedVipExam = exams.find(exam => isVipExam(exam) && !canAccessExam(exam));
     if (lockedVipExam) {
       return {
         exam: lockedVipExam,
@@ -296,7 +302,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
       action: t('exam.completed'),
       disabled: true,
     };
-  }, [exams, isVip, t, format]);
+  }, [exams, user, t, format]);
 
   // Difficulty badge
   const DiffBadge = ({ level }: { level?: string }) => {
@@ -347,7 +353,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
     const attemptCount = getAttemptCount(exam);
     const done = attemptCount > 0;
     const vipOnly = isVipExam(exam);
-    const isLocked = vipOnly && !isVip;
+    const isLocked = vipOnly && !canAccessExam(exam);
     const accentColor = isLocked ? 'from-amber-500 to-orange-500' : done ? 'from-gray-400 to-gray-500' : 'from-indigo-500 to-purple-600';
     const textColor = isLocked ? 'text-amber-800' : done ? 'text-gray-700' : 'text-gray-900';
     const hoverBorder = isLocked ? 'hover:border-amber-300 hover:shadow-amber-200' : done ? 'hover:border-gray-300 hover:shadow-gray-200' : 'hover:border-indigo-300 hover:shadow-indigo-200';
