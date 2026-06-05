@@ -211,7 +211,7 @@ const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   color: 'ocean',
   mood: 'friendly',
   position,
-  showBubble: true,
+  showBubble: false,
   motion: true,
   variant: 'cat',
 });

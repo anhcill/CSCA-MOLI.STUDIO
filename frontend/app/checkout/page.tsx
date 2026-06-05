@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import axios from '@/lib/utils/axios';
 import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
-import { getTierLevel, type TierLevel } from '@/lib/utils/permissions';
+import { canAccessSubject, getTierLevel, type TierLevel } from '@/lib/utils/permissions';
 import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy, FaCheckCircle } from 'react-icons/fa';
 import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
 
@@ -18,6 +18,10 @@ interface DbPackage {
   original_price?: number | null;
   price_note?: string | null;
   original_price_note?: string | null;
+  subject_prices?: Record<string, number> | null;
+  subject_original_prices?: Record<string, number> | null;
+  allowed_subjects?: string[];
+  requires_subject_choice?: boolean;
   description: string;
   features: string[];
 }
@@ -39,8 +43,65 @@ function derivePackageUI(pkg: DbPackage): { tier: Exclude<TierLevel, 'basic'>; c
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
   return {
     tier: isPre ? 'premium' : 'vip',
-    color: isPre ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-purple-600',
+    color: isPre ? 'from-amber-400 to-orange-500' : 'from-indigo-500 to-sky-500',
   };
+}
+
+const SUBJECT_OPTIONS: Record<string, { label: string; short: string }> = {
+  MATH: { label: 'Toán', short: 'Toán' },
+  PHYSICS: { label: 'Vật lý', short: 'Lý' },
+  CHEMISTRY: { label: 'Hóa học', short: 'Hóa' },
+  CHINESE_SOC: { label: 'Tiếng Trung Xã hội', short: 'TTXH' },
+  CHINESE_SCI: { label: 'Tiếng Trung Tự nhiên', short: 'TTTN' },
+};
+
+function normalizeSubjectCode(value?: string | null) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getPackageSubjects(pkg: DbPackage | null): string[] {
+  return Array.isArray(pkg?.allowed_subjects)
+    ? pkg.allowed_subjects.map(normalizeSubjectCode).filter(Boolean)
+    : [];
+}
+
+function packageRequiresSubjectChoice(pkg: DbPackage | null) {
+  return !!pkg?.requires_subject_choice && getPackageSubjects(pkg).filter(code => code !== '*').length > 0;
+}
+
+function getSubjectPrice(pkg: DbPackage | null, subjectCode?: string | null) {
+  if (!pkg) return 0;
+  const code = normalizeSubjectCode(subjectCode);
+  const subjectPrice = code ? Number(pkg.subject_prices?.[code]) : 0;
+  return Number.isFinite(subjectPrice) && subjectPrice > 0 ? subjectPrice : Number(pkg.price || 0);
+}
+
+function getSubjectOriginalPrice(pkg: DbPackage | null, subjectCode?: string | null) {
+  if (!pkg) return null;
+  const code = normalizeSubjectCode(subjectCode);
+  const subjectOriginal = code ? Number(pkg.subject_original_prices?.[code]) : 0;
+  if (Number.isFinite(subjectOriginal) && subjectOriginal > 0) return subjectOriginal;
+  return pkg.original_price || null;
+}
+
+function packageFullyCoveredByUser(user: any, pkg: DbPackage) {
+  const userTier = getTierLevel(user);
+  if (userTier === 'premium') return true;
+  if (derivePackageUI(pkg).tier === 'premium') return false;
+  const subjects = getPackageSubjects(pkg).filter(code => code !== '*');
+  return subjects.length > 0 && subjects.every(subject => canAccessSubject(user, subject));
+}
+
+function selectedEntitlementCovered(user: any, pkg: DbPackage | null, subjectCode?: string | null) {
+  if (!pkg) return false;
+  const userTier = getTierLevel(user);
+  if (userTier === 'premium') return true;
+  if (derivePackageUI(pkg).tier === 'premium') return false;
+  if (packageRequiresSubjectChoice(pkg)) {
+    return !!subjectCode && canAccessSubject(user, subjectCode);
+  }
+  const subjects = getPackageSubjects(pkg).filter(code => code !== '*');
+  return subjects.length > 0 && subjects.every(subject => canAccessSubject(user, subject));
 }
 
 const PAYMENT_METHODS = [
@@ -51,13 +112,13 @@ const PAYMENT_METHODS = [
     icon: (
       <div className="w-9 h-9 bg-green-600 rounded-lg flex items-center justify-center text-white text-xs font-black">QR</div>
     ),
-    bg: 'bg-green-50',
-    border: 'border-green-200',
-    hoverBg: 'hover:border-green-400 hover:bg-green-50',
-    selectedBg: 'bg-green-50 border-green-400',
-    color: 'text-green-700',
+    bg: 'bg-white',
+    border: 'border-gray-200',
+    hoverBg: 'hover:border-emerald-300 hover:bg-emerald-50/40',
+    selectedBg: 'border-emerald-500 bg-white ring-2 ring-emerald-100',
+    color: 'text-emerald-700',
     badge: 'Miễn phí phí giao dịch',
-    badgeColor: 'bg-green-500 text-white',
+    badgeColor: 'bg-emerald-100 text-emerald-700',
     recommended: true,
   },
 ];
@@ -70,38 +131,33 @@ function getPromotionTheme(theme: PromotionBanner['theme']) {
   switch (theme) {
     case 'violet':
       return {
-        shell: 'from-violet-700 via-fuchsia-600 to-pink-500',
-        ring: 'ring-fuchsia-200',
-        button: 'bg-white text-violet-700 hover:bg-violet-50',
-        glow: 'bg-fuchsia-300',
+        shell: 'border-violet-200 bg-violet-50 text-violet-950',
+        button: 'bg-violet-600 text-white hover:bg-violet-700',
+        badge: 'bg-violet-100 text-violet-700',
       };
     case 'emerald':
       return {
-        shell: 'from-emerald-700 via-teal-600 to-cyan-500',
-        ring: 'ring-emerald-200',
-        button: 'bg-white text-emerald-700 hover:bg-emerald-50',
-        glow: 'bg-teal-300',
+        shell: 'border-emerald-200 bg-emerald-50 text-emerald-950',
+        button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+        badge: 'bg-emerald-100 text-emerald-700',
       };
     case 'rose':
       return {
-        shell: 'from-rose-700 via-pink-600 to-orange-500',
-        ring: 'ring-rose-200',
-        button: 'bg-white text-rose-700 hover:bg-rose-50',
-        glow: 'bg-pink-300',
+        shell: 'border-rose-200 bg-rose-50 text-rose-950',
+        button: 'bg-rose-600 text-white hover:bg-rose-700',
+        badge: 'bg-rose-100 text-rose-700',
       };
     case 'blue':
       return {
-        shell: 'from-blue-700 via-indigo-600 to-sky-500',
-        ring: 'ring-blue-200',
-        button: 'bg-white text-blue-700 hover:bg-blue-50',
-        glow: 'bg-sky-300',
+        shell: 'border-sky-200 bg-sky-50 text-sky-950',
+        button: 'bg-sky-600 text-white hover:bg-sky-700',
+        badge: 'bg-sky-100 text-sky-700',
       };
     default:
       return {
-        shell: 'from-amber-500 via-orange-500 to-rose-500',
-        ring: 'ring-amber-200',
-        button: 'bg-white text-orange-700 hover:bg-amber-50',
-        glow: 'bg-amber-200',
+        shell: 'border-amber-200 bg-amber-50 text-amber-950',
+        button: 'bg-amber-600 text-white hover:bg-amber-700',
+        badge: 'bg-amber-100 text-amber-700',
       };
   }
 }
@@ -294,6 +350,7 @@ function CheckoutContent() {
 
   const [allPackages, setAllPackages] = useState<DbPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<DbPackage | null>(null);
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('bank_transfer');
   const [loading, setLoading] = useState(false);
   const [pkgLoading, setPkgLoading] = useState(true);
@@ -506,6 +563,7 @@ function CheckoutContent() {
   const currentTier = getTierLevel(user);
   const selectedTier: TierLevel = selectedPkg ? derivePackageUI(selectedPkg).tier : 'basic';
   const currentTierCoversSelectedPkg = selectedPkg ? TIER_RANK[currentTier] >= TIER_RANK[selectedTier] : false;
+  const promotionTheme = promotion ? getPromotionTheme(promotion.theme) : null;
 
   // ── SELECT SCREEN ──
   return (
@@ -526,59 +584,55 @@ function CheckoutContent() {
       </button>
 
       {/* Hero */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-amber-100 to-orange-100 border border-amber-200 rounded-full text-amber-800 text-sm font-bold shadow-sm">
-          <FaCrown size={14} className="text-amber-500" />
-          Nâng cấp CSCA PRO
+      <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-100">
+            <FaCrown size={13} className="text-amber-500" />
+            Nâng cấp CSCA PRO
+          </div>
+          <h1 className="mt-3 text-2xl font-black text-gray-950 sm:text-3xl">Chọn gói và thanh toán</h1>
+          <p className="mt-1 break-words text-sm text-gray-500">
+            Tài khoản <span className="font-semibold text-gray-700">{user.email}</span>
+          </p>
         </div>
-        <h1 className="text-2xl font-black text-gray-900 sm:text-3xl">
-          Mở khóa tất cả tính năng
-          <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"> PRO</span>
-        </h1>
-        <p className="text-gray-500 text-sm break-words">
-          Thanh toán với tài khoản
-          <span className="font-semibold text-gray-700 ml-1">{user.email}</span>
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-1">
+        <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[320px]">
           {[
-            { icon: <FaShieldAlt size={16} />, text: 'Bảo mật 100%' },
-            { icon: <FaBolt size={16} />, text: 'Kích hoạt tức thì' },
-            { icon: <FaGift size={16} />, text: 'Hoàn tiền 7 ngày' },
+            { icon: <FaShieldAlt size={15} />, text: 'Bảo mật' },
+            { icon: <FaBolt size={15} />, text: 'Kích hoạt' },
+            { icon: <FaGift size={15} />, text: '7 ngày' },
           ].map((f, i) => (
-            <div key={i} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
-              <span className="text-indigo-500">{f.icon}</span>
+            <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600">
+              <span className="mx-auto mb-1 flex w-fit text-indigo-500">{f.icon}</span>
               {f.text}
             </div>
           ))}
         </div>
       </div>
 
-      {promotion && (
-        <div className={`relative overflow-hidden rounded-3xl bg-gradient-to-br ${getPromotionTheme(promotion.theme).shell} p-5 text-white shadow-2xl ring-4 ${getPromotionTheme(promotion.theme).ring} sm:p-6`}>
-          <div className={`absolute -right-12 -top-12 h-36 w-36 rounded-full ${getPromotionTheme(promotion.theme).glow} opacity-35 blur-3xl`} />
-          <div className="absolute -bottom-16 left-8 h-32 w-32 rounded-full bg-white/20 blur-3xl" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 space-y-3">
+      {promotion && promotionTheme && (
+        <div className={`rounded-2xl border p-4 shadow-sm sm:p-5 ${promotionTheme.shell}`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1 ring-white/25">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${promotionTheme.badge}`}>
                   <FaGift size={12} />
                   {promotion.badge_text || 'Ưu đãi MOLY'}
                 </span>
                 {promotion.coupon_code && (
-                  <span className="rounded-full bg-black/20 px-3 py-1 font-mono text-xs font-black">
+                  <span className="rounded-lg bg-white px-3 py-1 font-mono text-xs font-black text-gray-900 ring-1 ring-gray-200">
                     {promotion.coupon_code}
                   </span>
                 )}
               </div>
-              <div>
-                <h2 className="text-2xl font-black leading-tight sm:text-3xl">{promotion.title}</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/85">{promotion.content}</p>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:gap-3">
+                <h2 className="text-xl font-black leading-tight sm:text-2xl">{promotion.title}</h2>
+                {promotion.ends_at && (
+                  <p className="text-xs font-semibold opacity-70">
+                    Kết thúc {new Date(promotion.ends_at).toLocaleDateString('vi-VN')}
+                  </p>
+                )}
               </div>
-              {promotion.ends_at && (
-                <p className="text-xs font-semibold text-white/75">
-                  Kết thúc {new Date(promotion.ends_at).toLocaleDateString('vi-VN')}
-                </p>
-              )}
+              <p className="max-w-3xl text-sm leading-relaxed opacity-75">{promotion.content}</p>
             </div>
             {promotion.coupon_code && (
               <button
@@ -587,7 +641,7 @@ function CheckoutContent() {
                   setAppliedCouponCode(promotion.coupon_code);
                   setCouponMismatchError('');
                 }}
-                className={`shrink-0 rounded-2xl px-5 py-3 text-sm font-black shadow-lg transition-colors ${getPromotionTheme(promotion.theme).button}`}
+                className={`shrink-0 rounded-xl px-5 py-3 text-sm font-black shadow-sm transition-colors ${promotionTheme.button}`}
               >
                 {appliedCouponCode === promotion.coupon_code ? 'Đã áp dụng' : (promotion.cta_text || 'Dùng mã ngay')}
               </button>
@@ -596,13 +650,13 @@ function CheckoutContent() {
         </div>
       )}
 
-      <div className="rounded-3xl border border-gray-100 bg-white p-4 shadow-xl shadow-indigo-100/60 sm:p-6 lg:p-8">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
           <div className="space-y-6">
       {/* Step 1: Package */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">1</div>
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">1</div>
           <h2 className="text-lg font-black text-gray-900">Chọn gói phù hợp</h2>
         </div>
         {pkgLoading ? (
@@ -632,44 +686,49 @@ function CheckoutContent() {
                 <button
                   key={pkg.id}
                   onClick={() => setSelectedPkg(pkg)}
-                  className={`w-full text-left rounded-2xl border-2 transition-all duration-300 overflow-hidden
-                    ${selected ? 'border-transparent shadow-xl sm:scale-[1.02] ring-4 ring-indigo-200' : 'border-gray-200 hover:border-gray-300 hover:shadow-lg bg-white'}`}
+                  className={`relative w-full overflow-hidden rounded-2xl border p-4 text-left transition-all duration-200 sm:p-5
+                    ${selected ? 'border-indigo-500 bg-indigo-50/40 shadow-md ring-1 ring-indigo-100' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'}`}
                 >
-                  <div className={`p-5 pb-4 bg-gradient-to-r ${ui.color} text-white`}>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-black text-xl">{pkg.name}</h3>
-                        <p className="text-xs mt-0.5 text-white/70">{pkg.duration_days} ngày sử dụng</p>
+                  <div className={`absolute inset-y-5 left-0 w-1 rounded-r-full ${selected ? 'bg-indigo-600' : 'bg-transparent'}`} />
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-black text-gray-950">{pkg.name}</h3>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${ui.tier === 'premium' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                          {ui.tier === 'premium' ? 'Premium' : 'VIP'}
+                        </span>
                       </div>
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'bg-white border-white' : 'border-white/30'}`}>
-                        {selected && <FiCheck size={12} className="text-indigo-600" />}
-                      </div>
+                      <p className="mt-1 text-xs font-semibold text-gray-500">{pkg.duration_days} ngày sử dụng</p>
                     </div>
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-3xl font-black sm:text-4xl">{pkg.price.toLocaleString('vi-VN')}</span>
-                      <span className="text-sm text-white/70">đ</span>
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-all ${selected ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300 bg-white'}`}>
+                      {selected && <FiCheck size={14} className="text-white" />}
                     </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
+                    <span className="text-3xl font-black leading-none text-gray-950 sm:text-4xl">
+                      {pkg.price.toLocaleString('vi-VN')}<span className="ml-1 text-sm text-gray-500">đ</span>
+                    </span>
                     {hasSalePrice && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-black line-through text-white/55">{Number(pkg.original_price).toLocaleString('vi-VN')}đ</span>
-                        <span className="rounded-2xl border border-white/70 bg-white px-2.5 py-0.5 text-xs font-black text-orange-500">-{salePercent}%</span>
-                      </div>
+                      <>
+                        <span className="text-sm font-bold text-gray-400 line-through">{Number(pkg.original_price).toLocaleString('vi-VN')}đ</span>
+                        <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-black text-rose-600 ring-1 ring-rose-100">-{salePercent}%</span>
+                      </>
                     )}
-                    {pkg.price_note && <p className="mt-1.5 text-[10px] font-bold leading-snug text-white/85">{pkg.price_note}</p>}
                   </div>
-                  <div className="p-5 bg-white">
-                    <ul className="space-y-2">
-                      {(pkg.features || []).slice(0, 4).map((f, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <FiCheck size={14} className="text-indigo-500 mt-0.5 shrink-0" />
-                          <span className="text-sm text-gray-600">{f}</span>
-                        </li>
-                      ))}
-                      {(pkg.features || []).length > 4 && (
-                        <li className="text-xs text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
-                      )}
-                    </ul>
-                  </div>
+                  {pkg.price_note && <p className="mt-2 text-xs font-bold leading-snug text-gray-500">{pkg.price_note}</p>}
+
+                  <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+                    {(pkg.features || []).slice(0, 4).map((f, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <FiCheck size={14} className="mt-0.5 shrink-0 text-indigo-500" />
+                        <span className="text-sm leading-relaxed text-gray-600">{f}</span>
+                      </li>
+                    ))}
+                    {(pkg.features || []).length > 4 && (
+                      <li className="text-xs font-semibold text-gray-400">+{pkg.features.length - 4} tính năng khác...</li>
+                    )}
+                  </ul>
                 </button>
               );
             })}
@@ -680,7 +739,7 @@ function CheckoutContent() {
       {/* Step 2: Payment method */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">2</div>
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">2</div>
           <h2 className="text-lg font-black text-gray-900">Phương thức thanh toán</h2>
         </div>
         <div className="grid grid-cols-1 gap-3">
@@ -688,15 +747,15 @@ function CheckoutContent() {
             <button
               key={method.id}
               onClick={() => setSelectedMethod(method.id)}
-              className={`relative w-full flex items-center gap-3 p-4 sm:gap-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 text-left
+              className={`relative flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-all duration-200 sm:gap-4 sm:p-5
                 ${selectedMethod === method.id ? `${method.selectedBg} shadow-lg` : `${method.border} ${method.bg} ${method.hoverBg} hover:shadow-md`}`}
             >
               {method.recommended && (
-                <div className="absolute -top-2 right-4 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider px-3 py-0.5 rounded-full">
+                <div className="absolute -top-2 right-4 rounded-full bg-gray-900 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
                   Khuyên dùng
                 </div>
               )}
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm bg-white">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gray-50 shadow-sm ring-1 ring-gray-100">
                 {method.icon}
               </div>
               <div className="flex-1 min-w-0">
@@ -706,7 +765,7 @@ function CheckoutContent() {
                 </div>
                 {method.sub && <p className="text-xs text-gray-500 mt-0.5">{method.sub}</p>}
               </div>
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${selectedMethod === method.id ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300 bg-white'}`}>
+              <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${selectedMethod === method.id ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300 bg-white'}`}>
                 {selectedMethod === method.id && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
               </div>
             </button>
@@ -718,16 +777,16 @@ function CheckoutContent() {
       {selectedPkg && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-sm font-black">3</div>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">3</div>
             <h2 className="text-lg font-black text-gray-900">Dùng xu giảm nhẹ đơn hàng</h2>
           </div>
           <button
             type="button"
             onClick={() => maxCoinUse > 0 && setUseCoins(v => !v)}
             disabled={maxCoinUse <= 0}
-            className={`w-full rounded-2xl border-2 p-4 text-left transition-all sm:p-5 ${
+            className={`w-full rounded-2xl border p-4 text-left transition-all sm:p-5 ${
               useCoins && maxCoinUse > 0
-                ? 'border-amber-400 bg-amber-50 shadow-lg'
+                ? 'border-amber-400 bg-amber-50 shadow-sm ring-2 ring-amber-100'
                 : maxCoinUse > 0
                   ? 'border-amber-200 bg-white hover:border-amber-300 hover:bg-amber-50'
                   : 'border-gray-200 bg-gray-50 opacity-75'
@@ -760,110 +819,112 @@ function CheckoutContent() {
           <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
       {/* Order summary */}
       {selectedPkg && (
-        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-4 sm:p-6 text-white space-y-4 shadow-2xl">
+        <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
-            <FaLock size={14} className="text-amber-400" />
-            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Xác nhận đơn hàng</h3>
+            <FaLock size={14} className="text-gray-900" />
+            <h3 className="text-sm font-black uppercase tracking-wide text-gray-900">Xác nhận đơn hàng</h3>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color} flex items-center justify-center shrink-0`}>
-                <FaCrown size={16} className="text-white sm:w-5 sm:h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-bold text-sm sm:text-base">{selectedPkg.name}</p>
-                <p className="text-xs text-gray-400">{selectedPkg.duration_days} ngày sử dụng</p>
-              </div>
-            </div>
-            <div className="shrink-0 text-left sm:text-right">
-              {hasDiscount ? (
-                <div className="space-y-1">
-                  <span className="text-sm font-black line-through text-gray-500 block">
-                    {selectedPkg.price.toLocaleString('vi-VN')}đ
-                  </span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-400 block">
-                    {payableAmount.toLocaleString('vi-VN')}đ
-                  </span>
-                  <div className="flex flex-wrap gap-1 sm:justify-end">
-                    {appliedCouponInfo && (
-                      <span className="inline-block px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-bold">
-                        -{appliedCouponInfo.discount_amount.toLocaleString('vi-VN')}đ
-                      </span>
-                    )}
-                    {useCoins && maxCoinUse > 0 && (
-                      <span className="inline-block px-2 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded-lg font-bold">
-                        -{coinDiscountAmount.toLocaleString('vi-VN')}đ
-                      </span>
-                    )}
-                  </div>
+
+          <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color}`}>
+                  <FaCrown size={17} className="text-white" />
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  {selectedPkg.original_price && selectedPkg.original_price > selectedPkg.price && (
-                    <span className="block text-sm font-black text-gray-500 line-through">{selectedPkg.original_price.toLocaleString('vi-VN')}đ</span>
-                  )}
-                  <span className="block text-xl sm:text-2xl font-black">{selectedPkg.price.toLocaleString('vi-VN')}<span className="text-sm text-gray-400">đ</span></span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-gray-950 sm:text-base">{selectedPkg.name}</p>
+                  <p className="text-xs font-semibold text-gray-500">{selectedPkg.duration_days} ngày sử dụng</p>
                 </div>
+              </div>
+              {selectedPkg.original_price && selectedPkg.original_price > selectedPkg.price && (
+                <span className="shrink-0 text-sm font-bold text-gray-400 line-through">{selectedPkg.original_price.toLocaleString('vi-VN')}đ</span>
               )}
             </div>
           </div>
-          {useCoins && maxCoinUse > 0 && (
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-700 text-sm">
-              <span className="text-gray-400">Dùng xu</span>
-              <span className="font-bold text-amber-300">
-                {maxCoinUse.toLocaleString('vi-VN')} xu (-{coinDiscountAmount.toLocaleString('vi-VN')}đ)
-              </span>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-gray-500">Tạm tính</span>
+              <span className="font-bold text-gray-900">{baseAmount.toLocaleString('vi-VN')}đ</span>
             </div>
-          )}
+            {appliedCouponInfo && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-500">Mã giảm giá</span>
+                <span className="font-bold text-emerald-600">-{appliedCouponInfo.discount_amount.toLocaleString('vi-VN')}đ</span>
+              </div>
+            )}
+            {useCoins && maxCoinUse > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-500">Dùng xu</span>
+                <span className="font-bold text-amber-600">
+                  -{coinDiscountAmount.toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+            )}
+          </div>
+
           {appliedCouponCode && appliedCouponInfo && (
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
-              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs rounded-lg font-mono font-bold">
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+              <span className="rounded-lg bg-white px-2 py-0.5 font-mono text-xs font-black text-emerald-700 ring-1 ring-emerald-100">
                 {appliedCouponCode}
               </span>
-              <span className="text-xs text-gray-400">đã được áp dụng</span>
+              <span className="text-xs font-semibold text-emerald-700">đã được áp dụng</span>
             </div>
           )}
+
+          <div className="flex items-end justify-between gap-3 border-t border-gray-100 pt-4">
+            <span className="text-sm font-bold text-gray-500">Thanh toán</span>
+            <span className="text-3xl font-black leading-none text-gray-950">
+              {payableAmount.toLocaleString('vi-VN')}<span className="ml-1 text-sm text-gray-500">đ</span>
+            </span>
+          </div>
+
+          <div className="space-y-3 pt-1">
+            <button
+              onClick={handleProceed}
+              disabled={loading || currentTierCoversSelectedPkg}
+              className={`flex w-full flex-wrap items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-black text-white shadow-lg transition-all sm:gap-3
+                ${loading || currentTierCoversSelectedPkg ? 'cursor-not-allowed bg-gray-300 shadow-none' : 'bg-gray-950 hover:bg-gray-800 hover:shadow-gray-200 active:scale-[0.99]'}`}
+            >
+              {loading ? (
+                <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
+              ) : currentTierCoversSelectedPkg ? (
+                'Gói này đã được kích hoạt'
+              ) : (
+                <>
+                  <span>{payableAmount <= 0 ? 'Kích hoạt gói' : 'Tiến hành thanh toán'}</span>
+                  <FaArrowRight size={18} />
+                </>
+              )}
+            </button>
+            <button onClick={() => router.push('/vip')} className="flex w-full items-center justify-center gap-2 py-2.5 text-sm font-bold text-gray-500 transition-colors hover:text-gray-800">
+              <FiArrowLeft size={16} /> Quay lại bảng giá
+            </button>
+          </div>
         </div>
       )}
 
       {couponMismatchError && (
-        <div className="flex items-center gap-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-5 py-4">
+        <div className="flex items-center gap-3 rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-600">
           ⚠️ {couponMismatchError} — Vui lòng chọn lại gói hoặc gỡ mã giảm giá.
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-5 py-4">
+        <div className="flex items-center gap-3 rounded-xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-600">
           {error}
         </div>
       )}
 
-      <div className="space-y-3">
+      {!selectedPkg && (
         <button
           onClick={handleProceed}
-          disabled={!selectedPkg || loading || currentTierCoversSelectedPkg}
-          className={`w-full flex flex-wrap items-center justify-center gap-2 px-5 py-4 sm:gap-3 sm:px-8 rounded-2xl text-white font-black text-base sm:text-lg shadow-2xl transition-all
-            ${!selectedPkg || loading || currentTierCoversSelectedPkg ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl hover:shadow-indigo-200 active:scale-[0.99]'}`}
+          disabled
+          className="flex w-full items-center justify-center rounded-xl bg-gray-300 px-5 py-4 text-base font-black text-white"
         >
-          {loading ? (
-            <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
-          ) : currentTierCoversSelectedPkg ? (
-            'Gói này đã được kích hoạt'
-          ) : selectedPkg ? (
-            <>
-              <span>{`${payableAmount.toLocaleString('vi-VN')}đ`}</span>
-              <span className="opacity-60">—</span>
-              <span>{payableAmount <= 0 ? 'Kích hoạt gói' : 'Tiến hành thanh toán'}</span>
-              <FaArrowRight size={18} />
-            </>
-          ) : (
-            'Chọn gói để tiếp tục'
-          )}
+          Chọn gói để tiếp tục
         </button>
-        <button onClick={() => router.push('/vip')} className="w-full flex items-center justify-center gap-2 py-3 text-gray-500 font-medium hover:text-gray-700 transition-colors">
-          <FiArrowLeft size={16} /> Quay lại bảng giá
-        </button>
-      </div>
+      )}
           </div>
         </div>
       </div>
@@ -873,20 +934,15 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50 px-3 py-6 pt-20 sm:px-4 sm:py-12 sm:pt-28">
+    <div className="min-h-screen bg-slate-50 px-3 py-6 pt-20 sm:px-4 sm:py-10 sm:pt-28">
       <div className="w-full max-w-7xl mx-auto">
-        <div className="bg-white shadow-2xl rounded-3xl sm:rounded-[2rem] overflow-hidden border border-gray-100">
-          <div className="h-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500" />
-          <div className="p-4 sm:p-8 lg:p-10">
-            <Suspense fallback={
-              <div className="flex justify-center items-center py-24">
-                <FiLoader size={40} className="animate-spin text-indigo-600" />
-              </div>
-            }>
-              <CheckoutContent />
-            </Suspense>
+        <Suspense fallback={
+          <div className="flex justify-center items-center py-24">
+            <FiLoader size={40} className="animate-spin text-indigo-600" />
           </div>
-        </div>
+        }>
+          <CheckoutContent />
+        </Suspense>
       </div>
     </div>
   );
