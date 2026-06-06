@@ -39,11 +39,48 @@ interface PromotionBanner {
   discount_value?: number | null;
 }
 
-function derivePackageUI(pkg: DbPackage): { tier: Exclude<TierLevel, 'basic'>; color: string } {
+function derivePackageUI(pkg: DbPackage) {
   const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
+  if (isPre) {
+    return {
+      tier: 'premium' as const,
+      color: 'from-amber-400 to-orange-500',
+      stepBg: 'bg-gradient-to-br from-amber-500 to-orange-500',
+      accentText: 'text-amber-700',
+      accentIcon: 'text-amber-500',
+      pill: 'bg-amber-100 text-amber-700',
+      selectedCard: 'border-amber-400 bg-amber-50/60 shadow-md shadow-amber-100/70 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:shadow-amber-950/40 dark:ring-amber-500/20',
+      cardHover: 'hover:border-amber-200 hover:shadow-amber-100/60',
+      selectedStripe: 'bg-amber-500',
+      selectedCheck: 'border-amber-500 bg-amber-500',
+      featureIcon: 'text-amber-500',
+      subjectSelected: 'border-amber-400 bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:ring-amber-500/20',
+      subjectHover: 'hover:border-amber-200 hover:bg-amber-50/50',
+      summaryCard: 'border-amber-200 bg-gradient-to-br from-white via-amber-50/70 to-orange-50 shadow-md shadow-amber-100/70',
+      summaryInner: 'bg-white/85 ring-1 ring-amber-100',
+      totalText: 'text-amber-700',
+      payButton: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-amber-200',
+    };
+  }
+
   return {
-    tier: isPre ? 'premium' : 'vip',
-    color: isPre ? 'from-amber-400 to-orange-500' : 'from-indigo-500 to-sky-500',
+    tier: 'vip' as const,
+    color: 'from-indigo-500 to-sky-500',
+    stepBg: 'bg-gradient-to-br from-indigo-600 to-sky-500',
+    accentText: 'text-indigo-700',
+    accentIcon: 'text-indigo-500',
+    pill: 'bg-indigo-100 text-indigo-700',
+    selectedCard: 'border-indigo-500 bg-indigo-50/60 shadow-md shadow-indigo-100/70 ring-1 ring-indigo-100 dark:bg-indigo-950/35 dark:shadow-indigo-950/40 dark:ring-indigo-500/20',
+    cardHover: 'hover:border-indigo-200 hover:shadow-indigo-100/60',
+    selectedStripe: 'bg-indigo-600',
+    selectedCheck: 'border-indigo-600 bg-indigo-600',
+    featureIcon: 'text-indigo-500',
+    subjectSelected: 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-100 dark:bg-indigo-950/35 dark:ring-indigo-500/20',
+    subjectHover: 'hover:border-indigo-200 hover:bg-indigo-50/50',
+    summaryCard: 'border-indigo-200 bg-gradient-to-br from-white via-indigo-50/70 to-sky-50 shadow-md shadow-indigo-100/70',
+    summaryInner: 'bg-white/85 ring-1 ring-indigo-100',
+    totalText: 'text-indigo-700',
+    payButton: 'bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-700 hover:to-sky-600 hover:shadow-indigo-200',
   };
 }
 
@@ -125,6 +162,27 @@ const PAYMENT_METHODS = [
 
 const COIN_VALUE_VND = 100;
 const MAX_COIN_DISCOUNT_RATIO = 0.2;
+
+function getStoredCheckoutToken() {
+  if (typeof window === 'undefined') return null;
+  const sessionToken = sessionStorage.getItem('token');
+  if (sessionToken) return sessionToken;
+
+  try {
+    const raw = localStorage.getItem('auth-storage');
+    const parsed = raw ? JSON.parse(raw) : null;
+    const token = typeof parsed?.state?.token === 'string' ? parsed.state.token : null;
+    const refreshToken = typeof parsed?.state?.refreshToken === 'string' ? parsed.state.refreshToken : null;
+    if (token) {
+      sessionStorage.setItem('token', token);
+      if (refreshToken) sessionStorage.setItem('refreshToken', refreshToken);
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+
 function getPromotionTheme(theme: PromotionBanner['theme']) {
   switch (theme) {
     case 'violet':
@@ -344,7 +402,7 @@ function SuccessScreen({ packageName, vipExpires }: { packageName?: string; vipE
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { isAuthenticated, user, updateUser } = useAuthStore();
+  const { isAuthenticated, user, setUser, setTokens, refreshToken: storedRefreshToken } = useAuthStore();
 
   const [allPackages, setAllPackages] = useState<DbPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<DbPackage | null>(null);
@@ -366,6 +424,15 @@ function CheckoutContent() {
   const [couponMismatchError, setCouponMismatchError] = useState('');
   const [useCoins, setUseCoins] = useState(false);
   const [promotion, setPromotion] = useState<PromotionBanner | null>(null);
+  const [authChecked, setAuthChecked] = useState(() => typeof window !== 'undefined');
+  const [hasStoredToken, setHasStoredToken] = useState(() => Boolean(getStoredCheckoutToken()));
+  const canUseCheckout = isAuthenticated || hasStoredToken;
+  const userAllowedSubjectsKey = JSON.stringify(user?.vip_allowed_subjects || []);
+
+  useEffect(() => {
+    setHasStoredToken(Boolean(getStoredCheckoutToken()));
+    setAuthChecked(true);
+  }, []);
 
   // Re-validate coupon whenever package or coupon code changes
   useEffect(() => {
@@ -409,18 +476,31 @@ function CheckoutContent() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!canUseCheckout) {
+      if (getStoredCheckoutToken()) setHasStoredToken(true);
+      return;
+    }
     getCurrentUser()
       .then((response) => {
         if (response?.success && response?.data?.user) {
-          updateUser(response.data.user);
+          const nextToken = (response.data as any).token;
+          if (nextToken) {
+            const refreshToken = storedRefreshToken || (typeof window !== 'undefined' ? sessionStorage.getItem('refreshToken') || '' : '');
+            setTokens(nextToken, refreshToken);
+          }
+          setUser(response.data.user);
         }
       })
       .catch(() => {});
-  }, [isAuthenticated, updateUser]);
+  }, [canUseCheckout, setTokens, setUser, storedRefreshToken]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!authChecked) return;
+    if (!canUseCheckout) {
+      if (getStoredCheckoutToken()) {
+        setHasStoredToken(true);
+        return;
+      }
       router.push('/login?redirect=/checkout');
       return;
     }
@@ -453,7 +533,7 @@ function CheckoutContent() {
       .catch(() => setAllPackages([]))
       .finally(() => setPkgLoading(false));
     if (urlMethod) setSelectedMethod(urlMethod);
-  }, [isAuthenticated, urlPackageId, urlMethod, router, user?.is_vip, user?.subscription_tier, user?.vip_expires_at]);
+  }, [authChecked, canUseCheckout, urlPackageId, urlMethod, router, user?.is_vip, user?.subscription_tier, user?.vip_expires_at, user?.vip_package_id, userAllowedSubjectsKey]);
 
   const userCoins = Math.max(0, Number(user?.coins || 0));
   const baseAmount = selectedPkg ? getSubjectPrice(selectedPkg, selectedSubjectCode) : 0;
@@ -476,7 +556,12 @@ function CheckoutContent() {
     try {
       const response = await getCurrentUser();
       if (response?.success && response?.data?.user) {
-        updateUser(response.data.user);
+        const nextToken = (response.data as any).token;
+        if (nextToken) {
+          const refreshToken = storedRefreshToken || (typeof window !== 'undefined' ? sessionStorage.getItem('refreshToken') || '' : '');
+          setTokens(nextToken, refreshToken);
+        }
+        setUser(response.data.user);
       }
     } catch (_) {}
   };
@@ -566,6 +651,7 @@ function CheckoutContent() {
   const currentTierCoversSelectedPkg = selectedPkg ? selectedEntitlementCovered(user, selectedPkg, selectedSubjectCode) : false;
   const needsSubjectChoice = packageRequiresSubjectChoice(selectedPkg);
   const selectedSubjectMissing = needsSubjectChoice && !selectedSubjectCode;
+  const selectedUi = selectedPkg ? derivePackageUI(selectedPkg) : null;
   const promotionTheme = promotion ? getPromotionTheme(promotion.theme) : null;
 
   // ── SELECT SCREEN ──
@@ -587,7 +673,7 @@ function CheckoutContent() {
       </button>
 
       {/* Hero */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className={`flex flex-col gap-4 rounded-2xl border bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-6 ${selectedUi ? selectedUi.summaryCard : 'border-gray-200'}`}>
         <div className="min-w-0">
           <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-700 ring-1 ring-amber-100">
             <FaCrown size={13} className="text-amber-500" />
@@ -604,8 +690,8 @@ function CheckoutContent() {
             { icon: <FaBolt size={15} />, text: 'Kích hoạt' },
             { icon: <FaGift size={15} />, text: '7 ngày' },
           ].map((f, i) => (
-            <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600">
-              <span className="mx-auto mb-1 flex w-fit text-indigo-500">{f.icon}</span>
+            <div key={i} className="rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs font-bold text-gray-600 shadow-sm">
+              <span className={`mx-auto mb-1 flex w-fit ${selectedUi?.accentIcon || 'text-indigo-500'}`}>{f.icon}</span>
               {f.text}
             </div>
           ))}
@@ -653,13 +739,13 @@ function CheckoutContent() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+      <div className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 lg:p-6 ${selectedUi ? selectedUi.summaryCard : 'border-gray-200'}`}>
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
           <div className="space-y-6">
       {/* Step 1: Package */}
       <div>
         <div className="flex items-center gap-2 mb-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">1</div>
+          <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-white ${selectedUi?.stepBg || 'bg-gray-900'}`}>1</div>
           <h2 className="text-lg font-black text-gray-900">Chọn gói phù hợp</h2>
         </div>
         {pkgLoading ? (
@@ -690,20 +776,20 @@ function CheckoutContent() {
                   key={pkg.id}
                   onClick={() => setSelectedPkg(pkg)}
                   className={`relative w-full overflow-hidden rounded-2xl border p-4 text-left transition-all duration-200 sm:p-5
-                    ${selected ? 'border-indigo-500 bg-indigo-50/40 shadow-md ring-1 ring-indigo-100' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'}`}
+                    ${selected ? ui.selectedCard : `border-gray-200 bg-white hover:shadow-sm ${ui.cardHover}`}`}
                 >
-                  <div className={`absolute inset-y-5 left-0 w-1 rounded-r-full ${selected ? 'bg-indigo-600' : 'bg-transparent'}`} />
+                  <div className={`absolute inset-y-5 left-0 w-1 rounded-r-full ${selected ? ui.selectedStripe : 'bg-transparent'}`} />
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-lg font-black text-gray-950">{pkg.name}</h3>
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${ui.tier === 'premium' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${ui.pill}`}>
                           {ui.tier === 'premium' ? 'Premium' : 'VIP'}
                         </span>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-gray-500">{pkg.duration_days} ngày sử dụng</p>
                     </div>
-                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-all ${selected ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300 bg-white'}`}>
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-all ${selected ? ui.selectedCheck : 'border-gray-300 bg-white'}`}>
                       {selected && <FiCheck size={14} className="text-white" />}
                     </div>
                   </div>
@@ -724,7 +810,7 @@ function CheckoutContent() {
                   <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
                     {(pkg.features || []).slice(0, 4).map((f, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <FiCheck size={14} className="mt-0.5 shrink-0 text-indigo-500" />
+                        <FiCheck size={14} className={`mt-0.5 shrink-0 ${ui.featureIcon}`} />
                         <span className="text-sm leading-relaxed text-gray-600">{f}</span>
                       </li>
                     ))}
@@ -742,7 +828,7 @@ function CheckoutContent() {
       {selectedPkg && needsSubjectChoice && (
         <div>
           <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">2</div>
+            <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-white ${selectedUi?.stepBg || 'bg-gray-900'}`}>2</div>
             <h2 className="text-lg font-black text-gray-900">Chọn môn học</h2>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -759,10 +845,10 @@ function CheckoutContent() {
                   disabled={covered}
                   className={`rounded-2xl border p-4 text-left transition-all ${
                     selected
-                      ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-100'
+                      ? selectedUi?.subjectSelected || 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-100'
                       : covered
                         ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-70'
-                        : 'border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40'
+                        : `border-gray-200 bg-white ${selectedUi?.subjectHover || 'hover:border-indigo-200 hover:bg-indigo-50/40'}`
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -772,7 +858,7 @@ function CheckoutContent() {
                         {covered ? 'Đã có quyền' : 'Mở đúng môn này'}
                       </p>
                     </div>
-                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300 bg-white'}`}>
+                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${selected ? selectedUi?.selectedCheck || 'border-indigo-600 bg-indigo-600' : 'border-gray-300 bg-white'}`}>
                       {selected && <FiCheck size={13} className="text-white" />}
                     </div>
                   </div>
@@ -790,9 +876,9 @@ function CheckoutContent() {
       )}
 
       {/* Step 2: Payment method */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">2</div>
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+          <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-white ${selectedUi?.stepBg || 'bg-gray-900'}`}>{needsSubjectChoice ? 3 : 2}</div>
           <h2 className="text-lg font-black text-gray-900">Phương thức thanh toán</h2>
         </div>
         <div className="grid grid-cols-1 gap-3">
@@ -801,10 +887,10 @@ function CheckoutContent() {
               key={method.id}
               onClick={() => setSelectedMethod(method.id)}
               className={`relative flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-all duration-200 sm:gap-4 sm:p-5
-                ${selectedMethod === method.id ? `${method.selectedBg} shadow-lg` : `${method.border} ${method.bg} ${method.hoverBg} hover:shadow-md`}`}
+              ${selectedMethod === method.id ? `${method.selectedBg} shadow-lg` : `${method.border} ${method.bg} ${method.hoverBg} hover:shadow-md`}`}
             >
               {method.recommended && (
-                <div className="absolute -top-2 right-4 rounded-full bg-gray-900 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                <div className={`absolute -top-2 right-4 rounded-full px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-white ${selectedUi?.stepBg || 'bg-gray-900'}`}>
                   Khuyên dùng
                 </div>
               )}
@@ -830,7 +916,7 @@ function CheckoutContent() {
       {selectedPkg && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900 text-sm font-black text-white">3</div>
+            <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black text-white ${selectedUi?.stepBg || 'bg-gray-900'}`}>{needsSubjectChoice ? 4 : 3}</div>
             <h2 className="text-lg font-black text-gray-900">Dùng xu giảm nhẹ đơn hàng</h2>
           </div>
           <button
@@ -872,13 +958,13 @@ function CheckoutContent() {
           <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
       {/* Order summary */}
       {selectedPkg && (
-        <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className={`space-y-5 rounded-2xl border p-5 ${selectedUi?.summaryCard || 'border-gray-200 bg-white shadow-sm'}`}>
           <div className="flex items-center gap-2">
-            <FaLock size={14} className="text-gray-900" />
+            <FaLock size={14} className={selectedUi?.accentIcon || 'text-gray-900'} />
             <h3 className="text-sm font-black uppercase tracking-wide text-gray-900">Xác nhận đơn hàng</h3>
           </div>
 
-          <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+          <div className={`rounded-xl p-4 ${selectedUi?.summaryInner || 'bg-gray-50 ring-1 ring-gray-100'}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${derivePackageUI(selectedPkg).color}`}>
@@ -888,7 +974,7 @@ function CheckoutContent() {
                   <p className="truncate text-sm font-black text-gray-950 sm:text-base">{selectedPkg.name}</p>
                   <p className="text-xs font-semibold text-gray-500">{selectedPkg.duration_days} ngày sử dụng</p>
                   {selectedSubjectCode && (
-                    <p className="mt-0.5 text-xs font-bold text-indigo-600">
+                    <p className={`mt-0.5 text-xs font-bold ${selectedUi?.accentText || 'text-indigo-600'}`}>
                       {SUBJECT_OPTIONS[selectedSubjectCode]?.label || selectedSubjectCode}
                     </p>
                   )}
@@ -932,7 +1018,7 @@ function CheckoutContent() {
 
           <div className="flex items-end justify-between gap-3 border-t border-gray-100 pt-4">
             <span className="text-sm font-bold text-gray-500">Thanh toán</span>
-            <span className="text-3xl font-black leading-none text-gray-950">
+            <span className={`text-3xl font-black leading-none ${selectedUi?.totalText || 'text-gray-950'}`}>
               {payableAmount.toLocaleString('vi-VN')}<span className="ml-1 text-sm text-gray-500">đ</span>
             </span>
           </div>
@@ -942,7 +1028,7 @@ function CheckoutContent() {
               onClick={handleProceed}
               disabled={loading || currentTierCoversSelectedPkg || selectedSubjectMissing}
               className={`flex w-full flex-wrap items-center justify-center gap-2 rounded-xl px-5 py-4 text-base font-black text-white shadow-lg transition-all sm:gap-3
-                ${loading || currentTierCoversSelectedPkg || selectedSubjectMissing ? 'cursor-not-allowed bg-gray-300 shadow-none' : 'bg-gray-950 hover:bg-gray-800 hover:shadow-gray-200 active:scale-[0.99]'}`}
+                ${loading || currentTierCoversSelectedPkg || selectedSubjectMissing ? 'cursor-not-allowed bg-gray-300 shadow-none' : `${selectedUi?.payButton || 'bg-gray-950 hover:bg-gray-800 hover:shadow-gray-200'} active:scale-[0.99]`}`}
             >
               {loading ? (
                 <><FiLoader size={20} className="animate-spin" /> Đang khởi tạo...</>
