@@ -25,6 +25,24 @@ function sanitizeExplanation(str) {
   return str.replace(/\0/g, "").trim();
 }
 
+function getSafeErrorLog(error) {
+  if (!error) return { message: "Unknown error" };
+
+  const safe = {
+    message: error.message,
+    statusCode: error.statusCode,
+    responseBody: error.responseBody,
+    code: error.code,
+    providerStatus: error.providerStatus,
+    providerCode: error.providerCode,
+    providerMessage: error.providerMessage,
+    retryAfter: error.retryAfter,
+  };
+
+  Object.keys(safe).forEach((key) => safe[key] === undefined && delete safe[key]);
+  return safe;
+}
+
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
 const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
@@ -57,6 +75,10 @@ function normalizeExamAccess(isPremium, vipTier) {
     isPremium: normalizedPremium,
     vipTier: normalizedPremium ? "vip" : "basic",
   };
+}
+
+function getExamAllowDownload(access) {
+  return access?.vipTier === "basic";
 }
 
 function isSuperAdmin(req) {
@@ -210,7 +232,7 @@ const AdminExamController = {
       const preview = await previewImportFile(req.file, req.body?.importPreset);
       res.json(preview);
     } catch (error) {
-      console.error("Preview file import error:", error);
+      console.error("Preview file import error:", getSafeErrorLog(error));
       res.status(error.statusCode || 500).json(error.responseBody || { message: "Failed to preview import file" });
     }
   },
@@ -349,8 +371,8 @@ const AdminExamController = {
       const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14, $15)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING *`,
         [
           examCode,
@@ -362,6 +384,7 @@ const AdminExamController = {
           safeDescription,
           difficulty_level || 'medium',
           access.isPremium,
+          getExamAllowDownload(access),
           solution_video_url ? sanitize(solution_video_url) : null,
           solution_description ? sanitize(solution_description) : null,
           shuffle_mode === true,
@@ -400,6 +423,12 @@ const AdminExamController = {
       const updates = [];
       const params = [];
       let idx = 1;
+      const currentExamResult = await pool.query("SELECT is_premium, vip_tier FROM exams WHERE id = $1 AND deleted_at IS NULL", [examId]);
+      if (currentExamResult.rows.length === 0) {
+        return res.status(404).json({ message: "Exam not found" });
+      }
+      const currentAccess = normalizeExamAccess(currentExamResult.rows[0].is_premium, currentExamResult.rows[0].vip_tier);
+      let effectiveAccess = currentAccess;
       // P1: sanitize all text fields + P0: handle titleCn/descriptionCn
       if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(sanitize(title)); }
       if (titleCn !== undefined) { updates.push(`title_cn = $${idx++}`); params.push(titleCn ? sanitize(titleCn) : null); }
@@ -422,12 +451,14 @@ const AdminExamController = {
       if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
       if (is_premium !== undefined || vip_tier !== undefined) {
         const access = normalizeExamAccess(is_premium, vip_tier);
+        effectiveAccess = access;
         updates.push(`is_premium = $${idx++}`);
         params.push(access.isPremium);
         updates.push(`vip_tier = $${idx++}`);
         params.push(access.vipTier);
       }
-      if (allow_download !== undefined) { updates.push(`allow_download = $${idx++}`); params.push(allow_download === true); }
+      updates.push(`allow_download = $${idx++}`);
+      params.push(getExamAllowDownload(effectiveAccess));
       if (solution_video_url !== undefined) { updates.push(`solution_video_url = $${idx++}`); params.push(solution_video_url ? sanitize(solution_video_url) : null); }
       if (solution_description !== undefined) { updates.push(`solution_description = $${idx++}`); params.push(solution_description ? sanitize(solution_description) : null); }
       if (shuffle_mode !== undefined) { updates.push(`shuffle_mode = $${idx++}`); params.push(shuffle_mode === true); }
@@ -1368,8 +1399,9 @@ const AdminExamController = {
 
                 // ── Determine target position ──
                 let targetPosition;
-                if (atPosition !== undefined && atPosition > 0) {
-                    targetPosition = atPosition;
+                const parsedAtPosition = Number.parseInt(atPosition, 10);
+                if (Number.isFinite(parsedAtPosition) && parsedAtPosition > 0) {
+                    targetPosition = parsedAtPosition;
                 } else if (afterQuestionId) {
                     const afterRes = await client.query(
                         "SELECT question_number FROM questions WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL",
@@ -1386,17 +1418,7 @@ const AdminExamController = {
                 }
 
                 // ── Shift all questions at or after targetPosition by +1 ──
-                await client.query(
-                    `UPDATE questions AS q
-                     SET question_number = q.question_number + 1
-                     FROM (
-                         SELECT id FROM questions
-                         WHERE exam_id = $1 AND question_number >= $2 AND deleted_at IS NULL
-                         ORDER BY question_number DESC
-                     ) AS sub
-                     WHERE q.id = sub.id`,
-                    [examId, targetPosition],
-                );
+                await shiftQuestionNumbers(client, examId, targetPosition, 1);
 
                 // ── Handle passage_group for sub-questions ──
                 let passageGroupId = null;
@@ -1998,8 +2020,11 @@ const AdminExamController = {
           : null,
       }));
 
+      const exam = examResult.rows[0];
+      exam.allow_download = getExamAllowDownload(normalizeExamAccess(exam.is_premium, exam.vip_tier));
+
       res.json({
-        exam: examResult.rows[0],
+        exam,
         questions,
       });
     } catch (error) {

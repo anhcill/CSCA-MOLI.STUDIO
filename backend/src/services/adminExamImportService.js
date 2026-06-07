@@ -72,7 +72,7 @@ async function getNextContainerQuestionNumber(client, examId) {
 }
 
 function shouldTryImportFallback(error) {
-  const status = error?.response?.status;
+  const status = error?.providerStatus ?? error?.response?.status;
   return error?.message === "AI_TIMEOUT" || (Number.isFinite(status) && status >= 500);
 }
 
@@ -392,6 +392,7 @@ function normalizeImportedQuestion(rawQuestion, index) {
   const reviewNotes = stringValue(rawQuestion?.reviewNotes || rawQuestion?.review_notes);
   const combinedText = `${questionText} ${questionTextCn} ${imageHint} ${reviewNotes}`;
   const needsImage = rawQuestion?.needsImage === true || PDF_IMPORT_IMAGE_HINT_RE.test(combinedText);
+  const subQuestionNumber = Number.parseInt(rawQuestion?.subQuestionNumber, 10);
 
   return {
     questionType: QUESTION_TYPES.SINGLE_CHOICE,
@@ -411,6 +412,7 @@ function normalizeImportedQuestion(rawQuestion, index) {
     needsImage,
     imageHint: imageHint || (needsImage ? "Question may reference an image/table/chart in the PDF. Add image manually before publishing." : ""),
     reviewNotes,
+    subQuestionNumber: Number.isFinite(subQuestionNumber) ? subQuestionNumber : index + 1,
     importIndex: index + 1,
   };
 }
@@ -778,6 +780,12 @@ const CHINESE_SOCIAL_OPTION_LABEL_RE = /[（(]\s*([A-H])\s*[）)]/gi;
 const CHINESE_SOCIAL_GROUP_POOL_RE = /(?:^|\n)\s*(?:第\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*(?:题)?\s*[:：]\s*([^\n]*(?:[（(]\s*[A-H]\s*[）)][^\n]*)+)/gi;
 const CHINESE_SOCIAL_READING_GROUP_RE = /(?:^|\n)\s*第\s*(\d{1,3})\s*-\s*(\d{1,3})\s*题\s*[:：]?\s*/gi;
 const CHINESE_SOCIAL_SECTION_READING_RE = /(?:^|\n)\s*(?:VI|Ⅵ)[.．]\s*阅读理解/i;
+const CHINESE_SCIENCE_QUESTION_LINE_RE = /^(\d{1,3})[.．、]\s*(.*)$/;
+const CHINESE_SCIENCE_OPTION_LINE_RE = /^([A-H])[.．、]\s*/i;
+const CHINESE_SCIENCE_OPTION_RE = /(?:^|[ \t\n])([A-H])[ \t]*[.．、][ \t]*/gi;
+const CHINESE_SCIENCE_EXPLANATION_LINE_RE = /^(?:解答|解析|答案解析|说明|答案)\s*[:：]?/i;
+const CHINESE_SCIENCE_EXPLANATION_RE = /(?:^|\n)\s*(?:解答|解析|答案解析|说明|答案)\s*[:：]?\s*/i;
+const CHINESE_SCIENCE_EXPLICIT_ANSWER_RE = /(?:答案|正确答案|故选|应选|选|得答案)\s*[:：为是]?\s*([A-H])/i;
 
 function getSequentialVietnameseQuestionMatches(text) {
   const matches = [];
@@ -898,6 +906,197 @@ function normalizeChineseSocialText(rawText) {
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function normalizeChineseScienceLines(rawText) {
+  return normalizeRuleBasedMathLayout(rawText)
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => stringValue(line).replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function getChineseScienceQuestionMarkers(lines) {
+  const markers = [];
+  lines.forEach((line, index) => {
+    const match = line.match(CHINESE_SCIENCE_QUESTION_LINE_RE);
+    const questionNumber = Number.parseInt(match?.[1], 10);
+    if (Number.isFinite(questionNumber) && questionNumber > 0 && questionNumber <= PDF_IMPORT_MAX_QUESTIONS) {
+      markers.push({ index, questionNumber });
+    }
+  });
+  return markers;
+}
+
+function splitChineseScienceMissingQuestion(blockLines, questionNumber, nextQuestionNumber) {
+  if (nextQuestionNumber !== questionNumber + 2) {
+    return [{ questionNumber, lines: blockLines }];
+  }
+
+  const optionLineIndexes = blockLines
+    .map((line, index) => (CHINESE_SCIENCE_OPTION_LINE_RE.test(line) ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (optionLineIndexes.length < 8) {
+    return [{ questionNumber, lines: blockLines }];
+  }
+
+  const secondOptionGroupStart = optionLineIndexes[4];
+  const missingQuestionLineIndex = secondOptionGroupStart - 1;
+  const missingQuestionText = blockLines[missingQuestionLineIndex] || "";
+
+  if (
+    missingQuestionLineIndex <= optionLineIndexes[3] ||
+    missingQuestionText.length < 8 ||
+    !/[\u4e00-\u9fff]/.test(missingQuestionText)
+  ) {
+    return [{ questionNumber, lines: blockLines }];
+  }
+
+  return [
+    { questionNumber, lines: blockLines.slice(0, missingQuestionLineIndex) },
+    {
+      questionNumber: questionNumber + 1,
+      lines: [
+        `${questionNumber + 1}. ${missingQuestionText}`,
+        ...blockLines.slice(secondOptionGroupStart),
+      ],
+    },
+  ];
+}
+
+function getChineseScienceQuestionBlocks(rawText) {
+  const lines = normalizeChineseScienceLines(rawText);
+  const markers = getChineseScienceQuestionMarkers(lines);
+  const blocks = [];
+
+  for (let index = 0; index < markers.length; index++) {
+    const marker = markers[index];
+    const nextMarker = markers[index + 1];
+    const blockLines = lines.slice(marker.index, nextMarker?.index ?? lines.length);
+    const splitBlocks = splitChineseScienceMissingQuestion(
+      blockLines,
+      marker.questionNumber,
+      nextMarker?.questionNumber,
+    );
+    blocks.push(...splitBlocks);
+  }
+
+  return blocks;
+}
+
+function getChineseScienceOptionMatches(text) {
+  return [...stringValue(text).matchAll(CHINESE_SCIENCE_OPTION_RE)]
+    .map((match) => {
+      const labelOffset = match[0].search(/[A-H]/i);
+      return {
+        key: stringValue(match[1]).toUpperCase(),
+        labelStart: match.index + Math.max(labelOffset, 0),
+        contentStart: match.index + match[0].length,
+      };
+    })
+    .filter((match) => /^[A-H]$/.test(match.key));
+}
+
+function cleanChineseScienceOptionText(rawText) {
+  const text = splitRuleBasedOptionText(rawText);
+  if (/^[A-H][.．、]?$/.test(text)) return "";
+  return text;
+}
+
+function parseChineseScienceQuestionBlock(block) {
+  const firstLineMatch = block.lines[0]?.match(CHINESE_SCIENCE_QUESTION_LINE_RE);
+  const firstQuestionLine = firstLineMatch ? firstLineMatch[2] : block.lines[0];
+  const body = [firstQuestionLine, ...block.lines.slice(1)].filter(Boolean).join("\n");
+  const explanationMatch = body.match(CHINESE_SCIENCE_EXPLANATION_RE);
+  const questionAndOptions = (explanationMatch ? body.slice(0, explanationMatch.index) : body).trim();
+  const explanation = explanationMatch
+    ? cleanRuleBasedTextFragment(body.slice(explanationMatch.index + explanationMatch[0].length))
+    : "";
+  const optionMatches = getChineseScienceOptionMatches(questionAndOptions);
+
+  if (optionMatches.length < 2) return null;
+
+  const questionText = cleanRuleBasedTextFragment(questionAndOptions.slice(0, optionMatches[0].labelStart));
+  if (!questionText) return null;
+
+  const parsedOptions = optionMatches
+    .slice(0, 8)
+    .map((option, index, allOptions) => {
+      const nextOption = allOptions[index + 1];
+      const optionText = cleanChineseScienceOptionText(
+        questionAndOptions.slice(option.contentStart, nextOption?.labelStart ?? questionAndOptions.length),
+      );
+      return {
+        key: option.key,
+        text: optionText,
+      };
+    });
+  const maxOptionIndex = Math.max(
+    3,
+    ...parsedOptions.map((option) => RULE_IMPORT_ANSWER_KEYS.indexOf(option.key)).filter((index) => index >= 0),
+  );
+  const optionTextByKey = new Map(parsedOptions.map((option) => [option.key, option.text]));
+  const answers = RULE_IMPORT_ANSWER_KEYS.slice(0, maxOptionIndex + 1).map((key) => ({
+    text: "",
+    textCn: optionTextByKey.get(key) || getMissingOptionText(key),
+  }));
+
+  const explicitAnswer = explanation.match(CHINESE_SCIENCE_EXPLICIT_ANSWER_RE)?.[1]?.toUpperCase() || "";
+  const correctAnswer = explicitAnswer || inferCorrectAnswerFromExplanation(answers, explanation);
+  const hasMissingAnswerText = answers.some((answer) => stringValue(answer.textCn).includes(RULE_IMPORT_MISSING_OPTION_TEXT));
+  const needsImage = PDF_IMPORT_IMAGE_HINT_RE.test(`${questionText} ${explanation}`);
+  const reviewNotes = [
+    correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
+    hasMissingAnswerText ? "Some formula/image answer content was not extracted from Word/PDF. Edit placeholders in the preview." : "",
+  ].filter(Boolean).join(" ");
+
+  return {
+    itemType: "single_choice",
+    questionType: "single_choice",
+    questionText: "",
+    questionTextCn: questionText,
+    answers,
+    correctAnswer,
+    explanation: "",
+    explanationCn: explanation,
+    points: 1,
+    difficulty: /提高|advanced|hard/i.test(questionText) ? "hard" : "medium",
+    subQuestionNumber: block.questionNumber,
+    needsImage,
+    imageHint: needsImage ? "Question may reference an image/table/chart in the file. Add image manually before publishing." : "",
+    reviewNotes,
+  };
+}
+
+function parseChineseScienceTextWithRules(rawText, sourceMeta) {
+  const blocks = getChineseScienceQuestionBlocks(rawText);
+  if (blocks.length < 5) return null;
+
+  const items = blocks
+    .map(parseChineseScienceQuestionBlock)
+    .filter(Boolean);
+
+  if (!items.length) return null;
+
+  const skippedCount = blocks.length - items.length;
+  const warnings = [
+    "This preview used the fast Chinese science parser. Please review formulas, diagrams, placeholders, and correct answers before saving.",
+  ];
+  if (skippedCount > 0) {
+    warnings.push(`Skipped ${skippedCount} question-like blocks that did not contain enough option labels.`);
+  }
+
+  return normalizePdfImportResult({
+    exam: {
+      title: sourceMeta?.fileName ? String(sourceMeta.fileName).replace(/\.(pdf|docx?|doc)$/i, "") : "Imported exam",
+      duration: 90,
+      totalPoints: Math.max(items.length, 1),
+    },
+    items,
+    warnings,
+  }, sourceMeta);
 }
 
 function parseChineseSocialQuestionMatches(text) {
@@ -1237,6 +1436,9 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
 function parsePdfTextWithRules(pdfText, sourceMeta) {
   const vietnamesePreview = parseVietnameseChoiceTextWithRules(pdfText, sourceMeta);
   if (vietnamesePreview?.items?.length) return vietnamesePreview;
+
+  const chineseSciencePreview = parseChineseScienceTextWithRules(pdfText, sourceMeta);
+  if (chineseSciencePreview?.items?.length) return chineseSciencePreview;
 
   const chineseSocialPreview = parseChineseSocialTextWithRules(pdfText, sourceMeta);
   if (chineseSocialPreview?.items?.length) return chineseSocialPreview;
@@ -1619,9 +1821,13 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
 
 
 function createImportPreviewError(statusCode, responseBody, cause) {
-  const error = cause instanceof Error ? cause : new Error(responseBody?.message || "Import preview failed");
+  const error = new Error(responseBody?.message || cause?.message || "Import preview failed");
   error.statusCode = statusCode;
   error.responseBody = responseBody;
+  if (cause?.providerStatus) error.providerStatus = cause.providerStatus;
+  if (cause?.providerCode) error.providerCode = cause.providerCode;
+  if (cause?.providerMessage) error.providerMessage = cause.providerMessage;
+  if (cause?.retryAfter) error.retryAfter = cause.retryAfter;
   return error;
 }
 
@@ -1693,6 +1899,15 @@ async function previewImportFile(file, importPresetInput) {
         message: "No valid supported questions were found in this PDF.",
         ...normalized,
       });
+    }
+
+    const normalizedCount = normalized.totalQuestionCount || 0;
+    const ruleBasedCount = ruleBasedPreview?.totalQuestionCount || 0;
+    if (ruleBasedCount > normalizedCount) {
+      return withRuleBasedFallbackWarning(
+        ruleBasedPreview,
+        `Rule-based parser found ${ruleBasedCount} questions while AI returned ${normalizedCount}; returned rule-based preview to avoid missing questions.`,
+      );
     }
 
     return normalized;

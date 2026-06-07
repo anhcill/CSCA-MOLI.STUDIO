@@ -40,47 +40,115 @@ interface PromotionBanner {
 }
 
 function derivePackageUI(pkg: DbPackage) {
-  const isPre = pkg.tier === 'premium' || /pre/i.test(pkg.name);
-  if (isPre) {
+  const name = String(pkg.name || '').toLowerCase();
+  const baseTier = pkg.tier === 'premium' || /pre|premium/i.test(pkg.name) ? 'premium' as const : 'vip' as const;
+
+  if (name.includes('mini')) {
+    return {
+      tier: baseTier,
+      color: 'from-slate-500 to-gray-700',
+      stepBg: 'bg-gradient-to-br from-slate-500 to-gray-700',
+      accentText: 'text-slate-700',
+      accentIcon: 'text-slate-500',
+      pill: 'bg-slate-100 text-slate-700',
+      selectedCard: 'border-slate-500 bg-slate-50 shadow-md shadow-slate-100 ring-1 ring-slate-200',
+      cardHover: 'hover:border-slate-300 hover:shadow-slate-100',
+      selectedStripe: 'bg-slate-600',
+      selectedCheck: 'border-slate-600 bg-slate-600',
+      featureIcon: 'text-slate-500',
+      subjectSelected: 'border-slate-500 bg-slate-50 ring-1 ring-slate-200',
+      subjectHover: 'hover:border-slate-300 hover:bg-slate-50',
+      summaryCard: 'border-slate-200 bg-slate-50',
+      summaryInner: 'bg-white ring-1 ring-slate-200',
+      totalText: 'text-slate-800',
+      payButton: 'bg-gradient-to-r from-slate-600 to-gray-800 hover:from-slate-700 hover:to-gray-900 hover:shadow-slate-200',
+    };
+  }
+
+  if (name.includes('tự nhiên') || name.includes('tu nhien')) {
+    return {
+      tier: baseTier,
+      color: 'from-sky-600 to-emerald-600',
+      stepBg: 'bg-gradient-to-br from-sky-600 to-emerald-600',
+      accentText: 'text-sky-700',
+      accentIcon: 'text-sky-600',
+      pill: 'bg-sky-100 text-sky-700',
+      selectedCard: 'border-sky-500 bg-sky-50 shadow-md shadow-sky-100 ring-1 ring-sky-200',
+      cardHover: 'hover:border-sky-300 hover:shadow-sky-100',
+      selectedStripe: 'bg-sky-600',
+      selectedCheck: 'border-sky-600 bg-sky-600',
+      featureIcon: 'text-sky-600',
+      subjectSelected: 'border-sky-500 bg-sky-50 ring-1 ring-sky-200',
+      subjectHover: 'hover:border-sky-300 hover:bg-sky-50',
+      summaryCard: 'border-sky-200 bg-sky-50',
+      summaryInner: 'bg-white ring-1 ring-sky-200',
+      totalText: 'text-sky-700',
+      payButton: 'bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-700 hover:to-emerald-700 hover:shadow-sky-200',
+    };
+  }
+
+  if (name.includes('xã hội') || name.includes('xa hoi')) {
+    return {
+      tier: baseTier,
+      color: 'from-rose-500 to-orange-500',
+      stepBg: 'bg-gradient-to-br from-rose-500 to-orange-500',
+      accentText: 'text-rose-700',
+      accentIcon: 'text-rose-500',
+      pill: 'bg-rose-100 text-rose-700',
+      selectedCard: 'border-rose-500 bg-rose-50 shadow-md shadow-rose-100 ring-1 ring-rose-200',
+      cardHover: 'hover:border-rose-300 hover:shadow-rose-100',
+      selectedStripe: 'bg-rose-600',
+      selectedCheck: 'border-rose-600 bg-rose-600',
+      featureIcon: 'text-rose-500',
+      subjectSelected: 'border-rose-500 bg-rose-50 ring-1 ring-rose-200',
+      subjectHover: 'hover:border-rose-300 hover:bg-rose-50',
+      summaryCard: 'border-rose-200 bg-rose-50',
+      summaryInner: 'bg-white ring-1 ring-rose-200',
+      totalText: 'text-rose-700',
+      payButton: 'bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-rose-200',
+    };
+  }
+
+  if (baseTier === 'premium') {
     return {
       tier: 'premium' as const,
-      color: 'from-amber-400 to-orange-500',
-      stepBg: 'bg-gradient-to-br from-amber-500 to-orange-500',
-      accentText: 'text-amber-700',
-      accentIcon: 'text-amber-500',
-      pill: 'bg-amber-100 text-amber-700',
-      selectedCard: 'border-amber-400 bg-amber-50/60 shadow-md shadow-amber-100/70 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:shadow-amber-950/40 dark:ring-amber-500/20',
-      cardHover: 'hover:border-amber-200 hover:shadow-amber-100/60',
-      selectedStripe: 'bg-amber-500',
-      selectedCheck: 'border-amber-500 bg-amber-500',
-      featureIcon: 'text-amber-500',
-      subjectSelected: 'border-amber-400 bg-amber-50 ring-1 ring-amber-100 dark:bg-amber-950/35 dark:ring-amber-500/20',
-      subjectHover: 'hover:border-amber-200 hover:bg-amber-50/50',
-      summaryCard: 'border-amber-200 bg-gradient-to-br from-white via-amber-50/70 to-orange-50 shadow-md shadow-amber-100/70',
-      summaryInner: 'bg-white/85 ring-1 ring-amber-100',
-      totalText: 'text-amber-700',
-      payButton: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-amber-200',
+      color: 'from-teal-700 to-emerald-700',
+      stepBg: 'bg-gradient-to-br from-teal-700 to-emerald-700',
+      accentText: 'text-teal-700',
+      accentIcon: 'text-teal-600',
+      pill: 'bg-teal-100 text-teal-700',
+      selectedCard: 'border-teal-600 bg-teal-50 shadow-md shadow-teal-100 ring-1 ring-teal-200',
+      cardHover: 'hover:border-teal-300 hover:shadow-teal-100',
+      selectedStripe: 'bg-teal-700',
+      selectedCheck: 'border-teal-700 bg-teal-700',
+      featureIcon: 'text-teal-600',
+      subjectSelected: 'border-teal-600 bg-teal-50 ring-1 ring-teal-200',
+      subjectHover: 'hover:border-teal-300 hover:bg-teal-50',
+      summaryCard: 'border-teal-200 bg-teal-50',
+      summaryInner: 'bg-white ring-1 ring-teal-200',
+      totalText: 'text-teal-700',
+      payButton: 'bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 hover:shadow-teal-200',
     };
   }
 
   return {
     tier: 'vip' as const,
-    color: 'from-indigo-500 to-sky-500',
-    stepBg: 'bg-gradient-to-br from-indigo-600 to-sky-500',
+    color: 'from-indigo-600 to-purple-700',
+    stepBg: 'bg-gradient-to-br from-indigo-600 to-purple-700',
     accentText: 'text-indigo-700',
     accentIcon: 'text-indigo-500',
     pill: 'bg-indigo-100 text-indigo-700',
-    selectedCard: 'border-indigo-500 bg-indigo-50/60 shadow-md shadow-indigo-100/70 ring-1 ring-indigo-100 dark:bg-indigo-950/35 dark:shadow-indigo-950/40 dark:ring-indigo-500/20',
-    cardHover: 'hover:border-indigo-200 hover:shadow-indigo-100/60',
+    selectedCard: 'border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100 ring-1 ring-indigo-200',
+    cardHover: 'hover:border-indigo-300 hover:shadow-indigo-100',
     selectedStripe: 'bg-indigo-600',
     selectedCheck: 'border-indigo-600 bg-indigo-600',
     featureIcon: 'text-indigo-500',
-    subjectSelected: 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-100 dark:bg-indigo-950/35 dark:ring-indigo-500/20',
-    subjectHover: 'hover:border-indigo-200 hover:bg-indigo-50/50',
-    summaryCard: 'border-indigo-200 bg-gradient-to-br from-white via-indigo-50/70 to-sky-50 shadow-md shadow-indigo-100/70',
-    summaryInner: 'bg-white/85 ring-1 ring-indigo-100',
+    subjectSelected: 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200',
+    subjectHover: 'hover:border-indigo-300 hover:bg-indigo-50',
+    summaryCard: 'border-indigo-200 bg-indigo-50',
+    summaryInner: 'bg-white ring-1 ring-indigo-200',
     totalText: 'text-indigo-700',
-    payButton: 'bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-700 hover:to-sky-600 hover:shadow-indigo-200',
+    payButton: 'bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 hover:shadow-indigo-200',
   };
 }
 
@@ -119,6 +187,28 @@ function getSubjectOriginalPrice(pkg: DbPackage | null, subjectCode?: string | n
   const subjectOriginal = code ? Number(pkg.subject_original_prices?.[code]) : 0;
   if (Number.isFinite(subjectOriginal) && subjectOriginal > 0) return subjectOriginal;
   return pkg.original_price || null;
+}
+
+function getPositivePriceValues(map?: Record<string, number> | null) {
+  return Object.values(map || {})
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value) && value > 0);
+}
+
+function getPackageStartingPrice(pkg: DbPackage) {
+  const subjectPrices = getPositivePriceValues(pkg.subject_prices);
+  if (pkg.requires_subject_choice && subjectPrices.length > 0) {
+    return Math.min(...subjectPrices);
+  }
+  return Number(pkg.price) || 0;
+}
+
+function getPackageStartingOriginalPrice(pkg: DbPackage) {
+  const subjectOriginalPrices = getPositivePriceValues(pkg.subject_original_prices);
+  if (pkg.requires_subject_choice && subjectOriginalPrices.length > 0) {
+    return Math.min(...subjectOriginalPrices);
+  }
+  return Number(pkg.original_price) || 0;
 }
 
 function packageFullyCoveredByUser(user: any, pkg: DbPackage) {
@@ -510,7 +600,7 @@ function CheckoutContent() {
 
         const filteredPkgs = pkgs
           .filter(pkg => !packageFullyCoveredByUser(user, pkg))
-          .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+          .sort((a, b) => getPackageStartingPrice(a) - getPackageStartingPrice(b));
 
         setAllPackages(filteredPkgs);
         if (urlPackageId) {
@@ -587,7 +677,13 @@ function CheckoutContent() {
         selected_subject_code: selectedSubjectCode || undefined,
         use_coins: useCoins,
         coins_to_use: useCoins ? maxCoinUse : 0,
-        idempotency_key: `${selectedPkg.id}_${selectedSubjectCode || 'all'}_${selectedMethod}_${useCoins ? maxCoinUse : 0}_${Date.now()}`,
+        idempotency_key: [
+          selectedPkg.id,
+          selectedSubjectCode || 'all',
+          selectedMethod,
+          appliedCouponCode || 'no-coupon',
+          useCoins ? maxCoinUse : 0,
+        ].join(':'),
       });
       if (res.data.success) {
         if (res.data.appliedCoupon) {
@@ -739,8 +835,8 @@ function CheckoutContent() {
         </div>
       )}
 
-      <div className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 lg:p-6 ${selectedUi ? selectedUi.summaryCard : 'border-gray-200'}`}>
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+        <div className="space-y-8">
           <div className="space-y-6">
       {/* Step 1: Package */}
       <div>
@@ -769,8 +865,10 @@ function CheckoutContent() {
             {allPackages.map(pkg => {
               const ui = derivePackageUI(pkg);
               const selected = selectedPkg?.id === pkg.id;
-              const hasSalePrice = !!pkg.original_price && pkg.original_price > pkg.price;
-              const salePercent = hasSalePrice ? Math.round((1 - pkg.price / Number(pkg.original_price)) * 100) : 0;
+              const displayPrice = selected && selectedSubjectCode ? getSubjectPrice(pkg, selectedSubjectCode) : getPackageStartingPrice(pkg);
+              const displayOriginal = selected && selectedSubjectCode ? getSubjectOriginalPrice(pkg, selectedSubjectCode) : getPackageStartingOriginalPrice(pkg);
+              const hasSalePrice = !!displayOriginal && displayOriginal > displayPrice;
+              const salePercent = hasSalePrice ? Math.round((1 - displayPrice / Number(displayOriginal)) * 100) : 0;
               return (
                 <button
                   key={pkg.id}
@@ -796,11 +894,12 @@ function CheckoutContent() {
 
                   <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
                     <span className="text-3xl font-black leading-none text-gray-950 sm:text-4xl">
-                      {pkg.price.toLocaleString('vi-VN')}<span className="ml-1 text-sm text-gray-500">đ</span>
+                      {pkg.requires_subject_choice && !selectedSubjectCode && <span className="mr-1 text-sm text-gray-500">Từ</span>}
+                      {displayPrice.toLocaleString('vi-VN')}<span className="ml-1 text-sm text-gray-500">đ</span>
                     </span>
                     {hasSalePrice && (
                       <>
-                        <span className="text-sm font-bold text-gray-400 line-through">{Number(pkg.original_price).toLocaleString('vi-VN')}đ</span>
+                        <span className="text-sm font-bold text-gray-400 line-through">{Number(displayOriginal).toLocaleString('vi-VN')}đ</span>
                         <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-black text-rose-600 ring-1 ring-rose-100">-{salePercent}%</span>
                       </>
                     )}
@@ -955,10 +1054,10 @@ function CheckoutContent() {
 
           </div>
 
-          <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="space-y-4 border-t border-gray-100 pt-6">
       {/* Order summary */}
       {selectedPkg && (
-        <div className={`space-y-5 rounded-2xl border p-5 ${selectedUi?.summaryCard || 'border-gray-200 bg-white shadow-sm'}`}>
+        <div className="space-y-5">
           <div className="flex items-center gap-2">
             <FaLock size={14} className={selectedUi?.accentIcon || 'text-gray-900'} />
             <h3 className="text-sm font-black uppercase tracking-wide text-gray-900">Xác nhận đơn hàng</h3>

@@ -62,6 +62,24 @@ class Transaction {
     }
   }
 
+  static async findByIdempotencyKey(userId, idempotencyKey) {
+    try {
+      const result = await db.query(
+        `SELECT *
+         FROM transactions
+         WHERE user_id = $1
+           AND raw_response->>'idempotencyKey' = $2
+           AND status IN ('pending', 'processing', 'completed')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [userId, idempotencyKey]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   /**
    * Get transaction history for a user
    */

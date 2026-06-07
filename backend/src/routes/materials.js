@@ -50,7 +50,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const MAX_MATERIAL_UPLOAD_MB = Number(process.env.MATERIAL_UPLOAD_MAX_MB || 100);
+const MAX_MATERIAL_UPLOAD_MB = Number(process.env.MATERIAL_UPLOAD_MAX_MB || 500);
 const MAX_SYNC_PDF_PARSE_MB = Number(process.env.MATERIAL_SYNC_PARSE_MAX_MB || 12);
 
 // Multer: memory storage for PDF upload

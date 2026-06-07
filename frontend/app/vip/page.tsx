@@ -17,6 +17,8 @@ interface VipPackage {
   original_price?: number | null;
   price_note?: string | null;
   original_price_note?: string | null;
+  subject_prices?: Record<string, number> | null;
+  subject_original_prices?: Record<string, number> | null;
   allowed_subjects?: string[];
   requires_subject_choice?: boolean;
   description: string;
@@ -97,6 +99,28 @@ function getPackageSubjects(pkg: VipPackage) {
     : [];
 }
 
+function getPositivePriceValues(map?: Record<string, number> | null) {
+  return Object.values(map || {})
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value) && value > 0);
+}
+
+function getPackageStartingPrice(pkg: VipPackage) {
+  const subjectPrices = getPositivePriceValues(pkg.subject_prices);
+  if (pkg.requires_subject_choice && subjectPrices.length > 0) {
+    return Math.min(...subjectPrices);
+  }
+  return Number(pkg.price) || 0;
+}
+
+function getPackageStartingOriginalPrice(pkg: VipPackage) {
+  const subjectOriginalPrices = getPositivePriceValues(pkg.subject_original_prices);
+  if (pkg.requires_subject_choice && subjectOriginalPrices.length > 0) {
+    return Math.min(...subjectOriginalPrices);
+  }
+  return Number(pkg.original_price) || 0;
+}
+
 function isPackageCovered(pkg: VipPackage, user: any) {
   const userTier = getVipDisplay(user).tier;
   const packageTier = getPackageTier(pkg);
@@ -161,20 +185,21 @@ export default function VipPricingPage() {
     router.push(`/checkout?${params.toString()}`);
   };
 
-  const handleApplyCoupon = async (pkg?: VipPackage) => {
+  const handleApplyCoupon = async (pkg?: VipPackage, codeOverride?: string) => {
     const targetPkg = pkg || selectedPkg;
-    if (!couponInput.trim()) {
+    const code = String(codeOverride ?? couponInput).trim().toUpperCase();
+    if (!code) {
       setCouponError('Vui lòng nhập mã giảm giá');
-      return;
+      return false;
     }
     if (!targetPkg) {
       setCouponError('Vui lòng chọn một gói trước');
-      return;
+      return false;
     }
     setCouponLoading(true);
     setCouponError('');
     try {
-      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(couponInput.trim())}&package_id=${targetPkg.id}`);
+      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(code)}&package_id=${targetPkg.id}`);
       if (res.data.success) {
         const data = res.data.data;
         const d: Discount = {
@@ -186,12 +211,16 @@ export default function VipPricingPage() {
         };
         setAppliedDiscount(d);
         setCouponResult(data);
+        setCouponInput(code);
+        return true;
       }
+      return false;
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Mã giảm giá không hợp lệ';
       setCouponError(msg);
       setCouponResult(null);
       setAppliedDiscount(null);
+      return false;
     } finally {
       setCouponLoading(false);
     }
@@ -205,7 +234,7 @@ export default function VipPricingPage() {
   };
 
   const paidPkgs = [...packages.filter(p => !isFreePackage(p))]
-    .sort((a, b) => (Number(a.price) || 0) - (Number(b.price) || 0));
+    .sort((a, b) => getPackageStartingPrice(a) - getPackageStartingPrice(b));
 
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
@@ -335,6 +364,7 @@ export default function VipPricingPage() {
                           onCheckout={handleCheckout}
                           discount={discount}
                           onApplyCoupon={handleApplyCoupon}
+                          onRemoveCoupon={handleRemoveCoupon}
                           selectedPkg={selectedPkg}
                           onSelectPkg={setSelectedPkg}
                         />
@@ -430,13 +460,14 @@ export default function VipPricingPage() {
   );
 }
 
-function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selectedPkg, onSelectPkg }: {
+function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRemoveCoupon, selectedPkg, onSelectPkg }: {
   pkg: VipPackage;
   isVip: boolean;
   user: any;
   onCheckout: (p: VipPackage) => void;
   discount?: Discount | null;
-  onApplyCoupon?: (p: VipPackage) => void;
+  onApplyCoupon?: (p: VipPackage, codeOverride?: string) => Promise<boolean>;
+  onRemoveCoupon?: () => void;
   selectedPkg?: VipPackage | null;
   onSelectPkg?: (p: VipPackage | null) => void;
 }) {
@@ -460,9 +491,11 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selec
     setLocalCouponLoading(true);
     setLocalCouponError('');
     try {
-      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(localCoupon.trim())}&package_id=${pkg.id}`);
-      if (res.data.success) {
-        onApplyCoupon(pkg);
+      const ok = await onApplyCoupon(pkg, localCoupon);
+      if (ok) {
+        setLocalCoupon('');
+      } else {
+        setLocalCouponError('Mã không áp dụng cho gói này');
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Mã không hợp lệ';
@@ -474,8 +507,8 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selec
 
   const isSelected = selectedPkg?.id === pkg.id;
   const isUnselected = selectedPkg && !isSelected;
-  const salePrice = Number(pkg.price) || 0;
-  const originalPrice = Number(pkg.original_price) || 0;
+  const salePrice = getPackageStartingPrice(pkg);
+  const originalPrice = getPackageStartingOriginalPrice(pkg);
   const hasSalePrice = originalPrice > salePrice;
   const salePercent = hasSalePrice ? Math.round((1 - salePrice / originalPrice) * 100) : 0;
   const displayPrice = discount ? discount.final_amount : salePrice;
@@ -516,6 +549,11 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selec
             <span className="text-4xl font-black tracking-normal">{displayPrice.toLocaleString('vi-VN')}</span>
             <span className="text-base font-bold text-white/80">đ</span>
           </div>
+          {pkg.requires_subject_choice && (
+            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/85">
+              Từ giá môn
+            </span>
+          )}
           {crossedPrice !== null && (
             <div className="flex flex-wrap items-center justify-center gap-2">
               <span className="text-base font-black line-through text-white/55">
@@ -567,7 +605,7 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, selec
                 <FiCheck size={12} />
                 Mã {discount.code} — Giảm {discount.discount_amount.toLocaleString('vi-VN')}đ
               </div>
-              <button onClick={(e) => { e.stopPropagation(); onApplyCoupon && onApplyCoupon(pkg); }}
+              <button onClick={(e) => { e.stopPropagation(); onRemoveCoupon && onRemoveCoupon(); }}
                 className="text-red-500 hover:text-red-700 font-semibold">✕</button>
             </div>
           ) : (

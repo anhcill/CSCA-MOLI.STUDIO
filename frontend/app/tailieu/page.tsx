@@ -25,6 +25,7 @@ interface Material {
 const CATEGORIES = [
   { value: 'all', label: 'Tất Cả', icon: '📚', color: 'bg-purple-500' },
   { value: 'ly-thuyet', label: 'Lý Thuyết', icon: '📖', color: 'bg-blue-500' },
+  { value: 'cong-thuc-on-thi', label: 'Công Thức Ôn Thi', icon: '∑', color: 'bg-emerald-500' },
   { value: 'cau-truc-de', label: 'Cấu Trúc Đề', icon: '📋', color: 'bg-green-500' },
   { value: 'de-mo-phong', label: 'Đề Mô Phỏng', icon: '📝', color: 'bg-orange-500' },
   { value: 'tu-vung', label: 'Từ Vựng', icon: '✏️', color: 'bg-pink-500' },

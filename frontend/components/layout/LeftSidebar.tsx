@@ -16,6 +16,7 @@ export default function LeftSidebar() {
   const menuItems = [
     { icon: '📚', label: 'Cấu trúc đề', href: '/cau-truc-de', color: 'from-blue-500 to-blue-600' },
     { icon: '📖', label: 'Lý Thuyết', href: '/ly-thuyet', color: 'from-green-500 to-green-600' },
+    { icon: '∑', label: 'Công thức ôn thi', href: '/cong-thuc', color: 'from-emerald-500 to-teal-600' },
     { icon: '🔮', label: 'Tư Vấn', href: '/tu-vang', color: 'from-purple-500 to-purple-600' },
     { icon: '📝', label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'from-orange-500 to-orange-600' },
     { icon: '🎥', label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet', color: 'from-red-500 to-red-600' },

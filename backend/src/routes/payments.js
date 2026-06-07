@@ -347,6 +347,91 @@ function getStoredDiscountDetails(transaction) {
   };
 }
 
+function normalizeIdempotencyKey(value) {
+  return String(value || '').trim().slice(0, 160);
+}
+
+function buildAppliedCouponFromTransaction(transaction) {
+  const couponCode = getStoredCouponCode(transaction);
+  if (!couponCode) return null;
+
+  const discounts = getStoredDiscountDetails(transaction);
+  return {
+    code: couponCode,
+    discount_amount: discounts.couponDiscountAmount,
+    original_amount: discounts.originalAmount,
+    final_amount: discounts.finalAmount,
+  };
+}
+
+function buildAppliedCoinsFromTransaction(transaction) {
+  const { coinsUsed, coinDiscountAmount } = getStoredCoinSpend(transaction);
+  if (!coinsUsed) return null;
+
+  return {
+    coins_used: coinsUsed,
+    coin_value_vnd: COIN_VALUE_VND,
+    discount_amount: coinDiscountAmount,
+  };
+}
+
+async function buildExistingPaymentResponse(transaction) {
+  if (transaction.status === 'completed') {
+    const user = await User.findById(transaction.user_id);
+    return {
+      success: true,
+      status: 'completed',
+      payment_method: transaction.payment_method,
+      orderId: transaction.transaction_code,
+      data: {
+        package_name: transaction.package_name,
+        package_duration: transaction.package_duration,
+        amount: Number(transaction.amount || 0),
+        vip_expires_at: user?.vip_expires_at || transaction.vip_expires_at || null,
+        subscription_tier: user?.subscription_tier || 'basic',
+      },
+      appliedCoupon: buildAppliedCouponFromTransaction(transaction),
+      appliedCoins: buildAppliedCoinsFromTransaction(transaction),
+    };
+  }
+
+  if (transaction.payment_method === 'bank_transfer') {
+    const bankConfig = getBankConfig();
+    if (!bankConfig) {
+      return {
+        success: false,
+        status: 500,
+        message: 'Thanh toán chuyển khoản chưa được cấu hình.',
+      };
+    }
+
+    return {
+      success: true,
+      payment_method: 'bank_transfer',
+      orderId: transaction.transaction_code,
+      bank: {
+        bankCode: bankConfig.bankCode,
+        accountNumber: bankConfig.accountNumber,
+        accountName: bankConfig.accountName,
+        amount: Number(transaction.amount || 0),
+        content: transaction.transaction_code,
+        qrUrl: `https://img.vietqr.io/image/${bankConfig.bankCode}-${bankConfig.accountNumber}-compact2.png?amount=${Number(transaction.amount || 0)}&addInfo=${encodeURIComponent(transaction.transaction_code)}&accountName=${encodeURIComponent(bankConfig.accountName)}`,
+      },
+      appliedCoupon: buildAppliedCouponFromTransaction(transaction),
+      appliedCoins: buildAppliedCoinsFromTransaction(transaction),
+    };
+  }
+
+  return {
+    success: true,
+    status: transaction.status,
+    payment_method: transaction.payment_method,
+    orderId: transaction.transaction_code,
+    appliedCoupon: buildAppliedCouponFromTransaction(transaction),
+    appliedCoins: buildAppliedCoinsFromTransaction(transaction),
+  };
+}
+
 async function getPackageEntitlement(packageId) {
   if (!packageId) return null;
   const result = await db.query(
@@ -720,6 +805,7 @@ router.post('/create', authenticate, async (req, res) => {
 
     const { package_id, payment_method = 'momo', coupon_code, idempotency_key, use_coins, coins_to_use, selected_subject_code } = req.body;
     const userId = req.user.id;
+    const idemKey = normalizeIdempotencyKey(idempotency_key);
 
     // ── Input validation ────────────────────────────────────────────────────
     if (!package_id) {
@@ -735,18 +821,15 @@ router.post('/create', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Phương thức thanh toán không hợp lệ.' });
     }
 
-    // ── Idempotency: tránh tạo transaction trùng lặp ──────────────────────
-    if (idempotency_key) {
-      const idemKey = `IDEM_${userId}_${Buffer.from(idempotency_key).toString('hex').slice(0, 16)}`;
-      const existingTx = await Transaction.findByTransactionCode(idemKey);
-      if (existingTx && existingTx.status === 'pending') {
-        return res.json({
-          success: true,
-          payUrl: null,
-          orderId: existingTx.transaction_code,
-          message: 'Transaction đã tồn tại.',
-          appliedCoupon: null,
-        });
+    // ── Idempotency: tránh tạo transaction trùng khi bấm thanh toán nhiều lần ──
+    if (idemKey) {
+      const existingTx = await Transaction.findByIdempotencyKey(userId, idemKey);
+      if (existingTx) {
+        const existingResponse = await buildExistingPaymentResponse(existingTx);
+        if (existingResponse.success === false) {
+          return res.status(existingResponse.status || 500).json(existingResponse);
+        }
+        return res.json(existingResponse);
       }
     }
 
@@ -895,6 +978,7 @@ router.post('/create', authenticate, async (req, res) => {
 
       // Lưu transaction pending — lưu giá đã giảm vào amount, coupon vào raw_response
       const paymentMeta = {
+        idempotencyKey: idemKey || null,
         couponCode: coupon_code?.trim() || null,
         coinsUsed,
         coinValueVnd: COIN_VALUE_VND,

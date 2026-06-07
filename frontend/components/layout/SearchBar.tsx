@@ -39,6 +39,7 @@ interface SearchResults {
 
 const CATEGORY_LABEL: Record<string, string> = {
   'ly-thuyet': 'Lý Thuyết',
+  'cong-thuc-on-thi': 'Công Thức Ôn Thi',
   'cau-truc-de': 'Cấu Trúc Đề',
   'de-mo-phong': 'Đề Mô Phỏng',
   'tu-vung': 'Từ Vựng',
@@ -46,6 +47,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const CATEGORY_HREF: Record<string, string> = {
   'ly-thuyet': '/ly-thuyet',
+  'cong-thuc-on-thi': '/cong-thuc',
   'cau-truc-de': '/cau-truc-de',
   'de-mo-phong': '/de-mo-phong',
   'tu-vung': '/tu-vung',

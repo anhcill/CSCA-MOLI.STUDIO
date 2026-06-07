@@ -17,6 +17,7 @@ export default function Footer() {
     { name: 'Trang chủ', href: '/' },
     { name: 'Cấu trúc đề', href: '/cau-truc-de' },
     { name: 'Lý thuyết', href: '/ly-thuyet' },
+    { name: 'Công thức ôn thi', href: '/cong-thuc' },
     { name: 'Từ vựng', href: '/tu-vung' },
     { name: 'Đề mô phỏng', href: '/de-mo-phong' },
     { name: 'Tài liệu', href: '/tailieu' },

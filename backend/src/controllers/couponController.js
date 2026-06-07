@@ -1,5 +1,25 @@
 const db = require('../config/database');
 
+function getPositivePriceValues(map) {
+  return Object.values(map || {})
+    .map(value => Number(value))
+    .filter(value => Number.isFinite(value) && value > 0);
+}
+
+function getCouponBaseAmount(pkg, selectedSubjectCode) {
+  const subjectCode = String(selectedSubjectCode || '').trim().toUpperCase();
+  const subjectPrice = subjectCode ? Number(pkg.subject_prices?.[subjectCode]) : 0;
+  if (Number.isFinite(subjectPrice) && subjectPrice > 0) return subjectPrice;
+
+  const subjectPrices = getPositivePriceValues(pkg.subject_prices);
+  if (pkg.requires_subject_choice === true && subjectPrices.length > 0) {
+    return Math.min(...subjectPrices);
+  }
+
+  const basePrice = Number(pkg.price);
+  return Number.isFinite(basePrice) && basePrice > 0 ? basePrice : 0;
+}
+
 const CouponController = {
   /**
    * GET /api/coupons/promotion?placement=checkout
@@ -88,18 +108,14 @@ const CouponController = {
 
       if (package_id) {
         const pkg = await db.query(
-          `SELECT id, name, price, duration_days, subject_prices FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+          `SELECT id, name, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
           [package_id]
         );
         if (!pkg.rows[0]) {
           return res.status(404).json({ success: false, message: 'Gói VIP không tồn tại' });
         }
 
-        const subjectCode = String(selected_subject_code || '').trim().toUpperCase();
-        const subjectPrice = subjectCode ? Number(pkg.rows[0].subject_prices?.[subjectCode]) : 0;
-        originalAmount = Number.isFinite(subjectPrice) && subjectPrice > 0
-          ? subjectPrice
-          : pkg.rows[0].price;
+        originalAmount = getCouponBaseAmount(pkg.rows[0], selected_subject_code);
         packageName = pkg.rows[0].name;
 
         // Check package applicability
@@ -162,7 +178,7 @@ const CouponController = {
    */
   async apply(req, res) {
     try {
-      const { code, package_id } = req.body;
+      const { code, package_id, selected_subject_code } = req.body;
       const userId = req.user.id;
 
       if (!code || !package_id) {
@@ -194,14 +210,14 @@ const CouponController = {
 
       // Get package
       const pkg = await db.query(
-        `SELECT id, name, price, duration_days FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
+        `SELECT id, name, price, duration_days, subject_prices, requires_subject_choice FROM vip_packages WHERE id = $1 AND is_active = TRUE`,
         [package_id]
       );
       if (!pkg.rows[0]) {
         return res.status(404).json({ success: false, message: 'Gói VIP không tồn tại' });
       }
 
-      const originalAmount = pkg.rows[0].price;
+      const originalAmount = getCouponBaseAmount(pkg.rows[0], selected_subject_code);
       const pkgTier = pkg.rows[0].name.toLowerCase().includes('premium') ? 'premium' : 'vip';
 
       // Check applicability

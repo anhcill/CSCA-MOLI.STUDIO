@@ -26,6 +26,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     route('/tu-vung', siteUpdated, 'weekly', 0.7),
     route('/lo-trinh', siteUpdated, 'monthly', 0.7),
     route('/ly-thuyet', siteUpdated, 'monthly', 0.7),
+    route('/cong-thuc', siteUpdated, 'monthly', 0.7),
     route('/cau-truc-de', siteUpdated, 'monthly', 0.6),
     route('/giai-de-chi-tiet', siteUpdated, 'monthly', 0.6),
     route('/cau-hoi-thuong-gap', siteUpdated, 'monthly', 0.7),

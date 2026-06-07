@@ -31,6 +31,10 @@ function getRequiredVipTier(exam) {
   return exam?.is_premium ? 'vip' : 'basic';
 }
 
+function getExamAllowDownload(requiredTier) {
+  return requiredTier === 'basic';
+}
+
 function buildVipAccessError(requiredTier) {
   return {
     success: false,
@@ -124,6 +128,7 @@ const examController = {
         return res.status(403).json(buildVipAccessError(requiredTier));
       }
 
+      exam.allow_download = getExamAllowDownload(requiredTier);
       exam.questions = (exam.questions || []).map(sanitizeQuestionForAttempt);
 
       res.json({
@@ -358,6 +363,7 @@ const examController = {
       }
 
       const { questions: _rawQuestions, ...safeExam } = exam;
+      safeExam.allow_download = getExamAllowDownload(requiredTier);
 
       res.json({
         success: true,

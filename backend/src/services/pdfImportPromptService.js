@@ -19,7 +19,7 @@ const PDF_IMPORT_PRESETS = {
   },
   science: {
     label: "Science",
-    ruleParser: false,
+    ruleParser: true,
     instruction: [
       "Prioritize physics, chemistry, biology, formulas, units, variables, reactions, tables, and experiment descriptions.",
       "Use LaTeX for formulas and equations. Mark diagrams, circuits, lab figures, charts, and tables as needsImage=true when the visual is required.",

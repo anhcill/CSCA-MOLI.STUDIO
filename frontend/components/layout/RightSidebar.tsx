@@ -7,6 +7,7 @@ export default function RightSidebar() {
   const menuItems = [
     { icon: FiLayers, label: 'Cấu trúc đề', href: '/cau-truc-de', color: 'text-blue-600' },
     { icon: FiBook, label: 'Lý Thuyết', href: '/ly-thuyet', color: 'text-green-600' },
+    { icon: FiFileText, label: 'Công thức ôn thi', href: '/cong-thuc', color: 'text-emerald-600' },
     { icon: FiTarget, label: 'Từ vựng', href: '/tu-vung', color: 'text-purple-600' },
     { icon: FiFileText, label: 'Đề mô phỏng', href: '/de-mo-phong', color: 'text-orange-600' },
     { icon: FiVideo, label: 'Giải đề chi tiết', href: '/giai-de-chi-tiet', color: 'text-red-600' },

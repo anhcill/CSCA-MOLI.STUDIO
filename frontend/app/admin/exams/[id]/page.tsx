@@ -392,6 +392,9 @@ export default function AdminExamDetailPage() {
         setMetaDirty(true);
     };
 
+    const isDownloadAllowedForTier = (vipTier?: string, isPremium?: boolean) =>
+        (vipTier || 'basic') === 'basic' && isPremium !== true;
+
     const handleSaveMeta = async () => {
         if (!exam) return;
         if (!metaForm.subjectId) {
@@ -407,7 +410,7 @@ export default function AdminExamDetailPage() {
                 duration: metaForm.duration,
                 totalPoints: metaForm.totalPoints,
                 description: metaForm.description,
-                allow_download: metaForm.allow_download,
+                allow_download: isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium),
                 is_premium: metaForm.is_premium,
                 shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url,
@@ -416,9 +419,10 @@ export default function AdminExamDetailPage() {
                 is_simulated: metaForm.is_simulated,
             });
             const selectedSubject = subjects.find(subject => subject.id === metaForm.subjectId);
+            const nextAllowDownload = isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium);
             setExam({ ...exam, title: metaForm.title, duration: metaForm.duration,
                 subject_id: metaForm.subjectId, subject_name: selectedSubject?.name || exam.subject_name,
-                subject_code: selectedSubject?.code || exam.subject_code, total_points: metaForm.totalPoints, allow_download: metaForm.allow_download,
+                subject_code: selectedSubject?.code || exam.subject_code, total_points: metaForm.totalPoints, allow_download: nextAllowDownload,
                 is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated });
@@ -809,7 +813,7 @@ export default function AdminExamDetailPage() {
     const handleToggleDownload = async () => {
         if (!exam) return;
         try {
-            const newVal = !exam.allow_download;
+            const newVal = isDownloadAllowedForTier(exam.vip_tier, exam.is_premium);
             await examAdminApi.updateExam(Number(id), { allow_download: newVal });
             setExam({ ...exam, allow_download: newVal });
         } catch {
@@ -857,7 +861,7 @@ export default function AdminExamDetailPage() {
             const newVal = !exam.is_premium;
             const nextTier = newVal ? 'vip' : 'basic';
             await examAdminApi.updateExam(Number(id), { is_premium: newVal, vip_tier: nextTier });
-            setExam({ ...exam, is_premium: newVal, vip_tier: nextTier });
+            setExam({ ...exam, is_premium: newVal, vip_tier: nextTier, allow_download: isDownloadAllowedForTier(nextTier, newVal) });
         } catch {
             alert('Lỗi cập nhật trạng thái VIP');
         }
@@ -868,14 +872,15 @@ export default function AdminExamDetailPage() {
         try {
             const nextPremium = tier !== 'basic';
             await examAdminApi.updateExam(Number(id), { vip_tier: tier, is_premium: nextPremium });
-            setExam({ ...exam, vip_tier: tier, is_premium: nextPremium });
+            setExam({ ...exam, vip_tier: tier, is_premium: nextPremium, allow_download: isDownloadAllowedForTier(tier, nextPremium) });
         } catch {
             alert('Lỗi cập nhật phân loại VIP');
         }
     };
 
     const handleSetVipTierMeta = (tier: string) => {
-        setMetaForm(prev => ({ ...prev, vip_tier: tier, is_premium: tier !== 'basic' }));
+        const nextPremium = tier !== 'basic';
+        setMetaForm(prev => ({ ...prev, vip_tier: tier, is_premium: nextPremium, allow_download: isDownloadAllowedForTier(tier, nextPremium) }));
         setMetaDirty(true);
     };
 
@@ -1111,11 +1116,12 @@ export default function AdminExamDetailPage() {
 
                                     {/* Toggles */}
                                     <div className="md:col-span-2 flex flex-wrap gap-6">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" checked={metaForm.allow_download}
-                                                onChange={e => handleMetaChange('allow_download', e.target.checked)}
+                                        <label className="flex items-center gap-2 cursor-not-allowed opacity-80">
+                                            <input type="checkbox" checked={isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium)}
+                                                readOnly
+                                                disabled
                                                 className="w-4 h-4" />
-                                            <span className="text-sm font-medium text-gray-700">Cho phép tải PDF</span>
+                                            <span className="text-sm font-medium text-gray-700">Tải PDF: đề miễn phí bật, VIP tắt</span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" checked={metaForm.shuffle_mode}
@@ -1127,7 +1133,13 @@ export default function AdminExamDetailPage() {
                                             <input type="checkbox" checked={metaForm.is_premium}
                                                 onChange={e => {
                                                     const checked = e.target.checked;
-                                                    setMetaForm(prev => ({ ...prev, is_premium: checked, vip_tier: checked ? 'vip' : 'basic' }));
+                                                    const nextTier = checked ? 'vip' : 'basic';
+                                                    setMetaForm(prev => ({
+                                                        ...prev,
+                                                        is_premium: checked,
+                                                        vip_tier: nextTier,
+                                                        allow_download: isDownloadAllowedForTier(nextTier, checked),
+                                                    }));
                                                     setMetaDirty(true);
                                                 }}
                                                 className="w-4 h-4" />
@@ -1195,12 +1207,13 @@ export default function AdminExamDetailPage() {
                         {/* Download toggle */}
                         <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-semibold text-gray-700">Cho phép tải PDF</p>
-                                <p className="text-xs text-gray-400">Thí sinh có thể in / tải đề thi này về máy</p>
+                                <p className="text-sm font-semibold text-gray-700">Quyền tải PDF</p>
+                                <p className="text-xs text-gray-400">Đề miễn phí luôn cho tải. Đề VIP/Pre luôn tắt tải.</p>
                             </div>
                             <button
                                 onClick={handleToggleDownload}
-                                className={`relative w-12 h-6 rounded-full transition-colors ${
+                                disabled
+                                className={`relative w-12 h-6 cursor-not-allowed rounded-full transition-colors ${
                                     exam.allow_download ? 'bg-green-500' : 'bg-gray-300'
                                 }`}
                             >

@@ -8,6 +8,7 @@ import {
   BsStars,
   BsGraphUp,
 } from 'react-icons/bs';
+import { FiFileText } from 'react-icons/fi';
 import { buildSubjectScopedHref } from '@/lib/utils/subjectScope';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -35,6 +36,7 @@ const getDefaultMenuItems = (subjectSlug?: string): MenuItem[] => {
   return [
     { icon: BsJournalBookmark, labelKey: 'course.section.structure', href: '/cau-truc-de' },
     { icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+    { icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
     { icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
     { icon: BsGraphUp, labelKey: 'course.section.solutions', href: '/giai-de-chi-tiet' },
   ];

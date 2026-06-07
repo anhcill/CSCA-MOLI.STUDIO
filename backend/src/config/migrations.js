@@ -617,6 +617,9 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
     );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_transactions_idempotency_key ON transactions ((raw_response->>'idempotencyKey')) WHERE raw_response ? 'idempotencyKey'`,
+    );
 
     // Exam schedule audit log (Ngày 11-12)
     await pool.query(`
@@ -711,6 +714,21 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS solution_description TEXT,
       ADD COLUMN IF NOT EXISTS shuffle_mode BOOLEAN DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS vip_tier VARCHAR(20) DEFAULT 'basic'
+    `);
+    await pool.query(`
+      UPDATE exams
+      SET allow_download = CASE
+        WHEN COALESCE(is_premium, FALSE) = FALSE
+         AND COALESCE(vip_tier, 'basic') = 'basic'
+        THEN TRUE
+        ELSE FALSE
+      END
+      WHERE allow_download IS DISTINCT FROM CASE
+        WHEN COALESCE(is_premium, FALSE) = FALSE
+         AND COALESCE(vip_tier, 'basic') = 'basic'
+        THEN TRUE
+        ELSE FALSE
+      END
     `);
 
     // VIP tier for materials

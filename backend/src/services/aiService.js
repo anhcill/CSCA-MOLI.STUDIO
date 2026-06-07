@@ -44,6 +44,35 @@ function getNextKey() {
   return key;
 }
 
+function getProviderResponseMessage(err) {
+  const data = err?.response?.data;
+  const message =
+    data?.error?.message ||
+    data?.message ||
+    data?.error ||
+    err?.message ||
+    'AI provider request failed';
+
+  if (typeof message === 'string') {
+    return message.slice(0, 500);
+  }
+
+  try {
+    return JSON.stringify(message).slice(0, 500);
+  } catch {
+    return 'AI provider request failed';
+  }
+}
+
+function createSafeProviderError(err) {
+  const status = err?.response?.status;
+  const error = new Error('AI_PROVIDER_ERROR');
+  error.providerStatus = Number.isFinite(status) ? status : undefined;
+  error.providerCode = err?.code;
+  error.providerMessage = getProviderResponseMessage(err);
+  return error;
+}
+
 async function waitBetweenRequests() {
   const delay = BEE.delayBetweenRequests || 500;
   const elapsed = Date.now() - lastRequestTime;
@@ -131,7 +160,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
         e.retryAfter = getRateLimitRemaining();
         throw e;
       }
-      throw err;
+      throw createSafeProviderError(err);
     }
   });
 }

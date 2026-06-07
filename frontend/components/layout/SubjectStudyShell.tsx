@@ -28,6 +28,7 @@ export type SubjectStudySection =
   | 'lich-su'
   | 'cau-truc-de'
   | 'ly-thuyet'
+  | 'cong-thuc'
   | 'tu-vung'
   | 'giai-de-chi-tiet'
   | 'lo-trinh'
@@ -52,6 +53,7 @@ const QUICK_LINKS = [
   { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
   { key: 'cau-truc-de', icon: BsJournalBookmark, labelKey: 'course.section.structure', href: '/cau-truc-de' },
   { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+  { key: 'cong-thuc', icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
   { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
   { key: 'giai-de-chi-tiet', icon: BsGraphUp, labelKey: 'course.section.solutions', href: '/giai-de-chi-tiet' },
 ] as const;
@@ -61,6 +63,7 @@ const SIDE_LINKS = [
   { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
   { key: 'ai-phan-tich', icon: BsGraphUp, labelKey: 'course.section.ai', href: '/lo-trinh' },
   { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
+  { key: 'cong-thuc', icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
   { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
   { key: 'lo-trinh', icon: FiTrendingUp, labelKey: 'course.section.progress', href: '/lo-trinh' },
   { key: 'cai-dat', icon: FiSettings, labelKey: 'course.section.settings', href: '/profile' },
@@ -86,6 +89,7 @@ const TITLE_KEYS: Partial<Record<SubjectStudySection, string>> = {
   'lich-su': 'course.title.history',
   'cau-truc-de': 'course.title.structure',
   'ly-thuyet': 'course.title.theory',
+  'cong-thuc': 'course.title.formulas',
   'tu-vung': 'course.title.vocabulary',
   'giai-de-chi-tiet': 'course.title.solutions',
   'lo-trinh': 'course.title.roadmap',
@@ -208,7 +212,7 @@ export default function SubjectStudyShell({
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <section className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
           {QUICK_LINKS.map((item) => {
             const Icon = item.icon;
             const active = activeSection === item.key;

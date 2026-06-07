@@ -28,6 +28,7 @@ const TABS = [
 const CATEGORY_HREF: Record<string, string> = {
   'ly-thuyet': '/ly-thuyet', 'cau-truc-de': '/cau-truc-de',
   'de-mo-phong': '/de-mo-phong', 'tu-vung': '/tu-vung',
+  'cong-thuc-on-thi': '/cong-thuc',
 };
 
 function Highlight({ text, query }: { text: string; query: string }) {

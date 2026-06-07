@@ -43,8 +43,8 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const isExam = pathname?.startsWith('/exam/');
   const isChat = pathname?.startsWith('/hoi-dap') || pathname?.startsWith('/gop-y');
   const isGame = pathname?.startsWith('/games');
-  const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
-  const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|giai-de-chi-tiet|lo-trinh)$/);
+  const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
+  const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;

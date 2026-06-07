@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
-import { FiPlus, FiTrash2, FiEdit2, FiUpload, FiX, FiExternalLink, FiCheck } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiEdit2, FiUpload, FiX, FiExternalLink, FiCheck, FiBookOpen } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Material {
@@ -28,6 +28,7 @@ interface Material {
 
 const CATEGORIES = [
   { value: 'ly-thuyet', label: 'Lý Thuyết' },
+  { value: 'cong-thuc-on-thi', label: 'Công Thức Ôn Thi' },
   { value: 'cau-truc-de', label: 'Cấu Trúc Đề' },
   { value: 'de-mo-phong', label: 'Đề Mô Phỏng' },
   { value: 'tu-vung', label: 'Từ Vựng' },
@@ -42,6 +43,19 @@ const SUBJECTS = [
 ];
 
 const MAX_MATERIAL_UPLOAD_MB = 100;
+const FORMULA_CATEGORY = 'cong-thuc-on-thi';
+const DEFAULT_FORM_DATA = {
+  title: '',
+  description: '',
+  file_url: '',
+  category: 'ly-thuyet',
+  subject: 'toan',
+  topic: '',
+  is_premium: false,
+  content_text: '',
+  content_html: '',
+  content_meta: {} as Record<string, any>,
+};
 
 export default function AdminMaterialsPage() {
   const router = useRouter();
@@ -61,20 +75,10 @@ export default function AdminMaterialsPage() {
 
   // Filter
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
 
   // Form states
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    file_url: '',
-    category: 'ly-thuyet',
-    subject: 'toan',
-    topic: '',
-    is_premium: false,
-    content_text: '',
-    content_html: '',
-    content_meta: {} as Record<string, any>,
-  });
+  const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
 
   // Wait for auth to hydrate before checking
   useEffect(() => { setMounted(true); }, []);
@@ -142,6 +146,8 @@ export default function AdminMaterialsPage() {
       setFormData(prev => ({
         ...prev,
         file_url: res.data.data.url,
+        title: prev.title || (prev.category === FORMULA_CATEGORY ? file.name.replace(/\.[^.]+$/, '') : prev.title),
+        topic: prev.topic || (prev.category === FORMULA_CATEGORY ? 'Công thức' : prev.topic),
         content_text: res.data.data.content_text || prev.content_text,
         content_html: '',
         content_meta: res.data.data.content_meta || {},
@@ -213,21 +219,24 @@ export default function AdminMaterialsPage() {
   };
 
   const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      file_url: '',
-      category: 'ly-thuyet',
-      subject: 'toan',
-      topic: '',
-      is_premium: false,
-      content_text: '',
-      content_html: '',
-      content_meta: {},
-    });
+    setFormData(DEFAULT_FORM_DATA);
     setUploadedUrl('');
     setEditingId(null);
     setShowModal(false);
+  };
+
+  const openCreateModal = (category = 'ly-thuyet') => {
+    setEditingId(null);
+    setUploadedUrl('');
+    setUploadProgress(0);
+    setUploadStatus('');
+    setUploadFileName('');
+    setFormData({
+      ...DEFAULT_FORM_DATA,
+      category,
+      topic: category === FORMULA_CATEGORY ? 'Công thức' : '',
+    });
+    setShowModal(true);
   };
 
   if (!mounted || loading) {
@@ -241,6 +250,11 @@ export default function AdminMaterialsPage() {
     );
   }
 
+  const filteredMaterials = materials.filter(m =>
+    (!filterCategory || m.category === filterCategory) &&
+    (!filterSubject || m.subject === filterSubject)
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -250,13 +264,22 @@ export default function AdminMaterialsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Quản Lý Tài Liệu</h1>
             <p className="text-sm text-gray-500 mt-1">Upload và quản lý PDF tài liệu</p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <FiPlus size={18} />
-            Thêm Tài Liệu
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => openCreateModal(FORMULA_CATEGORY)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              <FiBookOpen size={18} />
+              Thêm Công Thức
+            </button>
+            <button
+              onClick={() => openCreateModal()}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <FiPlus size={18} />
+              Thêm Tài Liệu
+            </button>
+          </div>
         </div>
 
         {/* Category filter */}
@@ -266,6 +289,16 @@ export default function AdminMaterialsPage() {
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${filterCategory === c.value ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
                 }`}>
               {c.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {[{ value: '', label: 'Tất cả môn' }, ...SUBJECTS].map(s => (
+            <button key={s.value} onClick={() => setFilterSubject(s.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${filterSubject === s.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                }`}>
+              {s.label}
             </button>
           ))}
         </div>
@@ -285,14 +318,14 @@ export default function AdminMaterialsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {materials.length === 0 ? (
+                {filteredMaterials.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-gray-500 text-sm">
                       Chưa có tài liệu nào
                     </td>
                   </tr>
                 ) : (
-                  materials.filter(m => !filterCategory || m.category === filterCategory).map(material => (
+                  filteredMaterials.map(material => (
                     <tr key={material.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -387,7 +420,7 @@ export default function AdminMaterialsPage() {
               {/* Upload PDF */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload PDF <span className="text-gray-400 font-normal text-xs">(tùy chọn nếu nhập nội dung web)</span>
+                  {formData.category === FORMULA_CATEGORY ? 'Upload PDF công thức' : 'Upload PDF'} <span className="text-gray-400 font-normal text-xs">(tự trích nội dung nếu PDF có text)</span>
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                   {uploadedUrl ? (
@@ -473,12 +506,12 @@ export default function AdminMaterialsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nội dung web <span className="text-gray-400 font-normal text-xs">(PDF upload sẽ tự điền, có thể sửa lại)</span>
+                  {formData.category === FORMULA_CATEGORY ? 'Nội dung công thức OCR/extract' : 'Nội dung web'} <span className="text-gray-400 font-normal text-xs">(PDF upload sẽ tự điền, có thể sửa lại)</span>
                 </label>
                 <textarea
                   value={formData.content_text}
                   onChange={e => setFormData(prev => ({ ...prev, content_text: e.target.value, content_html: '' }))}
-                  placeholder="Nhập hoặc chỉnh nội dung lý thuyết hiển thị trên web..."
+                  placeholder={formData.category === FORMULA_CATEGORY ? 'Nội dung công thức sau khi trích từ PDF...' : 'Nhập hoặc chỉnh nội dung lý thuyết hiển thị trên web...'}
                   rows={8}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
                 />
