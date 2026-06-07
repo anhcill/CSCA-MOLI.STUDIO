@@ -554,8 +554,9 @@ function CheckoutContent() {
     }
     const subjects = getPackageSubjects(selectedPkg).filter(code => code !== '*');
     if (!subjects.includes(selectedSubjectCode)) {
-      const firstAvailable = subjects.find(subject => !canAccessSubject(user, subject)) || subjects[0] || '';
-      setSelectedSubjectCode(firstAvailable);
+      const byPrice = [...subjects].sort((a, b) => getSubjectPrice(selectedPkg, a) - getSubjectPrice(selectedPkg, b));
+      const cheapestAvailable = byPrice.find(subject => !canAccessSubject(user, subject)) || byPrice[0] || '';
+      setSelectedSubjectCode(cheapestAvailable);
     }
   }, [selectedPkg, selectedSubjectCode, user]);
 
