@@ -525,11 +525,11 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
   // ── Giải thích ────────────────────────────────────────────────────────────
   const renderExplanation = () => (
-    <details className="bg-gray-50 rounded-lg border">
-      <summary className="px-4 py-2 cursor-pointer text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg">
+    <details className="rounded-xl border border-blue-200 bg-blue-50 shadow-sm">
+      <summary className="cursor-pointer rounded-xl px-4 py-2.5 text-sm font-bold text-blue-900 transition-colors hover:bg-blue-100">
         💡 Giải thích đáp án (tùy chọn)
       </summary>
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 pt-1">
         <MathInput
           label="Giải thích (Tiếng Việt)"
           value={form.explanation}

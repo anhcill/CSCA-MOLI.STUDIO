@@ -236,8 +236,8 @@ export default function PracticeSetPage() {
                     {isCorrect ? 'Chúc mừng! Bạn đã trả lời đúng.' : `Chưa chính xác. Đáp án đúng là: ${correctAnswer?.answer_key || '-'}`}
                   </p>
                   {question.explanation && (
-                    <div className="mt-3 pt-3 border-t border-dashed border-gray-200/50 dark:border-gray-800 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                      <p className="font-bold text-gray-800 dark:text-gray-200 mb-1">💡 Giải thích:</p>
+                    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-base leading-7 text-blue-950 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
+                      <p className="mb-2 font-bold uppercase tracking-wide text-blue-900 dark:text-blue-200">💡 Giải thích:</p>
                       <p className="whitespace-pre-wrap">{question.explanation}</p>
                     </div>
                   )}

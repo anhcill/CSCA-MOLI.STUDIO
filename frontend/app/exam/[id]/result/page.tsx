@@ -697,9 +697,9 @@ function ExamResultContent() {
 
                     {/* Explanation */}
                     {(q.explanation || q.explanation_cn) && (
-                      <div className="mt-4 ml-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm font-semibold text-blue-900 mb-1">💡 Giải thích:</p>
-                        <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-blue-800" />
+                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm sm:ml-8">
+                        <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">💡 Giải thích:</p>
+                        <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
                       </div>
                     )}
 
@@ -878,12 +878,12 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                 <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
                   🤖 AI phân tích
                 </p>
-                <AIFormattedText value={explanation.answer} className="text-gray-700" />
+                <AIFormattedText value={explanation.answer} className="text-base leading-7 text-gray-800" />
               </div>
               {(question.explanation || question.explanation_cn) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
-                  <RichMathText value={question.explanation || question.explanation_cn || ''} className="text-blue-800" />
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                  <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">📖 Giải thích có sẵn</p>
+                  <RichMathText value={question.explanation || question.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
                 </div>
               )}
             </div>

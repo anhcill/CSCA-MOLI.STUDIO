@@ -721,10 +721,7 @@ export default function AdminExamDetailPage() {
                 const questionId = pendingDeleteItem.questionId;
                 setDeletingId(questionId);
                 await examAdminApi.deleteQuestion(questionId);
-                const updated = savedQuestions.filter(q => isPendingQuestion(q) || q.id !== questionId);
-                setSavedQuestions(updated);
-                setLocalQuestions(updated);
-                if (exam) setExam({ ...exam, total_questions: exam.total_questions - 1 });
+                await loadExam();
             }
 
             setPendingDeleteItem(null);
@@ -1744,11 +1741,11 @@ export default function AdminExamDetailPage() {
                                             </div>
 
                                             {(q.explanation || q.explanation_cn) && (
-                                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                                    <p className="text-xs text-gray-500 font-semibold uppercase mb-1">Giải thích:</p>
-                                                    <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-gray-600" />
+                                                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                                                    <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">Giải thích:</p>
+                                                    <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
                                                     {q.explanation && q.explanation_cn && q.explanation_cn !== q.explanation && (
-                                                        <RichMathText value={q.explanation_cn} className="mt-2 text-gray-500" />
+                                                        <RichMathText value={q.explanation_cn} className="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800" />
                                                     )}
                                                 </div>
                                             )}

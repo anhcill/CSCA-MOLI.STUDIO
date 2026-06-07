@@ -556,9 +556,9 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                                         {/* Explanation + AI button */}
                                         {(q.explanation || q.explanation_cn) && (
-                                            <div className="mt-4 ml-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                                <p className="text-sm font-semibold text-blue-900 mb-1">💡 Giải thích:</p>
-                                                <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-blue-800" />
+                                            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm sm:ml-8">
+                                                <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">💡 Giải thích:</p>
+                                                <RichMathText value={q.explanation || q.explanation_cn || ''} className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
                                             </div>
                                         )}
 
@@ -748,12 +748,12 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                                 <p className="text-xs font-bold text-purple-700 mb-3 flex items-center gap-1.5">
                                     <FiCpu size={12} /> 🤖 AI phân tích
                                 </p>
-                                <AIFormattedText value={explanation.answer} className="min-w-0 overflow-x-auto text-gray-700 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
+                                <AIFormattedText value={explanation.answer} className="min-w-0 overflow-x-auto text-base leading-7 text-gray-800 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
                             </div>
                             {(question.explanation || question.explanation_cn) && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                                    <p className="text-xs font-bold text-blue-700 mb-2">📖 Giải thích có sẵn</p>
-                                    <RichMathText value={question.explanation || question.explanation_cn || ''} className="min-w-0 overflow-x-auto text-blue-800 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                                    <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">📖 Giải thích có sẵn</p>
+                                    <RichMathText value={question.explanation || question.explanation_cn || ''} className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
                                 </div>
                             )}
                         </div>

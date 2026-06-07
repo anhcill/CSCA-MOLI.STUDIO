@@ -407,11 +407,11 @@ export default function FillBlankGroup({
                       </div>
                     </div>
 
-                    <details className="bg-gray-50 rounded-lg border">
-                      <summary className="px-3 py-1.5 cursor-pointer text-xs font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">
+                    <details className="rounded-xl border border-blue-200 bg-blue-50 shadow-sm">
+                      <summary className="cursor-pointer rounded-xl px-3 py-2 text-sm font-bold text-blue-900 transition-colors hover:bg-blue-100">
                         Giải thích
                       </summary>
-                      <div className="px-3 pb-2">
+                      <div className="px-3 pb-3 pt-1">
                         <MathInput
                           value={item.explanation}
                           onChange={(v) => setSubItem(item._localId, 'explanation', v)}
