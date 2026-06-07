@@ -106,7 +106,7 @@ export default function Header() {
   return (
     <>
     <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'}`}>
-      <div className="container mx-auto overflow-visible px-4 md:px-6">
+      <div className="mx-auto w-full max-w-[1600px] overflow-visible px-3 sm:px-4 2xl:px-6">
         {/* Top Row: Logo, Nav, Search, Actions */}
         <div className="flex items-center justify-between gap-4 overflow-visible">
           {/* Logo */}
@@ -176,9 +176,9 @@ export default function Header() {
 
           {/* Right Side Icons & Actions */}
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-            <Link href="/vip" className="hidden items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 px-4 py-2 text-xs font-extrabold text-white shadow-md shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/20 xl:flex">
+            <Link href="/vip" className="hidden items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 px-3 py-2 text-xs font-extrabold text-white shadow-md shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/20 xl:flex 2xl:px-4">
               <FaCrown className="text-white" size={12} />
-              <span>{t('nav.upgrade')}</span>
+              <span className="hidden 2xl:inline">{t('nav.upgrade')}</span>
             </Link>
 
             <div className="hidden lg:block">
@@ -225,7 +225,7 @@ export default function Header() {
                       <FiUser size={14} className="text-white" />
                     )}
                   </div>
-                  <span className="hidden flex-col items-start leading-tight md:flex">
+                  <span className="hidden flex-col items-start leading-tight 2xl:flex">
                     <span className="max-w-[100px] truncate text-sm font-bold text-gray-800 dark:text-gray-200">{user.full_name}</span>
                     {isVipActive(user) && (
                       <span className="rounded bg-violet-600 px-1 py-0.5 text-[9px] font-extrabold tracking-wide text-white leading-none mt-0.5">
@@ -233,7 +233,7 @@ export default function Header() {
                       </span>
                     )}
                   </span>
-                  <FiChevronDown size={14} className={`hidden text-gray-400 transition-transform duration-200 md:block ${showUserMenu ? 'rotate-180' : ''}`} />
+                  <FiChevronDown size={14} className={`hidden text-gray-400 transition-transform duration-200 2xl:block ${showUserMenu ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showUserMenu && (

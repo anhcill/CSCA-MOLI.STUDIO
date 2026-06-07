@@ -175,7 +175,7 @@ export default function DailyQuestsBtn() {
           title="Nhiệm vụ hằng ngày"
         >
           <FiGift size={20} className={uncompleted > 0 ? "text-rose-500" : ""} />
-          <span className="hidden lg:inline text-xs font-bold">Nhiệm vụ</span>
+          <span className="hidden 2xl:inline text-xs font-bold">Nhiệm vụ</span>
           {uncompleted > 0 && (
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
           )}
