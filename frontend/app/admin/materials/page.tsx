@@ -42,7 +42,7 @@ const SUBJECTS = [
   { value: 'tieng-trung-tn', label: 'Tiếng Trung TN' },
 ];
 
-const MAX_MATERIAL_UPLOAD_MB = 100;
+const MAX_MATERIAL_UPLOAD_MB = 500;
 const FORMULA_CATEGORY = 'cong-thuc-on-thi';
 const DEFAULT_FORM_DATA = {
   title: '',
@@ -132,7 +132,7 @@ export default function AdminMaterialsPage() {
 
       const res = await axios.post('/materials/upload-pdf', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000,
+        timeout: 900000,
         onUploadProgress: (event) => {
           const total = event.total || file.size;
           if (!total) return;
