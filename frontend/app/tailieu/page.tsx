@@ -25,11 +25,12 @@ interface Material {
 const CATEGORIES = [
   { value: 'all', label: 'Tất Cả', icon: '📚', color: 'bg-purple-500' },
   { value: 'ly-thuyet', label: 'Lý Thuyết', icon: '📖', color: 'bg-blue-500' },
-  { value: 'cong-thuc-on-thi', label: 'Công Thức Ôn Thi', icon: '∑', color: 'bg-emerald-500' },
   { value: 'cau-truc-de', label: 'Cấu Trúc Đề', icon: '📋', color: 'bg-green-500' },
   { value: 'de-mo-phong', label: 'Đề Mô Phỏng', icon: '📝', color: 'bg-orange-500' },
   { value: 'tu-vung', label: 'Từ Vựng', icon: '✏️', color: 'bg-pink-500' },
 ];
+
+const FORMULA_CATEGORY = 'cong-thuc-on-thi';
 
 const SUBJECTS = [
   { value: '', label: 'Tất cả môn', emoji: '🎯' },
@@ -224,12 +225,13 @@ export default function TaiLieuPage() {
 
   useEffect(() => {
     axios.get('/materials')
-      .then(r => setMaterials(r.data.data || []))
+      .then(r => setMaterials((r.data.data || []).filter((m: Material) => m.category !== FORMULA_CATEGORY)))
       .catch(() => setMaterials([]))
       .finally(() => setLoading(false));
   }, []);
 
   const filtered = materials.filter(m => {
+    if (m.category === FORMULA_CATEGORY) return false;
     const matchSearch = m.title.toLowerCase().includes(search.toLowerCase()) ||
       (m.description || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = category === 'all' || m.category === category;

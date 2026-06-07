@@ -26,9 +26,10 @@ interface Material {
 }
 
 const FORMULA_CATEGORY = 'cong-thuc-on-thi';
+const DEFAULT_FORMULA_SUBJECT = 'toan';
+const FORMULA_SUBJECT_OPTIONS = SUBJECT_OPTIONS.filter(subject => subject.value);
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
-  '': 'common.all',
   toan: 'subject.math',
   'vat-ly': 'subject.physics',
   'hoa-hoc': 'subject.chemistry',
@@ -127,7 +128,7 @@ function TopicSection({
 export default function CongThucPage() {
   const { t } = useLanguage();
   const searchParams = useSearchParams() as unknown as URLSearchParams;
-  const subjectParam = normalizeContentSubject(searchParams.get('subject'));
+  const subjectParam = normalizeContentSubject(searchParams.get('subject')) || DEFAULT_FORMULA_SUBJECT;
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -141,19 +142,18 @@ export default function CongThucPage() {
   }, [subjectParam]);
 
   const handleSubjectChange = (subject: string) => {
-    const normalizedSubject = normalizeContentSubject(subject);
+    const normalizedSubject = normalizeContentSubject(subject) || DEFAULT_FORMULA_SUBJECT;
     setActiveSubject(normalizedSubject);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
-      if (normalizedSubject) url.searchParams.set('subject', normalizedSubject);
-      else url.searchParams.delete('subject');
+      url.searchParams.set('subject', normalizedSubject);
       window.history.replaceState({}, '', url.toString());
     }
   };
 
   useEffect(() => {
     const params = new URLSearchParams({ category: FORMULA_CATEGORY });
-    if (activeSubject) params.set('subject', activeSubject);
+    params.set('subject', activeSubject || DEFAULT_FORMULA_SUBJECT);
 
     setLoading(true);
     axios.get(`/materials?${params.toString()}`)
@@ -212,13 +212,13 @@ export default function CongThucPage() {
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700">∑</span>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{formulaTitle}</h1>
-              <p className="mt-0.5 text-sm text-gray-500">Tổng hợp công thức theo môn, trích từ PDF admin upload.</p>
+              <p className="mt-0.5 text-sm text-gray-500">Tổng hợp công thức ôn thi theo từng môn.</p>
             </div>
           </div>
         </div>
 
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          {SUBJECT_OPTIONS.map(subject => (
+          {FORMULA_SUBJECT_OPTIONS.map(subject => (
             <button
               key={subject.value}
               type="button"
