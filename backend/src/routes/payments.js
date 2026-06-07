@@ -351,6 +351,13 @@ function normalizeIdempotencyKey(value) {
   return String(value || '').trim().slice(0, 160);
 }
 
+function restrictionAllows(values, expected) {
+  if (!Array.isArray(values) || values.length === 0) return true;
+  const normalized = values.map(value => String(value).toLowerCase());
+  if (normalized.includes('all')) return true;
+  return normalized.includes(String(expected).toLowerCase());
+}
+
 function buildAppliedCouponFromTransaction(transaction) {
   const couponCode = getStoredCouponCode(transaction);
   if (!couponCode) return null;
@@ -596,18 +603,23 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
   }
 
   const sepayTransId = providerPayload.referenceCode || providerPayload.reference_number || providerPayload.id?.toString() || `SEPAY_${Date.now()}`;
+  const payload = {
+    ...getStoredPaymentMeta(transaction),
+    ...(providerPayload || {}),
+    bankTransferWebhook: providerPayload,
+  };
   try {
     await Transaction.updateComplete(transaction.id, {
       status: 'completed',
       payment_channel: 'bank_transfer',
       trans_id: sepayTransId,
-      raw_response: providerPayload,
+      raw_response: payload,
       paid_at: new Date(),
       vip_expires_at: updatedUser?.vip_expires_at || null,
     });
   } catch (completeErr) {
     console.error('[Payment] Full transaction completion failed, using fallback:', completeErr.message);
-    await markTransactionCompletedFallback(transaction, providerPayload);
+    await markTransactionCompletedFallback(transaction, payload);
   }
 
   Promise.all([
@@ -896,59 +908,61 @@ router.post('/create', authenticate, async (req, res) => {
         [coupon_code.trim()]
       );
 
-      if (couponRes.rows[0]) {
-        const c = couponRes.rows[0];
-        const now = new Date();
-
-        const validFrom = c.valid_from ? new Date(c.valid_from) : null;
-        const validUntil = c.valid_until ? new Date(c.valid_until) : null;
-
-        const notStarted = validFrom && now < validFrom;
-        const expired = validUntil && now > validUntil;
-        const maxedOut = c.max_uses !== null && c.used_count >= c.max_uses;
-
-        if (!notStarted && !expired && !maxedOut) {
-          const pkgTier = tier;
-          let applicable = true;
-
-          if (c.applicable_packages && c.applicable_packages.length > 0 && !c.applicable_packages.includes('all')) {
-            applicable = c.applicable_packages.includes(pkg.id);
-          }
-          if (c.applicable_tiers && c.applicable_tiers.length > 0 && !c.applicable_tiers.includes('all')) {
-            applicable = applicable && c.applicable_tiers.includes(pkgTier);
-          }
-          if (c.min_order_amount && c.min_order_amount > effectivePrice) {
-            applicable = false;
-          }
-
-          if (applicable) {
-            const userUsage = await db.query(
-              `SELECT COUNT(*)::int AS count
-               FROM coupon_usages
-               WHERE coupon_id = $1 AND user_id = $2`,
-              [c.id, userId]
-            );
-            if (Number(userUsage.rows[0]?.count || 0) >= Number(c.user_limit || 1)) {
-              return res.status(400).json({
-                success: false,
-                message: 'Bạn đã sử dụng mã giảm giá này đủ số lần cho phép.',
-              });
-            }
-
-            if (c.discount_type === 'percentage') {
-              discountAmount = Math.floor(effectivePrice * c.discount_value / 100);
-              if (c.max_discount_amount) {
-                discountAmount = Math.min(discountAmount, c.max_discount_amount);
-              }
-            } else {
-              discountAmount = Math.min(Number(c.discount_value), effectivePrice);
-            }
-            discountAmount = Math.min(Math.max(0, discountAmount), Number(effectivePrice));
-            finalAmount = Math.max(0, Math.round(effectivePrice - discountAmount));
-            appliedCoupon = c;
-          }
-        }
+      if (!couponRes.rows[0]) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá không hợp lệ.' });
       }
+
+      const c = couponRes.rows[0];
+      const now = new Date();
+      const validFrom = c.valid_from ? new Date(c.valid_from) : null;
+      const validUntil = c.valid_until ? new Date(c.valid_until) : null;
+
+      if (validFrom && now < validFrom) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá chưa có hiệu lực.' });
+      }
+      if (validUntil && now > validUntil) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá đã hết hạn.' });
+      }
+      if (c.max_uses !== null && c.used_count >= c.max_uses) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá đã hết lượt sử dụng.' });
+      }
+      if (!restrictionAllows(c.applicable_packages, pkg.id)) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá không áp dụng cho gói này.' });
+      }
+      if (!restrictionAllows(c.applicable_tiers, tier)) {
+        return res.status(400).json({ success: false, message: 'Mã giảm giá không áp dụng cho cấp bậc này.' });
+      }
+      if (c.min_order_amount && Number(c.min_order_amount) > effectivePrice) {
+        return res.status(400).json({
+          success: false,
+          message: `Giá trị đơn hàng tối thiểu là ${Number(c.min_order_amount).toLocaleString('vi-VN')}đ.`,
+        });
+      }
+
+      const userUsage = await db.query(
+        `SELECT COUNT(*)::int AS count
+         FROM coupon_usages
+         WHERE coupon_id = $1 AND user_id = $2`,
+        [c.id, userId]
+      );
+      if (Number(userUsage.rows[0]?.count || 0) >= Number(c.user_limit || 1)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bạn đã sử dụng mã giảm giá này đủ số lần cho phép.',
+        });
+      }
+
+      if (c.discount_type === 'percentage') {
+        discountAmount = Math.floor(effectivePrice * c.discount_value / 100);
+        if (c.max_discount_amount) {
+          discountAmount = Math.min(discountAmount, c.max_discount_amount);
+        }
+      } else {
+        discountAmount = Math.min(Number(c.discount_value), effectivePrice);
+      }
+      discountAmount = Math.min(Math.max(0, discountAmount), Number(effectivePrice));
+      finalAmount = Math.max(0, Math.round(effectivePrice - discountAmount));
+      appliedCoupon = c;
     }
 
     let coinsUsed = 0;
