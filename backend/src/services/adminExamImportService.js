@@ -114,6 +114,7 @@ async function callPdfImportAI(prompt, options) {
 
 const PDF_IMPORT_TEXT_LIMIT = 60000;
 const PDF_IMPORT_MAX_QUESTIONS = 120;
+const PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN = Number.parseInt(process.env.PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN || "20", 10);
 const PDF_IMPORT_IMAGE_HINT_RE = /(?:\b(?:hinh|anh|bieu\s*do|do\s*thi|so\s*do|figure|image|diagram|chart|map|graph|picture)\b|h\u00ecnh|\u1ea3nh|bi\u1ec3u\s*\u0111\u1ed3|\u0111\u1ed3\s*th\u1ecb|s\u01a1\s*\u0111\u1ed3|\u770b\u56fe|\u56fe|\u56fe\u7247|\u56fe\u8868)/i;
 
 const wordExtractor = new WordExtractor();
@@ -282,18 +283,26 @@ function withRuleBasedFallbackWarning(preview, reason) {
   if (!preview?.items?.length) return preview;
 
   const warnings = Array.isArray(preview.warnings) ? [...preview.warnings] : [];
-  warnings.push(reason || "AI parse failed; returned rule-based preview fallback.");
+  warnings.push(reason || "AI đọc đề chưa ổn, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.");
+  return { ...preview, warnings };
+}
+
+function withRuleBasedOnlyWarning(preview) {
+  if (!preview?.items?.length) return preview;
+
+  const warnings = Array.isArray(preview.warnings) ? [...preview.warnings] : [];
+  warnings.push("Parser nhanh đã đọc đủ nhiều câu nên hệ thống không gọi AI để tránh tốn tiền. Hãy kiểm tra lại đáp án và công thức trước khi lưu.");
   return { ...preview, warnings };
 }
 
 function getPdfImportFallbackReason(error) {
   if (error?.message === "RATE_LIMITED") {
-    return "AI is rate limited; returned rule-based preview fallback.";
+    return "AI đang bị giới hạn tạm thời, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.";
   }
   if (error?.message === "AI_TIMEOUT") {
-    return "AI timed out; returned rule-based preview fallback.";
+    return "AI xử lý quá thời gian, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.";
   }
-  return "AI parse failed; returned rule-based preview fallback.";
+  return "AI đọc đề chưa ổn, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.";
 }
 
 function normalizeUploadedFileName(value) {
@@ -410,7 +419,7 @@ function normalizeImportedQuestion(rawQuestion, index) {
     correctAnswer,
     difficulty,
     needsImage,
-    imageHint: imageHint || (needsImage ? "Question may reference an image/table/chart in the PDF. Add image manually before publishing." : ""),
+    imageHint: imageHint || (needsImage ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong PDF. Hãy thêm ảnh thủ công trước khi xuất bản." : ""),
     reviewNotes,
     subQuestionNumber: Number.isFinite(subQuestionNumber) ? subQuestionNumber : index + 1,
     importIndex: index + 1,
@@ -451,7 +460,7 @@ function normalizeImportedReadingGroup(rawGroup, index) {
     passageImageUrl,
     subQuestions,
     needsImage,
-    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Reading passage may reference a visual in the PDF. Add image manually before publishing." : ""),
+    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Đoạn đọc hiểu có thể cần hình ảnh trong PDF. Hãy thêm ảnh thủ công trước khi xuất bản." : ""),
     reviewNotes: stringValue(rawGroup?.reviewNotes),
     importIndex: index + 1,
   };
@@ -509,7 +518,7 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
     linkedOptions,
     subItems,
     needsImage,
-    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Fill-blank group may reference a visual in the PDF. Add image manually before publishing." : ""),
+    imageHint: stringValue(rawGroup?.imageHint) || (needsImage ? "Nhóm điền từ có thể cần hình ảnh trong PDF. Hãy thêm ảnh thủ công trước khi xuất bản." : ""),
     reviewNotes,
     importIndex: index + 1,
   };
@@ -773,7 +782,7 @@ const VIETNAMESE_ANSWER_RE = /\u0110\u00e1p\s*\u00e1n(?:\s*\u0111\u00fang)?\s*:\
 const VIETNAMESE_OPTION_LABEL_RE = /^(?:\(([A-H])\)|([A-H])[\.)])\s*(.*)$/i;
 const VIETNAMESE_TRAILING_ANSWER_KEY_RE = /(?:^|\n)\s*(\d{1,3})\s*[\.)]\s*([A-H])\s*(?=\n|$)/gi;
 const RULE_IMPORT_ANSWER_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const RULE_IMPORT_MISSING_OPTION_TEXT = "Option content was not extracted from Word/PDF. Edit this answer in the preview.";
+const RULE_IMPORT_MISSING_OPTION_TEXT = "Chưa trích được nội dung đáp án từ Word/PDF. Hãy sửa đáp án này trong bản xem trước.";
 const CHINESE_SOCIAL_ANSWER_RE = /Answer\s*:\s*([A-H])/i;
 const CHINESE_SOCIAL_EXPLANATION_RE = /Explanation(?:\s*(?:中文|Chinese))?\s*[:：]?\s*/i;
 const CHINESE_SOCIAL_OPTION_LABEL_RE = /[（(]\s*([A-H])\s*[）)]/gi;
@@ -1048,8 +1057,8 @@ function parseChineseScienceQuestionBlock(block) {
   const hasMissingAnswerText = answers.some((answer) => stringValue(answer.textCn).includes(RULE_IMPORT_MISSING_OPTION_TEXT));
   const needsImage = PDF_IMPORT_IMAGE_HINT_RE.test(`${questionText} ${explanation}`);
   const reviewNotes = [
-    correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
-    hasMissingAnswerText ? "Some formula/image answer content was not extracted from Word/PDF. Edit placeholders in the preview." : "",
+    correctAnswer ? "" : "Chưa tự nhận diện được đáp án đúng. Hãy chọn đáp án trước khi lưu.",
+    hasMissingAnswerText ? "Một số công thức/hình trong đáp án chưa được trích ra từ Word/PDF. Hãy sửa các ô giữ chỗ trong bản xem trước." : "",
   ].filter(Boolean).join(" ");
 
   return {
@@ -1065,7 +1074,7 @@ function parseChineseScienceQuestionBlock(block) {
     difficulty: /提高|advanced|hard/i.test(questionText) ? "hard" : "medium",
     subQuestionNumber: block.questionNumber,
     needsImage,
-    imageHint: needsImage ? "Question may reference an image/table/chart in the file. Add image manually before publishing." : "",
+    imageHint: needsImage ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
     reviewNotes,
   };
 }
@@ -1082,10 +1091,10 @@ function parseChineseScienceTextWithRules(rawText, sourceMeta) {
 
   const skippedCount = blocks.length - items.length;
   const warnings = [
-    "This preview used the fast Chinese science parser. Please review formulas, diagrams, placeholders, and correct answers before saving.",
+    "Bản xem trước này dùng bộ đọc nhanh cho đề khoa học tiếng Trung. Hãy kiểm tra công thức, hình vẽ, ô trống và đáp án đúng trước khi lưu.",
   ];
   if (skippedCount > 0) {
-    warnings.push(`Skipped ${skippedCount} question-like blocks that did not contain enough option labels.`);
+    warnings.push(`Đã bỏ qua ${skippedCount} đoạn giống câu hỏi nhưng không có đủ nhãn đáp án.`);
   }
 
   return normalizePdfImportResult({
@@ -1207,8 +1216,8 @@ function parseChineseSocialQuestionBlock(block, questionNumber, poolMap) {
     difficulty: "medium",
     subQuestionNumber: questionNumber,
     needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
-    imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Question may reference an image/table/chart in the file. Add image manually before publishing." : "",
-    reviewNotes: correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
+    imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
+    reviewNotes: correctAnswer ? "" : "Chưa tự nhận diện được đáp án đúng. Hãy chọn đáp án trước khi lưu.",
   };
 }
 
@@ -1256,7 +1265,7 @@ function buildChineseSocialFillBlankGroup(poolGroup, questionBlocks, poolMap) {
     needsImage: subItems.some((item) => PDF_IMPORT_IMAGE_HINT_RE.test(`${item.questionText} ${item.questionTextCn}`)),
     imageHint: "",
     reviewNotes: subItems.length !== poolGroup.endQuestion - poolGroup.startQuestion + 1
-      ? "Some pooled fill-blank questions could not be parsed. Review this group before saving."
+      ? "Một số câu điền từ dùng chung lựa chọn chưa được đọc đủ. Hãy kiểm tra nhóm này trước khi lưu."
       : "",
   };
 }
@@ -1323,7 +1332,7 @@ function parseChineseSocialReadingGroups(text, poolMap) {
         passageText,
         subQuestions,
         needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(passageText),
-        imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(passageText) ? "Reading passage may reference a visual in the file. Add image manually before publishing." : "",
+        imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(passageText) ? "Đoạn đọc hiểu có thể cần hình ảnh trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
         reviewNotes: "",
       });
     } else {
@@ -1358,7 +1367,7 @@ function parseChineseSocialTextWithRules(rawText, sourceMeta) {
     },
     items,
     warnings: [
-      "This preview used the fast Chinese social-science parser. Please review reading passages and pooled options before saving.",
+      "Bản xem trước này dùng bộ đọc nhanh cho đề xã hội tiếng Trung. Hãy kiểm tra đoạn đọc hiểu và các lựa chọn chung trước khi lưu.",
     ],
   }, sourceMeta);
 }
@@ -1397,8 +1406,8 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
     if (!questionText || answers.length < 2) continue;
     const hasMissingAnswerText = answers.some((answer) => stringValue(answer.text).includes(RULE_IMPORT_MISSING_OPTION_TEXT));
     const reviewNotes = [
-      correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
-      hasMissingAnswerText ? "Some answer content was not extracted from Word/PDF. Edit placeholders in the preview." : "",
+      correctAnswer ? "" : "Chưa tự nhận diện được đáp án đúng. Hãy chọn đáp án trước khi lưu.",
+      hasMissingAnswerText ? "Một số nội dung đáp án chưa được trích ra từ Word/PDF. Hãy sửa các ô giữ chỗ trong bản xem trước." : "",
     ].filter(Boolean).join(" ");
 
     items.push({
@@ -1413,7 +1422,7 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
       points: 1,
       difficulty: /VDC|advanced|hard/i.test(match[0]) ? "hard" : "medium",
       needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
-      imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Question may reference an image/table/chart in the file. Add image manually before publishing." : "",
+      imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
       reviewNotes,
     });
   }
@@ -1428,7 +1437,7 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
     },
     items,
     warnings: [
-      "This preview used the fast Vietnamese question parser. Please review formulas, placeholder answers, and image-based questions before saving.",
+      "Bản xem trước này dùng bộ đọc nhanh cho đề tiếng Việt. Hãy kiểm tra công thức, đáp án giữ chỗ và các câu cần hình ảnh trước khi lưu.",
     ],
   }, sourceMeta);
 }
@@ -1496,15 +1505,15 @@ function parsePdfTextWithRules(pdfText, sourceMeta) {
       points: 1,
       difficulty: /提高|advanced|hard/i.test(questionText) ? "hard" : "medium",
       needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
-      imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Question may reference an image/table/chart in the PDF. Add image manually before publishing." : "",
-      reviewNotes: correctAnswer ? "" : "Could not infer the correct answer automatically. Please choose it before saving.",
+      imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong PDF. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
+      reviewNotes: correctAnswer ? "" : "Chưa tự nhận diện được đáp án đúng. Hãy chọn đáp án trước khi lưu.",
     });
   }
 
   if (items.length === 0) return null;
 
   const warnings = [
-    "This preview used the fast PDF text parser. Please review correct answers before saving.",
+    "Bản xem trước này dùng bộ đọc nhanh văn bản PDF. Hãy kiểm tra đáp án đúng trước khi lưu.",
   ];
 
   return normalizePdfImportResult({
@@ -1531,7 +1540,7 @@ function normalizePdfImportResult(aiResult, sourceMeta) {
   const questions = items.filter((item) => item.itemType === "single_choice");
 
   if (rawItems.length > items.length) {
-    warnings.push(`Skipped ${rawItems.length - items.length} invalid or unsupported items. Review the PDF and add missing parts manually.`);
+    warnings.push(`Đã bỏ qua ${rawItems.length - items.length} mục không hợp lệ hoặc chưa hỗ trợ. Hãy kiểm tra PDF và thêm phần thiếu thủ công.`);
   }
 
   return {
@@ -1555,7 +1564,7 @@ function validateImportItems(items) {
 
   const totalQuestions = items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0);
   if (totalQuestions > PDF_IMPORT_MAX_QUESTIONS) {
-    return `Cannot import more than ${PDF_IMPORT_MAX_QUESTIONS} questions at once`;
+    return `Không thể import quá ${PDF_IMPORT_MAX_QUESTIONS} câu trong một lần`;
   }
 
   const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
@@ -1845,7 +1854,7 @@ async function previewImportFile(file, importPresetInput) {
 
     if (extractedText.length < 120) {
       throw createImportPreviewError(400, {
-        message: "File does not contain enough readable text. Please use a text PDF, a Word .doc/.docx file, or enter questions manually.",
+        message: "File không có đủ chữ đọc được. Hãy dùng PDF có text, file Word .doc/.docx hoặc nhập câu hỏi thủ công.",
       });
     }
 
@@ -1863,6 +1872,16 @@ async function previewImportFile(file, importPresetInput) {
       ? parsePdfTextWithRules(truncatedText, sourceMeta)
       : null;
 
+    const ruleBasedCountBeforeAi = ruleBasedPreview?.totalQuestionCount || 0;
+    if (
+      ruleBasedPreview?.items?.length
+      && Number.isFinite(PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN)
+      && PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN > 0
+      && ruleBasedCountBeforeAi >= PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN
+    ) {
+      return withRuleBasedOnlyWarning(ruleBasedPreview);
+    }
+
     const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset), {
       temperature: 0.15,
       maxTokens: 6500,
@@ -1875,12 +1894,12 @@ async function previewImportFile(file, importPresetInput) {
       if (ruleBasedPreview?.items?.length) {
         return withRuleBasedFallbackWarning(
           ruleBasedPreview,
-          "AI did not return valid JSON; returned rule-based preview fallback.",
+          "AI không trả về JSON hợp lệ, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.",
         );
       }
 
       throw createImportPreviewError(502, {
-        message: "AI did not return a valid import JSON. Please try again with a shorter PDF.",
+        message: "AI không trả về dữ liệu import hợp lệ. Hãy thử lại với PDF ngắn hơn.",
         preview: String(rawAi || "").slice(0, 800),
       });
     }
@@ -1891,12 +1910,12 @@ async function previewImportFile(file, importPresetInput) {
       if (ruleBasedPreview?.items?.length) {
         return withRuleBasedFallbackWarning(
           ruleBasedPreview,
-          "AI returned no valid questions; returned rule-based preview fallback.",
+          "AI không trả về câu hỏi hợp lệ, hệ thống đã dùng bản đọc nhanh bằng quy tắc để tránh thiếu câu.",
         );
       }
 
       throw createImportPreviewError(422, {
-        message: "No valid supported questions were found in this PDF.",
+        message: "Không tìm thấy câu hỏi hợp lệ được hỗ trợ trong PDF này.",
         ...normalized,
       });
     }
@@ -1906,7 +1925,7 @@ async function previewImportFile(file, importPresetInput) {
     if (ruleBasedCount > normalizedCount) {
       return withRuleBasedFallbackWarning(
         ruleBasedPreview,
-        `Rule-based parser found ${ruleBasedCount} questions while AI returned ${normalizedCount}; returned rule-based preview to avoid missing questions.`,
+        `Parser nhanh đọc được ${ruleBasedCount} câu, còn AI chỉ trả về ${normalizedCount} câu; hệ thống dùng bản parser nhanh để tránh thiếu câu.`,
       );
     }
 
@@ -1920,14 +1939,14 @@ async function previewImportFile(file, importPresetInput) {
 
     if (error.message === "RATE_LIMITED") {
       throw createImportPreviewError(429, {
-        message: "AI is rate limited. Please try again later.",
+        message: "AI đang bị giới hạn tạm thời. Hãy thử lại sau.",
         retryAfter: error.retryAfter || aiService.getRateLimitRemaining?.(),
       }, error);
     }
 
     if (error.message === "AI_TIMEOUT") {
       throw createImportPreviewError(504, {
-        message: "AI took too long to parse this PDF. Please try a shorter PDF.",
+        message: "AI đọc PDF quá lâu. Hãy thử PDF ngắn hơn.",
       }, error);
     }
 
@@ -1939,7 +1958,7 @@ async function previewImportFile(file, importPresetInput) {
     }
 
     if (error.message === "UNSUPPORTED_IMPORT_FILE") {
-      throw createImportPreviewError(400, { message: "Only PDF and Word .doc/.docx files are supported." }, error);
+      throw createImportPreviewError(400, { message: "Chỉ hỗ trợ file PDF và Word .doc/.docx." }, error);
     }
 
     throw createImportPreviewError(500, { message: "Failed to preview import file" }, error);

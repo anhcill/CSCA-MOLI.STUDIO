@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { examAdminApi } from '@/lib/api/examAdmin';
 
-const IMAGE_OCR_MAX_SIZE = 5 * 1024 * 1024;
-const IMAGE_OCR_HARD_MAX_SIZE = 15 * 1024 * 1024;
-const IMAGE_OCR_MAX_EDGE = 1600;
-const IMAGE_OCR_JPEG_QUALITY = 0.84;
+const IMAGE_OCR_MAX_SIZE = 8 * 1024 * 1024;
+const IMAGE_OCR_HARD_MAX_SIZE = 20 * 1024 * 1024;
+const IMAGE_OCR_MAX_EDGE = 2200;
+const IMAGE_OCR_JPEG_QUALITY = 0.9;
 
 interface ClipboardImageEvent {
   clipboardData?: DataTransfer | null;
@@ -104,7 +104,7 @@ export function useSingleQuestionImageOcr({ onTextExtracted }: UseSingleQuestion
     }
 
     if (file.size > IMAGE_OCR_HARD_MAX_SIZE) {
-      alert('Ảnh tối đa 15MB trước khi tối ưu.');
+      alert('Ảnh tối đa 20MB trước khi tối ưu.');
       return;
     }
 
@@ -117,7 +117,7 @@ export function useSingleQuestionImageOcr({ onTextExtracted }: UseSingleQuestion
       if (activeRunRef.current !== runId) return;
 
       if (ocrFile.size > IMAGE_OCR_MAX_SIZE) {
-        alert('Ảnh sau khi tối ưu vẫn quá 5MB. Vui lòng cắt sát 1 câu hỏi rồi thử lại.');
+        alert('Ảnh sau khi tối ưu vẫn quá 8MB. Vui lòng cắt sát 1 câu hỏi rồi thử lại.');
         return;
       }
 

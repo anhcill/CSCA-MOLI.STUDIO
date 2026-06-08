@@ -15,6 +15,32 @@ const examWriteLimiter = rateLimit({
 });
 
 /** Giới hạn nghiêm ngặt cho xóa đề */
+const examImportPreviewLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 3,
+  message: {
+    message: "Bạn đang import đề quá nhanh. Vui lòng đợi vài phút rồi thử lại để tránh tốn phí AI.",
+    retryAfter: 300,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id?.toString() || req.ip,
+  validate: { keyGeneratorIpFallback: false },
+});
+
+const examImageOcrLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 15,
+  message: {
+    message: "Bạn đang OCR ảnh quá nhanh. Vui lòng đợi vài phút rồi thử lại.",
+    retryAfter: 300,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.id?.toString() || req.ip,
+  validate: { keyGeneratorIpFallback: false },
+});
+
 const examDeleteLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
   max: 10,              // Tối đa 10 lần xóa/phút
@@ -42,4 +68,10 @@ const scheduleLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
 });
 
-module.exports = { examWriteLimiter, examDeleteLimiter, scheduleLimiter };
+module.exports = {
+  examWriteLimiter,
+  examImportPreviewLimiter,
+  examImageOcrLimiter,
+  examDeleteLimiter,
+  scheduleLimiter,
+};

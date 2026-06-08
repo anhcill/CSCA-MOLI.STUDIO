@@ -26,7 +26,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // Giới hạn 5MB
+    fileSize: 8 * 1024 * 1024, // Gioi han 8MB cho OCR anh ro hon
   },
   fileFilter: fileFilter,
 });

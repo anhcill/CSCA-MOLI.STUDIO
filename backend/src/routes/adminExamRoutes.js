@@ -7,7 +7,13 @@ const {
 const AdminExamController = require("../controllers/adminExamController");
 const adminFillBlankGroupController = require("../controllers/adminFillBlankGroupController");
 const officialExamController = require("../controllers/officialExamController");
-const { examWriteLimiter, examDeleteLimiter, scheduleLimiter } = require("./adminExamLimiter");
+const {
+	examWriteLimiter,
+	examImportPreviewLimiter,
+	examImageOcrLimiter,
+	examDeleteLimiter,
+	scheduleLimiter,
+} = require("./adminExamLimiter");
 const uploadPdf = require("../middleware/pdfUploadMiddleware");
 const uploadImage = require("../middleware/uploadMiddleware");
 
@@ -35,7 +41,7 @@ function handleImageOcrUpload(req, res, next) {
 		}
 
 		if (error.code === "LIMIT_FILE_SIZE") {
-			res.status(413).json({ message: "Ảnh tối đa 5MB" });
+			res.status(413).json({ message: "Ảnh tối đa 8MB sau khi tối ưu." });
 			return;
 		}
 
@@ -50,8 +56,8 @@ router.use(authorizePermission("exams.manage"));
 // Counts (place before /:examId to avoid route conflict) — no rate limit needed
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
-router.post("/import/pdf/preview", examWriteLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
-router.post("/import/image/ocr", examWriteLimiter, handleImageOcrUpload, AdminExamController.ocrSingleQuestionImage);
+router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
+router.post("/import/image/ocr", examImageOcrLimiter, handleImageOcrUpload, AdminExamController.ocrSingleQuestionImage);
 
 // Exam CRUD — rate limited for write operations
 router.get("/", AdminExamController.getAllExams);
