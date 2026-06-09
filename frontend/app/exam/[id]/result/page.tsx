@@ -78,6 +78,9 @@ function formatReviewAnswer(key?: string | null, text?: string | null, fallback 
   return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
 }
 
+const REVIEW_AI_ACCURACY_RULE =
+  'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
+
 function buildQuestionExplanationPrompt(question: QuestionResult) {
   const questionNo = question.sub_question_number || question.question_number;
   const questionText = question.question_text || question.question_text_cn || '';
@@ -87,6 +90,7 @@ function buildQuestionExplanationPrompt(question: QuestionResult) {
     `Câu ${questionNo}`,
     questionText ? `Nội dung câu hỏi: ${questionText}` : '',
     `Đáp án đúng: ${correctAnswer}`,
+    REVIEW_AI_ACCURACY_RULE,
   ].filter(Boolean).join('\n');
 
   const status = getQuestionReviewStatus(question);

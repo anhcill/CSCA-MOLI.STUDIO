@@ -91,6 +91,8 @@ Task:
 - Add short Vietnamese explanations for each correct answer if possible.
 - If a question references an image, table, chart, diagram, map, figure, experiment setup, or missing visual, set needsImage=true and write imageHint.
 - Preserve math as KaTeX-compatible LaTeX inside \\(...\\). Convert OCR/plain fractions like 2x+3/x-1, (2x+3)/(x-1), or stacked numerator/denominator text into \\frac{2x+3}{x-1}.
+- Preserve inequality and set/interval meaning exactly. Never change strict/non-strict signs: < stays <, > stays >, <= or ≤ becomes \\le, >= or ≥ becomes \\ge. Do not change \\le to < or \\ge to >.
+- Do not change negative signs, decimal points, exponents, subscripts, answer labels, option text, domain conditions, or set membership when cleaning OCR artifacts.
 - Convert math symbols to LaTeX: != or ≠ -> \\ne, <= or ≤ -> \\le, >= or ≥ -> \\ge, sqrt/√ -> \\sqrt{}, superscripts like f-1(x) or f^-1(x) -> f^{-1}(x).
 - For Chinese math questions, keep Chinese words in questionTextCn but wrap only formulas, e.g. 求函数 \\(y=\\frac{2x+3}{x-1}(x\\ne1)\\) 的反函数。
 - For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).

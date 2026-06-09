@@ -1,7 +1,7 @@
 /**
  * AI Service — Tất cả 7 features AI cho hệ thống thi CSCA
  *
- * Model: DeepSeek R1 qua Beeknoee
+ * Models are configured in src/config/aiConfig.js via Beeknoee env vars.
  * Muốn đổi model? Sửa src/config/aiConfig.js
  */
 
@@ -32,6 +32,11 @@ function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUnti
 
 // ─── Round-robin API key pool ────────────────────────────────────────────────
 const BEE = aiConfig.beeknoee;
+const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và giải thích admin trước khi suy luận.
+- Giữ nguyên ký hiệu toán/logic và điều kiện trong đề: <, <=, ≤, >, >=, ≥, =, ≠, ∈, ∉, ∪, ∩, ∅, |.
+- Không đổi ≤ thành <, ≥ thành >, không đổi dấu âm, số mũ, chỉ số, miền xác định, tập nghiệm hoặc đáp án.
+- Với câu Toán/Khoa học, đối chiếu lại điều kiện gốc và các lựa chọn trước khi kết luận.
+- Nếu thiếu dữ kiện, thiếu hình/bảng/biểu đồ hoặc đáp án không khớp dữ liệu, nói rõ phần thiếu; không đoán.`;
 let currentKeyIndex = 0;
 
 function getNextKey() {
@@ -423,6 +428,7 @@ ${q.passage_text ? `Đoạn văn: ${q.passage_text.substring(0, 160)}` : ''}`.su
   const prompt = `Bạn là giáo viên giỏi. Phân tích bài thi bằng TIẾNG VIỆT, đủ chi tiết nhưng gọn.
 
 Nguyên tắc:
+${AI_ACCURACY_PROMPT_RULES}
 - Dựa trên thống kê toàn bài và danh sách câu sai/bỏ trống bên dưới.
 - Không bịa câu hỏi/chủ đề ngoài dữ liệu. Nếu chưa đủ dữ liệu, nói rõ "cần xem thêm".
 - Khi nêu điểm yếu, chỉ rõ câu hoặc nhóm câu làm căn cứ.
@@ -532,6 +538,7 @@ Loại câu: ${q.question_type || 'single_choice'}`;
     const prompt = `Bạn là giáo viên tiếng Trung. Giải thích bằng TIẾNG VIỆT.
 
 YÊU CẦU:
+${AI_ACCURACY_PROMPT_RULES}
 - Viết plain text thuần túy, không dùng **bold**, không dùng ##, không dùng bất kỳ ký hiệu markdown phức tạp nào
 - Mỗi phần phải đủ ý: vì sao đáp án học sinh sai, vì sao đáp án đúng đúng, kiến thức cần ôn
 - Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 电脑 (diàn nǎo)
@@ -810,6 +817,7 @@ YÊU CẦU:
 - Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
 - Nếu là tiếng Trung: từ mới phải ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
 - Nếu là Toán/Khoa học: dùng công thức KaTeX-compatible trong \\( ... \\), ví dụ \\( y=\\frac{2x+3}{x-1} \\). Không viết công thức thành ảnh.
+${AI_ACCURACY_PROMPT_RULES}
 - Nếu là môn khác: giải thích đúng trọng tâm môn đó, không ép thành tiếng Trung.
 - Đưa ví dụ cụ thể trong đời thường khi cần.
 - Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
@@ -876,6 +884,7 @@ function buildMoliPetPrompt(message, context = {}) {
 Tra loi bang tieng Viet co dau, tu nhien, thong minh, am ap, ngan gon.
 
 Tinh cach:
+${AI_ACCURACY_PROMPT_RULES}
 - Xung ho minh/ban, co the them mot cau hoi tham nhe neu hop ngu canh.
 - Noi nhu ban dong hanh nho: dang yeu nhung khong nham nhi, khong lam mau qua da.
 - Biet bam vao mon hoc/trang hien tai de goi y dung viec user dang lam.
@@ -907,7 +916,7 @@ User noi: ${message}`;
 
 async function askMoliPet(message, context = {}) {
   const prompt = buildMoliPetPrompt(message, context);
-  const model = BEE.importFallbackModel || BEE.importModel || BEE.model;
+  const model = BEE.petChatModel || BEE.model;
   const maxTokens = Math.min(BEE.petChatMaxTokens || 700, 900);
 
   try {

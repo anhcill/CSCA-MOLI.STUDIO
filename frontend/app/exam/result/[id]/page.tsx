@@ -70,6 +70,9 @@ function formatReviewAnswer(key?: string | null, text?: string | null, fallback 
     return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
 }
 
+const REVIEW_AI_ACCURACY_RULE =
+    'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
+
 function buildQuestionExplanationPrompt(question: QuestionResult, questionText: string) {
     const questionNo = question.sub_question_number || question.question_number;
     const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
@@ -78,6 +81,7 @@ function buildQuestionExplanationPrompt(question: QuestionResult, questionText: 
         `Câu ${questionNo}`,
         questionText ? `Nội dung câu hỏi: ${questionText}` : '',
         `Đáp án đúng: ${correctAnswer}`,
+        REVIEW_AI_ACCURACY_RULE,
     ].filter(Boolean).join('\n');
 
     const status = getQuestionReviewStatus(question);
@@ -106,6 +110,7 @@ function buildQuestionTheoryPrompt(question: QuestionResult, questionText: strin
         questionText ? `Nội dung câu hỏi: ${questionText}` : '',
         learnerState,
         `Đáp án đúng: ${correctAnswer}`,
+        REVIEW_AI_ACCURACY_RULE,
         'Hãy giảng lại lý thuyết liên quan trực tiếp tới câu này.',
         'Trả lời bằng tiếng Việt có dấu, gồm: kiến thức trọng tâm, cách nhận biết, ví dụ ngắn, lỗi dễ nhầm, mẹo nhớ.',
     ].filter(Boolean).join('\n');

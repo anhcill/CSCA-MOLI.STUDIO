@@ -28,6 +28,8 @@ Rules:
 - Transcribe exactly what is visible. If a small part is unreadable, write [không rõ] instead of guessing.
 - Preserve question number, A/B/C/D options, answer marker if visible, and explanation markers like 解析, 答案解析, 解答, 说明, Lời giải, Giải thích.
 - Preserve math as clean text/LaTeX where visible: fractions, roots, powers, vectors, log/trig/lim/sum/int, systems, intervals.
+- Preserve comparison signs exactly: <, <=, ≤, >, >=, ≥, =, ≠. Do not change ≤ to <, ≥ to >, or strict signs to non-strict signs.
+- Preserve negative signs, decimal points, exponents, subscripts, domain conditions, set/interval notation, and answer labels exactly where visible.
 - Keep option labels exactly as A., B., C., D. on separate lines when visible.
 - If the image contains a stacked fraction, write it as \\frac{numerator}{denominator}.
 - If the image contains a brace system of equations, write it as \\begin{cases} row1 \\\\ row2 \\end{cases}.
