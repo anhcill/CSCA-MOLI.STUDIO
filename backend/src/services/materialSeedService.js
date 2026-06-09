@@ -144,14 +144,14 @@ async function seedLaunchTheoryMaterials(pool = db) {
          title, description, file_url, file_type, category, subject, topic,
          is_active, is_premium, content_text, content_html, content_source, content_meta
        )
-       SELECT $1, $2, '', 'web', 'ly-thuyet', $3, $4,
-              TRUE, FALSE, $5, $6, 'seed', '{}'::jsonb
+       SELECT $1::varchar, $2::text, '', 'web', 'ly-thuyet', $3::varchar, $4::varchar,
+              TRUE, FALSE, $5::text, $6::text, 'seed', '{}'::jsonb
        WHERE NOT EXISTS (
          SELECT 1 FROM materials
          WHERE category = 'ly-thuyet'
-           AND subject = $3
-           AND topic = $4
-           AND title = $1
+           AND subject = $3::varchar
+           AND topic = $4::varchar
+           AND title = $1::varchar
        )`,
       [item.title, item.description, item.subject, item.topic, contentText, contentHtml],
     );
