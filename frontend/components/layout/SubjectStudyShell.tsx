@@ -12,7 +12,7 @@ import {
   FiSettings,
   FiTrendingUp,
 } from 'react-icons/fi';
-import { BsGraphUp, BsJournalBookmark, BsLightbulb, BsStars } from 'react-icons/bs';
+import { BsGraphUp, BsLightbulb, BsStars } from 'react-icons/bs';
 import { HiOutlineSparkles } from 'react-icons/hi2';
 import BackButton from '@/components/layout/BackButton';
 import {
@@ -48,15 +48,6 @@ interface SubjectStudyShellProps {
 
 const DEFAULT_SUBTITLE = 'Luyện tập theo đề, xem lịch sử điểm và để AI phân tích lộ trình cải thiện sau mỗi lần làm bài.';
 const DEFAULT_SEARCH_PLACEHOLDER = 'Tìm nhanh đề thi... (nhấn / để focus)';
-
-const QUICK_LINKS = [
-  { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
-  { key: 'cau-truc-de', icon: BsJournalBookmark, labelKey: 'course.section.structure', href: '/cau-truc-de' },
-  { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
-  { key: 'cong-thuc', icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
-  { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
-  { key: 'giai-de-chi-tiet', icon: BsGraphUp, labelKey: 'course.section.solutions', href: '/giai-de-chi-tiet' },
-] as const;
 
 const SIDE_LINKS = [
   { key: 'de-mo-phong', icon: FiHome, labelKey: 'course.section.mockExam', href: 'exam' },
@@ -211,31 +202,6 @@ export default function SubjectStudyShell({
             </div>
           </div>
         </header>
-
-        <section className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
-          {QUICK_LINKS.map((item) => {
-            const Icon = item.icon;
-            const active = activeSection === item.key;
-            return (
-              <Link
-                key={item.key}
-                href={getScopedHref(item.href, normalizedSubject)}
-                className={`group flex min-h-[76px] items-center gap-4 rounded-2xl border px-5 py-4 shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md ${
-                  active ? 'border-violet-200 bg-violet-50' : 'border-slate-200 bg-white'
-                }`}
-              >
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                  active
-                    ? 'bg-violet-600 text-white'
-                    : 'bg-violet-50 text-violet-600 group-hover:bg-violet-600 group-hover:text-white'
-                }`}>
-                  <Icon />
-                </span>
-                <span className="text-sm font-black text-slate-800">{t(item.labelKey)}</span>
-              </Link>
-            );
-          })}
-        </section>
 
         {children}
 
