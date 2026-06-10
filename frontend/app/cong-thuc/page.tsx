@@ -644,6 +644,7 @@ export default function CongThucPage() {
         {isFormulaRepositorySubject ? (
           <div className="space-y-8">
             <FormulaRepository
+              key={activeSubject}
               search={search}
               setSearch={setSearch}
               topics={formulaRepositoryTopics}
