@@ -3,6 +3,7 @@ const aiService = require('../services/aiService');
 const { cache, TTL } = require('../config/cache');
 const { canUseAIFeatures } = require('../middleware/authMiddleware');
 const coinService = require('../services/coinService');
+const dailyGiftLetterService = require('../services/dailyGiftLetterService');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -971,6 +972,61 @@ async function askMoliPet(req, res) {
   }
 }
 
+async function getDailyGiftLetter(req, res) {
+  try {
+    const userId = req.user.id;
+    const giftDate = dailyGiftLetterService.getVietnamDateKey();
+    const letter = await dailyGiftLetterService.getOrCreateDailyGiftLetter(giftDate);
+
+    if (!letter) {
+      return res.status(500).json({
+        success: false,
+        message: 'Chưa thể tạo thư hôm nay.',
+      });
+    }
+
+    const openedToday = await dailyGiftLetterService.hasOpened(userId, giftDate);
+
+    return res.json({
+      success: true,
+      data: {
+        letter,
+        giftDate,
+        openedToday,
+      },
+    });
+  } catch (error) {
+    console.error('getDailyGiftLetter error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi tải quà hằng ngày',
+    });
+  }
+}
+
+async function markDailyGiftLetterOpened(req, res) {
+  try {
+    const userId = req.user.id;
+    const giftDate = dailyGiftLetterService.getVietnamDateKey();
+    await dailyGiftLetterService.getOrCreateDailyGiftLetter(giftDate);
+    await dailyGiftLetterService.markOpened(userId, giftDate);
+
+    return res.json({
+      success: true,
+      data: {
+        giftDate,
+        openedToday: true,
+      },
+    });
+  } catch (error) {
+    console.error('markDailyGiftLetterOpened error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi lưu trạng thái quà hằng ngày',
+    });
+  }
+}
+
 async function analyzeProgress(req, res) {
   try {
     const userId = req.user.id;
@@ -1489,6 +1545,8 @@ module.exports = {
   askAI,
   askAIStream,
   askMoliPet,
+  getDailyGiftLetter,
+  markDailyGiftLetterOpened,
   analyzeProgress,
   recommendNextExam,
   analyzeUserPerformance,

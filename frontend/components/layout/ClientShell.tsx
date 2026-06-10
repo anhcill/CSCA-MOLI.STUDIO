@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 import MoliPet from '@/components/common/MoliPet';
+import DailyGiftBox from '@/components/daily-gift/DailyGiftBox';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 
@@ -48,12 +49,14 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
+  const showDailyGift = showMoliPet && isAuthenticated;
   const moliPetPosition = 'left';
 
   return (
     <>
       {showFloatingContacts && mounted && <FloatingContactButtons />}
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
+      {showDailyGift && mounted && <DailyGiftBox />}
 
       <div className="min-h-[100dvh] flex flex-col">
         <div className="flex-1">

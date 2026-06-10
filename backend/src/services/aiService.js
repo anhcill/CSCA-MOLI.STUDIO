@@ -941,6 +941,125 @@ async function askMoliPet(message, context = {}) {
   }
 }
 
+function getDailyGiftFallback(giftDate = '') {
+  const titles = [
+    'Một lá thư nhỏ cho ngày học mới',
+    'Gói năng lượng pastel đã tới',
+    'Hộp quà học tập từ Moly',
+    'Một chút may mắn cho hôm nay',
+  ];
+  const encouragements = [
+    'Hôm nay bạn không cần học thật nhiều mới tính là tiến bộ. Chỉ cần hiểu thêm một công thức Toán, nhớ thêm vài từ tiếng Trung, hoặc sửa lại một lỗi nhỏ trong bài CSCA là đã có điểm cộng rất xinh rồi.',
+    'Mỗi trang lý thuyết, mỗi câu từ vựng và mỗi bài toán bạn chạm vào đều đang xây thêm một viên gạch cho mục tiêu CSCA. Cứ đi chậm mà chắc, Moly tin bạn đang làm tốt.',
+    'Có những ngày não hơi đầy, nhưng một phiên học ngắn vẫn có thể giữ nhịp rất tốt. Bạn chỉ cần bắt đầu bằng phần dễ nhất, rồi để sự tập trung kéo mình đi tiếp.',
+    'CSCA là hành trình nhiều mảnh ghép: ngôn ngữ, Toán, tư duy và thói quen. Hôm nay mình nhặt một mảnh nhỏ thôi, nhưng nhặt đều thì bức tranh sẽ rõ dần.',
+  ];
+  const reminders = [
+    'Nhắc nhẹ hôm nay: chọn 1 mục tiêu nhỏ, học 20 phút thật gọn rồi đánh dấu hoàn thành nhé.',
+    'Nhắc nhẹ hôm nay: ôn lại 5 từ hoặc 1 dạng bài vừa sai, đừng để lỗi cũ trốn trong vở nha.',
+    'Nhắc nhẹ hôm nay: làm một câu dễ trước để khởi động, sau đó mới xử lý phần khó hơn.',
+    'Nhắc nhẹ hôm nay: uống nước, mở bài học, và cho bản thân một lượt tập trung không bị chen ngang.',
+  ];
+  const blessings = [
+    'Chúc bạn gặp đúng dạng bài mình đã ôn và giữ được cái đầu thật sáng.',
+    'Chúc bạn học đâu nhớ đó, làm bài bình tĩnh và may mắn ghé vai.',
+    'Chúc hôm nay của bạn nhẹ nhàng, có tiến bộ nhỏ và nhiều tự tin hơn hôm qua.',
+    'Chúc bạn gom đủ năng lượng, đủ kiên nhẫn và đủ may mắn cho buổi học này.',
+  ];
+  const seed = String(giftDate || new Date().toISOString().slice(0, 10))
+    .split('')
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+  return {
+    title: titles[seed % titles.length],
+    greeting: 'Gửi bạn học viên chăm chỉ,',
+    encouragement: encouragements[seed % encouragements.length],
+    study_reminder: reminders[(seed + 1) % reminders.length],
+    blessing: blessings[(seed + 2) % blessings.length],
+    mood: ['sparkly', 'soft', 'focus', 'lucky'][seed % 4],
+    source_model: 'fallback',
+    raw_payload: { fallback: true, giftDate },
+  };
+}
+
+function normalizeDailyGiftLetter(value, giftDate) {
+  const fallback = getDailyGiftFallback(giftDate);
+  const safe = value && typeof value === 'object' ? value : {};
+
+  return {
+    title: asString(safe.title, fallback.title).slice(0, 140),
+    greeting: asString(safe.greeting, fallback.greeting).slice(0, 180),
+    encouragement: asString(safe.encouragement, fallback.encouragement).slice(0, 700),
+    study_reminder: asString(safe.study_reminder || safe.studyReminder, fallback.study_reminder).slice(0, 280),
+    blessing: asString(safe.blessing, fallback.blessing).slice(0, 240),
+    mood: asString(safe.mood, fallback.mood).slice(0, 60),
+  };
+}
+
+function buildDailyGiftLetterPrompt(giftDate, recentLetters = []) {
+  const recentContext = recentLetters.length
+    ? recentLetters.map((item, index) => {
+        return `${index + 1}. ${item.title || ''} | ${item.encouragement || ''} | ${item.study_reminder || ''}`;
+      }).join('\n')
+    : '(chua co thu gan day)';
+
+  return `Ban la Moly, pet hoc tap cua CSCA MOLI.STUDIO.
+Hay viet mot Daily Gift Letter bang tieng Viet co dau cho hoc vien on thi CSCA.
+
+Yeu cau:
+- Giong van cute, am ap, thong minh, pastel infographic hoc tap.
+- Noi ve hanh trinh CSCA, ngon ngu/tieng Trung, Toan, va thoi quen hoc deu.
+- Khong sao chep y/cau tu cac thu gan day.
+- Khong nhac minh la AI/model/API.
+- Khong dung markdown.
+- Moi truong frontend se tu chen ten hoc vien, vi vay greeting de dang goi chung.
+- Do dai vua phai, khong lan man.
+
+Ngay sinh noi dung: ${giftDate}
+Thu gan day can tranh trung lap:
+${recentContext}
+
+Tra ve JSON hop le duy nhat, dung schema:
+{
+  "title": "tieu de cute toi da 12 tu",
+  "greeting": "loi chao chung, chua can ten rieng",
+  "encouragement": "doan dong vien 3-5 cau ve CSCA/ngon ngu/Toan",
+  "study_reminder": "mot cau nhac hoc nhe nhang hom nay",
+  "blessing": "mot cau chuc may man",
+  "mood": "sparkly|soft|focus|lucky"
+}`;
+}
+
+async function generateDailyGiftLetter(giftDate, context = {}) {
+  const model = BEE.petChatModel || BEE.model;
+  const prompt = buildDailyGiftLetterPrompt(giftDate, context.recentLetters || []);
+
+  try {
+    const raw = await callBeeknoee(prompt, {
+      model,
+      temperature: 0.72,
+      maxTokens: 650,
+      timeout: Math.min(BEE.timeout || 90000, 45000),
+    });
+    const parsed = parseAIMaybeJSON(raw);
+    const letter = normalizeDailyGiftLetter(parsed, giftDate);
+    return {
+      ...letter,
+      source_model: model,
+      raw_payload: parsed || { raw: String(raw || '').slice(0, 1200) },
+    };
+  } catch (err) {
+    const fallback = getDailyGiftFallback(giftDate);
+    return {
+      ...fallback,
+      raw_payload: {
+        ...fallback.raw_payload,
+        error: err.message || 'DAILY_GIFT_GENERATION_FAILED',
+      },
+    };
+  }
+}
+
 async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
 
@@ -1440,6 +1559,8 @@ module.exports = {
   askAI,
   askAIStream,
   askMoliPet,
+  generateDailyGiftLetter,
+  getDailyGiftFallback,
   analyzeProgress,
   recommendNextExam,
   generateFullAnalysis,

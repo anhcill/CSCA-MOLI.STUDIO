@@ -28,6 +28,8 @@ router.post('/practice',        aiController.getPracticeRecommendations); // POS
 router.post('/ask',             aiController.askAI);
 router.post('/ask-stream',      aiController.askAIStream);
 router.post('/moli-pet',        aiController.askMoliPet);
+router.get('/daily-gift-letter', aiController.getDailyGiftLetter);
+router.post('/daily-gift-letter/open', aiController.markDailyGiftLetterOpened);
 
 // 🧠 FEATURE 6: Phân tích tiến bộ
 router.get('/progress',         aiController.analyzeProgress);           // GET /api/ai/progress
