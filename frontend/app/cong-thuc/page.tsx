@@ -143,16 +143,16 @@ function getGradeLabel(grade: GradeFilter) {
 
 function FormulaValue({ line }: { line: FormulaLine }) {
   return (
-    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{line.label}</div>
+    <div className="min-w-0 rounded-lg border border-sky-100 bg-sky-50/80 p-4 shadow-sm">
+      <div className="mb-2 text-sm font-black uppercase tracking-wide text-sky-700">{line.label}</div>
       <RichMathText
         value={line.value}
-        className="min-w-0 overflow-x-auto text-[15px] font-semibold leading-7 text-slate-950 [&_.katex-display]:overflow-x-auto"
+        className="min-w-0 overflow-x-auto text-base font-semibold leading-8 text-slate-950 [&_.katex-display]:overflow-x-auto [&_.katex]:text-[1.12em]"
       />
       {line.note && (
         <RichMathText
           value={line.note}
-          className="mt-2 border-t border-slate-100 pt-2 text-sm leading-6 text-slate-500"
+          className="mt-3 border-t border-sky-100 pt-3 text-[15px] leading-7 text-slate-600"
         />
       )}
     </div>
@@ -355,22 +355,22 @@ function MaterialCard({
       onClick={() => onView(material)}
       className={`w-full rounded-lg border p-4 text-left transition-all ${
         active
-          ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-          : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm'
+          ? 'border-sky-300 bg-sky-50 shadow-sm'
+          : 'border-sky-100 bg-sky-50/60 hover:border-sky-300 hover:bg-white hover:shadow-sm'
       }`}
     >
       <div className="flex items-start gap-3">
         <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-          active ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'
+          active ? 'bg-sky-600 text-white' : 'bg-white text-sky-700'
         }`}>
           <FiFileText size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-black leading-snug text-slate-950">{material.title}</h3>
-          {material.description && <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-slate-500">{material.description}</p>}
+          <h3 className="text-base font-black leading-snug text-slate-950">{material.title}</h3>
+          {material.description && <p className="mt-1 line-clamp-2 text-sm font-medium leading-6 text-slate-600">{material.description}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
-            {material.topic && <span className="rounded-lg bg-white px-2 py-0.5 text-emerald-700">{material.topic}</span>}
-            {hasWebContent(material) && <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-emerald-700">OCR</span>}
+            {material.topic && <span className="rounded-lg bg-white px-2 py-0.5 text-sky-700">{material.topic}</span>}
+            {hasWebContent(material) && <span className="rounded-lg bg-sky-100 px-2 py-0.5 text-sky-700">OCR</span>}
             <span>{new Date(material.created_at).toLocaleDateString('vi-VN')}</span>
           </div>
         </div>
