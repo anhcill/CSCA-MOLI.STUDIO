@@ -15,6 +15,7 @@ export interface ReadingSubQuestion {
   points: number;
   explanation: string;
   explanationCn: string;
+  explanationImageUrl: string;
   answers: { text: string; textCn: string; imageUrl: string }[];
   correctAnswer: string;
   difficulty: string;
@@ -51,6 +52,7 @@ function makeSubQuestion(startNum: number, index: number): ReadingSubQuestion {
     points: 1,
     explanation: '',
     explanationCn: '',
+    explanationImageUrl: '',
     answers: [
       { text: '', textCn: '', imageUrl: '' },
       { text: '', textCn: '', imageUrl: '' },
@@ -76,7 +78,10 @@ export default function ReadingPassageGroup({
       ? {
           ...initialData,
           subQuestions: initialData.subQuestions?.length
-            ? initialData.subQuestions
+            ? initialData.subQuestions.map(sq => ({
+                ...sq,
+                explanationImageUrl: sq.explanationImageUrl || '',
+              }))
             : [makeSubQuestion(startNumber, 0)],
         }
       : {
@@ -358,6 +363,20 @@ export default function ReadingPassageGroup({
                   cnPlaceholder="解释正确答案..."
                   defaultTab="cn"
                 />
+                <div className="mt-4 rounded-lg border border-blue-100 bg-white/80 p-3">
+                  <ImageUpload
+                    label="Ảnh giải thích (tùy chọn)"
+                    currentImage={sq.explanationImageUrl}
+                    onImageUploaded={url => setSubQuestion(sq._localId, 'explanationImageUrl', url)}
+                    compact
+                  />
+                  <input
+                    value={sq.explanationImageUrl}
+                    onChange={e => setSubQuestion(sq._localId, 'explanationImageUrl', e.target.value)}
+                    className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    placeholder="Hoặc dán URL ảnh giải thích..."
+                  />
+                </div>
               </div>
             </details>
 

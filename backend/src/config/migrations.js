@@ -187,7 +187,8 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS deleted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS delete_reason TEXT,
-      ADD COLUMN IF NOT EXISTS deleted_question_number INTEGER
+      ADD COLUMN IF NOT EXISTS deleted_question_number INTEGER,
+      ADD COLUMN IF NOT EXISTS explanation_image_url TEXT
     `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_questions_deleted_at ON questions(deleted_at)`,

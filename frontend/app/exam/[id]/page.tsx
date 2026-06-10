@@ -1010,13 +1010,23 @@ export default function ExamPage() {
                      Đáp án đúng: {currentFeedback.correct_answer_key}. {currentFeedback.correct_answer_text}
                    </p>
                   )}
-                  {(currentFeedback.explanation || currentFeedback.explanation_cn) && (
+                  {(currentFeedback.explanation || currentFeedback.explanation_cn || currentFeedback.explanation_image_url) && (
                     <div className="mt-3 rounded-xl border border-white/70 bg-white/90 p-4 shadow-sm">
                       <p className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-800">Giải thích:</p>
-                      <RichMathText
-                        value={currentFeedback.explanation || currentFeedback.explanation_cn || ''}
-                        className="text-base leading-7 text-slate-800"
-                      />
+                      {(currentFeedback.explanation || currentFeedback.explanation_cn) && (
+                        <RichMathText
+                          value={currentFeedback.explanation || currentFeedback.explanation_cn || ''}
+                          readableBreaks
+                          className="text-base leading-7 text-slate-800"
+                        />
+                      )}
+                      {currentFeedback.explanation_image_url && (
+                        <img
+                          src={currentFeedback.explanation_image_url}
+                          alt="Ảnh giải thích"
+                          className="mt-3 max-h-[520px] w-full rounded-lg border border-slate-200 bg-white object-contain"
+                        />
+                      )}
                     </div>
                   )}
                 </div>

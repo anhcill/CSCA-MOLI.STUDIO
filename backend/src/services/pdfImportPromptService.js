@@ -83,6 +83,7 @@ Task:
 - Repair PDF math extraction artifacts before returning text: remove stray "$$", convert (()/(...)) to (...), ([)/(a,b)) to [a,b), convert C R / C ℝ to C_{\\mathbb{R}}, and keep set operations as \\cup, \\cap, \\setminus.
 - For math sequences, convert a^2, a^5, a n to sequence subscripts a_2, a_5, a_n when the context is a sequence term, not exponentiation.
 - Always map correctAnswer to A-H when the explanation conclusion clearly matches an option, including short one-character options like 0, 2, 3, √2. Examples: q=2 -> the option text 2; a·b=0 -> the option text 0; 最小值为3 -> the option text 3; 共3个 -> the option text 3.
+- If OCR/source text explicitly marks an option as red/correct (for example "[red] D", "D red", "红色 D", "答案: D"), use that option as correctAnswer. If color is not preserved in text and no answer/explanation marker exists, leave correctAnswer empty.
 - Read the PDF/Word/OCR text below.
 - Extract mixed exam content into three supported item types:
   1. single_choice: normal A/B/C/D multiple choice question.

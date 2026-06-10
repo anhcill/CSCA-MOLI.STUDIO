@@ -10,6 +10,39 @@ import { isLikelyLooseMathLine, normalizeLatexMath, normalizeRichMathText } from
 interface RichMathTextProps {
   value: string;
   className?: string;
+  readableBreaks?: boolean;
+}
+
+function tidyReadableBreaks(value: string) {
+  return value
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function applyReadableBreakRules(value: string) {
+  return value
+    .replace(/\s*((?:前\s*n\s*[项項]和公式|通[项項]公式|代入(?:数据|數據)?解不等式|验证|驗證|检验|檢驗|结论|結論|所以)\s*[:：])/g, '\n$1')
+    .replace(/\s*((?:Công thức|Thay|Kiểm tra|Kết luận|Chọn|Vậy)\s*[:：])/gi, '\n$1')
+    .replace(/\s*((?:考[虑慮]?|考虑|考慮)\s*[A-H]\s*[：:])/g, '\n$1')
+    .replace(/\s*((?:垂直条件|垂直條件|计算|計算|方程组|方程組|由两西不等式|由两式不等式|由兩式不等式)\s*[:：])/g, '\n$1')
+    .replace(/\s*((?:步骤|步驟|Bước)\s*\d+\s*(?:[（(][^）)]{1,24}[）)])?\s*[:：])/gi, '\n$1')
+    .replace(/\s*(⇔|=>|⇒|\\Rightarrow)\s*/g, '\n$1 ')
+    .replace(/([。.;；])\s*(?=(?:过点|過點|设直线|設直線|考虑|考慮|由|由于|因|当|比較|比较|代入|验证|驗證|因此|所以|故|选|答案|解析|得|Suy ra|Vậy|n\s*=))/g, '$1\n')
+    .replace(/([，,])\s*(?=(?:n|x|m|k)\s*=\s*-?\d+\s*(?:时|時))/g, '$1\n')
+    .replace(/[，,]\s*(?=(?:代入|值域|定义域|反函数|由于|因此|所以|故|选|答案|得))/g, '，\n')
+    .replace(/([:：])\s*(?=(?:[A-Za-z0-9\\(√]|\\log|\\frac|\\sqrt))/g, '$1\n')
+    .replace(/\s*(选\s*[A-H][.。]?)/gi, '\n$1')
+    .replace(/\n\s*\n(?=(?:⇔|=>|⇒|\\Rightarrow))/g, '\n');
+}
+
+function restoreReadableBreaks(value: string) {
+  const normalized = value
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n?/g, '\n');
+
+  return tidyReadableBreaks(applyReadableBreakRules(normalized));
 }
 
 function normalizeMathDelimiters(value: string) {
@@ -59,8 +92,9 @@ function autoWrapLooseMathLines(text: string) {
   return out.join('\n');
 }
 
-function RichMathText({ value, className = '' }: RichMathTextProps) {
-  const markdown = useMemo(() => (value ? normalizeMathDelimiters(value) : ''), [value]);
+function RichMathText({ value, className = '', readableBreaks = false }: RichMathTextProps) {
+  const source = useMemo(() => (readableBreaks ? restoreReadableBreaks(value) : value), [readableBreaks, value]);
+  const markdown = useMemo(() => (source ? normalizeMathDelimiters(source) : ''), [source]);
 
   if (!value) return null;
 
@@ -70,7 +104,7 @@ function RichMathText({ value, className = '' }: RichMathTextProps) {
         remarkPlugins={[remarkMath]}
         rehypePlugins={[rehypeSanitize, rehypeKatex]}
         components={{
-          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          p: ({ children }) => <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="mb-2 list-disc pl-5 space-y-1">{children}</ul>,
           ol: ({ children }) => <ol className="mb-2 list-decimal pl-5 space-y-1">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,

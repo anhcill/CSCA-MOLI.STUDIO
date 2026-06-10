@@ -48,7 +48,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
-  const moliPetPosition = isSubjectPage || isSubjectScopedPage ? 'right' : 'left';
+  const moliPetPosition = 'right';
 
   return (
     <>

@@ -47,6 +47,7 @@ interface Discount {
   original_amount: number;
   final_amount: number;
   package_id: number;
+  subject_code?: string | null;
 }
 
 function deriveColor(pkg: VipPackage) {
@@ -93,10 +94,39 @@ function getPackageTier(pkg: VipPackage): TierLevel {
   return 'vip';
 }
 
+const SUBJECT_OPTIONS: Record<string, { label: string; short: string }> = {
+  MATH: { label: 'Toán', short: 'Toán' },
+  PHYSICS: { label: 'Vật lý', short: 'Lý' },
+  CHEMISTRY: { label: 'Hóa học', short: 'Hóa' },
+  CHINESE_SOC: { label: 'Tiếng Trung Xã hội', short: 'TTXH' },
+  CHINESE_SCI: { label: 'Tiếng Trung Tự nhiên', short: 'TTTN' },
+};
+
+function normalizeSubjectCode(value?: string | null) {
+  return String(value || '').trim().toUpperCase();
+}
+
 function getPackageSubjects(pkg: VipPackage) {
   return Array.isArray(pkg.allowed_subjects)
-    ? pkg.allowed_subjects.map(subject => String(subject || '').trim().toUpperCase()).filter(Boolean)
+    ? pkg.allowed_subjects.map(normalizeSubjectCode).filter(Boolean)
     : [];
+}
+
+function packageRequiresSubjectChoice(pkg: VipPackage) {
+  return !!pkg.requires_subject_choice && getPackageSubjects(pkg).filter(subject => subject !== '*').length > 0;
+}
+
+function getSubjectPrice(pkg: VipPackage, subjectCode?: string | null) {
+  const code = normalizeSubjectCode(subjectCode);
+  const subjectPrice = code ? Number(pkg.subject_prices?.[code]) : 0;
+  return Number.isFinite(subjectPrice) && subjectPrice > 0 ? subjectPrice : Number(pkg.price || 0);
+}
+
+function getSubjectOriginalPrice(pkg: VipPackage, subjectCode?: string | null) {
+  const code = normalizeSubjectCode(subjectCode);
+  const subjectOriginal = code ? Number(pkg.subject_original_prices?.[code]) : 0;
+  if (Number.isFinite(subjectOriginal) && subjectOriginal > 0) return subjectOriginal;
+  return Number(pkg.original_price) || 0;
 }
 
 function getPositivePriceValues(map?: Record<string, number> | null) {
@@ -119,6 +149,13 @@ function getPackageStartingOriginalPrice(pkg: VipPackage) {
     return Math.min(...subjectOriginalPrices);
   }
   return Number(pkg.original_price) || 0;
+}
+
+function getDefaultSubjectCode(pkg: VipPackage, user: any) {
+  const subjects = getPackageSubjects(pkg).filter(subject => subject !== '*');
+  if (subjects.length === 0) return '';
+  const byPrice = [...subjects].sort((a, b) => getSubjectPrice(pkg, a) - getSubjectPrice(pkg, b));
+  return byPrice.find(subject => !user || !canAccessSubject(user, subject)) || byPrice[0] || '';
 }
 
 function isPackageCovered(pkg: VipPackage, user: any) {
@@ -170,7 +207,7 @@ export default function VipPricingPage() {
       .catch(() => setComparisonFeatures([]));
   }, []);
 
-  const handleCheckout = (pkg: VipPackage) => {
+  const handleCheckout = (pkg: VipPackage, selectedSubjectCode?: string | null) => {
     if (!isAuthenticated) {
       router.push('/login?redirect=/vip');
       return;
@@ -178,14 +215,21 @@ export default function VipPricingPage() {
     if (user && isPackageCovered(pkg, user)) {
       return;
     }
+    const normalizedSubject = normalizeSubjectCode(selectedSubjectCode);
     const params = new URLSearchParams({ package_id: String(pkg.id) });
-    if (appliedDiscount && appliedDiscount.package_id === pkg.id) {
+    if (packageRequiresSubjectChoice(pkg) && normalizedSubject) {
+      params.set('selected_subject_code', normalizedSubject);
+    }
+    const discountMatchesSelection = appliedDiscount
+      && appliedDiscount.package_id === pkg.id
+      && (!packageRequiresSubjectChoice(pkg) || !appliedDiscount.subject_code || appliedDiscount.subject_code === normalizedSubject);
+    if (discountMatchesSelection) {
       params.set('coupon', appliedDiscount.code);
     }
     router.push(`/checkout?${params.toString()}`);
   };
 
-  const handleApplyCoupon = async (pkg?: VipPackage, codeOverride?: string) => {
+  const handleApplyCoupon = async (pkg?: VipPackage, codeOverride?: string, selectedSubjectCode?: string | null) => {
     const targetPkg = pkg || selectedPkg;
     const code = String(codeOverride ?? couponInput).trim().toUpperCase();
     if (!code) {
@@ -199,7 +243,11 @@ export default function VipPricingPage() {
     setCouponLoading(true);
     setCouponError('');
     try {
-      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(code)}&package_id=${targetPkg.id}`);
+      const normalizedSubject = normalizeSubjectCode(selectedSubjectCode);
+      const subjectQuery = packageRequiresSubjectChoice(targetPkg) && normalizedSubject
+        ? `&selected_subject_code=${encodeURIComponent(normalizedSubject)}`
+        : '';
+      const res = await axios.get(`/coupons/validate?code=${encodeURIComponent(code)}&package_id=${targetPkg.id}${subjectQuery}`);
       if (res.data.success) {
         const data = res.data.data;
         const d: Discount = {
@@ -208,6 +256,7 @@ export default function VipPricingPage() {
           original_amount: data.original_amount,
           final_amount: data.final_amount,
           package_id: targetPkg.id,
+          subject_code: normalizedSubject || null,
         };
         setAppliedDiscount(d);
         setCouponResult(data);
@@ -464,9 +513,9 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
   pkg: VipPackage;
   isVip: boolean;
   user: any;
-  onCheckout: (p: VipPackage) => void;
+  onCheckout: (p: VipPackage, selectedSubjectCode?: string | null) => void;
   discount?: Discount | null;
-  onApplyCoupon?: (p: VipPackage, codeOverride?: string) => Promise<boolean>;
+  onApplyCoupon?: (p: VipPackage, codeOverride?: string, selectedSubjectCode?: string | null) => Promise<boolean>;
   onRemoveCoupon?: () => void;
   selectedPkg?: VipPackage | null;
   onSelectPkg?: (p: VipPackage | null) => void;
@@ -478,6 +527,21 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
   const [localCoupon, setLocalCoupon] = useState('');
   const [localCouponLoading, setLocalCouponLoading] = useState(false);
   const [localCouponError, setLocalCouponError] = useState('');
+  const subjectChoices = packageRequiresSubjectChoice(pkg)
+    ? getPackageSubjects(pkg).filter(subject => subject !== '*')
+    : [];
+  const subjectChoiceKey = subjectChoices.join('|');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
+
+  useEffect(() => {
+    if (subjectChoices.length === 0) {
+      if (selectedSubjectCode) setSelectedSubjectCode('');
+      return;
+    }
+    if (!subjectChoices.includes(selectedSubjectCode)) {
+      setSelectedSubjectCode(getDefaultSubjectCode(pkg, user));
+    }
+  }, [pkg, subjectChoiceKey, selectedSubjectCode, user]);
 
   // Pad all cards to the same number of features (9 = max across all tiers)
   const MAX_FEATURES = 9;
@@ -491,7 +555,7 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
     setLocalCouponLoading(true);
     setLocalCouponError('');
     try {
-      const ok = await onApplyCoupon(pkg, localCoupon);
+      const ok = await onApplyCoupon(pkg, localCoupon, activeSubjectCode || null);
       if (ok) {
         setLocalCoupon('');
       } else {
@@ -507,14 +571,21 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
 
   const isSelected = selectedPkg?.id === pkg.id;
   const isUnselected = selectedPkg && !isSelected;
-  const salePrice = getPackageStartingPrice(pkg);
-  const originalPrice = getPackageStartingOriginalPrice(pkg);
+  const activeSubjectCode = subjectChoices.length > 0
+    ? selectedSubjectCode || getDefaultSubjectCode(pkg, user)
+    : '';
+  const activeDiscount = discount
+    && (!subjectChoices.length || !discount.subject_code || discount.subject_code === activeSubjectCode)
+    ? discount
+    : null;
+  const salePrice = activeSubjectCode ? getSubjectPrice(pkg, activeSubjectCode) : getPackageStartingPrice(pkg);
+  const originalPrice = activeSubjectCode ? getSubjectOriginalPrice(pkg, activeSubjectCode) : getPackageStartingOriginalPrice(pkg);
   const hasSalePrice = originalPrice > salePrice;
   const salePercent = hasSalePrice ? Math.round((1 - salePrice / originalPrice) * 100) : 0;
-  const displayPrice = discount ? discount.final_amount : salePrice;
-  const crossedPrice = discount ? salePrice : hasSalePrice ? originalPrice : null;
-  const badgeText = discount
-    ? `-${discount.discount_amount.toLocaleString('vi-VN')}đ`
+  const displayPrice = activeDiscount ? activeDiscount.final_amount : salePrice;
+  const crossedPrice = activeDiscount ? salePrice : hasSalePrice ? originalPrice : null;
+  const badgeText = activeDiscount
+    ? `-${activeDiscount.discount_amount.toLocaleString('vi-VN')}đ`
     : hasSalePrice
       ? `-${salePercent}%`
       : '';
@@ -598,12 +669,56 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
         </ul>
 
         {/* Per-card coupon input */}
+        {subjectChoices.length > 0 && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-black uppercase tracking-wide text-slate-600">Chọn môn Mini</span>
+              {activeSubjectCode && (
+                <span className="text-xs font-black text-slate-800">
+                  {getSubjectPrice(pkg, activeSubjectCode).toLocaleString('vi-VN')}đ
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {subjectChoices.map(subject => {
+                const selected = activeSubjectCode === subject;
+                const covered = !!user && canAccessSubject(user, subject);
+                return (
+                  <button
+                    key={subject}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectPkg && onSelectPkg(pkg);
+                      if (!covered) setSelectedSubjectCode(subject);
+                    }}
+                    disabled={covered}
+                    className={`min-h-10 rounded-lg border px-2 py-1.5 text-center text-xs font-black transition ${
+                      selected
+                        ? 'border-slate-700 bg-slate-700 text-white shadow-sm'
+                        : covered
+                          ? 'cursor-not-allowed border-slate-200 bg-white text-slate-300'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                    }`}
+                  >
+                    <span className="block">{SUBJECT_OPTIONS[subject]?.short || subject}</span>
+                    <span className={`block text-[10px] font-bold ${selected ? 'text-white/75' : 'text-slate-400'}`}>
+                      {covered ? 'Đã có' : getSubjectPrice(pkg, subject).toLocaleString('vi-VN')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Per-card coupon input */}
         <div className="mb-4 pt-5 mt-auto">
-          {discount ? (
+          {activeDiscount ? (
             <div className="flex items-center justify-between gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
               <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
                 <FiCheck size={12} />
-                Mã {discount.code} — Giảm {discount.discount_amount.toLocaleString('vi-VN')}đ
+                Mã {activeDiscount.code} — Giảm {activeDiscount.discount_amount.toLocaleString('vi-VN')}đ
               </div>
               <button onClick={(e) => { e.stopPropagation(); onRemoveCoupon && onRemoveCoupon(); }}
                 className="text-red-500 hover:text-red-700 font-semibold">✕</button>
@@ -632,7 +747,7 @@ function PlanCard({ pkg, isVip, user, onCheckout, discount, onApplyCoupon, onRem
         </div>
 
         <button
-          onClick={(e) => { e.stopPropagation(); if (!packageCovered) onCheckout(pkg); }}
+          onClick={(e) => { e.stopPropagation(); if (!packageCovered) onCheckout(pkg, activeSubjectCode || null); }}
           disabled={packageCovered}
           className={`w-full mt-auto py-3.5 rounded-xl font-black text-sm transition-all shadow-md text-white
             ${packageCovered

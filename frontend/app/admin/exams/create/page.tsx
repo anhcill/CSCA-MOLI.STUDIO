@@ -676,6 +676,7 @@ export default function CreateExamPage() {
                         points: question.points || 1,
                         explanation: question.explanation || '',
                         explanationCn: question.explanationCn || '',
+                        explanationImageUrl: question.explanationImageUrl || '',
                         answers: (question.answers || []).map(answer => ({
                             text: answer.text || '',
                             textCn: answer.textCn || '',
@@ -706,6 +707,7 @@ export default function CreateExamPage() {
                             points: subQuestion.points || 1,
                             explanation: subQuestion.explanation || '',
                             explanationCn: subQuestion.explanationCn || '',
+                            explanationImageUrl: subQuestion.explanationImageUrl || '',
                             answers: (subQuestion.answers || []).map(answer => ({
                                 text: answer.text || '',
                                 textCn: answer.textCn || '',
@@ -736,6 +738,7 @@ export default function CreateExamPage() {
                             points: subItem.points || 1,
                             explanation: subItem.explanation || '',
                             explanationCn: subItem.explanationCn || '',
+                            explanationImageUrl: subItem.explanationImageUrl || '',
                             correctAnswerKey: subItem.correctAnswerKey || 'A',
                             difficulty: subItem.difficulty || 'medium',
                             subQuestionNumber: subItem.subQuestionNumber || subIndex + 1,

@@ -8,6 +8,7 @@ const {
   normalizePdfImportPreset,
   shouldUseRuleBasedPdfParser,
 } = require("./pdfImportPromptService");
+const { repairOcrMathArtifacts } = require("./ocrMathRepairService");
 
 const MAX_POINTS_PER_QUESTION = 100;
 const QUESTION_TYPES = {
@@ -260,7 +261,7 @@ function repairPdfImportTextArtifacts(value) {
   const text = stringValue(value);
   if (!text) return "";
 
-  return text
+  return repairOcrMathArtifacts(text)
     .replace(/\$\$+/g, "")
     .replace(/([A-Za-z\u00C0-\u1EF9])\s+n\s+([\u00C0-\u1EF9])/g, "$1 n$2")
     .replace(/([A-Za-z\u00C0-\u1EF9])_\{n\}([A-Za-z\u00C0-\u1EF9])/g, "$1 n$2")
@@ -277,6 +278,37 @@ function repairPdfImportTextArtifacts(value) {
     .replace(/\s+([,.;:ï¼Œă€‚ï¼›ï¼ï¼‰\)Â°])/g, "$1")
     .replace(/([ï¼ˆ\(])\s+/g, "$1")
     .trim();
+}
+
+function tidyImportedExplanationBreaks(value) {
+  return value
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function applyImportedExplanationBreakRules(value) {
+  return value
+    .replace(/\s*((?:前\s*n\s*[项項]和公式|通[项項]公式|代入(?:数据|數據)?解不等式|验证|驗證|检验|檢驗|结论|結論)\s*[:：])/g, "\n$1")
+    .replace(/\s*((?:Công thức|Thay|Kiểm tra|Kết luận|Chọn|Vậy)\s*[:：])/gi, "\n$1")
+    .replace(/\s*((?:步骤|步驟|Bước)\s*\d+\s*[:：])/gi, "\n$1")
+    .replace(/\s*(⇔|=>|⇒|\\Rightarrow)\s*/g, "\n$1 ")
+    .replace(/([。.;；])\s*(?=(?:由|当|代入|验证|驗證|因此|所以|故|选|答案|解析|得|Suy ra|Vậy|n\s*=))/g, "$1\n")
+    .replace(/([，,])\s*(?=(?:n|x|m|k)\s*=\s*-?\d+\s*(?:时|時))/g, "$1\n")
+    .replace(/[，,]\s*(?=(?:值域|定义域|反函数|因此|所以|故|选|答案|得))/g, "，\n")
+    .replace(/([:：])\s*(?=(?:[A-Za-z0-9\\(√]|\\log|\\frac|\\sqrt))/g, "$1\n")
+    .replace(/\s*(选\s*[A-H][.。]?)/gi, "\n$1")
+    .replace(/\n\s*\n(?=(?:⇔|=>|⇒|\\Rightarrow))/g, "\n");
+}
+
+function restoreImportedExplanationBreaks(value) {
+  const text = repairPdfImportTextArtifacts(value)
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n?/g, "\n");
+  if (!text) return "";
+
+  return tidyImportedExplanationBreaks(applyImportedExplanationBreakRules(text));
 }
 
 function withRuleBasedFallbackWarning(preview, reason) {
@@ -408,9 +440,10 @@ function normalizeImportedQuestion(rawQuestion, index) {
     questionText: normalizedQuestion.en,
     questionTextCn: normalizedQuestion.cn,
     imageUrl: stringValue(rawQuestion?.imageUrl),
+    explanationImageUrl: stringValue(rawQuestion?.explanationImageUrl || rawQuestion?.explanation_image_url),
     points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
-    explanation: repairPdfImportTextArtifacts(rawQuestion?.explanation || viQuestion.explanation),
-    explanationCn: repairPdfImportTextArtifacts(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
+    explanation: restoreImportedExplanationBreaks(rawQuestion?.explanation || viQuestion.explanation),
+    explanationCn: restoreImportedExplanationBreaks(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
     answers: answers.map((answer) => ({
       text: answer.text || answer.textCn,
       textCn: answer.textCn || answer.text,
@@ -491,6 +524,7 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
         points: clamp(parsePositiveNumber(item?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
         explanation: stringValue(item?.explanation),
         explanationCn: stringValue(item?.explanationCn || item?.explanation_cn),
+        explanationImageUrl: stringValue(item?.explanationImageUrl || item?.explanation_image_url),
         correctAnswerKey,
         difficulty: ["easy", "medium", "hard"].includes(item?.difficulty) ? item.difficulty : "medium",
         subQuestionNumber: Number.parseInt(item?.subQuestionNumber, 10) || subIndex + 1,
@@ -750,7 +784,6 @@ function inferCorrectAnswerFromExplanation(answers, explanation) {
     const sentenceConclusion = new RegExp(`(?:\\u7B54\\u6848|\\u7ED3\\u679C|\\u89E3\\u5F97|\\u6545|\\u6240\\u4EE5|\\u56E0\\u6B64)[^\\u3002\\uFF1B;,.]{0,24}${escaped}${boundary}`);
     if (sentenceConclusion.test(normalizedExplanation)) return 4;
 
-    if (answerText.length >= 2 && new RegExp(`${escaped}${boundary}`).test(normalizedExplanation)) return 2;
     return 0;
   };
 
@@ -768,7 +801,7 @@ function inferCorrectAnswerFromExplanation(answers, explanation) {
         score: Math.max(0, ...values.map(scoreAnswer)),
       };
     })
-    .filter((answer) => answer.score > 0)
+    .filter((answer) => answer.score >= 4)
     .sort((a, b) => b.score - a.score);
 
   if (!candidates.length) return "";
@@ -1615,8 +1648,8 @@ async function insertImportedSingleChoice(client, { examId, question, questionNu
        exam_id, question_number, question_type,
        question_text, question_text_cn,
        points, explanation, explanation_cn,
-       image_url, question_group_type, difficulty
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       explanation_image_url, image_url, question_group_type, difficulty
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       examId,
@@ -1627,6 +1660,7 @@ async function insertImportedSingleChoice(client, { examId, question, questionNu
       clamp(parsePositiveNumber(question.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
       question.explanation ? sanitizeExplanation(question.explanation) : null,
       question.explanationCn ? sanitizeExplanation(question.explanationCn) : null,
+      question.explanationImageUrl ? sanitize(question.explanationImageUrl) : null,
       question.imageUrl ? sanitize(question.imageUrl) : null,
       QUESTION_TYPES.SINGLE_CHOICE,
       question.difficulty || "medium",
@@ -1775,10 +1809,10 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
       `INSERT INTO questions (
          exam_id, question_number, question_type,
          question_text, question_text_cn,
-         points, explanation, explanation_cn,
+         points, explanation, explanation_cn, explanation_image_url,
          question_group_type, difficulty,
          sub_question_number, passage_group_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         examId,
@@ -1789,6 +1823,7 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
         parsedPoints,
         subItem.explanation ? sanitizeExplanation(subItem.explanation) : null,
         subItem.explanationCn ? sanitizeExplanation(subItem.explanationCn) : null,
+        subItem.explanationImageUrl ? sanitize(subItem.explanationImageUrl) : null,
         QUESTION_TYPES.FILL_BLANK_ITEM,
         subItem.difficulty || "medium",
         subItem.subQuestionNumber || questionNumber,

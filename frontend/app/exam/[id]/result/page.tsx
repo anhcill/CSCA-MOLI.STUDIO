@@ -42,6 +42,7 @@ interface QuestionResult {
   points: number;
   explanation?: string;
   explanation_cn?: string;
+  explanation_image_url?: string;
   options: AnswerOption[];
   difficulty?: string;
   topic_name?: string;
@@ -700,10 +701,19 @@ function ExamResultContent() {
                     )}
 
                     {/* Explanation */}
-                    {(q.explanation || q.explanation_cn) && (
+                    {(q.explanation || q.explanation_cn || q.explanation_image_url) && (
                       <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm sm:ml-8">
                         <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">💡 Giải thích:</p>
-                        <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
+                        {(q.explanation || q.explanation_cn) && (
+                          <RichMathText value={q.explanation || q.explanation_cn || ''} readableBreaks className="text-base leading-7 text-blue-950" />
+                        )}
+                        {q.explanation_image_url && (
+                          <img
+                            src={q.explanation_image_url}
+                            alt="Ảnh giải thích"
+                            className="mt-3 max-h-[520px] w-full rounded-lg border border-blue-200 bg-white object-contain"
+                          />
+                        )}
                       </div>
                     )}
 
@@ -884,10 +894,19 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
                 </p>
                 <AIFormattedText value={explanation.answer} className="text-base leading-7 text-gray-800" />
               </div>
-              {(question.explanation || question.explanation_cn) && (
+              {(question.explanation || question.explanation_cn || question.explanation_image_url) && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                   <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">📖 Giải thích có sẵn</p>
-                  <RichMathText value={question.explanation || question.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
+                  {(question.explanation || question.explanation_cn) && (
+                    <RichMathText value={question.explanation || question.explanation_cn || ''} readableBreaks className="text-base leading-7 text-blue-950" />
+                  )}
+                  {question.explanation_image_url && (
+                    <img
+                      src={question.explanation_image_url}
+                      alt="Ảnh giải thích"
+                      className="mt-3 max-h-[520px] w-full rounded-lg border border-blue-200 bg-white object-contain"
+                    />
+                  )}
                 </div>
               )}
             </div>

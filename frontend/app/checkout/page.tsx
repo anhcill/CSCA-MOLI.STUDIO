@@ -493,10 +493,14 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { isAuthenticated, user, setUser, setTokens, refreshToken: storedRefreshToken } = useAuthStore();
+  const urlPackageId = searchParams?.get('package_id');
+  const urlMethod = searchParams?.get('method');
+  const urlCoupon = searchParams?.get('coupon');
+  const urlSubjectCode = normalizeSubjectCode(searchParams?.get('selected_subject_code'));
 
   const [allPackages, setAllPackages] = useState<DbPackage[]>([]);
   const [selectedPkg, setSelectedPkg] = useState<DbPackage | null>(null);
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(urlSubjectCode);
   const [selectedMethod, setSelectedMethod] = useState<string>('bank_transfer');
   const [loading, setLoading] = useState(false);
   const [pkgLoading, setPkgLoading] = useState(true);
@@ -504,10 +508,6 @@ function CheckoutContent() {
   const [step, setStep] = useState<'select' | 'qr' | 'success'>('select');
   const [qrData, setQrData] = useState<any>(null);
   const [successData, setSuccessData] = useState<any>(null);
-
-  const urlPackageId = searchParams?.get('package_id');
-  const urlMethod = searchParams?.get('method');
-  const urlCoupon = searchParams?.get('coupon');
 
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);

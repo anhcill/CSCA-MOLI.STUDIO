@@ -29,6 +29,7 @@ export interface QuestionData {
     points?: number;
     explanation?: string;
     explanationCn?: string;
+    explanationImageUrl?: string;
     answers?: AnswerData[];       // Cho single_choice, reading_item
     correctAnswer?: string;        // 'A','B','C','D' - cho single_choice
     passageText?: string;         // Đoạn văn đọc hiểu / điền từ
@@ -72,6 +73,7 @@ export interface ImportedFillBlankGroupData {
         points?: number;
         explanation?: string;
         explanationCn?: string;
+        explanationImageUrl?: string;
         correctAnswerKey: string;
         difficulty?: string;
         subQuestionNumber?: number;

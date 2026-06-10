@@ -91,6 +91,7 @@ export interface PracticeFeedback {
   correct_answer_text_cn?: string;
   explanation?: string;
   explanation_cn?: string;
+  explanation_image_url?: string;
 }
 
 export interface TopicStats {

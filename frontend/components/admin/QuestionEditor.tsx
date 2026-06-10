@@ -32,6 +32,7 @@ export interface QuestionFormData {
   points: number;
   explanation: string;
   explanationCn: string;
+  explanationImageUrl: string;
   answers: { text: string; textCn: string; imageUrl: string }[];
   correctAnswer: string;       // cho single_choice, reading_item, true_false
   linkedOptions: LinkedOption[]; // pool A-F cho fill_blank_pool
@@ -79,6 +80,7 @@ function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
     points: initial?.points || 1,
     explanation: initial?.explanation || '',
     explanationCn: initial?.explanationCn || '',
+    explanationImageUrl: initial?.explanationImageUrl || '',
     answers: initial?.answers?.length ? initial.answers : DEFAULT_ANSWERS(),
     correctAnswer: initial?.correctAnswer || 'A',
     linkedOptions: initial?.linkedOptions?.length ? initial.linkedOptions : DEFAULT_LINKED_OPTIONS,
@@ -179,6 +181,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       correctAnswerKey: parsed.correctAnswer || prev.correctAnswerKey,
       explanation: parsed.explanation,
       explanationCn: parsed.explanationCn,
+      explanationImageUrl: prev.explanationImageUrl,
     }));
   };
 
@@ -194,6 +197,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       correctAnswerKey: 'A',
       explanation: '',
       explanationCn: '',
+      explanationImageUrl: '',
     }));
   };
 
@@ -541,6 +545,20 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           cnPlaceholder="解释正确答案..."
           defaultTab="cn"
         />
+        <div className="mt-4 rounded-lg border border-blue-100 bg-white/80 p-3">
+          <ImageUpload
+            label="Ảnh giải thích (tùy chọn)"
+            currentImage={form.explanationImageUrl}
+            onImageUploaded={url => set('explanationImageUrl', url)}
+            compact
+          />
+          <input
+            value={form.explanationImageUrl}
+            onChange={e => set('explanationImageUrl', e.target.value)}
+            className={`${ADMIN_INPUT_CLASS} mt-3`}
+            placeholder="Hoặc dán URL ảnh giải thích..."
+          />
+        </div>
       </div>
     </details>
   );

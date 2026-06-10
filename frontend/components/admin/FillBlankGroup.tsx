@@ -14,6 +14,7 @@ export interface BlankSubItem {
   points: number;
   explanation: string;
   explanationCn: string;
+  explanationImageUrl: string;
   correctAnswerKey: string;
   difficulty: string;
   subQuestionNumber: number;
@@ -49,6 +50,7 @@ function makeSubItem(startNum: number, index: number): BlankSubItem {
     points: 1,
     explanation: '',
     explanationCn: '',
+    explanationImageUrl: '',
     correctAnswerKey: 'A',
     difficulty: 'medium',
     subQuestionNumber: startNum + index,
@@ -87,7 +89,12 @@ function normalizeInitialData(data: FillBlankGroupData | undefined, startNumber:
     ...data,
     clozeMode: data.clozeMode || 'sentences',
     linkedOptions: data.linkedOptions?.length ? data.linkedOptions : getDefaultLinkedOptions(),
-    subItems: data.subItems?.length ? data.subItems : [makeSubItem(startNumber, 0)],
+    subItems: data.subItems?.length
+      ? data.subItems.map(item => ({
+          ...item,
+          explanationImageUrl: item.explanationImageUrl || '',
+        }))
+      : [makeSubItem(startNumber, 0)],
   };
 }
 
@@ -422,6 +429,20 @@ export default function FillBlankGroup({
                           cnPlaceholder="解释正确答案..."
                           defaultTab="cn"
                         />
+                        <div className="mt-4 rounded-lg border border-blue-100 bg-white/80 p-3">
+                          <ImageUpload
+                            label="Ảnh giải thích (tùy chọn)"
+                            currentImage={item.explanationImageUrl}
+                            onImageUploaded={(url) => setSubItem(item._localId, 'explanationImageUrl', url)}
+                            compact
+                          />
+                          <input
+                            value={item.explanationImageUrl}
+                            onChange={(e) => setSubItem(item._localId, 'explanationImageUrl', e.target.value)}
+                            className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            placeholder="Hoặc dán URL ảnh giải thích..."
+                          />
+                        </div>
                       </div>
                     </details>
 

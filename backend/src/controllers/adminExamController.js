@@ -905,6 +905,7 @@ const AdminExamController = {
         points,
         explanation,
         explanationCn,
+        explanationImageUrl,
         answers,           // Mảng [{text, textCn, isCorrect}] — cho single_choice / reading_item
         correctAnswer,     // Key đúng: 'A','B','C','D' — cho single_choice / reading_item
         passageText,       // Đoạn văn đọc hiểu / điền từ
@@ -1019,11 +1020,11 @@ const AdminExamController = {
              exam_id, question_number, question_type,
              question_text, question_text_cn,
              points, explanation, explanation_cn,
-             image_url,
+             explanation_image_url, image_url,
              passage_text, passage_image_url,
              question_group_type, difficulty,
              linked_options, sub_question_number, passage_group_id
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
            RETURNING id`,
           [
             examId,
@@ -1034,6 +1035,7 @@ const AdminExamController = {
             parsedPoints,
             explanation ? sanitizeExplanation(explanation) : null,
             explanationCn ? sanitizeExplanation(explanationCn) : null,
+            explanationImageUrl ? sanitize(explanationImageUrl) : null,
             imageUrl ? sanitize(imageUrl) : null,
             passageText ? sanitize(passageText) : null,
             passageImageUrl ? sanitize(passageImageUrl) : null,
@@ -1126,6 +1128,7 @@ const AdminExamController = {
         points,
         explanation,
         explanationCn,
+        explanationImageUrl,
         answers,
         correctAnswer,
         passageText,
@@ -1190,6 +1193,10 @@ const AdminExamController = {
         if (explanationCn !== undefined) {
           fields.push(`explanation_cn = $${idx++}`);
           vals.push(explanationCn ? sanitizeExplanation(explanationCn) : null);
+        }
+        if (explanationImageUrl !== undefined) {
+          fields.push(`explanation_image_url = $${idx++}`);
+          vals.push(explanationImageUrl ? sanitize(explanationImageUrl) : null);
         }
         if (passageText !== undefined) {
           fields.push(`passage_text = $${idx++}`);
@@ -1376,7 +1383,7 @@ const AdminExamController = {
 
         const {
             questionType, questionText, questionTextCn, imageUrl,
-            points, explanation, explanationCn, answers, correctAnswer,
+            points, explanation, explanationCn, explanationImageUrl, answers, correctAnswer,
             passageText, passageImageUrl, difficulty, linkedOptions,
             correctAnswerKey, subQuestionNumber,
         } = questionData;
@@ -1490,10 +1497,10 @@ const AdminExamController = {
                         exam_id, question_number, question_type,
                         question_text, question_text_cn,
                         points, explanation, explanation_cn,
-                        image_url, passage_text, passage_image_url,
+                        explanation_image_url, image_url, passage_text, passage_image_url,
                         question_group_type, difficulty,
                         linked_options, sub_question_number, passage_group_id
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                     RETURNING id`,
                     [
                         examId, targetPosition, qType,
@@ -1501,6 +1508,7 @@ const AdminExamController = {
                         parsedPoints,
                         explanation ? sanitizeExplanation(explanation) : null,
                         explanationCn ? sanitizeExplanation(explanationCn) : null,
+                        explanationImageUrl ? sanitize(explanationImageUrl) : null,
                         imageUrl ? sanitize(imageUrl) : null,
                         passageText ? sanitize(passageText) : null,
                         passageImageUrl ? sanitize(passageImageUrl) : null,
@@ -1961,6 +1969,7 @@ const AdminExamController = {
            q.points,
            q.explanation,
            q.explanation_cn,
+           q.explanation_image_url,
            q.passage_text,
            q.passage_image_url,
            q.question_group_type,
@@ -2281,10 +2290,10 @@ const AdminExamController = {
             `INSERT INTO questions (
                exam_id, question_number, question_type,
                question_text, question_text_cn,
-               points, explanation, explanation_cn,
+               points, explanation, explanation_cn, explanation_image_url,
                question_group_type, difficulty,
                sub_question_number, passage_group_id
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING id`,
             [
               examId, questionNumber, QUESTION_TYPES.READING_ITEM,
@@ -2292,6 +2301,7 @@ const AdminExamController = {
               parsedPoints,
               q.explanation ? sanitizeExplanation(q.explanation) : null,
               q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
+              q.explanationImageUrl ? sanitize(q.explanationImageUrl) : null,
               QUESTION_TYPES.READING_ITEM,
               q.difficulty || 'medium',
               q.subQuestionNumber || questionNumber,
@@ -2451,10 +2461,10 @@ const AdminExamController = {
               `INSERT INTO questions (
                  exam_id, question_number, question_type,
                  question_text, question_text_cn,
-                 points, explanation, explanation_cn,
+                 points, explanation, explanation_cn, explanation_image_url,
                  question_group_type, difficulty,
                  sub_question_number, passage_group_id
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                RETURNING id`,
               [
                 examId, questionNumber, QUESTION_TYPES.READING_ITEM,
@@ -2462,6 +2472,7 @@ const AdminExamController = {
                 parsedPoints,
                 q.explanation ? sanitizeExplanation(q.explanation) : null,
                 q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
+                q.explanationImageUrl ? sanitize(q.explanationImageUrl) : null,
                 QUESTION_TYPES.READING_ITEM,
                 q.difficulty || 'medium',
                 q.subQuestionNumber || questionNumber,

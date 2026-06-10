@@ -1,15 +1,13 @@
 const axios = require('axios');
 
 /**
- * Email Service — Brevo (Sendinblue) SMTP
- * Sender: cloudlystudio05@gmail.com
- * API Key: xkeysib-...
+ * Email Service - Brevo (Sendinblue) SMTP
  */
 class EmailService {
   constructor() {
     this.apiKey = process.env.BREVO_API_KEY;
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
-    this.senderName = process.env.EMAIL_SENDER_NAME || 'CSCA Platform';
+    this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLI.STUDIO';
     this.baseUrl = 'https://api.brevo.com/v3';
 
     this.client = axios.create({
@@ -22,24 +20,24 @@ class EmailService {
     });
   }
 
-  // ─── Core sender ────────────────────────────────────────────────────────────
   async _send({ to, subject, html, text }) {
     if (!this.apiKey) {
-      console.warn('⚠️ BREVO_API_KEY not configured, email skipped:', subject);
+      console.warn('BREVO_API_KEY not configured, email skipped:', subject);
       return;
     }
+
     try {
       await this.client.post('/smtp/email', {
         sender: { email: this.senderEmail, name: this.senderName },
-        to: Array.isArray(to) ? to.map(e => ({ email: e })) : [{ email: to }],
+        to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
         subject,
         htmlContent: html,
         textContent: text || subject,
       });
-      console.log(`✅ Email sent: "${subject}" → ${Array.isArray(to) ? to.join(', ') : to}`);
+      console.log(`Email sent: "${subject}" -> ${Array.isArray(to) ? to.join(', ') : to}`);
     } catch (err) {
       const msg = err?.response?.data?.message || err.message;
-      console.error(`❌ Email failed: "${subject}" — ${msg}`);
+      console.error(`Email failed: "${subject}" - ${msg}`);
     }
   }
 
@@ -52,31 +50,182 @@ class EmailService {
       .replace(/'/g, '&#39;');
   }
 
+  frontendUrl(path = '') {
+    const base = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    return `${base}${path}`;
+  }
+
+  formatMoney(amount) {
+    return `${new Intl.NumberFormat('vi-VN').format(Number(amount || 0))}đ`;
+  }
+
+  formatDate(value) {
+    if (!value) return 'Chưa xác định';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Chưa xác định';
+    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
+
+  toneGradient(tone) {
+    const tones = {
+      violet: 'linear-gradient(135deg,#7c3aed 0%,#2563eb 100%)',
+      emerald: 'linear-gradient(135deg,#10b981 0%,#059669 100%)',
+      amber: 'linear-gradient(135deg,#f59e0b 0%,#f97316 100%)',
+      rose: 'linear-gradient(135deg,#fb7185 0%,#ef4444 100%)',
+      slate: 'linear-gradient(135deg,#475569 0%,#111827 100%)',
+      cyan: 'linear-gradient(135deg,#06b6d4 0%,#3b82f6 100%)',
+    };
+    return tones[tone] || tones.violet;
+  }
+
+  button(label, href, tone = 'violet') {
+    return `
+      <div style="text-align:center;margin:28px 0 8px">
+        <a href="${this.escapeHtml(href)}" style="display:inline-block;padding:15px 28px;background:${this.toneGradient(tone)};color:#fff;font-weight:900;border-radius:999px;text-decoration:none;font-size:15px;box-shadow:0 12px 24px rgba(37,99,235,.20)">
+          ${this.escapeHtml(label)}
+        </a>
+      </div>`;
+  }
+
+  infoRows(rows) {
+    return `
+      <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:0;margin:0 0 24px;border:1px solid #e5e7eb;border-radius:18px;overflow:hidden;background:#fff">
+        ${rows.map((row, index) => `
+          <tr>
+            <td style="padding:14px 16px;color:#64748b;font-size:14px;border-bottom:${index === rows.length - 1 ? '0' : '1px solid #eef2f7'}">${this.escapeHtml(row.label)}</td>
+            <td style="padding:14px 16px;text-align:right;color:#0f172a;font-size:14px;font-weight:900;border-bottom:${index === rows.length - 1 ? '0' : '1px solid #eef2f7'}">${row.valueHtml || this.escapeHtml(row.value)}</td>
+          </tr>
+        `).join('')}
+      </table>`;
+  }
+
+  checklist(items, tone = 'violet') {
+    const colors = {
+      violet: ['#ede9fe', '#6d28d9'],
+      emerald: ['#dcfce7', '#15803d'],
+      amber: ['#fef3c7', '#b45309'],
+      cyan: ['#cffafe', '#0e7490'],
+      slate: ['#f1f5f9', '#334155'],
+    }[tone] || ['#ede9fe', '#6d28d9'];
+
+    return `
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:18px 18px;margin:0 0 24px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${items.map(item => `
+            <tr>
+              <td valign="top" style="width:30px;padding:0 8px 12px 0">
+                <span style="display:inline-block;width:22px;height:22px;border-radius:999px;background:${colors[0]};color:${colors[1]};line-height:22px;text-align:center;font-weight:900">✓</span>
+              </td>
+              <td valign="top" style="padding:1px 0 12px;color:#334155;font-size:14px;line-height:1.55">${this.escapeHtml(item)}</td>
+            </tr>
+          `).join('')}
+        </table>
+      </div>`;
+  }
+
+  callout(html, tone = 'violet') {
+    const styles = {
+      violet: ['#f5f3ff', '#7c3aed', '#4c1d95'],
+      emerald: ['#ecfdf5', '#10b981', '#065f46'],
+      amber: ['#fffbeb', '#f59e0b', '#92400e'],
+      rose: ['#fff1f2', '#fb7185', '#9f1239'],
+      slate: ['#f8fafc', '#64748b', '#334155'],
+      cyan: ['#ecfeff', '#06b6d4', '#155e75'],
+    }[tone] || ['#f5f3ff', '#7c3aed', '#4c1d95'];
+
+    return `
+      <div style="background:${styles[0]};border:1px solid ${styles[1]}33;border-left:5px solid ${styles[1]};border-radius:16px;padding:16px 18px;margin:0 0 24px;color:${styles[2]};font-size:14px;line-height:1.65">
+        ${html}
+      </div>`;
+  }
+
+  linkBox(url) {
+    return `
+      <p style="margin:18px 0 10px;color:#64748b;font-size:13px">Nếu nút không mở được, copy link này nha:</p>
+      <div style="word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;color:#475569;font-size:12px;line-height:1.5">
+        ${this.escapeHtml(url)}
+      </div>`;
+  }
+
+  heroCard({ emoji, title, subtitle, tone = 'violet' }) {
+    return `
+      <div style="background:${this.toneGradient(tone)};border-radius:24px;padding:26px 22px;text-align:center;margin:0 0 26px;color:#fff">
+        <div style="width:62px;height:62px;margin:0 auto 14px;border-radius:22px;background:rgba(255,255,255,.20);line-height:62px;font-size:32px">${emoji}</div>
+        <h2 style="margin:0;color:#fff;font-size:24px;line-height:1.2;font-weight:900;letter-spacing:-.4px">${this.escapeHtml(title)}</h2>
+        ${subtitle ? `<p style="margin:10px 0 0;color:rgba(255,255,255,.86);font-size:14px;line-height:1.55">${this.escapeHtml(subtitle)}</p>` : ''}
+      </div>`;
+  }
+
+  _wrapper({ title, emoji = '✨', preheader = '', content, tone = 'violet' }) {
+    const safeTitle = this.escapeHtml(title);
+    const safePreheader = this.escapeHtml(preheader || title);
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${safeTitle}</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2ff;font-family:Inter,'Segoe UI',Arial,sans-serif;color:#0f172a">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${safePreheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 100%);padding:28px 12px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;border-collapse:separate;border-spacing:0">
+          <tr>
+            <td style="padding:0 8px 14px;text-align:center">
+              <div style="display:inline-block;padding:9px 14px;border-radius:999px;background:#fff;border:1px solid #dbeafe;color:#1d4ed8;font-size:12px;font-weight:900;letter-spacing:.3px">
+                ${emoji} MOLI.STUDIO
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#fff;border:1px solid #e5e7eb;border-radius:28px;overflow:hidden;box-shadow:0 22px 60px rgba(15,23,42,.12)">
+              <div style="background:${this.toneGradient(tone)};padding:34px 34px 30px;text-align:center;color:#fff">
+                <div style="display:inline-block;width:58px;height:58px;border-radius:20px;background:rgba(255,255,255,.18);line-height:58px;font-size:30px;margin-bottom:14px">${emoji}</div>
+                <h1 style="margin:0;color:#fff;font-size:26px;line-height:1.18;font-weight:900;letter-spacing:-.6px">${safeTitle}</h1>
+                <p style="margin:10px auto 0;max-width:440px;color:rgba(255,255,255,.84);font-size:14px;line-height:1.55">Học CSCA chill hơn, rõ hướng hơn, bớt stress hơn.</p>
+              </div>
+              <div style="padding:34px 34px 28px;font-size:15px;line-height:1.7;color:#334155">
+                ${content}
+              </div>
+              <div style="padding:22px 34px;background:#f8fafc;border-top:1px solid #e5e7eb;text-align:center">
+                <p style="margin:0 0 8px;color:#64748b;font-size:12px;line-height:1.5">Email tự động từ MOLI.STUDIO. Nếu có gì lạ lạ, đừng reply mã OTP hay mật khẩu cho bất kỳ ai.</p>
+                <p style="margin:0;color:#94a3b8;font-size:12px">© 2026 MOLI.STUDIO. Made for CSCA learners.</p>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
   async sendContactMessage({ to, name, email, phone, subject, message }) {
     if (!this.apiKey) {
       throw new Error('BREVO_API_KEY not configured');
     }
 
-    const safeName = this.escapeHtml(name);
     const safeEmail = this.escapeHtml(email);
-    const safePhone = this.escapeHtml(phone || 'Không cung cấp');
-    const safeSubject = this.escapeHtml(subject || 'Liên hệ từ website');
     const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
 
     const html = this._wrapper({
-      title: 'Tin nhắn liên hệ mới',
+      title: 'Có tin nhắn mới nè',
       emoji: '📩',
+      tone: 'cyan',
+      preheader: 'Một bạn vừa gửi liên hệ từ website MOLI.STUDIO.',
       content: `
-        <h2 style="margin:0 0 16px;font-size:20px">Tin nhắn liên hệ mới</h2>
-        <table style="width:100%;border-collapse:collapse;margin:0 0 22px">
-          <tr><td style="padding:8px 0;color:#666;width:120px">Họ tên</td><td style="padding:8px 0;font-weight:700">${safeName}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Email</td><td style="padding:8px 0"><a href="mailto:${safeEmail}" style="color:#667eea">${safeEmail}</a></td></tr>
-          <tr><td style="padding:8px 0;color:#666">Điện thoại</td><td style="padding:8px 0">${safePhone}</td></tr>
-          <tr><td style="padding:8px 0;color:#666">Chủ đề</td><td style="padding:8px 0">${safeSubject}</td></tr>
-        </table>
-        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:18px;color:#333">
-          ${safeMessage}
-        </div>`,
+        ${this.heroCard({ emoji: '📩', title: 'Tin nhắn mới từ website', subtitle: 'Có người đang cần MOLI.STUDIO hỗ trợ đó.', tone: 'cyan' })}
+        ${this.infoRows([
+          { label: 'Họ tên', value: name },
+          { label: 'Email', valueHtml: `<a href="mailto:${safeEmail}" style="color:#2563eb;text-decoration:none;font-weight:900">${safeEmail}</a>` },
+          { label: 'Điện thoại', value: phone || 'Không cung cấp' },
+          { label: 'Chủ đề', value: subject || 'Liên hệ từ website' },
+        ])}
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:18px;color:#334155;font-size:14px;line-height:1.7">${safeMessage}</div>`,
     });
 
     const response = await this.client.post('/smtp/email', {
@@ -98,322 +247,283 @@ class EmailService {
     return response.data;
   }
 
-  // ─── Shared HTML wrapper ────────────────────────────────────────────────────
-  _wrapper({ title, emoji, content }) {
-    return `<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f8;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif">
-  <div style="max-width:600px;margin:30px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)">
-    <!-- Header -->
-    <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:32px 40px;text-align:center">
-      <div style="display:inline-block;width:56px;height:56px;background:rgba(255,255,255,.2);border-radius:14px;line-height:56px;font-size:28px;margin-bottom:12px">${emoji}</div>
-      <h1 style="color:#fff;font-size:22px;font-weight:800;margin:0;letter-spacing:-.3px">CSCA Platform</h1>
-      <p style="color:rgba(255,255,255,.75);font-size:13px;margin:6px 0 0">${title}</p>
-    </div>
-    <!-- Body -->
-    <div style="padding:36px 40px;font-size:15px;line-height:1.7;color:#333">
-      ${content}
-    </div>
-    <!-- Footer -->
-    <div style="padding:24px 40px;background:#f9f9f9;border-top:1px solid #eee;text-align:center">
-      <p style="margin:0 0 4px;color:#999;font-size:12px">Email này được gửi tự động từ CSCA Platform.</p>
-      <p style="margin:0;color:#999;font-size:12px">© 2026 CSCA Platform. Mọi quyền được bảo lưu.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 1. Mail xác nhận đăng ký + chào mừng
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendWelcomeEmail(email, name) {
+    const safeName = this.escapeHtml(name || 'bạn');
     const content = `
-      <h2 style="margin:0 0 16px;font-size:20px">Xin chào <strong style="color:#667eea">${name}</strong>! 👋</h2>
-      <p style="margin:0 0 20px">Chào mừng bạn đến với <strong>CSCA Platform</strong> — nền tảng luyện thi học bổng Trung Quốc hàng đầu!</p>
-      <p style="margin:0 0 24px">Cảm ơn bạn đã đăng ký. Dưới đây là những gì bạn có thể làm ngay:</p>
-      <div style="background:#f9f9f9;border-radius:12px;padding:20px;margin:0 0 24px">
-        <div style="margin:0 0 12px"><strong>📝</strong> Làm đề thi thử — Hơn 500+ đề mô phỏng chuẩn cấu trúc thật</div>
-        <div style="margin:0 0 12px"><strong>📊</strong> Theo dõi tiến độ — Thống kê chi tiết điểm số &amp; độ chính xác</div>
-        <div style="margin:0 0 12px"><strong>💬</strong> Tham gia cộng đồng — Chia sẻ kinh nghiệm &amp; học hỏi từ người khác</div>
-        <div style="margin:0"><strong>📚</strong> Tài liệu học tập — Kho tài liệu phong phú &amp; chất lượng</div>
-      </div>
-      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="display:inline-block;padding:14px 32px;background:#667eea;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Bắt đầu học ngay →</a>`;
+      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#0f172a">Chào ${safeName}, welcome lên thuyền MOLI nha 👋</h2>
+      <p style="margin:0 0 22px;color:#475569">Tài khoản đã sẵn sàng. Từ giờ bạn có thể luyện đề, lưu lịch sử, gom xu và bật mode học nghiêm túc mà vẫn dễ thở.</p>
+      ${this.checklist([
+        'Làm đề mô phỏng CSCA và xem lại lỗi sai sau mỗi bài.',
+        'Học từ vựng, lý thuyết, công thức theo từng môn.',
+        'Theo dõi tiến độ, lịch sử làm bài và bảng xếp hạng.',
+        'Dùng xu để giảm một phần đơn hàng hoặc mở lượt AI nếu gói chưa nâng.',
+      ], 'violet')}
+      ${this.callout('<strong>Tip nhỏ:</strong> làm một đề ngắn trước để MOLI hiểu trình độ của bạn. Có dữ liệu rồi học mới đúng trọng tâm.', 'cyan')}
+      ${this.button('Vào học ngay', this.frontendUrl(), 'violet')}`;
 
     await this._send({
       to: email,
-      subject: '🎉 Chào mừng bạn đến với CSCA Platform!',
-      html: this._wrapper({ title: 'Chào mừng thành viên mới', emoji: '🎓', content }),
+      subject: '🎉 Welcome to MOLI.STUDIO, bắt đầu học thôi!',
+      html: this._wrapper({
+        title: 'Tài khoản MOLI đã mở khóa',
+        emoji: '🎓',
+        tone: 'violet',
+        preheader: 'Chào mừng bạn đến với MOLI.STUDIO.',
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 2. Mail xác nhận email (verify email)
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendVerificationEmail(email, name, verifyUrl) {
+    const safeName = this.escapeHtml(name || 'bạn');
     const content = `
-      <h2 style="margin:0 0 20px;font-size:20px">Xác nhận email của bạn</h2>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Cảm ơn bạn đã đăng ký CSCA Platform! Vui lòng nhấn vào nút bên dưới để xác nhận địa chỉ email của bạn.</p>
-      <div style="text-align:center;margin:0 0 24px">
-        <a href="${verifyUrl}" style="display:inline-block;padding:16px 36px;background:#667eea;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Xác nhận email →</a>
-      </div>
-      <p style="margin:0 0 16px;font-size:14px;color:#666">Nếu nút không hoạt động, sao chép đường dẫn sau vào trình duyệt:</p>
-      <p style="margin:0 0 24px;word-break:break-all;background:#f4f4f8;padding:12px 16px;border-radius:8px;font-size:12px;color:#666">${verifyUrl}</p>
-      <p style="background:#fef9c3;border-left:4px solid #eab308;border-radius:0 8px 8px 0;padding:14px 18px;margin:0;font-size:14px;color:#713f12">⏰ Liên kết này có hiệu lực trong <strong>24 giờ</strong>. Nếu bạn không yêu cầu xác nhận email, hãy bỏ qua email này.</p>`;
+      <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a">Xác nhận email nha ${safeName}</h2>
+      <p style="margin:0 0 22px;color:#475569">Một bước nhỏ thôi là tài khoản của bạn sạch đẹp, bảo mật và sẵn sàng lưu toàn bộ tiến độ học.</p>
+      ${this.button('Xác nhận email', verifyUrl, 'cyan')}
+      ${this.linkBox(verifyUrl)}
+      ${this.callout('Link có hiệu lực trong <strong>24 giờ</strong>. Nếu bạn không đăng ký tài khoản, cứ bỏ qua email này nha.', 'amber')}`;
 
     await this._send({
       to: email,
-      subject: '📧 Xác nhận email đăng ký CSCA Platform',
-      html: this._wrapper({ title: 'Xác nhận email của bạn', emoji: '📧', content }),
+      subject: '📧 Xác nhận email MOLI.STUDIO',
+      html: this._wrapper({
+        title: 'Xác nhận email',
+        emoji: '📧',
+        tone: 'cyan',
+        preheader: 'Xác nhận email để hoàn tất tài khoản MOLI.STUDIO.',
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 3. Mail xác nhận thanh toán (QUAN TRỌNG)
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendPaymentConfirmation({ email, name, packageName, amount, durationDays, transactionCode, method }) {
-    const formattedAmount = new Intl.NumberFormat('vi-VN').format(amount) + '₫';
-    const methodLabel = { momo: 'MoMo', vnpay: 'VNPay', bank_transfer: 'Chuyển khoản ngân hàng', manual: 'Thủ công' }[method] || method;
+    const methodLabel = {
+      momo: 'MoMo',
+      vnpay: 'VNPay',
+      bank_transfer: 'Chuyển khoản ngân hàng',
+      coupon_free: 'Ưu đãi / xu',
+      manual: 'Kích hoạt thủ công',
+    }[method] || method || 'Không xác định';
 
     const content = `
-      <div style="background:#f0f4ff;border-radius:12px;padding:24px;margin:0 0 24px;text-align:center">
-        <div style="font-size:48px;margin-bottom:12px">💳</div>
-        <h2 style="margin:0 0 8px;font-size:20px;color:#333">Thanh toán thành công!</h2>
-        <p style="margin:0;font-size:14px;color:#666">Mã giao dịch: <strong>${transactionCode}</strong></p>
-      </div>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">Gói dịch vụ</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:14px">${packageName}</td></tr>
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">Thời hạn</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px">${durationDays} ngày</td></tr>
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">Phương thức</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px">${methodLabel}</td></tr>
-        <tr><td style="padding:12px 0;color:#666;font-size:15px;font-weight:600">Số tiền</td><td style="padding:12px 0;text-align:right;font-size:20px;font-weight:800;color:#16a34a">${formattedAmount}</td></tr>
-      </table>
-      <p style="background:#fef9c3;border-left:4px solid #eab308;border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#713f12">🎉 <strong>Tài khoản VIP của bạn đã được kích hoạt!</strong> Bạn có thể tận hưởng toàn bộ tính năng cao cấp ngay bây giờ.</p>
-      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="display:inline-block;padding:14px 32px;background:#667eea;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Khám phá CSCA ngay →</a>`;
+      ${this.heroCard({ emoji: '💳', title: 'Thanh toán thành công', subtitle: `${name || 'Bạn'} ơi, đơn của bạn đã được ghi nhận.`, tone: 'emerald' })}
+      ${this.infoRows([
+        { label: 'Gói dịch vụ', value: packageName },
+        { label: 'Thời hạn', value: `${durationDays} ngày` },
+        { label: 'Phương thức', value: methodLabel },
+        { label: 'Mã giao dịch', value: transactionCode },
+        { label: 'Số tiền', valueHtml: `<span style="font-size:20px;color:#059669">${this.formatMoney(amount)}</span>` },
+      ])}
+      ${this.callout('<strong>Done!</strong> Gói đã được kích hoạt. Vào học liền cho nóng, đừng để mood học rơi mất.', 'emerald')}
+      ${this.button('Mở MOLI và học ngay', this.frontendUrl(), 'emerald')}`;
 
     await this._send({
       to: email,
-      subject: `💳 Xác nhận thanh toán CSCA — ${packageName}`,
-      html: this._wrapper({ title: 'Xác nhận thanh toán', emoji: '💳', content }),
+      subject: `💳 Thanh toán thành công - ${packageName}`,
+      html: this._wrapper({
+        title: 'Thanh toán xong rồi nè',
+        emoji: '💳',
+        tone: 'emerald',
+        preheader: `Thanh toán gói ${packageName} đã thành công.`,
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 3. Mail OTP (2FA) — đăng nhập / đổi mật khẩu
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendOtpEmail({ email, name, otp, reason }) {
-    const reasonLabel = reason === 'login' ? 'đăng nhập' : reason === 'password_change' ? 'thay đổi mật khẩu' : 'xác thực';
-
+    const safeName = this.escapeHtml(name || 'bạn');
+    const safeOtp = this.escapeHtml(otp);
+    const reasonLabel = reason === 'login' ? 'đăng nhập' : reason === 'password_change' ? 'đổi mật khẩu' : 'xác thực';
     const content = `
-      <h2 style="margin:0 0 20px;font-size:20px">Mã xác thực của bạn</h2>
-      <p style="margin:0 0 24px">Chúng tôi nhận được yêu cầu ${reasonLabel} cho tài khoản liên kết với email này.</p>
-      <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:16px;padding:32px;text-align:center;margin:0 0 24px">
-        <p style="margin:0 0 8px;color:rgba(255,255,255,.75);font-size:13px;text-transform:uppercase;letter-spacing:1px">Mã OTP</p>
-        <p style="margin:0;font-size:40px;font-weight:900;color:#fff;letter-spacing:8px;font-family:monospace">${otp}</p>
-        <p style="margin:16px 0 0;color:rgba(255,255,255,.65);font-size:12px">Mã có hiệu lực trong <strong>5 phút</strong>. Không chia sẻ mã này cho ai.</p>
+      <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a">Mã OTP của ${safeName}</h2>
+      <p style="margin:0 0 22px;color:#475569">MOLI nhận được yêu cầu ${reasonLabel}. Nhập mã bên dưới để tiếp tục nha.</p>
+      <div style="background:${this.toneGradient('slate')};border-radius:24px;padding:30px;text-align:center;margin:0 0 24px;color:#fff">
+        <p style="margin:0 0 10px;color:rgba(255,255,255,.72);font-size:12px;font-weight:900;letter-spacing:1.8px;text-transform:uppercase">Mã xác thực</p>
+        <p style="margin:0;font-size:44px;line-height:1;font-weight:900;letter-spacing:10px;font-family:Consolas,Monaco,monospace">${safeOtp}</p>
+        <p style="margin:16px 0 0;color:rgba(255,255,255,.72);font-size:13px">Hiệu lực 5 phút.</p>
       </div>
-      <p style="background:#fee2e2;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:14px 18px;margin:0;font-size:14px;color:#991b1b">⚠️ Nếu bạn <strong>không</strong> yêu cầu mã này, ai đó có thể đang cố truy cập tài khoản của bạn. Vui lòng <strong>không</strong> chia sẻ mã và đổi mật khẩu ngay.</p>`;
+      ${this.callout('<strong>Đừng share mã này nha.</strong> MOLI không bao giờ hỏi OTP qua chat, inbox hay điện thoại.', 'rose')}`;
 
     await this._send({
       to: email,
-      subject: `🔐 Mã OTP CSCA — ${otp}`,
-      html: this._wrapper({ title: `Mã xác thực (${reasonLabel})`, emoji: '🔐', content }),
+      subject: `🔐 Mã OTP MOLI - ${otp}`,
+      html: this._wrapper({
+        title: 'Mã xác thực MOLI',
+        emoji: '🔐',
+        tone: 'slate',
+        preheader: `Mã OTP của bạn là ${otp}.`,
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 4. Mail reset mật khẩu
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendPasswordResetEmail(email, resetUrl) {
     const content = `
-      <h2 style="margin:0 0 20px;font-size:20px">Đặt lại mật khẩu</h2>
-      <p style="margin:0 0 16px">Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản liên kết với email này.</p>
-      <p style="margin:0 0 24px">Nhấn vào nút bên dưới để tạo mật khẩu mới. Liên kết này chỉ có hiệu lực trong <strong style="color:#ef4444">15 phút</strong>.</p>
-      <div style="text-align:center;margin:0 0 24px">
-        <a href="${resetUrl}" style="display:inline-block;padding:16px 36px;background:#111827;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Đặt lại mật khẩu →</a>
-      </div>
-      <p style="margin:0 0 16px;font-size:14px;color:#666">Nếu nút không hoạt động, sao chép đường dẫn sau vào trình duyệt:</p>
-      <p style="margin:0 0 24px;word-break:break-all;background:#f4f4f8;padding:12px 16px;border-radius:8px;font-size:12px;color:#666">${resetUrl}</p>
-      <p style="background:#fef9c3;border-left:4px solid #eab308;border-radius:0 8px 8px 0;padding:14px 18px;margin:0;font-size:14px;color:#713f12">⏰ Liên kết đặt lại sẽ hết hạn sau 15 phút. Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p>`;
+      <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a">Reset mật khẩu nè</h2>
+      <p style="margin:0 0 22px;color:#475569">Bạn vừa yêu cầu tạo mật khẩu mới cho tài khoản MOLI.STUDIO. Bấm nút dưới đây để đặt lại.</p>
+      ${this.button('Đặt lại mật khẩu', resetUrl, 'slate')}
+      ${this.linkBox(resetUrl)}
+      ${this.callout('Link chỉ sống trong <strong>15 phút</strong>. Nếu không phải bạn yêu cầu, bỏ qua email này và đổi mật khẩu nếu thấy tài khoản có dấu hiệu lạ.', 'amber')}`;
 
     await this._send({
       to: email,
-      subject: '🔐 Đặt lại mật khẩu CSCA Platform',
-      html: this._wrapper({ title: 'Đặt lại mật khẩu', emoji: '🔐', content }),
+      subject: '🔐 Đặt lại mật khẩu MOLI.STUDIO',
+      html: this._wrapper({
+        title: 'Đặt lại mật khẩu',
+        emoji: '🔐',
+        tone: 'slate',
+        preheader: 'Link đặt lại mật khẩu có hiệu lực trong 15 phút.',
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 5. Mail nhắc hết hạn VIP (2-3 ngày trước)
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendVipExpirationReminder({ email, name, daysLeft, expiresAt }) {
-    const formattedDate = new Date(expiresAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' });
-
+    const safeName = this.escapeHtml(name || 'bạn');
+    const formattedDate = this.formatDate(expiresAt);
     const content = `
-      <div style="background:linear-gradient(135deg,#f59e0b 0%,#ef4444 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-        <div style="font-size:48px;margin-bottom:12px">⏰</div>
-        <h2 style="margin:0 0 8px;font-size:20px;color:#fff">Tài khoản VIP sắp hết hạn!</h2>
-        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">Còn <strong>${daysLeft} ngày</strong> nữa là VIP của bạn hết hạn.</p>
-      </div>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Tài khoản VIP của bạn sẽ hết hạn vào ngày <strong>${formattedDate}</strong>. Đừng để gián đoạn quá trình học tập của bạn!</p>
-      <div style="background:#f9f9f9;border-radius:12px;padding:20px;margin:0 0 24px">
-        <p style="margin:0 0 12px;font-weight:700;color:#333">🎁 Quyền lợi VIP của bạn:</p>
-        <div style="margin:0 0 8px;font-size:14px">✓ Truy cập toàn bộ đề thi cao cấp</div>
-        <div style="margin:0 0 8px;font-size:14px">✓ Phân tích AI chi tiết từng câu trả lời</div>
-        <div style="margin:0 0 8px;font-size:14px">✓ Không giới hạn luyện tập</div>
-        <div style="margin:0;font-size:14px">✓ Hỗ trợ ưu tiên từ đội ngũ CSCA</div>
-      </div>
-      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/vip" style="display:inline-block;padding:14px 32px;background:#f59e0b;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Gia hạn ngay →</a>`;
+      ${this.heroCard({ emoji: '⏰', title: `Gói sắp hết hạn sau ${daysLeft} ngày`, subtitle: 'Đừng để chuỗi học bị đứt đoạn nha.', tone: 'amber' })}
+      <p style="margin:0 0 18px;color:#475569">Chào ${safeName}, gói của bạn sẽ hết hạn vào <strong>${formattedDate}</strong>.</p>
+      ${this.checklist([
+        'Giữ quyền truy cập đề và tài liệu theo gói.',
+        'Tiếp tục xem lịch sử làm bài, lời giải và phần phân tích.',
+        'Không bị ngắt nhịp ôn thi khi đang vào guồng.',
+      ], 'amber')}
+      ${this.callout('Gia hạn sớm không làm mất ngày còn lại. Học đều mới thắng lớn.', 'amber')}
+      ${this.button('Gia hạn ngay', this.frontendUrl('/vip'), 'amber')}`;
 
     await this._send({
       to: email,
-      subject: `⏰ [Nhắc nhở] Tài khoản VIP CSCA sắp hết hạn — Còn ${daysLeft} ngày!`,
-      html: this._wrapper({ title: `VIP sắp hết hạn — Còn ${daysLeft} ngày`, emoji: '⏰', content }),
+      subject: `⏰ Gói MOLI sắp hết hạn - còn ${daysLeft} ngày`,
+      html: this._wrapper({
+        title: 'Gói sắp hết hạn',
+        emoji: '⏰',
+        tone: 'amber',
+        preheader: `Gói của bạn còn ${daysLeft} ngày.`,
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 6. Mail kích hoạt VIP thành công
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendVipActivatedEmail({ email, name, packageName, durationDays, expiresAt }) {
-    const formattedDate = new Date(expiresAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' });
-
+    const formattedDate = this.formatDate(expiresAt);
     const content = `
-      <div style="background:linear-gradient(135deg,#16a34a 0%,#059669 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-        <div style="font-size:48px;margin-bottom:12px">🎉</div>
-        <h2 style="margin:0 0 8px;font-size:22px;color:#fff">Bạn đã trở thành VIP!</h2>
-        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">Chúc mừng bạn — ${packageName}</p>
-      </div>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Cảm ơn bạn đã tin tưởng và lựa chọn CSCA Platform! Tài khoản VIP của bạn đã được kích hoạt thành công.</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">Gói VIP</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:14px">${packageName}</td></tr>
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">Thời hạn</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px">${durationDays} ngày</td></tr>
-        <tr><td style="padding:10px 0;color:#666;font-size:14px">Hết hạn</td><td style="padding:10px 0;text-align:right;font-size:14px">${formattedDate}</td></tr>
-      </table>
-      <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:0 0 24px">
-        <p style="margin:0 0 12px;font-weight:700;color:#15803d">🌟 Quyền lợi VIP bạn nhận được:</p>
-        <div style="margin:0 0 8px;font-size:14px;color:#166534">✓ Truy cập 500+ đề thi mô phỏng thực tế</div>
-        <div style="margin:0 0 8px;font-size:14px;color:#166534">✓ Phân tích chi tiết từng câu trả lời bằng AI</div>
-        <div style="margin:0 0 8px;font-size:14px;color:#166534">✓ Lộ trình học tập cá nhân hoá</div>
-        <div style="margin:0 0 8px;font-size:14px;color:#166534">✓ Diễn đàn Hỏi-Đáp VIP ưu tiên</div>
-        <div style="margin:0;font-size:14px;color:#166534">✓ Không giới hạn luyện tập mọi lúc</div>
-      </div>
-      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="display:inline-block;padding:14px 32px;background:#16a34a;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Bắt đầu học VIP ngay →</a>`;
+      ${this.heroCard({ emoji: '✨', title: 'Nâng cấp thành công', subtitle: `${name || 'Bạn'} đã mở khóa ${packageName}`, tone: 'violet' })}
+      ${this.infoRows([
+        { label: 'Gói', value: packageName },
+        { label: 'Thời hạn', value: `${durationDays} ngày` },
+        { label: 'Hết hạn', value: formattedDate },
+      ])}
+      ${this.checklist([
+        'Truy cập nội dung, đề, tài liệu theo phạm vi gói đã mua.',
+        'AI phân tích kết quả và gợi ý ôn tập khi đủ dữ liệu.',
+        'Xem lại lịch sử làm bài, lời giải và tiến độ học.',
+        'Dùng MOLI theo cách chill hơn nhưng vẫn rất có mục tiêu.',
+      ], 'violet')}
+      ${this.button('Vào khu học của mình', this.frontendUrl(), 'violet')}`;
 
     await this._send({
       to: email,
-      subject: `🎉 Chúc mừng ${name} — Bạn đã là VIP CSCA!`,
-      html: this._wrapper({ title: 'Kích hoạt VIP thành công', emoji: '🎉', content }),
+      subject: `✨ ${packageName} đã kích hoạt, học thôi ${name || ''}!`,
+      html: this._wrapper({
+        title: 'Gói đã kích hoạt',
+        emoji: '✨',
+        tone: 'violet',
+        preheader: `Gói ${packageName} đã được kích hoạt.`,
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 8. Mail thông báo VIP đã hết hạn (auto-revoke)
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendVipExpiredEmail({ email, name, expiredAt }) {
-    const formattedDate = expiredAt
-      ? new Date(expiredAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'long', year: 'numeric' })
-      : 'không rõ';
-
+    const safeName = this.escapeHtml(name || 'bạn');
+    const formattedDate = this.formatDate(expiredAt);
     const content = `
-      <div style="background:linear-gradient(135deg,#6b7280 0%,#374151 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-        <div style="font-size:48px;margin-bottom:12px">📅</div>
-        <h2 style="margin:0 0 8px;font-size:22px;color:#fff">Tài khoản VIP đã hết hạn</h2>
-        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">Ngày hết hạn: <strong>${formattedDate}</strong></p>
-      </div>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Tài khoản VIP của bạn trên nền tảng CSCA đã hết hạn vào ngày <strong>${formattedDate}</strong>. Mọi quyền lợi VIP đã tạm thời bị tạm khóa.</p>
-      <div style="background:#f9f9f9;border-radius:12px;padding:20px;margin:0 0 24px">
-        <p style="margin:0 0 12px;font-weight:700;color:#333">🎁 Bạn vẫn giữ được:</p>
-        <div style="margin:0 0 8px;font-size:14px;color:#555">✓ Tài khoản và lịch sử học tập</div>
-        <div style="margin:0 0 8px;font-size:14px;color:#555">✓ Điểm số và thống kê cá nhân</div>
-        <div style="margin:0;font-size:14px;color:#555">✓ Đề thi miễn phí (nếu có)</div>
-      </div>
-      <p style="margin:0 0 24px">Để tiếp tục truy cập đề thi cao cấp, phân tích AI và các tính năng VIP, bạn có thể gia hạn bất kỳ lúc nào.</p>
-      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/vip" style="display:inline-block;padding:14px 32px;background:#f59e0b;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Gia hạn VIP ngay →</a>`;
+      ${this.heroCard({ emoji: '📅', title: 'Gói đã hết hạn', subtitle: `Hết hạn từ ${formattedDate}`, tone: 'slate' })}
+      <p style="margin:0 0 18px;color:#475569">Chào ${safeName}, quyền lợi gói trả phí của bạn đã tạm dừng. Nhưng dữ liệu học vẫn còn nguyên, không mất gì cả.</p>
+      ${this.checklist([
+        'Tài khoản và hồ sơ học tập vẫn được giữ.',
+        'Lịch sử làm bài, điểm số và thống kê vẫn nằm trong profile.',
+        'Bạn vẫn có thể dùng các phần miễn phí trên web.',
+      ], 'slate')}
+      ${this.callout('Khi cần quay lại nhịp ôn nghiêm túc, bạn có thể gia hạn bất kỳ lúc nào.', 'cyan')}
+      ${this.button('Xem gói hiện có', this.frontendUrl('/vip'), 'slate')}`;
 
     await this._send({
       to: email,
-      subject: `📅 [CSCA] Tài khoản VIP đã hết hạn — Gia hạn ngay để tiếp tục!`,
-      html: this._wrapper({ title: 'VIP đã hết hạn', emoji: '📅', content }),
+      subject: '📅 Gói MOLI đã hết hạn',
+      html: this._wrapper({
+        title: 'Gói đã hết hạn',
+        emoji: '📅',
+        tone: 'slate',
+        preheader: 'Gói trả phí đã hết hạn, dữ liệu học vẫn được giữ.',
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 7. Mail cảnh báo bảo mật (login từ IP lạ / đổi mật khẩu)
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendSecurityAlert({ email, name, event, ip, location, device, time }) {
+    const safeName = this.escapeHtml(name || 'bạn');
     const eventLabel = {
-      login: 'Đăng nhập từ thiết bị mới',
+      login: 'Có yêu cầu đăng nhập',
       password_change: 'Mật khẩu vừa được thay đổi',
       suspicious: 'Hoạt động đáng ngờ',
     }[event] || 'Thông báo bảo mật';
-
-    const eventEmoji = event === 'login' ? '🔔' : event === 'password_change' ? '🔑' : '🚨';
-    const bgGradient = event === 'login' ? 'linear-gradient(135deg,#3b82f6 0%,#6366f1 100%)'
-      : event === 'password_change' ? 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)'
-      : 'linear-gradient(135deg,#ef4444 0%,#dc2626 100%)';
+    const tone = event === 'suspicious' ? 'rose' : event === 'password_change' ? 'amber' : 'cyan';
 
     const content = `
-      <div style="background:${bgGradient.replace('background:', '')};border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-        <div style="font-size:48px;margin-bottom:12px">${eventEmoji}</div>
-        <h2 style="margin:0 0 8px;font-size:20px;color:#fff">${eventLabel}</h2>
-        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">CSCA Platform — Thông báo bảo mật tài khoản</p>
-      </div>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Chúng tôi phát hiện một hoạt động trên tài khoản của bạn:</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">⏰ Thời gian</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px">${time}</td></tr>
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">🌐 Địa chỉ IP</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px;font-family:monospace">${ip}</td></tr>
-        <tr><td style="padding:10px 0;border-bottom:1px solid #eee;color:#666;font-size:14px">📍 Vị trí</td><td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;font-size:14px">${location || 'Không xác định'}</td></tr>
-        <tr><td style="padding:10px 0;color:#666;font-size:14px">💻 Thiết bị</td><td style="padding:10px 0;text-align:right;font-size:14px">${device || 'Không xác định'}</td></tr>
-      </table>
-      ${event === 'suspicious' ? `
-      <p style="background:#fee2e2;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#991b1b">🚨 Nếu đây <strong>không phải</strong> là bạn, hãy <strong>đổi mật khẩu ngay</strong> và liên hệ hỗ trợ.</p>` : ''}
-      ${event === 'login' ? `
-      <p style="background:#dbeafe;border-left:4px solid #3b82f6;border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#1e40af">💡 Nếu đây <strong>là bạn</strong> — có thể bỏ qua email này.<br>Nếu <strong>không phải bạn</strong> — hãy đổi mật khẩu ngay và liên hệ hỗ trợ.</p>` : ''}
-      <div style="text-align:center;margin:0 0 24px">
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/profile" style="display:inline-block;padding:14px 32px;background:#1f2937;color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Kiểm tra tài khoản →</a>
-      </div>
-      <p style="margin:0;font-size:13px;color:#999">📧 Email này được gửi tự động bởi CSCA Platform. Nếu có thắc mắc, hãy liên hệ cloudlystudio05@gmail.com</p>`;
+      ${this.heroCard({ emoji: event === 'suspicious' ? '🚨' : '🔐', title: eventLabel, subtitle: 'Bảo mật tài khoản là ưu tiên số 1.', tone })}
+      <p style="margin:0 0 18px;color:#475569">Chào ${safeName}, MOLI ghi nhận hoạt động sau trên tài khoản của bạn:</p>
+      ${this.infoRows([
+        { label: 'Thời gian', value: time || 'Không xác định' },
+        { label: 'IP', value: ip || 'Không xác định' },
+        { label: 'Vị trí', value: location || 'Không xác định' },
+        { label: 'Thiết bị', value: device || 'Không xác định' },
+      ])}
+      ${this.callout(event === 'login'
+        ? 'Nếu đúng là bạn thì yên tâm bỏ qua. Nếu không phải bạn, đổi mật khẩu ngay nha.'
+        : '<strong>Nếu không phải bạn thực hiện, hãy đổi mật khẩu ngay</strong> và kiểm tra thiết bị đăng nhập.', event === 'suspicious' ? 'rose' : 'amber')}
+      ${this.button('Kiểm tra tài khoản', this.frontendUrl('/profile'), tone)}`;
 
     await this._send({
       to: email,
-      subject: `🔐 [Bảo mật] ${eventLabel} — CSCA Platform`,
-      html: this._wrapper({ title: 'Thông báo bảo mật', emoji: '🔐', content }),
+      subject: `🔐 [MOLI] ${eventLabel}`,
+      html: this._wrapper({
+        title: 'Thông báo bảo mật',
+        emoji: '🔐',
+        tone,
+        preheader: eventLabel,
+        content,
+      }),
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 8. Mail thông báo Cố vấn đã trả lời câu hỏi
-  // ─────────────────────────────────────────────────────────────────────────────
   async sendQaReplyEmail({ email, name, ticketId, preview, advisorName, ticketUrl: customTicketUrl }) {
-    const ticketUrl = customTicketUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/hoi-dap/${ticketId}`;
-    const previewText = preview ? `"${preview.substring(0, 120)}${preview.length > 120 ? '...' : ''}"` : 'Cố vấn đã gửi tin nhắn mới cho bạn.';
+    const safeAdvisor = this.escapeHtml(advisorName || 'cố vấn MOLI');
+    const ticketUrl = customTicketUrl || this.frontendUrl(`/hoi-dap/${ticketId}`);
+    const previewText = preview
+      ? this.escapeHtml(`${preview.substring(0, 150)}${preview.length > 150 ? '...' : ''}`)
+      : 'Cố vấn đã gửi phản hồi mới cho bạn.';
 
     const content = `
-      <div style="background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px">
-        <div style="font-size:48px;margin-bottom:12px">💬</div>
-        <h2 style="margin:0 0 8px;font-size:20px;color:#fff">Cố vấn vừa phản hồi câu hỏi của bạn!</h2>
-        <p style="margin:0;font-size:14px;color:rgba(255,255,255,.85)">CSCA Platform — Hỏi Đáp 1-1 với Cố Vấn</p>
+      ${this.heroCard({ emoji: '💬', title: 'Cố vấn phản hồi rồi', subtitle: `${name || 'Bạn'}, câu hỏi của bạn có update mới.`, tone: 'cyan' })}
+      <p style="margin:0 0 18px;color:#475569"><strong>${safeAdvisor}</strong> vừa phản hồi trong mục Hỏi Đáp 1-1.</p>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:18px;margin:0 0 24px;color:#334155;font-size:14px;line-height:1.7;font-style:italic">
+        "${previewText}"
       </div>
-      <p style="margin:0 0 16px">Xin chào <strong>${name}</strong>,</p>
-      <p style="margin:0 0 24px">Cố vấn <strong>${advisorName || 'CSCA'}</strong> đã trả lời câu hỏi của bạn. Đây là nội dung phản hồi:</p>
-      <div style="background:#f0f4ff;border-left:4px solid #6366f1;border-radius:0 12px 12px 0;padding:16px 20px;margin:0 0 24px;font-size:14px;color:#1e1b4b;font-style:italic">
-        ${previewText}
-      </div>
-      <div style="text-align:center;margin:0 0 24px">
-        <a href="${ticketUrl}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#3b82f6 0%,#6366f1 100%);color:#fff;font-weight:700;border-radius:10px;text-decoration:none;font-size:15px">Xem và phản hồi ngay →</a>
-      </div>
-      <p style="margin:0;font-size:13px;color:#999">💡 Nếu bạn chưa hiểu phần nào, hãy nhắn thêm cho cố vấn — chúng tôi luôn sẵn sàng hỗ trợ bạn!</p>`;
+      ${this.callout('Nếu vẫn chưa rõ, cứ hỏi tiếp trong ticket. Cố vấn sẽ bám mạch để hỗ trợ bạn tốt hơn.', 'cyan')}
+      ${this.button('Mở câu trả lời', ticketUrl, 'cyan')}`;
 
     await this._send({
       to: email,
-      subject: `💬 Cố vấn CSCA đã trả lời câu hỏi của bạn!`,
-      html: this._wrapper({ title: 'Cố vấn đã phản hồi', emoji: '💬', content }),
+      subject: '💬 Cố vấn MOLI đã phản hồi câu hỏi của bạn',
+      html: this._wrapper({
+        title: 'Cố vấn đã phản hồi',
+        emoji: '💬',
+        tone: 'cyan',
+        preheader: 'Câu hỏi Hỏi Đáp 1-1 của bạn có phản hồi mới.',
+        content,
+      }),
     });
   }
 }

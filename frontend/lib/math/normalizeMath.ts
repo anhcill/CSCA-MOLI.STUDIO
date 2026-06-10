@@ -1,3 +1,9 @@
+import {
+  OCR_MATH_SYMBOL_REPLACEMENTS,
+  normalizeOcrMathSyntax,
+  repairOcrMathArtifacts,
+} from './ocrMathArtifacts';
+
 const MATH_RANGES: Array<[number, number, number]> = [
   [0x1d400, 65, 26],
   [0x1d41a, 97, 26],
@@ -23,6 +29,7 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
   ['\u00b7']: '\\cdot ',
   ['\u00b1']: '\\pm ',
   ['\u21d2']: '\\Rightarrow ',
+  ['\u21d4']: '\\Leftrightarrow ',
   ['\u2192']: '\\to ',
   ['\u221a']: '\\sqrt{}',
   ['\u221e']: '\\infty ',
@@ -85,7 +92,7 @@ export function normalizeMathUnicode(input: string): string {
 
   for (const char of input) {
     const mapped = mapMathCodePoint(char.codePointAt(0) || 0);
-    out += mapped || SYMBOL_REPLACEMENTS[char] || char;
+    out += mapped || SYMBOL_REPLACEMENTS[char] || OCR_MATH_SYMBOL_REPLACEMENTS[char] || char;
   }
 
   return out;
@@ -119,7 +126,7 @@ export function repairMathFormatArtifacts(
   if (!input) return '';
   const shouldWrapIntervalAssignments = options.wrapIntervalAssignments ?? true;
 
-  const repaired = normalizeSetOperators(normalizeEscapedLatexBackslashes(input))
+  const repaired = normalizeSetOperators(repairOcrMathArtifacts(normalizeEscapedLatexBackslashes(input)))
     .replace(/([=:\uff1a]\s*)\$\$+(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, '[$1)')
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, '($1)')
@@ -140,7 +147,7 @@ export function repairMathFormatArtifacts(
 }
 
 function normalizeLooseMathSyntax(input: string): string {
-  return input
+  return repairLooseSqrtRadicands(normalizeOcrMathSyntax(input))
     .replace(/([=:\uff1a]\s*)\$\$(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
     .replace(LATEX_COMMAND_BOUNDARY_RE, (match, command: string, offset: number, whole: string) => {
       const commandText = whole.slice(offset + 1);
@@ -177,6 +184,13 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
     .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}')
     .replace(/\bC\s+(\\mathbb\{[A-Z]\})\s*\(/g, 'C_{$1}(');
+}
+
+function repairLooseSqrtRadicands(input: string): string {
+  return input.replace(/\\sqrt\{\}\s*([([{][^=。\n；;，,]+)(?=\s*=)/g, (_, radicand) => {
+    const clean = String(radicand || '').trim();
+    return clean ? `\\sqrt{${clean}}` : '\\sqrt{}';
+  });
 }
 
 function findMatchingBackward(input: string, closeIndex: number): number {
@@ -425,7 +439,17 @@ export function isLikelyLooseMathLine(input: string): boolean {
 }
 
 function isMathishChar(char: string): boolean {
-  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,|\s']/.test(char);
+  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,;|\s']/.test(char) && !/[À-ỹ]/.test(char);
+}
+
+function isAsciiLetterBeforeVietnamese(input: string, index: number): boolean {
+  return /[A-Za-z]/.test(input[index] || '') && /[À-ỹ]/.test(input[index + 1] || '');
+}
+
+function isBoundaryAfterVietnameseWord(input: string, index: number): boolean {
+  if (!/\s/.test(input[index - 1] || '')) return false;
+  const before = input.slice(0, index - 1).match(/(\S+)$/)?.[1] || '';
+  return /[À-ỹ]/.test(before);
 }
 
 function hasBalancedMathGroups(input: string): boolean {
@@ -438,7 +462,11 @@ function hasBalancedMathGroups(input: string): boolean {
     if (char === '(' || char === '[' || char === '{') {
       stack.push(char);
     } else if (char === ')' || char === ']' || char === '}') {
-      if (stack.pop() !== pairs[char]) return false;
+      const open = stack.pop();
+      const isIntervalClose =
+        (char === ')' && open === '[') ||
+        (char === ']' && open === '(');
+      if (open !== pairs[char] && !isIntervalClose) return false;
     }
   }
 
@@ -523,10 +551,10 @@ function wrapEqualMathInPlainText(input: string): string {
 
     const relationIndex = cursor + relation.index;
     let start = relationIndex;
-    while (start > cursor && isMathishChar(input[start - 1])) start--;
+    while (start > cursor && isMathishChar(input[start - 1]) && !isBoundaryAfterVietnameseWord(input, start)) start--;
 
     let end = relationIndex + relation[0].length;
-    while (end < input.length && isMathishChar(input[end])) end++;
+    while (end < input.length && isMathishChar(input[end]) && !isAsciiLetterBeforeVietnamese(input, end)) end++;
 
     const rawCandidate = input.slice(start, end);
     const leadingWhitespace = rawCandidate.match(/^\s*/)?.[0] || '';
@@ -565,11 +593,20 @@ function wrapStandaloneFractions(input: string): string {
       before.includes('\\(') ||
       before.includes('$') ||
       after.includes('\\)') ||
-      after.includes('$')
+      after.includes('$') ||
+      isInsideWrappedMath(whole, offset)
     ) return match;
     const normalized = normalizeLatexMath(match);
     return hasBalancedMathGroups(normalized) ? `\\(${normalized}\\)` : match;
   });
+}
+
+function isInsideWrappedMath(input: string, offset: number): boolean {
+  for (const match of input.matchAll(WRAPPED_MATH_RE)) {
+    const start = match.index ?? -1;
+    if (start >= 0 && offset > start && offset < start + match[0].length) return true;
+  }
+  return false;
 }
 
 function latexGroupDepthAt(input: string, offset: number): number {
@@ -594,7 +631,8 @@ function wrapMathMatch(input: string, pattern: RegExp): string {
       before.includes('\\(') ||
       before.includes('$') ||
       after.includes('\\)') ||
-      after.includes('$')
+      after.includes('$') ||
+      isInsideWrappedMath(whole, offset)
     ) return match;
 
     return `\\(${normalizeLatexMath(match)}\\)`;
@@ -615,6 +653,20 @@ function wrapPowerExpressions(input: string): string {
   );
 }
 
+function wrapSubscriptExpressions(input: string): string {
+  return wrapMathMatch(
+    input,
+    /\b[A-Za-z]\s*_\s*(?:\{[^{}]+\}|[A-Za-z0-9]+)/g,
+  );
+}
+
+function wrapPointCoordinateExpressions(input: string): string {
+  return wrapMathMatch(
+    input,
+    /\b[A-Z]\s*\(\s*[^()（）;；]{1,80}[;；]\s*[^()（）]{1,80}\)/g,
+  );
+}
+
 function wrapCommandExpressionsInSegment(segment: string): string {
   let out = '';
   let cursor = 0;
@@ -631,8 +683,8 @@ function wrapCommandExpressionsInSegment(segment: string): string {
     let start = commandIndex;
     let end = commandIndex + match[0].length;
 
-    while (start > cursor && isMathishChar(segment[start - 1])) start--;
-    while (end < segment.length && isMathishChar(segment[end])) end++;
+    while (start > cursor && isMathishChar(segment[start - 1]) && !isBoundaryAfterVietnameseWord(segment, start)) start--;
+    while (end < segment.length && isMathishChar(segment[end]) && !isAsciiLetterBeforeVietnamese(segment, end)) end++;
 
     const raw = segment.slice(start, end);
     const leading = raw.match(/^\s*/)?.[0] || '';
@@ -668,12 +720,13 @@ function wrapCommandExpressions(input: string): string {
 }
 
 function applyUndelimitedMathWraps(input: string): string {
-  return wrapCommandExpressions(wrapPowerExpressions(wrapIntervalExpressions(wrapStandaloneFractions(input))));
+  return wrapCommandExpressions(wrapSubscriptExpressions(wrapPowerExpressions(wrapIntervalExpressions(wrapStandaloneFractions(wrapPointCoordinateExpressions(input))))));
 }
 
 function mergeAdjacentInlineMath(input: string): string {
   return input
     .replace(/(^|[^\w\\])-\s*\\\((\\frac[\s\S]*?)\\\)/g, '$1\\(-$2\\)')
+    .replace(/\\\)\\\(,\s*/g, ', ')
     .replace(/\\\)\s+\\\(/g, ' ');
 }
 

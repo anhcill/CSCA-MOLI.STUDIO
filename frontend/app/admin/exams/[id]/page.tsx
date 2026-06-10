@@ -40,6 +40,7 @@ interface SavedQuestion {
     points: number;
     explanation?: string;
     explanation_cn?: string;
+    explanation_image_url?: string;
     difficulty?: string;
     linked_options?: any;
     cloze_mode?: 'sentences' | 'passage';
@@ -176,6 +177,7 @@ function groupToReadingData(group: SavedQuestionGroup): ReadingPassageGroupData 
                 points: q.points || 1,
                 explanation: q.explanation || '',
                 explanationCn: q.explanation_cn || '',
+                explanationImageUrl: q.explanation_image_url || '',
                 answers: answers.length ? answers : [
                     { text: '', textCn: '', imageUrl: '' },
                     { text: '', textCn: '', imageUrl: '' },
@@ -212,6 +214,7 @@ function groupToFillBlankData(group: SavedQuestionGroup): FillBlankGroupData {
             points: q.points || 1,
             explanation: q.explanation || '',
             explanationCn: q.explanation_cn || '',
+            explanationImageUrl: q.explanation_image_url || '',
             correctAnswerKey: (q.answers || []).find(a => a.is_correct)?.answer_key || 'A',
             difficulty: q.difficulty || 'medium',
             subQuestionNumber: q.sub_question_number || q.question_number || group.question_number + index,
@@ -240,6 +243,7 @@ function dbToFormData(q: SavedQuestion): QuestionFormData {
         points: q.points || 1,
         explanation: q.explanation || '',
         explanationCn: q.explanation_cn || '',
+        explanationImageUrl: q.explanation_image_url || '',
         answers,
         correctAnswer,
         linkedOptions: (q.effective_linked_options || q.linked_options || []).map((o: any) => ({
@@ -451,6 +455,7 @@ export default function AdminExamDetailPage() {
                 points: data.points,
                 explanation: data.explanation,
                 explanationCn: data.explanationCn,
+                explanationImageUrl: data.explanationImageUrl,
                 answers: data.answers,
                 correctAnswer: data.correctAnswer,
                 passageText: data.passageText,
@@ -475,6 +480,7 @@ export default function AdminExamDetailPage() {
                         points: data.points,
                         explanation: data.explanation,
                         explanation_cn: data.explanationCn,
+                        explanation_image_url: data.explanationImageUrl,
                         difficulty: data.difficulty,
                         answers: (data.answers || []).map((a, i) => ({
                             id: q.answers?.[i]?.id || 0,
@@ -1740,12 +1746,21 @@ export default function AdminExamDetailPage() {
                                                 ))}
                                             </div>
 
-                                            {(q.explanation || q.explanation_cn) && (
+                                            {(q.explanation || q.explanation_cn || q.explanation_image_url) && (
                                                 <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                                                     <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">Giải thích:</p>
-                                                    <RichMathText value={q.explanation || q.explanation_cn || ''} className="text-base leading-7 text-blue-950" />
+                                                    {(q.explanation || q.explanation_cn) && (
+                                                        <RichMathText value={q.explanation || q.explanation_cn || ''} readableBreaks className="text-base leading-7 text-blue-950" />
+                                                    )}
                                                     {q.explanation && q.explanation_cn && q.explanation_cn !== q.explanation && (
-                                                        <RichMathText value={q.explanation_cn} className="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800" />
+                                                        <RichMathText value={q.explanation_cn} readableBreaks className="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800" />
+                                                    )}
+                                                    {q.explanation_image_url && (
+                                                        <img
+                                                            src={q.explanation_image_url}
+                                                            alt="Ảnh giải thích"
+                                                            className="mt-3 max-h-[520px] w-full rounded-lg border border-blue-200 bg-white object-contain"
+                                                        />
                                                     )}
                                                 </div>
                                             )}

@@ -257,10 +257,10 @@ async function insertFillBlankSubItem(client, { examId, groupId, questionNumber,
     `INSERT INTO questions (
        exam_id, question_number, question_type,
        question_text, question_text_cn,
-       points, explanation, explanation_cn,
+       points, explanation, explanation_cn, explanation_image_url,
        question_group_type, difficulty,
        sub_question_number, passage_group_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [
       examId,
@@ -271,6 +271,7 @@ async function insertFillBlankSubItem(client, { examId, groupId, questionNumber,
       parsedPoints,
       item.explanation ? sanitizeExplanation(item.explanation) : null,
       item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
+      item.explanationImageUrl ? sanitize(item.explanationImageUrl) : null,
       QUESTION_TYPES.FILL_BLANK_ITEM,
       item.difficulty || "medium",
       item.subQuestionNumber || questionNumber,
@@ -487,11 +488,12 @@ const AdminFillBlankGroupController = {
                    points = $4,
                    explanation = $5,
                    explanation_cn = $6,
-                   difficulty = $7,
-                   sub_question_number = $8,
-                   passage_group_id = $9,
-                   question_group_type = $10
-               WHERE id = $11 AND exam_id = $12 AND question_type = $13`,
+                   explanation_image_url = $7,
+                   difficulty = $8,
+                   sub_question_number = $9,
+                   passage_group_id = $10,
+                   question_group_type = $11
+               WHERE id = $12 AND exam_id = $13 AND question_type = $14`,
               [
                 questionNumber,
                 sanitize(normQ?.en || fallbackQuestionText),
@@ -499,6 +501,7 @@ const AdminFillBlankGroupController = {
                 parsedPoints,
                 item.explanation ? sanitizeExplanation(item.explanation) : null,
                 item.explanationCn ? sanitizeExplanation(item.explanationCn) : null,
+                item.explanationImageUrl ? sanitize(item.explanationImageUrl) : null,
                 item.difficulty || "medium",
                 item.subQuestionNumber || questionNumber,
                 groupId,

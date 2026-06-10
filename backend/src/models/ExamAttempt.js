@@ -440,6 +440,7 @@ const ExamAttempt = {
         q.points,
         q.explanation,
         q.explanation_cn,
+        q.explanation_image_url,
         (
           SELECT qt.name
           FROM question_topic_mapping qtm
@@ -518,6 +519,7 @@ const ExamAttempt = {
         points: question.points,
         explanation: question.explanation,
         explanation_cn: question.explanation_cn,
+        explanation_image_url: question.explanation_image_url,
         options: questionAnswers.map((a) => ({
           key: a.answer_key,
           text: a.answer_text,

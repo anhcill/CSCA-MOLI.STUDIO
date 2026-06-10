@@ -43,7 +43,8 @@ interface PetMessage {
 
 const SETTINGS_KEY = 'moli_pet_settings_v1';
 const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
-const POSITION_KEY = 'moli_pet_position_v1';
+const POSITION_KEY = 'moli_pet_position_v2';
+const SETTINGS_DEFAULTS_VERSION = 2;
 const PET_FRAME_SIZE = 88;
 
 interface PetPoint {
@@ -212,7 +213,7 @@ const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   mood: 'friendly',
   position,
   showBubble: false,
-  motion: true,
+  motion: false,
   variant: 'cat',
 });
 
@@ -222,15 +223,16 @@ const readSettings = (position: PetPosition) => {
     const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}');
     const defaults = getDefaultSettings(position);
     const savedName = typeof saved.name === 'string' ? saved.name.trim().slice(0, 24) : '';
+    const hasCurrentDefaults = saved.defaultsVersion === SETTINGS_DEFAULTS_VERSION;
     return {
       ...defaults,
       ...saved,
       name: savedName && savedName.toLowerCase() !== 'moli' ? savedName : defaults.name,
       color: COLOR_THEMES[saved.color as PetColor] ? saved.color : defaults.color,
       mood: MOODS[saved.mood as PetMood] ? saved.mood : defaults.mood,
-      position: saved.position === 'right' || saved.position === 'left' ? saved.position : defaults.position,
+      position: hasCurrentDefaults && (saved.position === 'right' || saved.position === 'left') ? saved.position : defaults.position,
       showBubble: typeof saved.showBubble === 'boolean' ? saved.showBubble : defaults.showBubble,
-      motion: typeof saved.motion === 'boolean' ? saved.motion : defaults.motion,
+      motion: hasCurrentDefaults && typeof saved.motion === 'boolean' ? saved.motion : defaults.motion,
       variant: PET_VARIANTS[saved.variant as PetVariant] ? saved.variant : defaults.variant,
     } as MoliPetSettings;
   } catch {
@@ -804,7 +806,7 @@ function MolyPlushPet({
   );
 }
 
-export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
+export default function MoliPet({ defaultPosition = 'right' }: MoliPetProps) {
   const pathname = usePathname();
   const { user, isAuthenticated } = useAuthStore();
   const [mounted, setMounted] = useState(false);
@@ -815,6 +817,8 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const [settings, setSettings] = useState<MoliPetSettings>(() => getDefaultSettings(defaultPosition));
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(0);
   const [messages, setMessages] = useState<PetMessage[]>([]);
   const [petPoint, setPetPoint] = useState<PetPoint | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -838,6 +842,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const isVocabularyRoute = pathname?.includes('tu-vung') ?? false;
   const petMood = isVocabularyRoute ? 'happy' : settings.mood;
   const showHintBubble = settings.showBubble && !open && !isVocabularyRoute;
+  const cooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - cooldownNow) / 1000));
 
   useEffect(() => {
     const nextSettings = readSettings(defaultPosition);
@@ -858,8 +863,18 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
 
   useEffect(() => {
     if (!mounted) return;
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      ...settings,
+      defaultsVersion: SETTINGS_DEFAULTS_VERSION,
+    }));
   }, [mounted, settings]);
+
+  useEffect(() => {
+    if (!cooldownUntil || cooldownUntil <= Date.now()) return;
+    setCooldownNow(Date.now());
+    const timer = window.setInterval(() => setCooldownNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1041,6 +1056,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     event.preventDefault();
     const text = input.trim();
     if (!text || loading) return;
+    if (cooldownSeconds > 0) return;
 
     const nextMessages: PetMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(nextMessages);
@@ -1076,6 +1092,10 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         { role: 'assistant', content: response.data?.answer || 'Moly nghe rồi nè.' },
       ]);
     } catch (error: any) {
+      const retryAfter = Number(error?.response?.data?.retryAfter || 0);
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        setCooldownUntil(Date.now() + retryAfter * 1000);
+      }
       setMessages((current) => [
         ...current,
         {
@@ -1327,17 +1347,23 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             <div ref={messagesEndRef} />
           </div>
 
+          {cooldownSeconds > 0 && (
+            <div className="shrink-0 border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Đợi {cooldownSeconds}s rồi nhắn tiếp.
+            </div>
+          )}
+
           <form onSubmit={sendMessage} className="flex shrink-0 items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-700">
             <input
               value={input}
               maxLength={600}
               onChange={(event) => setInput(event.target.value)}
-              placeholder={isAuthenticated ? `Nhắn ${settings.name}...` : 'Đăng nhập để chat AI'}
+              placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name}...` : 'Đăng nhập để chat AI'}
               className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
             <button
               type="submit"
-              disabled={!input.trim() || loading}
+              disabled={!input.trim() || loading || cooldownSeconds > 0}
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.button}`}
               title="Gửi"
             >

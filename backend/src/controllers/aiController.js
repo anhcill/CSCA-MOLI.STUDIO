@@ -18,6 +18,9 @@ const moliPetInFlightUsers = new Set();
 const MOLI_PET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MOLI_PET_MAX_PER_WINDOW = Number.parseInt(process.env.MOLI_PET_DAILY_LIMIT, 10) || 20;
 const MOLI_PET_MIN_INTERVAL_MS = Number.parseInt(process.env.MOLI_PET_MIN_INTERVAL_MS, 10) || 3000;
+const MOLI_PET_BURST_WINDOW_MS = 60 * 1000;
+const MOLI_PET_MAX_PER_BURST = Number.parseInt(process.env.MOLI_PET_BURST_LIMIT, 10) || 6;
+const MOLI_PET_REPEAT_WINDOW_MS = Number.parseInt(process.env.MOLI_PET_REPEAT_WINDOW_MS, 10) || 45 * 1000;
 const MOLI_PET_MAX_MESSAGE_LENGTH = Number.parseInt(process.env.MOLI_PET_MAX_MESSAGE_LENGTH, 10) || 600;
 const INSIGHT_TYPES = {
   fullAnalysis: 'full_analysis',
@@ -156,12 +159,39 @@ function finishMoliPet(userId) {
   moliPetInFlightUsers.delete(userId);
 }
 
-function checkMoliPetLimit(userId) {
+function normalizeMoliPetFingerprint(message) {
+  return String(message || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
+function checkMoliPetLimit(userId, message) {
   const now = Date.now();
-  const current = moliPetWindows.get(userId) || { windowStart: now, count: 0, lastAt: 0 };
+  const fingerprint = normalizeMoliPetFingerprint(message);
+  const current = moliPetWindows.get(userId) || {
+    windowStart: now,
+    count: 0,
+    lastAt: 0,
+    burstStart: now,
+    burstCount: 0,
+    lastFingerprint: '',
+    lastFingerprintAt: 0,
+  };
   const state = now - current.windowStart >= MOLI_PET_WINDOW_MS
-    ? { windowStart: now, count: 0, lastAt: current.lastAt || 0 }
-    : current;
+    ? {
+        ...current,
+        windowStart: now,
+        count: 0,
+        burstStart: now,
+        burstCount: 0,
+      }
+    : {
+        ...current,
+        burstStart: now - (current.burstStart || now) >= MOLI_PET_BURST_WINDOW_MS ? now : (current.burstStart || now),
+        burstCount: now - (current.burstStart || now) >= MOLI_PET_BURST_WINDOW_MS ? 0 : (current.burstCount || 0),
+      };
 
   const nextAllowedAt = state.lastAt + MOLI_PET_MIN_INTERVAL_MS;
   if (state.lastAt && now < nextAllowedAt) {
@@ -170,6 +200,28 @@ function checkMoliPetLimit(userId) {
       allowed: false,
       retryAfter: Math.ceil((nextAllowedAt - now) / 1000),
       message: 'Moly nghe kip khong noi kip. Doi vai giay roi nhan tiep nhe.',
+    };
+  }
+
+  const repeated = fingerprint
+    && fingerprint === state.lastFingerprint
+    && state.lastFingerprintAt
+    && now - state.lastFingerprintAt < MOLI_PET_REPEAT_WINDOW_MS;
+  if (repeated) {
+    moliPetWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((state.lastFingerprintAt + MOLI_PET_REPEAT_WINDOW_MS - now) / 1000),
+      message: 'Tin nay vua gui roi. Doi mot chut hoac hoi y khac nhe.',
+    };
+  }
+
+  if (state.burstCount >= MOLI_PET_MAX_PER_BURST) {
+    moliPetWindows.set(userId, state);
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((state.burstStart + MOLI_PET_BURST_WINDOW_MS - now) / 1000),
+      message: `Ban dang nhan hoi nhanh. Moly chi nhan ${MOLI_PET_MAX_PER_BURST} tin/phut de tranh spam.`,
     };
   }
 
@@ -183,7 +235,10 @@ function checkMoliPetLimit(userId) {
   }
 
   state.count += 1;
+  state.burstCount += 1;
   state.lastAt = now;
+  state.lastFingerprint = fingerprint;
+  state.lastFingerprintAt = now;
   moliPetWindows.set(userId, state);
   return {
     allowed: true,
@@ -850,7 +905,7 @@ async function askMoliPet(req, res) {
     }
     petLockUserId = userId;
 
-    const petLimit = checkMoliPetLimit(userId);
+    const petLimit = checkMoliPetLimit(userId, trimmedMessage);
     if (!petLimit.allowed) {
       return res.status(429).json({
         success: false,

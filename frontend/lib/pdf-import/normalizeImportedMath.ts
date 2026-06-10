@@ -7,6 +7,35 @@ const EXPLANATION_MARKER_RE =
 const normalizeImportText = (value?: string) =>
     normalizeImportedText(value);
 
+const tidyExplanationBreaks = (value: string) =>
+    value
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+const applyExplanationBreakRules = (value: string) =>
+    value
+        .replace(/\s*((?:前\s*n\s*[项項]和公式|通[项項]公式|代入(?:数据|數據)?解不等式|验证|驗證|检验|檢驗|结论|結論)\s*[:：])/g, '\n$1')
+        .replace(/\s*((?:Công thức|Thay|Kiểm tra|Kết luận|Chọn|Vậy)\s*[:：])/gi, '\n$1')
+        .replace(/\s*((?:步骤|步驟|Bước)\s*\d+\s*[:：])/gi, '\n$1')
+        .replace(/\s*(⇔|=>|⇒|\\Rightarrow)\s*/g, '\n$1 ')
+        .replace(/([。.;；])\s*(?=(?:由|当|代入|验证|驗證|因此|所以|故|选|答案|解析|得|Suy ra|Vậy|n\s*=))/g, '$1\n')
+        .replace(/([，,])\s*(?=(?:n|x|m|k)\s*=\s*-?\d+\s*(?:时|時))/g, '$1\n')
+        .replace(/[，,]\s*(?=(?:值域|定义域|反函数|因此|所以|故|选|答案|得))/g, '，\n')
+        .replace(/([:：])\s*(?=(?:[A-Za-z0-9\\(√]|\\log|\\frac|\\sqrt))/g, '$1\n')
+        .replace(/\s*(选\s*[A-H][.。]?)/gi, '\n$1')
+        .replace(/\n\s*\n(?=(?:⇔|=>|⇒|\\Rightarrow))/g, '\n');
+
+const normalizeExplanationText = (value?: string) => {
+    const normalized = normalizeImportText(value)
+        ?.replace(/\\n/g, '\n')
+        .replace(/\r\n?/g, '\n');
+    if (!normalized) return normalized;
+
+    return tidyExplanationBreaks(applyExplanationBreakRules(normalized));
+};
+
 const splitExplanationMarker = (value?: string) => {
     const text = value || '';
     const match = text.match(EXPLANATION_MARKER_RE);
@@ -30,8 +59,8 @@ const normalizeImportedQuestionMath = (question: ImportedQuestionData): Imported
         return {
             questionText: normalizeImportText(vi.explanation ? vi.text : question.questionText) || '',
             questionTextCn: normalizeImportText(cn.explanation ? cn.text : question.questionTextCn),
-            explanation: normalizeImportText(question.explanation || vi.explanation),
-            explanationCn: normalizeImportText(question.explanationCn || cn.explanation),
+            explanation: normalizeExplanationText(question.explanation || vi.explanation),
+            explanationCn: normalizeExplanationText(question.explanationCn || cn.explanation),
             answers: question.answers?.map(answer => ({
                 ...answer,
                 text: normalizeImportText(answer.text) || '',
@@ -70,8 +99,8 @@ export const normalizeImportedItemsMath = (items: ImportedExamItem[] = []): Impo
                     ...subItem,
                     questionText: normalizeImportText(subItem.questionText) || '',
                     questionTextCn: normalizeImportText(subItem.questionTextCn),
-                    explanation: normalizeImportText(subItem.explanation),
-                    explanationCn: normalizeImportText(subItem.explanationCn),
+                    explanation: normalizeExplanationText(subItem.explanation),
+                    explanationCn: normalizeExplanationText(subItem.explanationCn),
                 })),
             };
         }
