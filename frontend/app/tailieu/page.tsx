@@ -20,6 +20,9 @@ interface Material {
   subject: string;
   created_at: string;
   is_premium?: boolean;
+  content_html?: string;
+  content_text?: string;
+  content_source?: string;
 }
 
 const CATEGORIES = [
@@ -43,6 +46,32 @@ const SUBJECTS = [
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function textToHtml(value?: string) {
+  return (value || '')
+    .split(/\n{2,}/)
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => `<p>${escapeHtml(block).replace(/\n/g, '<br />')}</p>`)
+    .join('');
+}
+
+function hasWebContent(material: Material) {
+  return Boolean(material.content_html || material.content_text);
+}
+
+function canUsePdfProxy(fileUrl?: string) {
+  return Boolean(fileUrl && /\/upload\/v\d+\//.test(fileUrl));
+}
+
 function PDFCard({ m }: { m: Material }) {
   const user = useAuthStore((s) => s.user);
   const isVip = isVipActive(user);
@@ -51,8 +80,11 @@ function PDFCard({ m }: { m: Material }) {
   const [bookmarked, setBookmarked] = useState(false);
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
   const queryString = token ? `?token=${token}` : '';
-  const pdfUrl = `${API_URL}/materials/pdf/${m.id}${queryString}`;
-  const downloadUrl = `${API_URL}/materials/pdf/${m.id}/download${queryString}`;
+  const hasFile = Boolean(m.file_url);
+  const hasPdfProxy = canUsePdfProxy(m.file_url);
+  const hasContent = hasWebContent(m);
+  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}${queryString}` : m.file_url;
+  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}/download${queryString}` : m.file_url;
   const categoryData = CATEGORIES.find(c => c.value === m.category);
   const subjectData = SUBJECTS.find(s => s.value === m.subject);
   const locked = m.is_premium && !isVip;
@@ -147,7 +179,16 @@ function PDFCard({ m }: { m: Material }) {
                 <FiLock size={14} />
                 Khóa PRO
               </button>
-            ) : (
+            ) : hasContent ? (
+              <button
+                type="button"
+                onClick={() => setExpanded(v => !v)}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
+              >
+                <FiExternalLink size={14} />
+                Xem noi dung
+              </button>
+            ) : hasFile ? (
               <a
                 href={pdfUrl}
                 target="_blank"
@@ -158,8 +199,12 @@ function PDFCard({ m }: { m: Material }) {
                 <FiExternalLink size={14} />
                 Xem PDF
               </a>
+            ) : (
+              <span className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 text-sm font-medium rounded-lg">
+                Chua co file
+              </span>
             )}
-            {!locked && (
+            {!locked && hasFile && (
               <a
                 href={downloadUrl}
                 onClick={handleDownloadClick}
@@ -181,7 +226,13 @@ function PDFCard({ m }: { m: Material }) {
       </div>
 
       {/* Preview */}
-      {expanded && !locked && (
+      {expanded && !locked && hasContent && (
+        <article
+          className="border-t border-gray-200 bg-white px-5 py-6 text-sm leading-7 text-gray-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_p]:mb-4 [&_li]:mb-2 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6"
+          dangerouslySetInnerHTML={{ __html: m.content_html || textToHtml(m.content_text) }}
+        />
+      )}
+      {expanded && !locked && !hasContent && hasFile && (
         <div className="border-t border-gray-200 bg-gray-50 p-4">
           <iframe
             src={pdfUrl}
@@ -189,6 +240,11 @@ function PDFCard({ m }: { m: Material }) {
             title={m.title}
             loading="lazy"
           />
+        </div>
+      )}
+      {expanded && !locked && !hasContent && !hasFile && (
+        <div className="border-t border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+          Tai lieu nay chua co file hoac noi dung web.
         </div>
       )}
       {expanded && locked && (
