@@ -2,15 +2,40 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  FiBookOpen,
+  FiChevronRight,
+  FiDownload,
+  FiExternalLink,
+  FiFileText,
+  FiFilter,
+  FiSearch,
+} from 'react-icons/fi';
+import RichMathText from '@/components/common/RichMathText';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
+import { useLanguage } from '@/context/LanguageContext';
+import {
+  MATH_CSCA_FORMULA_TOPICS,
+  MATH_FORMULA_AREAS,
+  MATH_FORMULA_GRADE_OPTIONS,
+  type MathCscaFormulaTopic,
+  type MathFormulaGrade,
+  type MathFormulaLine,
+} from '@/lib/formulas/mathCscaFormulas';
+import {
+  PHYSICS_CSCA_FORMULA_TOPICS,
+  PHYSICS_FORMULA_AREAS,
+  PHYSICS_FORMULA_GRADE_OPTIONS,
+  type PhysicsCscaFormulaTopic,
+  type PhysicsFormulaGrade,
+  type PhysicsFormulaLine,
+} from '@/lib/formulas/physicsCscaFormulas';
 import axios from '@/lib/utils/axios';
 import {
   SUBJECT_OPTIONS,
   normalizeContentSubject,
   subjectMatches,
 } from '@/lib/utils/subjectScope';
-import { useLanguage } from '@/context/LanguageContext';
-import { FiDownload, FiExternalLink, FiFileText, FiSearch } from 'react-icons/fi';
 
 interface Material {
   id: number;
@@ -25,9 +50,21 @@ interface Material {
   content_text?: string;
 }
 
+type FormulaGrade = MathFormulaGrade | PhysicsFormulaGrade;
+type FormulaLine = MathFormulaLine | PhysicsFormulaLine;
+type FormulaTopic = MathCscaFormulaTopic | PhysicsCscaFormulaTopic;
+type GradeFilter = FormulaGrade | 'all';
+
+interface FilteredFormulaTopic {
+  topic: FormulaTopic;
+  formulas: FormulaLine[];
+}
+
 const FORMULA_CATEGORY = 'cong-thuc-on-thi';
 const DEFAULT_FORMULA_SUBJECT = 'toan';
 const FORMULA_SUBJECT_OPTIONS = SUBJECT_OPTIONS.filter(subject => subject.value);
+const ALL_GRADE: GradeFilter = 'all';
+const ALL_AREA = 'all';
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
   toan: 'subject.math',
@@ -59,29 +96,281 @@ function hasWebContent(material?: Material | null) {
   return Boolean(material?.content_html || material?.content_text);
 }
 
-function FormulaCard({ material, active, onView }: { material: Material; active: boolean; onView: (material: Material) => void }) {
+function normalizeSearchText(value?: string | null) {
+  return (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd');
+}
+
+function getFormulaText(line: FormulaLine) {
+  return `${line.label} ${line.value} ${line.note || ''}`;
+}
+
+function getTopicMetaText(topic: FormulaTopic) {
+  return [
+    topic.title,
+    topic.grade,
+    topic.area,
+    topic.chinese,
+    topic.summary,
+    topic.keywords.join(' '),
+    topic.notes?.join(' '),
+  ].filter(Boolean).join(' ');
+}
+
+function topicMatchesSearch(topic: FormulaTopic, query: string) {
+  if (!query) return true;
+  const metaMatch = normalizeSearchText(getTopicMetaText(topic)).includes(query);
+  const formulaMatch = topic.formulas.some(line => normalizeSearchText(getFormulaText(line)).includes(query));
+  return metaMatch || formulaMatch;
+}
+
+function getVisibleFormulas(topic: FormulaTopic, query: string) {
+  if (!query) return topic.formulas;
+  const metaMatch = normalizeSearchText(getTopicMetaText(topic)).includes(query);
+  if (metaMatch) return topic.formulas;
+  return topic.formulas.filter(line => normalizeSearchText(getFormulaText(line)).includes(query));
+}
+
+function getGradeLabel(grade: GradeFilter) {
+  if (grade === 'all') return 'Tất cả';
+  if (grade === 'Chung') return 'Chung';
+  return `Lớp ${grade}`;
+}
+
+function FormulaValue({ line }: { line: FormulaLine }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{line.label}</div>
+      <RichMathText
+        value={line.value}
+        className="min-w-0 overflow-x-auto text-[15px] font-semibold leading-7 text-slate-950 [&_.katex-display]:overflow-x-auto"
+      />
+      {line.note && (
+        <RichMathText
+          value={line.note}
+          className="mt-2 border-t border-slate-100 pt-2 text-sm leading-6 text-slate-500"
+        />
+      )}
+    </div>
+  );
+}
+
+function FormulaTopicSection({ item }: { item: FilteredFormulaTopic }) {
+  const { topic, formulas } = item;
+
+  return (
+    <section id={`formula-${topic.id}`} className="scroll-mt-5 border-t border-slate-200 pt-6">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700">{getGradeLabel(topic.grade)}</span>
+            <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">{topic.area}</span>
+            {topic.chinese && <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700">{topic.chinese}</span>}
+          </div>
+          <h2 className="text-xl font-black tracking-tight text-slate-950">{topic.title}</h2>
+          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">{topic.summary}</p>
+        </div>
+        <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700">
+          {formulas.length} công thức
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {formulas.map(line => (
+          <FormulaValue key={`${topic.id}-${line.label}`} line={line} />
+        ))}
+      </div>
+
+      {topic.notes?.length ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          {topic.notes.map(note => (
+            <RichMathText key={note} value={note} className="text-sm font-medium leading-6 text-amber-900" />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function FormulaRepository({
+  search,
+  setSearch,
+  topics,
+  areas,
+  gradeOptions,
+}: {
+  search: string;
+  setSearch: (value: string) => void;
+  topics: FormulaTopic[];
+  areas: string[];
+  gradeOptions: FormulaGrade[];
+}) {
+  const [grade, setGrade] = useState<GradeFilter>(ALL_GRADE);
+  const [area, setArea] = useState(ALL_AREA);
+  const query = normalizeSearchText(search);
+
+  const filteredTopics = useMemo<FilteredFormulaTopic[]>(() => (
+    topics
+      .filter(topic => {
+        const gradeMatch = grade === ALL_GRADE || topic.grade === grade || (grade !== 'Chung' && topic.grade === 'Chung');
+        const areaMatch = area === ALL_AREA || topic.area === area;
+        return gradeMatch && areaMatch && topicMatchesSearch(topic, query);
+      })
+      .map(topic => ({ topic, formulas: getVisibleFormulas(topic, query) }))
+      .filter(item => item.formulas.length > 0)
+  ), [area, grade, query, topics]);
+
+  const totalFormulaCount = useMemo(
+    () => topics.reduce((sum, topic) => sum + topic.formulas.length, 0),
+    [topics],
+  );
+  const visibleFormulaCount = filteredTopics.reduce((sum, item) => sum + item.formulas.length, 0);
+
+  return (
+    <section className="space-y-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Tìm công thức, chủ đề, từ khóa tiếng Trung..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+            <div className="rounded-lg bg-sky-50 px-3 py-2">
+              <div className="text-lg font-black text-sky-700">{filteredTopics.length}</div>
+              <div className="text-[11px] font-bold uppercase text-sky-500">chủ đề</div>
+            </div>
+            <div className="rounded-lg bg-emerald-50 px-3 py-2">
+              <div className="text-lg font-black text-emerald-700">{visibleFormulaCount}</div>
+              <div className="text-[11px] font-bold uppercase text-emerald-500">đang hiện</div>
+            </div>
+            <div className="rounded-lg bg-amber-50 px-3 py-2">
+              <div className="text-lg font-black text-amber-700">{totalFormulaCount}</div>
+              <div className="text-[11px] font-bold uppercase text-amber-500">tổng</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            <FiFilter />
+            Lớp
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {[ALL_GRADE, ...gradeOptions].map(option => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setGrade(option)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-black transition ${
+                  grade === option
+                    ? 'border-sky-600 bg-sky-600 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700'
+                }`}
+              >
+                {getGradeLabel(option)}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            <FiBookOpen />
+            Mảng kiến thức
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {[ALL_AREA, ...areas].map(option => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setArea(option)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-black transition ${
+                  area === option
+                    ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700'
+                }`}
+              >
+                {option === ALL_AREA ? 'Tất cả' : option}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {filteredTopics.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
+          <div className="mb-3 text-5xl">∑</div>
+          <p className="font-semibold text-slate-500">Không thấy công thức phù hợp.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[230px_1fr]">
+          <aside className="hidden lg:block">
+            <div className="sticky top-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">Chủ đề</div>
+              <div className="max-h-[70vh] space-y-1 overflow-y-auto pr-1">
+                {filteredTopics.map(({ topic }) => (
+                  <a
+                    key={topic.id}
+                    href={`#formula-${topic.id}`}
+                    className="flex items-start gap-2 rounded-lg px-2 py-2 text-xs font-bold leading-5 text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                  >
+                    <FiChevronRight className="mt-0.5 shrink-0" />
+                    <span>{topic.title}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </aside>
+          <div className="space-y-7">
+            {filteredTopics.map(item => (
+              <FormulaTopicSection key={item.topic.id} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MaterialCard({
+  material,
+  active,
+  onView,
+}: {
+  material: Material;
+  active: boolean;
+  onView: (material: Material) => void;
+}) {
   return (
     <button
       type="button"
       onClick={() => onView(material)}
-      className={`w-full text-left rounded-xl border p-4 transition-all ${
+      className={`w-full rounded-lg border p-4 text-left transition-all ${
         active
           ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-          : 'border-gray-200 bg-white hover:border-emerald-200 hover:shadow-sm'
+          : 'border-slate-200 bg-white hover:border-emerald-200 hover:shadow-sm'
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
           active ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'
         }`}>
           <FiFileText size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-bold leading-snug text-gray-950">{material.title}</h3>
-          {material.description && <p className="mt-1 line-clamp-2 text-xs text-gray-500">{material.description}</p>}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-gray-400">
-            {material.topic && <span className="rounded-full bg-white px-2 py-0.5 text-emerald-700">{material.topic}</span>}
-            {hasWebContent(material) && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">OCR</span>}
+          <h3 className="text-sm font-black leading-snug text-slate-950">{material.title}</h3>
+          {material.description && <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-slate-500">{material.description}</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-400">
+            {material.topic && <span className="rounded-lg bg-white px-2 py-0.5 text-emerald-700">{material.topic}</span>}
+            {hasWebContent(material) && <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-emerald-700">OCR</span>}
             <span>{new Date(material.created_at).toLocaleDateString('vi-VN')}</span>
           </div>
         </div>
@@ -90,44 +379,156 @@ function FormulaCard({ material, active, onView }: { material: Material; active:
   );
 }
 
-function TopicSection({
-  topic,
-  materials,
-  activeId,
-  onView,
+function MaterialViewer({
+  material,
+  viewerLoaded,
+  useGoogleViewer,
+  setViewerLoaded,
+  setUseGoogleViewer,
 }: {
-  topic: string;
-  materials: Material[];
-  activeId?: number;
-  onView: (material: Material) => void;
+  material: Material;
+  viewerLoaded: boolean;
+  useGoogleViewer: boolean;
+  setViewerLoaded: (value: boolean) => void;
+  setUseGoogleViewer: (value: boolean) => void;
 }) {
   const { t } = useLanguage();
 
   return (
-    <section className="mb-6">
-      <div className="mb-3 flex items-center justify-between border-b border-gray-200 py-2">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-gray-800">{topic || t('materials.commonTopic')}</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">{materials.length}</span>
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b bg-slate-950 px-4 py-3 text-white">
+        <div className="min-w-0">
+          <h2 className="truncate font-semibold">{material.title}</h2>
+          {material.topic && <p className="truncate text-xs text-slate-300">{material.topic}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {material.file_url && (
+            <>
+              <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>
+              <a href={material.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/20"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
+            </>
+          )}
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {materials.map(material => (
-          <FormulaCard
-            key={material.id}
-            material={material}
-            active={activeId === material.id}
-            onView={onView}
+      {hasWebContent(material) ? (
+        <article
+          className="max-h-[72vh] overflow-y-auto bg-white px-5 py-6 text-sm leading-7 text-slate-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-slate-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-slate-900 [&_li]:mb-2 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mb-4 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6"
+          dangerouslySetInnerHTML={{ __html: material.content_html || textToHtml(material.content_text) }}
+        />
+      ) : material.file_url ? (
+        <div className="relative h-[72vh] bg-slate-800">
+          {!viewerLoaded && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <p className="text-sm text-slate-300">{t('materials.loadingDoc')}</p>
+            </div>
+          )}
+          <iframe
+            src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true` : material.file_url}
+            className="h-full w-full border-0"
+            title={material.title}
+            onLoad={() => setViewerLoaded(true)}
+            onError={() => setUseGoogleViewer(true)}
           />
-        ))}
+        </div>
+      ) : (
+        <div className="bg-white px-5 py-12 text-center text-sm text-slate-500">
+          {t('materials.none')}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MaterialLibrary({
+  title,
+  materials,
+  grouped,
+  loading,
+  viewing,
+  setViewing,
+  viewerLoaded,
+  useGoogleViewer,
+  setViewerLoaded,
+  setUseGoogleViewer,
+  emptyText,
+}: {
+  title: string;
+  materials: Material[];
+  grouped: Map<string, Material[]>;
+  loading: boolean;
+  viewing: Material | null;
+  setViewing: (material: Material) => void;
+  viewerLoaded: boolean;
+  useGoogleViewer: boolean;
+  setViewerLoaded: (value: boolean) => void;
+  setUseGoogleViewer: (value: boolean) => void;
+  emptyText: string;
+}) {
+  if (loading) {
+    return (
+      <section className="space-y-3">
+        <div className="h-7 w-48 animate-pulse rounded-lg bg-slate-200" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, index) => <div key={index} className="h-24 animate-pulse rounded-lg bg-slate-200" />)}
+        </div>
+      </section>
+    );
+  }
+
+  if (materials.length === 0) {
+    return (
+      <section className="rounded-lg border border-dashed border-slate-300 bg-white py-12 text-center">
+        <div className="mb-3 text-5xl">∑</div>
+        <p className="font-semibold text-slate-500">{emptyText}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-lg font-black text-slate-950">{title}</h2>
+          <p className="text-sm font-medium text-slate-500">{materials.length} tài liệu</p>
+        </div>
       </div>
+
+      {viewing && (
+        <MaterialViewer
+          material={viewing}
+          viewerLoaded={viewerLoaded}
+          useGoogleViewer={useGoogleViewer}
+          setViewerLoaded={setViewerLoaded}
+          setUseGoogleViewer={setUseGoogleViewer}
+        />
+      )}
+
+      {Array.from(grouped.entries()).map(([topic, items]) => (
+        <div key={topic || 'common'} className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="font-black text-slate-800">{topic || 'Chủ đề chung'}</span>
+            <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">{items.length}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {items.map(material => (
+              <MaterialCard
+                key={material.id}
+                material={material}
+                active={viewing?.id === material.id}
+                onView={setViewing}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
 
 export default function CongThucPage() {
   const { t } = useLanguage();
-  const searchParams = useSearchParams() as unknown as URLSearchParams;
+  const searchParams = useSearchParams();
   const subjectParam = normalizeContentSubject(searchParams.get('subject')) || DEFAULT_FORMULA_SUBJECT;
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +537,10 @@ export default function CongThucPage() {
   const [viewing, setViewing] = useState<Material | null>(null);
   const [viewerLoaded, setViewerLoaded] = useState(false);
   const [useGoogleViewer, setUseGoogleViewer] = useState(false);
+  const isFormulaRepositorySubject = activeSubject === 'toan' || activeSubject === 'vat-ly';
+  const formulaRepositoryTopics = activeSubject === 'vat-ly' ? PHYSICS_CSCA_FORMULA_TOPICS : MATH_CSCA_FORMULA_TOPICS;
+  const formulaRepositoryAreas = activeSubject === 'vat-ly' ? PHYSICS_FORMULA_AREAS : MATH_FORMULA_AREAS;
+  const formulaRepositoryGradeOptions = activeSubject === 'vat-ly' ? PHYSICS_FORMULA_GRADE_OPTIONS : MATH_FORMULA_GRADE_OPTIONS;
 
   useEffect(() => {
     setActiveSubject(subjectParam);
@@ -144,6 +549,7 @@ export default function CongThucPage() {
   const handleSubjectChange = (subject: string) => {
     const normalizedSubject = normalizeContentSubject(subject) || DEFAULT_FORMULA_SUBJECT;
     setActiveSubject(normalizedSubject);
+    setViewing(null);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('subject', normalizedSubject);
@@ -157,46 +563,57 @@ export default function CongThucPage() {
 
     setLoading(true);
     axios.get(`/materials?${params.toString()}`)
-      .then(response => setMaterials(response.data.data || []))
+      .then(response => {
+        const data = response.data?.data;
+        setMaterials(Array.isArray(data) ? data : []);
+      })
       .catch(() => setMaterials([]))
       .finally(() => setLoading(false));
   }, [activeSubject]);
 
-  const filtered = useMemo(() => materials.filter(material => {
-    const query = search.toLowerCase();
+  const filteredMaterials = useMemo(() => materials.filter(material => {
+    const query = normalizeSearchText(search);
     const matchSubject = subjectMatches(material.subject, activeSubject);
     const matchSearch = !query ||
-      material.title.toLowerCase().includes(query) ||
-      (material.description || '').toLowerCase().includes(query) ||
-      (material.topic || '').toLowerCase().includes(query) ||
-      (material.content_text || '').toLowerCase().includes(query);
+      normalizeSearchText(material.title).includes(query) ||
+      normalizeSearchText(material.description).includes(query) ||
+      normalizeSearchText(material.topic).includes(query) ||
+      normalizeSearchText(material.content_text).includes(query);
     return matchSubject && matchSearch;
   }), [materials, activeSubject, search]);
 
   useEffect(() => {
-    if (filtered.length === 0) {
+    if (isFormulaRepositorySubject) {
+      if (viewing && !filteredMaterials.some(material => material.id === viewing.id)) {
+        setViewing(null);
+      }
+      return;
+    }
+
+    if (filteredMaterials.length === 0) {
       setViewing(null);
       return;
     }
-    if (!viewing || !filtered.some(material => material.id === viewing.id)) {
-      setViewing(filtered[0]);
+    if (!viewing || !filteredMaterials.some(material => material.id === viewing.id)) {
+      setViewing(filteredMaterials[0]);
     }
-  }, [filtered, viewing]);
+  }, [filteredMaterials, isFormulaRepositorySubject, viewing]);
 
   useEffect(() => {
     setViewerLoaded(false);
     setUseGoogleViewer(false);
   }, [viewing?.id]);
 
-  const grouped = useMemo(() => {
+  const groupedMaterials = useMemo(() => {
     const map = new Map<string, Material[]>();
-    filtered.forEach(material => {
+    filteredMaterials.forEach(material => {
       const key = material.topic || '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(material);
     });
     return map;
-  }, [filtered]);
+  }, [filteredMaterials]);
+
   const formulaTitle = t('course.title.formulas');
 
   return (
@@ -206,27 +623,17 @@ export default function CongThucPage() {
       activeSection="cong-thuc"
       searchPlaceholder="Tìm công thức..."
     >
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <div className="mb-6">
-          <div className="mb-1 flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700">∑</span>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{formulaTitle}</h1>
-              <p className="mt-0.5 text-sm text-gray-500">Tổng hợp công thức ôn thi theo từng môn.</p>
-            </div>
-          </div>
-        </div>
-
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {FORMULA_SUBJECT_OPTIONS.map(subject => (
             <button
               key={subject.value}
               type="button"
               onClick={() => handleSubjectChange(subject.value)}
-              className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+              className={`flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-black transition-all ${
                 activeSubject === subject.value
-                  ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700'
+                  ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-950'
               }`}
             >
               <span>{subject.emoji}</span> {t(SUBJECT_LABEL_KEYS[subject.value] || subject.label)}
@@ -234,75 +641,55 @@ export default function CongThucPage() {
           ))}
         </div>
 
-        <div className="relative mb-7">
-          <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input
-            type="text"
-            placeholder="Tìm công thức, chủ đề, từ khóa..."
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          />
-        </div>
-
-        {viewing && (
-          <section className="mb-8 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b bg-gray-900 px-4 py-3 text-white">
-              <div className="min-w-0">
-                <h2 className="truncate font-semibold">{viewing.title}</h2>
-                {viewing.topic && <p className="truncate text-xs text-gray-300">{viewing.topic}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {viewing.file_url && (
-                  <>
-                    <a href={viewing.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>
-                    <a href={viewing.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
-                  </>
-                )}
-              </div>
-            </div>
-            {hasWebContent(viewing) ? (
-              <article
-                className="max-h-[72vh] overflow-y-auto bg-white px-5 py-6 text-sm leading-7 text-gray-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_p]:mb-4 [&_li]:mb-2 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6"
-                dangerouslySetInnerHTML={{ __html: viewing.content_html || textToHtml(viewing.content_text) }}
-              />
-            ) : viewing.file_url ? (
-              <div className="relative h-[72vh] bg-gray-800">
-                {!viewerLoaded && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <p className="text-sm text-gray-300">{t('materials.loadingDoc')}</p>
-                  </div>
-                )}
-                <iframe
-                  src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true` : viewing.file_url}
-                  className="h-full w-full border-0"
-                  title={viewing.title}
-                  onLoad={() => setViewerLoaded(true)}
-                  onError={() => setUseGoogleViewer(true)}
-                />
-              </div>
-            ) : (
-              <div className="bg-white px-5 py-12 text-center text-sm text-gray-500">
-                {t('materials.none')}
-              </div>
-            )}
-          </section>
-        )}
-
-        {loading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, index) => <div key={index} className="h-24 animate-pulse rounded-xl bg-gray-200" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-20 text-center">
-            <div className="mb-4 text-6xl">∑</div>
-            <p className="text-gray-500">{search ? t('materials.noMatch') : t('materials.none')}</p>
+        {isFormulaRepositorySubject ? (
+          <div className="space-y-8">
+            <FormulaRepository
+              search={search}
+              setSearch={setSearch}
+              topics={formulaRepositoryTopics}
+              areas={formulaRepositoryAreas}
+              gradeOptions={formulaRepositoryGradeOptions}
+            />
+            <MaterialLibrary
+              title="Tài liệu bổ sung từ admin"
+              materials={filteredMaterials}
+              grouped={groupedMaterials}
+              loading={loading}
+              viewing={viewing}
+              setViewing={setViewing}
+              viewerLoaded={viewerLoaded}
+              useGoogleViewer={useGoogleViewer}
+              setViewerLoaded={setViewerLoaded}
+              setUseGoogleViewer={setUseGoogleViewer}
+              emptyText="Chưa có tài liệu bổ sung cho môn này."
+            />
           </div>
         ) : (
-          Array.from(grouped.entries()).map(([topic, items]) => (
-            <TopicSection key={topic} topic={topic} materials={items} activeId={viewing?.id} onView={setViewing} />
-          ))
+          <div className="space-y-5">
+            <div className="relative">
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                type="text"
+                placeholder="Tìm tài liệu, chủ đề, từ khóa..."
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              />
+            </div>
+            <MaterialLibrary
+              title="Công thức đã upload"
+              materials={filteredMaterials}
+              grouped={groupedMaterials}
+              loading={loading}
+              viewing={viewing}
+              setViewing={setViewing}
+              viewerLoaded={viewerLoaded}
+              useGoogleViewer={useGoogleViewer}
+              setViewerLoaded={setViewerLoaded}
+              setUseGoogleViewer={setUseGoogleViewer}
+              emptyText={search ? t('materials.noMatch') : t('materials.none')}
+            />
+          </div>
         )}
       </div>
     </SubjectStudyShell>
