@@ -44,8 +44,10 @@ interface PetMessage {
 const SETTINGS_KEY = 'moli_pet_settings_v1';
 const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
 const POSITION_KEY = 'moli_pet_position_v2';
-const SETTINGS_DEFAULTS_VERSION = 2;
+const SETTINGS_DEFAULTS_VERSION = 3;
 const PET_FRAME_SIZE = 88;
+const PET_PANEL_MAX_WIDTH = 372;
+const PET_PANEL_MARGIN = 12;
 
 interface PetPoint {
   x: number;
@@ -806,7 +808,7 @@ function MolyPlushPet({
   );
 }
 
-export default function MoliPet({ defaultPosition = 'right' }: MoliPetProps) {
+export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const pathname = usePathname();
   const { user, isAuthenticated } = useAuthStore();
   const [mounted, setMounted] = useState(false);
@@ -977,10 +979,37 @@ export default function MoliPet({ defaultPosition = 'right' }: MoliPetProps) {
 
   if (!petPoint) return null;
 
-  const dockedRight = petPoint.x > window.innerWidth / 2;
-  const panelSideClass = dockedRight ? 'sm:right-0 sm:left-auto' : 'sm:left-0 sm:right-auto';
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const dockedRight = petPoint.x > viewportWidth / 2;
+  const panelWidth = Math.min(PET_PANEL_MAX_WIDTH, Math.max(220, viewportWidth - PET_PANEL_MARGIN * 2));
+  const maxPanelLeft = Math.max(PET_PANEL_MARGIN, viewportWidth - panelWidth - PET_PANEL_MARGIN);
+  const preferredPanelLeft = dockedRight ? petPoint.x + PET_FRAME_SIZE - panelWidth : petPoint.x;
+  const panelLeft = Math.min(Math.max(PET_PANEL_MARGIN, preferredPanelLeft), maxPanelLeft);
+  const minPanelHeight = Math.min(240, Math.max(180, viewportHeight - PET_PANEL_MARGIN * 2));
+  const openPanelBelowPet = petPoint.y < viewportHeight * 0.45;
+  const panelTop = openPanelBelowPet
+    ? Math.min(
+        Math.max(PET_PANEL_MARGIN, petPoint.y + PET_FRAME_SIZE + PET_PANEL_MARGIN),
+        Math.max(PET_PANEL_MARGIN, viewportHeight - minPanelHeight - PET_PANEL_MARGIN),
+      )
+    : undefined;
+  const panelBottom = openPanelBelowPet
+    ? undefined
+    : Math.min(
+        Math.max(PET_PANEL_MARGIN, viewportHeight - petPoint.y + PET_PANEL_MARGIN),
+        Math.max(PET_PANEL_MARGIN, viewportHeight - minPanelHeight - PET_PANEL_MARGIN),
+      );
+  const panelAvailableHeight = openPanelBelowPet
+    ? viewportHeight - (panelTop ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN
+    : viewportHeight - (panelBottom ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN;
+  const panelStyle: CSSProperties = {
+    left: panelLeft,
+    width: panelWidth,
+    maxHeight: Math.max(180, panelAvailableHeight),
+    ...(openPanelBelowPet ? { top: panelTop } : { bottom: panelBottom }),
+  };
   const bubbleSideClass = dockedRight ? 'right-20' : 'left-20';
-  const panelVerticalClass = petPoint.y < 360 ? 'sm:top-20 sm:bottom-auto' : 'sm:bottom-24 sm:top-auto';
   const containerStyle: CSSProperties = {
     left: petPoint.x,
     top: petPoint.y,
@@ -1202,7 +1231,8 @@ export default function MoliPet({ defaultPosition = 'right' }: MoliPetProps) {
       `}</style>
       {open && !minimized && (
         <section
-          className={`fixed bottom-[104px] left-3 right-3 flex max-h-[calc(100dvh-116px)] w-auto flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl sm:absolute sm:left-auto sm:right-auto sm:w-[min(372px,calc(100vw-24px))] ${panelVerticalClass} ${panelSideClass} dark:border-slate-700 dark:bg-slate-900/95`}
+          className="fixed flex flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95"
+          style={panelStyle}
           aria-label="MolyPet"
         >
           <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
