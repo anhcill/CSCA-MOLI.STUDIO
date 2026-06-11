@@ -10,6 +10,7 @@ const officialExamController = require("../controllers/officialExamController");
 const {
 	examWriteLimiter,
 	examImportPreviewLimiter,
+	examAiReviewCooldown,
 	examImageOcrLimiter,
 	examDeleteLimiter,
 	scheduleLimiter,
@@ -57,7 +58,8 @@ router.use(authorizePermission("exams.manage"));
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
 router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
-router.post("/import/pdf/review", examImportPreviewLimiter, AdminExamController.reviewImportedItems);
+router.post("/import/pdf/review", examImportPreviewLimiter, examAiReviewCooldown, AdminExamController.reviewImportedItems);
+router.post("/import/pdf/apply-review-fixes", examImportPreviewLimiter, examAiReviewCooldown, AdminExamController.applyImportedReviewFixes);
 router.post("/import/image/ocr", examImageOcrLimiter, handleImageOcrUpload, AdminExamController.ocrSingleQuestionImage);
 router.post("/normalize-formulas", examWriteLimiter, AdminExamController.normalizeManyExamFormulas);
 
@@ -72,6 +74,8 @@ router.post("/:examId/delete-request/reject", examWriteLimiter, AdminExamControl
 router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController.normalizeExamFormulas);
+router.post("/:examId/review-quality", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewExamQuality);
+router.post("/:examId/apply-ai-review-fixes", examWriteLimiter, examAiReviewCooldown, AdminExamController.applyExamReviewFixes);
 
 // Question insertion at specific position
 router.post("/:examId/questions/insert", examWriteLimiter, AdminExamController.insertQuestion);

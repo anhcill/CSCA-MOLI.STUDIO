@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview } from '@/lib/api/examAdmin';
+import { examAdminApi, ApplyExamReviewFixesResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
-import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor, FiRefreshCw } from 'react-icons/fi';
+import { FiAlertCircle, FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
@@ -103,6 +103,25 @@ function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
 
 function isPendingQuestion(item: QuestionListItem): item is PendingQuestion {
     return '_pending' in item;
+}
+
+function getAiReviewLabel(status?: string) {
+    if (status === 'ok') return 'AI thấy ổn';
+    if (status === 'formula_issue') return 'Nghi lỗi công thức';
+    if (status === 'answer_issue') return 'Nghi sai đáp án';
+    if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
+    return 'Cần kiểm tra';
+}
+
+function getAiReviewTone(status?: string) {
+    if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+    if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800';
+    if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800';
+    return 'border-amber-200 bg-amber-50 text-amber-900';
+}
+
+function getExamReviewIssues(result: StoredExamReviewResult | null) {
+    return (result?.reviews || []).filter(review => review.status !== 'ok');
 }
 
 function buildQuestionList(rawQuestions: SavedQuestion[]): QuestionListItem[] {
@@ -222,6 +241,151 @@ function groupToFillBlankData(group: SavedQuestionGroup): FillBlankGroupData {
     };
 }
 
+function SavedExamAiReviewPanel({
+    result,
+    error,
+    reviewing,
+    normalizingFormulas,
+    applyingReviewFixes,
+    applyResult,
+    onApplySafeFix,
+    onApplyAiFixes,
+    onOpenQuestion,
+}: {
+    result: StoredExamReviewResult | null;
+    error: string;
+    reviewing: boolean;
+    normalizingFormulas: boolean;
+    applyingReviewFixes: boolean;
+    applyResult: ApplyExamReviewFixesResult | null;
+    onApplySafeFix: () => void;
+    onApplyAiFixes: () => void;
+    onOpenQuestion: (review: StoredExamReviewResult['reviews'][number]) => void;
+}) {
+    if (!result && !error && !reviewing && !applyResult && !applyingReviewFixes) return null;
+
+    const summary = result?.summary;
+    const issueRows = getExamReviewIssues(result);
+    const safeFix = result?.safeFixPreview;
+
+    return (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                    <p className="font-black text-slate-950">AI soát đề đã lưu</p>
+                    {reviewing ? (
+                        <p className="mt-1 flex items-center gap-2 text-indigo-700">
+                            <FiRefreshCw className="animate-spin" size={15} />
+                            Đang soát câu hỏi, đáp án và lời giải...
+                        </p>
+                    ) : summary ? (
+                        <p className="mt-1 text-slate-600">
+                            {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} câu có review: {summary.ok} ổn, {summary.issues} cần xem.
+                            {summary.model ? ` Model: ${summary.model}.` : ''}
+                        </p>
+                    ) : null}
+                    {safeFix && (
+                        <p className="mt-1 text-slate-600">
+                            Sửa công thức chắc chắn: {safeFix.changedCount || 0} chỗ. Nghi lỗi cần xem tay: {safeFix.warningCount || 0} chỗ.
+                        </p>
+                    )}
+                </div>
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                    {issueRows.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={onApplyAiFixes}
+                            disabled={applyingReviewFixes}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <FiRefreshCw size={15} className={applyingReviewFixes ? 'animate-spin' : ''} />
+                            {applyingReviewFixes ? 'AI đang sửa...' : `AI sửa toàn bộ log (${issueRows.length})`}
+                        </button>
+                    )}
+                    {safeFix && (safeFix.changedCount > 0 || safeFix.warningCount > 0) && (
+                        <button
+                            type="button"
+                            onClick={onApplySafeFix}
+                            disabled={normalizingFormulas}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <FiRefreshCw size={15} className={normalizingFormulas ? 'animate-spin' : ''} />
+                            {normalizingFormulas ? 'Đang sửa...' : 'Sửa công thức chắc chắn'}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {error && (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">
+                    {error}
+                </div>
+            )}
+
+            {applyResult && (
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+                    {applyResult.message || `AI đã sửa ${applyResult.changedCount || 0} chỗ.`}
+                    {!!applyResult.skippedCount && <span> Còn {applyResult.skippedCount} chỗ cần xem tay.</span>}
+                </div>
+            )}
+
+            {!!result?.diagnostics?.length && (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {result.diagnostics.slice(0, 4).map((log) => (
+                        <div key={`${log.batch}-${log.status}-${log.range || ''}`} className={`rounded-lg border px-3 py-2 text-xs ${getAiReviewTone(log.status)}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+                                <span>Batch {log.batch}: {log.range || 'không rõ câu'}</span>
+                                <span>{log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'JSON lỗi' : log.status === 'no_questions' ? 'Không có câu' : 'Lỗi'}</span>
+                            </div>
+                            <p className="mt-1">Model: {log.model || summary?.model || 'chưa rõ'}{log.durationMs ? ` - ${Math.round(log.durationMs / 1000)}s` : ''}</p>
+                            {log.message && <p className="mt-1 whitespace-pre-wrap">{log.message}</p>}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {issueRows.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                    {issueRows.map((review) => (
+                        <div key={`${review.path}-${review.questionId || ''}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-2 font-black">
+                                        <FiAlertCircle className="shrink-0" size={15} />
+                                        <span>{review.label || `Câu ${review.questionNumber || '?'}`}</span>
+                                        <span>-</span>
+                                        <span>{getAiReviewLabel(review.status)}</span>
+                                        {Number.isFinite(review.confidence) && <span>{Math.round((review.confidence || 0) * 100)}%</span>}
+                                    </div>
+                                    {review.suggestedCorrectAnswer && <p className="mt-1">Gợi ý đáp án: {review.suggestedCorrectAnswer}</p>}
+                                    {review.note && <p className="mt-1 whitespace-pre-wrap">{review.note}</p>}
+                                    {(review.formulaIssues || []).map((issue, index) => (
+                                        <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>
+                                    ))}
+                                    {(review.explanationIssues || []).map((issue, index) => (
+                                        <p key={`explanation-${index}`} className="mt-1">Lời giải: {issue}</p>
+                                    ))}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenQuestion(review)}
+                                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                                >
+                                    <FiEdit2 size={13} /> Sửa câu
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : summary && !reviewing ? (
+                <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
+                    AI chưa đánh dấu câu lỗi.
+                </p>
+            ) : null}
+        </div>
+    );
+}
+
 // Convert saved DB question → QuestionFormData
 function dbToFormData(q: SavedQuestion): QuestionFormData {
     const answers = (q.answers || []).map(a => ({
@@ -321,6 +485,11 @@ export default function AdminExamDetailPage() {
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
     const [normalizingFormulas, setNormalizingFormulas] = useState(false);
     const [normalizeResult, setNormalizeResult] = useState<NormalizeFormulaResult | null>(null);
+    const [reviewingExam, setReviewingExam] = useState(false);
+    const [examReviewResult, setExamReviewResult] = useState<StoredExamReviewResult | null>(null);
+    const [examReviewError, setExamReviewError] = useState('');
+    const [applyingExamReviewFixes, setApplyingExamReviewFixes] = useState(false);
+    const [examReviewApplyResult, setExamReviewApplyResult] = useState<ApplyExamReviewFixesResult | null>(null);
 
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingExam = () => {
@@ -627,6 +796,73 @@ export default function AdminExamDetailPage() {
         } finally {
             setNormalizingFormulas(false);
         }
+    };
+
+    const handleReviewCurrentExam = async () => {
+        if (!exam?.id || reviewingExam) return;
+        try {
+            setReviewingExam(true);
+            setExamReviewError('');
+            setExamReviewResult(null);
+            setExamReviewApplyResult(null);
+            const result = await examAdminApi.reviewExamQuality(exam.id);
+            setExamReviewResult(result);
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            setExamReviewError((error?.response?.data?.message || 'AI soát đề thất bại.') + retryText);
+        } finally {
+            setReviewingExam(false);
+        }
+    };
+
+    const handleApplyExamReviewFixes = async () => {
+        if (!exam?.id || applyingExamReviewFixes || !examReviewResult) return;
+        const reviews = getExamReviewIssues(examReviewResult);
+        if (!reviews.length) return;
+        if (!confirm('Cho AI sửa toàn bộ log lỗi của đề này? Hệ thống sẽ ghi trực tiếp vào đề, bạn nên xem lại sau khi sửa.')) return;
+
+        try {
+            setApplyingExamReviewFixes(true);
+            setExamReviewError('');
+            setExamReviewApplyResult(null);
+            const result = await examAdminApi.applyExamReviewFixes(exam.id, {
+                reviews,
+                applySafeFormulas: true,
+                applySuggestedAnswers: true,
+            });
+            setExamReviewApplyResult(result);
+            setExamReviewResult(null);
+            await loadExam();
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            setExamReviewError((error?.response?.data?.message || 'AI sửa lỗi đề thất bại.') + retryText);
+        } finally {
+            setApplyingExamReviewFixes(false);
+        }
+    };
+
+    const handleOpenReviewQuestion = (review: StoredExamReviewResult['reviews'][number]) => {
+        const targetQuestionId = review.parentQuestionId || review.questionId;
+        if (!targetQuestionId) return;
+
+        if (editMode !== 'edit') {
+            setEditMode('edit');
+            setLocalQuestions([...savedQuestions]);
+        }
+        if (!review.parentQuestionId && review.questionId) {
+            setEditingQuestionId(review.questionId);
+        }
+
+        window.setTimeout(() => {
+            document.getElementById(`question-${targetQuestionId}`)?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+        }, 80);
     };
 
     const handleAddFillBlankGroup = async (data: FillBlankGroupData) => {
@@ -1367,6 +1603,14 @@ export default function AdminExamDetailPage() {
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
+                                onClick={handleReviewCurrentExam}
+                                disabled={reviewingExam}
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiAlertCircle size={15} />
+                                {reviewingExam ? 'AI đang soát...' : 'AI soát đề này'}
+                            </button>
+                            <button
                                 onClick={handleNormalizeCurrentExam}
                                 disabled={normalizingFormulas}
                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
@@ -1442,6 +1686,20 @@ export default function AdminExamDetailPage() {
                             </div>
                         )}
                     </div>
+                )}
+
+                {isEditingExam && (
+                    <SavedExamAiReviewPanel
+                        result={examReviewResult}
+                        error={examReviewError}
+                        reviewing={reviewingExam}
+                        normalizingFormulas={normalizingFormulas}
+                        applyingReviewFixes={applyingExamReviewFixes}
+                        applyResult={examReviewApplyResult}
+                        onApplySafeFix={handleNormalizeCurrentExam}
+                        onApplyAiFixes={handleApplyExamReviewFixes}
+                        onOpenQuestion={handleOpenReviewQuestion}
+                    />
                 )}
 
                 {isEditingExam && (
@@ -1642,7 +1900,7 @@ export default function AdminExamDetailPage() {
                                     const endNumber = q.children[q.children.length - 1]?.question_number || startNumber;
                                     const isReadingGroup = q.question_type === 'reading_passage';
                                     return (
-                                        <div key={`group-view-${q.id}`} className={`bg-white rounded-xl border ${isReadingGroup ? 'border-purple-200' : 'border-green-200'} p-6`}>
+                                        <div id={`question-${q.id}`} key={`group-view-${q.id}`} className={`bg-white rounded-xl border ${isReadingGroup ? 'border-purple-200' : 'border-green-200'} p-6`}>
                                             <div className="flex items-start justify-between mb-4">
                                                 <div className="flex items-start gap-3">
                                                     <span className={`flex-shrink-0 px-3 py-1 rounded-full text-sm font-bold ${isReadingGroup ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
@@ -1678,7 +1936,7 @@ export default function AdminExamDetailPage() {
                                 if (q.question_type === 'reading_passage') {
                                     const initialData = groupToReadingData(q);
                                     return (
-                                        <div key={`reading-group-${q.id}`} className="bg-white rounded-xl border border-purple-200 p-6">
+                                        <div id={`question-${q.id}`} key={`reading-group-${q.id}`} className="bg-white rounded-xl border border-purple-200 p-6">
                                             <ReadingPassageGroup
                                                 startNumber={startNumber}
                                                 initialData={initialData}
@@ -1691,7 +1949,7 @@ export default function AdminExamDetailPage() {
 
                                 const initialData = groupToFillBlankData(q);
                                 return (
-                                    <div key={`fill-group-${q.id}`} className="bg-white rounded-xl border border-green-200 p-6">
+                                    <div id={`question-${q.id}`} key={`fill-group-${q.id}`} className="bg-white rounded-xl border border-green-200 p-6">
                                         <FillBlankGroup
                                             startNumber={startNumber}
                                             initialData={initialData}
@@ -1706,7 +1964,7 @@ export default function AdminExamDetailPage() {
                             const formData = dbToFormData(q);
 
                             return (
-                                <div key={q.id} className={`bg-white rounded-xl border ${isEditing ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'} p-6`}>
+                                <div id={`question-${q.id}`} key={q.id} className={`bg-white rounded-xl border ${isEditing ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'} p-6`}>
                                     {isEditing ? (
                                         <QuestionEditor
                                             questionNumber={q.question_number}

@@ -1,5 +1,51 @@
 const rateLimit = require("express-rate-limit");
 
+const aiReviewCooldowns = new Map();
+const AI_REVIEW_COOLDOWN_MS = Number(process.env.ADMIN_AI_REVIEW_COOLDOWN_MS || 15_000);
+
+function getLimiterKey(req) {
+  return req.user?.id?.toString() || req.ip;
+}
+
+function examAiReviewCooldown(req, res, next) {
+  const key = getLimiterKey(req);
+  const now = Date.now();
+  const current = aiReviewCooldowns.get(key);
+
+  if (current?.inFlight) {
+    return res.status(429).json({
+      message: "AI đang soát đề. Vui lòng chờ kết quả, đừng bấm lại để tránh tốn phí.",
+      retryAfter: Math.ceil(AI_REVIEW_COOLDOWN_MS / 1000),
+    });
+  }
+
+  if (current?.until && current.until > now) {
+    return res.status(429).json({
+      message: "Bạn vừa chạy AI soát đề. Chờ một chút rồi thử lại để tránh spam.",
+      retryAfter: Math.ceil((current.until - now) / 1000),
+    });
+  }
+
+  const startedAt = now;
+  aiReviewCooldowns.set(key, { inFlight: true, startedAt });
+
+  res.on("finish", () => {
+    const record = aiReviewCooldowns.get(key);
+    if (record?.startedAt !== startedAt) return;
+
+    const until = Date.now() + AI_REVIEW_COOLDOWN_MS;
+    aiReviewCooldowns.set(key, { inFlight: false, startedAt, until });
+    setTimeout(() => {
+      const latest = aiReviewCooldowns.get(key);
+      if (latest?.startedAt === startedAt && !latest.inFlight) {
+        aiReviewCooldowns.delete(key);
+      }
+    }, AI_REVIEW_COOLDOWN_MS + 1000);
+  });
+
+  next();
+}
+
 /** Cảnh báo admin spam tạo/sửa đề thi */
 const examWriteLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 phút
@@ -71,6 +117,7 @@ const scheduleLimiter = rateLimit({
 module.exports = {
   examWriteLimiter,
   examImportPreviewLimiter,
+  examAiReviewCooldown,
   examImageOcrLimiter,
   examDeleteLimiter,
   scheduleLimiter,

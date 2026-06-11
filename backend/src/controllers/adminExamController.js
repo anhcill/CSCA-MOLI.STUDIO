@@ -15,7 +15,10 @@ const {
 } = require("../services/singleQuestionImageOcrService");
 const {
   normalizeExamFormulas: normalizeStoredExamFormulas,
+  applyExamReviewFixes: applyStoredExamReviewFixes,
+  applyImportedReviewFixesWithAI,
   reviewImportedItemsWithAI,
+  reviewStoredExamWithAI,
 } = require("../services/examQualityService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
@@ -384,6 +387,140 @@ const AdminExamController = {
         return res.status(504).json({ message: "AI soát đề quá thời gian." });
       }
       res.status(500).json({ message: "AI soát đề thất bại." });
+    }
+  },
+
+  async applyImportedReviewFixes(req, res) {
+    try {
+      const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+      const items = rawItems
+        .map((item, index) => normalizeImportedItem(item, index))
+        .filter(Boolean);
+      const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
+
+      if (!items.length) {
+        return res.status(400).json({ message: "Không có câu hỏi để AI sửa." });
+      }
+      if (!reviews.some(review => review?.status && review.status !== "ok")) {
+        return res.status(400).json({ message: "Không có log lỗi cần sửa." });
+      }
+
+      const result = await applyImportedReviewFixesWithAI(items, reviews, {
+        subject: req.body?.subject || req.body?.subjectName || "CSCA",
+      });
+
+      UserActivity.log(req.user.id, "admin.apply_imported_exam_review_fixes", {
+        changedCount: result.changedCount || 0,
+        skippedCount: result.skippedCount || 0,
+        total: result.summary?.total || 0,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Apply imported review fixes error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI sửa đề quá thời gian." });
+      }
+      res.status(500).json({ message: "AI sửa lỗi đề thất bại." });
+    }
+  },
+
+  async reviewExamQuality(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await reviewStoredExamWithAI(client, examId, {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+
+      UserActivity.log(req.user.id, "admin.review_saved_exam_quality", {
+        examId,
+        total: result.summary?.total || 0,
+        issues: result.summary?.issues || 0,
+        changedPreview: result.safeFixPreview?.changedCount || 0,
+        warningPreview: result.safeFixPreview?.warningCount || 0,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Review saved exam quality error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI soát đề quá thời gian." });
+      }
+      if (error.message === "EXAM_NOT_FOUND") {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      res.status(500).json({ message: "AI soát đề thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async applyExamReviewFixes(req, res) {
+    const { examId } = req.params;
+    const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await applyStoredExamReviewFixes(client, examId, reviews, {
+        applySafeFormulas: req.body?.applySafeFormulas !== false,
+        applySuggestedAnswers: req.body?.applySuggestedAnswers !== false,
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.apply_exam_review_fixes", {
+        examId,
+        answerChangedCount: result.answerChangedCount,
+        formulaChangedCount: result.formulaChangedCount,
+        skippedCount: result.skippedCount,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Apply exam review fixes error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI sửa đề quá thời gian." });
+      }
+      res.status(500).json({ message: "Sửa lỗi AI đề này thất bại." });
+    } finally {
+      client.release();
     }
   },
 

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { FiAlertCircle, FiCheckCircle, FiPlus, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import ImageUpload from '@/components/admin/ImageUpload';
 import BaseMathInput from '@/components/admin/MathInput';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import type {
+  ApplyExamReviewFixesResult,
   ImportedExamItem,
   ImportedFillBlankGroupData,
   ImportedItemsReviewResult,
@@ -36,6 +37,8 @@ const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 
 const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50';
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
 const reviewButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50';
+const REVIEW_REVEAL_DELAY_MS = 2500;
+const REVIEW_COOLDOWN_MS = 15000;
 
 function MathInput(props: ComponentProps<typeof BaseMathInput>) {
   return <BaseMathInput {...props} commitDelayMs={350} />;
@@ -132,6 +135,27 @@ function collectReviewIssueRows(items: ImportedExamItem[]) {
   });
 
   return rows;
+}
+
+function collectImportedAiReviews(items: ImportedExamItem[]) {
+  const reviews: NonNullable<ImportedQuestionData['aiReview']>[] = [];
+  const push = (review?: ImportedQuestionData['aiReview']) => {
+    if (review && review.status !== 'ok') reviews.push(review);
+  };
+
+  items.forEach((item) => {
+    if (item.itemType === 'reading_group') {
+      item.subQuestions.forEach(question => push(question.aiReview));
+      return;
+    }
+    if (item.itemType === 'fill_blank_group') {
+      item.subItems.forEach(question => push(question.aiReview));
+      return;
+    }
+    push(item.aiReview);
+  });
+
+  return reviews;
 }
 
 function AiReviewLogPanel({
@@ -290,21 +314,68 @@ function isTechnicalImportWarning(warning: string) {
 export default function PdfImportReview({ preview, items: sourceItems, saving, onSave, onChangeItems }: Props) {
   const [draftItems, setDraftItems] = useState<ImportedExamItem[]>(sourceItems);
   const [reviewing, setReviewing] = useState(false);
+  const [reviewSettling, setReviewSettling] = useState(false);
+  const [reviewCooldownUntil, setReviewCooldownUntil] = useState(0);
+  const [reviewCooldownSeconds, setReviewCooldownSeconds] = useState(0);
   const [reviewError, setReviewError] = useState('');
+  const [fixingReviewIssues, setFixingReviewIssues] = useState(false);
+  const [fixResult, setFixResult] = useState<ApplyExamReviewFixesResult | null>(null);
   const [reviewSummary, setReviewSummary] = useState<ImportedItemsReviewResult['summary'] | null>(null);
   const [reviewDiagnostics, setReviewDiagnostics] = useState<ImportedItemsReviewResult['diagnostics']>([]);
+  const reviewLockRef = useRef(false);
+  const reviewRunRef = useRef(0);
+  const reviewRevealTimerRef = useRef<number | null>(null);
   const items = draftItems;
   const reviewIssueRows = collectReviewIssueRows(items);
 
   useEffect(() => {
     setDraftItems(sourceItems);
+  }, [sourceItems]);
+
+  useEffect(() => {
+    reviewRunRef.current += 1;
+    if (reviewRevealTimerRef.current) {
+      clearTimeout(reviewRevealTimerRef.current);
+      reviewRevealTimerRef.current = null;
+    }
+    reviewLockRef.current = false;
+    setReviewing(false);
+    setReviewSettling(false);
     setReviewSummary(null);
     setReviewDiagnostics([]);
     setReviewError('');
-  }, [preview, sourceItems]);
+    setFixResult(null);
+  }, [preview]);
+
+  useEffect(() => {
+    return () => {
+      if (reviewRevealTimerRef.current) clearTimeout(reviewRevealTimerRef.current);
+      reviewLockRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!reviewCooldownUntil) {
+      setReviewCooldownSeconds(0);
+      return;
+    }
+
+    const updateCooldown = () => {
+      const seconds = Math.max(0, Math.ceil((reviewCooldownUntil - Date.now()) / 1000));
+      setReviewCooldownSeconds(seconds);
+      if (seconds <= 0) setReviewCooldownUntil(0);
+    };
+
+    updateCooldown();
+    const timer = window.setInterval(updateCooldown, 500);
+    return () => window.clearInterval(timer);
+  }, [reviewCooldownUntil]);
 
   const questionCount = getImportItemsQuestionCount(items);
   const visibleWarnings = (preview.warnings || []).filter((warning) => !isTechnicalImportWarning(warning));
+  const reviewBusy = reviewing || reviewSettling;
+  const reviewBlocked = saving || reviewBusy || reviewCooldownSeconds > 0 || items.length === 0;
+  const fixBlocked = saving || reviewBusy || fixingReviewIssues || reviewCooldownSeconds > 0 || reviewIssueRows.length === 0;
 
   const updateItem = (index: number, updater: (item: ImportedExamItem) => ImportedExamItem | null) => {
     const nextItems = [...items];
@@ -335,9 +406,18 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   };
 
   const handleAiReview = async () => {
-    if (!items.length || reviewing) return;
+    if (!items.length || reviewBusy || reviewLockRef.current || reviewCooldownSeconds > 0) return;
+    reviewLockRef.current = true;
+    const reviewRunId = reviewRunRef.current + 1;
+    reviewRunRef.current = reviewRunId;
+    if (reviewRevealTimerRef.current) {
+      clearTimeout(reviewRevealTimerRef.current);
+      reviewRevealTimerRef.current = null;
+    }
+
     try {
       setReviewing(true);
+      setReviewSettling(false);
       setReviewError('');
       setReviewSummary(null);
       setReviewDiagnostics([{
@@ -349,14 +429,32 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
       }]);
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const result = await examAdminApi.reviewImportedItems(items);
+      if (reviewRunRef.current !== reviewRunId) return;
       const hasQuestionReviews = (result.reviews || []).length > 0;
-      if (hasQuestionReviews) {
-        setDraftItems(result.items);
-        onChangeItems(result.items);
-      }
-      setReviewSummary(result.summary);
-      setReviewDiagnostics(result.diagnostics || []);
+      setReviewing(false);
+      setReviewSettling(true);
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${questionCount} câu`,
+        status: 'requesting',
+        expectedReviews: questionCount,
+        message: 'AI đã phân tích xong. Đang sắp xếp kết quả vài giây để trang không bị khựng.',
+      }]);
+      reviewRevealTimerRef.current = window.setTimeout(() => {
+        if (reviewRunRef.current !== reviewRunId) return;
+        if (hasQuestionReviews) {
+          setDraftItems(result.items);
+          onChangeItems(result.items);
+        }
+        setReviewSummary(result.summary);
+        setReviewDiagnostics(result.diagnostics || []);
+        setReviewSettling(false);
+        setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+        reviewLockRef.current = false;
+        reviewRevealTimerRef.current = null;
+      }, REVIEW_REVEAL_DELAY_MS);
     } catch (error: any) {
+      if (reviewRunRef.current !== reviewRunId) return;
       setReviewError(error.response?.data?.message || 'AI soát đề thất bại.');
       setReviewDiagnostics([{
         batch: 0,
@@ -366,8 +464,50 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         message: error.response?.data?.message || error.message || 'Request AI review thất bại trước khi nhận phản hồi.',
         providerStatus: error.response?.status,
       }]);
+      setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+      reviewLockRef.current = false;
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handleFixAllReviewIssues = async () => {
+    const reviews = collectImportedAiReviews(items);
+    if (!reviews.length || fixBlocked) return;
+    if (!confirm('Cho AI sửa toàn bộ log lỗi trong bản import này? Bạn vẫn cần xem lại rồi bấm lưu đề.')) return;
+
+    try {
+      setFixingReviewIssues(true);
+      setReviewError('');
+      setFixResult(null);
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${reviews.length} lỗi`,
+        status: 'requesting',
+        expectedReviews: reviews.length,
+        message: 'Đang gọi AI để sửa toàn bộ log lỗi.',
+      }]);
+      const result = await examAdminApi.applyImportedReviewFixes(items, reviews);
+      if (result.items) {
+        setDraftItems(result.items);
+        onChangeItems(result.items);
+      }
+      setFixResult(result);
+      setReviewDiagnostics(result.diagnostics || []);
+      setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+    } catch (error: any) {
+      setReviewError(error.response?.data?.message || 'AI sửa lỗi đề thất bại.');
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${reviews.length} lỗi`,
+        status: 'failed',
+        expectedReviews: reviews.length,
+        message: error.response?.data?.message || error.message || 'Request AI sửa log thất bại.',
+        providerStatus: error.response?.status,
+      }]);
+      setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+    } finally {
+      setFixingReviewIssues(false);
     }
   };
 
@@ -573,11 +713,30 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           <button
             type="button"
             onClick={handleAiReview}
-            disabled={saving || reviewing || items.length === 0}
+            disabled={reviewBlocked}
             className={reviewButtonClass}
           >
-            <FiRefreshCw className={reviewing ? 'animate-spin' : ''} size={15} />
-            {reviewing ? 'AI đang soát...' : 'AI soát đáp án/lời giải'}
+            <FiRefreshCw className={reviewBusy ? 'animate-spin' : ''} size={15} />
+            {reviewing
+              ? 'AI đang soát...'
+              : reviewSettling
+                ? 'Đang sắp xếp kết quả...'
+                : reviewCooldownSeconds > 0
+                  ? `Chờ ${reviewCooldownSeconds}s`
+                  : 'AI soát đề đăng lên'}
+          </button>
+          <button
+            type="button"
+            onClick={handleFixAllReviewIssues}
+            disabled={fixBlocked}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+          >
+            <FiRefreshCw className={fixingReviewIssues ? 'animate-spin' : ''} size={15} />
+            {fixingReviewIssues
+              ? 'AI đang sửa log...'
+              : reviewCooldownSeconds > 0
+                ? `Chờ ${reviewCooldownSeconds}s`
+                : `AI sửa toàn bộ log${reviewIssueRows.length ? ` (${reviewIssueRows.length})` : ''}`}
           </button>
           <button
             type="button"
@@ -599,6 +758,20 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
       {reviewError && (
         <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {reviewError}
+        </div>
+      )}
+
+      {fixResult && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          {fixResult.message || `AI đã sửa ${fixResult.changedCount || 0} chỗ.`}
+          {!!fixResult.skippedCount && <span> Còn {fixResult.skippedCount} chỗ AI bỏ qua, cần xem tay.</span>}
+        </div>
+      )}
+
+      {reviewSettling && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm font-semibold text-indigo-800">
+          <FiRefreshCw className="shrink-0 animate-spin" size={16} />
+          <span>AI đã phân tích xong. Đợi vài giây để trang sắp xếp kết quả mượt hơn.</span>
         </div>
       )}
 

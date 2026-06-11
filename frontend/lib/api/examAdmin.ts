@@ -54,6 +54,10 @@ export interface ImportedQuestionData extends QuestionData {
 export interface ImportedQuestionAiReview {
     path: string;
     label?: string;
+    questionId?: number;
+    questionNumber?: number;
+    questionType?: string;
+    parentQuestionId?: number;
     status: 'ok' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review';
     confidence: number;
     suggestedCorrectAnswer?: string;
@@ -185,6 +189,62 @@ export interface ImportedItemsReviewResult {
     };
 }
 
+export interface StoredExamReviewResult {
+    examId: number;
+    exam?: {
+        id: number;
+        title?: string;
+        subjectName?: string;
+        subjectCode?: string;
+    };
+    reviews: ImportedQuestionAiReview[];
+    diagnostics?: ImportedItemsReviewDiagnostic[];
+    summary: ImportedItemsReviewResult['summary'];
+    safeFixPreview?: NormalizeFormulaResult;
+}
+
+export interface ApplyExamReviewFixesResult {
+    examId?: number;
+    message: string;
+    changedCount?: number;
+    answerChangedCount?: number;
+    formulaChangedCount?: number;
+    warningCount?: number;
+    skippedCount: number;
+    items?: ImportedExamItem[];
+    answerChanges?: Array<{
+        questionId: number;
+        questionNumber?: number;
+        before?: string;
+        after: string;
+        confidence?: number;
+    }>;
+    changes?: Array<{
+        path?: string;
+        questionId?: number;
+        questionNumber?: number;
+        answerKey?: string;
+        field: string;
+        before?: string;
+        after?: string;
+    }>;
+    skipped?: Array<{
+        path?: string;
+        questionId?: number;
+        questionNumber?: number;
+        suggestedAnswer?: string;
+        confidence?: number;
+        reason: string;
+    }>;
+    diagnostics?: ImportedItemsReviewDiagnostic[];
+    summary?: ImportedItemsReviewResult['summary'] & {
+        fixed?: number;
+        changedCount?: number;
+        skippedCount?: number;
+    };
+    formulaResult?: NormalizeFormulaResult | null;
+}
+
 export interface SingleQuestionImageOcrResult {
     text: string;
     source?: {
@@ -257,6 +317,21 @@ export const examAdminApi = {
     reviewImportedItems: async (items: ImportedExamItem[], subject?: string): Promise<ImportedItemsReviewResult> => {
         const response = await axios.post('/admin/exams/import/pdf/review', {
             items,
+            subject,
+        }, {
+            timeout: 300000,
+        });
+        return response.data;
+    },
+
+    applyImportedReviewFixes: async (
+        items: ImportedExamItem[],
+        reviews: ImportedQuestionAiReview[],
+        subject?: string,
+    ): Promise<ApplyExamReviewFixesResult> => {
+        const response = await axios.post('/admin/exams/import/pdf/apply-review-fixes', {
+            items,
+            reviews,
             subject,
         }, {
             timeout: 300000,
@@ -357,6 +432,23 @@ export const examAdminApi = {
 
     normalizeExamFormulas: async (examId: number): Promise<NormalizeFormulaResult> => {
         const response = await axios.post(`/admin/exams/${examId}/normalize-formulas`);
+        return response.data;
+    },
+
+    reviewExamQuality: async (examId: number): Promise<StoredExamReviewResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/review-quality`, {}, {
+            timeout: 300000,
+        });
+        return response.data;
+    },
+
+    applyExamReviewFixes: async (
+        examId: number,
+        data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean },
+    ): Promise<ApplyExamReviewFixesResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/apply-ai-review-fixes`, data, {
+            timeout: 300000,
+        });
         return response.data;
     },
 
