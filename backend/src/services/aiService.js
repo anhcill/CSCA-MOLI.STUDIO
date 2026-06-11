@@ -87,6 +87,43 @@ function getAdminExamRateLimitRemaining() {
   return Math.max(0, Math.ceil((adminExamRateLimitedUntil - Date.now()) / 1000));
 }
 
+function isNineRouterAdminExam() {
+  const provider = String(ADMIN_EXAM_AI.provider || '').toLowerCase();
+  const baseUrl = String(ADMIN_EXAM_AI.baseUrl || '').toLowerCase();
+  return provider.includes('9router') || provider.includes('ninerouter') || baseUrl.includes('9router');
+}
+
+function isUsableAdminExamRouterModel(model) {
+  const value = String(model || '').trim();
+  if (!value) return false;
+  if (!isNineRouterAdminExam()) return true;
+
+  // This project wires admin exam AI to Antigravity accounts in 9router.
+  // Plain google/* models require separate Google API-key credentials in 9router;
+  // keep those for Beeknoee fallback instead of wasting a failed router call.
+  return value.startsWith('ag/');
+}
+
+function getAdminExamModelCandidates(options = {}) {
+  const configured = [
+    ...(Array.isArray(options.models) ? options.models : []),
+    options.model,
+    ADMIN_EXAM_AI.model,
+  ]
+    .map(model => String(model || '').trim())
+    .filter(Boolean);
+  const filtered = configured.filter(isUsableAdminExamRouterModel);
+  const candidates = filtered.length ? filtered : configured;
+  return [...new Set(candidates)];
+}
+
+function getAdminExamFallbackModel(options = {}) {
+  const model = options.fallbackModel || options.beeknoeeModel;
+  if (model) return model;
+  if (String(options.model || '').startsWith('ag/')) return BEE.importModel || BEE.model;
+  return options.model || BEE.importModel || BEE.model;
+}
+
 function getProviderResponseMessage(err) {
   const data = err?.response?.data;
   const message =
@@ -256,13 +293,9 @@ async function callBeeknoee(prompt, options = {}) {
 async function callAdminExamAIMessages(messages, options = {}) {
   const fallbackOptions = {
     ...options,
-    model: options.fallbackModel || options.beeknoeeModel || options.model || BEE.importModel || BEE.model,
+    model: getAdminExamFallbackModel(options),
   };
-  const modelCandidates = [...new Set([
-    ...(Array.isArray(options.models) ? options.models : []),
-    options.model,
-    ADMIN_EXAM_AI.model,
-  ].filter(Boolean))];
+  const modelCandidates = getAdminExamModelCandidates(options);
 
   if (!isAdminExamProviderEnabled() || isAdminExamRateLimited()) {
     return callBeeknoeeMessages(messages, fallbackOptions);

@@ -41,11 +41,188 @@ function compactWhitespace(value) {
     .trim();
 }
 
+const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
+const LATEX_COMMAND_RE = /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|le|ge|ne|leq|geq|neq|approx)\b/;
+
+function normalizeMathUnicode(value) {
+  const replacements = [
+    [/−/g, "-"],
+    [/≤/g, "\\le "],
+    [/≥/g, "\\ge "],
+    [/≠/g, "\\ne "],
+    [/≈/g, "\\approx "],
+    [/∞/g, "\\infty "],
+    [/∈/g, "\\in "],
+    [/∉/g, "\\notin "],
+    [/∪/g, "\\cup "],
+    [/∩/g, "\\cap "],
+    [/∅/g, "\\emptyset "],
+    [/×/g, "\\times "],
+    [/÷/g, "\\div "],
+    [/±/g, "\\pm "],
+    [/<=/g, "\\le "],
+    [/>=/g, "\\ge "],
+    [/!=/g, "\\ne "],
+    [/⇒|=>/g, "\\Rightarrow "],
+    [/⇔|<=>/g, "\\Leftrightarrow "],
+    [/→|->/g, "\\to "],
+    [/√/g, "\\sqrt"],
+    [/∑/g, "\\sum "],
+    [/∫/g, "\\int "],
+    [/π/g, "\\pi "],
+    [/α/g, "\\alpha "],
+    [/β/g, "\\beta "],
+    [/γ/g, "\\gamma "],
+    [/δ/g, "\\delta "],
+    [/θ/g, "\\theta "],
+    [/λ/g, "\\lambda "],
+    [/μ/g, "\\mu "],
+  ];
+  return replacements.reduce((text, [pattern, replacement]) => (
+    text.replace(pattern, () => replacement)
+  ), stringValue(value));
+}
+
+function findMatchingForward(input, openIndex) {
+  const open = input[openIndex];
+  const close = open === "(" ? ")" : open === "[" ? "]" : "}";
+  let depth = 0;
+
+  for (let i = openIndex; i < input.length; i++) {
+    if (input[i - 1] === "\\") continue;
+    if (input[i] === open) depth++;
+    if (input[i] === close) depth--;
+    if (depth === 0) return i;
+  }
+
+  return -1;
+}
+
+function escapeSetLiteralBraces(input) {
+  let out = "";
+  let cursor = 0;
+
+  while (cursor < input.length) {
+    const openIndex = input.indexOf("{", cursor);
+    if (openIndex < 0) {
+      out += input.slice(cursor);
+      break;
+    }
+
+    const before = input[openIndex - 1] || "";
+    if (before === "\\" || before === "_" || before === "^") {
+      out += input.slice(cursor, openIndex + 1);
+      cursor = openIndex + 1;
+      continue;
+    }
+
+    const closeIndex = findMatchingForward(input, openIndex);
+    if (closeIndex < 0) {
+      out += input.slice(cursor);
+      break;
+    }
+
+    const content = input.slice(openIndex + 1, closeIndex);
+    const looksLikeSetLiteral = /[,;，；]/.test(content) && !/[{}]/.test(content) && /\S/.test(content);
+    if (looksLikeSetLiteral) {
+      out += `${input.slice(cursor, openIndex)}\\{${content}\\}`;
+    } else {
+      out += input.slice(cursor, closeIndex + 1);
+    }
+    cursor = closeIndex + 1;
+  }
+
+  return out;
+}
+
+function normalizeLooseMathSyntax(value) {
+  return escapeSetLiteralBraces(normalizeMathUnicode(value)
+    .replace(/(^|\n)-(?=\s*[A-Z]\s*(?:\\cap|\\cup|\\setminus)\b)/g, "$1")
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc|ln|lg|log)\b\s*/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
+    .replace(/\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g, (_, fn) => `\\${fn}^{-1}`)
+    .replace(/\\(sin|cos|tan|cot|sec|csc|ln|lg|log)\s+([0-9]+)\s*(?:°|\^?\\?circ|度)/gi, "\\$1 $2^\\circ")
+    .replace(/\bsqrt\s*\(([^()]+)\)/gi, "\\sqrt{$1}")
+    .replace(/\bsqrt\s+((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:\^[{]?[A-Za-z0-9]+[}]?)?)/gi, "\\sqrt{$1}")
+    .replace(/\\sqrt\s*\(([^()]+)\)/g, "\\sqrt{$1}")
+    .replace(/\\sqrt\{\}\s*([A-Za-z0-9\\]+(?:\^\{[^{}]+\})?)/g, "\\sqrt{$1}")
+    .replace(/\\sqrt\s*([A-Za-z0-9])\b/g, "\\sqrt{$1}")
+    .replace(/\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])\b/g, "\\frac{$1}{$2}")
+    .replace(/(^|[\s=([{,;:])([+\-]?\d+)\s*\/\s*([+\-]?\d+)(?=\s*(?:[),.;:\]}]|$))/g, "$1\\frac{$2}{$3}")
+    .replace(/\blog\s*_\s*([0-9A-Za-z]+)\s+/gi, "\\log_{$1} ")
+    .replace(/\blog([2-9])\s+/gi, "\\log_{$1} ")
+    .replace(/([=+\-*/(,]\s*)([2-9])\s+([0-9])(?=\s*(?:[=+\-*/),，。;；]|$))/g, "$1$2^{$3}")
+    .replace(/\^\s*([+\-]?\d+|[A-Za-z]|\\[A-Za-z]+)(?![A-Za-z])/g, "^{$1}")
+    .replace(/\b([A-Za-z])\s*(?:\\in)\s*([NZQR])\b/g, "$1\\in \\mathbb{$2}")
+    .replace(/\bU\b(?=\s*[\[(])/g, "\\cup "));
+}
+
+function isMostlyMath(value) {
+  const text = stringValue(value).replace(LATEX_COMMAND_RE, "").replace(/\s/g, "");
+  if (!text) return true;
+  const mathChars = (text.match(/[A-Za-z0-9{}()[\]^_+\-*/=<>.,;|\\]/g) || []).length;
+  return mathChars / Math.max(text.length, 1) >= 0.75;
+}
+
+function isLikelyLooseMathLine(value) {
+  const normalized = normalizeLooseMathSyntax(value);
+  if (!normalized) return false;
+  if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ne|le|ge|times|div|cdot|sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|mathbb|infty|emptyset|in|notin|setminus|cup|cap|binom|circ|Rightarrow|Leftrightarrow|to|approx)\b/.test(normalized)) return false;
+  return isMostlyMath(normalized);
+}
+
+function wrapLooseMathLines(input) {
+  return stringValue(input)
+    .split("\n")
+    .map((line) => {
+      if (!line.trim() || line.includes("$") || line.includes("\\(") || line.includes("\\[")) return line;
+      const labeledMath = line.match(/^(\s*[^:：]{1,50}[:：])\s*(.+)$/);
+      if (labeledMath && /[A-Za-zÀ-ỹ\u4e00-\u9fff]/.test(labeledMath[1])) {
+        const math = labeledMath[2].trim();
+        return isLikelyLooseMathLine(math)
+          ? `${labeledMath[1]}\n\\(${normalizeLooseMathSyntax(math).trim()}\\)`
+          : line;
+      }
+      return isLikelyLooseMathLine(line) ? `\\(${normalizeLooseMathSyntax(line).trim()}\\)` : line;
+    })
+    .join("\n");
+}
+
+function normalizeMathSegments(input) {
+  return stringValue(input)
+    .split(WRAPPED_MATH_RE)
+    .map((part) => {
+      if (!part) return part;
+      if (part.startsWith("\\(") && part.endsWith("\\)")) {
+        return `\\(${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}\\)`;
+      }
+      if (part.startsWith("\\[") && part.endsWith("\\]")) {
+        return `\\[${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}\\]`;
+      }
+      if (part.startsWith("$$") && part.endsWith("$$")) {
+        return `$$${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}$$`;
+      }
+      if (part.startsWith("$") && part.endsWith("$")) {
+        return `$${normalizeLooseMathSyntax(part.slice(1, -1)).trim()}$`;
+      }
+      return wrapLooseMathLines(normalizeLooseMathSyntax(part));
+    })
+    .join("");
+}
+
+function repairLatexControlChars(value) {
+  return stringValue(value)
+    .replace(/([A-Za-z0-9}\\)])\n(?:e)\b/g, (_, prefix) => `${prefix}\\ne`)
+    .replace(/([A-Za-z0-9}\\)])\n(?:otin)\b/g, (_, prefix) => `${prefix}\\notin`)
+    .replace(/([A-Za-z0-9}\\)])\t(?:imes)\b/g, (_, prefix) => `${prefix}\\times`)
+    .replace(/([A-Za-z0-9}\\)])\t(?:heta)\b/g, (_, prefix) => `${prefix}\\theta`)
+    .replace(/([A-Za-z0-9}\\)])\t(?:o)\b/g, (_, prefix) => `${prefix}\\to`);
+}
+
 function normalizeStoredFormulaText(value, options = {}) {
   const input = stringValue(value).replace(/\0/g, "");
   if (!input.trim()) return "";
 
-  let out = repairOcrMathArtifacts(input)
+  let out = normalizeMathSegments(repairOcrMathArtifacts(input))
     .replace(/\\\\(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\})/g, "\\")
     .replace(/\\right\s+leftharpoons/g, "\\rightleftharpoons")
     .replace(/\\left\s+right/g, "\\leftright")
@@ -70,12 +247,14 @@ function normalizeStoredFormulaText(value, options = {}) {
       .replace(/\\n/g, "\n")
       .replace(/\r\n?/g, "\n")
       .replace(/\s*((?:Công thức|Thay|Kiểm tra|Kết luận|Chọn|Vậy)\s*[:：])/gi, "\n$1")
-      .replace(/\s*((?:步骤|Bước)\s*\d+\s*[:：])/gi, "\n$1")
+      .replace(/\s*((?:Suy ra)\s*[:：])/gi, "\n$1")
+      .replace(/\s*((?:步骤|步驟|Bước)\s*\d+\s*(?:[（(][^）)]{1,24}[）)])?\s*[:：])/gi, "\n$1")
       .replace(/\s*(=>|⇒|\\Rightarrow)\s*/g, "\n$1 ")
-      .replace(/([。.;；])\s*(?=(?:由|当|代入|验证|因此|所以|故|选|答案|解析|得|Suy ra|Vậy))/g, "$1\n");
+      .replace(/([。.;；])\s*(?=(?:过点|過點|设直线|設直線|考虑|考慮|由|由于|因|当|比較|比较|代入|验证|驗證|因此|所以|故|选|答案|解析|得|Suy ra|Vậy|n\s*=))/g, "$1\n")
+      .replace(/([:：])\s*(?=(?:[A-Za-z0-9\\(√]|\\log|\\frac|\\sqrt))/g, "$1\n");
   }
 
-  return compactWhitespace(out);
+  return repairLatexControlChars(compactWhitespace(repairLatexControlChars(out)));
 }
 
 function isSuspiciousFormulaText(value) {
@@ -108,6 +287,11 @@ function normalizeField(value, options = {}) {
   const safe = ratio >= 0.5 && ratio <= 1.8 && !/<[^>]+>/.test(after);
   const suspicious = !safe || isSuspiciousFormulaText(after);
   return { before, after, changed: safe && !suspicious, suspicious };
+}
+
+function normalizeFixValue(value, options = {}) {
+  const normalized = normalizeField(value, options);
+  return normalized.changed ? normalized.after : normalized.before;
 }
 
 function pushChange(changes, question, field, before, after) {
@@ -434,6 +618,8 @@ Yêu cầu:
 - Nếu có imageUrl/contextImageUrl/explanationImageUrl mà ảnh cần để giải nhưng bạn không đọc được ảnh, status="needs_review".
 - Nếu đáp án hiện tại đúng, status="ok".
 - Nếu công thức/LaTeX/OCR làm câu khó hiểu hoặc sai, status="formula_issue".
+- Soát kỹ lỗi format toán: thiếu dấu \\, thiếu ngoặc {}, thiếu delimiter, tập hợp {1;2}, sin/cos/log/sqrt/int/frac viết sai, dấu ≤ ≥ ≠ ∈ ∩ ∪ bị OCR sai.
+- Chỉ báo formula_issue khi lỗi format có thể làm hiển thị/sai nghĩa; không bắt lỗi style nhỏ.
 - Nếu đáp án hiện tại có vẻ sai, status="answer_issue" và đưa suggestedCorrectAnswer.
 - Nếu lời giải sai, thiếu, hoặc trình bày không khớp đáp án, status="explanation_issue".
 - Nếu thiếu hình/dữ kiện hoặc không chắc, status="needs_review".
@@ -713,6 +899,8 @@ Yêu cầu:
 - Chỉ sửa những trường cần sửa. Không tự chế đề mới.
 - Nếu sửa đáp án, correctAnswer phải là một key đang có trong answers.
 - Nếu sửa công thức/lời giải, trả lại nguyên field đã sửa hoàn chỉnh, giữ đúng ngôn ngữ gốc.
+- Công thức toán phải dùng LaTeX chuẩn, bọc inline bằng \\(...\\) khi field có cả chữ và công thức. Tập hợp dùng \\{...\\}; giao/hợp dùng \\cap/\\cup; hàm dùng \\sin, \\cos, \\log, \\sqrt{...}, \\frac{...}{...}.
+- Lời giải dài phải xuống dòng theo bước: Công thức, Thay, Suy ra/Kết luận, Chọn.
 - Nếu không đủ dữ kiện hoặc cần hình ảnh không đọc được, không sửa bừa; đưa note ngắn.
 - Phải trả một object fix cho từng mục trong dữ liệu. Nếu không sửa được mục nào, vẫn trả path/index của mục đó kèm note lý do, không gửi field sửa.
 - Note phải nói rõ đã sửa field nào, hoặc lý do chính xác vì sao bỏ qua.
@@ -756,10 +944,10 @@ function normalizeAiFix(rawFix, entry) {
     parentQuestionId: entry.parentQuestionId,
     confidence: Math.max(0, Math.min(1, Number(rawFix?.confidence) || 0)),
     correctAnswer: answerKeys.has(correctAnswer) ? correctAnswer : "",
-    questionText: stringValue(rawFix?.questionText).trim(),
-    questionTextCn: stringValue(rawFix?.questionTextCn).trim(),
-    explanation: stringValue(rawFix?.explanation).trim(),
-    explanationCn: stringValue(rawFix?.explanationCn).trim(),
+    questionText: normalizeFixValue(rawFix?.questionText),
+    questionTextCn: normalizeFixValue(rawFix?.questionTextCn),
+    explanation: normalizeFixValue(rawFix?.explanation, { explanation: true }),
+    explanationCn: normalizeFixValue(rawFix?.explanationCn, { explanation: true }),
     note: stringValue(rawFix?.note).slice(0, 600),
     answers: [],
   };
@@ -770,8 +958,8 @@ function normalizeAiFix(rawFix, entry) {
       if (!answerKeys.has(key)) return null;
       return {
         key,
-        text: stringValue(answer?.text).trim(),
-        textCn: stringValue(answer?.textCn).trim(),
+        text: normalizeFixValue(answer?.text),
+        textCn: normalizeFixValue(answer?.textCn),
       };
     }).filter(Boolean);
   }
