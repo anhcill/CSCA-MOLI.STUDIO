@@ -58,10 +58,10 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
 };
 
 const INLINE_MATH_COMMAND_RE =
-  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)\b/;
+  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)\b/;
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_BOUNDARY_RE =
-  /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
+  /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
 const SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE =
   String.raw`[+\-]?(?:\\infty|\u221e|\d+(?:[.,]\d+)?|[A-Za-z](?:_\{[^{}]+\})?)`;
 const SIMPLE_INTERVAL_RE_SOURCE =
@@ -99,7 +99,10 @@ export function normalizeMathUnicode(input: string): string {
 }
 
 export function normalizeEscapedLatexBackslashes(input: string): string {
-  return input.replace(/\\\\(?=(?:[A-Za-z]|\(|\)|\[|\]|\{|\}))/g, '\\');
+  return input.replace(
+    /\\\\(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\})/g,
+    '\\',
+  );
 }
 
 function normalizeSetOperators(input: string): string {
@@ -152,8 +155,10 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(LATEX_COMMAND_BOUNDARY_RE, (match, command: string, offset: number, whole: string) => {
       const commandText = whole.slice(offset + 1);
       if (
-        (command === 'in' && commandText.startsWith('infty')) ||
-        (command === 'le' && commandText.startsWith('leq')) ||
+        (command === 'in' && (commandText.startsWith('infty') || commandText.startsWith('int'))) ||
+        (command === 'le' && (commandText.startsWith('leq') || commandText.startsWith('left'))) ||
+        (command === 'left' && commandText.startsWith('leftrightharpoons')) ||
+        (command === 'right' && commandText.startsWith('rightleftharpoons')) ||
         (command === 'ge' && commandText.startsWith('geq')) ||
         (command === 'ne' && commandText.startsWith('neq'))
       ) {

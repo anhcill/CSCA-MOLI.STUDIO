@@ -71,7 +71,11 @@ export function repairInverseLogExponentArtifacts(input: string): string {
 
 export function repairSequenceSubscriptArtifacts(input: string): string {
   const looksLikeSequence = /数列|等差|等比|第\s*\d+\s*项|\{[A-Za-z]\s*n\}/i.test(input);
-  const withSequenceName = input.replace(/\{([A-Za-z])\s*n\}/g, (_, name: string) => `\\(\\{${name}_n\\}\\)`);
+  const withSequenceName = input.replace(/\{([A-Za-z])\s*n\}/g, (match: string, name: string, offset: number, whole: string) => {
+    const before = whole[offset - 1] || '';
+    if (before === '^' || before === '_' || before === '\\') return match;
+    return `\\(\\{${name}_n\\}\\)`;
+  });
   if (!looksLikeSequence) return withSequenceName;
 
   return withSequenceName
