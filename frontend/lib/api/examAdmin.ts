@@ -47,7 +47,19 @@ export interface ImportedQuestionData extends QuestionData {
     needsImage?: boolean;
     imageHint?: string;
     reviewNotes?: string;
+    aiReview?: ImportedQuestionAiReview;
     importIndex?: number;
+}
+
+export interface ImportedQuestionAiReview {
+    path: string;
+    label?: string;
+    status: 'ok' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review';
+    confidence: number;
+    suggestedCorrectAnswer?: string;
+    formulaIssues?: string[];
+    explanationIssues?: string[];
+    note?: string;
 }
 
 export interface ImportedReadingGroupData {
@@ -77,6 +89,8 @@ export interface ImportedFillBlankGroupData {
         correctAnswerKey: string;
         difficulty?: string;
         subQuestionNumber?: number;
+        reviewNotes?: string;
+        aiReview?: ImportedQuestionAiReview;
     }[];
     needsImage?: boolean;
     imageHint?: string;
@@ -103,6 +117,46 @@ export interface PdfImportPreview {
         truncated?: boolean;
         importPreset?: PdfImportPreset;
         fileType?: 'pdf' | 'doc' | 'docx' | string;
+    };
+}
+
+export interface NormalizeFormulaResult {
+    message: string;
+    examCount?: number;
+    changedCount: number;
+    warningCount: number;
+    changes?: Array<{
+        questionId?: number;
+        answerId?: number;
+        questionNumber?: number;
+        answerKey?: string;
+        field: string;
+        before: string;
+        after: string;
+    }>;
+    warnings?: Array<{
+        questionId?: number;
+        answerId?: number;
+        questionNumber?: number;
+        answerKey?: string;
+        field: string;
+        message: string;
+        value?: string;
+    }>;
+    results?: any[];
+}
+
+export interface ImportedItemsReviewResult {
+    items: ImportedExamItem[];
+    reviews: ImportedQuestionAiReview[];
+    summary: {
+        total: number;
+        ok: number;
+        issues: number;
+        formula_issue?: number;
+        answer_issue?: number;
+        explanation_issue?: number;
+        needs_review?: number;
     };
 }
 
@@ -173,6 +227,19 @@ export const examAdminApi = {
             signal,
         });
         return normalizePdfImportPreviewMath(response.data);
+    },
+
+    reviewImportedItems: async (items: ImportedExamItem[], subject?: string): Promise<ImportedItemsReviewResult> => {
+        const response = await axios.post('/admin/exams/import/pdf/review', {
+            items: normalizeImportedItemsMath(items),
+            subject,
+        }, {
+            timeout: 300000,
+        });
+        return {
+            ...response.data,
+            items: normalizeImportedItemsMath(response.data?.items || []),
+        };
     },
 
     // OCR one pasted/uploaded question image before parsing into the form
@@ -263,6 +330,16 @@ export const examAdminApi = {
     // Update exam status
     updateExamStatus: async (examId: number, status: 'draft' | 'published' | 'archived') => {
         const response = await axios.put(`/admin/exams/${examId}`, { status });
+        return response.data;
+    },
+
+    normalizeExamFormulas: async (examId: number): Promise<NormalizeFormulaResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/normalize-formulas`);
+        return response.data;
+    },
+
+    normalizeManyExamFormulas: async (data: { subject?: string; limit?: number } = {}): Promise<NormalizeFormulaResult> => {
+        const response = await axios.post('/admin/exams/normalize-formulas', data);
         return response.data;
     },
 

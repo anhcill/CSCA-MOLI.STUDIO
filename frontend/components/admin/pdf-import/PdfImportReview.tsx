@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState, type ComponentProps } from 'react';
-import { FiAlertCircle, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiAlertCircle, FiCheckCircle, FiPlus, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import ImageUpload from '@/components/admin/ImageUpload';
 import BaseMathInput from '@/components/admin/MathInput';
+import { examAdminApi } from '@/lib/api/examAdmin';
 import type {
   ImportedExamItem,
   ImportedFillBlankGroupData,
+  ImportedItemsReviewResult,
   ImportedQuestionData,
   ImportedReadingGroupData,
   PdfImportPreview,
@@ -33,6 +35,7 @@ interface Props {
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500';
 const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50';
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
+const reviewButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50';
 
 function MathInput(props: ComponentProps<typeof BaseMathInput>) {
   return <BaseMathInput {...props} commitDelayMs={350} />;
@@ -69,14 +72,40 @@ function isSingleChoice(item: ImportedExamItem): item is ImportedQuestionData {
   return item.itemType !== 'reading_group' && item.itemType !== 'fill_blank_group';
 }
 
-function ItemWarnings({ item }: { item: Pick<ImportedQuestionData, 'imageHint' | 'reviewNotes' | 'needsImage'> }) {
-  if (!item.imageHint && !item.reviewNotes && !item.needsImage) return null;
+function getAiReviewLabel(status?: string) {
+  if (status === 'ok') return 'AI thấy ổn';
+  if (status === 'formula_issue') return 'Nghi lỗi công thức';
+  if (status === 'answer_issue') return 'Nghi sai đáp án';
+  if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
+  return 'Cần kiểm tra';
+}
+
+function ItemWarnings({ item }: { item: Pick<ImportedQuestionData, 'imageHint' | 'reviewNotes' | 'needsImage' | 'aiReview'> }) {
+  if (!item.imageHint && !item.reviewNotes && !item.needsImage && !item.aiReview) return null;
+
+  const isOk = item.aiReview?.status === 'ok';
 
   return (
-    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+      isOk
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-amber-200 bg-amber-50 text-amber-800'
+    }`}>
+      {item.aiReview && (
+        <div className="mb-1 flex items-start gap-2 font-semibold">
+          {isOk ? <FiCheckCircle className="mt-0.5 shrink-0" /> : <FiAlertCircle className="mt-0.5 shrink-0" />}
+          <span>
+            {getAiReviewLabel(item.aiReview.status)}
+            {Number.isFinite(item.aiReview.confidence) ? ` - ${Math.round(item.aiReview.confidence * 100)}%` : ''}
+          </span>
+        </div>
+      )}
       {item.needsImage && <p className="font-semibold">Cần kiểm tra hoặc thêm ảnh cho mục này.</p>}
       {item.imageHint && <p>{item.imageHint}</p>}
-      {item.reviewNotes && <p>{item.reviewNotes}</p>}
+      {item.aiReview?.suggestedCorrectAnswer && item.aiReview.status !== 'ok' && (
+        <p>Gợi ý đáp án: {item.aiReview.suggestedCorrectAnswer}</p>
+      )}
+      {item.reviewNotes && <div className="whitespace-pre-line">{item.reviewNotes}</div>}
     </div>
   );
 }
@@ -132,6 +161,9 @@ function isTechnicalImportWarning(warning: string) {
 
 export default function PdfImportReview({ preview, items: sourceItems, saving, onSave, onChangeItems }: Props) {
   const [draftItems, setDraftItems] = useState<ImportedExamItem[]>(sourceItems);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [reviewSummary, setReviewSummary] = useState<ImportedItemsReviewResult['summary'] | null>(null);
   const items = draftItems;
 
   useEffect(() => {
@@ -167,6 +199,22 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const handleSave = () => {
     onChangeItems(items);
     onSave(items);
+  };
+
+  const handleAiReview = async () => {
+    if (!items.length || reviewing) return;
+    try {
+      setReviewing(true);
+      setReviewError('');
+      const result = await examAdminApi.reviewImportedItems(items);
+      setDraftItems(result.items);
+      setReviewSummary(result.summary);
+      onChangeItems(result.items);
+    } catch (error: any) {
+      setReviewError(error.response?.data?.message || 'AI soát đề thất bại.');
+    } finally {
+      setReviewing(false);
+    }
   };
 
   const updateSingle = (index: number, updates: Partial<ImportedQuestionData>) => {
@@ -370,6 +418,15 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           <AddItemButtons label="Thêm mục" onAdd={addItem} />
           <button
             type="button"
+            onClick={handleAiReview}
+            disabled={saving || reviewing || items.length === 0}
+            className={reviewButtonClass}
+          >
+            <FiRefreshCw className={reviewing ? 'animate-spin' : ''} size={15} />
+            {reviewing ? 'AI đang soát...' : 'AI soát đáp án/lời giải'}
+          </button>
+          <button
+            type="button"
             onClick={handleSave}
             disabled={saving || items.length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
@@ -378,6 +435,18 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           </button>
         </div>
       </div>
+
+      {reviewSummary && (
+        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+          AI đã soát {reviewSummary.total} câu: {reviewSummary.ok} ổn, {reviewSummary.issues} cần xem lại.
+        </div>
+      )}
+
+      {reviewError && (
+        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {reviewError}
+        </div>
+      )}
 
       {!!visibleWarnings.length && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -507,6 +576,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               defaultTab="cn"
                             />
                           </div>
+                          <ItemWarnings item={subQuestion} />
                         </div>
                       );
                     })}
@@ -635,6 +705,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               defaultTab="cn"
                             />
                           </div>
+                          <ItemWarnings item={subItem} />
                         </div>
                       ))}
                       <button type="button" onClick={() => addFillBlankSubItem(itemIndex)} className={tinyButtonClass}>

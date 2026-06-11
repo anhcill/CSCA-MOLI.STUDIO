@@ -13,6 +13,10 @@ const {
 const {
   extractSingleQuestionImageOcrText,
 } = require("../services/singleQuestionImageOcrService");
+const {
+  normalizeExamFormulas: normalizeStoredExamFormulas,
+  reviewImportedItemsWithAI,
+} = require("../services/examQualityService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -340,6 +344,148 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
       res.status(500).json({ message: "Failed to import questions" });
+    } finally {
+      client.release();
+    }
+  },
+
+  async reviewImportedItems(req, res) {
+    try {
+      const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+      const items = rawItems
+        .map((item, index) => normalizeImportedItem(item, index))
+        .filter(Boolean);
+
+      if (!items.length) {
+        return res.status(400).json({ message: "Không có câu hỏi để AI soát." });
+      }
+
+      const result = await reviewImportedItemsWithAI(items, {
+        subject: req.body?.subject || req.body?.subjectName || "CSCA",
+      });
+
+      UserActivity.log(req.user.id, "admin.review_imported_exam_items", {
+        total: result.summary?.total || 0,
+        issues: result.summary?.issues || 0,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Review imported items error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI soát đề quá thời gian." });
+      }
+      res.status(500).json({ message: "AI soát đề thất bại." });
+    }
+  },
+
+  async normalizeExamFormulas(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await normalizeStoredExamFormulas(client, examId, { apply: true });
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.normalize_exam_formulas", {
+        examId,
+        changedCount: result.changedCount,
+        warningCount: result.warningCount,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json({
+        message: result.changedCount
+          ? `Đã chuẩn hóa ${result.changedCount} chỗ.`
+          : "Không có công thức cần chuẩn hóa.",
+        ...result,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Normalize exam formulas error:", error);
+      res.status(500).json({ message: "Chuẩn hóa công thức thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async normalizeManyExamFormulas(req, res) {
+    const limit = Math.max(1, Math.min(200, Number.parseInt(req.body?.limit || "50", 10) || 50));
+    const subject = String(req.body?.subject || "").trim();
+    const client = await pool.connect();
+    try {
+      const where = ["e.deleted_at IS NULL", "COALESCE(e.deletion_status, 'none') <> 'soft_deleted'"];
+      const params = [];
+      if (subject) {
+        params.push(subject);
+        where.push(`s.code = $${params.length}`);
+      }
+      params.push(limit);
+
+      const examResult = await client.query(
+        `SELECT e.id, e.title
+         FROM exams e
+         LEFT JOIN subjects s ON s.id = e.subject_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY e.updated_at DESC NULLS LAST, e.id DESC
+         LIMIT $${params.length}`,
+        params,
+      );
+
+      const results = [];
+      for (const exam of examResult.rows) {
+        await client.query("BEGIN");
+        try {
+          const result = await normalizeStoredExamFormulas(client, exam.id, { apply: true });
+          await client.query("COMMIT");
+          results.push({ id: exam.id, title: exam.title, ...result });
+        } catch (error) {
+          await client.query("ROLLBACK");
+          results.push({
+            id: exam.id,
+            title: exam.title,
+            error: "Chuẩn hóa đề này thất bại.",
+          });
+        }
+      }
+
+      const changedCount = results.reduce((sum, item) => sum + (item.changedCount || 0), 0);
+      const warningCount = results.reduce((sum, item) => sum + (item.warningCount || 0), 0);
+
+      UserActivity.log(req.user.id, "admin.normalize_many_exam_formulas", {
+        examCount: results.length,
+        changedCount,
+        warningCount,
+        subject,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json({
+        message: `Đã quét ${results.length} đề, sửa ${changedCount} chỗ.`,
+        examCount: results.length,
+        changedCount,
+        warningCount,
+        results,
+      });
+    } catch (error) {
+      console.error("Normalize many exam formulas error:", error);
+      res.status(500).json({ message: "Chuẩn hóa nhiều đề thất bại." });
     } finally {
       client.release();
     }

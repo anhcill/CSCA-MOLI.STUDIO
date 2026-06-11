@@ -57,7 +57,9 @@ router.use(authorizePermission("exams.manage"));
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
 router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
+router.post("/import/pdf/review", examImportPreviewLimiter, AdminExamController.reviewImportedItems);
 router.post("/import/image/ocr", examImageOcrLimiter, handleImageOcrUpload, AdminExamController.ocrSingleQuestionImage);
+router.post("/normalize-formulas", examWriteLimiter, AdminExamController.normalizeManyExamFormulas);
 
 // Exam CRUD — rate limited for write operations
 router.get("/", AdminExamController.getAllExams);
@@ -69,6 +71,7 @@ router.post("/:examId/delete-request/approve", examWriteLimiter, AdminExamContro
 router.post("/:examId/delete-request/reject", examWriteLimiter, AdminExamController.rejectDeleteRequest);
 router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
+router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController.normalizeExamFormulas);
 
 // Question insertion at specific position
 router.post("/:examId/questions/insert", examWriteLimiter, AdminExamController.insertQuestion);

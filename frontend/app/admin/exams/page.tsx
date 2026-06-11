@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw } from 'react-icons/fi';
+import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
 interface Exam {
@@ -129,6 +129,8 @@ export default function ExamsPage() {
     const [permanentDeleteReason, setPermanentDeleteReason] = useState('');
     const [permanentDeleteError, setPermanentDeleteError] = useState('');
     const [permanentDeleting, setPermanentDeleting] = useState(false);
+    const [batchNormalizing, setBatchNormalizing] = useState(false);
+    const [batchNormalizeMessage, setBatchNormalizeMessage] = useState('');
     const isSuperAdminUser = hasPermission(user, 'admin.super');
     const isTemporarilyDeletedExam = (exam: Exam) => Boolean(exam.deleted_at || exam.deletion_status === 'soft_deleted');
 
@@ -308,6 +310,29 @@ export default function ExamsPage() {
         setPagination(prev => ({ ...prev, currentPage: 1 }));
     };
 
+    const handleNormalizeManyExams = async () => {
+        if (batchNormalizing) return;
+        const subjectText = subjectFilter ? ` môn ${subjectFilter}` : '';
+        if (!confirm(`Chuẩn hóa công thức tối đa 50 đề cũ${subjectText}? Hệ thống chỉ sửa chỗ chắc chắn, chỗ nghi lỗi sẽ báo lại.`)) {
+            return;
+        }
+
+        try {
+            setBatchNormalizing(true);
+            setBatchNormalizeMessage('');
+            const result = await examAdminApi.normalizeManyExamFormulas({
+                subject: subjectFilter || undefined,
+                limit: 50,
+            });
+            setBatchNormalizeMessage(`${result.message} Còn ${result.warningCount || 0} chỗ cần xem tay.`);
+            refreshExamData();
+        } catch (error: any) {
+            setBatchNormalizeMessage(error.response?.data?.message || 'Chuẩn hóa nhiều đề thất bại.');
+        } finally {
+            setBatchNormalizing(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -405,6 +430,15 @@ export default function ExamsPage() {
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
                         />
                     </div>
+                    <button
+                        type="button"
+                        onClick={handleNormalizeManyExams}
+                        disabled={batchNormalizing}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold text-sm hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60 shrink-0"
+                    >
+                        <FiRefreshCw size={16} className={batchNormalizing ? 'animate-spin' : ''} />
+                        {batchNormalizing ? 'Đang chuẩn hóa...' : 'Chuẩn hóa nhiều đề cũ'}
+                    </button>
                     <Link
                         href="/admin/exams/create"
                         className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all shrink-0"
@@ -412,6 +446,12 @@ export default function ExamsPage() {
                         <FiPlus size={16} /> Tạo đề mới
                     </Link>
                 </div>
+
+                {batchNormalizeMessage && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                        {batchNormalizeMessage}
+                    </div>
+                )}
 
                 {/* Filter Tabs */}
                 <div className="flex flex-wrap items-center gap-2">

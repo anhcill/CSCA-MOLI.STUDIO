@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
+import { examAdminApi, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
-import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor } from 'react-icons/fi';
+import { FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
@@ -319,6 +319,8 @@ export default function AdminExamDetailPage() {
     const [quickAddPosition, setQuickAddPosition] = useState<number | null>(null);
     const [pdfImportPreview, setPdfImportPreview] = useState<PdfImportPreview | null>(null);
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
+    const [normalizingFormulas, setNormalizingFormulas] = useState(false);
+    const [normalizeResult, setNormalizeResult] = useState<NormalizeFormulaResult | null>(null);
 
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingExam = () => {
@@ -609,6 +611,21 @@ export default function AdminExamDetailPage() {
             alert(error?.response?.data?.message || 'Luu cau hoi import that bai');
         } finally {
             setPdfImportSaving(false);
+        }
+    };
+
+    const handleNormalizeCurrentExam = async () => {
+        if (!exam?.id || normalizingFormulas) return;
+        try {
+            setNormalizingFormulas(true);
+            setNormalizeResult(null);
+            const result = await examAdminApi.normalizeExamFormulas(exam.id);
+            setNormalizeResult(result);
+            await loadExam();
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Chuẩn hóa công thức thất bại');
+        } finally {
+            setNormalizingFormulas(false);
         }
     };
 
@@ -1350,6 +1367,14 @@ export default function AdminExamDetailPage() {
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
+                                onClick={handleNormalizeCurrentExam}
+                                disabled={normalizingFormulas}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiRefreshCw size={15} className={normalizingFormulas ? 'animate-spin' : ''} />
+                                {normalizingFormulas ? 'Đang chuẩn hóa...' : 'Chuẩn hóa công thức đề này'}
+                            </button>
+                            <button
                                 onClick={() => {
                                     const nextNum = getNextQuestionNum();
                                     setLocalQuestions(prev => [...prev, {
@@ -1398,6 +1423,24 @@ export default function AdminExamDetailPage() {
                                 <FiPlus size={15} /> Trắc Nghiệm
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {isEditingExam && normalizeResult && (
+                    <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                        <p className="font-bold">{normalizeResult.message}</p>
+                        <p className="mt-1">
+                            Đã sửa {normalizeResult.changedCount || 0} chỗ, còn {normalizeResult.warningCount || 0} chỗ nghi lỗi cần xem tay.
+                        </p>
+                        {!!normalizeResult.warnings?.length && (
+                            <div className="mt-2 max-h-40 overflow-auto rounded-lg bg-white/70 p-2 text-xs">
+                                {normalizeResult.warnings.slice(0, 8).map((warning, index) => (
+                                    <p key={index}>
+                                        Câu {warning.questionNumber || '?'} {warning.answerKey ? `đáp án ${warning.answerKey}` : ''} - {warning.field}: {warning.message}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
