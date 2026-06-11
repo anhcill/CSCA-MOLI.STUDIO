@@ -89,7 +89,7 @@ Task:
   1. single_choice: normal A/B/C/D multiple choice question.
   2. reading_group: one reading passage with multiple single-choice subQuestions.
   3. fill_blank_group: word-bank/cloze questions with linkedOptions and blank subItems.
-- Add short Vietnamese explanations for each correct answer if possible.
+- Add short Vietnamese explanations for each correct answer if possible. Vietnamese explanations must use full Vietnamese diacritics, not no-accent text.
 - If a question references an image, table, chart, diagram, map, figure, experiment setup, or missing visual, set needsImage=true and write imageHint.
 - Preserve math as KaTeX-compatible LaTeX inside \\(...\\). Convert OCR/plain fractions like 2x+3/x-1, (2x+3)/(x-1), or stacked numerator/denominator text into \\frac{2x+3}{x-1}.
 - Preserve inequality and set/interval meaning exactly. Never change strict/non-strict signs: < stays <, > stays >, <= or ≤ becomes \\le, >= or ≥ becomes \\ge. Do not change \\le to < or \\ge to >.

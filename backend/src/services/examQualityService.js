@@ -1018,21 +1018,22 @@ function buildMissingExplanationsPrompt(batch, context = {}) {
     };
   });
 
-  return `Ban la giao vien CSCA. Hay tao loi giai ngan vua du cho cac cau dang thieu giai thich.
+  return `Bạn là giáo viên CSCA. Hãy tạo lời giải ngắn vừa đủ cho các câu đang thiếu giải thích.
 
-Yeu cau:
-- Chi tra JSON hop le, khong markdown.
-- Khong sua de, khong sua dap an, chi tao explanation/explanationCn.
-- explanation viet bang tieng Viet, ngan vua du, 2-5 dong, dung trong tam cach ra dap an.
-- Neu co questionTextCn va missingExplanationCn=true, tao explanationCn bang tieng Trung gon, tuong duong noi dung explanation.
-- Cong thuc dung LaTeX chuan: inline \\(...\\), phan so \\frac{...}{...}, can \\sqrt{...}, tap hop \\{...\\}, giao/hop \\cap/\\cup.
-- Loi giai nen xuong dong theo y: Cong thuc/Phan tich, Thay tinh, Ket luan/Chon.
-- Neu can doc anh nhung khong du du lieu tu text/answers de giai chac, de explanation rong va note ly do, khong doan bua.
-- Moi item trong du lieu phai co mot object trong explanations.
+Yêu cầu:
+- Chỉ trả JSON hợp lệ, không markdown.
+- Không sửa đề, không sửa đáp án, chỉ tạo explanation/explanationCn.
+- Trường explanation bắt buộc viết bằng tiếng Việt CÓ DẤU. Không được viết kiểu không dấu như "Tap hop", "dap an", "loi giai".
+- explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
+- Nếu có questionTextCn và missingExplanationCn=true, tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation.
+- Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
+- Lời giải nên xuống dòng theo ý: Công thức/Phân tích, Thay tính, Kết luận/Chọn.
+- Nếu cần đọc ảnh nhưng không đủ dữ liệu từ text/answers để giải chắc, để explanation rỗng và note lý do, không đoán bừa.
+- Mỗi item trong dữ liệu phải có một object trong explanations.
 
-Mon/ngu canh: ${context.subject || "CSCA da mon"}.
+Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
 
-Tra dang:
+Trả dạng:
 {
   "explanations": [
     {
@@ -1040,14 +1041,14 @@ Tra dang:
       "path": "question:1",
       "questionId": 1,
       "confidence": 0.9,
-      "explanation": "loi giai tieng Viet neu can dien",
-      "explanationCn": "giai thich tieng Trung neu can dien",
-      "note": "ngan gon"
+      "explanation": "Lời giải tiếng Việt có dấu nếu cần điền",
+      "explanationCn": "中文解析 nếu cần điền",
+      "note": "ngắn gọn"
     }
   ]
 }
 
-Du lieu:
+Dữ liệu:
 ${JSON.stringify(payload)}`;
 }
 

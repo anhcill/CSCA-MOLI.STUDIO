@@ -68,6 +68,12 @@ interface SavedQuestionGroup {
 type PendingQuestion = { _pending: true; _localId: string; _questionNumber: number; _questionType: string };
 type QuestionListItem = SavedQuestion | SavedQuestionGroup | PendingQuestion;
 
+interface AiRepeatConfirmState {
+    action: ExamAiRun['action'];
+    run: ExamAiRun;
+    resolve: (value: boolean) => void;
+}
+
 interface Exam {
     id: number;
     title: string;
@@ -557,6 +563,7 @@ export default function AdminExamDetailPage() {
 
     const [exam, setExam] = useState<Exam | null>(null);
     const [aiHistory, setAiHistory] = useState<ExamAiRun[]>([]);
+    const [aiRepeatConfirm, setAiRepeatConfirm] = useState<AiRepeatConfirmState | null>(null);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -702,18 +709,17 @@ export default function AdminExamDetailPage() {
     const getLatestAiRun = (action: ExamAiRun['action']) =>
         aiHistory.find(run => run.action === action);
 
-    const confirmRepeatAiAction = (action: ExamAiRun['action']) => {
+    const confirmRepeatAiAction = async (action: ExamAiRun['action']) => {
         const run = getLatestAiRun(action);
         if (!run) return true;
-        const summary = run.summary || {};
-        const countText = summary.questionChangedCount
-            ? `, đã ảnh hưởng ${summary.questionChangedCount} câu`
-            : summary.changedCount
-                ? `, đã sửa ${summary.changedCount} chỗ`
-                : summary.issues
-                    ? `, phát hiện ${summary.issues} lỗi`
-                    : '';
-        return confirm(`${getExamAiRunLabel(action)} đã chạy lúc ${formatAiRunTime(run.created_at)}${run.run_by_name ? ` bởi ${run.run_by_name}` : ''}${countText}. Bạn vẫn muốn chạy lại?`);
+        return new Promise<boolean>((resolve) => {
+            setAiRepeatConfirm({ action, run, resolve });
+        });
+    };
+
+    const closeAiRepeatConfirm = (value: boolean) => {
+        aiRepeatConfirm?.resolve(value);
+        setAiRepeatConfirm(null);
     };
 
     // ── Metadata editing ──────────────────────────────────────────────────────
@@ -940,7 +946,7 @@ export default function AdminExamDetailPage() {
 
     const handleNormalizeCurrentExam = async () => {
         if (!exam?.id || normalizingFormulas) return;
-        if (!confirmRepeatAiAction('normalize_formulas')) return;
+        if (!(await confirmRepeatAiAction('normalize_formulas'))) return;
         try {
             setNormalizingFormulas(true);
             setAiBlockingTask('normalize');
@@ -960,7 +966,7 @@ export default function AdminExamDetailPage() {
 
     const handleReviewCurrentExam = async () => {
         if (!exam?.id || reviewingExam) return;
-        if (!confirmRepeatAiAction('review_quality')) return;
+        if (!(await confirmRepeatAiAction('review_quality'))) return;
         try {
             setReviewingExam(true);
             setAiBlockingTask('review');
@@ -987,7 +993,7 @@ export default function AdminExamDetailPage() {
         if (!exam?.id || applyingExamReviewFixes || !examReviewResult) return;
         const reviews = getExamReviewIssues(examReviewResult);
         if (!reviews.length) return;
-        if (!confirmRepeatAiAction('apply_fixes')) return;
+        if (!(await confirmRepeatAiAction('apply_fixes'))) return;
         if (!confirm('Cho AI sửa toàn bộ log lỗi của đề này? Hệ thống sẽ ghi trực tiếp vào đề, bạn nên xem lại sau khi sửa.')) return;
 
         try {
@@ -1018,7 +1024,7 @@ export default function AdminExamDetailPage() {
 
     const handleGenerateMissingExplanations = async () => {
         if (!exam?.id || generatingMissingExplanations) return;
-        if (!confirmRepeatAiAction('missing_explanations')) return;
+        if (!(await confirmRepeatAiAction('missing_explanations'))) return;
         if (!confirm('Cho AI thêm giải thích cho các câu đang trống? Hệ thống chỉ điền ô chưa có giải thích và lưu trực tiếp vào DB.')) return;
 
         try {
@@ -1389,9 +1395,63 @@ export default function AdminExamDetailPage() {
         return (q._questionType === 'reading_passage' || q._questionType === 'fill_blank_pool') ? 10 : 1;
     };
 
+    const repeatSummary = aiRepeatConfirm?.run.summary || {};
+    const repeatDetail = repeatSummary.questionChangedCount
+        ? `${repeatSummary.questionChangedCount} câu đã bị ảnh hưởng`
+        : repeatSummary.changedCount
+            ? `${repeatSummary.changedCount} chỗ đã được sửa`
+            : repeatSummary.issues
+                ? `${repeatSummary.issues} lỗi đã được phát hiện`
+                : repeatSummary.total
+                    ? `${repeatSummary.total} câu đã được quét`
+                    : 'Đề này đã được xử lý bằng AI trước đó';
+
     return (
         <div className="min-h-screen bg-gray-50">
             <ExamAiBlockingOverlay task={aiBlockingTask} startedAt={aiBlockingStartedAt} />
+            {aiRepeatConfirm && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+                    <div className="w-full max-w-md rounded-2xl border border-white/20 bg-white p-5 shadow-2xl">
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                                <FiAlertCircle size={24} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-lg font-black text-slate-950">{getExamAiRunLabel(aiRepeatConfirm.action)} đã chạy</p>
+                                <p className="mt-1 text-sm font-medium leading-6 text-slate-600">
+                                    Lúc {formatAiRunTime(aiRepeatConfirm.run.created_at)}
+                                    {aiRepeatConfirm.run.run_by_name ? ` bởi ${aiRepeatConfirm.run.run_by_name}` : ''}.
+                                    {' '}{repeatDetail}.
+                                </p>
+                                {repeatSummary.model && (
+                                    <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                                        Model: {repeatSummary.model}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                            Chạy lại có thể tốn thêm token. Chỉ chạy lại khi bạn muốn AI kiểm tra/sửa lại từ đầu.
+                        </div>
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => closeAiRepeatConfirm(false)}
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                            >
+                                Hủy
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => closeAiRepeatConfirm(true)}
+                                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-violet-700"
+                            >
+                                Vẫn chạy lại
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Header */}
             <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
