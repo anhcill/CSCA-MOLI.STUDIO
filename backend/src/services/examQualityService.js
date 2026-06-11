@@ -146,6 +146,7 @@ function normalizeLooseMathSyntax(value) {
     .replace(/\\sqrt\s*\(([^()]+)\)/g, "\\sqrt{$1}")
     .replace(/\\sqrt\{\}\s*([A-Za-z0-9\\]+(?:\^\{[^{}]+\})?)/g, "\\sqrt{$1}")
     .replace(/\\sqrt\s*([A-Za-z0-9])\b/g, "\\sqrt{$1}")
+    .replace(/(^|[^\\}])\b([A-Za-z0-9](?:\^\{[^{}]+\}|\^[A-Za-z0-9])?)\s*\/\s*([+\-]?\d+)\b/g, "$1\\frac{$2}{$3}")
     .replace(/\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])\b/g, "\\frac{$1}{$2}")
     .replace(/(^|[\s=([{,;:])([+\-]?\d+)\s*\/\s*([+\-]?\d+)(?=\s*(?:[),.;:\]}]|$))/g, "$1\\frac{$2}{$3}")
     .replace(/\blog\s*_\s*([0-9A-Za-z]+)\s+/gi, "\\log_{$1} ")
@@ -218,8 +219,33 @@ function repairLatexControlChars(value) {
     .replace(/([A-Za-z0-9}\\)])\t(?:o)\b/g, (_, prefix) => `${prefix}\\to`);
 }
 
+function repairMalformedInlineDollarDelimiters(value) {
+  return stringValue(value).replace(/\$\$?/g, (match, offset, whole) => {
+    const before = whole.slice(0, offset);
+    const after = whole.slice(offset + match.length);
+    const lineBefore = before.slice(before.lastIndexOf("\n") + 1);
+    const nextNewline = after.indexOf("\n");
+    const lineAfter = nextNewline >= 0 ? after.slice(0, nextNewline) : after;
+    const isLineStart = lineBefore.trim().length === 0;
+    const isLineEnd = lineAfter.trim().length === 0;
+
+    if (match === "$$" && (isLineStart || isLineEnd)) return match;
+
+    const prev = before.match(/\S\s*$/)?.[0]?.trim() || "";
+    const next = after.match(/^\s*\S/)?.[0]?.trim() || "";
+    const touchesMathOperator =
+      /[=<>+\-*/({[,;:|]$/.test(prev) ||
+      /^[=<>+\-*/)}\],.;:|]/.test(next) ||
+      /\\(?:Rightarrow|Leftrightarrow|to)\s*$/.test(before) ||
+      /^\\(?:Rightarrow|Leftrightarrow|to)\b/.test(after.trimStart());
+
+    if (touchesMathOperator) return "";
+    return match;
+  });
+}
+
 function normalizeStoredFormulaText(value, options = {}) {
-  const input = stringValue(value).replace(/\0/g, "");
+  const input = repairMalformedInlineDollarDelimiters(stringValue(value).replace(/\0/g, ""));
   if (!input.trim()) return "";
 
   let out = normalizeMathSegments(repairOcrMathArtifacts(input))
@@ -229,6 +255,7 @@ function normalizeStoredFormulaText(value, options = {}) {
     .replace(/\\le\s+ft/g, "\\left")
     .replace(/\\in\s+t/g, "\\int")
     .replace(/\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])\b/g, "\\frac{$1}{$2}")
+    .replace(/([A-Za-z0-9])\s*\\frac\{\s*\^\{?([^{}]+)\}?\s*\}\{/g, "\\frac{$1^{$2}}{")
     .replace(/\\sqrt\s*([A-Za-z0-9])\b/g, "\\sqrt{$1}")
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, "[$1)")
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, "($1)")
@@ -271,7 +298,7 @@ function isSuspiciousFormulaText(value) {
     openDisplay !== closeDisplay ||
     /\\(?:frac|sqrt|left|right)\s+(?=[A-Za-z])/i.test(text) ||
     /\\(?:le\s+ft|in\s+t|right\s+leftharpoons)/i.test(text) ||
-    /\$\$/.test(text)
+    /\$\$?/.test(text)
   );
 }
 
@@ -1170,6 +1197,12 @@ function buildDisplayFormatPrompt(batch, context = {}) {
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
       explanation: q.explanation || "",
       explanationCn: q.explanationCn || "",
+      formatterInstructions: [
+        "Rewrite the whole broken field into a clean natural version in the same original language when format is broken.",
+        "Remove stray malformed $ or $$ delimiters.",
+        "Examples: (x-2)^{2}+(y+1)^{2}$$=5 -> \\((x-2)^2+(y+1)^2=5\\); y^2$$/16 -> \\frac{y^2}{16}; (4,0)$$: -> \\((4,0)\\):.",
+        "Keep meaning and correct answer unchanged.",
+      ],
     };
   });
 
