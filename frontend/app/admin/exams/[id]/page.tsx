@@ -89,6 +89,15 @@ interface Exam {
     vip_tier?: string;
 }
 
+interface ExamAiRun {
+    action: 'review_quality' | 'apply_fixes' | 'missing_explanations' | 'normalize_formulas' | string;
+    status: string;
+    summary?: Record<string, any>;
+    run_by?: number | null;
+    run_by_name?: string | null;
+    created_at: string;
+}
+
 interface Subject {
     id: number;
     name: string;
@@ -123,6 +132,27 @@ function getAiReviewTone(status?: string) {
 
 function getExamReviewIssues(result: StoredExamReviewResult | null) {
     return (result?.reviews || []).filter(review => review.status !== 'ok');
+}
+
+function getExamAiRunLabel(action: string) {
+    if (action === 'review_quality') return 'AI soát đề';
+    if (action === 'apply_fixes') return 'AI sửa log';
+    if (action === 'missing_explanations') return 'AI thêm giải thích';
+    if (action === 'normalize_formulas') return 'Chuẩn hóa công thức';
+    return action;
+}
+
+function formatAiRunTime(value?: string) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    });
 }
 
 function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; startedAt: number | null }) {
@@ -526,6 +556,7 @@ export default function AdminExamDetailPage() {
     ].join('|');
 
     const [exam, setExam] = useState<Exam | null>(null);
+    const [aiHistory, setAiHistory] = useState<ExamAiRun[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -628,12 +659,13 @@ export default function AdminExamDetailPage() {
         }
     };
 
-    const loadExam = async () => {
+    const loadExam = async (options: { silent?: boolean } = {}) => {
         try {
-            setLoading(true);
+            if (!options.silent) setLoading(true);
             const data = await examAdminApi.getExamForEdit(Number(id));
             const visibleQuestions = buildQuestionList(data.questions || []);
             setExam(data.exam);
+            setAiHistory(Array.isArray(data.aiHistory) ? data.aiHistory : []);
             setSavedQuestions(visibleQuestions);
             setLocalQuestions(visibleQuestions);
             if (data.exam) {
@@ -663,8 +695,25 @@ export default function AdminExamDetailPage() {
             alert('Không thể tải đề thi: ' + (error.response?.data?.message || error.message));
             router.push('/admin/exams');
         } finally {
-            setLoading(false);
+            if (!options.silent) setLoading(false);
         }
+    };
+
+    const getLatestAiRun = (action: ExamAiRun['action']) =>
+        aiHistory.find(run => run.action === action);
+
+    const confirmRepeatAiAction = (action: ExamAiRun['action']) => {
+        const run = getLatestAiRun(action);
+        if (!run) return true;
+        const summary = run.summary || {};
+        const countText = summary.questionChangedCount
+            ? `, đã ảnh hưởng ${summary.questionChangedCount} câu`
+            : summary.changedCount
+                ? `, đã sửa ${summary.changedCount} chỗ`
+                : summary.issues
+                    ? `, phát hiện ${summary.issues} lỗi`
+                    : '';
+        return confirm(`${getExamAiRunLabel(action)} đã chạy lúc ${formatAiRunTime(run.created_at)}${run.run_by_name ? ` bởi ${run.run_by_name}` : ''}${countText}. Bạn vẫn muốn chạy lại?`);
     };
 
     // ── Metadata editing ──────────────────────────────────────────────────────
@@ -872,7 +921,7 @@ export default function AdminExamDetailPage() {
         try {
             setPdfImportSaving(true);
             const response = await examAdminApi.bulkImportQuestions(exam.id, importItems);
-            await loadExam();
+            await loadExam({ silent: true });
             setPdfImportPreview(null);
             setShowQuickAdd(false);
             setAddingAfterId(null);
@@ -891,6 +940,7 @@ export default function AdminExamDetailPage() {
 
     const handleNormalizeCurrentExam = async () => {
         if (!exam?.id || normalizingFormulas) return;
+        if (!confirmRepeatAiAction('normalize_formulas')) return;
         try {
             setNormalizingFormulas(true);
             setAiBlockingTask('normalize');
@@ -898,7 +948,7 @@ export default function AdminExamDetailPage() {
             setNormalizeResult(null);
             const result = await examAdminApi.normalizeExamFormulas(exam.id);
             setNormalizeResult(result);
-            await loadExam();
+            await loadExam({ silent: true });
         } catch (error: any) {
             alert(error?.response?.data?.message || 'Chuẩn hóa công thức thất bại');
         } finally {
@@ -910,6 +960,7 @@ export default function AdminExamDetailPage() {
 
     const handleReviewCurrentExam = async () => {
         if (!exam?.id || reviewingExam) return;
+        if (!confirmRepeatAiAction('review_quality')) return;
         try {
             setReviewingExam(true);
             setAiBlockingTask('review');
@@ -919,6 +970,7 @@ export default function AdminExamDetailPage() {
             setExamReviewApplyResult(null);
             const result = await examAdminApi.reviewExamQuality(exam.id);
             setExamReviewResult(result);
+            await loadExam({ silent: true });
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -935,6 +987,7 @@ export default function AdminExamDetailPage() {
         if (!exam?.id || applyingExamReviewFixes || !examReviewResult) return;
         const reviews = getExamReviewIssues(examReviewResult);
         if (!reviews.length) return;
+        if (!confirmRepeatAiAction('apply_fixes')) return;
         if (!confirm('Cho AI sửa toàn bộ log lỗi của đề này? Hệ thống sẽ ghi trực tiếp vào đề, bạn nên xem lại sau khi sửa.')) return;
 
         try {
@@ -950,7 +1003,7 @@ export default function AdminExamDetailPage() {
             });
             setExamReviewApplyResult(result);
             setExamReviewResult(null);
-            await loadExam();
+            await loadExam({ silent: true });
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -965,6 +1018,7 @@ export default function AdminExamDetailPage() {
 
     const handleGenerateMissingExplanations = async () => {
         if (!exam?.id || generatingMissingExplanations) return;
+        if (!confirmRepeatAiAction('missing_explanations')) return;
         if (!confirm('Cho AI thêm giải thích cho các câu đang trống? Hệ thống chỉ điền ô chưa có giải thích và lưu trực tiếp vào DB.')) return;
 
         try {
@@ -1818,6 +1872,44 @@ export default function AdminExamDetailPage() {
                             >
                                 <FiPlus size={15} /> Trắc Nghiệm
                             </button>
+                        </div>
+                    </div>
+                )}
+
+                {isEditingExam && aiHistory.length > 0 && (
+                    <div className="mb-6 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="font-black">Lịch sử AI của đề này</p>
+                                <p className="mt-1 text-cyan-800">Đề đã được AI xử lý. Bấm lại vẫn được, nhưng hệ thống sẽ hỏi xác nhận để tránh tốn tiền.</p>
+                            </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                            {aiHistory.slice(0, 6).map((run) => {
+                                const summary = run.summary || {};
+                                const detail = summary.questionChangedCount
+                                    ? `${summary.questionChangedCount} câu`
+                                    : summary.changedCount
+                                        ? `${summary.changedCount} chỗ`
+                                        : summary.issues
+                                            ? `${summary.issues} lỗi`
+                                            : summary.total
+                                                ? `${summary.total} câu`
+                                                : '';
+                                return (
+                                    <div key={`${run.action}-${run.created_at}`} className="rounded-lg border border-cyan-200 bg-white/70 px-3 py-2">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <span className="font-bold">{getExamAiRunLabel(run.action)}</span>
+                                            <span className="text-xs font-semibold text-cyan-700">{formatAiRunTime(run.created_at)}</span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-cyan-800">
+                                            {run.run_by_name ? `Bởi ${run.run_by_name}` : 'Không rõ admin'}
+                                            {detail ? ` · ${detail}` : ''}
+                                            {summary.model ? ` · ${summary.model}` : ''}
+                                        </p>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

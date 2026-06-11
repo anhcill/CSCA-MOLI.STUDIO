@@ -63,6 +63,13 @@ function normalizeLedgerObject(value) {
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
 const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
+const EXAM_AI_LOCK_NAMESPACE = 910612;
+const EXAM_AI_ACTIONS = {
+  REVIEW: "review_quality",
+  FIX: "apply_fixes",
+  EXPLAIN: "missing_explanations",
+  NORMALIZE: "normalize_formulas",
+};
 
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -168,6 +175,69 @@ async function ensureExamExists(client, examId) {
     [examId],
   );
   return result.rows.length > 0;
+}
+
+async function acquireExamAiLock(client, examId) {
+  const parsedExamId = Number.parseInt(examId, 10);
+  if (!Number.isInteger(parsedExamId) || parsedExamId <= 0) {
+    const error = new Error("EXAM_NOT_FOUND");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const result = await client.query(
+    "SELECT pg_try_advisory_lock($1::int, $2::int) AS locked",
+    [EXAM_AI_LOCK_NAMESPACE, parsedExamId],
+  );
+
+  if (!result.rows[0]?.locked) {
+    const error = new Error("EXAM_AI_BUSY");
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+async function releaseExamAiLock(client, examId) {
+  const parsedExamId = Number.parseInt(examId, 10);
+  if (!Number.isInteger(parsedExamId) || parsedExamId <= 0) return;
+  try {
+    await client.query("SELECT pg_advisory_unlock($1::int, $2::int)", [EXAM_AI_LOCK_NAMESPACE, parsedExamId]);
+  } catch {}
+}
+
+function getExamAiBusyResponse(res) {
+  return res.status(409).json({
+    message: "De nay dang duoc AI xu ly boi admin khac. Vui long doi xong roi thu lai.",
+  });
+}
+
+async function recordExamAiRun(client, examId, action, userId, summary = {}) {
+  await client.query(
+    `INSERT INTO admin_exam_ai_runs (exam_id, action, status, summary, run_by, created_at)
+     VALUES ($1, $2, 'completed', $3::jsonb, $4, NOW())
+     ON CONFLICT (exam_id, action)
+     DO UPDATE SET status = EXCLUDED.status,
+                   summary = EXCLUDED.summary,
+                   run_by = EXCLUDED.run_by,
+                   created_at = NOW()`,
+    [examId, action, JSON.stringify(summary || {}), userId || null],
+  );
+}
+
+async function getExamAiHistory(examId) {
+  const result = await pool.query(
+    `SELECT r.action, r.status, r.summary, r.run_by, r.created_at,
+            COALESCE(u.full_name, u.email) AS run_by_name
+     FROM admin_exam_ai_runs r
+     LEFT JOIN users u ON u.id = r.run_by
+     WHERE r.exam_id = $1
+     ORDER BY r.created_at DESC`,
+    [examId],
+  );
+  return result.rows.map((row) => ({
+    ...row,
+    summary: typeof row.summary === "string" ? JSON.parse(row.summary) : row.summary,
+  }));
 }
 
 async function tableExists(client, tableName) {
@@ -516,6 +586,7 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
+      await acquireExamAiLock(client, examId);
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
@@ -523,6 +594,12 @@ const AdminExamController = {
 
       const result = await reviewStoredExamWithAI(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW, req.user.id, {
+        total: result.summary?.total || 0,
+        issues: result.summary?.issues || 0,
+        ok: result.summary?.ok || 0,
+        model: result.summary?.model,
       });
 
       UserActivity.log(req.user.id, "admin.review_saved_exam_quality", {
@@ -547,11 +624,15 @@ const AdminExamController = {
       if (error.message === "AI_TIMEOUT") {
         return res.status(504).json({ message: "AI soát đề quá thời gian." });
       }
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
       if (error.message === "EXAM_NOT_FOUND") {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
       res.status(500).json({ message: "AI soát đề thất bại." });
     } finally {
+      await releaseExamAiLock(client, examId);
       client.release();
     }
   },
@@ -561,6 +642,7 @@ const AdminExamController = {
     const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
     const client = await pool.connect();
     try {
+      await acquireExamAiLock(client, examId);
       await client.query("BEGIN");
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
@@ -572,6 +654,13 @@ const AdminExamController = {
         applySafeFormulas: req.body?.applySafeFormulas !== false,
         applySuggestedAnswers: req.body?.applySuggestedAnswers !== false,
         subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FIX, req.user.id, {
+        changedCount: result.changedCount,
+        answerChangedCount: result.answerChangedCount,
+        formulaChangedCount: result.formulaChangedCount,
+        skippedCount: result.skippedCount,
+        model: result.summary?.model,
       });
       await client.query("COMMIT");
 
@@ -588,6 +677,9 @@ const AdminExamController = {
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Apply exam review fixes error:", getSafeErrorLog(error));
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
       if (error.message === "RATE_LIMITED") {
         return res.status(429).json({
           message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
@@ -599,6 +691,7 @@ const AdminExamController = {
       }
       res.status(500).json({ message: "Sửa lỗi AI đề này thất bại." });
     } finally {
+      await releaseExamAiLock(client, examId);
       client.release();
     }
   },
@@ -607,6 +700,7 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
+      await acquireExamAiLock(client, examId);
       await client.query("BEGIN");
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
@@ -616,6 +710,12 @@ const AdminExamController = {
 
       const result = await generateMissingExamExplanations(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.EXPLAIN, req.user.id, {
+        changedCount: result.changedCount,
+        questionChangedCount: result.questionChangedCount,
+        skippedCount: result.skippedCount,
+        model: result.summary?.model,
       });
       await client.query("COMMIT");
 
@@ -635,6 +735,9 @@ const AdminExamController = {
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Generate missing explanations error:", getSafeErrorLog(error));
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
       if (error.message === "RATE_LIMITED") {
         return res.status(429).json({
           message: "AI dang bi gioi han tam thoi. Thu lai sau.",
@@ -649,6 +752,7 @@ const AdminExamController = {
       }
       res.status(500).json({ message: "AI tao giai thich thieu that bai." });
     } finally {
+      await releaseExamAiLock(client, examId);
       client.release();
     }
   },
@@ -657,6 +761,7 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
+      await acquireExamAiLock(client, examId);
       await client.query("BEGIN");
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
@@ -665,6 +770,10 @@ const AdminExamController = {
       }
 
       const result = await normalizeStoredExamFormulas(client, examId, { apply: true });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.NORMALIZE, req.user.id, {
+        changedCount: result.changedCount,
+        warningCount: result.warningCount,
+      });
       await client.query("COMMIT");
 
       UserActivity.log(req.user.id, "admin.normalize_exam_formulas", {
@@ -684,8 +793,12 @@ const AdminExamController = {
     } catch (error) {
       await client.query("ROLLBACK");
       console.error("Normalize exam formulas error:", error);
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
       res.status(500).json({ message: "Chuẩn hóa công thức thất bại." });
     } finally {
+      await releaseExamAiLock(client, examId);
       client.release();
     }
   },
@@ -2443,10 +2556,12 @@ const AdminExamController = {
 
       const exam = examResult.rows[0];
       exam.allow_download = getExamAllowDownload(normalizeExamAccess(exam.is_premium, exam.vip_tier));
+      const aiHistory = await getExamAiHistory(examId);
 
       res.json({
         exam,
         questions,
+        aiHistory,
       });
     } catch (error) {
       console.error("Get exam error:", error);

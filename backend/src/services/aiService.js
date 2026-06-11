@@ -68,7 +68,7 @@ function getNextAdminExamKey() {
   const key = keys[adminExamKeyIndex % keys.length];
   adminExamKeyIndex++;
   console.log(`Admin exam AI request using ${ADMIN_EXAM_AI.provider || 'custom'} key #${keyNumber}/${keys.length}`);
-  return key;
+  return { key, keyNumber, total: keys.length };
 }
 
 function isAdminExamProviderEnabled() {
@@ -308,36 +308,42 @@ async function callAdminExamAIMessages(messages, options = {}) {
   } = options;
 
   for (const model of modelCandidates) {
-    await waitAdminExamBetweenRequests();
+    const keyCount = (ADMIN_EXAM_AI.apiKeys || []).filter(Boolean).length;
+    const attempts = Math.max(1, keyCount);
 
-    const apiKey = getNextAdminExamKey();
-    const headers = { 'Content-Type': 'application/json' };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await waitAdminExamBetweenRequests();
 
-    const payload = {
-      model,
-      messages,
-      max_tokens: maxTokens,
-      temperature,
-    };
+      const keyInfo = getNextAdminExamKey();
+      const headers = { 'Content-Type': 'application/json' };
+      if (keyInfo?.key) headers.Authorization = `Bearer ${keyInfo.key}`;
 
-    try {
-      return await withConcurrency(async () => {
-        const response = await axios.post(
-          getChatCompletionsUrl(ADMIN_EXAM_AI.baseUrl),
-          payload,
-          { timeout, headers },
-        );
-        const text = extractOpenAICompatibleText(response.data);
-        return text || JSON.stringify(response.data);
-      });
-    } catch (err) {
-      const message = getProviderResponseMessage(err);
-      if (err.response?.status === 429) {
-        adminExamKeyIndex++;
-        console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} model ${model} quota/rate limited, trying next model...`);
-      } else {
-        console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} model ${model} failed, trying next model:`, message);
+      const payload = {
+        model,
+        messages,
+        max_tokens: maxTokens,
+        temperature,
+      };
+
+      try {
+        return await withConcurrency(async () => {
+          const response = await axios.post(
+            getChatCompletionsUrl(ADMIN_EXAM_AI.baseUrl),
+            payload,
+            { timeout, headers },
+          );
+          const text = extractOpenAICompatibleText(response.data);
+          return text || JSON.stringify(response.data);
+        });
+      } catch (err) {
+        const status = err.response?.status;
+        const message = getProviderResponseMessage(err);
+        const keyLabel = keyInfo ? `key #${keyInfo.keyNumber}/${keyInfo.total}` : 'no key';
+        if ([401, 403, 429].includes(status)) {
+          console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} ${keyLabel} model ${model} blocked/quota limited, trying next key/model:`, message);
+        } else {
+          console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} ${keyLabel} model ${model} failed, trying next key/model:`, message);
+        }
       }
     }
   }
