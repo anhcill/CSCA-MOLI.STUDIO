@@ -62,6 +62,24 @@ export interface ImportedQuestionAiReview {
     note?: string;
 }
 
+export interface ImportedItemsReviewDiagnostic {
+    batch: number;
+    range?: string;
+    paths?: string[];
+    labels?: string[];
+    model?: string;
+    status: 'ok' | 'failed' | 'invalid_response' | string;
+    durationMs?: number;
+    returnedReviews?: number;
+    expectedReviews?: number;
+    message?: string;
+    rawPreview?: string;
+    errorCode?: string;
+    retryAfter?: number;
+    providerStatus?: number;
+    providerCode?: string;
+}
+
 export interface ImportedReadingGroupData {
     itemType: 'reading_group';
     passageText: string;
@@ -149,6 +167,7 @@ export interface NormalizeFormulaResult {
 export interface ImportedItemsReviewResult {
     items: ImportedExamItem[];
     reviews: ImportedQuestionAiReview[];
+    diagnostics?: ImportedItemsReviewDiagnostic[];
     summary: {
         total: number;
         ok: number;
@@ -157,6 +176,12 @@ export interface ImportedItemsReviewResult {
         answer_issue?: number;
         explanation_issue?: number;
         needs_review?: number;
+        aiCalls?: number;
+        failedBatches?: number;
+        invalidBatches?: number;
+        model?: string;
+        questionTotal?: number;
+        reviewedCount?: number;
     };
 }
 

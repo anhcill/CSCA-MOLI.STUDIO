@@ -428,30 +428,78 @@ function buildFallbackReview(entry, note) {
   };
 }
 
+function getReviewErrorDiagnostic(error) {
+  const errorCode = error?.message || "AI_REVIEW_ERROR";
+  const providerMessage = stringValue(error?.providerMessage).slice(0, 500);
+  const message = providerMessage || (
+    errorCode === "RATE_LIMITED"
+      ? "AI đang bị giới hạn, thử lại sau."
+      : errorCode === "AI_TIMEOUT"
+        ? "AI soát đề quá thời gian."
+        : stringValue(error?.message || "AI review lỗi, cần chạy lại.").slice(0, 500)
+  );
+
+  return {
+    errorCode,
+    message,
+    retryAfter: Number.isFinite(error?.retryAfter) ? error.retryAfter : undefined,
+    providerStatus: Number.isFinite(error?.providerStatus) ? error.providerStatus : undefined,
+    providerCode: error?.providerCode,
+  };
+}
+
+function getBatchLabelRange(batch) {
+  const labels = batch.map(entry => entry.label).filter(Boolean);
+  if (!labels.length) return "";
+  if (labels.length === 1) return labels[0];
+  return `${labels[0]} - ${labels[labels.length - 1]}`;
+}
+
 async function reviewImportedItemsWithAI(items, context = {}) {
   const entries = collectImportedQuestions(items);
   if (!entries.length) {
-    return { items, summary: { total: 0, ok: 0, issues: 0 }, reviews: [] };
+    return { items, summary: { total: 0, ok: 0, issues: 0, aiCalls: 0, failedBatches: 0 }, reviews: [], diagnostics: [] };
   }
 
   const reviews = [];
+  const diagnostics = [];
   const batchSize = Math.max(1, Math.min(12, REVIEW_BATCH_SIZE || 6));
   for (let i = 0; i < entries.length; i += batchSize) {
     const batch = entries.slice(i, i + batchSize);
+    const model = aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+    const startedAt = Date.now();
     try {
       const raw = await aiService.callBeeknoee(buildReviewPrompt(batch, context), {
-        model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+        model,
         temperature: 0.1,
         maxTokens: Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_TOKENS || "3000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_REVIEW_TIMEOUT_MS || "90000", 10),
       });
       const parsed = parseAiJson(raw);
       const batchReviews = Array.isArray(parsed?.reviews) ? parsed.reviews : [];
+      diagnostics.push({
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: batchReviews.length ? "ok" : "invalid_response",
+        durationMs: Date.now() - startedAt,
+        returnedReviews: batchReviews.length,
+        expectedReviews: batch.length,
+        message: batchReviews.length
+          ? `AI đã trả ${batchReviews.length}/${batch.length} review.`
+          : "AI đã được gọi nhưng phản hồi không có JSON reviews hợp lệ.",
+        rawPreview: batchReviews.length ? undefined : stringValue(raw).slice(0, 500),
+      });
+      if (!batchReviews.length) {
+        continue;
+      }
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
         const review = batchReviews.find((item) => item?.path === entry.path || item?.index === localIndex);
         if (!review) {
-          reviews.push(buildFallbackReview(entry, "AI không trả review cho câu này."));
+          reviews.push(buildFallbackReview(entry, "AI không trả review cho câu này. Xem log tổng hợp phía trên."));
           continue;
         }
         reviews.push({
@@ -466,9 +514,19 @@ async function reviewImportedItemsWithAI(items, context = {}) {
         });
       }
     } catch (error) {
-      for (const entry of batch) {
-        reviews.push(buildFallbackReview(entry, error.message === "RATE_LIMITED" ? "AI đang bị giới hạn, thử lại sau." : "AI review lỗi, cần chạy lại."));
-      }
+      const diagnostic = {
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        expectedReviews: batch.length,
+        ...getReviewErrorDiagnostic(error),
+      };
+      diagnostics.push(diagnostic);
+      console.warn("AI imported exam review batch failed:", diagnostic);
     }
   }
 
@@ -503,11 +561,18 @@ async function reviewImportedItemsWithAI(items, context = {}) {
     acc[review.status] = (acc[review.status] || 0) + 1;
     return acc;
   }, { total: 0, ok: 0, issues: 0 });
+  counts.aiCalls = diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length;
+  counts.failedBatches = diagnostics.filter(item => item.status === "failed").length;
+  counts.invalidBatches = diagnostics.filter(item => item.status === "invalid_response").length;
+  counts.model = aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+  counts.questionTotal = entries.length;
+  counts.reviewedCount = reviews.length;
 
   return {
     items: nextItems,
     reviews,
     summary: counts,
+    diagnostics,
   };
 }
 

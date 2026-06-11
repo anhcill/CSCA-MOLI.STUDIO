@@ -524,9 +524,10 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                     )}
                                                     <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                                                 </div>
-                                                <p className="text-gray-900 font-medium leading-relaxed">
-                                                    {pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn })}
-                                                </p>
+                                                <RichMathText
+                                                    value={pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn }) || ''}
+                                                    className="text-sm font-medium leading-relaxed text-gray-900"
+                                                />
                                             </div>
                                         </div>
 
@@ -542,10 +543,11 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                 return (
                                                     <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
                                                         <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
-                                                        <div className="flex-1">
-                                                            <span className={`text-sm ${text}`}>
-                                                                {pick({ vi: opt.text, en: opt.text_en, zh: opt.text_cn })}
-                                                            </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <RichMathText
+                                                                value={pick({ vi: opt.text, en: opt.text_en, zh: opt.text_cn }) || ''}
+                                                                className={`text-sm ${text}`}
+                                                            />
                                                         </div>
                                                         {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
                                                         {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0">✗ Bạn chọn</span>}

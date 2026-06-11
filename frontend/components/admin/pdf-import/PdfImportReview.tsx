@@ -80,6 +80,133 @@ function getAiReviewLabel(status?: string) {
   return 'Cần kiểm tra';
 }
 
+function getAiReviewTone(status?: string) {
+  if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800';
+  return 'border-amber-200 bg-amber-50 text-amber-800';
+}
+
+function collectReviewIssueRows(items: ImportedExamItem[]) {
+  const rows: Array<{
+    key: string;
+    label: string;
+    status: string;
+    confidence?: number;
+    suggestedCorrectAnswer?: string;
+    note?: string;
+    formulaIssues: string[];
+    explanationIssues: string[];
+  }> = [];
+
+  const push = (key: string, label: string, review?: ImportedQuestionData['aiReview']) => {
+    if (!review || review.status === 'ok') return;
+    rows.push({
+      key,
+      label,
+      status: review.status,
+      confidence: review.confidence,
+      suggestedCorrectAnswer: review.suggestedCorrectAnswer,
+      note: review.note,
+      formulaIssues: review.formulaIssues || [],
+      explanationIssues: review.explanationIssues || [],
+    });
+  };
+
+  items.forEach((item, itemIndex) => {
+    if (item.itemType === 'reading_group') {
+      item.subQuestions.forEach((question, subIndex) => {
+        push(`${itemIndex}-reading-${subIndex}`, `Đọc hiểu ${itemIndex + 1}.${subIndex + 1}`, question.aiReview);
+      });
+      return;
+    }
+
+    if (item.itemType === 'fill_blank_group') {
+      item.subItems.forEach((question, subIndex) => {
+        push(`${itemIndex}-blank-${subIndex}`, `Điền từ ${itemIndex + 1}.${subIndex + 1}`, question.aiReview);
+      });
+      return;
+    }
+
+    push(`${itemIndex}`, `Câu ${itemIndex + 1}`, item.aiReview);
+  });
+
+  return rows;
+}
+
+function AiReviewLogPanel({
+  summary,
+  diagnostics,
+  issueRows,
+}: {
+  summary: ImportedItemsReviewResult['summary'] | null;
+  diagnostics: ImportedItemsReviewResult['diagnostics'];
+  issueRows: ReturnType<typeof collectReviewIssueRows>;
+}) {
+  if (!summary && !diagnostics?.length && issueRows.length === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800 shadow-sm">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="font-black text-slate-950">Log AI review</p>
+          {summary && (
+            <p className="text-xs font-semibold text-slate-500">
+              Model: {summary.model || 'chưa rõ'} - Gọi AI: {summary.aiCalls ?? 0} batch, lỗi: {summary.failedBatches ?? 0}, JSON lỗi: {summary.invalidBatches ?? 0}
+            </p>
+          )}
+        </div>
+        {summary && (
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+            {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} có review
+          </span>
+        )}
+      </div>
+
+      {!!diagnostics?.length && (
+        <div className="mb-3 space-y-2">
+          {diagnostics.map((log) => (
+            <div key={`${log.batch}-${log.status}`} className={`rounded-lg border px-3 py-2 text-xs ${getAiReviewTone(log.status)}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+                <span>Batch {log.batch}: {log.range || (log.labels || []).join(', ') || 'không rõ câu'}</span>
+                <span>{log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'AI trả sai JSON' : 'Lỗi gọi AI'}</span>
+              </div>
+              <p className="mt-1">Model: {log.model || summary?.model || 'chưa rõ'}{log.durationMs ? ` - ${Math.round(log.durationMs / 1000)}s` : ''}</p>
+              {log.message && <p className="mt-1 whitespace-pre-wrap">{log.message}</p>}
+              {log.providerStatus && <p className="mt-1">Provider status: {log.providerStatus}</p>}
+              {log.errorCode && <p className="mt-1">Mã lỗi: {log.errorCode}</p>}
+              {log.retryAfter ? <p className="mt-1">Thử lại sau khoảng {log.retryAfter}s.</p> : null}
+              {log.rawPreview && <p className="mt-1 whitespace-pre-wrap break-words">Phản hồi đầu: {log.rawPreview}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {issueRows.length > 0 ? (
+        <div className="space-y-2">
+          {issueRows.map((row) => (
+            <div key={row.key} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <div className="flex flex-wrap items-center gap-2 font-black">
+                <span>{row.label}</span>
+                <span>-</span>
+                <span>{getAiReviewLabel(row.status)}</span>
+                {Number.isFinite(row.confidence) && <span>{Math.round((row.confidence || 0) * 100)}%</span>}
+              </div>
+              {row.suggestedCorrectAnswer && <p className="mt-1">Gợi ý đáp án: {row.suggestedCorrectAnswer}</p>}
+              {row.note && <p className="mt-1 whitespace-pre-wrap">{row.note}</p>}
+              {row.formulaIssues.map((issue, index) => <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>)}
+              {row.explanationIssues.map((issue, index) => <p key={`explanation-${index}`} className="mt-1">Lời giải: {issue}</p>)}
+            </div>
+          ))}
+        </div>
+      ) : summary ? (
+        <p className="text-xs font-semibold text-emerald-700">
+          {summary.total > 0 ? 'Không có câu bị AI đánh dấu lỗi.' : 'Chưa có review theo câu. Xem log batch phía trên.'}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ItemWarnings({ item }: { item: Pick<ImportedQuestionData, 'imageHint' | 'reviewNotes' | 'needsImage' | 'aiReview'> }) {
   if (!item.imageHint && !item.reviewNotes && !item.needsImage && !item.aiReview) return null;
 
@@ -164,10 +291,15 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const [reviewing, setReviewing] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [reviewSummary, setReviewSummary] = useState<ImportedItemsReviewResult['summary'] | null>(null);
+  const [reviewDiagnostics, setReviewDiagnostics] = useState<ImportedItemsReviewResult['diagnostics']>([]);
   const items = draftItems;
+  const reviewIssueRows = collectReviewIssueRows(items);
 
   useEffect(() => {
     setDraftItems(sourceItems);
+    setReviewSummary(null);
+    setReviewDiagnostics([]);
+    setReviewError('');
   }, [preview, sourceItems]);
 
   const questionCount = getImportItemsQuestionCount(items);
@@ -209,6 +341,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
       const result = await examAdminApi.reviewImportedItems(items);
       setDraftItems(result.items);
       setReviewSummary(result.summary);
+      setReviewDiagnostics(result.diagnostics || []);
       onChangeItems(result.items);
     } catch (error: any) {
       setReviewError(error.response?.data?.message || 'AI soát đề thất bại.');
@@ -438,7 +571,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
 
       {reviewSummary && (
         <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
-          AI đã soát {reviewSummary.total} câu: {reviewSummary.ok} ổn, {reviewSummary.issues} cần xem lại.
+          AI đã trả review cho {reviewSummary.reviewedCount ?? reviewSummary.total}/{reviewSummary.questionTotal ?? reviewSummary.total} câu: {reviewSummary.ok} ổn, {reviewSummary.issues} cần xem lại.
         </div>
       )}
 
@@ -447,6 +580,12 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           {reviewError}
         </div>
       )}
+
+      <AiReviewLogPanel
+        summary={reviewSummary}
+        diagnostics={reviewDiagnostics}
+        issueRows={reviewIssueRows}
+      />
 
       {!!visibleWarnings.length && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

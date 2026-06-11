@@ -151,6 +151,7 @@ export function repairMathFormatArtifacts(
 
 function normalizeLooseMathSyntax(input: string): string {
   return repairLooseSqrtRadicands(normalizeOcrMathSyntax(input))
+    .replace(/\\sqrt\{\s*\(\(\s*([^{}()\n]+?)\s*\)\s*\/\s*([^{}()\n]+?)\s*\)\)+\s*\}/g, '\\sqrt{\\frac{$1}{$2}}')
     .replace(/([=:\uff1a]\s*)\$\$(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
     .replace(LATEX_COMMAND_BOUNDARY_RE, (match, command: string, offset: number, whole: string) => {
       const commandText = whole.slice(offset + 1);
@@ -167,6 +168,10 @@ function normalizeLooseMathSyntax(input: string): string {
 
       return `\\${command} `;
     })
+    .replace(
+      /(^|[^\\A-Za-z])([A-Z0-9])\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z0-9]|\s*(?:[+\-*/=,.;)\]]|$)))/gi,
+      (_, prefix, coefficient, fn) => `${prefix}${coefficient}\\${fn.toLowerCase()} `,
+    )
     .replace(
       /\\sqrt\{\}\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
       (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
@@ -274,7 +279,7 @@ function stripOuterGroup(value: string): string {
 function isMostlyMath(value: string): boolean {
   const withoutCommands = value.replace(/\\[a-zA-Z]+/g, '');
   const words = (withoutCommands.match(/[A-Za-z]{2,}/g) || [])
-    .filter(word => !/^d[xyztun]$/i.test(word));
+    .filter(word => !/^(?:d[xyztun]|mg|kg|cm|mm|dm|km|ms|mol|rad|hz|pa|ev|kw|w|j|n|v|a|c)$/i.test(word));
   if (words.length > 0) return false;
 
   const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&']/g, '');
