@@ -215,7 +215,7 @@ async function normalizeExamFormulas(client, examId, options = {}) {
     if (apply && updates.length) {
       params.push(question.id);
       await client.query(
-        `UPDATE questions SET ${updates.join(", ")}, updated_at = NOW() WHERE id = $${params.length}`,
+        `UPDATE questions SET ${updates.join(", ")} WHERE id = $${params.length}`,
         params,
       );
     }
