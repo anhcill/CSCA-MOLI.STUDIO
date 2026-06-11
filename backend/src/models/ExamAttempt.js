@@ -490,8 +490,10 @@ const ExamAttempt = {
 
       // Build a map: { 'A': 'text...', 'B': 'text...' }
       const optionMap = {};
+      const optionCnMap = {};
       questionAnswers.forEach((a) => {
         optionMap[a.answer_key] = a.answer_text;
+        optionCnMap[a.answer_key] = a.answer_text_cn;
       });
 
       const userAnswerKey = question.user_answer;
@@ -512,9 +514,15 @@ const ExamAttempt = {
           ? `${userAnswerKey}. ${optionMap[userAnswerKey] || ""}`
           : "Bỏ qua",
         correct_answer_key: correctAnswerKey,
+        selected_answer_text_cn: userAnswerKey && optionCnMap[userAnswerKey] && optionCnMap[userAnswerKey] !== optionMap[userAnswerKey]
+          ? `${userAnswerKey}. ${optionCnMap[userAnswerKey]}`
+          : null,
         correct_answer_text: correctAnswerKey
           ? `${correctAnswerKey}. ${optionMap[correctAnswerKey] || ""}`
           : "",
+        correct_answer_text_cn: correctAnswerKey && optionCnMap[correctAnswerKey] && optionCnMap[correctAnswerKey] !== optionMap[correctAnswerKey]
+          ? `${correctAnswerKey}. ${optionCnMap[correctAnswerKey]}`
+          : null,
         is_correct: question.is_correct || false,
         points: question.points,
         explanation: question.explanation,

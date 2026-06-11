@@ -38,8 +38,10 @@ interface QuestionResult {
     passage_text?: string;
     selected_answer_key: string | null;
     selected_answer_text: string;
+    selected_answer_text_cn?: string | null;
     correct_answer_key: string;
     correct_answer_text: string;
+    correct_answer_text_cn?: string | null;
     is_correct: boolean;
     points: number;
     score_awarded?: number | string | null;
@@ -69,6 +71,37 @@ function formatReviewAnswer(key?: string | null, text?: string | null, fallback 
     if (!key) return fallback;
     const cleanText = (text || '').trim();
     return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
+}
+
+function hasAltText(primary?: string | null, alt?: string | null) {
+    const a = (primary || '').trim();
+    const b = (alt || '').trim();
+    return Boolean(b && b !== a);
+}
+
+function BilingualMathText({
+    primary,
+    secondary,
+    className = '',
+    secondaryClassName = 'mt-1 text-sm text-gray-500',
+    readableBreaks = false,
+}: {
+    primary?: string | null;
+    secondary?: string | null;
+    className?: string;
+    secondaryClassName?: string;
+    readableBreaks?: boolean;
+}) {
+    const main = (primary || secondary || '').trim();
+    if (!main) return null;
+    return (
+        <div className="min-w-0">
+            <RichMathText value={main} className={className} readableBreaks={readableBreaks} />
+            {hasAltText(main, secondary) && (
+                <RichMathText value={secondary || ''} className={secondaryClassName} readableBreaks={readableBreaks} />
+            )}
+        </div>
+    );
 }
 
 const REVIEW_AI_ACCURACY_RULE =
@@ -524,8 +557,9 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                     )}
                                                     <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                                                 </div>
-                                                <RichMathText
-                                                    value={pick({ vi: q.question_text, en: q.question_text_en, zh: q.question_text_cn }) || ''}
+                                                <BilingualMathText
+                                                    primary={q.question_text || q.question_text_en}
+                                                    secondary={q.question_text_cn}
                                                     className="text-sm font-medium leading-relaxed text-gray-900"
                                                 />
                                             </div>
@@ -544,9 +578,11 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                     <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
                                                         <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
                                                         <div className="min-w-0 flex-1">
-                                                            <RichMathText
-                                                                value={pick({ vi: opt.text, en: opt.text_en, zh: opt.text_cn }) || ''}
+                                                            <BilingualMathText
+                                                                primary={opt.text || opt.text_en}
+                                                                secondary={opt.text_cn}
                                                                 className={`text-sm ${text}`}
+                                                                secondaryClassName={`mt-1 text-xs ${isCorrect ? 'text-green-700' : isUserPick ? 'text-red-700' : 'text-gray-500'}`}
                                                             />
                                                         </div>
                                                         {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
@@ -567,7 +603,13 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                             <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm sm:ml-8">
                                                 <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">💡 Giải thích:</p>
                                                 {(q.explanation || q.explanation_cn) && (
-                                                    <RichMathText value={q.explanation || q.explanation_cn || ''} readableBreaks className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
+                                                    <BilingualMathText
+                                                        primary={q.explanation}
+                                                        secondary={q.explanation_cn}
+                                                        className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
+                                                        secondaryClassName="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800"
+                                                        readableBreaks
+                                                    />
                                                 )}
                                                 {q.explanation_image_url && (
                                                     <img
@@ -746,22 +788,32 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                     {/* Câu hỏi */}
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
                         <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-                        <p className="break-words text-sm text-gray-800 [overflow-wrap:anywhere]">{questionText}</p>
+                        <BilingualMathText
+                            primary={question.question_text || question.question_text_en}
+                            secondary={question.question_text_cn}
+                            className="break-words text-sm text-gray-800 [overflow-wrap:anywhere]"
+                        />
                     </div>
 
                     {/* Đáp án */}
                     <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className={answerBoxClass}>
                             <p className={answerLabelClass}>{answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}</p>
-                            <p className={answerTextClass}>
-                                {formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
-                            </p>
+                            <BilingualMathText
+                                primary={formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
+                                secondary={question.selected_answer_text_cn}
+                                className={answerTextClass}
+                                secondaryClassName="mt-1 text-xs text-gray-600"
+                            />
                         </div>
                         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                             <p className="text-xs font-bold text-green-600 mb-1">Đáp án đúng</p>
-                            <p className="text-green-800 font-semibold text-sm">
-                                {formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
-                            </p>
+                            <BilingualMathText
+                                primary={formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
+                                secondary={question.correct_answer_text_cn}
+                                className="text-green-800 font-semibold text-sm"
+                                secondaryClassName="mt-1 text-xs text-green-700"
+                            />
                         </div>
                     </div>
 
@@ -779,7 +831,13 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                                     <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">📖 Giải thích có sẵn</p>
                                     {(question.explanation || question.explanation_cn) && (
-                                        <RichMathText value={question.explanation || question.explanation_cn || ''} readableBreaks className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
+                                        <BilingualMathText
+                                            primary={question.explanation}
+                                            secondary={question.explanation_cn}
+                                            className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
+                                            secondaryClassName="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800"
+                                            readableBreaks
+                                        />
                                     )}
                                     {question.explanation_image_url && (
                                         <img
