@@ -38,6 +38,7 @@ const tinyButtonClass = 'inline-flex items-center gap-1 rounded-lg border border
 const dangerButtonClass = 'inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50';
 const reviewButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50';
 const REVIEW_REVEAL_DELAY_MS = 2500;
+const REVIEW_POST_RENDER_LOCK_MS = 3500;
 const REVIEW_COOLDOWN_MS = 15000;
 
 function MathInput(props: ComponentProps<typeof BaseMathInput>) {
@@ -273,20 +274,22 @@ function createImportedItem(type: NewImportedItemType): ImportedExamItem {
 function AddItemButtons({
   label,
   onAdd,
+  disabled = false,
 }: {
   label: string;
   onAdd: (type: NewImportedItemType) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs font-semibold text-gray-500">{label}</span>
-      <button type="button" onClick={() => onAdd('single_choice')} className={tinyButtonClass}>
+      <button type="button" onClick={() => onAdd('single_choice')} disabled={disabled} className={tinyButtonClass}>
         <FiPlus size={12} /> Trắc nghiệm
       </button>
-      <button type="button" onClick={() => onAdd('reading_group')} className={tinyButtonClass}>
+      <button type="button" onClick={() => onAdd('reading_group')} disabled={disabled} className={tinyButtonClass}>
         <FiPlus size={12} /> Đọc hiểu
       </button>
-      <button type="button" onClick={() => onAdd('fill_blank_group')} className={tinyButtonClass}>
+      <button type="button" onClick={() => onAdd('fill_blank_group')} disabled={disabled} className={tinyButtonClass}>
         <FiPlus size={12} /> Điền từ
       </button>
     </div>
@@ -315,6 +318,8 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const [draftItems, setDraftItems] = useState<ImportedExamItem[]>(sourceItems);
   const [reviewing, setReviewing] = useState(false);
   const [reviewSettling, setReviewSettling] = useState(false);
+  const [reviewPostRenderUntil, setReviewPostRenderUntil] = useState(0);
+  const [reviewPostRenderSeconds, setReviewPostRenderSeconds] = useState(0);
   const [reviewCooldownUntil, setReviewCooldownUntil] = useState(0);
   const [reviewCooldownSeconds, setReviewCooldownSeconds] = useState(0);
   const [reviewError, setReviewError] = useState('');
@@ -341,6 +346,8 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     reviewLockRef.current = false;
     setReviewing(false);
     setReviewSettling(false);
+    setReviewPostRenderUntil(0);
+    setReviewPostRenderSeconds(0);
     setReviewSummary(null);
     setReviewDiagnostics([]);
     setReviewError('');
@@ -371,13 +378,33 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     return () => window.clearInterval(timer);
   }, [reviewCooldownUntil]);
 
+  useEffect(() => {
+    if (!reviewPostRenderUntil) {
+      setReviewPostRenderSeconds(0);
+      return;
+    }
+
+    const updatePostRenderLock = () => {
+      const seconds = Math.max(0, Math.ceil((reviewPostRenderUntil - Date.now()) / 1000));
+      setReviewPostRenderSeconds(seconds);
+      if (seconds <= 0) setReviewPostRenderUntil(0);
+    };
+
+    updatePostRenderLock();
+    const timer = window.setInterval(updatePostRenderLock, 300);
+    return () => window.clearInterval(timer);
+  }, [reviewPostRenderUntil]);
+
   const questionCount = getImportItemsQuestionCount(items);
   const visibleWarnings = (preview.warnings || []).filter((warning) => !isTechnicalImportWarning(warning));
   const reviewBusy = reviewing || reviewSettling;
-  const reviewBlocked = saving || reviewBusy || reviewCooldownSeconds > 0 || items.length === 0;
-  const fixBlocked = saving || reviewBusy || fixingReviewIssues || reviewCooldownSeconds > 0 || reviewIssueRows.length === 0;
+  const aiBusy = reviewBusy || fixingReviewIssues;
+  const reviewInteractionLocked = aiBusy || reviewPostRenderSeconds > 0;
+  const reviewBlocked = saving || aiBusy || reviewCooldownSeconds > 0 || items.length === 0;
+  const fixBlocked = saving || aiBusy || reviewCooldownSeconds > 0 || reviewIssueRows.length === 0;
 
   const updateItem = (index: number, updater: (item: ImportedExamItem) => ImportedExamItem | null) => {
+    if (reviewInteractionLocked) return;
     const nextItems = [...items];
     const updated = updater(nextItems[index]);
     if (!updated) return;
@@ -386,21 +413,25 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   };
 
   const removeItem = (index: number) => {
+    if (reviewInteractionLocked) return;
     if (!confirm('Xóa mục này khỏi danh sách import?')) return;
     setDraftItems(items.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const addItem = (type: NewImportedItemType) => {
+    if (reviewInteractionLocked) return;
     setDraftItems([...items, createImportedItem(type)]);
   };
 
   const insertItemAfter = (index: number, type: NewImportedItemType) => {
+    if (reviewInteractionLocked) return;
     const nextItems = [...items];
     nextItems.splice(index + 1, 0, createImportedItem(type));
     setDraftItems(nextItems);
   };
 
   const handleSave = () => {
+    if (reviewInteractionLocked) return;
     onChangeItems(items);
     onSave(items);
   };
@@ -449,6 +480,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         setReviewSummary(result.summary);
         setReviewDiagnostics(result.diagnostics || []);
         setReviewSettling(false);
+        setReviewPostRenderUntil(Date.now() + REVIEW_POST_RENDER_LOCK_MS);
         setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
         reviewLockRef.current = false;
         reviewRevealTimerRef.current = null;
@@ -473,11 +505,20 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
 
   const handleFixAllReviewIssues = async () => {
     const reviews = collectImportedAiReviews(items);
-    if (!reviews.length || fixBlocked) return;
+    if (!reviews.length || fixBlocked || reviewLockRef.current) return;
     if (!confirm('Cho AI sửa toàn bộ log lỗi trong bản import này? Bạn vẫn cần xem lại rồi bấm lưu đề.')) return;
+
+    reviewLockRef.current = true;
+    const reviewRunId = reviewRunRef.current + 1;
+    reviewRunRef.current = reviewRunId;
+    if (reviewRevealTimerRef.current) {
+      clearTimeout(reviewRevealTimerRef.current);
+      reviewRevealTimerRef.current = null;
+    }
 
     try {
       setFixingReviewIssues(true);
+      setReviewSettling(false);
       setReviewError('');
       setFixResult(null);
       setReviewDiagnostics([{
@@ -488,14 +529,32 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         message: 'Đang gọi AI để sửa toàn bộ log lỗi.',
       }]);
       const result = await examAdminApi.applyImportedReviewFixes(items, reviews);
-      if (result.items) {
-        setDraftItems(result.items);
-        onChangeItems(result.items);
-      }
-      setFixResult(result);
-      setReviewDiagnostics(result.diagnostics || []);
-      setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+      if (reviewRunRef.current !== reviewRunId) return;
+      setFixingReviewIssues(false);
+      setReviewSettling(true);
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${reviews.length} lỗi`,
+        status: 'requesting',
+        expectedReviews: reviews.length,
+        message: 'AI đã sửa xong. Đang sắp xếp kết quả vài giây để trang không bị khựng.',
+      }]);
+      reviewRevealTimerRef.current = window.setTimeout(() => {
+        if (reviewRunRef.current !== reviewRunId) return;
+        if (result.items) {
+          setDraftItems(result.items);
+          onChangeItems(result.items);
+        }
+        setFixResult(result);
+        setReviewDiagnostics(result.diagnostics || []);
+        setReviewSettling(false);
+        setReviewPostRenderUntil(Date.now() + REVIEW_POST_RENDER_LOCK_MS);
+        setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+        reviewLockRef.current = false;
+        reviewRevealTimerRef.current = null;
+      }, REVIEW_REVEAL_DELAY_MS);
     } catch (error: any) {
+      if (reviewRunRef.current !== reviewRunId) return;
       setReviewError(error.response?.data?.message || 'AI sửa lỗi đề thất bại.');
       setReviewDiagnostics([{
         batch: 0,
@@ -506,6 +565,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         providerStatus: error.response?.status,
       }]);
       setReviewCooldownUntil(Date.now() + REVIEW_COOLDOWN_MS);
+      reviewLockRef.current = false;
     } finally {
       setFixingReviewIssues(false);
     }
@@ -709,7 +769,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
-          <AddItemButtons label="Thêm mục" onAdd={addItem} />
+          <AddItemButtons label="Thêm mục" onAdd={addItem} disabled={reviewInteractionLocked} />
           <button
             type="button"
             onClick={handleAiReview}
@@ -741,7 +801,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || items.length === 0}
+            disabled={saving || reviewInteractionLocked || items.length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
           >
             {saving ? 'Đang lưu...' : `Lưu ${questionCount} câu vào đề`}
@@ -771,7 +831,14 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
       {reviewSettling && (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm font-semibold text-indigo-800">
           <FiRefreshCw className="shrink-0 animate-spin" size={16} />
-          <span>AI đã phân tích xong. Đợi vài giây để trang sắp xếp kết quả mượt hơn.</span>
+          <span>AI đã xử lý xong. Đợi vài giây để trang sắp xếp kết quả mượt hơn.</span>
+        </div>
+      )}
+
+      {reviewPostRenderSeconds > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-800">
+          <FiRefreshCw className="shrink-0 animate-spin" size={16} />
+          <span>Kết quả đã hiện. Chờ {reviewPostRenderSeconds}s để giao diện ổn định rồi sửa tiếp.</span>
         </div>
       )}
 
@@ -792,7 +859,29 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         </div>
       )}
 
-      <div className="divide-y divide-gray-200">
+      <div className="relative">
+        {reviewInteractionLocked && (
+          <div className="absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-white/70 px-3 py-8 backdrop-blur-[1px]">
+            <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-800 shadow-sm">
+              <FiRefreshCw className="shrink-0 animate-spin" size={16} />
+              <span>
+                {reviewing
+                  ? 'AI đang soát đáp án/lời giải, tạm khóa thao tác.'
+                  : fixingReviewIssues
+                    ? 'AI đang sửa log lỗi, tạm khóa thao tác.'
+                    : reviewSettling
+                      ? 'Đang sắp xếp kết quả AI, tạm khóa thao tác.'
+                      : `Đợi ${reviewPostRenderSeconds}s để giao diện ổn định.`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div
+          aria-busy={reviewInteractionLocked}
+          aria-disabled={reviewInteractionLocked}
+          className={`divide-y divide-gray-200 ${reviewInteractionLocked ? 'pointer-events-none select-none opacity-60' : ''}`}
+        >
         {items.map((item, itemIndex) => {
           if (item.itemType === 'reading_group') {
             return (
@@ -800,7 +889,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="font-semibold text-gray-900">Đọc hiểu - {item.subQuestions.length} câu</h4>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} disabled={reviewInteractionLocked} />
                     <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
                       <FiTrash2 size={13} /> Bỏ mục
                     </button>
@@ -929,7 +1018,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                   <h4 className="font-semibold text-gray-900">Điền từ - {item.subItems.length} chỗ trống</h4>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                    <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} disabled={reviewInteractionLocked} />
                     <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
                       <FiTrash2 size={13} /> Bỏ mục
                     </button>
@@ -1058,7 +1147,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h4 className="font-semibold text-gray-900">Câu {itemIndex + 1}</h4>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} />
+                <AddItemButtons label="Thêm sau" onAdd={(type) => insertItemAfter(itemIndex, type)} disabled={reviewInteractionLocked} />
                   <button type="button" onClick={() => removeItem(itemIndex)} className={dangerButtonClass}>
                     <FiTrash2 size={13} /> Bỏ mục
                   </button>
@@ -1147,6 +1236,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

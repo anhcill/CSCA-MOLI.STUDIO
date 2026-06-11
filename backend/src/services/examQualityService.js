@@ -1440,6 +1440,7 @@ module.exports = {
   normalizeField,
   normalizeStoredFormulaText,
   applyExamReviewFixes,
+  applyImportedReviewFixesWithAI,
   reviewStoredExamWithAI,
   reviewImportedItemsWithAI,
 };
