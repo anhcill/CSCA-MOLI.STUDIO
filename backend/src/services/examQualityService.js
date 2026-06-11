@@ -692,6 +692,8 @@ Yêu cầu:
 - Nếu sửa đáp án, correctAnswer phải là một key đang có trong answers.
 - Nếu sửa công thức/lời giải, trả lại nguyên field đã sửa hoàn chỉnh, giữ đúng ngôn ngữ gốc.
 - Nếu không đủ dữ kiện hoặc cần hình ảnh không đọc được, không sửa bừa; đưa note ngắn.
+- Phải trả một object fix cho từng mục trong dữ liệu. Nếu không sửa được mục nào, vẫn trả path/index của mục đó kèm note lý do, không gửi field sửa.
+- Note phải nói rõ đã sửa field nào, hoặc lý do chính xác vì sao bỏ qua.
 - Ưu tiên sửa lỗi trong review.note, formulaIssues, explanationIssues.
 
 Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
@@ -839,15 +841,59 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
   };
 }
 
-function applyFixesToImportedItems(items, fixes = []) {
+function collectRemainingImportedReviewIssues(items) {
+  return collectImportedQuestions(items)
+    .map((entry) => {
+      const review = entry.question?.aiReview;
+      if (!review || review.status === "ok") return null;
+      return {
+        path: entry.path,
+        label: review.label || entry.label,
+        status: review.status,
+        confidence: review.confidence,
+        suggestedCorrectAnswer: review.suggestedCorrectAnswer,
+        note: review.note,
+        formulaIssues: review.formulaIssues || [],
+        explanationIssues: review.explanationIssues || [],
+      };
+    })
+    .filter(Boolean);
+}
+
+function applyFixesToImportedItems(items, fixes = [], entries = []) {
   const nextItems = JSON.parse(JSON.stringify(items || []));
   const changes = [];
   const skipped = [];
+  const entryByPath = new Map((entries || []).map((entry) => [entry.path, entry]));
+
+  const makeMeta = (path) => {
+    const entry = entryByPath.get(path) || {};
+    return {
+      path,
+      label: entry.review?.label || entry.label,
+      status: entry.review?.status,
+      confidence: entry.review?.confidence,
+      note: entry.review?.note,
+    };
+  };
+
+  const pushSkipped = (fix, reason) => {
+    skipped.push({
+      ...makeMeta(fix.path),
+      reason,
+    });
+  };
 
   const setField = (target, field, value, change) => {
     if (!value || target[field] === value) return;
+    const before = target[field] || "";
     target[field] = value;
-    changes.push(change);
+    changes.push({
+      ...makeMeta(change.path),
+      ...change,
+      before,
+      after: value,
+    });
   };
 
   for (const fix of fixes) {
@@ -855,7 +901,7 @@ function applyFixesToImportedItems(items, fixes = []) {
     const itemIndex = Number.parseInt(parts[0], 10);
     const item = nextItems[itemIndex];
     if (!item) {
-      skipped.push({ path: fix.path, reason: "Không tìm thấy mục import." });
+      pushSkipped(fix, "Không tìm thấy mục import.");
       continue;
     }
 
@@ -863,7 +909,7 @@ function applyFixesToImportedItems(items, fixes = []) {
     if (parts[1] === "subQuestions") target = item.subQuestions?.[Number.parseInt(parts[2], 10)];
     if (parts[1] === "subItems") target = item.subItems?.[Number.parseInt(parts[2], 10)];
     if (!target) {
-      skipped.push({ path: fix.path, reason: "Không tìm thấy câu cần sửa." });
+      pushSkipped(fix, "Không tìm thấy câu cần sửa.");
       continue;
     }
 
@@ -876,12 +922,14 @@ function applyFixesToImportedItems(items, fixes = []) {
     if (fix.correctAnswer) {
       if (parts[1] === "subItems") {
         if (target.correctAnswerKey !== fix.correctAnswer) {
+          const before = target.correctAnswerKey || "";
           target.correctAnswerKey = fix.correctAnswer;
-          changes.push({ path: fix.path, field: "correctAnswerKey", after: fix.correctAnswer });
+          changes.push({ ...makeMeta(fix.path), path: fix.path, field: "correctAnswerKey", before, after: fix.correctAnswer });
         }
       } else if (target.correctAnswer !== fix.correctAnswer) {
+        const before = target.correctAnswer || "";
         target.correctAnswer = fix.correctAnswer;
-        changes.push({ path: fix.path, field: "correctAnswer", after: fix.correctAnswer });
+        changes.push({ ...makeMeta(fix.path), path: fix.path, field: "correctAnswer", before, after: fix.correctAnswer });
       }
     }
 
@@ -908,34 +956,58 @@ function applyFixesToImportedItems(items, fixes = []) {
         .filter(Boolean)
         .join("\n");
     } else {
-      skipped.push({ path: fix.path, reason: fix.note || "AI không trả field có thể áp dụng." });
+      pushSkipped(fix, fix.note || "AI không trả field có thể áp dụng.");
     }
   }
+
+  const fixedIssueCount = new Set(changes.map((change) => change.path).filter(Boolean)).size;
+  const remainingIssues = collectRemainingImportedReviewIssues(nextItems);
 
   return {
     items: nextItems,
     changedCount: changes.length,
+    fixedIssueCount,
+    remainingIssueCount: remainingIssues.length,
     skippedCount: skipped.length,
     changes: changes.slice(0, 100),
     skipped: skipped.slice(0, 100),
+    remainingIssues: remainingIssues.slice(0, 100),
   };
 }
 
 async function applyImportedReviewFixesWithAI(items, reviews = [], context = {}) {
   const entries = collectImportedQuestions(items);
+  const targets = getReviewFixTargetEntries(entries, reviews);
   const generated = await generateReviewFixesWithAI(entries, reviews, context);
-  const applied = applyFixesToImportedItems(items, generated.fixes);
+  const applied = applyFixesToImportedItems(items, generated.fixes, entries);
+  const returnedFixPaths = new Set(generated.fixes.map((fix) => fix.path).filter(Boolean));
+  const missingFixes = targets
+    .filter((entry) => !returnedFixPaths.has(entry.path))
+    .map((entry) => ({
+      path: entry.path,
+      label: entry.review?.label || entry.label,
+      status: entry.review?.status,
+      confidence: entry.review?.confidence,
+      note: entry.review?.note,
+      reason: "AI không trả bản sửa cho log này.",
+    }));
+  const skipped = [...(applied.skipped || []), ...missingFixes].slice(0, 100);
+  const skippedCount = skipped.length;
 
   return {
     ...applied,
+    skipped,
+    skippedCount,
     fixes: generated.fixes,
     diagnostics: generated.diagnostics,
     summary: {
       ...generated.summary,
       changedCount: applied.changedCount,
-      skippedCount: applied.skippedCount,
+      fixedIssueCount: applied.fixedIssueCount,
+      remainingIssueCount: applied.remainingIssueCount,
+      skippedCount,
     },
-    message: `AI đã sửa ${applied.changedCount} chỗ trong bản import.`,
+    message: `AI đã sửa ${applied.fixedIssueCount}/${generated.summary.total || 0} log, còn ${applied.remainingIssueCount} log cần xem lại.`,
   };
 }
 

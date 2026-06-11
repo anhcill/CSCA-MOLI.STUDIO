@@ -211,6 +211,8 @@ export interface ApplyExamReviewFixesResult {
     formulaChangedCount?: number;
     warningCount?: number;
     skippedCount: number;
+    fixedIssueCount?: number;
+    remainingIssueCount?: number;
     items?: ImportedExamItem[];
     answerChanges?: Array<{
         questionId: number;
@@ -224,22 +226,30 @@ export interface ApplyExamReviewFixesResult {
         questionId?: number;
         questionNumber?: number;
         answerKey?: string;
+        label?: string;
+        status?: ImportedQuestionAiReview['status'];
         field: string;
         before?: string;
         after?: string;
     }>;
     skipped?: Array<{
         path?: string;
+        label?: string;
         questionId?: number;
         questionNumber?: number;
         suggestedAnswer?: string;
         confidence?: number;
+        status?: ImportedQuestionAiReview['status'];
+        note?: string;
         reason: string;
     }>;
+    remainingIssues?: ImportedQuestionAiReview[];
     diagnostics?: ImportedItemsReviewDiagnostic[];
     summary?: ImportedItemsReviewResult['summary'] & {
         fixed?: number;
         changedCount?: number;
+        fixedIssueCount?: number;
+        remainingIssueCount?: number;
         skippedCount?: number;
     };
     formulaResult?: NormalizeFormulaResult | null;
