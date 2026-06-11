@@ -200,6 +200,7 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(/\\log\s+([2-9])([0-9])\b/g, '\\log_{$1} $2')
     .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
     .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}')
+    .replace(/([A-Za-z0-9])\s*\\frac\{\s*\^\{?([^{}]+)\}?\s*\}\{/g, '\\frac{$1^{$2}}{')
     .replace(/\bC\s+(\\mathbb\{[A-Z]\})\s*\(/g, 'C_{$1}(');
 }
 
@@ -317,6 +318,10 @@ function findNumeratorStart(input: string, end: number): number {
     const char = input[i];
     if (char === ')' || char === ']' || char === '}') depth++;
     if (char === '(' || char === '[' || char === '{') depth--;
+
+    if (depth === 0 && (char === '+' || char === '-') && i > 0) {
+      return i + 1;
+    }
 
     if (depth === 0 && isTermSeparator(input, i)) {
       return i + 1;
@@ -750,10 +755,37 @@ function mergeAdjacentInlineMath(input: string): string {
     .replace(/\\\)\s+\\\(/g, ' ');
 }
 
+function repairMalformedInlineDollarDelimiters(input: string): string {
+  return input.replace(/\$\$?/g, (match, offset: number, whole: string) => {
+    const before = whole.slice(0, offset);
+    const after = whole.slice(offset + match.length);
+    const lineBefore = before.slice(before.lastIndexOf('\n') + 1);
+    const nextNewline = after.indexOf('\n');
+    const lineAfter = nextNewline >= 0 ? after.slice(0, nextNewline) : after;
+    const isLineStart = lineBefore.trim().length === 0;
+    const isLineEnd = lineAfter.trim().length === 0;
+
+    if (match === '$$' && (isLineStart || isLineEnd)) return match;
+
+    const prev = before.match(/\S\s*$/)?.[0]?.trim() || '';
+    const next = after.match(/^\s*\S/)?.[0]?.trim() || '';
+    const touchesMathOperator =
+      /[=<>+\-*/({[,;:|]$/.test(prev) ||
+      /^[=<>+\-*/)}\],.;:|]/.test(next) ||
+      /\\(?:Rightarrow|Leftrightarrow|to)\s*$/.test(before) ||
+      /^\\(?:Rightarrow|Leftrightarrow|to)\b/.test(after.trimStart());
+
+    if (match === '$$' && touchesMathOperator) return '';
+    if (match === '$' && touchesMathOperator) return '';
+
+    return match;
+  });
+}
+
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const normalized = normalizeMathText(repairMathFormatArtifacts(input))
+  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(input)))
     .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
