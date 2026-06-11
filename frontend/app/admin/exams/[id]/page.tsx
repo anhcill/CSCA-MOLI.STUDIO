@@ -113,12 +113,24 @@ interface Subject {
 type EditMode = 'view' | 'edit';
 type AiBlockingTask = 'review' | 'fix' | 'format' | 'normalize' | 'explain' | 'polish' | null;
 
+const EDIT_QUESTION_BATCH_SIZE = 20;
+
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
 }
 
 function isPendingQuestion(item: QuestionListItem): item is PendingQuestion {
     return '_pending' in item;
+}
+
+function findQuestionItemIndex(items: QuestionListItem[], questionId: number) {
+    return items.findIndex(item => {
+        if (isPendingQuestion(item)) return false;
+        if (isSavedGroup(item)) {
+            return item.id === questionId || item.children.some(child => child.id === questionId);
+        }
+        return item.id === questionId;
+    });
 }
 
 function getAiReviewLabel(status?: string) {
@@ -583,6 +595,7 @@ export default function AdminExamDetailPage() {
 
     // Editing state (local question list while in edit mode)
     const [localQuestions, setLocalQuestions] = useState<QuestionListItem[]>([]);
+    const [editVisibleCount, setEditVisibleCount] = useState(EDIT_QUESTION_BATCH_SIZE);
     const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
     const [addingAfterId, setAddingAfterId] = useState<number | null>(null);
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -1121,9 +1134,14 @@ export default function AdminExamDetailPage() {
         if (editMode !== 'edit') {
             setEditMode('edit');
             setLocalQuestions([...savedQuestions]);
+            setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
         }
         if (!review.parentQuestionId && review.questionId) {
             setEditingQuestionId(review.questionId);
+        }
+        const targetIndex = findQuestionItemIndex(savedQuestions, targetQuestionId);
+        if (targetIndex >= 0) {
+            setEditVisibleCount(prev => Math.max(prev, targetIndex + 1));
         }
 
         window.setTimeout(() => {
@@ -1267,6 +1285,7 @@ export default function AdminExamDetailPage() {
     const enterEditMode = () => {
         setEditMode('edit');
         setLocalQuestions([...savedQuestions]);
+        setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
     };
 
     const exitEditMode = () => {
@@ -1278,6 +1297,7 @@ export default function AdminExamDetailPage() {
         const shouldNavigate = navigateAfterExit;
         setEditMode('view');
         setLocalQuestions([...savedQuestions]);
+        setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
         setEditingQuestionId(null);
         setShowQuickAdd(false);
         setAddingAfterId(null);
@@ -1435,6 +1455,8 @@ export default function AdminExamDetailPage() {
 
     const isEditingExam = editMode === 'edit';
     const questions = isEditingExam ? localQuestions : savedQuestions;
+    const visibleQuestions = isEditingExam ? questions.slice(0, editVisibleCount) : questions;
+    const hiddenQuestionCount = isEditingExam ? Math.max(questions.length - visibleQuestions.length, 0) : 0;
     const pdfPreviewItems = getImportPreviewItems(pdfImportPreview);
 
     // Compute the next question number by finding the max in localQuestions
@@ -1976,6 +1998,7 @@ export default function AdminExamDetailPage() {
                                         _questionNumber: nextNum,
                                         _questionType: 'fill_blank_pool',
                                     }]);
+                                    setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                     setAddingAfterId(null);
                                     setQuickAddPosition(nextNum);
                                 }}
@@ -1992,6 +2015,7 @@ export default function AdminExamDetailPage() {
                                         _questionNumber: nextNum,
                                         _questionType: 'reading_passage',
                                     }]);
+                                    setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                     setAddingAfterId(null);
                                     setQuickAddPosition(nextNum);
                                 }}
@@ -2008,6 +2032,7 @@ export default function AdminExamDetailPage() {
                                         _questionNumber: nextNum,
                                         _questionType: 'single_choice',
                                     }]);
+                                    setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                     setAddingAfterId(null);
                                     setQuickAddPosition(nextNum);
                                 }}
@@ -2165,10 +2190,31 @@ export default function AdminExamDetailPage() {
                     />
                 )}
 
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-bold text-gray-900">
                         {isEditingExam ? 'Danh sách câu hỏi (chế độ sửa)' : `Danh sách câu hỏi (${questions.length})`}
                     </h2>
+                    {isEditingExam && hiddenQuestionCount > 0 && (
+                        <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                Đang hiện {visibleQuestions.length}/{questions.length}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setEditVisibleCount(prev => Math.min(prev + EDIT_QUESTION_BATCH_SIZE, questions.length))}
+                                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                            >
+                                Tải thêm
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setEditVisibleCount(questions.length)}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                                Hiện hết
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {questions.length === 0 && pendingFillBlankGroups.length === 0 && pendingReadingGroups.length === 0 ? (
@@ -2256,7 +2302,7 @@ export default function AdminExamDetailPage() {
                             />
                         ))}
 
-                        {questions.map((q, idx) => {
+                        {visibleQuestions.map((q, idx) => {
                             if ('_pending' in q) {
                                 const isReading = q._questionType === 'reading_passage';
                                 const isFillBlank = q._questionType === 'fill_blank_pool';
@@ -2529,6 +2575,7 @@ export default function AdminExamDetailPage() {
                                                                     arr.splice(idx + 1, 0, newQ);
                                                                     return arr;
                                                                 });
+                                                                setEditVisibleCount(prev => Math.max(prev, idx + 2));
                                                                 setShowQuickAdd(true);
                                                             }}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors text-xs font-medium"
@@ -2549,6 +2596,7 @@ export default function AdminExamDetailPage() {
                                                                     arr.splice(idx + 1, 0, newQ);
                                                                     return arr;
                                                                 });
+                                                                setEditVisibleCount(prev => Math.max(prev, idx + 2));
                                                                 setAddingAfterId(q.id);
                                                                 setQuickAddPosition(nextNum);
                                                             }}
@@ -2570,6 +2618,7 @@ export default function AdminExamDetailPage() {
                                                                     arr.splice(idx + 1, 0, newQ);
                                                                     return arr;
                                                                 });
+                                                                setEditVisibleCount(prev => Math.max(prev, idx + 2));
                                                                 setAddingAfterId(q.id);
                                                                 setQuickAddPosition(nextNum);
                                                             }}
@@ -2586,6 +2635,30 @@ export default function AdminExamDetailPage() {
                             );
                         })}
 
+                        {isEditingExam && hiddenQuestionCount > 0 && (
+                            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-blue-200 bg-blue-50/60 px-4 py-5 text-center">
+                                <p className="text-sm font-semibold text-blue-900">
+                                    Còn {hiddenQuestionCount} mục chưa render để trang sửa đề mở nhanh hơn.
+                                </p>
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditVisibleCount(prev => Math.min(prev + EDIT_QUESTION_BATCH_SIZE, questions.length))}
+                                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                                    >
+                                        Tải thêm {Math.min(EDIT_QUESTION_BATCH_SIZE, hiddenQuestionCount)} mục
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditVisibleCount(questions.length)}
+                                        className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50"
+                                    >
+                                        Hiện hết
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Append buttons at bottom */}
                         {isEditingExam && (
                             <div className="text-center py-4">
@@ -2599,6 +2672,7 @@ export default function AdminExamDetailPage() {
                                                 _questionNumber: nextNum,
                                                 _questionType: 'fill_blank_pool',
                                             }]);
+                                            setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                             setAddingAfterId(null);
                                             setQuickAddPosition(nextNum);
                                         }}
@@ -2615,6 +2689,7 @@ export default function AdminExamDetailPage() {
                                                 _questionNumber: nextNum,
                                                 _questionType: 'reading_passage',
                                             }]);
+                                            setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                             setAddingAfterId(null);
                                             setQuickAddPosition(nextNum);
                                         }}
@@ -2631,6 +2706,7 @@ export default function AdminExamDetailPage() {
                                                 _questionNumber: nextNum,
                                                 _questionType: 'single_choice',
                                             }]);
+                                            setEditVisibleCount(prev => Math.max(prev, localQuestions.length + 1));
                                             setAddingAfterId(null);
                                             setQuickAddPosition(nextNum);
                                         }}

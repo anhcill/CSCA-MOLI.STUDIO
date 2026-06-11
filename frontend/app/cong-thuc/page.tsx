@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   FiBookOpen,
@@ -14,45 +14,30 @@ import {
 import RichMathText from '@/components/common/RichMathText';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import { useLanguage } from '@/context/LanguageContext';
-import {
-  CHINESE_NATURAL_CSCA_FORMULA_TOPICS,
-  CHINESE_NATURAL_FORMULA_AREAS,
-  CHINESE_NATURAL_FORMULA_GRADE_OPTIONS,
-  type ChineseNaturalCscaFormulaTopic,
-  type ChineseNaturalFormulaGrade,
-  type ChineseNaturalFormulaLine,
+import type {
+  ChineseNaturalCscaFormulaTopic,
+  ChineseNaturalFormulaGrade,
+  ChineseNaturalFormulaLine,
 } from '@/lib/formulas/chineseNaturalCscaFormulas';
-import {
-  CHINESE_SOCIAL_CSCA_FORMULA_TOPICS,
-  CHINESE_SOCIAL_FORMULA_AREAS,
-  CHINESE_SOCIAL_FORMULA_GRADE_OPTIONS,
-  type ChineseSocialCscaFormulaTopic,
-  type ChineseSocialFormulaGrade,
-  type ChineseSocialFormulaLine,
+import type {
+  ChineseSocialCscaFormulaTopic,
+  ChineseSocialFormulaGrade,
+  ChineseSocialFormulaLine,
 } from '@/lib/formulas/chineseSocialCscaFormulas';
-import {
-  CHEMISTRY_CSCA_FORMULA_TOPICS,
-  CHEMISTRY_FORMULA_AREAS,
-  CHEMISTRY_FORMULA_GRADE_OPTIONS,
-  type ChemistryCscaFormulaTopic,
-  type ChemistryFormulaGrade,
-  type ChemistryFormulaLine,
+import type {
+  ChemistryCscaFormulaTopic,
+  ChemistryFormulaGrade,
+  ChemistryFormulaLine,
 } from '@/lib/formulas/chemistryCscaFormulas';
-import {
-  MATH_CSCA_FORMULA_TOPICS,
-  MATH_FORMULA_AREAS,
-  MATH_FORMULA_GRADE_OPTIONS,
-  type MathCscaFormulaTopic,
-  type MathFormulaGrade,
-  type MathFormulaLine,
+import type {
+  MathCscaFormulaTopic,
+  MathFormulaGrade,
+  MathFormulaLine,
 } from '@/lib/formulas/mathCscaFormulas';
-import {
-  PHYSICS_CSCA_FORMULA_TOPICS,
-  PHYSICS_FORMULA_AREAS,
-  PHYSICS_FORMULA_GRADE_OPTIONS,
-  type PhysicsCscaFormulaTopic,
-  type PhysicsFormulaGrade,
-  type PhysicsFormulaLine,
+import type {
+  PhysicsCscaFormulaTopic,
+  PhysicsFormulaGrade,
+  PhysicsFormulaLine,
 } from '@/lib/formulas/physicsCscaFormulas';
 import axios from '@/lib/utils/axios';
 import {
@@ -84,11 +69,18 @@ interface FilteredFormulaTopic {
   formulas: FormulaLine[];
 }
 
+interface FormulaRepositoryData {
+  topics: FormulaTopic[];
+  areas: string[];
+  gradeOptions: FormulaGrade[];
+}
+
 const FORMULA_CATEGORY = 'cong-thuc-on-thi';
 const DEFAULT_FORMULA_SUBJECT = 'toan';
 const FORMULA_SUBJECT_OPTIONS = SUBJECT_OPTIONS.filter(subject => subject.value);
 const ALL_GRADE: GradeFilter = 'all';
 const ALL_AREA = 'all';
+const FORMULA_TOPIC_BATCH_SIZE = 8;
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
   toan: 'subject.math',
@@ -97,6 +89,56 @@ const SUBJECT_LABEL_KEYS: Record<string, string> = {
   'tieng-trung-xh': 'subject.chineseSoc',
   'tieng-trung-tn': 'subject.chineseSci',
 };
+
+function isFormulaSubject(subject: string) {
+  return subject === 'toan'
+    || subject === 'vat-ly'
+    || subject === 'hoa-hoc'
+    || subject === 'tieng-trung-tn'
+    || subject === 'tieng-trung-xh';
+}
+
+async function loadFormulaRepositoryData(subject: string): Promise<FormulaRepositoryData> {
+  if (subject === 'vat-ly') {
+    const module = await import('@/lib/formulas/physicsCscaFormulas');
+    return {
+      topics: module.PHYSICS_CSCA_FORMULA_TOPICS,
+      areas: module.PHYSICS_FORMULA_AREAS,
+      gradeOptions: module.PHYSICS_FORMULA_GRADE_OPTIONS,
+    };
+  }
+  if (subject === 'hoa-hoc') {
+    const module = await import('@/lib/formulas/chemistryCscaFormulas');
+    return {
+      topics: module.CHEMISTRY_CSCA_FORMULA_TOPICS,
+      areas: module.CHEMISTRY_FORMULA_AREAS,
+      gradeOptions: module.CHEMISTRY_FORMULA_GRADE_OPTIONS,
+    };
+  }
+  if (subject === 'tieng-trung-tn') {
+    const module = await import('@/lib/formulas/chineseNaturalCscaFormulas');
+    return {
+      topics: module.CHINESE_NATURAL_CSCA_FORMULA_TOPICS,
+      areas: module.CHINESE_NATURAL_FORMULA_AREAS,
+      gradeOptions: module.CHINESE_NATURAL_FORMULA_GRADE_OPTIONS,
+    };
+  }
+  if (subject === 'tieng-trung-xh') {
+    const module = await import('@/lib/formulas/chineseSocialCscaFormulas');
+    return {
+      topics: module.CHINESE_SOCIAL_CSCA_FORMULA_TOPICS,
+      areas: module.CHINESE_SOCIAL_FORMULA_AREAS,
+      gradeOptions: module.CHINESE_SOCIAL_FORMULA_GRADE_OPTIONS,
+    };
+  }
+
+  const module = await import('@/lib/formulas/mathCscaFormulas');
+  return {
+    topics: module.MATH_CSCA_FORMULA_TOPICS,
+    areas: module.MATH_FORMULA_AREAS,
+    gradeOptions: module.MATH_FORMULA_GRADE_OPTIONS,
+  };
+}
 
 function escapeHtml(value: string) {
   return value
@@ -226,16 +268,20 @@ function FormulaRepository({
   topics,
   areas,
   gradeOptions,
+  loading,
 }: {
   search: string;
   setSearch: (value: string) => void;
   topics: FormulaTopic[];
   areas: string[];
   gradeOptions: FormulaGrade[];
+  loading: boolean;
 }) {
   const [grade, setGrade] = useState<GradeFilter>(ALL_GRADE);
   const [area, setArea] = useState(ALL_AREA);
-  const query = normalizeSearchText(search);
+  const [visibleTopicCount, setVisibleTopicCount] = useState(FORMULA_TOPIC_BATCH_SIZE);
+  const deferredSearch = useDeferredValue(search);
+  const query = normalizeSearchText(deferredSearch);
 
   const filteredTopics = useMemo<FilteredFormulaTopic[]>(() => (
     topics
@@ -253,6 +299,32 @@ function FormulaRepository({
     [topics],
   );
   const visibleFormulaCount = filteredTopics.reduce((sum, item) => sum + item.formulas.length, 0);
+  const visibleTopics = filteredTopics.slice(0, visibleTopicCount);
+  const hiddenTopicCount = Math.max(filteredTopics.length - visibleTopics.length, 0);
+
+  useEffect(() => {
+    setVisibleTopicCount(FORMULA_TOPIC_BATCH_SIZE);
+  }, [area, grade, query, topics]);
+
+  if (loading) {
+    return (
+      <section className="space-y-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="h-11 animate-pulse rounded-lg bg-slate-100" />
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[...Array(3)].map((_, index) => (
+              <div key={index} className="h-14 animate-pulse rounded-lg bg-slate-100" />
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {[...Array(9)].map((_, index) => (
+            <div key={index} className="h-32 animate-pulse rounded-lg bg-slate-100" />
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
@@ -354,9 +426,32 @@ function FormulaRepository({
             </div>
           </aside>
           <div className="space-y-7">
-            {filteredTopics.map(item => (
+            {visibleTopics.map(item => (
               <FormulaTopicSection key={item.topic.id} item={item} />
             ))}
+            {hiddenTopicCount > 0 && (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center">
+                <p className="text-sm font-semibold text-sky-900">
+                  Còn {hiddenTopicCount} chủ đề chưa render để trang mở nhanh hơn.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleTopicCount(prev => Math.min(prev + FORMULA_TOPIC_BATCH_SIZE, filteredTopics.length))}
+                    className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-black text-white hover:bg-sky-700"
+                  >
+                    Tải thêm {Math.min(FORMULA_TOPIC_BATCH_SIZE, hiddenTopicCount)} chủ đề
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleTopicCount(filteredTopics.length)}
+                    className="rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-black text-sky-700 hover:bg-sky-50"
+                  >
+                    Hiện hết
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -561,38 +656,40 @@ export default function CongThucPage() {
   const [viewing, setViewing] = useState<Material | null>(null);
   const [viewerLoaded, setViewerLoaded] = useState(false);
   const [useGoogleViewer, setUseGoogleViewer] = useState(false);
-  const isFormulaRepositorySubject = activeSubject === 'toan' || activeSubject === 'vat-ly' || activeSubject === 'hoa-hoc' || activeSubject === 'tieng-trung-tn' || activeSubject === 'tieng-trung-xh';
-  const formulaRepositoryTopics = activeSubject === 'vat-ly'
-    ? PHYSICS_CSCA_FORMULA_TOPICS
-    : activeSubject === 'hoa-hoc'
-      ? CHEMISTRY_CSCA_FORMULA_TOPICS
-      : activeSubject === 'tieng-trung-tn'
-        ? CHINESE_NATURAL_CSCA_FORMULA_TOPICS
-        : activeSubject === 'tieng-trung-xh'
-          ? CHINESE_SOCIAL_CSCA_FORMULA_TOPICS
-          : MATH_CSCA_FORMULA_TOPICS;
-  const formulaRepositoryAreas = activeSubject === 'vat-ly'
-    ? PHYSICS_FORMULA_AREAS
-    : activeSubject === 'hoa-hoc'
-      ? CHEMISTRY_FORMULA_AREAS
-      : activeSubject === 'tieng-trung-tn'
-        ? CHINESE_NATURAL_FORMULA_AREAS
-        : activeSubject === 'tieng-trung-xh'
-          ? CHINESE_SOCIAL_FORMULA_AREAS
-          : MATH_FORMULA_AREAS;
-  const formulaRepositoryGradeOptions = activeSubject === 'vat-ly'
-    ? PHYSICS_FORMULA_GRADE_OPTIONS
-    : activeSubject === 'hoa-hoc'
-      ? CHEMISTRY_FORMULA_GRADE_OPTIONS
-      : activeSubject === 'tieng-trung-tn'
-        ? CHINESE_NATURAL_FORMULA_GRADE_OPTIONS
-        : activeSubject === 'tieng-trung-xh'
-          ? CHINESE_SOCIAL_FORMULA_GRADE_OPTIONS
-          : MATH_FORMULA_GRADE_OPTIONS;
+  const [formulaRepositoryData, setFormulaRepositoryData] = useState<FormulaRepositoryData | null>(null);
+  const [formulaRepositoryLoading, setFormulaRepositoryLoading] = useState(isFormulaSubject(subjectParam));
+  const deferredSearch = useDeferredValue(search);
+  const isFormulaRepositorySubject = isFormulaSubject(activeSubject);
 
   useEffect(() => {
     setActiveSubject(subjectParam);
   }, [subjectParam]);
+
+  useEffect(() => {
+    if (!isFormulaRepositorySubject) {
+      setFormulaRepositoryData(null);
+      setFormulaRepositoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFormulaRepositoryLoading(true);
+    setFormulaRepositoryData(null);
+    loadFormulaRepositoryData(activeSubject)
+      .then(data => {
+        if (!cancelled) setFormulaRepositoryData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFormulaRepositoryData({ topics: [], areas: [], gradeOptions: [] });
+      })
+      .finally(() => {
+        if (!cancelled) setFormulaRepositoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubject, isFormulaRepositorySubject]);
 
   const handleSubjectChange = (subject: string) => {
     const normalizedSubject = normalizeContentSubject(subject) || DEFAULT_FORMULA_SUBJECT;
@@ -620,7 +717,7 @@ export default function CongThucPage() {
   }, [activeSubject]);
 
   const filteredMaterials = useMemo(() => materials.filter(material => {
-    const query = normalizeSearchText(search);
+    const query = normalizeSearchText(deferredSearch);
     const matchSubject = subjectMatches(material.subject, activeSubject);
     const matchSearch = !query ||
       normalizeSearchText(material.title).includes(query) ||
@@ -628,7 +725,7 @@ export default function CongThucPage() {
       normalizeSearchText(material.topic).includes(query) ||
       normalizeSearchText(material.content_text).includes(query);
     return matchSubject && matchSearch;
-  }), [materials, activeSubject, search]);
+  }), [materials, activeSubject, deferredSearch]);
 
   useEffect(() => {
     if (isFormulaRepositorySubject) {
@@ -695,9 +792,10 @@ export default function CongThucPage() {
               key={activeSubject}
               search={search}
               setSearch={setSearch}
-              topics={formulaRepositoryTopics}
-              areas={formulaRepositoryAreas}
-              gradeOptions={formulaRepositoryGradeOptions}
+              topics={formulaRepositoryData?.topics || []}
+              areas={formulaRepositoryData?.areas || []}
+              gradeOptions={formulaRepositoryData?.gradeOptions || []}
+              loading={formulaRepositoryLoading}
             />
             <MaterialLibrary
               title="Tài liệu bổ sung từ admin"
