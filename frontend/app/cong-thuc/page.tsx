@@ -23,6 +23,14 @@ import {
   type ChineseNaturalFormulaLine,
 } from '@/lib/formulas/chineseNaturalCscaFormulas';
 import {
+  CHINESE_SOCIAL_CSCA_FORMULA_TOPICS,
+  CHINESE_SOCIAL_FORMULA_AREAS,
+  CHINESE_SOCIAL_FORMULA_GRADE_OPTIONS,
+  type ChineseSocialCscaFormulaTopic,
+  type ChineseSocialFormulaGrade,
+  type ChineseSocialFormulaLine,
+} from '@/lib/formulas/chineseSocialCscaFormulas';
+import {
   CHEMISTRY_CSCA_FORMULA_TOPICS,
   CHEMISTRY_FORMULA_AREAS,
   CHEMISTRY_FORMULA_GRADE_OPTIONS,
@@ -66,9 +74,9 @@ interface Material {
   content_text?: string;
 }
 
-type FormulaGrade = MathFormulaGrade | PhysicsFormulaGrade | ChemistryFormulaGrade | ChineseNaturalFormulaGrade;
-type FormulaLine = MathFormulaLine | PhysicsFormulaLine | ChemistryFormulaLine | ChineseNaturalFormulaLine;
-type FormulaTopic = MathCscaFormulaTopic | PhysicsCscaFormulaTopic | ChemistryCscaFormulaTopic | ChineseNaturalCscaFormulaTopic;
+type FormulaGrade = MathFormulaGrade | PhysicsFormulaGrade | ChemistryFormulaGrade | ChineseNaturalFormulaGrade | ChineseSocialFormulaGrade;
+type FormulaLine = MathFormulaLine | PhysicsFormulaLine | ChemistryFormulaLine | ChineseNaturalFormulaLine | ChineseSocialFormulaLine;
+type FormulaTopic = MathCscaFormulaTopic | PhysicsCscaFormulaTopic | ChemistryCscaFormulaTopic | ChineseNaturalCscaFormulaTopic | ChineseSocialCscaFormulaTopic;
 type GradeFilter = FormulaGrade | 'all';
 
 interface FilteredFormulaTopic {
@@ -553,28 +561,34 @@ export default function CongThucPage() {
   const [viewing, setViewing] = useState<Material | null>(null);
   const [viewerLoaded, setViewerLoaded] = useState(false);
   const [useGoogleViewer, setUseGoogleViewer] = useState(false);
-  const isFormulaRepositorySubject = activeSubject === 'toan' || activeSubject === 'vat-ly' || activeSubject === 'hoa-hoc' || activeSubject === 'tieng-trung-tn';
+  const isFormulaRepositorySubject = activeSubject === 'toan' || activeSubject === 'vat-ly' || activeSubject === 'hoa-hoc' || activeSubject === 'tieng-trung-tn' || activeSubject === 'tieng-trung-xh';
   const formulaRepositoryTopics = activeSubject === 'vat-ly'
     ? PHYSICS_CSCA_FORMULA_TOPICS
     : activeSubject === 'hoa-hoc'
       ? CHEMISTRY_CSCA_FORMULA_TOPICS
       : activeSubject === 'tieng-trung-tn'
         ? CHINESE_NATURAL_CSCA_FORMULA_TOPICS
-        : MATH_CSCA_FORMULA_TOPICS;
+        : activeSubject === 'tieng-trung-xh'
+          ? CHINESE_SOCIAL_CSCA_FORMULA_TOPICS
+          : MATH_CSCA_FORMULA_TOPICS;
   const formulaRepositoryAreas = activeSubject === 'vat-ly'
     ? PHYSICS_FORMULA_AREAS
     : activeSubject === 'hoa-hoc'
       ? CHEMISTRY_FORMULA_AREAS
       : activeSubject === 'tieng-trung-tn'
         ? CHINESE_NATURAL_FORMULA_AREAS
-        : MATH_FORMULA_AREAS;
+        : activeSubject === 'tieng-trung-xh'
+          ? CHINESE_SOCIAL_FORMULA_AREAS
+          : MATH_FORMULA_AREAS;
   const formulaRepositoryGradeOptions = activeSubject === 'vat-ly'
     ? PHYSICS_FORMULA_GRADE_OPTIONS
     : activeSubject === 'hoa-hoc'
       ? CHEMISTRY_FORMULA_GRADE_OPTIONS
       : activeSubject === 'tieng-trung-tn'
         ? CHINESE_NATURAL_FORMULA_GRADE_OPTIONS
-        : MATH_FORMULA_GRADE_OPTIONS;
+        : activeSubject === 'tieng-trung-xh'
+          ? CHINESE_SOCIAL_FORMULA_GRADE_OPTIONS
+          : MATH_FORMULA_GRADE_OPTIONS;
 
   useEffect(() => {
     setActiveSubject(subjectParam);
