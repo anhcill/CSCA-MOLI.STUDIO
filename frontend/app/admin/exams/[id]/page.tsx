@@ -96,6 +96,7 @@ interface Subject {
 }
 
 type EditMode = 'view' | 'edit';
+type AiBlockingTask = 'review' | 'fix' | 'normalize' | null;
 
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
@@ -122,6 +123,93 @@ function getAiReviewTone(status?: string) {
 
 function getExamReviewIssues(result: StoredExamReviewResult | null) {
     return (result?.reviews || []).filter(review => review.status !== 'ok');
+}
+
+function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; startedAt: number | null }) {
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        if (!task) return;
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [task]);
+
+    if (!task) return null;
+
+    const elapsedSeconds = Math.max(0, Math.floor((now - (startedAt || now)) / 1000));
+    const progress = Math.min(92, 12 + elapsedSeconds * (task === 'fix' ? 1.1 : 1.4));
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    const elapsedText = minutes ? `${minutes}p ${seconds}s` : `${seconds}s`;
+
+    const config = {
+        review: {
+            title: 'AI đang soát đề',
+            subtitle: 'Đang kiểm tra câu hỏi, đáp án, công thức và lời giải.',
+            steps: ['Gửi dữ liệu đề', 'AI đọc từng nhóm câu', 'Đối chiếu đáp án và lời giải', 'Tổng hợp log lỗi'],
+        },
+        fix: {
+            title: 'AI đang sửa toàn bộ log',
+            subtitle: 'Đang áp dụng lỗi chắc chắn, chuẩn hóa công thức và lưu lại đề.',
+            steps: ['Gửi log lỗi', 'AI tạo bản sửa', 'Kiểm tra đáp án và LaTeX', 'Lưu thay đổi vào đề'],
+        },
+        normalize: {
+            title: 'Đang chuẩn hóa công thức',
+            subtitle: 'Đang sửa các lỗi LaTeX chắc chắn bằng rule an toàn.',
+            steps: ['Đọc câu hỏi', 'Sửa công thức chắc chắn', 'Đánh dấu chỗ nghi lỗi', 'Lưu kết quả'],
+        },
+    }[task];
+
+    const activeIndex = Math.min(config.steps.length - 1, Math.floor(progress / 25));
+
+    return (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm" role="alert" aria-live="assertive" aria-busy="true">
+            <div className="w-full max-w-lg rounded-2xl border border-white/20 bg-white p-5 shadow-2xl">
+                <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-700">
+                        <FiRefreshCw className="animate-spin" size={24} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-lg font-black text-slate-950">{config.title}</p>
+                        <p className="mt-1 text-sm font-medium text-slate-600">{config.subtitle}</p>
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Đã chạy {elapsedText}</p>
+                    </div>
+                </div>
+
+                <div className="mt-5">
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                    <div className="mt-2 flex justify-between text-xs font-semibold text-slate-500">
+                        <span>{Math.round(progress)}%</span>
+                        <span>Không thao tác khi đang chạy</span>
+                    </div>
+                </div>
+
+                <div className="mt-5 space-y-2">
+                    {config.steps.map((step, index) => {
+                        const done = index < activeIndex;
+                        const active = index === activeIndex;
+                        return (
+                            <div key={step} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-900' : done ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-50 text-slate-500'}`}>
+                                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${active ? 'bg-indigo-600 text-white' : done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                    {done ? '✓' : index + 1}
+                                </span>
+                                <span className="font-semibold">{step}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+                    Đừng tắt tab. Xong sẽ tự tải lại đề và hiện kết quả.
+                </p>
+            </div>
+        </div>
+    );
 }
 
 function buildQuestionList(rawQuestions: SavedQuestion[]): QuestionListItem[] {
@@ -490,6 +578,8 @@ export default function AdminExamDetailPage() {
     const [examReviewError, setExamReviewError] = useState('');
     const [applyingExamReviewFixes, setApplyingExamReviewFixes] = useState(false);
     const [examReviewApplyResult, setExamReviewApplyResult] = useState<ApplyExamReviewFixesResult | null>(null);
+    const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
+    const [aiBlockingStartedAt, setAiBlockingStartedAt] = useState<number | null>(null);
 
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingExam = () => {
@@ -510,6 +600,15 @@ export default function AdminExamDetailPage() {
         loadExam();
         loadSubjects();
     }, [id, isAuthenticated, authPermissionKey]);
+
+    useEffect(() => {
+        if (!aiBlockingTask) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [aiBlockingTask]);
 
     const loadSubjects = async () => {
         try {
@@ -787,6 +886,8 @@ export default function AdminExamDetailPage() {
         if (!exam?.id || normalizingFormulas) return;
         try {
             setNormalizingFormulas(true);
+            setAiBlockingTask('normalize');
+            setAiBlockingStartedAt(Date.now());
             setNormalizeResult(null);
             const result = await examAdminApi.normalizeExamFormulas(exam.id);
             setNormalizeResult(result);
@@ -795,6 +896,8 @@ export default function AdminExamDetailPage() {
             alert(error?.response?.data?.message || 'Chuẩn hóa công thức thất bại');
         } finally {
             setNormalizingFormulas(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
         }
     };
 
@@ -802,6 +905,8 @@ export default function AdminExamDetailPage() {
         if (!exam?.id || reviewingExam) return;
         try {
             setReviewingExam(true);
+            setAiBlockingTask('review');
+            setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setExamReviewResult(null);
             setExamReviewApplyResult(null);
@@ -814,6 +919,8 @@ export default function AdminExamDetailPage() {
             setExamReviewError((error?.response?.data?.message || 'AI soát đề thất bại.') + retryText);
         } finally {
             setReviewingExam(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
         }
     };
 
@@ -825,6 +932,8 @@ export default function AdminExamDetailPage() {
 
         try {
             setApplyingExamReviewFixes(true);
+            setAiBlockingTask('fix');
+            setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setExamReviewApplyResult(null);
             const result = await examAdminApi.applyExamReviewFixes(exam.id, {
@@ -842,6 +951,8 @@ export default function AdminExamDetailPage() {
             setExamReviewError((error?.response?.data?.message || 'AI sửa lỗi đề thất bại.') + retryText);
         } finally {
             setApplyingExamReviewFixes(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
         }
     };
 
@@ -1195,6 +1306,8 @@ export default function AdminExamDetailPage() {
 
     return (
         <div className="min-h-screen bg-gray-50">
+            <ExamAiBlockingOverlay task={aiBlockingTask} startedAt={aiBlockingStartedAt} />
+
             {/* Header */}
             <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
                 <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
