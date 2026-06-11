@@ -7,6 +7,26 @@ const REVIEW_BATCH_SIZE = Number.parseInt(process.env.AI_EXAM_REVIEW_BATCH_SIZE 
 const REVIEW_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_ITEMS || "120", 10);
 const REVIEW_APPLY_MIN_CONFIDENCE = Number.parseFloat(process.env.AI_EXAM_REVIEW_APPLY_MIN_CONFIDENCE || "0.75");
 
+function getReviewModel() {
+  return aiConfig.adminExam?.reviewModel || aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+}
+
+function getReviewModels() {
+  return aiConfig.adminExam?.reviewModels?.length ? aiConfig.adminExam.reviewModels : [getReviewModel()];
+}
+
+function getFixModel() {
+  return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+}
+
+function getFixModels() {
+  return aiConfig.adminExam?.fixModels?.length ? aiConfig.adminExam.fixModels : [getFixModel()];
+}
+
+function getReviewFallbackModel() {
+  return aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+}
+
 function stringValue(value, fallback = "") {
   if (value === null || value === undefined) return fallback;
   return String(value);
@@ -496,7 +516,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         aiCalls: 0,
         failedBatches: 0,
         invalidBatches: 0,
-        model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+        model: getReviewModel(),
         questionTotal: 0,
         reviewedCount: 0,
       },
@@ -506,7 +526,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         range: "Không có câu hợp lệ",
         labels: [],
         paths: [],
-        model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+        model: getReviewModel(),
         status: "no_questions",
         message: "Không gom được câu hỏi hợp lệ từ dữ liệu này nên chưa gọi model.",
       }],
@@ -518,11 +538,13 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   const batchSize = Math.max(1, Math.min(12, REVIEW_BATCH_SIZE || 6));
   for (let i = 0; i < entries.length; i += batchSize) {
     const batch = entries.slice(i, i + batchSize);
-    const model = aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+    const model = getReviewModel();
     const startedAt = Date.now();
     try {
-      const raw = await aiService.callBeeknoee(buildReviewPrompt(batch, context), {
+      const raw = await aiService.callAdminExamAI(buildReviewPrompt(batch, context), {
         model,
+        models: getReviewModels(),
+        fallbackModel: getReviewFallbackModel(),
         temperature: 0.1,
         maxTokens: Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_TOKENS || "3000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_REVIEW_TIMEOUT_MS || "90000", 10),
@@ -596,7 +618,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   counts.aiCalls = diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length;
   counts.failedBatches = diagnostics.filter(item => item.status === "failed").length;
   counts.invalidBatches = diagnostics.filter(item => item.status === "invalid_response").length;
-  counts.model = aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+  counts.model = getReviewModel();
   counts.questionTotal = entries.length;
   counts.reviewedCount = reviews.length;
 
@@ -768,7 +790,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         status: "no_questions",
         message: "Không có log lỗi cần AI sửa.",
       }],
-      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel },
+      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
     };
   }
 
@@ -778,11 +800,13 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
 
   for (let i = 0; i < targets.length; i += batchSize) {
     const batch = targets.slice(i, i + batchSize);
-    const model = aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+    const model = getFixModel();
     const startedAt = Date.now();
     try {
-      const raw = await aiService.callBeeknoee(buildFixPrompt(batch, context), {
+      const raw = await aiService.callAdminExamAI(buildFixPrompt(batch, context), {
         model,
+        models: getFixModels(),
+        fallbackModel: getReviewFallbackModel(),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10),
@@ -836,7 +860,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
-      model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+      model: getFixModel(),
     },
   };
 }

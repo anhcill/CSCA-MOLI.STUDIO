@@ -32,12 +32,16 @@ function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUnti
 
 // ─── Round-robin API key pool ────────────────────────────────────────────────
 const BEE = aiConfig.beeknoee;
+const ADMIN_EXAM_AI = aiConfig.adminExam || {};
 const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và giải thích admin trước khi suy luận.
 - Giữ nguyên ký hiệu toán/logic và điều kiện trong đề: <, <=, ≤, >, >=, ≥, =, ≠, ∈, ∉, ∪, ∩, ∅, |.
 - Không đổi ≤ thành <, ≥ thành >, không đổi dấu âm, số mũ, chỉ số, miền xác định, tập nghiệm hoặc đáp án.
 - Với câu Toán/Khoa học, đối chiếu lại điều kiện gốc và các lựa chọn trước khi kết luận.
 - Nếu thiếu dữ kiện, thiếu hình/bảng/biểu đồ hoặc đáp án không khớp dữ liệu, nói rõ phần thiếu; không đoán.`;
 let currentKeyIndex = 0;
+let adminExamKeyIndex = 0;
+let adminExamRateLimitedUntil = 0;
+let adminExamLastRequestTime = 0;
 
 function getNextKey() {
   const keys = BEE.apiKeys.filter(Boolean);
@@ -47,6 +51,40 @@ function getNextKey() {
   currentKeyIndex++;
   console.log(`AI request using Beeknoee key #${keyNumber}/${keys.length}`);
   return key;
+}
+
+function getChatCompletionsUrl(baseUrl) {
+  const base = String(baseUrl || '').replace(/\/+$/, '');
+  if (!base) return '';
+  if (/\/chat\/completions$/i.test(base)) return base;
+  if (/\/(?:v1|api\/v1)$/i.test(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+function getNextAdminExamKey() {
+  const keys = (ADMIN_EXAM_AI.apiKeys || []).filter(Boolean);
+  if (keys.length === 0) return null;
+  const keyNumber = (adminExamKeyIndex % keys.length) + 1;
+  const key = keys[adminExamKeyIndex % keys.length];
+  adminExamKeyIndex++;
+  console.log(`Admin exam AI request using ${ADMIN_EXAM_AI.provider || 'custom'} key #${keyNumber}/${keys.length}`);
+  return key;
+}
+
+function isAdminExamProviderEnabled() {
+  return Boolean(ADMIN_EXAM_AI.baseUrl);
+}
+
+function isAdminExamRateLimited() {
+  return Date.now() < adminExamRateLimitedUntil;
+}
+
+function setAdminExamRateLimit(ms) {
+  adminExamRateLimitedUntil = Date.now() + ms;
+}
+
+function getAdminExamRateLimitRemaining() {
+  return Math.max(0, Math.ceil((adminExamRateLimitedUntil - Date.now()) / 1000));
 }
 
 function getProviderResponseMessage(err) {
@@ -69,6 +107,38 @@ function getProviderResponseMessage(err) {
   }
 }
 
+function extractOpenAICompatibleText(data) {
+  if (!data) return '';
+  if (typeof data !== 'string') {
+    const messageText = data?.choices?.[0]?.message?.content;
+    if (typeof messageText === 'string') return messageText.trim();
+    const deltaText = data?.choices?.[0]?.delta?.content;
+    if (typeof deltaText === 'string') return deltaText.trim();
+    return '';
+  }
+
+  const text = data.trim();
+  if (!text) return '';
+  if (!text.startsWith('data:')) {
+    try {
+      return extractOpenAICompatibleText(JSON.parse(text));
+    } catch {
+      return text;
+    }
+  }
+
+  let out = '';
+  for (const line of text.split(/\r?\n/)) {
+    const payload = line.trim().replace(/^data:\s*/, '');
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const chunk = JSON.parse(payload);
+      out += chunk?.choices?.[0]?.delta?.content || chunk?.choices?.[0]?.message?.content || '';
+    } catch {}
+  }
+  return out.trim();
+}
+
 function createSafeProviderError(err) {
   const status = err?.response?.status;
   const error = new Error('AI_PROVIDER_ERROR');
@@ -86,6 +156,15 @@ async function waitBetweenRequests() {
     await new Promise(r => setTimeout(r, wait));
   }
   lastRequestTime = Date.now();
+}
+
+async function waitAdminExamBetweenRequests() {
+  const delay = ADMIN_EXAM_AI.delayBetweenRequests || BEE.delayBetweenRequests || 500;
+  const elapsed = Date.now() - adminExamLastRequestTime;
+  if (elapsed < delay) {
+    await new Promise(r => setTimeout(r, delay - elapsed));
+  }
+  adminExamLastRequestTime = Date.now();
 }
 
 // Global concurrency: max 3 concurrent AI requests
@@ -147,9 +226,9 @@ async function callBeeknoeeMessages(messages, options = {}) {
         }
       );
 
-      // OpenAI-compatible response: choices[0].message.content
-      const text = response.data?.choices?.[0]?.message?.content || '';
-      return typeof text === 'string' ? text.trim() : JSON.stringify(text);
+      // OpenAI-compatible response, including SSE text from local routers.
+      const text = extractOpenAICompatibleText(response.data);
+      return text || JSON.stringify(response.data);
     } catch (err) {
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         const e = new Error('AI_TIMEOUT');
@@ -172,6 +251,71 @@ async function callBeeknoeeMessages(messages, options = {}) {
 
 async function callBeeknoee(prompt, options = {}) {
   return callBeeknoeeMessages([{ role: 'user', content: prompt }], options);
+}
+
+async function callAdminExamAIMessages(messages, options = {}) {
+  const fallbackOptions = {
+    ...options,
+    model: options.fallbackModel || options.beeknoeeModel || options.model || BEE.importModel || BEE.model,
+  };
+  const modelCandidates = [...new Set([
+    ...(Array.isArray(options.models) ? options.models : []),
+    options.model,
+    ADMIN_EXAM_AI.model,
+  ].filter(Boolean))];
+
+  if (!isAdminExamProviderEnabled() || isAdminExamRateLimited()) {
+    return callBeeknoeeMessages(messages, fallbackOptions);
+  }
+
+  const {
+    maxTokens = ADMIN_EXAM_AI.maxTokens || BEE.maxTokens,
+    temperature = ADMIN_EXAM_AI.temperature ?? BEE.temperature,
+    timeout = ADMIN_EXAM_AI.timeout || BEE.timeout,
+  } = options;
+
+  for (const model of modelCandidates) {
+    await waitAdminExamBetweenRequests();
+
+    const apiKey = getNextAdminExamKey();
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    const payload = {
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+    };
+
+    try {
+      return await withConcurrency(async () => {
+        const response = await axios.post(
+          getChatCompletionsUrl(ADMIN_EXAM_AI.baseUrl),
+          payload,
+          { timeout, headers },
+        );
+        const text = extractOpenAICompatibleText(response.data);
+        return text || JSON.stringify(response.data);
+      });
+    } catch (err) {
+      const message = getProviderResponseMessage(err);
+      if (err.response?.status === 429) {
+        adminExamKeyIndex++;
+        console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} model ${model} quota/rate limited, trying next model...`);
+      } else {
+        console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} model ${model} failed, trying next model:`, message);
+      }
+    }
+  }
+
+  console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} exhausted model chain, falling back to Beeknoee.`);
+  setAdminExamRateLimit(ADMIN_EXAM_AI.backoffMs || aiConfig.general.globalBackoffMs);
+  return callBeeknoeeMessages(messages, fallbackOptions);
+}
+
+async function callAdminExamAI(prompt, options = {}) {
+  return callAdminExamAIMessages([{ role: 'user', content: prompt }], options);
 }
 
 // ─── Parse JSON từ AI response ────────────────────────────────────────────────
@@ -1600,6 +1744,8 @@ module.exports = {
   // Core functions
   callBeeknoee,
   callBeeknoeeMessages,
+  callAdminExamAI,
+  callAdminExamAIMessages,
   isRateLimited,
   getRateLimitRemaining,
   // Features

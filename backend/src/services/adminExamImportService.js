@@ -87,15 +87,27 @@ async function callPdfImportAI(prompt, options) {
   const { attemptsPerModel = 2, ...aiOptions } = options || {};
   const maxAttemptsPerModel = Math.max(1, Math.min(3, Number.parseInt(attemptsPerModel, 10) || 2));
   const models = [
-    aiConfig.beeknoee.importModel,
-    aiConfig.beeknoee.importFallbackModel,
-  ].filter((model, index, all) => model && all.indexOf(model) === index);
+    {
+      model: aiConfig.adminExam?.importModel || aiConfig.beeknoee.importModel,
+      fallbackModel: aiConfig.beeknoee.importModel,
+    },
+    {
+      model: aiConfig.adminExam?.importFallbackModel || aiConfig.beeknoee.importFallbackModel,
+      fallbackModel: aiConfig.beeknoee.importFallbackModel || aiConfig.beeknoee.importModel,
+    },
+  ].filter((item, index, all) => (
+    item.model && all.findIndex(other => other.model === item.model && other.fallbackModel === item.fallbackModel) === index
+  ));
 
   let lastError = null;
-  for (const model of models) {
+  for (const modelConfig of models) {
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
       try {
-        return await aiService.callBeeknoee(prompt, { ...aiOptions, model });
+        return await aiService.callAdminExamAI(prompt, {
+          ...aiOptions,
+          ...modelConfig,
+          models: aiConfig.adminExam?.importModels,
+        });
       } catch (error) {
         lastError = error;
         const canRetry = shouldTryImportFallback(error);
@@ -104,10 +116,10 @@ async function callPdfImportAI(prompt, options) {
           await wait(800 * attempt);
           continue;
         }
-        if (model === models[models.length - 1]) {
+        if (modelConfig === models[models.length - 1]) {
           throw error;
         }
-        console.warn(`PDF import AI model ${model} failed, retrying fallback model.`);
+        console.warn(`PDF import AI model ${modelConfig.model} failed, retrying fallback model.`);
       }
     }
   }
