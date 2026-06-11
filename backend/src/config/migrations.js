@@ -74,6 +74,24 @@ async function runOptimizations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_promotion_banners_active ON promotion_banners(placement, is_active, priority DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_promotion_banners_coupon ON promotion_banners(UPPER(coupon_code))`);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_import_review_ledgers (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        ledger_key TEXT NOT NULL,
+        source JSONB DEFAULT '{}'::jsonb,
+        question_count INTEGER DEFAULT 0,
+        ledger JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, ledger_key)
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_import_review_ledgers_user_updated
+      ON admin_import_review_ledgers(user_id, updated_at DESC)
+    `);
+
     // Forum tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS posts (

@@ -646,10 +646,21 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     const state = reviewLedger[review.path]?.fixState;
     return state !== 'fixed' && state !== 'skipped';
   });
+  const persistReviewLedger = (ledger: Record<string, ReviewLogEntry>) => {
+    saveReviewLedger(reviewLedgerKey, ledger);
+    examAdminApi.saveImportReviewLedger({
+      key: reviewLedgerKey,
+      source: { ...(preview.source || {}) },
+      questionCount,
+      ledger,
+    }).catch(() => {
+      // Local copy already saved; DB can retry on next successful AI run.
+    });
+  };
   const commitReviewLedger = (updater: (current: Record<string, ReviewLogEntry>) => Record<string, ReviewLogEntry>) => {
     setReviewLedger((current) => {
       const next = updater(current);
-      saveReviewLedger(reviewLedgerKey, next);
+      persistReviewLedger(next);
       return next;
     });
   };
@@ -659,7 +670,42 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   }, [sourceItems]);
 
   useEffect(() => {
-    setReviewLedger(loadReviewLedger(reviewLedgerKey));
+    let cancelled = false;
+    const localLedger = loadReviewLedger(reviewLedgerKey);
+    setReviewLedger(localLedger);
+
+    examAdminApi.getImportReviewLedger(reviewLedgerKey)
+      .then((result) => {
+        if (cancelled) return;
+        const serverLedger = result.ledger && typeof result.ledger === 'object' && !Array.isArray(result.ledger)
+          ? result.ledger as Record<string, ReviewLogEntry>
+          : {};
+        const hasServerLedger = Object.keys(serverLedger).length > 0 || !!result.updatedAt;
+
+        if (hasServerLedger) {
+          setReviewLedger(serverLedger);
+          saveReviewLedger(reviewLedgerKey, serverLedger);
+          return;
+        }
+
+        if (Object.keys(localLedger).length > 0) {
+          examAdminApi.saveImportReviewLedger({
+            key: reviewLedgerKey,
+            source: { ...(preview.source || {}) },
+            questionCount,
+            ledger: localLedger,
+          }).catch(() => {
+            // DB is best-effort here; local copy still protects this browser.
+          });
+        }
+      })
+      .catch(() => {
+        // Keep local ledger if backend/db is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [reviewLedgerKey]);
 
   useEffect(() => {

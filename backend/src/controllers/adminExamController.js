@@ -50,6 +50,15 @@ function getSafeErrorLog(error) {
   return safe;
 }
 
+function normalizeLedgerKey(value) {
+  return String(value || "").trim().slice(0, 500);
+}
+
+function normalizeLedgerObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 500));
+}
+
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
 const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
@@ -430,6 +439,75 @@ const AdminExamController = {
         return res.status(504).json({ message: "AI sửa đề quá thời gian." });
       }
       res.status(500).json({ message: "AI sửa lỗi đề thất bại." });
+    }
+  },
+
+  async getImportReviewLedger(req, res) {
+    try {
+      const ledgerKey = normalizeLedgerKey(req.query?.key);
+      if (!ledgerKey) {
+        return res.status(400).json({ message: "Thiếu khóa log AI." });
+      }
+
+      const result = await pool.query(
+        `SELECT ledger_key, source, question_count, ledger, updated_at
+         FROM admin_import_review_ledgers
+         WHERE user_id = $1 AND ledger_key = $2
+         LIMIT 1`,
+        [req.user.id, ledgerKey],
+      );
+
+      const row = result.rows[0];
+      res.json({
+        key: ledgerKey,
+        source: row?.source || {},
+        questionCount: row?.question_count || 0,
+        ledger: row?.ledger || {},
+        updatedAt: row?.updated_at || null,
+      });
+    } catch (error) {
+      console.error("Get import review ledger error:", getSafeErrorLog(error));
+      res.status(500).json({ message: "Không tải được sổ log AI." });
+    }
+  },
+
+  async saveImportReviewLedger(req, res) {
+    try {
+      const ledgerKey = normalizeLedgerKey(req.body?.key || req.body?.ledgerKey);
+      if (!ledgerKey) {
+        return res.status(400).json({ message: "Thiếu khóa log AI." });
+      }
+
+      const ledger = normalizeLedgerObject(req.body?.ledger);
+      const source = req.body?.source && typeof req.body.source === "object" && !Array.isArray(req.body.source)
+        ? req.body.source
+        : {};
+      const questionCount = Math.max(
+        0,
+        Math.min(500, Number.parseInt(req.body?.questionCount || "0", 10) || 0),
+      );
+
+      const result = await pool.query(
+        `INSERT INTO admin_import_review_ledgers (user_id, ledger_key, source, question_count, ledger, updated_at)
+         VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, NOW())
+         ON CONFLICT (user_id, ledger_key)
+         DO UPDATE SET source = EXCLUDED.source,
+                       question_count = EXCLUDED.question_count,
+                       ledger = EXCLUDED.ledger,
+                       updated_at = NOW()
+         RETURNING ledger_key, question_count, updated_at`,
+        [req.user.id, ledgerKey, JSON.stringify(source), questionCount, JSON.stringify(ledger)],
+      );
+
+      res.json({
+        key: result.rows[0].ledger_key,
+        questionCount: result.rows[0].question_count,
+        updatedAt: result.rows[0].updated_at,
+        saved: true,
+      });
+    } catch (error) {
+      console.error("Save import review ledger error:", getSafeErrorLog(error));
+      res.status(500).json({ message: "Không lưu được sổ log AI." });
     }
   },
 

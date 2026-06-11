@@ -142,6 +142,15 @@ export interface PdfImportPreview {
     };
 }
 
+export interface ImportReviewLedgerResult {
+    key: string;
+    source?: Record<string, unknown>;
+    questionCount?: number;
+    ledger: Record<string, unknown>;
+    updatedAt?: string | null;
+    saved?: boolean;
+}
+
 export interface NormalizeFormulaResult {
     message: string;
     examCount?: number;
@@ -322,6 +331,23 @@ export const examAdminApi = {
             signal,
         });
         return normalizePdfImportPreviewMath(response.data);
+    },
+
+    getImportReviewLedger: async (key: string): Promise<ImportReviewLedgerResult> => {
+        const response = await axios.get('/admin/exams/import/pdf/review-ledger', {
+            params: { key },
+        });
+        return response.data;
+    },
+
+    saveImportReviewLedger: async (payload: {
+        key: string;
+        source?: Record<string, unknown>;
+        questionCount?: number;
+        ledger: Record<string, unknown>;
+    }): Promise<ImportReviewLedgerResult> => {
+        const response = await axios.post('/admin/exams/import/pdf/review-ledger', payload);
+        return response.data;
     },
 
     reviewImportedItems: async (items: ImportedExamItem[], subject?: string): Promise<ImportedItemsReviewResult> => {
