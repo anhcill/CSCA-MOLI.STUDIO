@@ -31,6 +31,13 @@ function parseApiKeys() {
   return [...new Set([...fromCombined, ...legacy])];
 }
 
+function normalizeBeeknoeeModel(model) {
+  const value = String(model || '').trim();
+  if (!value) return value;
+  if (/^gemini-/i.test(value)) return `google/${value}`;
+  return value;
+}
+
 function getApiKeyEnvIndex(name) {
   if (name === 'BEEKNOEE_API_KEY') return 0;
   const match = name.match(/_(\d+)$/);
@@ -44,9 +51,9 @@ const config = {
     apiKeys: parseApiKeys(),
     model: process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
     ocrModel: process.env.BEEKNOEE_OCR_MODEL || process.env.BEEKNOEE_MODEL || 'gpt-5.4-mini',
-    importModel: process.env.BEEKNOEE_IMPORT_MODEL || 'gemini-3.1-flash-lite',
-    importFallbackModel: process.env.BEEKNOEE_IMPORT_FALLBACK_MODEL || process.env.BEEKNOEE_IMPORT_MODEL || 'gemini-3.1-flash-lite',
-    reviewModel: process.env.BEEKNOEE_REVIEW_MODEL || process.env.BEEKNOEE_IMPORT_MODEL || 'gemini-3.1-flash-lite',
+    importModel: normalizeBeeknoeeModel(process.env.BEEKNOEE_IMPORT_MODEL || 'google/gemini-3.1-flash-lite'),
+    importFallbackModel: normalizeBeeknoeeModel(process.env.BEEKNOEE_IMPORT_FALLBACK_MODEL || process.env.BEEKNOEE_IMPORT_MODEL || 'google/gemini-3.1-flash-lite'),
+    reviewModel: normalizeBeeknoeeModel(process.env.BEEKNOEE_REVIEW_MODEL || process.env.BEEKNOEE_IMPORT_MODEL || 'google/gemini-3.1-flash-lite'),
     petChatModel: process.env.BEEKNOEE_PET_CHAT_MODEL || 'google/gemini-2.5-flash-lite',
     baseUrl: (process.env.BEEKNOEE_BASE_URL || 'https://platform.beeknoee.com/api/v1').replace(/\/+$/, ''),
     timeout: intEnv('BEEKNOEE_TIMEOUT_MS', 90000),
