@@ -978,6 +978,30 @@ function normalizeGeneratedExplanation(value) {
     .slice(0, 6000);
 }
 
+const VIETNAMESE_DIACRITIC_RE = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+const UNACCENTED_VIETNAMESE_HINT_RE = /\b(phan tich|dieu kien|cong thuc|ket luan|dap an|loi giai|giai thich|tap hop|phan tu|so tap|chon|nen|voi|cua|khong|dung|sai|suy ra|ta co|thay vao)\b/i;
+
+function needsVietnameseExplanationPolish(value) {
+  const text = compactWhitespace(value);
+  if (text.length < 18) return false;
+  if (UNACCENTED_VIETNAMESE_HINT_RE.test(text) && !VIETNAMESE_DIACRITIC_RE.test(text)) return true;
+  return /\b(Phan tich|Dieu kien|Cong thuc|Ket luan|Dap an|Loi giai|Giai thich)\s*:/i.test(text);
+}
+
+function hasDisplayFormatIssue(value) {
+  const text = stringValue(value).trim();
+  if (!text) return false;
+  const withoutWrapped = text.replace(WRAPPED_MATH_RE, " ");
+  return (
+    isSuspiciousFormulaText(text) ||
+    LATEX_COMMAND_RE.test(withoutWrapped) ||
+    /\\\w+\^\{?\d{2,}\}?\^\{?\\circ\}?/i.test(text) ||
+    /\^\{?\\circ\}?\}/i.test(text) ||
+    /(?:^|[^\w])(?:sin|cos|tan|sqrt|frac|log|ln)\s*[\^_{(]/i.test(text) ||
+    /[{}]\s*(?:的值是|的值为|答案|解析|Giải thích|Phân tích)/i.test(text)
+  );
+}
+
 function getMissingExplanationTargets(entries) {
   return (entries || []).filter((entry) => {
     const q = entry.question || {};
@@ -988,6 +1012,28 @@ function getMissingExplanationTargets(entries) {
     const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
     const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
     return hasPromptText && hasAnswer && (missingMain || missingChinese);
+  }).slice(0, REVIEW_MAX_ITEMS);
+}
+
+function getPolishExplanationTargets(entries) {
+  return (entries || []).filter((entry) => {
+    const q = entry.question || {};
+    return !isBlankText(q.explanation) && needsVietnameseExplanationPolish(q.explanation);
+  }).slice(0, REVIEW_MAX_ITEMS);
+}
+
+function getDisplayFormatTargets(entries) {
+  return (entries || []).filter((entry) => {
+    const q = entry.question || {};
+    if (hasDisplayFormatIssue(entry.contextText)) return true;
+    if (hasDisplayFormatIssue(q.questionText)) return true;
+    if (hasDisplayFormatIssue(q.questionTextCn)) return true;
+    if (hasDisplayFormatIssue(q.explanation)) return true;
+    if (hasDisplayFormatIssue(q.explanationCn)) return true;
+    return (q.answers || []).some(answer => (
+      hasDisplayFormatIssue(answer?.text || answer?.answer_text) ||
+      hasDisplayFormatIssue(answer?.textCn || answer?.answer_text_cn)
+    ));
   }).slice(0, REVIEW_MAX_ITEMS);
 }
 
@@ -1052,6 +1098,118 @@ Dữ liệu:
 ${JSON.stringify(payload)}`;
 }
 
+function buildPolishExplanationsPrompt(batch, context = {}) {
+  const payload = batch.map((entry, index) => {
+    const q = entry.question || {};
+    return {
+      index,
+      path: entry.path,
+      label: entry.label,
+      questionId: entry.questionId,
+      questionNumber: entry.questionNumber,
+      questionText: q.questionText || "",
+      questionTextCn: q.questionTextCn || "",
+      answers: (q.answers || []).map((answer, answerIndex) => ({
+        key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
+        text: answer.text || answer.answer_text || "",
+        textCn: answer.textCn || answer.answer_text_cn || "",
+      })),
+      correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
+      explanation: q.explanation || "",
+    };
+  });
+
+  return `Bạn là biên tập viên lời giải CSCA. Hãy chuẩn hóa các lời giải tiếng Việt cũ.
+
+Yêu cầu:
+- Chỉ trả JSON hợp lệ, không markdown.
+- Chỉ sửa trường explanation. Không sửa đề, không sửa đáp án, không thêm ý mới làm đổi nghĩa.
+- Bắt buộc viết tiếng Việt CÓ DẤU. Chuyển "Phan tich", "Dieu kien", "Cong thuc", "Ket luan", "dap an" thành tiếng Việt đúng dấu.
+- Giữ nguyên công thức, ký hiệu, đáp án chọn và ý nghĩa toán/lý/hóa. Nếu thấy LaTeX thô, có thể bọc công thức bằng \\(...\\) nhưng không đổi nội dung.
+- Trình bày dễ đọc bằng dòng ngắn: Phân tích, Điều kiện/Công thức, Suy ra/Kết luận, Chọn.
+- Nếu không chắc cách thêm dấu mà có thể đổi nghĩa, trả explanation rỗng và note lý do.
+
+Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
+
+Trả dạng:
+{
+  "explanations": [
+    {
+      "index": 0,
+      "path": "question:1",
+      "questionId": 1,
+      "confidence": 0.95,
+      "explanation": "Phân tích:\\n...",
+      "note": "đã thêm dấu và xuống dòng"
+    }
+  ]
+}
+
+Dữ liệu:
+${JSON.stringify(payload)}`;
+}
+
+function buildDisplayFormatPrompt(batch, context = {}) {
+  const payload = batch.map((entry, index) => {
+    const q = entry.question || {};
+    return {
+      index,
+      path: entry.path,
+      label: entry.label,
+      questionId: entry.questionId,
+      questionNumber: entry.questionNumber,
+      questionType: entry.questionType,
+      contextText: entry.contextText || "",
+      questionText: q.questionText || "",
+      questionTextCn: q.questionTextCn || "",
+      answers: (q.answers || []).map((answer, answerIndex) => ({
+        key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
+        text: answer.text || answer.answer_text || "",
+        textCn: answer.textCn || answer.answer_text_cn || "",
+      })),
+      correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
+      explanation: q.explanation || "",
+      explanationCn: q.explanationCn || "",
+    };
+  });
+
+  return `Bạn là kỹ thuật viên LaTeX/OCR cho đề CSCA. Hãy sửa lỗi FORMAT HIỂN THỊ trong dữ liệu dưới đây.
+
+Yêu cầu bắt buộc:
+- Chỉ trả JSON hợp lệ, không markdown.
+- Không đổi đáp án đúng, không gửi correctAnswer, không chấm lại bài.
+- Không đổi ý toán/lý/hóa. Chỉ sửa OCR/LaTeX/format hiển thị chắc chắn.
+- Giữ đúng ngôn ngữ gốc của từng field: questionTextCn/explanationCn giữ tiếng Trung; questionText/explanation giữ tiếng Việt nếu đang là tiếng Việt.
+- Bọc công thức inline bằng \\(...\\). Ví dụ: P=... 的值是 -> \\(P=...\\) 的值是.
+- Sửa lệnh LaTeX thô/sai rõ ràng: \\sin, \\cos, \\tan, \\sqrt{}, \\frac{}{}, \\circ, \\mathbb{}, \\in, \\cap, \\cup.
+- Với lỗi OCR lượng giác rõ ràng như \\sin^{215}^{\\circ}, hiểu là \\sin^2 15^\\circ; \\sin^{275}^{\\circ} hiểu là \\sin^2 75^\\circ.
+- Lời giải phải xuống dòng dễ đọc, giữ kết luận/đáp án hiện có.
+- Nếu cần suy luận có thể đổi nghĩa hoặc không chắc, không sửa field đó; ghi note ngắn.
+
+Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
+
+Trả dạng:
+{
+  "fixes": [
+    {
+      "index": 0,
+      "path": "question:1",
+      "questionId": 1,
+      "confidence": 0.95,
+      "questionText": "chỉ gửi nếu cần thay",
+      "questionTextCn": "chỉ gửi nếu cần thay",
+      "answers": [{"key": "A", "text": "chỉ gửi nếu cần thay", "textCn": "chỉ gửi nếu cần thay"}],
+      "explanation": "chỉ gửi nếu cần thay",
+      "explanationCn": "chỉ gửi nếu cần thay",
+      "note": "đã sửa format nào hoặc vì sao bỏ qua"
+    }
+  ]
+}
+
+Dữ liệu:
+${JSON.stringify(payload)}`;
+}
+
 function normalizeGeneratedExplanationItem(rawItem, entry) {
   return {
     path: entry.path,
@@ -1063,6 +1221,178 @@ function normalizeGeneratedExplanationItem(rawItem, entry) {
     explanation: normalizeGeneratedExplanation(rawItem?.explanation),
     explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn),
     note: stringValue(rawItem?.note).slice(0, 600),
+  };
+}
+
+async function generateDisplayFormatFixesWithAI(entries, context = {}) {
+  const targets = getDisplayFormatTargets(entries);
+  if (!targets.length) {
+    return {
+      fixes: [],
+      diagnostics: [{
+        batch: 0,
+        range: "Không có lỗi format rõ ràng",
+        status: "no_questions",
+        message: "Không tìm thấy field có dấu hiệu LaTeX/OCR cần AI sửa format.",
+      }],
+      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+    };
+  }
+
+  const fixes = [];
+  const diagnostics = [];
+  const batchSize = Math.max(1, Math.min(8, Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_BATCH_SIZE || "5", 10)));
+
+  for (let i = 0; i < targets.length; i += batchSize) {
+    const batch = targets.slice(i, i + batchSize);
+    const model = getFixModel();
+    const startedAt = Date.now();
+    try {
+      const raw = await aiService.callAdminExamAI(buildDisplayFormatPrompt(batch, context), {
+        model,
+        models: getFixModels(),
+        fallbackModel: getReviewFallbackModel(),
+        temperature: 0.03,
+        maxTokens: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_MAX_TOKENS || "5000", 10),
+        timeout: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_TIMEOUT_MS || "120000", 10),
+      });
+      const parsed = parseAiJson(raw);
+      const batchFixes = Array.isArray(parsed?.fixes) ? parsed.fixes : [];
+      diagnostics.push({
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: batchFixes.length ? "ok" : "invalid_response",
+        durationMs: Date.now() - startedAt,
+        returnedFixes: batchFixes.length,
+        expectedFixes: batch.length,
+        message: batchFixes.length
+          ? `AI đã trả ${batchFixes.length}/${batch.length} bản sửa format.`
+          : "AI đã được gọi nhưng phản hồi không có JSON fixes hợp lệ.",
+        rawPreview: batchFixes.length ? undefined : stringValue(raw).slice(0, 500),
+      });
+
+      for (const entry of batch) {
+        const localIndex = batch.indexOf(entry);
+        const fix = batchFixes.find((item) => item?.path === entry.path || item?.questionId === entry.questionId || item?.index === localIndex);
+        if (fix) fixes.push(normalizeAiFix({ ...fix, correctAnswer: "" }, entry));
+      }
+    } catch (error) {
+      const diagnostic = {
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        expectedFixes: batch.length,
+        ...getReviewErrorDiagnostic(error),
+      };
+      diagnostics.push(diagnostic);
+      console.warn("AI display format batch failed:", diagnostic);
+    }
+  }
+
+  return {
+    fixes,
+    diagnostics,
+    summary: {
+      total: targets.length,
+      fixed: fixes.length,
+      aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
+      failedBatches: diagnostics.filter(item => item.status === "failed").length,
+      invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
+      model: getFixModel(),
+    },
+  };
+}
+
+async function polishExplanationsWithAI(entries, context = {}) {
+  const targets = getPolishExplanationTargets(entries);
+  if (!targets.length) {
+    return {
+      explanations: [],
+      diagnostics: [{
+        batch: 0,
+        range: "Không có lời giải cần chuẩn hóa",
+        status: "no_questions",
+        message: "Không tìm thấy lời giải không dấu hoặc cần chuẩn hóa.",
+      }],
+      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+    };
+  }
+
+  const explanations = [];
+  const diagnostics = [];
+  const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_BATCH_SIZE || "8", 10)));
+
+  for (let i = 0; i < targets.length; i += batchSize) {
+    const batch = targets.slice(i, i + batchSize);
+    const model = getFixModel();
+    const startedAt = Date.now();
+    try {
+      const raw = await aiService.callAdminExamAI(buildPolishExplanationsPrompt(batch, context), {
+        model,
+        models: getFixModels(),
+        fallbackModel: getReviewFallbackModel(),
+        temperature: 0.05,
+        maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_MAX_TOKENS || "5000", 10),
+        timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10),
+      });
+      const parsed = parseAiJson(raw);
+      const batchItems = Array.isArray(parsed?.explanations) ? parsed.explanations : [];
+      diagnostics.push({
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: batchItems.length ? "ok" : "invalid_response",
+        durationMs: Date.now() - startedAt,
+        returnedExplanations: batchItems.length,
+        expectedExplanations: batch.length,
+        message: batchItems.length
+          ? `AI đã chuẩn hóa ${batchItems.length}/${batch.length} lời giải.`
+          : "AI đã được gọi nhưng phản hồi không có JSON explanations hợp lệ.",
+        rawPreview: batchItems.length ? undefined : stringValue(raw).slice(0, 500),
+      });
+
+      for (const entry of batch) {
+        const localIndex = batch.indexOf(entry);
+        const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
+        if (item) explanations.push(normalizeGeneratedExplanationItem(item, entry));
+      }
+    } catch (error) {
+      const diagnostic = {
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        expectedExplanations: batch.length,
+        ...getReviewErrorDiagnostic(error),
+      };
+      diagnostics.push(diagnostic);
+      console.warn("AI explanation polish batch failed:", diagnostic);
+    }
+  }
+
+  return {
+    explanations,
+    diagnostics,
+    summary: {
+      total: targets.length,
+      generated: explanations.length,
+      aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
+      failedBatches: diagnostics.filter(item => item.status === "failed").length,
+      invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
+      model: getFixModel(),
+    },
   };
 }
 
@@ -1787,6 +2117,137 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
   };
 }
 
+async function applyExamDisplayFormatFixes(client, examId, options = {}) {
+  const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const generated = await generateDisplayFormatFixesWithAI(entries, {
+    subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
+  });
+
+  const changes = [];
+  const skipped = [];
+
+  for (const fix of generated.fixes) {
+    const questionId = Number.parseInt(fix.questionId, 10);
+    if (!questionId) {
+      skipped.push({ path: fix.path, reason: "AI không trả questionId hợp lệ." });
+      continue;
+    }
+    if (fix.confidence && fix.confidence < 0.7) {
+      skipped.push({ path: fix.path, questionId, questionNumber: fix.questionNumber, reason: "Độ tin cậy sửa format dưới 70%." });
+      continue;
+    }
+
+    const questionResult = await client.query(
+      `SELECT id, question_number, question_text, question_text_cn, explanation, explanation_cn
+       FROM questions
+       WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
+       LIMIT 1`,
+      [questionId, examId],
+    );
+    const question = questionResult.rows[0];
+    if (!question) {
+      skipped.push({ path: fix.path, questionId, reason: "Câu không còn thuộc đề này." });
+      continue;
+    }
+
+    const fields = [];
+    const params = [];
+    const addQuestionField = (column, value) => {
+      const next = stringValue(value).trim();
+      if (!next) return;
+      const before = stringValue(question[column]).trim();
+      if (!before || before === next) return;
+      params.push(next);
+      fields.push(`${column} = $${params.length}`);
+      changes.push({ path: fix.path, questionId, questionNumber: question.question_number, field: column, before, after: next });
+    };
+
+    addQuestionField("question_text", fix.questionText);
+    addQuestionField("question_text_cn", fix.questionTextCn);
+    addQuestionField("explanation", fix.explanation);
+    addQuestionField("explanation_cn", fix.explanationCn);
+
+    if (fields.length) {
+      params.push(questionId);
+      await client.query(
+        `UPDATE questions SET ${fields.join(", ")} WHERE id = $${params.length}`,
+        params,
+      );
+    }
+
+    if (Array.isArray(fix.answers) && fix.answers.length) {
+      const answersResult = await client.query(
+        `SELECT id, answer_key, answer_text, answer_text_cn
+         FROM answers
+         WHERE question_id = $1
+         ORDER BY answer_key`,
+        [questionId],
+      );
+      const answerByKey = new Map(answersResult.rows.map((answer) => [answer.answer_key, answer]));
+
+      for (const answerFix of fix.answers) {
+        const current = answerByKey.get(answerFix.key);
+        if (!current) continue;
+
+        const answerFields = [];
+        const answerParams = [];
+        const addAnswerField = (column, value) => {
+          const next = stringValue(value).trim();
+          if (!next) return;
+          const before = stringValue(current[column]).trim();
+          if (!before || before === next) return;
+          answerParams.push(next);
+          answerFields.push(`${column} = $${answerParams.length}`);
+          changes.push({
+            path: fix.path,
+            questionId,
+            questionNumber: question.question_number,
+            answerKey: answerFix.key,
+            field: column,
+            before,
+            after: next,
+          });
+        };
+
+        addAnswerField("answer_text", answerFix.text);
+        addAnswerField("answer_text_cn", answerFix.textCn);
+        if (!answerFields.length) continue;
+
+        answerParams.push(current.id);
+        await client.query(
+          `UPDATE answers SET ${answerFields.join(", ")} WHERE id = $${answerParams.length}`,
+          answerParams,
+        );
+      }
+    }
+  }
+
+  const formulaResult = await normalizeExamFormulas(client, examId, { apply: true });
+  if (changes.length || formulaResult.changedCount) {
+    await client.query("UPDATE exams SET updated_at = NOW() WHERE id = $1", [examId]);
+  }
+
+  return {
+    examId: Number(examId),
+    message: `AI đã sửa ${changes.length} chỗ format và rule đã chuẩn hóa ${formulaResult.changedCount || 0} chỗ.`,
+    changedCount: changes.length,
+    formulaChangedCount: formulaResult.changedCount || 0,
+    warningCount: formulaResult.warningCount || 0,
+    skippedCount: skipped.length,
+    changes: changes.slice(0, 100),
+    skipped: skipped.slice(0, 100),
+    diagnostics: generated.diagnostics,
+    summary: {
+      ...generated.summary,
+      changedCount: changes.length,
+      formulaChangedCount: formulaResult.changedCount || 0,
+      warningCount: formulaResult.warningCount || 0,
+      skippedCount: skipped.length,
+    },
+    formulaResult,
+  };
+}
+
 async function generateMissingExamExplanations(client, examId, options = {}) {
   const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
   const generated = await generateMissingExplanationsWithAI(entries, {
@@ -1876,6 +2337,96 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
       ...generated.summary,
       changedCount: changes.length,
       questionChangedCount: new Set(changes.map(change => change.questionId)).size,
+      skippedCount: skipped.length,
+    },
+  };
+}
+
+async function polishExamExplanations(client, examId, options = {}) {
+  const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const generated = await polishExplanationsWithAI(entries, {
+    subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
+  });
+
+  const changes = [];
+  const skipped = [];
+
+  for (const item of generated.explanations) {
+    const questionId = Number.parseInt(item.questionId, 10);
+    if (!questionId) {
+      skipped.push({ path: item.path, reason: "AI không trả questionId hợp lệ." });
+      continue;
+    }
+
+    const nextExplanation = normalizeGeneratedExplanation(item.explanation);
+    if (!nextExplanation || !VIETNAMESE_DIACRITIC_RE.test(nextExplanation)) {
+      skipped.push({
+        path: item.path,
+        questionId,
+        questionNumber: item.questionNumber,
+        reason: item.note || "AI chưa trả lời giải tiếng Việt có dấu hợp lệ.",
+      });
+      continue;
+    }
+
+    const questionResult = await client.query(
+      `SELECT id, question_number, explanation
+       FROM questions
+       WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
+       LIMIT 1`,
+      [questionId, examId],
+    );
+    const question = questionResult.rows[0];
+    if (!question) {
+      skipped.push({ path: item.path, questionId, reason: "Câu không còn thuộc đề này." });
+      continue;
+    }
+
+    const before = stringValue(question.explanation).trim();
+    if (!before || before === nextExplanation) continue;
+    if (!needsVietnameseExplanationPolish(before)) {
+      skipped.push({
+        path: item.path,
+        questionId,
+        questionNumber: question.question_number,
+        reason: "Lời giải hiện tại không còn cần chuẩn hóa.",
+      });
+      continue;
+    }
+
+    await client.query(
+      `UPDATE questions SET explanation = $1 WHERE id = $2`,
+      [nextExplanation, questionId],
+    );
+    changes.push({
+      path: item.path,
+      questionId,
+      questionNumber: question.question_number,
+      field: "explanation",
+      before,
+      after: nextExplanation,
+    });
+  }
+
+  if (changes.length) {
+    await client.query("UPDATE exams SET updated_at = NOW() WHERE id = $1", [examId]);
+  }
+
+  return {
+    examId: Number(examId),
+    message: changes.length
+      ? `AI đã chuẩn hóa lời giải cho ${changes.length} câu.`
+      : "Không có lời giải nào được chuẩn hóa.",
+    changedCount: changes.length,
+    questionChangedCount: changes.length,
+    skippedCount: skipped.length,
+    changes: changes.slice(0, 100),
+    skipped: skipped.slice(0, 100),
+    diagnostics: generated.diagnostics,
+    summary: {
+      ...generated.summary,
+      changedCount: changes.length,
+      questionChangedCount: changes.length,
       skippedCount: skipped.length,
     },
   };
@@ -2003,6 +2554,8 @@ module.exports = {
   normalizeField,
   normalizeStoredFormulaText,
   generateMissingExamExplanations,
+  polishExamExplanations,
+  applyExamDisplayFormatFixes,
   applyExamReviewFixes,
   applyImportedReviewFixesWithAI,
   reviewStoredExamWithAI,

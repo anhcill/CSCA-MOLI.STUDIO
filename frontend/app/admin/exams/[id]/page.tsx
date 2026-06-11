@@ -96,7 +96,7 @@ interface Exam {
 }
 
 interface ExamAiRun {
-    action: 'review_quality' | 'apply_fixes' | 'missing_explanations' | 'normalize_formulas' | string;
+    action: 'review_quality' | 'apply_fixes' | 'display_format_fixes' | 'missing_explanations' | 'polish_explanations' | 'normalize_formulas' | string;
     status: string;
     summary?: Record<string, any>;
     run_by?: number | null;
@@ -111,7 +111,7 @@ interface Subject {
 }
 
 type EditMode = 'view' | 'edit';
-type AiBlockingTask = 'review' | 'fix' | 'normalize' | 'explain' | null;
+type AiBlockingTask = 'review' | 'fix' | 'format' | 'normalize' | 'explain' | 'polish' | null;
 
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
@@ -143,7 +143,9 @@ function getExamReviewIssues(result: StoredExamReviewResult | null) {
 function getExamAiRunLabel(action: string) {
     if (action === 'review_quality') return 'AI soát đề';
     if (action === 'apply_fixes') return 'AI sửa log';
+    if (action === 'display_format_fixes') return 'AI sửa format hiển thị';
     if (action === 'missing_explanations') return 'AI thêm giải thích';
+    if (action === 'polish_explanations') return 'AI chuẩn hóa lời giải';
     if (action === 'normalize_formulas') return 'Chuẩn hóa công thức';
     return action;
 }
@@ -189,6 +191,11 @@ function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; star
             subtitle: 'Đang áp dụng lỗi chắc chắn, chuẩn hóa công thức và lưu lại đề.',
             steps: ['Gửi log lỗi', 'AI tạo bản sửa', 'Kiểm tra đáp án và LaTeX', 'Lưu thay đổi vào đề'],
         },
+        format: {
+            title: 'AI đang sửa format hiển thị',
+            subtitle: 'Đang sửa LaTeX/OCR thô trong câu hỏi, đáp án, lời giải nhưng không đổi đáp án đúng.',
+            steps: ['Tìm lỗi format', 'AI sửa LaTeX/OCR', 'Giữ nguyên đáp án', 'Lưu vào đề'],
+        },
         normalize: {
             title: 'Đang chuẩn hóa công thức',
             subtitle: 'Đang sửa các lỗi LaTeX chắc chắn bằng rule an toàn.',
@@ -198,6 +205,11 @@ function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; star
             title: 'AI đang thêm giải thích',
             subtitle: 'Đang tìm câu chưa có lời giải, tạo giải thích ngắn vừa đủ và lưu vào DB.',
             steps: ['Đọc câu thiếu giải thích', 'AI tạo lời giải', 'Chuẩn hóa công thức', 'Lưu vào đề'],
+        },
+        polish: {
+            title: 'AI đang chuẩn hóa lời giải',
+            subtitle: 'Đang sửa lời giải cũ không dấu, xuống dòng lại cho dễ đọc và lưu vào DB.',
+            steps: ['Tìm lời giải không dấu', 'AI thêm dấu tiếng Việt', 'Giữ nguyên công thức', 'Lưu vào đề'],
         },
     }[task];
 
@@ -621,8 +633,12 @@ export default function AdminExamDetailPage() {
     const [examReviewError, setExamReviewError] = useState('');
     const [applyingExamReviewFixes, setApplyingExamReviewFixes] = useState(false);
     const [examReviewApplyResult, setExamReviewApplyResult] = useState<ApplyExamReviewFixesResult | null>(null);
+    const [applyingDisplayFormatFixes, setApplyingDisplayFormatFixes] = useState(false);
+    const [displayFormatApplyResult, setDisplayFormatApplyResult] = useState<ApplyExamReviewFixesResult | null>(null);
     const [generatingMissingExplanations, setGeneratingMissingExplanations] = useState(false);
     const [missingExplanationResult, setMissingExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
+    const [polishingExplanations, setPolishingExplanations] = useState(false);
+    const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
     const [aiBlockingStartedAt, setAiBlockingStartedAt] = useState<number | null>(null);
 
@@ -1022,6 +1038,32 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const handleApplyDisplayFormatFixes = async () => {
+        if (!exam?.id || applyingDisplayFormatFixes) return;
+        if (!(await confirmRepeatAiAction('display_format_fixes'))) return;
+        if (!confirm('Cho AI sửa lỗi format hiển thị? Hệ thống chỉ sửa text/LaTeX/OCR, không đổi đáp án đúng và lưu trực tiếp vào DB.')) return;
+
+        try {
+            setApplyingDisplayFormatFixes(true);
+            setAiBlockingTask('format');
+            setAiBlockingStartedAt(Date.now());
+            setExamReviewError('');
+            setDisplayFormatApplyResult(null);
+            const result = await examAdminApi.applyDisplayFormatFixes(exam.id);
+            setDisplayFormatApplyResult(result);
+            await loadExam({ silent: true });
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            setExamReviewError((error?.response?.data?.message || 'AI sửa format hiển thị thất bại.') + retryText);
+        } finally {
+            setApplyingDisplayFormatFixes(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
+        }
+    };
+
     const handleGenerateMissingExplanations = async () => {
         if (!exam?.id || generatingMissingExplanations) return;
         if (!(await confirmRepeatAiAction('missing_explanations'))) return;
@@ -1042,6 +1084,31 @@ export default function AdminExamDetailPage() {
             alert((error?.response?.data?.message || 'AI thêm giải thích thất bại.') + retryText);
         } finally {
             setGeneratingMissingExplanations(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
+        }
+    };
+
+    const handlePolishExplanations = async () => {
+        if (!exam?.id || polishingExplanations) return;
+        if (!(await confirmRepeatAiAction('polish_explanations'))) return;
+        if (!confirm('Cho AI chuẩn hóa các lời giải cũ không dấu? Hệ thống chỉ sửa ô giải thích và lưu trực tiếp vào DB.')) return;
+
+        try {
+            setPolishingExplanations(true);
+            setAiBlockingTask('polish');
+            setAiBlockingStartedAt(Date.now());
+            setPolishExplanationResult(null);
+            const result = await examAdminApi.polishExplanations(exam.id);
+            setPolishExplanationResult(result);
+            await loadExam({ silent: true });
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            alert((error?.response?.data?.message || 'AI chuẩn hóa lời giải thất bại.') + retryText);
+        } finally {
+            setPolishingExplanations(false);
             setAiBlockingTask(null);
             setAiBlockingStartedAt(null);
         }
@@ -1869,12 +1936,28 @@ export default function AdminExamDetailPage() {
                                 {reviewingExam ? 'AI đang soát...' : 'AI soát đề này'}
                             </button>
                             <button
+                                onClick={handleApplyDisplayFormatFixes}
+                                disabled={applyingDisplayFormatFixes || !!aiBlockingTask}
+                                className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiRefreshCw size={15} className={applyingDisplayFormatFixes ? 'animate-spin' : ''} />
+                                {applyingDisplayFormatFixes ? 'AI đang sửa format...' : 'AI sửa format hiển thị'}
+                            </button>
+                            <button
                                 onClick={handleGenerateMissingExplanations}
                                 disabled={generatingMissingExplanations || !!aiBlockingTask}
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <FiRefreshCw size={15} className={generatingMissingExplanations ? 'animate-spin' : ''} />
                                 {generatingMissingExplanations ? 'AI đang thêm...' : 'AI thêm giải thích thiếu'}
+                            </button>
+                            <button
+                                onClick={handlePolishExplanations}
+                                disabled={polishingExplanations || !!aiBlockingTask}
+                                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiRefreshCw size={15} className={polishingExplanations ? 'animate-spin' : ''} />
+                                {polishingExplanations ? 'AI đang chuẩn hóa...' : 'AI chuẩn hóa lời giải'}
                             </button>
                             <button
                                 onClick={handleNormalizeCurrentExam}
@@ -1992,6 +2075,25 @@ export default function AdminExamDetailPage() {
                     </div>
                 )}
 
+                {isEditingExam && displayFormatApplyResult && (
+                    <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                        <p className="font-bold">{displayFormatApplyResult.message || `AI đã sửa ${displayFormatApplyResult.changedCount || 0} chỗ format.`}</p>
+                        <p className="mt-1">
+                            Sửa format: {displayFormatApplyResult.changedCount || 0} chỗ. Rule công thức: {displayFormatApplyResult.formulaChangedCount || 0} chỗ. Bỏ qua {displayFormatApplyResult.skippedCount || 0} câu.
+                            {displayFormatApplyResult.summary?.model ? ` Model: ${displayFormatApplyResult.summary.model}.` : ''}
+                        </p>
+                        {!!displayFormatApplyResult.skipped?.length && (
+                            <div className="mt-2 max-h-40 overflow-auto rounded-lg bg-white/70 p-2 text-xs">
+                                {displayFormatApplyResult.skipped.slice(0, 8).map((item, index) => (
+                                    <p key={`${item.questionId || item.path || index}-${index}`}>
+                                        Câu {item.questionNumber || '?'} - {item.reason}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {isEditingExam && missingExplanationResult && (
                     <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
                         <p className="font-bold">{missingExplanationResult.message}</p>
@@ -2002,6 +2104,25 @@ export default function AdminExamDetailPage() {
                         {!!missingExplanationResult.skipped?.length && (
                             <div className="mt-2 max-h-40 overflow-auto rounded-lg bg-white/70 p-2 text-xs">
                                 {missingExplanationResult.skipped.slice(0, 8).map((item, index) => (
+                                    <p key={`${item.questionId || item.path || index}-${index}`}>
+                                        Câu {item.questionNumber || '?'} - {item.reason}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {isEditingExam && polishExplanationResult && (
+                    <div className="mb-6 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900">
+                        <p className="font-bold">{polishExplanationResult.message}</p>
+                        <p className="mt-1">
+                            Đã chuẩn hóa {polishExplanationResult.questionChangedCount || 0} câu. Bỏ qua {polishExplanationResult.skippedCount || 0} câu.
+                            {polishExplanationResult.summary?.model ? ` Model: ${polishExplanationResult.summary.model}.` : ''}
+                        </p>
+                        {!!polishExplanationResult.skipped?.length && (
+                            <div className="mt-2 max-h-40 overflow-auto rounded-lg bg-white/70 p-2 text-xs">
+                                {polishExplanationResult.skipped.slice(0, 8).map((item, index) => (
                                     <p key={`${item.questionId || item.path || index}-${index}`}>
                                         Câu {item.questionNumber || '?'} - {item.reason}
                                     </p>

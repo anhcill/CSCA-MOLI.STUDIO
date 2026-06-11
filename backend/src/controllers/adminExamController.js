@@ -16,7 +16,9 @@ const {
 const {
   normalizeExamFormulas: normalizeStoredExamFormulas,
   applyExamReviewFixes: applyStoredExamReviewFixes,
+  applyExamDisplayFormatFixes,
   generateMissingExamExplanations,
+  polishExamExplanations,
   applyImportedReviewFixesWithAI,
   reviewImportedItemsWithAI,
   reviewStoredExamWithAI,
@@ -67,7 +69,9 @@ const EXAM_AI_LOCK_NAMESPACE = 910612;
 const EXAM_AI_ACTIONS = {
   REVIEW: "review_quality",
   FIX: "apply_fixes",
+  FORMAT: "display_format_fixes",
   EXPLAIN: "missing_explanations",
+  POLISH_EXPLANATIONS: "polish_explanations",
   NORMALIZE: "normalize_formulas",
 };
 
@@ -696,6 +700,65 @@ const AdminExamController = {
     }
   },
 
+  async applyExamDisplayFormatFixes(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      await acquireExamAiLock(client, examId);
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await applyExamDisplayFormatFixes(client, examId, {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FORMAT, req.user.id, {
+        changedCount: result.changedCount,
+        formulaChangedCount: result.formulaChangedCount,
+        warningCount: result.warningCount,
+        skippedCount: result.skippedCount,
+        model: result.summary?.model,
+      });
+      await client.query("COMMIT");
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+
+      UserActivity.log(req.user.id, "admin.apply_exam_display_format_fixes", {
+        examId,
+        changedCount: result.changedCount,
+        formulaChangedCount: result.formulaChangedCount,
+        skippedCount: result.skippedCount,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Apply exam display format fixes error:", getSafeErrorLog(error));
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI sửa format quá thời gian." });
+      }
+      res.status(500).json({ message: "AI sửa format hiển thị thất bại." });
+    } finally {
+      await releaseExamAiLock(client, examId);
+      client.release();
+    }
+  },
+
   async generateMissingExplanations(req, res) {
     const { examId } = req.params;
     const client = await pool.connect();
@@ -751,6 +814,67 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
       res.status(500).json({ message: "AI tao giai thich thieu that bai." });
+    } finally {
+      await releaseExamAiLock(client, examId);
+      client.release();
+    }
+  },
+
+  async polishExplanations(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      await acquireExamAiLock(client, examId);
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await polishExamExplanations(client, examId, {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.POLISH_EXPLANATIONS, req.user.id, {
+        changedCount: result.changedCount,
+        questionChangedCount: result.questionChangedCount,
+        skippedCount: result.skippedCount,
+        model: result.summary?.model,
+      });
+      await client.query("COMMIT");
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+
+      UserActivity.log(req.user.id, "admin.polish_exam_explanations", {
+        examId,
+        changedCount: result.changedCount,
+        questionChangedCount: result.questionChangedCount,
+        skippedCount: result.skippedCount,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Polish explanations error:", getSafeErrorLog(error));
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI chuẩn hóa lời giải quá thời gian." });
+      }
+      if (error.message === "EXAM_NOT_FOUND") {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      res.status(500).json({ message: "AI chuẩn hóa lời giải thất bại." });
     } finally {
       await releaseExamAiLock(client, examId);
       client.release();

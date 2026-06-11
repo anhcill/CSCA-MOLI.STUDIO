@@ -275,6 +275,7 @@ export interface GenerateMissingExplanationsResult {
         questionId?: number;
         questionNumber?: number;
         field: string;
+        before?: string;
         after?: string;
     }>;
     skipped?: Array<{
@@ -516,8 +517,22 @@ export const examAdminApi = {
         return response.data;
     },
 
+    applyDisplayFormatFixes: async (examId: number): Promise<ApplyExamReviewFixesResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/apply-display-format-fixes`, {}, {
+            timeout: 600000,
+        });
+        return response.data;
+    },
+
     generateMissingExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
         const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, {}, {
+            timeout: 600000,
+        });
+        return response.data;
+    },
+
+    polishExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/polish-explanations`, {}, {
             timeout: 600000,
         });
         return response.data;
