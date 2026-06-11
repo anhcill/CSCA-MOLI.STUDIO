@@ -62,6 +62,8 @@ const INLINE_MATH_COMMAND_RE =
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_BOUNDARY_RE =
   /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
+const MATH_WORD_RE =
+  /^(?:sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|alpha|beta|gamma|delta|theta|lambda|mu|pi)$/i;
 const SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE =
   String.raw`[+\-]?(?:\\infty|\u221e|\d+(?:[.,]\d+)?|[A-Za-z](?:_\{[^{}]+\})?)`;
 const SIMPLE_INTERVAL_RE_SOURCE =
@@ -176,6 +178,11 @@ function normalizeLooseMathSyntax(input: string): string {
       /\\sqrt\{\}\s*([0-9]+)\s*(sin|cos|tan|cot|sec|csc)(?=(?:\\[A-Za-z]+|[A-Za-z]))/gi,
       (_, radicand, fn) => `\\sqrt{${radicand}}\\${fn.toLowerCase()} `,
     )
+    .replace(/\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g, (_, fn) => `\\${fn.toLowerCase()}^{-1}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}^{-1}`)
+    .replace(/\\(sin|cos|tan|cot|sec|csc)\s*\^\s*\{?\s*([+\-]?\d+)\s*\}?/g, (_, fn, power) => `\\${fn.toLowerCase()}^{${power}}`)
+    .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)\b(?=\s*(?:\^|\(|\\[A-Za-z]+|[A-Za-z0-9]))/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
+    .replace(/(^|[^\\A-Za-z])(alpha|beta|gamma|delta|theta|lambda|mu|pi)\b/gi, (_, prefix, name) => `${prefix}\\${name.toLowerCase()}`)
     .replace(/\\sqrt\{\}\s*\(([^()]+)\)/g, '\\sqrt{$1}')
     .replace(/\\sqrt\{\}\s*((?:\\[A-Za-z]+|[A-Za-z0-9]+)(?:_\{[^{}]+\})?(?:\^\{[^{}]+\})?)/g, '\\sqrt{$1}')
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc)(?=\s*\()/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()}`)
@@ -281,6 +288,7 @@ function isMostlyMath(value: string): boolean {
     .replace(/\\[a-zA-Z]+/g, '')
     .replace(/\\([{}()[\],;|])/g, '$1');
   const words = (withoutCommands.match(/[A-Za-z]{2,}/g) || [])
+    .filter(word => !MATH_WORD_RE.test(word))
     .filter(word => !/^(?:d[xyztun]|mg|kg|cm|mm|dm|km|ms|mol|rad|hz|pa|ev|kw|w|j|n|v|a|c)$/i.test(word));
   if (words.length > 0) return false;
 
