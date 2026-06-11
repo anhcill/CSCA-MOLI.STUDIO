@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import {
   FiBell,
+  FiChevronLeft,
+  FiChevronRight,
   FiClock,
   FiEdit3,
   FiFileText,
@@ -108,6 +111,7 @@ export default function SubjectStudyShell({
   className = '',
   showFeatureCards = false,
 }: SubjectStudyShellProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { t, format } = useLanguage();
   const subjectMeta = getSubjectMeta(subjectSlug);
   const normalizedSubject = normalizeContentSubject(subjectSlug);
@@ -123,11 +127,36 @@ export default function SubjectStudyShell({
     ? t('course.searchPlaceholder')
     : searchPlaceholder;
 
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(window.localStorage.getItem('moly.studySidebarCollapsed') === '1');
+    } catch {}
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem('moly.studySidebarCollapsed', next ? '1' : '0');
+      } catch {}
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#fbfbff] text-slate-900">
       <div className="pointer-events-none fixed -top-32 left-1/4 h-[440px] w-[70vw] bg-gradient-to-br from-violet-500 opacity-10 blur-[130px]" />
 
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[212px] border-r border-violet-100 bg-white/95 px-4 py-5 shadow-sm xl:block">
+      <aside className={`fixed inset-y-0 left-0 z-30 hidden w-[212px] border-r border-violet-100 bg-white/95 px-4 py-5 shadow-sm transition-transform duration-300 ease-out xl:block ${sidebarCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Thu gọn thanh chức năng"
+          title="Thu gọn thanh chức năng"
+          className="absolute -right-4 top-1/2 z-40 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700"
+        >
+          <FiChevronLeft />
+        </button>
         <Link href="/" className="mb-8 flex items-center gap-2 text-2xl font-black text-violet-600">
           <HiOutlineSparkles className="text-violet-600" />
           MOLY
@@ -166,7 +195,19 @@ export default function SubjectStudyShell({
         </div>
       </aside>
 
-      <main className={`relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 xl:pl-[244px] xl:pr-6 ${className}`}>
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Mở thanh chức năng"
+          title="Mở thanh chức năng"
+          className="fixed left-3 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xl transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 xl:flex"
+        >
+          <FiChevronRight />
+        </button>
+      )}
+
+      <main className={`relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 transition-[padding] duration-300 ease-out sm:px-6 xl:pr-6 ${sidebarCollapsed ? 'xl:pl-8' : 'xl:pl-[244px]'} ${className}`}>
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-3">
