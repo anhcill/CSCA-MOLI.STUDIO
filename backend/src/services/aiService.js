@@ -98,10 +98,10 @@ function isUsableAdminExamRouterModel(model) {
   if (!value) return false;
   if (!isNineRouterAdminExam()) return true;
 
-  // This project wires admin exam AI to Antigravity accounts in 9router.
+  // This project wires admin exam AI to Codex/Antigravity accounts in 9router.
   // Plain google/* models require separate Google API-key credentials in 9router;
   // keep those for Beeknoee fallback instead of wasting a failed router call.
-  return value.startsWith('ag/');
+  return value.startsWith('cx/') || value.startsWith('ag/');
 }
 
 function getAdminExamModelCandidates(options = {}) {
