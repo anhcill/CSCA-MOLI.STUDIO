@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, ApplyExamReviewFixesResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
+import { examAdminApi, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import { FiAlertCircle, FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor, FiRefreshCw } from 'react-icons/fi';
@@ -96,7 +96,7 @@ interface Subject {
 }
 
 type EditMode = 'view' | 'edit';
-type AiBlockingTask = 'review' | 'fix' | 'normalize' | null;
+type AiBlockingTask = 'review' | 'fix' | 'normalize' | 'explain' | null;
 
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
@@ -157,6 +157,11 @@ function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; star
             title: 'Đang chuẩn hóa công thức',
             subtitle: 'Đang sửa các lỗi LaTeX chắc chắn bằng rule an toàn.',
             steps: ['Đọc câu hỏi', 'Sửa công thức chắc chắn', 'Đánh dấu chỗ nghi lỗi', 'Lưu kết quả'],
+        },
+        explain: {
+            title: 'AI đang thêm giải thích',
+            subtitle: 'Đang tìm câu chưa có lời giải, tạo giải thích ngắn vừa đủ và lưu vào DB.',
+            steps: ['Đọc câu thiếu giải thích', 'AI tạo lời giải', 'Chuẩn hóa công thức', 'Lưu vào đề'],
         },
     }[task];
 
@@ -578,6 +583,8 @@ export default function AdminExamDetailPage() {
     const [examReviewError, setExamReviewError] = useState('');
     const [applyingExamReviewFixes, setApplyingExamReviewFixes] = useState(false);
     const [examReviewApplyResult, setExamReviewApplyResult] = useState<ApplyExamReviewFixesResult | null>(null);
+    const [generatingMissingExplanations, setGeneratingMissingExplanations] = useState(false);
+    const [missingExplanationResult, setMissingExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
     const [aiBlockingStartedAt, setAiBlockingStartedAt] = useState<number | null>(null);
 
@@ -951,6 +958,30 @@ export default function AdminExamDetailPage() {
             setExamReviewError((error?.response?.data?.message || 'AI sửa lỗi đề thất bại.') + retryText);
         } finally {
             setApplyingExamReviewFixes(false);
+            setAiBlockingTask(null);
+            setAiBlockingStartedAt(null);
+        }
+    };
+
+    const handleGenerateMissingExplanations = async () => {
+        if (!exam?.id || generatingMissingExplanations) return;
+        if (!confirm('Cho AI thêm giải thích cho các câu đang trống? Hệ thống chỉ điền ô chưa có giải thích và lưu trực tiếp vào DB.')) return;
+
+        try {
+            setGeneratingMissingExplanations(true);
+            setAiBlockingTask('explain');
+            setAiBlockingStartedAt(Date.now());
+            setMissingExplanationResult(null);
+            const result = await examAdminApi.generateMissingExplanations(exam.id);
+            setMissingExplanationResult(result);
+            await loadExam();
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            alert((error?.response?.data?.message || 'AI thêm giải thích thất bại.') + retryText);
+        } finally {
+            setGeneratingMissingExplanations(false);
             setAiBlockingTask(null);
             setAiBlockingStartedAt(null);
         }
@@ -1717,15 +1748,23 @@ export default function AdminExamDetailPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={handleReviewCurrentExam}
-                                disabled={reviewingExam}
+                                disabled={reviewingExam || !!aiBlockingTask}
                                 className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <FiAlertCircle size={15} />
                                 {reviewingExam ? 'AI đang soát...' : 'AI soát đề này'}
                             </button>
                             <button
+                                onClick={handleGenerateMissingExplanations}
+                                disabled={generatingMissingExplanations || !!aiBlockingTask}
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiRefreshCw size={15} className={generatingMissingExplanations ? 'animate-spin' : ''} />
+                                {generatingMissingExplanations ? 'AI đang thêm...' : 'AI thêm giải thích thiếu'}
+                            </button>
+                            <button
                                 onClick={handleNormalizeCurrentExam}
-                                disabled={normalizingFormulas}
+                                disabled={normalizingFormulas || !!aiBlockingTask}
                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <FiRefreshCw size={15} className={normalizingFormulas ? 'animate-spin' : ''} />
@@ -1794,6 +1833,25 @@ export default function AdminExamDetailPage() {
                                 {normalizeResult.warnings.slice(0, 8).map((warning, index) => (
                                     <p key={index}>
                                         Câu {warning.questionNumber || '?'} {warning.answerKey ? `đáp án ${warning.answerKey}` : ''} - {warning.field}: {warning.message}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {isEditingExam && missingExplanationResult && (
+                    <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                        <p className="font-bold">{missingExplanationResult.message}</p>
+                        <p className="mt-1">
+                            Đã lưu {missingExplanationResult.questionChangedCount || 0} câu, {missingExplanationResult.changedCount || 0} ô giải thích. Bỏ qua {missingExplanationResult.skippedCount || 0} câu.
+                            {missingExplanationResult.summary?.model ? ` Model: ${missingExplanationResult.summary.model}.` : ''}
+                        </p>
+                        {!!missingExplanationResult.skipped?.length && (
+                            <div className="mt-2 max-h-40 overflow-auto rounded-lg bg-white/70 p-2 text-xs">
+                                {missingExplanationResult.skipped.slice(0, 8).map((item, index) => (
+                                    <p key={`${item.questionId || item.path || index}-${index}`}>
+                                        Câu {item.questionNumber || '?'} - {item.reason}
                                     </p>
                                 ))}
                             </div>

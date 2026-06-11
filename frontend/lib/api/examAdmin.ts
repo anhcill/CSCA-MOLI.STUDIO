@@ -264,6 +264,34 @@ export interface ApplyExamReviewFixesResult {
     formulaResult?: NormalizeFormulaResult | null;
 }
 
+export interface GenerateMissingExplanationsResult {
+    examId?: number;
+    message: string;
+    changedCount: number;
+    questionChangedCount: number;
+    skippedCount: number;
+    changes?: Array<{
+        path?: string;
+        questionId?: number;
+        questionNumber?: number;
+        field: string;
+        after?: string;
+    }>;
+    skipped?: Array<{
+        path?: string;
+        questionId?: number;
+        questionNumber?: number;
+        reason: string;
+    }>;
+    diagnostics?: ImportedItemsReviewDiagnostic[];
+    summary?: ImportedItemsReviewResult['summary'] & {
+        generated?: number;
+        changedCount?: number;
+        questionChangedCount?: number;
+        skippedCount?: number;
+    };
+}
+
 export interface SingleQuestionImageOcrResult {
     text: string;
     source?: {
@@ -484,6 +512,13 @@ export const examAdminApi = {
     ): Promise<ApplyExamReviewFixesResult> => {
         const response = await axios.post(`/admin/exams/${examId}/apply-ai-review-fixes`, data, {
             timeout: 300000,
+        });
+        return response.data;
+    },
+
+    generateMissingExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, {}, {
+            timeout: 600000,
         });
         return response.data;
     },

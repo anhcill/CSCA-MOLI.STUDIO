@@ -967,6 +967,190 @@ function normalizeAiFix(rawFix, entry) {
   return normalized;
 }
 
+function isBlankText(value) {
+  return !stringValue(value).trim();
+}
+
+function normalizeGeneratedExplanation(value) {
+  return compactWhitespace(normalizeFixValue(value, { explanation: true }))
+    .replace(/\0/g, "")
+    .replace(/<[^>]*>/g, "")
+    .slice(0, 6000);
+}
+
+function getMissingExplanationTargets(entries) {
+  return (entries || []).filter((entry) => {
+    const q = entry.question || {};
+    if (q.explanationImageUrl || q.explanation_image_url) return false;
+    const missingMain = isBlankText(q.explanation);
+    const needsChinese = !isBlankText(q.questionTextCn);
+    const missingChinese = needsChinese && isBlankText(q.explanationCn);
+    const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
+    const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
+    return hasPromptText && hasAnswer && (missingMain || missingChinese);
+  }).slice(0, REVIEW_MAX_ITEMS);
+}
+
+function buildMissingExplanationsPrompt(batch, context = {}) {
+  const payload = batch.map((entry, index) => {
+    const q = entry.question || {};
+    return {
+      index,
+      path: entry.path,
+      label: entry.label,
+      questionId: entry.questionId,
+      questionNumber: entry.questionNumber,
+      questionType: entry.questionType,
+      contextText: entry.contextText || "",
+      contextImageUrl: entry.contextImageUrl || "",
+      questionText: q.questionText || "",
+      questionTextCn: q.questionTextCn || "",
+      questionImageUrl: q.imageUrl || q.image_url || "",
+      answers: (q.answers || []).map((answer, answerIndex) => ({
+        key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
+        text: answer.text || answer.answer_text || "",
+        textCn: answer.textCn || answer.answer_text_cn || "",
+        imageUrl: answer.imageUrl || answer.image_url || "",
+      })),
+      correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
+      missingExplanation: isBlankText(q.explanation),
+      missingExplanationCn: !isBlankText(q.questionTextCn) && isBlankText(q.explanationCn),
+    };
+  });
+
+  return `Ban la giao vien CSCA. Hay tao loi giai ngan vua du cho cac cau dang thieu giai thich.
+
+Yeu cau:
+- Chi tra JSON hop le, khong markdown.
+- Khong sua de, khong sua dap an, chi tao explanation/explanationCn.
+- explanation viet bang tieng Viet, ngan vua du, 2-5 dong, dung trong tam cach ra dap an.
+- Neu co questionTextCn va missingExplanationCn=true, tao explanationCn bang tieng Trung gon, tuong duong noi dung explanation.
+- Cong thuc dung LaTeX chuan: inline \\(...\\), phan so \\frac{...}{...}, can \\sqrt{...}, tap hop \\{...\\}, giao/hop \\cap/\\cup.
+- Loi giai nen xuong dong theo y: Cong thuc/Phan tich, Thay tinh, Ket luan/Chon.
+- Neu can doc anh nhung khong du du lieu tu text/answers de giai chac, de explanation rong va note ly do, khong doan bua.
+- Moi item trong du lieu phai co mot object trong explanations.
+
+Mon/ngu canh: ${context.subject || "CSCA da mon"}.
+
+Tra dang:
+{
+  "explanations": [
+    {
+      "index": 0,
+      "path": "question:1",
+      "questionId": 1,
+      "confidence": 0.9,
+      "explanation": "loi giai tieng Viet neu can dien",
+      "explanationCn": "giai thich tieng Trung neu can dien",
+      "note": "ngan gon"
+    }
+  ]
+}
+
+Du lieu:
+${JSON.stringify(payload)}`;
+}
+
+function normalizeGeneratedExplanationItem(rawItem, entry) {
+  return {
+    path: entry.path,
+    label: entry.label,
+    questionId: entry.questionId,
+    questionNumber: entry.questionNumber,
+    needsExplanationCn: !isBlankText(entry.question?.questionTextCn) && isBlankText(entry.question?.explanationCn),
+    confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
+    explanation: normalizeGeneratedExplanation(rawItem?.explanation),
+    explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn),
+    note: stringValue(rawItem?.note).slice(0, 600),
+  };
+}
+
+async function generateMissingExplanationsWithAI(entries, context = {}) {
+  const targets = getMissingExplanationTargets(entries);
+  if (!targets.length) {
+    return {
+      explanations: [],
+      diagnostics: [{
+        batch: 0,
+        range: "Khong co cau thieu giai thich",
+        status: "no_questions",
+        message: "Khong co cau nao can AI them giai thich.",
+      }],
+      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+    };
+  }
+
+  const explanations = [];
+  const diagnostics = [];
+  const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_BATCH_SIZE || "8", 10)));
+
+  for (let i = 0; i < targets.length; i += batchSize) {
+    const batch = targets.slice(i, i + batchSize);
+    const model = getFixModel();
+    const startedAt = Date.now();
+    try {
+      const raw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt(batch, context), {
+        model,
+        models: getFixModels(),
+        fallbackModel: getReviewFallbackModel(),
+        temperature: 0.1,
+        maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || "5000", 10),
+        timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+      });
+      const parsed = parseAiJson(raw);
+      const batchItems = Array.isArray(parsed?.explanations) ? parsed.explanations : [];
+      diagnostics.push({
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: batchItems.length ? "ok" : "invalid_response",
+        durationMs: Date.now() - startedAt,
+        returnedExplanations: batchItems.length,
+        expectedExplanations: batch.length,
+        message: batchItems.length
+          ? `AI da tao ${batchItems.length}/${batch.length} loi giai.`
+          : "AI da duoc goi nhung phan hoi khong co JSON explanations hop le.",
+        rawPreview: batchItems.length ? undefined : stringValue(raw).slice(0, 500),
+      });
+
+      for (const entry of batch) {
+        const localIndex = batch.indexOf(entry);
+        const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
+        if (item) explanations.push(normalizeGeneratedExplanationItem(item, entry));
+      }
+    } catch (error) {
+      const diagnostic = {
+        batch: Math.floor(i / batchSize) + 1,
+        range: getBatchLabelRange(batch),
+        paths: batch.map(entry => entry.path),
+        labels: batch.map(entry => entry.label),
+        model,
+        status: "failed",
+        durationMs: Date.now() - startedAt,
+        expectedExplanations: batch.length,
+        ...getReviewErrorDiagnostic(error),
+      };
+      diagnostics.push(diagnostic);
+      console.warn("AI missing explanation batch failed:", diagnostic);
+    }
+  }
+
+  return {
+    explanations,
+    diagnostics,
+    summary: {
+      total: targets.length,
+      generated: explanations.length,
+      aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
+      failedBatches: diagnostics.filter(item => item.status === "failed").length,
+      invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
+      model: getFixModel(),
+    },
+  };
+}
+
 async function generateReviewFixesWithAI(entries, reviews, context = {}) {
   const targets = getReviewFixTargetEntries(entries, reviews);
   if (!targets.length) {
@@ -1602,6 +1786,100 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
   };
 }
 
+async function generateMissingExamExplanations(client, examId, options = {}) {
+  const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const generated = await generateMissingExplanationsWithAI(entries, {
+    subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
+  });
+
+  const changes = [];
+  const skipped = [];
+
+  for (const item of generated.explanations) {
+    const questionId = Number.parseInt(item.questionId, 10);
+    if (!questionId) {
+      skipped.push({ path: item.path, reason: "AI khong tra questionId hop le." });
+      continue;
+    }
+
+    const questionResult = await client.query(
+      `SELECT id, question_number, explanation, explanation_cn, explanation_image_url
+       FROM questions
+       WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
+       LIMIT 1`,
+      [questionId, examId],
+    );
+    const question = questionResult.rows[0];
+    if (!question) {
+      skipped.push({ path: item.path, questionId, reason: "Cau khong con thuoc de nay." });
+      continue;
+    }
+    if (!isBlankText(question.explanation_image_url)) {
+      skipped.push({ path: item.path, questionId, questionNumber: question.question_number, reason: "Cau da co anh giai thich." });
+      continue;
+    }
+
+    const fields = [];
+    const params = [];
+    const addField = (column, value, before) => {
+      if (!isBlankText(before) || isBlankText(value)) return;
+      params.push(value);
+      fields.push(`${column} = $${params.length}`);
+      changes.push({
+        path: item.path,
+        questionId,
+        questionNumber: question.question_number,
+        field: column,
+        after: value,
+      });
+    };
+
+    addField("explanation", item.explanation, question.explanation);
+    if (item.needsExplanationCn) {
+      addField("explanation_cn", item.explanationCn, question.explanation_cn);
+    }
+
+    if (!fields.length) {
+      skipped.push({
+        path: item.path,
+        questionId,
+        questionNumber: question.question_number,
+        reason: item.note || "AI chua tao duoc loi giai hop le hoac cau da co giai thich.",
+      });
+      continue;
+    }
+
+    params.push(questionId);
+    await client.query(
+      `UPDATE questions SET ${fields.join(", ")} WHERE id = $${params.length}`,
+      params,
+    );
+  }
+
+  if (changes.length) {
+    await client.query("UPDATE exams SET updated_at = NOW() WHERE id = $1", [examId]);
+  }
+
+  return {
+    examId: Number(examId),
+    message: changes.length
+      ? `AI da them giai thich cho ${new Set(changes.map(change => change.questionId)).size} cau.`
+      : "Khong co giai thich moi duoc luu.",
+    changedCount: changes.length,
+    questionChangedCount: new Set(changes.map(change => change.questionId)).size,
+    skippedCount: skipped.length,
+    changes: changes.slice(0, 100),
+    skipped: skipped.slice(0, 100),
+    diagnostics: generated.diagnostics,
+    summary: {
+      ...generated.summary,
+      changedCount: changes.length,
+      questionChangedCount: new Set(changes.map(change => change.questionId)).size,
+      skippedCount: skipped.length,
+    },
+  };
+}
+
 async function reviewStoredExamWithAI(client, examId, context = {}) {
   const examResult = await client.query(
     `SELECT e.id, e.title, s.name as subject_name, s.code as subject_code
@@ -1723,6 +2001,7 @@ module.exports = {
   normalizeExamFormulas,
   normalizeField,
   normalizeStoredFormulaText,
+  generateMissingExamExplanations,
   applyExamReviewFixes,
   applyImportedReviewFixesWithAI,
   reviewStoredExamWithAI,

@@ -16,6 +16,7 @@ const {
 const {
   normalizeExamFormulas: normalizeStoredExamFormulas,
   applyExamReviewFixes: applyStoredExamReviewFixes,
+  generateMissingExamExplanations,
   applyImportedReviewFixesWithAI,
   reviewImportedItemsWithAI,
   reviewStoredExamWithAI,
@@ -597,6 +598,56 @@ const AdminExamController = {
         return res.status(504).json({ message: "AI sửa đề quá thời gian." });
       }
       res.status(500).json({ message: "Sửa lỗi AI đề này thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async generateMissingExplanations(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await generateMissingExamExplanations(client, examId, {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+      });
+      await client.query("COMMIT");
+
+      cache.delByPrefix("exams:");
+      cache.del("exams:lobby");
+
+      UserActivity.log(req.user.id, "admin.generate_missing_exam_explanations", {
+        examId,
+        changedCount: result.changedCount,
+        questionChangedCount: result.questionChangedCount,
+        skippedCount: result.skippedCount,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Generate missing explanations error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI dang bi gioi han tam thoi. Thu lai sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI tao giai thich qua thoi gian." });
+      }
+      if (error.message === "EXAM_NOT_FOUND") {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      res.status(500).json({ message: "AI tao giai thich thieu that bai." });
     } finally {
       client.release();
     }
