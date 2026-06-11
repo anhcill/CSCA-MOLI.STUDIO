@@ -1,6 +1,8 @@
 const aiConfig = require("../config/aiConfig");
 const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
+const JSZip = require("jszip");
+const { DOMParser } = require("@xmldom/xmldom");
 const WordExtractor = require("word-extractor");
 const aiService = require("./aiService");
 const {
@@ -132,6 +134,243 @@ function getImportFileType(file) {
   return "";
 }
 
+function getXmlLocalName(node) {
+  return String(node?.localName || node?.nodeName || "").split(":").pop();
+}
+
+function isXmlElement(node, localName) {
+  return node?.nodeType === 1 && getXmlLocalName(node) === localName;
+}
+
+function getXmlChildElements(node, localName) {
+  return Array.from(node?.childNodes || []).filter((child) =>
+    child.nodeType === 1 && (!localName || getXmlLocalName(child) === localName)
+  );
+}
+
+function getFirstXmlChild(node, localName) {
+  return getXmlChildElements(node, localName)[0] || null;
+}
+
+function getFirstXmlDescendant(node, localName) {
+  if (!node) return null;
+  const stack = [...Array.from(node.childNodes || [])];
+  while (stack.length) {
+    const current = stack.shift();
+    if (isXmlElement(current, localName)) return current;
+    stack.unshift(...Array.from(current.childNodes || []));
+  }
+  return null;
+}
+
+function getXmlAttr(node, localName) {
+  const attrs = Array.from(node?.attributes || []);
+  const attr = attrs.find((item) => getXmlLocalName(item) === localName || item.nodeName === localName);
+  return attr?.value || "";
+}
+
+function normalizeDocxMathText(text) {
+  return String(text || "")
+    .replace(/\u00a0|\u2007|\u2008|\u2009|\u202f/g, " ")
+    .replace(/\u2212/g, "-")
+    .replace(/\u00d7/g, "\\times ")
+    .replace(/\u00f7/g, "\\div ")
+    .replace(/\u2264/g, "\\le ")
+    .replace(/\u2265/g, "\\ge ")
+    .replace(/\u2260/g, "\\ne ")
+    .replace(/\u03bc/g, "\\mu ")
+    .replace(/\u03b1/g, "\\alpha ")
+    .replace(/\u03b2/g, "\\beta ")
+    .replace(/\u03b3/g, "\\gamma ")
+    .replace(/\u03bb/g, "\\lambda ")
+    .replace(/\u03c9/g, "\\omega ")
+    .replace(/\u03c0/g, "\\pi ")
+    .replace(/\u0394/g, "\\Delta ")
+    .replace(/\u03a9/g, "\\Omega ")
+    .replace(/\u00b0/g, "^\\circ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function renderOmmlSlot(node, localName) {
+  const child = getFirstXmlChild(node, localName);
+  return child ? renderOmmlChildren(child) : "";
+}
+
+function wrapOmmlAtom(value) {
+  const text = normalizeDocxMathText(value);
+  if (!text) return "";
+  return /[+\-=<> ]|\\(?:frac|sqrt|sum|int)\b/.test(text) ? `{${text}}` : text;
+}
+
+function renderOmmlTextRuns(node) {
+  const values = [];
+  const walk = (current) => {
+    if (isXmlElement(current, "t")) {
+      values.push(current.textContent || "");
+      return;
+    }
+    Array.from(current.childNodes || []).forEach(walk);
+  };
+  walk(node);
+  return normalizeDocxMathText(values.join(""));
+}
+
+function renderOmml(node) {
+  const localName = getXmlLocalName(node);
+
+  if (localName === "oMath" || localName === "oMathPara") {
+    return normalizeDocxMathText(renderOmmlChildren(node));
+  }
+
+  if (localName === "r") return renderOmmlTextRuns(node);
+
+  if (localName === "f") {
+    const numerator = renderOmmlSlot(node, "num");
+    const denominator = renderOmmlSlot(node, "den");
+    return `\\frac{${normalizeDocxMathText(numerator)}}{${normalizeDocxMathText(denominator)}}`;
+  }
+
+  if (localName === "sSub") {
+    return `${wrapOmmlAtom(renderOmmlSlot(node, "e"))}_{${normalizeDocxMathText(renderOmmlSlot(node, "sub"))}}`;
+  }
+
+  if (localName === "sSup") {
+    return `${wrapOmmlAtom(renderOmmlSlot(node, "e"))}^{${normalizeDocxMathText(renderOmmlSlot(node, "sup"))}}`;
+  }
+
+  if (localName === "sSubSup") {
+    return `${wrapOmmlAtom(renderOmmlSlot(node, "e"))}_{${normalizeDocxMathText(renderOmmlSlot(node, "sub"))}}^{${normalizeDocxMathText(renderOmmlSlot(node, "sup"))}}`;
+  }
+
+  if (localName === "rad") {
+    const degree = normalizeDocxMathText(renderOmmlSlot(node, "deg"));
+    const value = normalizeDocxMathText(renderOmmlSlot(node, "e"));
+    return degree ? `\\sqrt[${degree}]{${value}}` : `\\sqrt{${value}}`;
+  }
+
+  if (localName === "d") {
+    const delimiterPr = getFirstXmlChild(node, "dPr");
+    const begin = getXmlAttr(getFirstXmlDescendant(delimiterPr, "begChr"), "val");
+    const end = getXmlAttr(getFirstXmlDescendant(delimiterPr, "endChr"), "val");
+    const value = normalizeDocxMathText(renderOmmlSlot(node, "e"));
+    if (begin || end) return `${begin || ""}${value}${end || ""}`;
+    return value;
+  }
+
+  if (localName === "func") {
+    return `${normalizeDocxMathText(renderOmmlSlot(node, "fName"))}${normalizeDocxMathText(renderOmmlSlot(node, "e"))}`;
+  }
+
+  if (localName === "nary") {
+    const naryPr = getFirstXmlChild(node, "naryPr");
+    const rawChr = getXmlAttr(getFirstXmlDescendant(naryPr, "chr"), "val");
+    const op = rawChr === "\u222b" ? "\\int" : rawChr === "\u2211" ? "\\sum" : normalizeDocxMathText(rawChr || "");
+    const sub = normalizeDocxMathText(renderOmmlSlot(node, "sub"));
+    const sup = normalizeDocxMathText(renderOmmlSlot(node, "sup"));
+    const expr = normalizeDocxMathText(renderOmmlSlot(node, "e"));
+    return `${op}${sub ? `_{${sub}}` : ""}${sup ? `^{${sup}}` : ""}${expr}`;
+  }
+
+  if (localName === "limLow") {
+    return `${wrapOmmlAtom(renderOmmlSlot(node, "e"))}_{${normalizeDocxMathText(renderOmmlSlot(node, "lim"))}}`;
+  }
+
+  if (localName === "limUpp") {
+    return `${wrapOmmlAtom(renderOmmlSlot(node, "e"))}^{${normalizeDocxMathText(renderOmmlSlot(node, "lim"))}}`;
+  }
+
+  if (localName === "acc") {
+    const accPr = getFirstXmlChild(node, "accPr");
+    const chr = getXmlAttr(getFirstXmlDescendant(accPr, "chr"), "val");
+    const value = normalizeDocxMathText(renderOmmlSlot(node, "e"));
+    if (chr === "\u20d7" || chr === "\u2192") return `\\vec{${value}}`;
+    return value;
+  }
+
+  if (localName === "bar" || localName === "box" || localName === "groupChr") {
+    return normalizeDocxMathText(renderOmmlSlot(node, "e"));
+  }
+
+  if (localName === "m") {
+    return getXmlChildElements(node, "mr")
+      .map((row) => getXmlChildElements(row, "e").map(renderOmmlChildren).join(" & "))
+      .filter(Boolean)
+      .join(" \\\\ ");
+  }
+
+  return renderOmmlChildren(node);
+}
+
+function renderOmmlChildren(node) {
+  return getXmlChildElements(node).map(renderOmml).join("");
+}
+
+function renderDocxInline(node) {
+  const localName = getXmlLocalName(node);
+
+  if (localName === "oMath" || localName === "oMathPara") {
+    const math = normalizeDocxMathText(renderOmml(node));
+    return math ? ` \\(${math}\\) ` : "";
+  }
+
+  if (localName === "t") return node.textContent || "";
+  if (localName === "tab") return "\t";
+  if (localName === "br" || localName === "cr") return "\n";
+  if (localName === "drawing" || localName === "pict") return " [Hình] ";
+  if (localName === "instrText") return "";
+
+  return Array.from(node.childNodes || []).map(renderDocxInline).join("");
+}
+
+function normalizeDocxParagraphText(text) {
+  return String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+async function extractDocxXmlTextWithMath(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const documentFile = zip.file("word/document.xml");
+  if (!documentFile) return "";
+
+  const xml = await documentFile.async("string");
+  const doc = new DOMParser({
+    errorHandler: {
+      warning: () => {},
+      error: () => {},
+      fatalError: () => {},
+    },
+  }).parseFromString(xml, "text/xml");
+  const body = getFirstXmlDescendant(doc, "body");
+  if (!body) return "";
+
+  const blocks = [];
+  const walkBlocks = (node) => {
+    if (isXmlElement(node, "p")) {
+      const text = normalizeDocxParagraphText(renderDocxInline(node));
+      if (text) blocks.push(text);
+      return;
+    }
+    if (isXmlElement(node, "tbl")) {
+      getXmlChildElements(node, "tr").forEach((row) => {
+        const cells = getXmlChildElements(row, "tc")
+          .map((cell) => normalizeDocxParagraphText(renderDocxInline(cell)))
+          .filter(Boolean);
+        if (cells.length) blocks.push(cells.join(" | "));
+      });
+      return;
+    }
+    getXmlChildElements(node).forEach(walkBlocks);
+  };
+
+  getXmlChildElements(body).forEach(walkBlocks);
+  return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 async function extractImportFileText(file) {
   const fileType = getImportFileType(file);
 
@@ -146,8 +385,17 @@ async function extractImportFileText(file) {
 
   if (fileType === "docx") {
     const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+    const docxXmlText = await extractDocxXmlTextWithMath(file.buffer).catch((error) => {
+      console.warn("DOCX XML math extraction failed, falling back to mammoth:", error.message);
+      return "";
+    });
+    const mammothText = docxData.value || "";
+    const text = docxXmlText && (docxXmlText.includes("\\(") || docxXmlText.length >= mammothText.length * 0.8)
+      ? docxXmlText
+      : mammothText;
+
     return {
-      text: docxData.value,
+      text,
       pages: null,
       fileType,
       warnings: Array.isArray(docxData.messages)
@@ -819,9 +1067,9 @@ const CHINESE_SOCIAL_OPTION_LABEL_RE = /[（(]\s*([A-H])\s*[）)]/gi;
 const CHINESE_SOCIAL_GROUP_POOL_RE = /(?:^|\n)\s*(?:第\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*(?:题)?\s*[:：]\s*([^\n]*(?:[（(]\s*[A-H]\s*[）)][^\n]*)+)/gi;
 const CHINESE_SOCIAL_READING_GROUP_RE = /(?:^|\n)\s*第\s*(\d{1,3})\s*-\s*(\d{1,3})\s*题\s*[:：]?\s*/gi;
 const CHINESE_SOCIAL_SECTION_READING_RE = /(?:^|\n)\s*(?:VI|Ⅵ)[.．]\s*阅读理解/i;
-const CHINESE_SCIENCE_QUESTION_LINE_RE = /^(\d{1,3})[.．、]\s*(.*)$/;
-const CHINESE_SCIENCE_OPTION_LINE_RE = /^([A-H])[.．、]\s*/i;
-const CHINESE_SCIENCE_OPTION_RE = /(?:^|[ \t\n])([A-H])[ \t]*[.．、][ \t]*/gi;
+const CHINESE_SCIENCE_QUESTION_LINE_RE = /^(?:\[Hình\]\s*)?(\d{1,3})[.\uFF0E\u3001]\s*(.*)$/;
+const CHINESE_SCIENCE_OPTION_LINE_RE = /^(?:[\uFF08(]\s*([A-H])\s*[\uFF09)]|([A-H])[.\uFF0E\u3001])\s*/i;
+const CHINESE_SCIENCE_OPTION_RE = /(?:^|[ \t\n])(?:[\uFF08(]\s*([A-H])\s*[\uFF09)]|([A-H])[ \t]*[.\uFF0E\u3001])[ \t]*/gi;
 const CHINESE_SCIENCE_EXPLANATION_LINE_RE = /^(?:解答|解析|答案解析|说明|答案)\s*[:：]?/i;
 const CHINESE_SCIENCE_EXPLANATION_RE = /(?:^|\n)\s*(?:解答|解析|答案解析|说明|答案)\s*[:：]?\s*/i;
 const CHINESE_SCIENCE_EXPLICIT_ANSWER_RE = /(?:答案|正确答案|故选|应选|选|得答案)\s*[:：为是]?\s*([A-H])/i;
@@ -982,7 +1230,13 @@ function splitChineseScienceMissingQuestion(blockLines, questionNumber, nextQues
   }
 
   const secondOptionGroupStart = optionLineIndexes[4];
-  const missingQuestionLineIndex = secondOptionGroupStart - 1;
+  let missingQuestionLineIndex = secondOptionGroupStart - 1;
+  while (
+    missingQuestionLineIndex > optionLineIndexes[3] &&
+    /^(?:\[Hình\]|\[image\]|\[figure\])$/i.test(blockLines[missingQuestionLineIndex] || "")
+  ) {
+    missingQuestionLineIndex--;
+  }
   const missingQuestionText = blockLines[missingQuestionLineIndex] || "";
 
   if (
@@ -1028,9 +1282,9 @@ function getChineseScienceQuestionBlocks(rawText) {
 function getChineseScienceOptionMatches(text) {
   return [...stringValue(text).matchAll(CHINESE_SCIENCE_OPTION_RE)]
     .map((match) => {
-      const labelOffset = match[0].search(/[A-H]/i);
+      const labelOffset = match[0].search(/[\uFF08(]|[A-H]/i);
       return {
-        key: stringValue(match[1]).toUpperCase(),
+        key: stringValue(match[1] || match[2]).toUpperCase(),
         labelStart: match.index + Math.max(labelOffset, 0),
         contentStart: match.index + match[0].length,
       };
