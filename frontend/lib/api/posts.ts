@@ -42,22 +42,40 @@ export interface CreateCommentData {
     reply_to_user_id?: number;
 }
 
+const toCount = (value: unknown) => Number(value || 0);
+
+const normalizePost = (post: Post): Post => ({
+    ...post,
+    like_count: toCount(post.like_count),
+    comment_count: toCount(post.comment_count),
+});
+
+const normalizeComment = (comment: Comment): Comment => ({
+    ...comment,
+    like_count: toCount(comment.like_count),
+});
+
+const normalizeCountResult = (data: { like_count: number }): { like_count: number } => ({
+    ...data,
+    like_count: toCount(data?.like_count),
+});
+
 // Get all posts (feed)
 export const getPosts = async (limit: number = 20, offset: number = 0): Promise<Post[]> => {
     const response = await axiosInstance.get(`/posts?limit=${limit}&offset=${offset}`);
-    return response.data.data;
+    return (response.data.data || []).map(normalizePost);
 };
 
 // Create new post
 export const createPost = async (data: CreatePostData): Promise<Post> => {
     const response = await axiosInstance.post('/posts', data);
-    return response.data.data;
+    return normalizePost(response.data.data);
 };
 
 // Update post
 export const updatePost = async (postId: number, data: CreatePostData): Promise<Post> => {
     const response = await axiosInstance.put(`/posts/${postId}`, data);
-    return response.data.data;
+    return normalizePost(response.data.data);
 };
 
 // Delete post
@@ -68,25 +86,25 @@ export const deletePost = async (postId: number): Promise<void> => {
 // Like post
 export const likePost = async (postId: number): Promise<{ like_count: number }> => {
     const response = await axiosInstance.post(`/posts/${postId}/like`);
-    return response.data.data;
+    return normalizeCountResult(response.data.data);
 };
 
 // Unlike post
 export const unlikePost = async (postId: number): Promise<{ like_count: number }> => {
     const response = await axiosInstance.delete(`/posts/${postId}/like`);
-    return response.data.data;
+    return normalizeCountResult(response.data.data);
 };
 
 // Get comments for post
 export const getComments = async (postId: number): Promise<Comment[]> => {
     const response = await axiosInstance.get(`/posts/${postId}/comments`);
-    return response.data.data;
+    return (response.data.data || []).map(normalizeComment);
 };
 
 // Add comment to post
 export const addComment = async (postId: number, data: CreateCommentData): Promise<Comment> => {
     const response = await axiosInstance.post(`/posts/${postId}/comments`, data);
-    return response.data.data.comment;
+    return normalizeComment(response.data.data.comment);
 };
 
 // Like comment

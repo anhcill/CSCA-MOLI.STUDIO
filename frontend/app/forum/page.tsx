@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FiHeart, FiMessageCircle, FiShare2,
   FiSend, FiLoader, FiChevronDown,
   FiFeather, FiZap, FiTrendingUp, FiUsers, FiBookOpen,
-  FiStar, FiTarget, FiHash, FiX, FiGlobe
+  FiStar, FiTarget, FiHash, FiX, FiGlobe, FiSearch
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import * as postsApi from '@/lib/api/posts';
@@ -92,6 +92,9 @@ export default function ForumPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'liked' | 'commented'>('newest');
+  const [pendingLikeIds, setPendingLikeIds] = useState<Set<number>>(new Set());
 
   const [newPost, setNewPost] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
@@ -131,14 +134,23 @@ export default function ForumPage() {
   };
 
   const handleLike = async (post: Post) => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || pendingLikeIds.has(post.id)) return;
+    const wasLiked = Boolean(post.is_liked);
+    const nextLiked = !wasLiked;
+    const optimisticCount = Math.max(0, Number(post.like_count || 0) + (wasLiked ? -1 : 1));
+    setPendingLikeIds(prev => new Set(prev).add(post.id));
     setPosts(prev => prev.map(p =>
-      p.id === post.id ? { ...p, is_liked: !p.is_liked, like_count: p.like_count + (p.is_liked ? -1 : 1) } : p
+      p.id === post.id ? { ...p, is_liked: nextLiked, like_count: optimisticCount } : p
     ));
     try {
-      post.is_liked ? await postsApi.unlikePost(post.id) : await postsApi.likePost(post.id);
+      const result = wasLiked ? await postsApi.unlikePost(post.id) : await postsApi.likePost(post.id);
+      setPosts(prev => prev.map(p =>
+        p.id === post.id ? { ...p, is_liked: nextLiked, like_count: Number(result.like_count ?? optimisticCount) } : p
+      ));
     } catch {
-      setPosts(prev => prev.map(p => p.id === post.id ? { ...p, is_liked: post.is_liked, like_count: post.like_count } : p));
+      setPosts(prev => prev.map(p => p.id === post.id ? { ...p, is_liked: wasLiked, like_count: Number(post.like_count || 0) } : p));
+    } finally {
+      setPendingLikeIds(prev => { const s = new Set(prev); s.delete(post.id); return s; });
     }
   };
 
@@ -205,6 +217,23 @@ export default function ForumPage() {
   };
 
   const isAuth = mounted && isAuthenticated;
+  const visiblePosts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const tag = activeTag === TAGS[0] ? '' : activeTag.toLowerCase();
+    return [...posts]
+      .filter(post => {
+        const content = (post.content || '').toLowerCase();
+        const author = (post.author_name || '').toLowerCase();
+        const matchesQuery = !query || content.includes(query) || author.includes(query);
+        const matchesTag = !tag || content.includes(tag);
+        return matchesQuery && matchesTag;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'liked') return Number(b.like_count || 0) - Number(a.like_count || 0);
+        if (sortBy === 'commented') return Number(b.comment_count || 0) - Number(a.comment_count || 0);
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [activeTag, posts, searchQuery, sortBy]);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 relative overflow-hidden flex flex-col">
@@ -333,10 +362,40 @@ export default function ForumPage() {
             )}
 
             {/* ── Feed ── */}
+            <div className="flex flex-col gap-3 rounded-[1.5rem] border border-white/60 bg-white/80 p-3 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/80 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <FiSearch size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Tìm bài viết, tác giả..."
+                  className="h-11 w-full rounded-2xl border border-gray-100 bg-white pl-11 pr-4 text-sm font-semibold text-gray-700 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:w-auto">
+                {[
+                  { key: 'newest', label: 'Mới' },
+                  { key: 'liked', label: 'Nhiều tim' },
+                  { key: 'commented', label: 'Sôi nổi' },
+                ].map(item => (
+                  <button
+                    key={item.key}
+                    onClick={() => setSortBy(item.key as typeof sortBy)}
+                    className={`h-11 rounded-2xl px-4 text-xs font-black transition ${sortBy === item.key
+                      ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                      : 'border border-gray-100 bg-white text-gray-500 hover:border-violet-200 hover:text-violet-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-6">
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => <PostSkeleton key={i} />)
-                : posts.length === 0
+                : visiblePosts.length === 0
                   ? (
                     <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-[2rem] border border-white/50 dark:border-slate-800 p-12 text-center shadow-xl shadow-indigo-100/30 dark:shadow-black/30 w-full flex flex-col items-center justify-center min-h-[400px]">
                       <div className="w-24 h-24 bg-gradient-to-br from-violet-100 to-pink-100 rounded-3xl flex items-center justify-center rotate-12 mb-6 shadow-inner border border-white">
@@ -346,10 +405,11 @@ export default function ForumPage() {
                       <p className="text-gray-500 dark:text-slate-400">Hãy là người tiên phong khai phá khu vực vùng đất này nhé!</p>
                     </div>
                   )
-                  : posts.map(post => (
+                  : visiblePosts.map(post => (
                     <PostCard
                       key={post.id}
                       post={post}
+                      likePending={pendingLikeIds.has(post.id)}
                       openComments={openComments.has(post.id)}
                       comments={comments[post.id] || []}
                       commentText={commentText[post.id] || ''}

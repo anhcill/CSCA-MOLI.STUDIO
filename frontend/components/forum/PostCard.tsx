@@ -26,6 +26,7 @@ interface Props {
   onDelete?: (postId: number) => void;
   onUpdate?: (post: Post) => void;
   onLike?: (post: Post) => void;
+  likePending?: boolean;
   onToggleComments?: (postId: number) => void;
   openComments?: boolean;
   comments?: postsApi.Comment[];
@@ -43,6 +44,7 @@ export default function PostCard({
   onDelete,
   onUpdate,
   onLike,
+  likePending = false,
   onToggleComments,
   openComments = false,
   comments = [],
@@ -87,9 +89,11 @@ export default function PostCard({
   };
 
   const isOwn = user?.id === post.user_id;
+  const likeCount = Number(post.like_count || 0);
+  const commentCount = Number(post.comment_count || 0);
 
   return (
-    <article className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2rem] border border-white dark:border-slate-800 shadow-lg shadow-gray-200/40 dark:shadow-black/30 overflow-hidden group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/60 dark:hover:shadow-black/40 hover:-translate-y-1">
+    <article id={`post-${post.id}`} className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-[2rem] border border-white dark:border-slate-800 shadow-lg shadow-gray-200/40 dark:shadow-black/30 overflow-hidden group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100/60 dark:hover:shadow-black/40 hover:-translate-y-1 scroll-mt-28">
 
       {/* Header */}
       <div className="flex items-start justify-between px-6 pt-6 mb-4">
@@ -170,21 +174,21 @@ export default function PostCard({
       )}
 
       {/* Stats */}
-      {(post.like_count > 0 || post.comment_count > 0) && (
+      {(likeCount > 0 || commentCount > 0) && (
         <div className="flex items-center justify-between px-6 py-3 mt-2">
           <div className="flex items-center gap-2">
-            {post.like_count > 0 && (
+            {likeCount > 0 && (
               <div className="flex items-center gap-1.5 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
                 <div className="w-4 h-4 rounded-full bg-gradient-to-br from-rose-400 to-red-500 flex items-center justify-center shadow-sm">
                   <FiHeart className="text-white fill-current w-2.5 h-2.5" />
                 </div>
-                <span className="text-xs font-bold text-rose-600">{post.like_count}</span>
+                <span className="text-xs font-bold text-rose-600">{likeCount}</span>
               </div>
             )}
           </div>
-          {post.comment_count > 0 && (
+          {commentCount > 0 && (
             <button onClick={() => onToggleComments?.(post.id)} className="text-xs font-bold text-gray-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors">
-              {post.comment_count} Ý kiến
+              {commentCount} Ý kiến
             </button>
           )}
         </div>
@@ -194,13 +198,15 @@ export default function PostCard({
       <div className="flex border-t border-gray-100 dark:border-slate-800 px-6 py-2 gap-2 mt-2">
         <button
           onClick={() => onLike?.(post)}
+          disabled={likePending}
           className={`flex items-center justify-center gap-2 flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${post.is_liked
             ? 'text-rose-600 bg-rose-50 shadow-inner border border-rose-100'
             : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-gray-100 dark:hover:border-slate-700'
-            }`}
+            } ${likePending ? 'opacity-70 cursor-wait' : ''}`}
         >
-          <FiHeart size={18} className={post.is_liked ? 'fill-current' : ''} />
+          {likePending ? <FiLoader size={18} className="animate-spin" /> : <FiHeart size={18} className={post.is_liked ? 'fill-current' : ''} />}
           {post.is_liked ? 'Hữu Ích' : 'Cổ vũ'}
+          {likeCount > 0 && <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs text-rose-600">{likeCount}</span>}
         </button>
 
         <button
@@ -214,9 +220,9 @@ export default function PostCard({
         <button
           onClick={() => {
             if (navigator.share) {
-              navigator.share({ title: `Bài viết của ${post.author_name}`, text: post.content.substring(0, 100) }).catch(() => {});
+              navigator.share({ title: `Bài viết của ${post.author_name}`, text: post.content.substring(0, 100), url: `${window.location.origin}${window.location.pathname}#post-${post.id}` }).catch(() => {});
             } else {
-              navigator.clipboard.writeText(window.location.href).then(() => alert('Đã sao chép link!'));
+              navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#post-${post.id}`).then(() => alert('Đã sao chép link!'));
             }
           }}
           className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-gray-100 dark:hover:border-slate-700 rounded-xl transition-all duration-300"
