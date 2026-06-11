@@ -826,7 +826,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const [dragging, setDragging] = useState(false);
   const [walking, setWalking] = useState(false);
   const [facing, setFacing] = useState<PetPosition>(defaultPosition);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const walkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragRef = useRef({
     pointerId: null as number | null,
@@ -879,7 +879,12 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   }, [cooldownUntil]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) return;
+    scrollContainer.scrollTo({
+      top: scrollContainer.scrollHeight,
+      behavior: 'smooth',
+    });
   }, [messages, open]);
 
   useEffect(() => {
@@ -981,6 +986,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
 
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
+  const isMobileViewport = viewportWidth < 640;
   const dockedRight = petPoint.x > viewportWidth / 2;
   const panelWidth = Math.min(PET_PANEL_MAX_WIDTH, Math.max(220, viewportWidth - PET_PANEL_MARGIN * 2));
   const maxPanelLeft = Math.max(PET_PANEL_MARGIN, viewportWidth - panelWidth - PET_PANEL_MARGIN);
@@ -1003,12 +1009,20 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const panelAvailableHeight = openPanelBelowPet
     ? viewportHeight - (panelTop ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN
     : viewportHeight - (panelBottom ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN;
-  const panelStyle: CSSProperties = {
+  const desktopPanelStyle: CSSProperties = {
     left: panelLeft,
     width: panelWidth,
     maxHeight: Math.max(180, panelAvailableHeight),
     ...(openPanelBelowPet ? { top: panelTop } : { bottom: panelBottom }),
   };
+  const mobilePanelStyle: CSSProperties = {
+    left: PET_PANEL_MARGIN,
+    right: PET_PANEL_MARGIN,
+    bottom: PET_PANEL_MARGIN,
+    width: 'auto',
+    maxHeight: 'min(78dvh, 620px)',
+  };
+  const panelStyle = isMobileViewport ? mobilePanelStyle : desktopPanelStyle;
   const bubbleSideClass = dockedRight ? 'right-20' : 'left-20';
   const containerStyle: CSSProperties = {
     left: petPoint.x,
@@ -1049,10 +1063,12 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     if (drag.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - drag.startX;
     const deltaY = event.clientY - drag.startY;
-    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+    const dragThreshold = event.pointerType === 'touch' || isMobileViewport ? 10 : 4;
+    if (Math.abs(deltaX) > dragThreshold || Math.abs(deltaY) > dragThreshold) {
       drag.moved = true;
       if (deltaX !== 0) setFacing(deltaX > 0 ? 'right' : 'left');
     }
+    if (!drag.moved) return;
     setPetPoint(clampPetPoint({ x: drag.originX + deltaX, y: drag.originY + deltaY }));
   };
 
@@ -1063,6 +1079,11 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer capture can already be gone after a browser cancel.
+    }
+    if (!drag.moved) {
+      dragRef.current.pointerId = null;
+      setDragging(false);
+      return;
     }
     const nextPoint = clampPetPoint({
       x: drag.originX + event.clientX - drag.startX,
@@ -1138,7 +1159,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   };
 
   return (
-    <div className="fixed z-[65] h-[88px] w-[88px] select-none" style={containerStyle}>
+    <div className={`fixed h-[88px] w-[88px] select-none ${open ? 'z-[100]' : 'z-[65]'}`} style={containerStyle}>
       <style>{`
         @keyframes moli-float {
           0%, 100% { transform: scaleX(var(--moli-dir, 1)) translateY(0) rotate(-1deg); }
@@ -1350,7 +1371,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
@@ -1374,7 +1395,6 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           {cooldownSeconds > 0 && (

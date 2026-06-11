@@ -203,6 +203,30 @@ export default function SubjectStudyShell({
           </div>
         </header>
 
+        <nav
+          aria-label="Chức năng môn học"
+          className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-2 xl:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {SIDE_LINKS.map((item) => {
+            const Icon = item.icon;
+            const active = activeSection === item.key;
+            return (
+              <Link
+                key={item.key}
+                href={getScopedHref(item.href, normalizedSubject)}
+                className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border px-3 py-2 text-xs font-black shadow-sm transition ${
+                  active
+                    ? 'border-violet-200 bg-violet-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700'
+                }`}
+              >
+                <Icon className="shrink-0 text-sm" />
+                <span>{t(item.labelKey)}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
         {children}
 
         {showFeatureCards && (

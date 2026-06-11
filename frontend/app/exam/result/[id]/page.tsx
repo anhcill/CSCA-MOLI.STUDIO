@@ -579,7 +579,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                                         {/* AI giải thích thêm */}
                                         {q.question_type !== 'essay' && q.question_type !== 'translation' && (
-                                            <div className="mt-3 ml-8 flex flex-wrap items-center gap-3">
+                                            <div className="mt-3 flex flex-wrap items-center gap-3 sm:ml-8">
                                                 <button
                                                     onClick={() => setShowExplanationModal({ question: q, mode: 'explain' })}
                                                     className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
@@ -698,6 +698,14 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
         loadExplanation();
     }, []);
 
+    useEffect(() => {
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = originalOverflow;
+        };
+    }, []);
+
     const loadExplanation = async () => {
         try {
             // Gọi AI hỏi giải thích tự động cho câu này
@@ -720,8 +728,8 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 no-print sm:items-center sm:p-4" onClick={loading ? undefined : onClose}>
-            <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-h-[80vh] sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 p-0 no-print sm:items-center sm:p-4" onClick={loading ? undefined : onClose}>
+            <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[24px] bg-white shadow-2xl sm:max-h-[80vh] sm:rounded-2xl" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-4 sm:p-6">
                     <h3 className="min-w-0 pr-3 text-base font-bold text-gray-900 sm:text-lg">
                         Phân tích câu {question.question_number || question.sub_question_number}
