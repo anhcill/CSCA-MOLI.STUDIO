@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FiAlertCircle, FiUpload } from 'react-icons/fi';
+import { FiAlertCircle, FiCheckCircle, FiClock, FiFileText, FiUpload } from 'react-icons/fi';
 import { examAdminApi, ImportedExamItem, PdfImportPreview } from '@/lib/api/examAdmin';
 import { PDF_IMPORT_PRESETS, PdfImportPreset } from '@/lib/pdf-import/presets';
 import PdfImportReview from './PdfImportReview';
@@ -18,6 +18,26 @@ interface PdfImportPanelProps {
 }
 
 const PREVIEW_TIMEOUT_MS = 240000;
+const PROGRESS_STEPS = [
+  'Tải file',
+  'Đọc OCR/text',
+  'Tách câu',
+  'Chuẩn hóa',
+  'Xem trước',
+];
+
+function formatFileSize(bytes?: number) {
+  if (!Number.isFinite(bytes || 0) || !bytes) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+function formatElapsed(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins <= 0) return `${secs}s`;
+  return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+}
 
 function getPdfImportErrorMessage(error: any) {
   if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
@@ -36,15 +56,35 @@ function getPreviewProgress(elapsedMs: number) {
   const percent = Math.min(92, Math.round(8 + ratio * 84));
 
   if (ratio < 0.08) {
-    return { percent: Math.max(percent, 10), label: 'Đang tải file lên...' };
+    return {
+      percent: Math.max(percent, 10),
+      stage: 0,
+      label: 'Đang tải file lên...',
+      detail: 'Đang gửi file vào hàng đọc dữ liệu.',
+    };
   }
   if (ratio < 0.25) {
-    return { percent: Math.max(percent, 24), label: 'Đang trích text/OCR từ PDF...' };
+    return {
+      percent: Math.max(percent, 24),
+      stage: 1,
+      label: 'Đang trích OCR/text từ file...',
+      detail: 'PDF có text và Word sẽ được đọc trực tiếp; PDF scan thuần cần OCR ảnh trước.',
+    };
   }
   if (ratio < 0.72) {
-    return { percent: Math.max(percent, 42), label: 'AI đang tách câu hỏi, đáp án và lời giải...' };
+    return {
+      percent: Math.max(percent, 42),
+      stage: 2,
+      label: 'Đang tách câu hỏi, đáp án và lời giải...',
+      detail: 'Hệ thống đang nhận diện cấu trúc đề, nhóm đọc hiểu và câu điền từ.',
+    };
   }
-  return { percent, label: 'Đang chuẩn hóa công thức và dựng bản xem trước...' };
+  return {
+    percent,
+    stage: 3,
+    label: 'Đang chuẩn hóa công thức...',
+    detail: 'Đang sửa ký hiệu toán, đáp án và dựng bản xem trước để bạn kiểm tra.',
+  };
 }
 
 export default function PdfImportPanel({
@@ -63,6 +103,9 @@ export default function PdfImportPanel({
   const [errorMessage, setErrorMessage] = useState('');
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
+  const [progressDetail, setProgressDetail] = useState('');
+  const [progressStage, setProgressStage] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const activeRequestRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,10 +144,17 @@ export default function PdfImportPanel({
     const firstStep = getPreviewProgress(0);
     setProgress(firstStep.percent);
     setProgressLabel(firstStep.label);
+    setProgressDetail(firstStep.detail);
+    setProgressStage(firstStep.stage);
+    setElapsedSeconds(0);
     progressIntervalRef.current = setInterval(() => {
-      const nextStep = getPreviewProgress(Date.now() - startedAt);
+      const elapsedMs = Date.now() - startedAt;
+      const nextStep = getPreviewProgress(elapsedMs);
       setProgress(nextStep.percent);
       setProgressLabel(nextStep.label);
+      setProgressDetail(nextStep.detail);
+      setProgressStage(nextStep.stage);
+      setElapsedSeconds(Math.floor(elapsedMs / 1000));
     }, 700);
   };
 
@@ -142,6 +192,8 @@ export default function PdfImportPanel({
       stopProgress();
       setProgress(100);
       setProgressLabel('Hoàn tất, đang dựng bản xem trước...');
+      setProgressDetail('Đã đọc xong file, chuẩn bị mở danh sách câu hỏi để review.');
+      setProgressStage(4);
       setLoading(false);
       window.setTimeout(() => {
         if (activeRequestRef.current === requestId) {
@@ -175,7 +227,7 @@ export default function PdfImportPanel({
             <h3 className="text-lg font-bold text-gray-900">Import OCR/PDF/Word đa môn</h3>
           </div>
           <p className="text-sm text-gray-500">
-            Upload PDF dạng text, PDF đã OCR hoặc Word .doc/.docx để AI tách câu hỏi, đáp án và giải thích. PDF scan ảnh thuần vẫn cần OCR ảnh ở bước sau.
+            Upload PDF dạng text, PDF đã OCR hoặc Word .doc/.docx để tách câu hỏi, đáp án và giải thích. PDF scan ảnh thuần vẫn cần OCR ảnh trước khi import.
           </p>
         </div>
 
@@ -206,6 +258,11 @@ export default function PdfImportPanel({
                 if (loading) handleCancelPreview();
                 setFile(event.target.files?.[0] || null);
                 setErrorMessage('');
+                setProgress(0);
+                setProgressLabel('');
+                setProgressDetail('');
+                setProgressStage(0);
+                setElapsedSeconds(0);
                 onPreviewCleared();
               }}
               className="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
@@ -241,24 +298,71 @@ export default function PdfImportPanel({
         )}
 
         {loading && (
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <div className="overflow-hidden rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-violet-50 p-4 text-sm text-slate-700 shadow-sm">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-sky-100">
+                <div className="absolute inset-1 animate-spin rounded-2xl border-2 border-sky-100 border-t-sky-500" />
+                <FiFileText className="relative text-sky-600" size={20} />
+              </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">Đang dùng AI phân tích file...</p>
-                  <span className="shrink-0 text-xs font-bold text-blue-700">{progress}%</span>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900">Đang đọc file import</p>
+                    <p className="mt-1 truncate text-xs font-medium text-slate-500">
+                      {file?.name || 'File đang xử lý'} • {formatFileSize(file?.size)} • {formatElapsed(elapsedSeconds)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 rounded-full border border-sky-100 bg-white px-3 py-1 text-xs font-black text-sky-700 shadow-sm">
+                    <FiClock size={13} />
+                    {progress}%
+                  </div>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white shadow-inner ring-1 ring-sky-100">
                   <div
-                    className="h-full rounded-full bg-blue-600 transition-all duration-700 ease-out"
+                    className="h-full rounded-full bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-400 transition-all duration-700 ease-out"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs font-semibold text-blue-700">{progressLabel}</p>
-                <p className="mt-1 text-xs leading-relaxed text-blue-700">
-                  AI đang tách câu hỏi, đáp án, lời giải và chỉnh lại công thức. File PDF/Word dài có thể mất vài phút, vui lòng giữ nguyên trang này.
-                </p>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {PROGRESS_STEPS.map((step, index) => {
+                    const done = index < progressStage;
+                    const active = index === progressStage;
+                    return (
+                      <div
+                        key={step}
+                        className={[
+                          'rounded-xl border px-2.5 py-2 text-[11px] font-bold transition-colors',
+                          done
+                            ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                            : active
+                              ? 'border-sky-200 bg-sky-50 text-sky-700'
+                              : 'border-slate-100 bg-white/70 text-slate-400',
+                        ].join(' ')}
+                      >
+                        <div className="mb-1 flex items-center gap-1.5">
+                          {done ? (
+                            <FiCheckCircle size={13} />
+                          ) : (
+                            <span className={active ? 'h-2 w-2 rounded-full bg-sky-500' : 'h-2 w-2 rounded-full bg-slate-200'} />
+                          )}
+                          <span>{index + 1}</span>
+                        </div>
+                        <span className="block leading-tight">{step}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/80 bg-white/70 px-3 py-2 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wide text-sky-700">
+                    {progressLabel}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                    {progressDetail} Đã xử lý ước lượng {progress}% luồng OCR/text. File dài có thể mất vài phút, vui lòng giữ nguyên trang này.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

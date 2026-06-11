@@ -126,6 +126,10 @@ function formatSourceSummary(source: PdfImportPreview['source']) {
   return parts.join(' - ');
 }
 
+function isTechnicalImportWarning(warning: string) {
+  return /không gọi AI|tránh tốn tiền|Parser nhanh đã đọc đủ nhiều câu/i.test(warning);
+}
+
 export default function PdfImportReview({ preview, items: sourceItems, saving, onSave, onChangeItems }: Props) {
   const [draftItems, setDraftItems] = useState<ImportedExamItem[]>(sourceItems);
   const items = draftItems;
@@ -135,6 +139,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   }, [preview, sourceItems]);
 
   const questionCount = getImportItemsQuestionCount(items);
+  const visibleWarnings = (preview.warnings || []).filter((warning) => !isTechnicalImportWarning(warning));
 
   const updateItem = (index: number, updater: (item: ImportedExamItem) => ImportedExamItem | null) => {
     const nextItems = [...items];
@@ -374,9 +379,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         </div>
       </div>
 
-      {!!preview.warnings?.length && (
+      {!!visibleWarnings.length && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          {preview.warnings.map((warning, index) => (
+          {visibleWarnings.map((warning, index) => (
             <div key={index} className="flex gap-2">
               <FiAlertCircle className="mt-0.5 shrink-0" />
               <span>{warning}</span>

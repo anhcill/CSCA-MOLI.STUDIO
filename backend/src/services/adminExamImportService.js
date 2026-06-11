@@ -321,10 +321,7 @@ function withRuleBasedFallbackWarning(preview, reason) {
 
 function withRuleBasedOnlyWarning(preview) {
   if (!preview?.items?.length) return preview;
-
-  const warnings = Array.isArray(preview.warnings) ? [...preview.warnings] : [];
-  warnings.push("Parser nhanh đã đọc đủ nhiều câu nên hệ thống không gọi AI để tránh tốn tiền. Hãy kiểm tra lại đáp án và công thức trước khi lưu.");
-  return { ...preview, warnings };
+  return preview;
 }
 
 function getPdfImportFallbackReason(error) {
