@@ -197,8 +197,24 @@ function asString(value, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
+function compactText(value, maxLength) {
+  const text = asString(value)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!maxLength || text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
+}
+
 function asArray(value, fallback = []) {
   return Array.isArray(value) ? value.filter(item => item !== null && item !== undefined) : fallback;
+}
+
+function compactStringArray(value, fallback = [], limit = 3, maxItemLength = 160) {
+  return asArray(value, fallback)
+    .map(v => compactText(v, maxItemLength))
+    .filter(Boolean)
+    .slice(0, limit);
 }
 
 function asNumber(value, fallback = 0) {
@@ -218,16 +234,16 @@ function normalizeExamAnalysis(ai, fallback, percentage) {
     score: percentage,
     grade: asString(source.grade, fallback.grade),
     gradeColor: normalizeGradeColor(source.gradeColor, fallback.gradeColor),
-    summary: asString(source.summary, fallback.summary),
-    strengths: asArray(source.strengths, fallback.strengths).map(v => asString(v)).filter(Boolean),
-    weaknesses: asArray(source.weaknesses, fallback.weaknesses).map(v => asString(v)).filter(Boolean),
-    analysis: asString(source.analysis, fallback.analysis),
-    overallAdvice: asString(source.overallAdvice, fallback.overallAdvice),
-    priorityTopics: asArray(source.priorityTopics, fallback.priorityTopics).map(v => asString(v)).filter(Boolean),
-    studyPlan: asString(source.studyPlan, fallback.studyPlan),
-    examTips: asArray(source.examTips, fallback.examTips).map(v => asString(v)).filter(Boolean),
-    commonMistakes: asArray(source.commonMistakes, fallback.commonMistakes).map(v => asString(v)).filter(Boolean),
-    nextExamSuggestion: asString(source.nextExamSuggestion, fallback.nextExamSuggestion),
+    summary: compactText(source.summary || fallback.summary, 260),
+    strengths: compactStringArray(source.strengths, fallback.strengths, 2, 120),
+    weaknesses: compactStringArray(source.weaknesses, fallback.weaknesses, 3, 140),
+    analysis: compactText(source.analysis || fallback.analysis, 360),
+    overallAdvice: compactText(source.overallAdvice || fallback.overallAdvice, 260),
+    priorityTopics: compactStringArray(source.priorityTopics, fallback.priorityTopics, 3, 80),
+    studyPlan: compactText(source.studyPlan || fallback.studyPlan, 220),
+    examTips: compactStringArray(source.examTips, fallback.examTips, 3, 110),
+    commonMistakes: compactStringArray(source.commonMistakes, fallback.commonMistakes, 3, 120),
+    nextExamSuggestion: compactText(source.nextExamSuggestion || fallback.nextExamSuggestion, 160),
   };
 }
 
@@ -351,7 +367,8 @@ async function analyzeExamResult(attemptData) {
   const safeTotal = Number(totalQuestions) || questions.length || 1;
   const safeCorrect = Number(correctCount) || 0;
   const percentage = Math.round((safeCorrect / safeTotal) * 100);
-  const examAnalysisMaxTokens = Math.min(BEE.examAnalysisMaxTokens || 3000, 3200);
+  const examAnalysisMaxTokens = Math.min(BEE.examAnalysisMaxTokens || 1600, 1800);
+  const examAnalysisModel = BEE.examAnalysisModel || BEE.ocrModel || BEE.importModel || BEE.model;
 
   // Nếu không có câu hỏi chi tiết → rule-based
   if (!questions.length || questions.length < 3) {
@@ -467,21 +484,25 @@ TRẢ VỀ JSON. Mỗi trường text dùng \\n để tách ý.
   "score": ${percentage},
   "grade": "Đánh giá ngắn 1 câu",
   "gradeColor": "emerald|blue|amber|red",
-  "summary": "3-4 dòng: tổng quan điểm số, tiến bộ nếu có, vấn đề chính.",
+  "summary": "2 dòng: điểm số và vấn đề chính.",
   "strengths": ["Điểm mạnh 1: 1 câu có căn cứ", "Điểm mạnh 2: 1 câu có căn cứ"],
   "weaknesses": ["Điểm yếu 1: nêu câu/nhóm câu liên quan", "Điểm yếu 2: nêu câu/nhóm câu liên quan"],
-  "analysis": "5-7 dòng: sai phần nào, vì sao sai, kiến thức cần học lại, ví dụ từ câu sai.",
-  "overallAdvice": "4-6 dòng: ưu tiên học gì trước, học thế nào, luyện bao nhiêu, kiểm tra lại ra sao.",
+  "analysis": "3 dòng: sai phần nào, vì sao sai, học lại gì trước.",
+  "overallAdvice": "3 ý ngắn: học gì trước, luyện gì, kiểm tra lại ra sao.",
   "priorityTopics": ["Chủ đề ưu tiên 1", "Chủ đề ưu tiên 2", "Chủ đề ưu tiên 3"],
-  "studyPlan": "3 giai đoạn rõ: Tuần 1, Tuần 2, Tuần 3+; mỗi giai đoạn 1-2 việc cụ thể.",
+  "studyPlan": "3 ý ngắn: hôm nay, tuần này, lần làm đề tới.",
   "examTips": ["Mẹo 1 sát dữ liệu bài thi", "Mẹo 2", "Mẹo 3"],
   "commonMistakes": ["Lỗi sai 1 và cách tránh", "Lỗi sai 2 và cách tránh"],
-  "nextExamSuggestion": "2-3 dòng: nên làm đề mức nào tiếp theo và lý do."
+  "nextExamSuggestion": "1-2 dòng: nên làm đề mức nào tiếp theo và lý do."
 }`;
 
   try {
     const fallback = ruleBasedExamAnalysis(attemptData);
-    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: examAnalysisMaxTokens });
+    const raw = await callBeeknoee(prompt, {
+      model: examAnalysisModel,
+      temperature: 0.2,
+      maxTokens: examAnalysisMaxTokens,
+    });
     const ai = parseAIMaybeJSON(raw);
 
     return {
@@ -638,7 +659,11 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const raw = await callBeeknoee(prompt, {
+      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+      temperature: 0.3,
+      maxTokens: 1800,
+    });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
 
@@ -715,7 +740,11 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: 3000 });
+    const raw = await callBeeknoee(prompt, {
+      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+      temperature: 0.4,
+      maxTokens: 1600,
+    });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
 
@@ -1219,7 +1248,11 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.3, maxTokens: 3000 });
+    const raw = await callBeeknoee(prompt, {
+      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+      temperature: 0.3,
+      maxTokens: 1400,
+    });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
 
@@ -1298,7 +1331,11 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.4, maxTokens: 1000 });
+    const raw = await callBeeknoee(prompt, {
+      model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
+      temperature: 0.35,
+      maxTokens: 900,
+    });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
