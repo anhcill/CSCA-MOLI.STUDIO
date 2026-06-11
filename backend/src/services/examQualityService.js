@@ -458,7 +458,30 @@ function getBatchLabelRange(batch) {
 async function reviewImportedItemsWithAI(items, context = {}) {
   const entries = collectImportedQuestions(items);
   if (!entries.length) {
-    return { items, summary: { total: 0, ok: 0, issues: 0, aiCalls: 0, failedBatches: 0 }, reviews: [], diagnostics: [] };
+    return {
+      items,
+      summary: {
+        total: 0,
+        ok: 0,
+        issues: 0,
+        aiCalls: 0,
+        failedBatches: 0,
+        invalidBatches: 0,
+        model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+        questionTotal: 0,
+        reviewedCount: 0,
+      },
+      reviews: [],
+      diagnostics: [{
+        batch: 0,
+        range: "Không có câu hợp lệ",
+        labels: [],
+        paths: [],
+        model: aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel,
+        status: "no_questions",
+        message: "Không gom được câu hỏi hợp lệ từ dữ liệu import nên chưa gọi model.",
+      }],
+    };
   }
 
   const reviews = [];

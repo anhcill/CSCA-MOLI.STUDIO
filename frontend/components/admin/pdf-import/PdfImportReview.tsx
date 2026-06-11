@@ -83,6 +83,7 @@ function getAiReviewLabel(status?: string) {
 function getAiReviewTone(status?: string) {
   if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
   if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800';
+  if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800';
   return 'border-amber-200 bg-amber-50 text-amber-800';
 }
 
@@ -168,7 +169,7 @@ function AiReviewLogPanel({
             <div key={`${log.batch}-${log.status}`} className={`rounded-lg border px-3 py-2 text-xs ${getAiReviewTone(log.status)}`}>
               <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
                 <span>Batch {log.batch}: {log.range || (log.labels || []).join(', ') || 'không rõ câu'}</span>
-                <span>{log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'AI trả sai JSON' : 'Lỗi gọi AI'}</span>
+                <span>{log.status === 'requesting' ? 'Đang gửi request' : log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'AI trả sai JSON' : log.status === 'no_questions' ? 'Không có câu hợp lệ' : 'Lỗi gọi AI'}</span>
               </div>
               <p className="mt-1">Model: {log.model || summary?.model || 'chưa rõ'}{log.durationMs ? ` - ${Math.round(log.durationMs / 1000)}s` : ''}</p>
               {log.message && <p className="mt-1 whitespace-pre-wrap">{log.message}</p>}
@@ -338,13 +339,33 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     try {
       setReviewing(true);
       setReviewError('');
+      setReviewSummary(null);
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${questionCount} câu`,
+        status: 'requesting',
+        expectedReviews: questionCount,
+        message: 'Đang gửi yêu cầu AI review. Nếu không thấy log Beeknoee mới, request chưa tới backend hoặc bị chặn trước khi gọi model.',
+      }]);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const result = await examAdminApi.reviewImportedItems(items);
-      setDraftItems(result.items);
+      const hasQuestionReviews = (result.reviews || []).length > 0;
+      if (hasQuestionReviews) {
+        setDraftItems(result.items);
+        onChangeItems(result.items);
+      }
       setReviewSummary(result.summary);
       setReviewDiagnostics(result.diagnostics || []);
-      onChangeItems(result.items);
     } catch (error: any) {
       setReviewError(error.response?.data?.message || 'AI soát đề thất bại.');
+      setReviewDiagnostics([{
+        batch: 0,
+        range: `${questionCount} câu`,
+        status: 'failed',
+        expectedReviews: questionCount,
+        message: error.response?.data?.message || error.message || 'Request AI review thất bại trước khi nhận phản hồi.',
+        providerStatus: error.response?.status,
+      }]);
     } finally {
       setReviewing(false);
     }

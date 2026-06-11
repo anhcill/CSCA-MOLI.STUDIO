@@ -256,15 +256,12 @@ export const examAdminApi = {
 
     reviewImportedItems: async (items: ImportedExamItem[], subject?: string): Promise<ImportedItemsReviewResult> => {
         const response = await axios.post('/admin/exams/import/pdf/review', {
-            items: normalizeImportedItemsMath(items),
+            items,
             subject,
         }, {
             timeout: 300000,
         });
-        return {
-            ...response.data,
-            items: normalizeImportedItemsMath(response.data?.items || []),
-        };
+        return response.data;
     },
 
     // OCR one pasted/uploaded question image before parsing into the form
