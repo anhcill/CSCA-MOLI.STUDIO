@@ -6,6 +6,7 @@ import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import RichMathText from '@/components/common/RichMathText';
 
 interface ExamAnswer {
   id: number;
@@ -151,11 +152,11 @@ function ExamPrintContent({ examId }: { examId: string }) {
 
           return (
             <div key={question.id} className="question-block mb-5">
-              <p className="mb-2 font-semibold text-gray-900">
+              <div className="mb-2 flex items-start gap-2 font-semibold text-gray-900">
                 <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white">{questionIndex + 1}</span>
-                {questionText}
+                <RichMathText value={questionText || ''} className="min-w-0 flex-1 text-gray-900" />
                 <span className="ml-2 text-xs text-gray-400">({question.points} {t('common.points')})</span>
-              </p>
+              </div>
               {question.answers && question.answers.length > 0 && (
                 <div className="ml-8 grid grid-cols-2 gap-1">
                   {question.answers.map((answer, answerIndex) => {
@@ -169,7 +170,7 @@ function ExamPrintContent({ examId }: { examId: string }) {
                     return (
                       <div key={answer.id} className={`flex items-start gap-2 rounded px-2 py-1 text-sm ${isCorrect ? 'border border-green-300 bg-green-50' : ''}`}>
                         <span className={`font-bold ${isCorrect ? 'text-green-600' : 'text-gray-500'}`}>{letter}.</span>
-                        <span className={isCorrect ? 'font-medium text-green-700' : 'text-gray-700'}>{answerText}</span>
+                        <RichMathText value={answerText || ''} className={isCorrect ? 'font-medium text-green-700' : 'text-gray-700'} />
                         {isCorrect && <span className="ml-auto text-green-500">✓</span>}
                       </div>
                     );

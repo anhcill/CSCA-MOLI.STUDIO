@@ -15,6 +15,7 @@ import {
   type PracticeSetDetail,
 } from '@/lib/api/insights';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
+import RichMathText from '@/components/common/RichMathText';
 
 type AnswerState = Record<number, string>;
 type NoteState = Record<number, string>;
@@ -171,11 +172,15 @@ export default function PracticeSetPage() {
                     Câu #{index + 1} · {question.subject_name || 'CSCA'}
                   </span>
                   <p className="text-xs text-gray-400 mt-1 truncate">{question.exam_title}</p>
-                  <h2 className="mt-3 text-base sm:text-lg font-bold text-gray-900 dark:text-white whitespace-pre-wrap leading-relaxed">
-                    {question.question_text}
-                  </h2>
+                  <RichMathText
+                    value={question.question_text}
+                    className="mt-3 text-base sm:text-lg font-bold text-gray-900 dark:text-white leading-relaxed"
+                  />
                   {question.question_text_cn && (
-                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 whitespace-pre-wrap italic">{question.question_text_cn}</p>
+                    <RichMathText
+                      value={question.question_text_cn}
+                      className="mt-2 text-sm text-gray-500 dark:text-gray-400 italic"
+                    />
                   )}
                 </div>
                 <button
@@ -215,8 +220,13 @@ export default function PracticeSetPage() {
                     >
                       <span className="font-extrabold shrink-0">{answer.answer_key}.</span>
                       <div className="flex-1">
-                        <span>{answer.answer_text}</span>
-                        {answer.answer_text_cn && <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400 font-normal">{answer.answer_text_cn}</span>}
+                        <RichMathText value={answer.answer_text || ''} className="font-normal" />
+                        {answer.answer_text_cn && (
+                          <RichMathText
+                            value={answer.answer_text_cn}
+                            className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-normal"
+                          />
+                        )}
                       </div>
                       {revealCorrect && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓ Đúng</span>}
                       {revealWrong && <span className="text-xs text-rose-600 dark:text-rose-400 font-bold shrink-0">✗ Bạn chọn</span>}

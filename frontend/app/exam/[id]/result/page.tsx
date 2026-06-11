@@ -646,9 +646,9 @@ function ExamResultContent() {
                           )}
                           <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                         </div>
-                        <p className="text-gray-900 font-medium leading-relaxed">{q.question_text || q.question_text_cn}</p>
+                        <RichMathText value={q.question_text || q.question_text_cn || ''} className="text-gray-900 font-medium leading-relaxed" />
                         {q.question_text_cn && q.question_text_cn !== q.question_text && (
-                          <p className="text-gray-500 text-sm mt-1">{q.question_text_cn}</p>
+                          <RichMathText value={q.question_text_cn} className="text-gray-500 text-sm mt-1" />
                         )}
                       </div>
                     </div>
@@ -666,9 +666,9 @@ function ExamResultContent() {
                           <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
                             <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
                             <div className="flex-1">
-                              <span className={`text-sm ${text}`}>{opt.text}</span>
+                              <RichMathText value={opt.text || ''} className={`text-sm ${text}`} />
                               {opt.text_cn && (
-                                <p className={`text-xs mt-0.5 ${isCorrect ? 'text-green-700' : 'text-gray-500'}`}>{opt.text_cn}</p>
+                                <RichMathText value={opt.text_cn} className={`text-xs mt-0.5 ${isCorrect ? 'text-green-700' : 'text-gray-500'}`} />
                               )}
                             </div>
                             {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
@@ -689,13 +689,11 @@ function ExamResultContent() {
                       <div className="mt-4 ml-8 space-y-3">
                         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                           <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                            {q.selected_answer_text || 'Chưa trả lời'}
-                          </p>
+                          <RichMathText value={q.selected_answer_text || 'Chưa trả lời'} className="text-sm text-gray-800 leading-relaxed" />
                         </div>
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                           <p className="text-xs font-bold text-green-700 mb-1">✓ Đáp án mẫu</p>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{q.correct_answer_text}</p>
+                          <RichMathText value={q.correct_answer_text || ''} className="text-sm text-gray-800" />
                         </div>
                       </div>
                     )}
@@ -864,7 +862,7 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
         <div className="p-6">
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
             <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-            <p className="text-sm text-gray-800">{question.question_text || question.question_text_cn}</p>
+            <RichMathText value={question.question_text || question.question_text_cn || ''} className="text-sm text-gray-800" />
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -872,15 +870,17 @@ function ExplanationModal({ question, attemptId, onClose }: { question: Question
               <p className={answerLabelClass}>
                 {answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}
               </p>
-              <p className={answerTextClass}>
-                {formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
-              </p>
+              <RichMathText
+                value={formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
+                className={answerTextClass}
+              />
             </div>
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
               <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
-              <p className="text-green-800 font-semibold text-sm">
-                {formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
-              </p>
+              <RichMathText
+                value={formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
+                className="text-green-800 font-semibold text-sm"
+              />
             </div>
           </div>
 
@@ -1078,14 +1078,14 @@ function GradeEssayModal({ question, attemptId, onClose }: {
               {/* User Answer */}
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                 <p className="text-xs font-bold text-indigo-700 mb-2">✍️ Câu trả lời của bạn</p>
-                <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{question.selected_answer_text}</p>
+                <RichMathText value={question.selected_answer_text || ''} className="text-sm text-gray-800 leading-relaxed" />
               </div>
 
               {/* Model Answer */}
               {result.modelAnswer && (
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                   <p className="text-xs font-bold text-green-700 mb-2">✓ Đáp án mẫu</p>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{result.modelAnswer}</p>
+                  <RichMathText value={result.modelAnswer || ''} className="text-sm text-gray-800" />
                 </div>
               )}
 

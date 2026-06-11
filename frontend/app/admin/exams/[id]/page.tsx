@@ -1019,9 +1019,16 @@ export default function AdminExamDetailPage() {
     };
 
     const handleApplyExamReviewFixes = async () => {
-        if (!exam?.id || applyingExamReviewFixes || !examReviewResult) return;
+        if (!exam?.id || applyingExamReviewFixes) return;
+        if (!examReviewResult) {
+            setExamReviewError('Bạn cần bấm AI soát đề trước, rồi mới dùng AI sửa toàn bộ log.');
+            return;
+        }
         const reviews = getExamReviewIssues(examReviewResult);
-        if (!reviews.length) return;
+        if (!reviews.length) {
+            setExamReviewError('AI soát đề chưa tìm thấy lỗi cần sửa.');
+            return;
+        }
         if (!(await confirmRepeatAiAction('apply_fixes'))) return;
         if (!confirm('Cho AI sửa toàn bộ log lỗi của đề này? Hệ thống sẽ ghi trực tiếp vào đề, bạn nên xem lại sau khi sửa.')) return;
 

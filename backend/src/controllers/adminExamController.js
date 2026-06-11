@@ -644,6 +644,11 @@ const AdminExamController = {
   async applyExamReviewFixes(req, res) {
     const { examId } = req.params;
     const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
+    if (!reviews.length) {
+      return res.status(400).json({
+        message: "Bạn cần bấm AI soát đề trước, rồi mới dùng AI sửa toàn bộ log.",
+      });
+    }
     const client = await pool.connect();
     try {
       await acquireExamAiLock(client, examId);
