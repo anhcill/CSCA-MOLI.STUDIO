@@ -175,6 +175,18 @@ function formatAiRunTime(value?: string) {
     });
 }
 
+function getExamAiRunDetail(run: ExamAiRun) {
+    const summary = run.summary || {};
+    if (summary.questionChangedCount) return `${summary.questionChangedCount} câu đã sửa`;
+    if (summary.changedCount) return `${summary.changedCount} chỗ đã sửa`;
+    if (summary.formulaChangedCount) return `${summary.formulaChangedCount} công thức đã sửa`;
+    if (summary.generatedCount) return `${summary.generatedCount} giải thích đã thêm`;
+    if (summary.polishedCount) return `${summary.polishedCount} lời giải đã chuẩn hóa`;
+    if (summary.issues) return `${summary.issues} lỗi đã phát hiện`;
+    if (summary.total) return `${summary.total} câu đã quét`;
+    return 'Đã xử lý bằng AI';
+}
+
 function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; startedAt: number | null }) {
     const [now, setNow] = useState(Date.now());
 
@@ -592,6 +604,9 @@ export default function AdminExamDetailPage() {
     const [savedQuestions, setSavedQuestions] = useState<QuestionListItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState<EditMode>('view');
+    const [editSessionNotice, setEditSessionNotice] = useState('');
+    const [savingEditSession, setSavingEditSession] = useState(false);
+    const [showEditStartSummary, setShowEditStartSummary] = useState(false);
 
     // Editing state (local question list while in edit mode)
     const [localQuestions, setLocalQuestions] = useState<QuestionListItem[]>([]);
@@ -683,6 +698,16 @@ export default function AdminExamDetailPage() {
             document.body.style.overflow = previousOverflow;
         };
     }, [aiBlockingTask]);
+
+    useEffect(() => {
+        if (editMode !== 'edit') return;
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [editMode]);
 
     const loadSubjects = async () => {
         try {
@@ -793,6 +818,7 @@ export default function AdminExamDetailPage() {
                 vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated });
             setMetaDirty(false);
             setEditingMeta(false);
+            markEditSessionSavedWork('Đã cập nhật thông tin đề và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             if (isMissingExamError(error)) {
                 handleMissingExam();
@@ -857,6 +883,7 @@ export default function AdminExamDetailPage() {
             setSavedQuestions(updated);
             setLocalQuestions(updated);
             setEditingQuestionId(null);
+            markEditSessionSavedWork('Đã cập nhật câu hỏi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã cập nhật câu hỏi!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -880,6 +907,7 @@ export default function AdminExamDetailPage() {
             setQuickAddPosition(null);
             setAddingAfterId(null);
             setShowAddMenu(false);
+            markEditSessionSavedWork('Đã thêm câu hỏi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã thêm câu hỏi!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -961,6 +989,7 @@ export default function AdminExamDetailPage() {
             setShowQuickAdd(false);
             setAddingAfterId(null);
             setQuickAddPosition(null);
+            markEditSessionSavedWork('Đã import câu hỏi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert(`Da import ${response?.insertedCount || getImportItemsQuestionCount(importItems)} cau vao de`);
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -984,6 +1013,7 @@ export default function AdminExamDetailPage() {
             const result = await examAdminApi.normalizeExamFormulas(exam.id);
             setNormalizeResult(result);
             await loadExam({ silent: true });
+            markEditSessionSavedWork('Đã chuẩn hóa công thức và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             alert(error?.response?.data?.message || 'Chuẩn hóa công thức thất bại');
         } finally {
@@ -1046,6 +1076,7 @@ export default function AdminExamDetailPage() {
             setExamReviewApplyResult(result);
             setExamReviewResult(null);
             await loadExam({ silent: true });
+            markEditSessionSavedWork('AI đã sửa log lỗi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -1072,6 +1103,7 @@ export default function AdminExamDetailPage() {
             const result = await examAdminApi.applyDisplayFormatFixes(exam.id);
             setDisplayFormatApplyResult(result);
             await loadExam({ silent: true });
+            markEditSessionSavedWork('AI đã sửa format hiển thị và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -1097,6 +1129,7 @@ export default function AdminExamDetailPage() {
             const result = await examAdminApi.generateMissingExplanations(exam.id);
             setMissingExplanationResult(result);
             await loadExam();
+            markEditSessionSavedWork('AI đã thêm giải thích và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -1122,6 +1155,7 @@ export default function AdminExamDetailPage() {
             const result = await examAdminApi.polishExplanations(exam.id);
             setPolishExplanationResult(result);
             await loadExam({ silent: true });
+            markEditSessionSavedWork('AI đã chuẩn hóa lời giải và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
@@ -1170,6 +1204,7 @@ export default function AdminExamDetailPage() {
             await loadExam();
             setPendingFillBlankGroups(prev => prev.filter(g => g._localId !== data._localId));
             if (pendingFillBlankGroups.length === 1) setShowAddFillBlank(false);
+            markEditSessionSavedWork('Đã thêm nhóm điền từ và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã thêm nhóm điền từ!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -1194,6 +1229,7 @@ export default function AdminExamDetailPage() {
             await loadExam();
             setPendingReadingGroups(prev => prev.filter(g => g._localId !== data._localId));
             if (pendingReadingGroups.length === 1) setShowAddReadingPassage(false);
+            markEditSessionSavedWork('Đã thêm nhóm đọc hiểu và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã thêm nhóm đọc hiểu!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -1213,6 +1249,7 @@ export default function AdminExamDetailPage() {
             setSavingQuestionId(groupId);
             await examAdminApi.updateFillBlankGroup(exam.id, groupId, data as any);
             await loadExam();
+            markEditSessionSavedWork('Đã cập nhật nhóm điền từ và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã cập nhật nhóm điền từ!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -1231,6 +1268,7 @@ export default function AdminExamDetailPage() {
             setSavingQuestionId(groupId);
             await examAdminApi.updateReadingPassageGroup(exam.id, groupId, data as any);
             await loadExam();
+            markEditSessionSavedWork('Đã cập nhật nhóm đọc hiểu và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
             alert('Đã cập nhật nhóm đọc hiểu!');
         } catch (error: any) {
             if (isMissingExamError(error)) {
@@ -1278,6 +1316,7 @@ export default function AdminExamDetailPage() {
             }
 
             setPendingDeleteItem(null);
+            markEditSessionSavedWork('Đã xóa mục khỏi đề và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {
             setDeleteItemError(error.response?.data?.message || error.message || 'Xóa thất bại.');
         } finally {
@@ -1291,8 +1330,42 @@ export default function AdminExamDetailPage() {
     // ── Toggle edit mode ──────────────────────────────────────────────────────
     const enterEditMode = () => {
         setEditMode('edit');
+        setEditSessionNotice('');
         setLocalQuestions([...savedQuestions]);
         setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
+    };
+
+    const handleOpenEditMode = () => {
+        if (aiHistory.length > 0) {
+            setShowEditStartSummary(true);
+            return;
+        }
+        enterEditMode();
+    };
+
+    const handleContinueToEditMode = () => {
+        setShowEditStartSummary(false);
+        enterEditMode();
+    };
+
+    const markEditSessionSavedWork = (message: string) => {
+        setEditSessionNotice(message);
+    };
+
+    const handleSaveEditSession = async () => {
+        try {
+            setSavingEditSession(true);
+            setEditMode('view');
+            setEditingQuestionId(null);
+            setShowQuickAdd(false);
+            setShowAddMenu(false);
+            setAddingAfterId(null);
+            setQuickAddPosition(null);
+            setEditSessionNotice('');
+            await loadExam({ silent: true });
+        } finally {
+            setSavingEditSession(false);
+        }
     };
 
     const exitEditMode = () => {
@@ -1300,19 +1373,31 @@ export default function AdminExamDetailPage() {
         setShowConfirmExit(true);
     };
 
-    const handleConfirmExit = () => {
+    const handleConfirmExit = async () => {
         const shouldNavigate = navigateAfterExit;
-        setEditMode('view');
-        setLocalQuestions([...savedQuestions]);
-        setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
-        setEditingQuestionId(null);
-        setShowQuickAdd(false);
-        setAddingAfterId(null);
-        setQuickAddPosition(null);
-        setShowConfirmExit(false);
-        setNavigateAfterExit(false);
-        if (shouldNavigate) {
-            router.push('/admin/exams');
+        try {
+            setSavingEditSession(true);
+            setEditMode('view');
+            setLocalQuestions([...savedQuestions]);
+            setEditVisibleCount(EDIT_QUESTION_BATCH_SIZE);
+            setEditingQuestionId(null);
+            setEditingMeta(false);
+            setMetaDirty(false);
+            setShowQuickAdd(false);
+            setShowAddMenu(false);
+            setAddingAfterId(null);
+            setQuickAddPosition(null);
+            setPendingFillBlankGroups([]);
+            setPendingReadingGroups([]);
+            setEditSessionNotice('');
+            setShowConfirmExit(false);
+            setNavigateAfterExit(false);
+            await loadExam({ silent: true });
+            if (shouldNavigate) {
+                router.push('/admin/exams');
+            }
+        } finally {
+            setSavingEditSession(false);
         }
     };
 
@@ -1549,6 +1634,64 @@ export default function AdminExamDetailPage() {
                 </div>
             )}
 
+            {showEditStartSummary && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+                    <div className="w-full max-w-2xl rounded-2xl border border-white/20 bg-white p-5 shadow-2xl">
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                                <FiAlertCircle size={24} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-lg font-black text-slate-950">Đề này đã có AI xử lý trước đó</p>
+                                <p className="mt-1 text-sm font-medium leading-6 text-slate-600">
+                                    Xem nhanh AI đã soát/sửa gì trước khi vào sửa đề, tránh sửa lại trùng hoặc chạy lại tốn token.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 max-h-[52vh] space-y-3 overflow-auto pr-1">
+                            {aiHistory.slice(0, 8).map((run) => {
+                                const summary = run.summary || {};
+                                return (
+                                    <div key={`edit-start-${run.action}-${run.created_at}`} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <span className="font-black text-slate-900">{getExamAiRunLabel(run.action)}</span>
+                                            <span className="text-xs font-bold text-slate-500">{formatAiRunTime(run.created_at)}</span>
+                                        </div>
+                                        <p className="mt-1 text-sm font-semibold text-slate-700">
+                                            {getExamAiRunDetail(run)}
+                                            {run.run_by_name ? ` · ${run.run_by_name}` : ''}
+                                            {summary.model ? ` · ${summary.model}` : ''}
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+                            Bấm “Vào sửa đề” để mở editor. Bảng này chỉ là lịch sử, không tự chạy AI mới.
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowEditStartSummary(false)}
+                                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                            >
+                                Để lát nữa
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleContinueToEditMode}
+                                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                            >
+                                Vào sửa đề
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
                 <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
@@ -1572,6 +1715,20 @@ export default function AdminExamDetailPage() {
                                 <>
                                     <button
                                         onClick={exitEditMode}
+                                        disabled={savingEditSession || !!aiBlockingTask}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        Không muốn sửa nữa
+                                    </button>
+                                    <button
+                                        onClick={handleSaveEditSession}
+                                        disabled={savingEditSession || !!aiBlockingTask}
+                                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <FiSave size={16} /> {savingEditSession ? 'Đang lưu...' : 'Lưu thay đổi'}
+                                    </button>
+                                    <button
+                                        onClick={exitEditMode}
                                         className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
                                     >
                                         <FiX size={16} /> Thoát sửa
@@ -1586,7 +1743,7 @@ export default function AdminExamDetailPage() {
                                         <FiMonitor size={16} /> Thi chính thức
                                     </button>
                                     <button
-                                        onClick={enterEditMode}
+                                        onClick={handleOpenEditMode}
                                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                                     >
                                         <FiEdit2 size={16} /> Sửa đề
@@ -1615,6 +1772,33 @@ export default function AdminExamDetailPage() {
             </header>
 
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">
+
+                {isEditingExam && editSessionNotice && (
+                    <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <p className="font-black">Có thay đổi trong phiên sửa đề</p>
+                            <p className="mt-1">{editSessionNotice}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={exitEditMode}
+                                disabled={savingEditSession || !!aiBlockingTask}
+                                className="rounded-lg border border-amber-300 bg-white px-4 py-2 font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Không muốn sửa nữa
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveEditSession}
+                                disabled={savingEditSession || !!aiBlockingTask}
+                                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <FiSave size={15} /> {savingEditSession ? 'Đang lưu...' : 'Lưu thay đổi'}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── EDIT MODE: Metadata Form ── */}
                 {isEditingExam && (
@@ -2062,15 +2246,6 @@ export default function AdminExamDetailPage() {
                         <div className="mt-3 grid gap-2 md:grid-cols-2">
                             {aiHistory.slice(0, 6).map((run) => {
                                 const summary = run.summary || {};
-                                const detail = summary.questionChangedCount
-                                    ? `${summary.questionChangedCount} câu`
-                                    : summary.changedCount
-                                        ? `${summary.changedCount} chỗ`
-                                        : summary.issues
-                                            ? `${summary.issues} lỗi`
-                                            : summary.total
-                                                ? `${summary.total} câu`
-                                                : '';
                                 return (
                                     <div key={`${run.action}-${run.created_at}`} className="rounded-lg border border-cyan-200 bg-white/70 px-3 py-2">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2079,7 +2254,7 @@ export default function AdminExamDetailPage() {
                                         </div>
                                         <p className="mt-1 text-xs text-cyan-800">
                                             {run.run_by_name ? `Bởi ${run.run_by_name}` : 'Không rõ admin'}
-                                            {detail ? ` · ${detail}` : ''}
+                                            {` · ${getExamAiRunDetail(run)}`}
                                             {summary.model ? ` · ${summary.model}` : ''}
                                         </p>
                                     </div>
@@ -2823,9 +2998,9 @@ export default function AdminExamDetailPage() {
                     onClick={(e) => { if (e.target === e.currentTarget) closeConfirmExit(); }}
                 >
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold text-gray-900 mb-2">Thoát chế độ sửa?</h3>
-                        <p className="text-sm text-gray-500 mb-6">
-                            Các thay đổi chưa lưu sẽ bị mất. Bạn có chắc muốn thoát?
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Không muốn sửa nữa?</h3>
+                        <p className="text-sm leading-6 text-gray-500 mb-6">
+                            Phần đang nhập dở sẽ bị bỏ và đề được tải lại. Các thay đổi đã bấm lưu hoặc AI đã ghi vào hệ thống vẫn được giữ.
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
@@ -2840,7 +3015,7 @@ export default function AdminExamDetailPage() {
                                 onClick={handleConfirmExit}
                                 className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
                             >
-                                Thoát
+                                Không sửa nữa
                             </button>
                         </div>
                     </div>
