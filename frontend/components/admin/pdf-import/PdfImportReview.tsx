@@ -42,6 +42,7 @@ const reviewButtonClass = 'inline-flex items-center justify-center gap-2 rounded
 const REVIEW_REVEAL_DELAY_MS = 2500;
 const REVIEW_POST_RENDER_LOCK_MS = 3500;
 const REVIEW_COOLDOWN_MS = 15000;
+const IMPORT_PREVIEW_BATCH_SIZE = 20;
 
 type ImportAiTask = 'review' | 'fix' | 'settling' | 'post-render' | null;
 
@@ -746,6 +747,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const [reviewError, setReviewError] = useState('');
   const [fixingReviewIssues, setFixingReviewIssues] = useState(false);
   const [fixResult, setFixResult] = useState<ApplyExamReviewFixesResult | null>(null);
+  const [visibleItemCount, setVisibleItemCount] = useState(IMPORT_PREVIEW_BATCH_SIZE);
   const [reviewLedger, setReviewLedger] = useState<Record<string, ReviewLogEntry>>(() => (
     loadReviewLedger(getReviewLedgerKey(preview, getImportItemsQuestionCount(sourceItems)))
   ));
@@ -755,6 +757,8 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const reviewRunRef = useRef(0);
   const reviewRevealTimerRef = useRef<number | null>(null);
   const items = draftItems;
+  const visibleItems = items.slice(0, visibleItemCount);
+  const hiddenItemCount = Math.max(items.length - visibleItems.length, 0);
   const reviewIssueRows = collectReviewIssueRows(items);
   const questionCount = getImportItemsQuestionCount(items);
   const reviewLedgerKey = getReviewLedgerKey(preview, questionCount);
@@ -789,6 +793,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
 
   useEffect(() => {
     setDraftItems(sourceItems);
+    setVisibleItemCount(IMPORT_PREVIEW_BATCH_SIZE);
   }, [sourceItems]);
 
   useEffect(() => {
@@ -1383,13 +1388,50 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
         </div>
       )}
 
+      {items.length > IMPORT_PREVIEW_BATCH_SIZE && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <span className="text-sm font-semibold text-slate-700">
+            Đang hiện {visibleItems.length}/{items.length} mục import
+          </span>
+          {hiddenItemCount > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setVisibleItemCount(prev => Math.min(prev + IMPORT_PREVIEW_BATCH_SIZE, items.length))}
+                disabled={reviewInteractionLocked}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              >
+                Tải thêm {Math.min(IMPORT_PREVIEW_BATCH_SIZE, hiddenItemCount)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibleItemCount(items.length)}
+                disabled={reviewInteractionLocked}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hiện hết
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setVisibleItemCount(IMPORT_PREVIEW_BATCH_SIZE)}
+              disabled={reviewInteractionLocked}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Thu gọn
+            </button>
+          )}
+        </div>
+      )}
+
       <div>
         <div
           aria-busy={reviewInteractionLocked}
           aria-disabled={reviewInteractionLocked}
           className={`divide-y divide-gray-200 ${reviewInteractionLocked ? 'pointer-events-none select-none opacity-60' : ''}`}
         >
-        {items.map((item, itemIndex) => {
+        {visibleItems.map((item, itemIndex) => {
           if (item.itemType === 'reading_group') {
             return (
               <div key={itemIndex} className="py-4 first:pt-0 last:pb-0">
