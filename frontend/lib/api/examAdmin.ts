@@ -386,7 +386,7 @@ export const examAdminApi = {
             items,
             subject,
         }, {
-            timeout: 300000,
+            timeout: 900000,
         });
         return response.data;
     },
@@ -401,7 +401,7 @@ export const examAdminApi = {
             reviews,
             subject,
         }, {
-            timeout: 300000,
+            timeout: 900000,
         });
         return response.data;
     },
@@ -504,7 +504,7 @@ export const examAdminApi = {
 
     reviewExamQuality: async (examId: number): Promise<StoredExamReviewResult> => {
         const response = await axios.post(`/admin/exams/${examId}/review-quality`, {}, {
-            timeout: 300000,
+            timeout: 900000,
         });
         return response.data;
     },
@@ -514,7 +514,7 @@ export const examAdminApi = {
         data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean },
     ): Promise<ApplyExamReviewFixesResult> => {
         const response = await axios.post(`/admin/exams/${examId}/apply-ai-review-fixes`, data, {
-            timeout: 300000,
+            timeout: 900000,
         });
         return response.data;
     },
