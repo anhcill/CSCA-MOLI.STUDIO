@@ -194,6 +194,16 @@ export default function PWAInstallSettings() {
     }
   }, [openGuide, promptEvent, waitForInstallPrompt]);
 
+  const resetInstallState = useCallback(() => {
+    window.moliDeferredPwaPrompt = null;
+    localStorage.removeItem('pwa-installed');
+    localStorage.removeItem('pwa-install-dismissed');
+    localStorage.removeItem('pwa-install-banner-dismissed');
+    setInstalled(false);
+    setPromptEvent(null);
+    setMessage('Đã xóa trạng thái cài cũ. Bấm Cài ngay để cài lại.');
+  }, []);
+
   const copyLink = useCallback(async () => {
     try {
       await navigator.clipboard?.writeText('https://www.molystudio.online');
@@ -248,15 +258,27 @@ export default function PWAInstallSettings() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => installApp()}
-            disabled={busy || installed}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy ? <FiRefreshCw className="animate-spin" size={14} /> : installed ? <FiCheckCircle size={14} /> : <FiDownload size={14} />}
-            {installed ? 'Đã cài' : 'Cài ngay'}
-          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => installApp()}
+              disabled={busy || installed}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? <FiRefreshCw className="animate-spin" size={14} /> : installed ? <FiCheckCircle size={14} /> : <FiDownload size={14} />}
+              {installed ? 'Đã cài' : 'Cài ngay'}
+            </button>
+            {installed && !isStandalonePwa() && (
+              <button
+                type="button"
+                onClick={resetInstallState}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-xs font-black text-indigo-700 hover:bg-indigo-50"
+              >
+                <FiRefreshCw size={14} />
+                Đã gỡ? Cài lại
+              </button>
+            )}
+          </div>
         </div>
 
         {message && (

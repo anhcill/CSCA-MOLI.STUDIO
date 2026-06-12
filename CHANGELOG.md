@@ -2,6 +2,12 @@
 
 Ghi log cập nhật theo từng version để sau này dễ biết bản nào sửa gì.
 
+## Version 3.1 - 2026-06-12
+
+- Đổi PWA icon/favion sang icon mèo MOLI mới.
+- Đổi URL icon sang tên `app-icon-v3-*` để Chrome không dùng lại icon cũ trong cache.
+- Bump service worker version để người dùng nhận manifest/icon mới.
+
 ## Version 3.0 - 2026-06-12
 
 - Hoàn thiện PWA: manifest, icon, offline page, service worker.

@@ -1,6 +1,6 @@
 // Service Worker - Safe caching strategy
 // Version bump -> old caches purged on activate
-const APP_VERSION = '3.0';
+const APP_VERSION = '3.1';
 const CACHE_VERSION = `csca-moli-v${APP_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
@@ -9,9 +9,9 @@ const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 const PRECACHE = [
   '/offline.html',
   '/manifest.webmanifest',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-  '/icons/apple-touch-icon.png',
+  '/icons/app-icon-v3-192x192.png',
+  '/icons/app-icon-v3-512x512.png',
+  '/icons/apple-touch-icon-v3.png',
   '/images/logo.svg',
 ];
 
@@ -66,8 +66,8 @@ self.addEventListener('push', (event) => {
     const title = data.title || 'CSCA MOLI';
     const options = {
       body: data.body || '',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-192x192.png',
+      icon: '/icons/app-icon-v3-192x192.png',
+      badge: '/icons/app-icon-v3-192x192.png',
       data: { url: data.url || '/' },
       tag: data.tag || 'csca-notification',
     };
@@ -77,7 +77,7 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
       self.registration.showNotification('CSCA MOLI', {
         body: event.data.text(),
-        icon: '/icons/icon-192x192.png',
+        icon: '/icons/app-icon-v3-192x192.png',
       })
     );
   }

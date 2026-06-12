@@ -45,6 +45,12 @@ async function generateIcons() {
   await makeIcon('apple-touch-icon.png', 180, 8);
   await makeIcon('favicon-32x32.png', 32, 1);
   await makeIcon('favicon-16x16.png', 16, 0);
+  await makeIcon('app-icon-v3-192x192.png', 192, 10);
+  await makeIcon('app-icon-v3-512x512.png', 512, 28);
+  await makeIcon('app-icon-v3-maskable-512x512.png', 512, 64);
+  await makeIcon('apple-touch-icon-v3.png', 180, 8);
+  await makeIcon('favicon-v3-32x32.png', 32, 1);
+  await makeIcon('favicon-v3-16x16.png', 16, 0);
 
   console.log('\nAll PWA icons generated.');
 }
