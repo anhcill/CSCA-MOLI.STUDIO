@@ -200,6 +200,9 @@ function normalizeLooseMathSyntax(input: string): string {
     .replace(/\\log\s+([2-9])([0-9])\b/g, '\\log_{$1} $2')
     .replace(/([0-9]+)\s*\\pi\s*\/\s*([0-9]+)/g, '\\frac{$1\\pi}{$2}')
     .replace(/\\pi\s*\/\s*([0-9]+)/g, '\\frac{\\pi}{$1}')
+    .replace(/\\frac\s*([0-9A-Za-z])\s*(\\[A-Za-z]+)\s*\}?\s*\{?([0-9A-Za-z]+)\}?/g, '\\frac{$1$2}{$3}')
+    .replace(/\\frac\{((?:[^{}]|\{[^{}]*\})+)\}\s*([0-9A-Za-z]+)\b/g, '\\frac{$1}{$2}')
+    .replace(/\\frac\s*([0-9A-Za-z])\s*\{([0-9A-Za-z]+)\}/g, '\\frac{$1}{$2}')
     .replace(/([A-Za-z0-9])\s*\\frac\{\s*\^\{?([^{}]+)\}?\s*\}\{/g, '\\frac{$1^{$2}}{')
     .replace(/\bC\s+(\\mathbb\{[A-Z]\})\s*\(/g, 'C_{$1}(');
 }
@@ -772,6 +775,9 @@ function repairMalformedInlineDollarDelimiters(input: string): string {
 
     const prev = before.match(/\S\s*$/)?.[0]?.trim() || '';
     const next = after.match(/^\s*\S/)?.[0]?.trim() || '';
+    const hasPairedDollarOnLine = match === '$' && (/^[^\n$]*\$/.test(after) || /\$[^\n$]*$/.test(before));
+    if (hasPairedDollarOnLine) return match;
+
     const touchesMathOperator =
       /[=<>+\-*/({[,;:|]$/.test(prev) ||
       /^[=<>+\-*/)}\],.;:|]/.test(next) ||
@@ -827,7 +833,11 @@ export function normalizeRichMathText(input: string): string {
     })
     .join('');
 
-  return mergeAdjacentInlineMath(normalized);
+  const repairedUnmatchedDollars = normalized
+    .replace(/(^|\n)([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`)
+    .replace(/(^|\n)\$([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`);
+
+  return mergeAdjacentInlineMath(repairedUnmatchedDollars);
 }
 
 export function normalizeAdminMathInputText(input: string): string {

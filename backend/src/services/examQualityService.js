@@ -43,6 +43,94 @@ function compactWhitespace(value) {
 
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_RE = /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|le|ge|ne|leq|geq|neq|approx)\b/;
+const ZERO_WIDTH_RE = /[\u200b-\u200f\ufeff\u2060]/g;
+
+function cleanStackedMathLine(value) {
+  return stringValue(value).replace(ZERO_WIDTH_RE, "").trim();
+}
+
+function isStackedMathFragmentLine(value) {
+  const text = cleanStackedMathLine(value);
+  if (!text || text.length > 24) return false;
+  if (/\\\(|\\\[|\$\$?/.test(text)) return false;
+  if (/[\u4e00-\u9fff]/.test(text)) return false;
+
+  const compact = text.replace(/\s+/g, "");
+  if (!compact || compact.length > 24) return false;
+  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+)$/iu.test(compact);
+  if (!mathOnly) return false;
+  return (
+    /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim)$/iu.test(compact) ||
+    /^[A-Za-z]$/.test(compact) ||
+    /^[0-9]+$/.test(compact) ||
+    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+$/u.test(compact)
+  );
+}
+
+function hasStackedOcrMathFragments(value) {
+  const lines = stringValue(value).split(/\r?\n/);
+  let count = 0;
+  let signal = "";
+
+  for (const line of lines) {
+    if (isStackedMathFragmentLine(line)) {
+      count += 1;
+      signal += cleanStackedMathLine(line);
+      if (count >= 3 && /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[0-9=<>≤≥≠≈∈∉∩∪∖|∣+\-−–*/{}()[\]^_])/iu.test(signal)) {
+        return true;
+      }
+      continue;
+    }
+    if (!cleanStackedMathLine(line)) continue;
+    count = 0;
+    signal = "";
+  }
+
+  return false;
+}
+
+function stripStackedOcrMathFragments(value) {
+  const lines = stringValue(value).split(/\r?\n/);
+  const kept = [];
+
+  for (let index = 0; index < lines.length;) {
+    if (!isStackedMathFragmentLine(lines[index])) {
+      kept.push(lines[index]);
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    let cursor = index;
+    let fragmentCount = 0;
+    let signal = "";
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      if (!cleanStackedMathLine(line)) {
+        cursor += 1;
+        continue;
+      }
+      if (!isStackedMathFragmentLine(line)) break;
+      fragmentCount += 1;
+      signal += cleanStackedMathLine(line);
+      cursor += 1;
+    }
+
+    const hasSignal = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[0-9=<>≤≥≠≈∈∉∩∪∖|∣+\-−–*/{}()[\]^_])/iu.test(signal);
+    if (fragmentCount >= 3 && hasSignal) {
+      if (kept.length && cleanStackedMathLine(kept[kept.length - 1]) === "") {
+        kept.pop();
+      }
+      index = cursor;
+      continue;
+    }
+
+    kept.push(...lines.slice(start, cursor));
+    index = cursor;
+  }
+
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n");
+}
 
 function normalizeMathUnicode(value) {
   const replacements = [
@@ -146,6 +234,9 @@ function normalizeLooseMathSyntax(value) {
     .replace(/\\sqrt\s*\(([^()]+)\)/g, "\\sqrt{$1}")
     .replace(/\\sqrt\{\}\s*([A-Za-z0-9\\]+(?:\^\{[^{}]+\})?)/g, "\\sqrt{$1}")
     .replace(/\\sqrt\s*([A-Za-z0-9])\b/g, "\\sqrt{$1}")
+    .replace(/\\frac\s*([0-9A-Za-z])\s*(\\[A-Za-z]+)\s*\}?\s*\{?([0-9A-Za-z]+)\}?/g, "\\frac{$1$2}{$3}")
+    .replace(/\\frac\{((?:[^{}]|\{[^{}]*\})+)\}\s*([0-9A-Za-z]+)\b/g, "\\frac{$1}{$2}")
+    .replace(/\\frac\s*([0-9A-Za-z])\s*\{([0-9A-Za-z]+)\}/g, "\\frac{$1}{$2}")
     .replace(/(^|[^\\}])\b([A-Za-z0-9](?:\^\{[^{}]+\}|\^[A-Za-z0-9])?)\s*\/\s*([+\-]?\d+)\b/g, "$1\\frac{$2}{$3}")
     .replace(/\\frac\s*([A-Za-z0-9])\s*([A-Za-z0-9])\b/g, "\\frac{$1}{$2}")
     .replace(/(^|[\s=([{,;:])([+\-]?\d+)\s*\/\s*([+\-]?\d+)(?=\s*(?:[),.;:\]}]|$))/g, "$1\\frac{$2}{$3}")
@@ -200,10 +291,10 @@ function normalizeMathSegments(input) {
         return `\\[${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}\\]`;
       }
       if (part.startsWith("$$") && part.endsWith("$$")) {
-        return `$$${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}$$`;
+        return `\\[${normalizeLooseMathSyntax(part.slice(2, -2)).trim()}\\]`;
       }
       if (part.startsWith("$") && part.endsWith("$")) {
-        return `$${normalizeLooseMathSyntax(part.slice(1, -1)).trim()}$`;
+        return `\\(${normalizeLooseMathSyntax(part.slice(1, -1)).trim()}\\)`;
       }
       return wrapLooseMathLines(normalizeLooseMathSyntax(part));
     })
@@ -236,6 +327,9 @@ function repairMalformedInlineDollarDelimiters(value) {
 
     const prev = before.match(/\S\s*$/)?.[0]?.trim() || "";
     const next = after.match(/^\s*\S/)?.[0]?.trim() || "";
+    const hasPairedDollarOnLine = match === "$" && (/^[^\n$]*\$/.test(after) || /\$[^\n$]*$/.test(before));
+    if (hasPairedDollarOnLine) return match;
+
     const touchesMathOperator =
       /[=<>+\-*/({[,;:|]$/.test(prev) ||
       /^[=<>+\-*/)}\],.;:|]/.test(next) ||
@@ -248,7 +342,7 @@ function repairMalformedInlineDollarDelimiters(value) {
 }
 
 function normalizeStoredFormulaText(value, options = {}) {
-  const input = repairMalformedInlineDollarDelimiters(stringValue(value).replace(/\0/g, ""));
+  const input = repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(stringValue(value).replace(/\0/g, "")));
   if (!input.trim()) return "";
 
   let out = normalizeMathSegments(repairOcrMathArtifacts(input))
@@ -271,6 +365,10 @@ function normalizeStoredFormulaText(value, options = {}) {
     .replace(/(\d)\s*o\b/g, "$1°")
     .replace(/\s+([,.;:\uff0c\u3002\uff1b\uff1a\uff09)\]])/g, "$1")
     .replace(/([\uff08(\[])\s+/g, "$1");
+
+  out = out
+    .replace(/(^|\n)([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`)
+    .replace(/(^|\n)\$([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`);
 
   if (options.explanation) {
     out = out
@@ -307,6 +405,7 @@ function isSuspiciousFormulaText(value) {
 
 function normalizeField(value, options = {}) {
   const before = stringValue(value).trim();
+  const stackedCleanup = hasStackedOcrMathFragments(before);
   const after = normalizeStoredFormulaText(before, options);
   if (before === after) {
     return { before, after, changed: false, suspicious: isSuspiciousFormulaText(after) };
@@ -314,7 +413,7 @@ function normalizeField(value, options = {}) {
 
   const beforeLen = Math.max(before.length, 1);
   const ratio = after.length / beforeLen;
-  const safe = ratio >= 0.5 && ratio <= 1.8 && !/<[^>]+>/.test(after);
+  const safe = ratio >= (stackedCleanup ? 0.25 : 0.5) && ratio <= 1.8 && !/<[^>]+>/.test(after);
   const suspicious = !safe || isSuspiciousFormulaText(after);
   return { before, after, changed: safe && !suspicious, suspicious };
 }
@@ -1023,6 +1122,7 @@ function hasDisplayFormatIssue(value) {
   if (!text) return false;
   const withoutWrapped = text.replace(WRAPPED_MATH_RE, " ");
   return (
+    hasStackedOcrMathFragments(text) ||
     isSuspiciousFormulaText(text) ||
     LATEX_COMMAND_RE.test(withoutWrapped) ||
     /\\\w+\^\{?\d{2,}\}?\^\{?\\circ\}?/i.test(text) ||
@@ -2190,7 +2290,7 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
     const fields = [];
     const params = [];
     const addQuestionField = (column, value) => {
-      const next = stringValue(value).trim();
+      const next = normalizeFixValue(value, column.includes("explanation") ? { explanation: true } : {}).trim();
       if (!next) return;
       const before = stringValue(question[column]).trim();
       if (!before || before === next) return;
@@ -2229,7 +2329,7 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
         const answerFields = [];
         const answerParams = [];
         const addAnswerField = (column, value) => {
-          const next = stringValue(value).trim();
+          const next = normalizeFixValue(value).trim();
           if (!next) return;
           const before = stringValue(current[column]).trim();
           if (!before || before === next) return;
