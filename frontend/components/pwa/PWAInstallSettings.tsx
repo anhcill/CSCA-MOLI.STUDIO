@@ -18,6 +18,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 type GuideType = 'pc' | 'android' | 'iphone';
+type UninstallGuideType = GuideType;
 
 declare global {
   interface Window {
@@ -85,6 +86,7 @@ export default function PWAInstallSettings() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [guide, setGuide] = useState<GuideType | null>(null);
+  const [uninstallGuide, setUninstallGuide] = useState<UninstallGuideType | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -119,6 +121,13 @@ export default function PWAInstallSettings() {
 
   const openGuide = useCallback((type: GuideType) => {
     setGuide(type);
+    setUninstallGuide(null);
+    setMessage('');
+  }, []);
+
+  const openUninstallGuide = useCallback((type: UninstallGuideType) => {
+    setUninstallGuide(type);
+    setGuide(null);
     setMessage('');
   }, []);
 
@@ -215,6 +224,47 @@ export default function PWAInstallSettings() {
 
   const currentGuide = useMemo(() => (guide ? guideCopy[guide] : null), [guide]);
   const GuideIcon = currentGuide?.icon || FiDownload;
+  const uninstallCopy = useMemo(() => {
+    const type = uninstallGuide || getDefaultGuide();
+    if (type === 'iphone') {
+      return {
+        title: 'Gỡ app trên iPhone',
+        icon: FiShare2,
+        steps: [
+          'Ra màn hình chính iPhone.',
+          'Giữ icon CSCA MOLI.',
+          'Chọn Xóa Dấu trang hoặc Xóa khỏi Màn hình chính.',
+          'Nếu muốn cài lại, mở Safari vào web rồi chọn Chia sẻ > Thêm vào Màn hình chính.',
+        ],
+        link: null,
+      };
+    }
+    if (type === 'android') {
+      return {
+        title: 'Gỡ app trên Android',
+        icon: FiSmartphone,
+        steps: [
+          'Ra màn hình chính hoặc danh sách ứng dụng.',
+          'Giữ icon CSCA MOLI.',
+          'Chọn Gỡ cài đặt hoặc Xóa khỏi màn hình chính.',
+          'Nếu Chrome vẫn nhớ app cũ, mở Chrome > Cài đặt > Trang web > molystudio.online > Xóa dữ liệu.',
+        ],
+        link: null,
+      };
+    }
+    return {
+      title: 'Gỡ app trên PC',
+      icon: FiMonitor,
+      steps: [
+        'Mở trang Chrome Apps bằng nút bên dưới.',
+        'Tìm CSCA MOLI.',
+        'Chuột phải vào app rồi chọn Remove from Chrome / Gỡ khỏi Chrome.',
+        'Quay lại web và bấm Đã gỡ? Cài lại để xóa trạng thái cũ.',
+      ],
+      link: 'chrome://apps',
+    };
+  }, [uninstallGuide]);
+  const UninstallIcon = uninstallCopy.icon;
 
   return (
     <>
@@ -286,6 +336,40 @@ export default function PWAInstallSettings() {
             {message}
           </p>
         )}
+
+        <div className="mt-3 rounded-2xl bg-white px-3 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black text-gray-900">Cần gỡ app hoặc cài lại?</p>
+              <p className="mt-0.5 text-[11px] font-semibold leading-5 text-gray-500">
+                Xem hướng dẫn gỡ trên PC, Android, iPhone. Web không thể tự gỡ app thay người dùng.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openUninstallGuide('pc')}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-[11px] font-black text-gray-700 hover:bg-gray-50"
+              >
+                Gỡ PC
+              </button>
+              <button
+                type="button"
+                onClick={() => openUninstallGuide('android')}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-[11px] font-black text-gray-700 hover:bg-gray-50"
+              >
+                Gỡ Android
+              </button>
+              <button
+                type="button"
+                onClick={() => openUninstallGuide('iphone')}
+                className="rounded-xl border border-gray-200 px-3 py-2 text-[11px] font-black text-gray-700 hover:bg-gray-50"
+              >
+                Gỡ iPhone
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {currentGuide && (
@@ -336,6 +420,70 @@ export default function PWAInstallSettings() {
                 className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
               >
                 Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uninstallGuide && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setUninstallGuide(null)}
+              className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Đóng hướng dẫn gỡ app"
+            >
+              <FiX size={18} />
+            </button>
+
+            <div className="mb-4 flex items-center gap-3 pr-10">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                <UninstallIcon size={22} />
+              </div>
+              <div>
+                <p className="text-lg font-black text-slate-950">{uninstallCopy.title}</p>
+                <p className="text-xs font-semibold text-slate-500">Làm theo các bước dưới đây.</p>
+              </div>
+            </div>
+
+            <ol className="space-y-3">
+              {uninstallCopy.steps.map((step, index) => (
+                <li key={step} className="flex gap-3 rounded-2xl bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-black text-white">
+                    {index + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              {uninstallCopy.link && (
+                <a
+                  href={uninstallCopy.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex flex-1 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"
+                >
+                  Mở chrome://apps
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={resetInstallState}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-indigo-200 px-4 py-3 text-sm font-black text-indigo-700 hover:bg-indigo-50"
+              >
+                <FiRefreshCw size={15} />
+                Đã gỡ? Cài lại
+              </button>
+              <button
+                type="button"
+                onClick={() => setUninstallGuide(null)}
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Đóng
               </button>
             </div>
           </div>
