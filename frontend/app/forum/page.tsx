@@ -346,14 +346,14 @@ export default function ForumPage() {
               </div>
             ) : (
               mounted && (
-                <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-700 rounded-[2rem] p-8 text-white shadow-2xl relative overflow-hidden flex items-center justify-between">
+                <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-700 rounded-[2rem] p-6 sm:p-8 text-white shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 sm:justify-between">
                   <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
-                  <div className="relative z-10 max-w-md">
-                     <h2 className="text-2xl font-black mb-2 flex items-center gap-2">Tham gia Trạm Học Tập</h2>
+                  <div className="relative z-10 max-w-md text-center sm:text-left">
+                     <h2 className="text-xl sm:text-2xl font-black mb-2 flex items-center justify-center sm:justify-start gap-2">Tham gia Trạm Học Tập</h2>
                      <p className="text-violet-200 text-sm leading-relaxed">Đăng nhập để chia sẻ kinh nghiệm ôn thi học bổng, đặt câu hỏi cho cao thủ và tìm đồng đội chạy deadline.</p>
                   </div>
                   <Link href="/auth"
-                    className="relative z-10 shrink-0 px-8 py-3.5 bg-white text-violet-700 text-sm font-bold rounded-2xl hover:scale-105 transition-transform shadow-xl shadow-indigo-900/40"
+                    className="relative z-10 shrink-0 w-full sm:w-auto text-center px-8 py-3.5 bg-white text-violet-700 text-sm font-bold rounded-2xl hover:scale-105 transition-transform shadow-xl shadow-indigo-900/40"
                   >
                     Gia Nhập Ngay
                   </Link>

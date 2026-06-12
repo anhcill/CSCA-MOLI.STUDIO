@@ -10,6 +10,7 @@ import { getCurrentUser } from '@/lib/api/auth';
 import { getWalletLedger } from '@/lib/api/games';
 import Header from '@/components/layout/Header';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import PushNotificationSettings from '@/components/pwa/PushNotificationSettings';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   FiEdit2, FiSave, FiX, FiUser, FiMail, FiBook,
@@ -1193,6 +1194,7 @@ export default function ProfilePage() {
                       </div>
                       <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Thông báo nhận tin</h3>
                     </div>
+                    <PushNotificationSettings />
                     <div className="flex items-center justify-between p-4 border border-gray-100 rounded-2xl bg-white hover:bg-gray-50/20 transition-colors">
                       <div>
                         <p className="text-sm font-bold text-gray-800">Thông báo qua Email</p>

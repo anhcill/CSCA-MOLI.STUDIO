@@ -11,6 +11,8 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
+import { useExamOffline } from '@/hooks/useExamOffline';
+import { FiWifiOff, FiRefreshCw } from 'react-icons/fi';
 
 type PendingEssaySave = {
   questionId: number;
@@ -34,6 +36,7 @@ export default function ExamPage() {
 
   useEffect(() => {
     setMounted(true);
+    tabOwnerIdRef.current = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }, []);
 
   // useMemo để tránh tính lại mỗi lần render
@@ -66,10 +69,34 @@ export default function ExamPage() {
   const [lastViolation, setLastViolation] = useState('');
   const [isScreenCaptured, setIsScreenCaptured] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const [queuedSubmit, setQueuedSubmit] = useState(false);
+  const [draftCheckedAttemptId, setDraftCheckedAttemptId] = useState<number | null>(null);
+  const [tabConflict, setTabConflict] = useState(false);
   const submitInFlightRef = useRef(false);
+  const tabOwnerIdRef = useRef('');
   const activeSavePromisesRef = useRef<Set<Promise<void>>>(new Set());
   const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
+
+  const {
+    isOffline,
+    pendingCount,
+    isSyncing,
+    saveAnswerOfflineAware,
+    submitOfflineAware,
+    persistDraft,
+    restoreDraft,
+    flushQueue,
+    clearDraft,
+  } = useExamOffline({
+    examId: Number.isFinite(examId) ? examId : null,
+    attemptId,
+    practiceMode,
+    selectedAnswers,
+    timeLeft,
+    started,
+  });
 
   const { maxViolations } = useExamProtection({
     enabled: !!attemptId && !submitting && !practiceMode,
@@ -99,6 +126,66 @@ export default function ExamPage() {
     },
   });
 
+  const claimAttemptTabLock = useCallback(() => {
+    if (!attemptId) return;
+    const key = `csca-active-attempt-${attemptId}`;
+    const owner = tabOwnerIdRef.current || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    tabOwnerIdRef.current = owner;
+    localStorage.setItem(key, JSON.stringify({ owner, updatedAt: Date.now() }));
+    setTabConflict(false);
+  }, [attemptId]);
+
+  useEffect(() => {
+    if (!started || !attemptId || typeof window === 'undefined') return;
+
+    const key = `csca-active-attempt-${attemptId}`;
+    const owner = tabOwnerIdRef.current || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    tabOwnerIdRef.current = owner;
+
+    const readLock = () => {
+      try {
+        return JSON.parse(localStorage.getItem(key) || 'null') as { owner?: string; updatedAt?: number } | null;
+      } catch {
+        return null;
+      }
+    };
+
+    const lock = readLock();
+    const isStale = !lock?.updatedAt || Date.now() - lock.updatedAt > 15000;
+    if (!lock || lock.owner === owner || isStale) {
+      localStorage.setItem(key, JSON.stringify({ owner, updatedAt: Date.now() }));
+      setTabConflict(false);
+    } else {
+      setTabConflict(true);
+    }
+
+    const heartbeat = window.setInterval(() => {
+      const current = readLock();
+      if (!current || current.owner === owner || Date.now() - (current.updatedAt || 0) > 15000) {
+        localStorage.setItem(key, JSON.stringify({ owner, updatedAt: Date.now() }));
+        setTabConflict(false);
+      } else {
+        setTabConflict(true);
+      }
+    }, 3000);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== key || !event.newValue) return;
+      const current = readLock();
+      setTabConflict(Boolean(current?.owner && current.owner !== owner && Date.now() - (current.updatedAt || 0) <= 15000));
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener('storage', handleStorage);
+      const current = readLock();
+      if (current?.owner === owner) {
+        localStorage.removeItem(key);
+      }
+    };
+  }, [attemptId, started]);
+
   // Auto-dismiss capture shield after 3 seconds
   useEffect(() => {
     if (!isScreenCaptured) return;
@@ -113,6 +200,55 @@ export default function ExamPage() {
       pendingEssaySavesRef.current = {};
     };
   }, []);
+
+  useEffect(() => {
+    if (!started || !attemptId || draftCheckedAttemptId === attemptId) return;
+    setDraftCheckedAttemptId(attemptId);
+
+    restoreDraft()
+      .then((draft) => {
+        if (!draft || !draft.selectedAnswers || Object.keys(draft.selectedAnswers).length === 0) return;
+        const shouldRestore = window.confirm('Tìm thấy bài đang làm được lưu trên máy. Bạn muốn tiếp tục bài này?');
+        if (shouldRestore) {
+          setSelectedAnswers(draft.selectedAnswers);
+          if (!practiceMode && Number.isFinite(draft.timeLeftSeconds)) {
+            setTimeLeft(Math.max(0, draft.timeLeftSeconds));
+          }
+          setOfflineNotice('Đã khôi phục bài làm lưu trên máy.');
+        } else {
+          clearDraft();
+        }
+      })
+      .catch(() => {});
+  }, [started, attemptId, draftCheckedAttemptId, restoreDraft, clearDraft, practiceMode]);
+
+  useEffect(() => {
+    if (!started || !attemptId) return;
+    const timer = setTimeout(() => persistDraft(), 250);
+    return () => clearTimeout(timer);
+  }, [started, attemptId, selectedAnswers, persistDraft]);
+
+  useEffect(() => {
+    if (!started) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isOffline && pendingCount <= 0) return;
+      event.preventDefault();
+      event.returnValue = 'Bài làm vẫn đang lưu trên máy. Hãy chờ đồng bộ xong trước khi rời trang.';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [started, isOffline, pendingCount]);
+
+  useEffect(() => {
+    if (!queuedSubmit || isOffline || pendingCount > 0 || !attemptId || !examId) return;
+    router.push(`/exam/${examId}/result?attemptId=${attemptId}`);
+  }, [queuedSubmit, isOffline, pendingCount, attemptId, examId, router]);
+
+  useEffect(() => {
+    if (!offlineNotice || isOffline || pendingCount > 0 || isSyncing) return;
+    const timer = setTimeout(() => setOfflineNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [offlineNotice, isOffline, pendingCount, isSyncing]);
 
   const handleViolationClose = useCallback(() => {
     setShowViolation(false);
@@ -248,6 +384,9 @@ export default function ExamPage() {
       setCurrentQuestionIndex(0);
       setFlaggedQuestions(new Set());
       setPracticeFeedback({});
+      setOfflineNotice(null);
+      setQueuedSubmit(false);
+      setDraftCheckedAttemptId(null);
 
       const restoredAnswers: Record<number, number | string> = {};
       for (const answer of response.savedAnswers || []) {
@@ -294,9 +433,12 @@ export default function ExamPage() {
   ) => {
     if (!attemptId) return Promise.resolve();
 
-    const promise = examApi
-      .saveAnswer(attemptId, questionId, answerKey, 0, essayText, requestPracticeMode)
+    const promise = saveAnswerOfflineAware(questionId, answerKey, 0, essayText)
       .then((saved) => {
+        if (saved?.queued) {
+          setOfflineNotice('Mất mạng, bài đang lưu trên máy. Khi có mạng hệ thống sẽ tự đồng bộ.');
+          return;
+        }
         if (requestPracticeMode && saved?.feedback) {
           setPracticeFeedback((prev) => ({
             ...prev,
@@ -306,6 +448,9 @@ export default function ExamPage() {
       })
       .catch((error: any) => {
         console.error('Error saving answer:', error);
+        if (!error.response) {
+          setOfflineNotice('Chưa gửi được đáp án. Bài đã được giữ trên máy, hãy thử lại khi có mạng.');
+        }
       });
 
     return trackSavePromise(promise);
@@ -347,7 +492,7 @@ export default function ExamPage() {
   };
 
   const handleAnswerSelect = async (answerId: number, answerKey: string, essayText?: string) => {
-    if (!attemptId || submitting) return;
+    if (!attemptId || submitting || tabConflict) return;
 
     const question = questions[currentQuestionIndex];
     if (!question) return;
@@ -380,7 +525,7 @@ export default function ExamPage() {
   };
 
   const handleSubmit = async (options: { force?: boolean } = {}) => {
-    if (!attemptId || submitting || submitInFlightRef.current) return;
+    if (!attemptId || submitting || submitInFlightRef.current || tabConflict) return;
 
     if (!options.force) {
       setShowSubmitConfirm(true);
@@ -393,7 +538,18 @@ export default function ExamPage() {
       setSubmitting(true);
       setShowSubmitConfirm(false);
       await flushPendingAnswerSaves();
-      await examApi.submitExam(submittingAttemptId);
+      if (navigator.onLine) {
+        await flushQueue();
+      }
+      const result = await submitOfflineAware();
+      if (result?.queued) {
+        setQueuedSubmit(true);
+        setOfflineNotice('Đã lưu lệnh nộp bài trên máy. Khi có mạng hệ thống sẽ tự gửi lại.');
+        submitInFlightRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+      await clearDraft();
       // Redirect to result page
       router.push(`/exam/${examId}/result?attemptId=${submittingAttemptId}`);
     } catch (error) {
@@ -683,6 +839,27 @@ export default function ExamPage() {
     >
       <AiAnalyzingOverlay open={submitting} mode={practiceMode ? 'practice' : 'exam'} />
 
+      {tabConflict && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <FiAlertCircle size={28} />
+            </div>
+            <h2 className="text-xl font-black text-slate-950">Bài này đang mở ở tab khác</h2>
+            <p className="mt-2 text-sm font-medium leading-6 text-slate-600">
+              Để tránh hai bản nháp ghi đè nhau, tab này đang tạm khóa thao tác. Đóng tab kia hoặc bấm tiếp tục ở đây.
+            </p>
+            <button
+              type="button"
+              onClick={claimAttemptTabLock}
+              className="mt-5 w-full rounded-2xl bg-amber-600 px-4 py-3 text-sm font-black text-white hover:bg-amber-700"
+            >
+              Tiếp tục ở tab này
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Screen Capture Shield - covers content when screenshot detected */}
       {isScreenCaptured && (
         <div className="exam-capture-shield" onClick={() => setIsScreenCaptured(false)}>
@@ -753,7 +930,7 @@ export default function ExamPage() {
 
           <button
             onClick={() => handleSubmit()}
-            disabled={submitting}
+            disabled={submitting || tabConflict}
             className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-5 sm:px-8 py-2 sm:py-2.5 rounded-xl font-bold shadow-md hover:shadow-xl hover:shadow-teal-500/20 active:scale-95 transition-all outline-none disabled:opacity-60"
           >
             {submitting ? (
@@ -767,11 +944,53 @@ export default function ExamPage() {
         
         {/* Magic Progress Bar running along the exact bottom of Top Bar */}
         <div className="absolute bottom-0 left-0 h-[3px] bg-slate-200 w-full" />
-        <div 
-          className="absolute bottom-0 left-0 h-[3px] bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-500 ease-out z-10" 
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
+      <div 
+        className="absolute bottom-0 left-0 h-[3px] bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-500 ease-out z-10" 
+        style={{ width: `${progressPercent}%` }}
+      />
+    </div>
+
+      {(isOffline || pendingCount > 0 || isSyncing || offlineNotice) && (
+        <div className="fixed left-3 right-3 top-[76px] z-[55] sm:left-1/2 sm:right-auto sm:w-[min(640px,calc(100vw-32px))] sm:-translate-x-1/2">
+          <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${
+            isOffline
+              ? 'border-amber-200 bg-amber-50/95 text-amber-900'
+              : pendingCount > 0 || isSyncing
+                ? 'border-blue-200 bg-blue-50/95 text-blue-900'
+                : 'border-emerald-200 bg-emerald-50/95 text-emerald-900'
+          }`}>
+            <div className="mt-0.5 shrink-0">
+              {isSyncing ? <FiRefreshCw className="animate-spin" size={18} /> : <FiWifiOff size={18} />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-black">
+                {isOffline
+                  ? 'Mất mạng, bài đang lưu trên máy'
+                  : isSyncing
+                    ? 'Đang đồng bộ bài làm'
+                    : pendingCount > 0
+                      ? `Còn ${pendingCount} thay đổi chờ đồng bộ`
+                      : 'Bài làm đã được lưu'}
+              </p>
+              <p className="mt-0.5 leading-5">
+                {offlineNotice || (pendingCount > 0
+                  ? 'Đừng tắt trang trước khi hệ thống gửi xong.'
+                  : 'Bạn có thể tiếp tục làm bài bình thường.')}
+              </p>
+            </div>
+            {!isOffline && pendingCount > 0 && (
+              <button
+                type="button"
+                onClick={() => flushQueue()}
+                disabled={isSyncing}
+                className="shrink-0 rounded-xl bg-white px-3 py-1.5 text-xs font-black text-blue-700 shadow-sm disabled:opacity-60"
+              >
+                Gửi lại
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
 
       {/* MAIN EXAM ARENA */}
@@ -1175,7 +1394,7 @@ export default function ExamPage() {
           <button
             type="button"
             onClick={() => handleSubmit()}
-            disabled={submitting}
+            disabled={submitting || tabConflict}
             className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 text-sm font-black text-white shadow-lg shadow-teal-500/20 active:scale-95 disabled:opacity-60"
           >
             {submitting ? (
@@ -1219,7 +1438,7 @@ export default function ExamPage() {
               <button
                 type="button"
                 onClick={() => setShowSubmitConfirm(false)}
-                disabled={submitting}
+                disabled={submitting || tabConflict}
                 className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 active:bg-slate-50 disabled:opacity-60"
               >
                 Kiểm tra lại
@@ -1227,7 +1446,7 @@ export default function ExamPage() {
               <button
                 type="button"
                 onClick={() => handleSubmit({ force: true })}
-                disabled={submitting}
+                disabled={submitting || tabConflict}
                 className="flex-1 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white active:bg-emerald-700 disabled:opacity-60"
               >
                 {submitting ? 'Đang nộp...' : 'Nộp ngay'}

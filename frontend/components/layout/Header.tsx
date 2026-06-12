@@ -206,9 +206,7 @@ export default function Header() {
             )}
 
             <MessageBadge />
-            <div className="hidden sm:block">
-              <NotificationBell />
-            </div>
+            <NotificationBell />
             <DailyQuestsBtn />
 
             {mounted && isAuthenticated && user ? (

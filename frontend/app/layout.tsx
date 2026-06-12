@@ -74,6 +74,16 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} ${plusJakarta.variable}`}>
       <head>
+        {/* PWA Manifest */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#1e40af" />
+
+        {/* Apple PWA */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="CSCA MOLI" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
         {/* Google Analytics */}
         {gaId && (
           <>

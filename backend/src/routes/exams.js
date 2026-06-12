@@ -36,6 +36,11 @@ router.delete(
   officialExamController.cancelRegistration,
 );
 router.post(
+  "/attempts/:attemptId/answers/batch",
+  authenticate,
+  examController.saveAnswersBatch
+);
+router.post(
   "/attempts/:attemptId/answers",
   authenticate,
   examController.saveAnswer

@@ -44,9 +44,19 @@ const config: Config = {
           '50%': { transform: 'translateX(0%)' },
           '100%': { transform: 'translateX(100%)' },
         },
+        'slide-up': {
+          '0%': { opacity: '0', transform: 'translate(-50%, 100%)' },
+          '100%': { opacity: '1', transform: 'translate(-50%, 0)' },
+        },
+        'spin-slow': {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
+        },
       },
       animation: {
         progress: 'progress 1.4s ease-in-out infinite',
+        'slide-up': 'slide-up 0.4s ease-out',
+        'spin-slow': 'spin-slow 2s linear infinite',
       },
     },
   },

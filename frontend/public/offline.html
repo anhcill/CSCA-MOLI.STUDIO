@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <title>Mất kết nối - CSCA MOLI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .container { max-width: 440px; text-align: center; }
+    .icon {
+      width: 84px;
+      height: 84px;
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    h1 { margin-bottom: 12px; font-size: 1.55rem; line-height: 1.25; }
+    p { margin-bottom: 8px; color: rgba(255,255,255,0.86); line-height: 1.6; font-size: 0.96rem; }
+    .note {
+      margin-top: 20px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.1);
+      font-size: 0.9rem;
+      text-align: left;
+    }
+    .note strong { color: #bfdbfe; }
+    button {
+      margin-top: 28px;
+      padding: 12px 28px;
+      border: 0;
+      border-radius: 14px;
+      background: #fff;
+      color: #1d4ed8;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="icon" aria-hidden="true">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18.364 5.636a9 9 0 0 1 0 12.728" />
+        <path d="M15.536 8.464a5 5 0 0 1 0 7.072" />
+        <path d="M12.707 11.293a1 1 0 0 1 0 1.414" />
+        <path d="M3 3l18 18" />
+      </svg>
+    </div>
+    <h1>Không có kết nối mạng</h1>
+    <p>Bạn đang offline. Hãy kiểm tra Wi-Fi hoặc dữ liệu di động rồi thử lại.</p>
+    <div class="note">
+      <strong>Tài khoản vẫn an toàn.</strong><br />
+      Bạn không bị đăng xuất khi mất mạng. Nếu đang làm bài thi, câu trả lời có thể được giữ trên máy và đồng bộ lại khi có mạng.
+    </div>
+    <button type="button" onclick="window.location.reload()">Thử lại</button>
+  </main>
+</body>
+</html>

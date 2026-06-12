@@ -409,6 +409,36 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_notifications_post ON notifications(post_id)`,
     );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        last_sent_at TIMESTAMPTZ,
+        last_error TEXT
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_active ON push_subscriptions(user_id, is_active)`,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_reminder_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reminder_key TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (user_id, reminder_key)
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_push_reminder_logs_key ON push_reminder_logs(reminder_key)`,
+    );
 
     // RBAC foundation (Day 3): roles, permissions, assignments
     await pool.query(`

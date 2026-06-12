@@ -1,0 +1,33 @@
+{
+  "name": "CSCA MOLI.STUDIO - Ôn thi học bổng du học Trung Quốc",
+  "short_name": "CSCA MOLI",
+  "description": "Nền tảng ôn thi CSCA, luyện đề học bổng CSC và chuẩn bị du học Trung Quốc",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "categories": ["education"],
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

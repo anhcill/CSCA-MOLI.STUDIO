@@ -6,6 +6,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 let cachedToken: string | null = null;
 let tokenLastChecked = 0;
 const TOKEN_CACHE_DURATION = 5000; // 5 seconds
+let lastOfflineAuthToastAt = 0;
+
+function isJwtExpired(token: string | null) {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now() + 30000;
+  } catch {
+    return false;
+  }
+}
+
+function notifyOfflineAuthRequired() {
+  if (typeof window === 'undefined') return;
+  const now = Date.now();
+  if (now - lastOfflineAuthToastAt < 15000) return;
+  lastOfflineAuthToastAt = now;
+  (window as any).moliToast?.('Cần mạng để đăng nhập lại. Bài làm vẫn được giữ trên máy.', 'warning');
+}
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -27,6 +46,9 @@ axiosInstance.interceptors.request.use(
     }
     if (cachedToken) {
       config.headers.Authorization = `Bearer ${cachedToken}`;
+      if (typeof navigator !== 'undefined' && !navigator.onLine && isJwtExpired(cachedToken)) {
+        notifyOfflineAuthRequired();
+      }
     }
     return config;
   },
@@ -43,6 +65,15 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // ── Offline guard: never logout when no network ──
+    if (!error.response && typeof navigator !== 'undefined' && !navigator.onLine) {
+      // Network error while offline → reject silently, keep user logged in
+      if (isJwtExpired(cachedToken || sessionStorage.getItem('token'))) {
+        notifyOfflineAuthRequired();
+      }
+      return Promise.reject(error);
+    }
+
     // If token expired
     if (error.response?.status === 401 && error.response?.data?.code === 'TOKEN_EXPIRED' && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -58,14 +89,25 @@ axiosInstance.interceptors.response.use(
           sessionStorage.setItem('token', token);
           sessionStorage.setItem('refreshToken', newRefreshToken);
 
+          // Update memory cache immediately
+          cachedToken = token;
+          tokenLastChecked = Date.now();
+
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return axiosInstance(originalRequest);
         }
-      } catch (refreshError) {
-        // Refresh failed, logout user
+      } catch (refreshError: any) {
+        // If offline during refresh → don't logout, keep session
+        if (!refreshError.response && typeof navigator !== 'undefined' && !navigator.onLine) {
+          notifyOfflineAuthRequired();
+          return Promise.reject(refreshError);
+        }
+        // Online but refresh truly failed → logout
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('user');
+        cachedToken = null;
+        tokenLastChecked = 0;
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }

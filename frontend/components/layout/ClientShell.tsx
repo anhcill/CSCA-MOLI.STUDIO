@@ -6,6 +6,9 @@ import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 import MoliPet from '@/components/common/MoliPet';
 import DailyGiftBox from '@/components/daily-gift/DailyGiftBox';
+import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt';
+import UpdateToast from '@/components/pwa/UpdateToast';
+import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 
@@ -52,11 +55,16 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showDailyGift = showMoliPet && isAuthenticated;
   const moliPetPosition = 'left';
 
+  // Register service worker + detect updates
+  const { updateAvailable, activateUpdate } = useServiceWorker();
+
   return (
     <>
       {showFloatingContacts && mounted && <FloatingContactButtons />}
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
+      {mounted && <PWAInstallPrompt />}
+      {mounted && <UpdateToast visible={updateAvailable} onUpdate={activateUpdate} />}
 
       <div className="min-h-[100dvh] flex flex-col">
         <div className="flex-1">

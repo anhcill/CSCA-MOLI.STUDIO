@@ -29,7 +29,7 @@ export default function ScopedStudyTopBar({
           <span className="hidden sm:inline">Quay lại</span>
         </button>
 
-        <div className="font-black text-gray-800 text-lg sm:text-xl text-center absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+        <div className="font-black text-gray-800 text-sm sm:text-xl text-center absolute left-1/2 -translate-x-1/2 max-w-[55%] sm:max-w-none truncate flex items-center gap-2">
           {activeMeta ? (
             <>
               <span>{activeMeta.icon}</span>

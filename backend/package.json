@@ -52,6 +52,7 @@
     "pg": "^8.11.3",
     "sanitize-html": "^2.17.3",
     "socket.io": "^4.8.3",
+    "web-push": "^3.6.7",
     "word-extractor": "^1.0.4"
   },
   "devDependencies": {

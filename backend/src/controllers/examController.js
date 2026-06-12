@@ -455,6 +455,82 @@ const examController = {
   },
 
   // Nộp bài
+  async saveAnswersBatch(req, res) {
+    try {
+      const { attemptId } = req.params;
+      const parsedAttemptId = parseInt(attemptId, 10);
+      const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+
+      if (!Number.isFinite(parsedAttemptId) || parsedAttemptId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID lan thi khong hop le",
+        });
+      }
+
+      if (answers.length === 0) {
+        return res.json({
+          success: true,
+          message: "Khong co dap an can dong bo",
+          data: { savedClientIds: [], failed: [] },
+        });
+      }
+
+      if (answers.length > 300) {
+        return res.status(400).json({
+          success: false,
+          message: "Qua nhieu dap an trong mot lan dong bo",
+        });
+      }
+
+      const savedClientIds = [];
+      const failed = [];
+
+      for (const [index, item] of answers.entries()) {
+        const parsedQuestionId = parseInt(item?.questionId, 10);
+        const clientId = item?.clientId ?? index;
+
+        if (!Number.isFinite(parsedQuestionId) || parsedQuestionId <= 0) {
+          failed.push({ clientId, questionId: item?.questionId, message: "Question ID khong hop le" });
+          continue;
+        }
+
+        try {
+          await ExamAttempt.saveAnswer(
+            parsedAttemptId,
+            parsedQuestionId,
+            item?.answerKey,
+            item?.timeSpent || 0,
+            item?.essayAnswer ?? null,
+            req.user.id,
+          );
+          savedClientIds.push(clientId);
+        } catch (error) {
+          failed.push({
+            clientId,
+            questionId: parsedQuestionId,
+            message: error.message || "Khong luu duoc dap an",
+          });
+        }
+      }
+
+      res.status(failed.length > 0 ? 207 : 200).json({
+        success: failed.length === 0,
+        message: failed.length > 0
+          ? "Mot so dap an chua dong bo duoc"
+          : "Dong bo dap an thanh cong",
+        data: { savedClientIds, failed },
+      });
+    } catch (error) {
+      console.error("Save answers batch error:", error);
+      res.status(error.statusCode || 500).json({
+        success: false,
+        message: "Loi khi dong bo dap an",
+        error: error.message,
+      });
+    }
+  },
+
   async submitExam(req, res) {
     try {
       const { attemptId } = req.params;
