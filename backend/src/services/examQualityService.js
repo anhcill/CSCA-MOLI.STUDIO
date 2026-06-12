@@ -690,6 +690,33 @@ function parseAiJson(raw) {
   return null;
 }
 
+function getAiItems(parsed, keys = [], singleFields = []) {
+  if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed;
+
+  for (const key of keys) {
+    const value = parsed?.[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object" && singleFields.some(field => !isBlankText(value[field]))) {
+      return [value];
+    }
+  }
+
+  for (const key of ["data", "result", "response", "item"]) {
+    const value = parsed?.[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") {
+      for (const childKey of keys) {
+        if (Array.isArray(value?.[childKey])) return value[childKey];
+      }
+      if (singleFields.some(field => !isBlankText(value[field]))) return [value];
+    }
+  }
+
+  if (singleFields.some(field => !isBlankText(parsed[field]))) return [parsed];
+  return [];
+}
+
 function normalizeReviewStatus(value) {
   const status = stringValue(value).toLowerCase();
   if (["ok", "question_issue", "formula_issue", "answer_issue", "explanation_issue", "needs_review"].includes(status)) {
@@ -1414,8 +1441,8 @@ function normalizeGeneratedExplanationItem(rawItem, entry) {
     needsExplanation: isBlankText(entry.question?.explanation),
     needsExplanationCn: isBlankText(entry.question?.explanationCn),
     confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
-    explanation: normalizeGeneratedExplanation(rawItem?.explanation),
-    explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn),
+    explanation: normalizeGeneratedExplanation(rawItem?.explanation || rawItem?.explanationVi || rawItem?.explanation_vi || rawItem?.vietnameseExplanation),
+    explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn || rawItem?.explanation_cn || rawItem?.chineseExplanation || rawItem?.zhExplanation),
     note: stringValue(rawItem?.note).slice(0, 600),
   };
 }
@@ -1426,10 +1453,10 @@ function findAiItemForEntry(items, entry, localIndex) {
     const candidatePath = stringValue(candidate.path);
     if (candidatePath && candidatePath === entry.path) return true;
 
-    const candidateQuestionId = Number.parseInt(candidate.questionId, 10);
+    const candidateQuestionId = Number.parseInt(candidate.questionId || candidate.question_id, 10);
     if (candidateQuestionId && candidateQuestionId === Number(entry.questionId)) return true;
 
-    const candidateIndex = Number.parseInt(candidate.index, 10);
+    const candidateIndex = Number.parseInt(candidate.index ?? candidate.idx, 10);
     return Number.isFinite(candidateIndex) && candidateIndex === localIndex;
   });
 }
@@ -1553,7 +1580,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10),
       });
       const parsed = parseAiJson(raw);
-      const batchItems = Array.isArray(parsed?.explanations) ? parsed.explanations : [];
+      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
       diagnostics.push({
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1572,7 +1599,9 @@ async function polishExplanationsWithAI(entries, context = {}) {
 
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const item = findAiItemForEntry(batchItems, entry, localIndex);
+        const item = findAiItemForEntry(batchItems, entry, localIndex) || (
+          batchItems.length === batch.length ? batchItems[localIndex] : null
+        );
         explanations.push(normalizeGeneratedExplanationItem(
           item || { note: "AI không trả lời giải cho câu này." },
           entry,
@@ -1642,7 +1671,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
       });
       const parsed = parseAiJson(raw);
-      const batchItems = Array.isArray(parsed?.explanations) ? parsed.explanations : [];
+      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
       diagnostics.push({
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1662,7 +1691,9 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       const retryEntries = [];
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const item = findAiItemForEntry(batchItems, entry, localIndex);
+        const item = findAiItemForEntry(batchItems, entry, localIndex) || (
+          batchItems.length === batch.length ? batchItems[localIndex] : null
+        );
         if (item) {
           explanations.push(normalizeGeneratedExplanationItem(item, entry));
         } else {
@@ -1683,8 +1714,8 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
               timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
             });
             const retryParsed = parseAiJson(retryRaw);
-            const retryItems = Array.isArray(retryParsed?.explanations) ? retryParsed.explanations : [];
-            const retryItem = findAiItemForEntry(retryItems, entry, 0);
+            const retryItems = getAiItems(retryParsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
+            const retryItem = findAiItemForEntry(retryItems, entry, 0) || (retryItems.length === 1 ? retryItems[0] : null);
             diagnostics.push({
               batch: `${Math.floor(i / batchSize) + 1}.${entry.questionNumber || entry.questionId || "retry"}`,
               range: entry.label,
