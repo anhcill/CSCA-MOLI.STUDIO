@@ -929,7 +929,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
       }
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const review = batchReviews.find((item) => item?.path === entry.path || item?.index === localIndex);
+        const review = findAiItemForEntry(batchReviews, entry, localIndex);
         if (!review) {
           reviews.push(buildFallbackReview(entry, "AI không trả review cho câu này. Xem log tổng hợp phía trên."));
           continue;
@@ -1185,8 +1185,7 @@ function getMissingExplanationTargets(entries) {
     const q = entry.question || {};
     if (q.explanationImageUrl || q.explanation_image_url) return false;
     const missingMain = isBlankText(q.explanation);
-    const needsChinese = !isBlankText(q.questionTextCn);
-    const missingChinese = needsChinese && isBlankText(q.explanationCn);
+    const missingChinese = isBlankText(q.explanationCn);
     const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
     const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
     return hasPromptText && hasAnswer && (missingMain || missingChinese);
@@ -1237,8 +1236,10 @@ function buildMissingExplanationsPrompt(batch, context = {}) {
         imageUrl: answer.imageUrl || answer.image_url || "",
       })),
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
+      currentExplanation: q.explanation || "",
+      currentExplanationCn: q.explanationCn || "",
       missingExplanation: isBlankText(q.explanation),
-      missingExplanationCn: !isBlankText(q.questionTextCn) && isBlankText(q.explanationCn),
+      missingExplanationCn: isBlankText(q.explanationCn),
     };
   });
 
@@ -1249,8 +1250,10 @@ Yêu cầu:
 - Không sửa đề, không sửa đáp án, chỉ tạo explanation/explanationCn.
 - Trường explanation bắt buộc viết bằng tiếng Việt CÓ DẤU. Không được viết kiểu không dấu như "Tap hop", "dap an", "loi giai".
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
-- Nếu có questionTextCn và missingExplanationCn=true, tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation.
+- Nếu missingExplanationCn=true, bắt buộc tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation/currentExplanation.
 - Nếu missingExplanation=true thì bắt buộc trả explanation tiếng Việt có dấu. Không được chỉ trả explanationCn.
+- Nếu currentExplanation đã có tiếng Việt và thiếu explanationCn, hãy dịch/diễn đạt lại sang tiếng Trung trong explanationCn.
+- Nếu currentExplanationCn đã có tiếng Trung và thiếu explanation, hãy dịch/diễn đạt lại sang tiếng Việt có dấu trong explanation.
 - Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
 - Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "FA=BIL=(B^2L^2v\\cos\\theta)/R" phải viết "\\(F_A=BIL=\\frac{B^2L^2v\\cos\\theta}{R}\\)".
@@ -1409,12 +1412,26 @@ function normalizeGeneratedExplanationItem(rawItem, entry) {
     questionId: entry.questionId,
     questionNumber: entry.questionNumber,
     needsExplanation: isBlankText(entry.question?.explanation),
-    needsExplanationCn: !isBlankText(entry.question?.questionTextCn) && isBlankText(entry.question?.explanationCn),
+    needsExplanationCn: isBlankText(entry.question?.explanationCn),
     confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
     explanation: normalizeGeneratedExplanation(rawItem?.explanation),
     explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn),
     note: stringValue(rawItem?.note).slice(0, 600),
   };
+}
+
+function findAiItemForEntry(items, entry, localIndex) {
+  return (items || []).find((candidate) => {
+    if (!candidate) return false;
+    const candidatePath = stringValue(candidate.path);
+    if (candidatePath && candidatePath === entry.path) return true;
+
+    const candidateQuestionId = Number.parseInt(candidate.questionId, 10);
+    if (candidateQuestionId && candidateQuestionId === Number(entry.questionId)) return true;
+
+    const candidateIndex = Number.parseInt(candidate.index, 10);
+    return Number.isFinite(candidateIndex) && candidateIndex === localIndex;
+  });
 }
 
 async function generateDisplayFormatFixesWithAI(entries, context = {}) {
@@ -1469,7 +1486,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
 
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const fix = batchFixes.find((item) => item?.path === entry.path || item?.questionId === entry.questionId || item?.index === localIndex);
+        const fix = findAiItemForEntry(batchFixes, entry, localIndex);
         if (fix) fixes.push(normalizeAiFix({ ...fix, correctAnswer: "" }, entry));
       }
     } catch (error) {
@@ -1555,7 +1572,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
 
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
+        const item = findAiItemForEntry(batchItems, entry, localIndex);
         explanations.push(normalizeGeneratedExplanationItem(
           item || { note: "AI không trả lời giải cho câu này." },
           entry,
@@ -1642,13 +1659,74 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         rawPreview: batchItems.length ? undefined : stringValue(raw).slice(0, 500),
       });
 
+      const retryEntries = [];
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
-        explanations.push(normalizeGeneratedExplanationItem(
-          item || { note: "AI không trả lời giải cho câu này." },
-          entry,
-        ));
+        const item = findAiItemForEntry(batchItems, entry, localIndex);
+        if (item) {
+          explanations.push(normalizeGeneratedExplanationItem(item, entry));
+        } else {
+          retryEntries.push(entry);
+        }
+      }
+
+      if (retryEntries.length && batch.length > 1) {
+        for (const entry of retryEntries) {
+          const retryStartedAt = Date.now();
+          try {
+            const retryRaw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt([entry], context), {
+              model,
+              models: getFixModels(),
+              fallbackModel: getReviewFallbackModel(),
+              temperature: 0.1,
+              maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1200", 10),
+              timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+            });
+            const retryParsed = parseAiJson(retryRaw);
+            const retryItems = Array.isArray(retryParsed?.explanations) ? retryParsed.explanations : [];
+            const retryItem = findAiItemForEntry(retryItems, entry, 0);
+            diagnostics.push({
+              batch: `${Math.floor(i / batchSize) + 1}.${entry.questionNumber || entry.questionId || "retry"}`,
+              range: entry.label,
+              paths: [entry.path],
+              labels: [entry.label],
+              model,
+              status: retryItem ? "retry_ok" : "retry_invalid_response",
+              durationMs: Date.now() - retryStartedAt,
+              returnedExplanations: retryItems.length,
+              expectedExplanations: 1,
+              message: retryItem ? "AI đã retry riêng câu này." : "AI retry riêng nhưng vẫn không trả lời giải hợp lệ.",
+              rawPreview: retryItem ? undefined : stringValue(retryRaw).slice(0, 500),
+            });
+            explanations.push(normalizeGeneratedExplanationItem(
+              retryItem || { note: "AI không trả lời giải cho câu này sau khi retry riêng." },
+              entry,
+            ));
+          } catch (retryError) {
+            diagnostics.push({
+              batch: `${Math.floor(i / batchSize) + 1}.${entry.questionNumber || entry.questionId || "retry"}`,
+              range: entry.label,
+              paths: [entry.path],
+              labels: [entry.label],
+              model,
+              status: "retry_failed",
+              durationMs: Date.now() - retryStartedAt,
+              expectedExplanations: 1,
+              ...getReviewErrorDiagnostic(retryError),
+            });
+            explanations.push(normalizeGeneratedExplanationItem(
+              { note: "AI retry riêng câu này vẫn lỗi. Cần chạy lại hoặc xem log." },
+              entry,
+            ));
+          }
+        }
+      } else {
+        for (const entry of retryEntries) {
+          explanations.push(normalizeGeneratedExplanationItem(
+            { note: "AI không trả lời giải cho câu này." },
+            entry,
+          ));
+        }
       }
     } catch (error) {
       const diagnostic = {
@@ -1739,7 +1817,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
 
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
-        const fix = batchFixes.find((item) => item?.path === entry.path || item?.index === localIndex);
+        const fix = findAiItemForEntry(batchFixes, entry, localIndex);
         if (fix) fixes.push(normalizeAiFix(fix, entry));
       }
     } catch (error) {
