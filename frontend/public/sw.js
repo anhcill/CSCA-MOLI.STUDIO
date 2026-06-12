@@ -1,6 +1,7 @@
 // Service Worker - Safe caching strategy
-// Version bump → old caches purged on activate
-const CACHE_VERSION = 'csca-moli-v2';
+// Version bump -> old caches purged on activate
+const APP_VERSION = '3.0';
+const CACHE_VERSION = `csca-moli-v${APP_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 
@@ -47,10 +48,13 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ─── Message: controlled skip-waiting ───
+// Message: controlled skip-waiting + version query.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'GET_VERSION') {
+    event.ports?.[0]?.postMessage({ version: APP_VERSION, cacheVersion: CACHE_VERSION });
   }
 });
 

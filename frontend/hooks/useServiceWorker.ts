@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from 'react';
 export function useServiceWorker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  const [updateVersion, setUpdateVersion] = useState('3.0');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -17,11 +18,23 @@ export function useServiceWorker() {
 
     let registration: ServiceWorkerRegistration | null = null;
 
+    const readWorkerVersion = (sw: ServiceWorker) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (event) => {
+        const version = event.data?.version;
+        if (typeof version === 'string' && version.trim()) {
+          setUpdateVersion(version);
+        }
+      };
+      sw.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+    };
+
     const onStateChange = (sw: ServiceWorker) => {
       if (sw.state === 'installed') {
-        // New SW installed but waiting — there's an update
+        // New SW installed but waiting; there's an update.
         setWaitingWorker(sw);
         setUpdateAvailable(true);
+        readWorkerVersion(sw);
       }
     };
 
@@ -34,6 +47,7 @@ export function useServiceWorker() {
         if (reg.waiting) {
           setWaitingWorker(reg.waiting);
           setUpdateAvailable(true);
+          readWorkerVersion(reg.waiting);
         }
 
         // Listen for new installing worker
@@ -57,12 +71,12 @@ export function useServiceWorker() {
     });
   }, []);
 
-  /** Tell waiting SW to skipWaiting → triggers controllerchange → page reloads */
+  /** Tell waiting SW to skipWaiting -> triggers controllerchange -> page reloads */
   const activateUpdate = useCallback(() => {
     if (waitingWorker) {
       waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     }
   }, [waitingWorker]);
 
-  return { updateAvailable, activateUpdate };
+  return { updateAvailable, updateVersion, activateUpdate };
 }

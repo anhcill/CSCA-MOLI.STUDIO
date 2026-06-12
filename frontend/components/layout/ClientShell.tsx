@@ -58,7 +58,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const moliPetPosition = 'left';
 
   // Register service worker + detect updates
-  const { updateAvailable, activateUpdate } = useServiceWorker();
+  const { updateAvailable, updateVersion, activateUpdate } = useServiceWorker();
 
   return (
     <>
@@ -66,7 +66,13 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
       {mounted && <PWAInstallPrompt />}
-      {mounted && <UpdateToast visible={updateAvailable} onUpdate={activateUpdate} />}
+      {mounted && (
+        <UpdateToast
+          visible={updateAvailable}
+          version={updateVersion}
+          onUpdate={activateUpdate}
+        />
+      )}
 
       <div className="min-h-[100dvh] flex flex-col">
         {mounted && showPwaBanner && <PWAInstallBanner />}
