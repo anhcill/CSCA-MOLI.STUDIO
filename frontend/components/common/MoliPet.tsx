@@ -1018,9 +1018,10 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const mobilePanelStyle: CSSProperties = {
     left: PET_PANEL_MARGIN,
     right: PET_PANEL_MARGIN,
-    bottom: PET_PANEL_MARGIN,
+    bottom: 'max(12px, env(safe-area-inset-bottom))',
     width: 'auto',
-    maxHeight: 'min(78dvh, 620px)',
+    height: 'min(82dvh, 620px)',
+    maxHeight: 'calc(100dvh - 24px)',
   };
   const panelStyle = isMobileViewport ? mobilePanelStyle : desktopPanelStyle;
   const bubbleSideClass = dockedRight ? 'right-20' : 'left-20';
@@ -1252,11 +1253,11 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
       `}</style>
       {open && !minimized && (
         <section
-          className="fixed flex flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95"
+          className="fixed flex flex-col overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-[0_24px_80px_rgba(15,23,42,0.25)] backdrop-blur-xl max-sm:rounded-[22px] max-sm:shadow-[0_18px_60px_rgba(15,23,42,0.3)] dark:border-slate-700 dark:bg-slate-900/95"
           style={panelStyle}
           aria-label="MolyPet"
         >
-          <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
+          <div className={`sticky top-0 z-10 flex shrink-0 items-center justify-between border-b px-4 py-3 max-sm:px-3 max-sm:py-2.5 ${theme.soft} dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100`}>
             <div className="flex min-w-0 items-center gap-3">
               <PetFace color={settings.color} variant={settings.variant} mood={petMood} />
               <div className="min-w-0">
@@ -1265,13 +1266,13 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <button type="button" title="Tùy chỉnh" onClick={() => setSettingsOpen((value) => !value)} className="rounded-lg p-2 hover:bg-white/70 dark:hover:bg-slate-700">
+              <button type="button" title="Tùy chỉnh" onClick={() => setSettingsOpen((value) => !value)} className="rounded-lg p-2 max-sm:p-2.5 hover:bg-white/70 dark:hover:bg-slate-700">
                 <FiSettings />
               </button>
-              <button type="button" title="Thu gọn" onClick={() => setMinimized(true)} className="rounded-lg p-2 hover:bg-white/70 dark:hover:bg-slate-700">
+              <button type="button" title="Thu gọn" onClick={() => setMinimized(true)} className="rounded-lg p-2 max-sm:p-2.5 hover:bg-white/70 dark:hover:bg-slate-700">
                 <FiChevronDown />
               </button>
-              <button type="button" title="Đóng" onClick={() => setOpen(false)} className="rounded-lg p-2 hover:bg-white/70 dark:hover:bg-slate-700">
+              <button type="button" title="Đóng" onClick={() => setOpen(false)} className="rounded-lg p-2 max-sm:p-2.5 hover:bg-white/70 dark:hover:bg-slate-700">
                 <FiX />
               </button>
             </div>
@@ -1371,14 +1372,14 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             </div>
           )}
 
-          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3 max-sm:px-3">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                  className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed max-sm:max-w-[88%] ${
                     message.role === 'user'
                       ? `${theme.button} text-white`
                       : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100'
@@ -1403,13 +1404,13 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             </div>
           )}
 
-          <form onSubmit={sendMessage} className="flex shrink-0 items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-700">
+          <form onSubmit={sendMessage} className="flex shrink-0 items-center gap-2 border-t border-slate-100 p-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700">
             <input
               value={input}
               maxLength={600}
               onChange={(event) => setInput(event.target.value)}
               placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name}...` : 'Đăng nhập để chat AI'}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:border-cyan-400 sm:py-2 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
             <button
               type="submit"

@@ -142,6 +142,7 @@ export default function DailyQuestsBtn() {
           colors: ['#f43f5e', '#fbbf24', '#34d399', '#60a5fa']
         });
         setQuests(prev => prev.map(q => q.id === id ? { ...q, is_completed: true } : q));
+        window.dispatchEvent(new CustomEvent('daily-quest-claimed', { detail: { questId: id } }));
         if (questCache) {
           questCache = {
             ...questCache,
@@ -151,7 +152,7 @@ export default function DailyQuestsBtn() {
         }
         await refreshUserCoins();
         setToast({ message: `Đã nhận thưởng thành công!`, coins: rewardCoins });
-        setTimeout(() => setToast(null), 4000);
+        setTimeout(() => setToast(null), 2600);
       } else {
         alert(data.message);
       }
@@ -182,7 +183,7 @@ export default function DailyQuestsBtn() {
         </button>
 
         {show && (
-          <div className="absolute right-0 top-full mt-2 w-[22rem] bg-white rounded-2xl shadow-xl border border-gray-100 z-[200] animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
+          <div className="fixed left-3 right-3 top-16 z-[200] max-h-[calc(100dvh-5rem)] w-auto overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-[22rem]">
             {/* Header */}
             <div className="p-4 bg-gradient-to-r from-rose-50 to-pink-50 border-b border-gray-100">
               <div className="flex items-center gap-2 mb-3">
@@ -246,7 +247,7 @@ export default function DailyQuestsBtn() {
             )}
 
             {/* Quest list */}
-            <div className="p-4 max-h-80 overflow-y-auto">
+            <div className="max-h-[calc(100dvh-17rem)] overflow-y-auto overscroll-contain p-4 sm:max-h-80">
               {loading ? (
                 <div className="text-center text-gray-500 py-4 text-sm animate-pulse">Đang tải nhiệm vụ...</div>
               ) : quests.length === 0 ? (
@@ -319,8 +320,8 @@ export default function DailyQuestsBtn() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 max-w-sm">
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-[300] w-[calc(100vw-1.5rem)] max-w-sm -translate-x-1/2 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 text-white shadow-2xl sm:px-5">
             <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shrink-0">
               <FiStar size={14} className="text-amber-900" />
             </div>

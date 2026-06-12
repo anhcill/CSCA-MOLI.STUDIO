@@ -79,6 +79,24 @@ export default function DailyQuestBanner() {
       .catch(() => {});
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    const handleQuestClaimed = (event: Event) => {
+      const questId = Number((event as CustomEvent<{ questId?: number }>).detail?.questId || 0);
+      if (!questId) return;
+
+      const next = quests.map((quest) => (
+        quest.id === questId ? { ...quest, is_completed: true } : quest
+      ));
+      setQuests(next);
+      if (!next.some((quest) => !quest.is_completed && quest.progress >= quest.target)) {
+        setDismissed(true);
+      }
+    };
+
+    window.addEventListener('daily-quest-claimed', handleQuestClaimed);
+    return () => window.removeEventListener('daily-quest-claimed', handleQuestClaimed);
+  }, [quests]);
+
   const dismissPromotion = () => {
     if (promotion?.id) {
       localStorage.setItem(`promotion_banner_dismissed_${promotion.id}`, '1');
@@ -137,6 +155,7 @@ export default function DailyQuestBanner() {
   const canClaim = quests.filter((quest) => !quest.is_completed && quest.progress >= quest.target);
   const allDone = quests.length > 0 && quests.every((quest) => quest.is_completed);
   if (quests.length === 0 || allDone) return null;
+  if (canClaim.length === 0) return null;
 
   const totalCoins = canClaim.reduce((sum, quest) => sum + quest.reward_coins, 0);
   const currentCoins = user?.coins || 0;

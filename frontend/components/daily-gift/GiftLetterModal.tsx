@@ -64,7 +64,7 @@ export default function GiftLetterModal({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[9998] flex items-end justify-center bg-slate-900/35 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-6"
+      className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-900/35 px-3 py-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm sm:px-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -74,14 +74,16 @@ export default function GiftLetterModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="daily-gift-letter-title"
-        className="relative max-h-[92dvh] w-full max-w-[540px] overflow-visible rounded-[28px] border border-rose-100 bg-[#fffaf0] p-3 shadow-[0_28px_80px_rgba(15,23,42,0.22)] sm:rounded-[32px] sm:p-4"
+        className="relative max-h-[calc(100dvh-24px)] w-full max-w-[540px] overflow-visible rounded-[24px] border border-rose-100 bg-[#fffaf0] p-2.5 shadow-[0_28px_80px_rgba(15,23,42,0.22)] sm:max-h-[92dvh] sm:rounded-[32px] sm:p-4"
         initial={{ y: 36, scale: 0.96, opacity: 0 }}
         animate={{ y: 0, scale: 1, opacity: 1 }}
         exit={{ y: 28, scale: 0.96, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 240, damping: 24 }}
         onClick={(event) => event.stopPropagation()}
       >
-        <CuteCat />
+        <div className="hidden sm:block">
+          <CuteCat />
+        </div>
 
         {DOODLES.map(({ Icon, className, rotate }) => (
           <motion.span
@@ -94,7 +96,7 @@ export default function GiftLetterModal({
           </motion.span>
         ))}
 
-        <div className="max-h-[calc(92dvh-24px)] overflow-y-auto rounded-[22px] border border-white/80 bg-[linear-gradient(180deg,#fffdf7_0%,#fff7ed_100%)] px-5 pb-5 pt-8 shadow-inner sm:rounded-[26px] sm:px-8 sm:pb-7 sm:pt-9">
+        <div className="max-h-[calc(100dvh-44px)] overflow-y-auto overscroll-contain rounded-[20px] border border-white/80 bg-[linear-gradient(180deg,#fffdf7_0%,#fff7ed_100%)] px-4 pb-4 pt-7 shadow-inner sm:max-h-[calc(92dvh-24px)] sm:rounded-[26px] sm:px-8 sm:pb-7 sm:pt-9">
           <button
             type="button"
             aria-label="Đóng thư quà hôm nay"
@@ -116,7 +118,7 @@ export default function GiftLetterModal({
 
             <h2
               id="daily-gift-letter-title"
-              className="max-w-[390px] text-2xl font-black leading-tight text-slate-800 sm:text-3xl"
+              className="max-w-[390px] text-xl font-black leading-tight text-slate-800 sm:text-3xl"
             >
               {letter.title}
             </h2>

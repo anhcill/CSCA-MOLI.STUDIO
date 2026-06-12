@@ -32,8 +32,8 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
   return (
     <>
-      <div className="fixed bottom-32 right-3 z-[90] sm:bottom-28 sm:right-6">
-        <div className="relative h-24 w-24 sm:h-28 sm:w-28">
+      <div className="fixed bottom-[max(6rem,calc(env(safe-area-inset-bottom)+5.5rem))] right-2 z-[90] sm:bottom-28 sm:right-6">
+        <div className="relative h-20 w-20 sm:h-28 sm:w-28">
           {FLOATING_DECOR.map(({ Icon, className, delay }) => (
             <motion.span
               key={className}
@@ -60,7 +60,7 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
             type="button"
             aria-label="Mở quà học tập hôm nay"
             onClick={() => setOpen(true)}
-            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[76px] w-[76px] items-center justify-center rounded-[24px] border border-rose-100 bg-gradient-to-br from-rose-100 via-pink-100 to-sky-100 shadow-[0_18px_45px_rgba(244,114,182,0.35)] outline-none ring-4 ring-white/70 transition-colors hover:from-rose-200 hover:via-pink-100 hover:to-cyan-100 focus-visible:ring-4 focus-visible:ring-rose-300 sm:h-[88px] sm:w-[88px]"
+            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[68px] w-[68px] items-center justify-center rounded-[22px] border border-rose-100 bg-gradient-to-br from-rose-100 via-pink-100 to-sky-100 shadow-[0_18px_45px_rgba(244,114,182,0.35)] outline-none ring-4 ring-white/70 transition-colors hover:from-rose-200 hover:via-pink-100 hover:to-cyan-100 focus-visible:ring-4 focus-visible:ring-rose-300 sm:h-[88px] sm:w-[88px] sm:rounded-[24px]"
             animate={{
               y: [0, -5, 0],
               rotate: [0, -4, 4, -2, 0],
@@ -81,12 +81,12 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
           >
             <span className="absolute inset-2 rounded-[20px] border border-white/70 bg-white/35" />
             <span className="absolute left-1/2 top-1 h-3 w-11 -translate-x-1/2 rounded-full bg-rose-300/80" />
-            <span className="absolute left-1/2 top-2 h-[64px] w-4 -translate-x-1/2 rounded-full bg-rose-400/80 sm:h-[72px]" />
-            <span className="absolute left-2 top-1/2 h-4 w-[60px] -translate-y-1/2 rounded-full bg-rose-400/80 sm:w-[72px]" />
-            <span className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-white/85 text-rose-500 shadow-inner sm:h-14 sm:w-14">
-              <FaGift size={30} className="drop-shadow-sm transition-transform duration-300 group-hover:scale-110" />
+            <span className="absolute left-1/2 top-2 h-[56px] w-3.5 -translate-x-1/2 rounded-full bg-rose-400/80 sm:h-[72px] sm:w-4" />
+            <span className="absolute left-2 top-1/2 h-3.5 w-[52px] -translate-y-1/2 rounded-full bg-rose-400/80 sm:h-4 sm:w-[72px]" />
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white/85 text-rose-500 shadow-inner sm:h-14 sm:w-14">
+              <FaGift size={26} className="drop-shadow-sm transition-transform duration-300 group-hover:scale-110 sm:size-[30px]" />
             </span>
-            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100 bg-white px-3 py-1 text-[11px] font-extrabold text-rose-500 shadow-md">
+            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100 bg-white px-2.5 py-1 text-[10px] font-extrabold text-rose-500 shadow-md sm:px-3 sm:text-[11px]">
               Quà hôm nay
             </span>
           </motion.button>
