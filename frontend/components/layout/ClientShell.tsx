@@ -6,6 +6,7 @@ import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 import MoliPet from '@/components/common/MoliPet';
 import DailyGiftBox from '@/components/daily-gift/DailyGiftBox';
+import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
 import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt';
 import UpdateToast from '@/components/pwa/UpdateToast';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
@@ -53,6 +54,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showDailyGift = showMoliPet && isAuthenticated;
+  const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame;
   const moliPetPosition = 'left';
 
   // Register service worker + detect updates
@@ -67,6 +69,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {mounted && <UpdateToast visible={updateAvailable} onUpdate={activateUpdate} />}
 
       <div className="min-h-[100dvh] flex flex-col">
+        {mounted && showPwaBanner && <PWAInstallBanner />}
         <div className="flex-1">
           {children}
         </div>

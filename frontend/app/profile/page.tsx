@@ -10,6 +10,7 @@ import { getCurrentUser } from '@/lib/api/auth';
 import { getWalletLedger } from '@/lib/api/games';
 import Header from '@/components/layout/Header';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import PWAInstallSettings from '@/components/pwa/PWAInstallSettings';
 import PushNotificationSettings from '@/components/pwa/PushNotificationSettings';
 import { useLanguage } from '@/context/LanguageContext';
 import {
@@ -17,7 +18,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap, FiMonitor, FiRefreshCw,
+  FiStar, FiZap, FiMonitor, FiRefreshCw, FiDownload,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -1184,6 +1185,17 @@ export default function ProfilePage() {
                         <FiSave size={14} />{pwSaving ? 'Đang lưu...' : 'Cập nhật mật khẩu'}
                       </button>
                     </form>
+                  </section>
+
+                  <div className="border-t border-gray-100" />
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <FiDownload size={14} className="text-gray-500" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Cài app</h3>
+                    </div>
+                    <PWAInstallSettings />
                   </section>
 
                   <div className="border-t border-gray-100" />

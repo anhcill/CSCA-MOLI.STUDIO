@@ -8,6 +8,12 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+declare global {
+  interface Window {
+    moliDeferredPwaPrompt?: BeforeInstallPromptEvent | null;
+  }
+}
+
 function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
 }
@@ -25,24 +31,36 @@ export default function PWAInstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('pwa-install-dismissed') === '1' || isStandalone()) {
+    const storedDismissed = localStorage.getItem('pwa-install-dismissed') === '1';
+    const storedInstalled = localStorage.getItem('pwa-installed') === '1';
+    if (isStandalone() || storedInstalled) {
       setDismissed(true);
       return;
     }
 
+    setDismissed(storedDismissed);
+
     if (isIOSSafari()) {
+      if (storedDismissed) return;
       setShowIOSGuide(true);
       return;
     }
 
     const handleInstallPrompt = (event: Event) => {
       event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
+      const promptEvent = event as BeforeInstallPromptEvent;
+      window.moliDeferredPwaPrompt = promptEvent;
+      window.dispatchEvent(new CustomEvent('moli-pwa-install-ready'));
+      if (!storedDismissed) {
+        setDeferredPrompt(promptEvent);
+      }
     };
     const handleInstalled = () => {
+      window.moliDeferredPwaPrompt = null;
       setDeferredPrompt(null);
       setDismissed(true);
       localStorage.setItem('pwa-install-dismissed', '1');
+      localStorage.setItem('pwa-installed', '1');
     };
 
     window.addEventListener('beforeinstallprompt', handleInstallPrompt);
@@ -60,8 +78,10 @@ export default function PWAInstallPrompt() {
     if (outcome === 'accepted') {
       setDismissed(true);
       localStorage.setItem('pwa-install-dismissed', '1');
+      localStorage.setItem('pwa-installed', '1');
     }
     setDeferredPrompt(null);
+    window.moliDeferredPwaPrompt = null;
   }, [deferredPrompt]);
 
   const handleDismiss = useCallback(() => {
