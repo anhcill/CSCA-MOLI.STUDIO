@@ -43,6 +43,8 @@ const REVIEW_REVEAL_DELAY_MS = 2500;
 const REVIEW_POST_RENDER_LOCK_MS = 3500;
 const REVIEW_COOLDOWN_MS = 15000;
 
+type ImportAiTask = 'review' | 'fix' | 'settling' | 'post-render' | null;
+
 function waitForNextPaint() {
   return new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
@@ -51,6 +53,115 @@ function waitForNextPaint() {
 
 function MathInput(props: ComponentProps<typeof BaseMathInput>) {
   return <BaseMathInput {...props} commitDelayMs={350} />;
+}
+
+function ImportAiBlockingOverlay({
+  task,
+  questionCount,
+  postRenderSeconds = 0,
+}: {
+  task: ImportAiTask;
+  questionCount: number;
+  postRenderSeconds?: number;
+}) {
+  const [startedAt, setStartedAt] = useState(Date.now());
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!task) return;
+    setStartedAt(Date.now());
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [task]);
+
+  if (!task) return null;
+
+  const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  const elapsedText = minutes ? `${minutes}p ${seconds}s` : `${seconds}s`;
+  const progress = task === 'post-render'
+    ? Math.max(8, Math.min(100, 100 - postRenderSeconds * 25))
+    : Math.min(94, 10 + elapsedSeconds * (task === 'fix' ? 0.9 : 1.2));
+
+  const config = {
+    review: {
+      title: 'AI đang soát đề đăng lên',
+      subtitle: `Đang kiểm tra ${questionCount} câu: câu hỏi, đáp án đúng, lời giải và lỗi format.`,
+      hint: 'Thường mất 1-3 phút với đề dài. Trang đang khóa để tránh mất dữ liệu.',
+      steps: ['Gửi đề lên backend', 'AI đọc từng nhóm câu', 'Đối chiếu đáp án/lời giải', 'Tổng hợp log lỗi'],
+    },
+    fix: {
+      title: 'AI đang sửa log lỗi',
+      subtitle: `Đang sửa các lỗi đã được đánh dấu trong ${questionCount} câu preview.`,
+      hint: 'Bước này có thể lâu hơn soát đề vì AI phải trả bản sửa hoàn chỉnh.',
+      steps: ['Gửi log lỗi', 'AI viết bản sửa', 'Chuẩn hóa LaTeX/OCR', 'Áp dụng vào bản xem trước'],
+    },
+    settling: {
+      title: 'Đang sắp xếp kết quả',
+      subtitle: 'AI đã trả kết quả, hệ thống đang gắn log vào từng câu.',
+      hint: 'Chờ vài giây để giao diện không bị khựng.',
+      steps: ['Nhận kết quả AI', 'Gắn log vào câu', 'Cập nhật sổ log', 'Mở khóa thao tác'],
+    },
+    'post-render': {
+      title: 'Đang ổn định giao diện',
+      subtitle: `Còn ${postRenderSeconds}s trước khi mở khóa thao tác.`,
+      hint: 'Đợi chút để tránh bấm nhầm khi danh sách câu vừa render lại.',
+      steps: ['Render câu hỏi', 'Cập nhật log', 'Khóa ngắn chống bấm nhầm', 'Sẵn sàng thao tác'],
+    },
+  }[task];
+
+  const activeIndex = Math.min(config.steps.length - 1, Math.floor(progress / 25));
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm" role="alert" aria-live="assertive" aria-busy="true">
+      <div className="w-full max-w-lg rounded-2xl border border-white/20 bg-white p-5 shadow-2xl">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-700">
+            <FiRefreshCw className="animate-spin" size={24} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-black text-slate-950">{config.title}</p>
+            <p className="mt-1 text-sm font-medium text-slate-600">{config.subtitle}</p>
+            <p className="mt-2 text-xs font-semibold uppercase text-slate-400">Đã chạy {elapsedText}</p>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-xs font-semibold text-slate-500">
+            <span>{Math.round(progress)}%</span>
+            <span>Đang khóa thao tác</span>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {config.steps.map((step, index) => {
+            const done = index < activeIndex;
+            const active = index === activeIndex;
+            return (
+              <div key={step} className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-900' : done ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-50 text-slate-500'}`}>
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black ${active ? 'bg-indigo-600 text-white' : done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  {done ? '✓' : index + 1}
+                </span>
+                <span className="font-semibold">{step}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+          {config.hint}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function ImageUrlEditor({
@@ -780,6 +891,15 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const visibleWarnings = (preview.warnings || []).filter((warning) => !isTechnicalImportWarning(warning));
   const reviewBusy = reviewing || reviewSettling;
   const aiBusy = reviewBusy || fixingReviewIssues;
+  const importAiTask: ImportAiTask = reviewing
+    ? 'review'
+    : fixingReviewIssues
+      ? 'fix'
+      : reviewSettling
+        ? 'settling'
+        : reviewPostRenderSeconds > 0
+          ? 'post-render'
+          : null;
   const reviewInteractionLocked = aiBusy || reviewPostRenderSeconds > 0;
   const reviewBlocked = saving || aiBusy || reviewCooldownSeconds > 0 || items.length === 0;
   const fixBlocked = saving || aiBusy || reviewCooldownSeconds > 0 || pendingReviewCount === 0;
@@ -1154,12 +1274,11 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   return (
     <div className="relative mt-5 border-t border-gray-200 pt-5">
       {reviewInteractionLocked && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-white/70 px-4 py-24 backdrop-blur-[1px]">
-          <div className="flex max-w-[92vw] items-center gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-bold text-indigo-800 shadow-lg">
-            <FiRefreshCw className="shrink-0 animate-spin" size={18} />
-            <span>{aiLockMessage}</span>
-          </div>
-        </div>
+        <ImportAiBlockingOverlay
+          task={importAiTask}
+          questionCount={questionCount}
+          postRenderSeconds={reviewPostRenderSeconds}
+        />
       )}
 
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
