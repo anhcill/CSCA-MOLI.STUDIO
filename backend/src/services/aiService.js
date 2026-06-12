@@ -113,6 +113,7 @@ function getAdminExamModelCandidates(options = {}) {
     .map(model => String(model || '').trim())
     .filter(Boolean);
   const filtered = configured.filter(isUsableAdminExamRouterModel);
+  if (isNineRouterAdminExam()) return [...new Set(filtered)];
   const candidates = filtered.length ? filtered : configured;
   return [...new Set(candidates)];
 }

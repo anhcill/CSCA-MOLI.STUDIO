@@ -86,6 +86,7 @@ function isSingleChoice(item: ImportedExamItem): item is ImportedQuestionData {
 
 function getAiReviewLabel(status?: string) {
   if (status === 'ok') return 'AI thấy ổn';
+    if (status === 'question_issue') return 'Nghi lỗi câu hỏi/OCR';
   if (status === 'formula_issue') return 'Nghi lỗi công thức';
   if (status === 'answer_issue') return 'Nghi sai đáp án';
   if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
@@ -108,6 +109,7 @@ type ReviewLogEntry = {
   confidence?: number;
   suggestedCorrectAnswer?: string;
   note?: string;
+  questionIssues: string[];
   formulaIssues: string[];
   explanationIssues: string[];
   fixState: ReviewLogState;
@@ -154,6 +156,7 @@ function collectReviewIssueRows(items: ImportedExamItem[]) {
     confidence?: number;
     suggestedCorrectAnswer?: string;
     note?: string;
+    questionIssues: string[];
     formulaIssues: string[];
     explanationIssues: string[];
   }> = [];
@@ -168,6 +171,7 @@ function collectReviewIssueRows(items: ImportedExamItem[]) {
       confidence: review.confidence,
       suggestedCorrectAnswer: review.suggestedCorrectAnswer,
       note: review.note,
+      questionIssues: review.questionIssues || [],
       formulaIssues: review.formulaIssues || [],
       explanationIssues: review.explanationIssues || [],
     });
@@ -232,6 +236,7 @@ function mergeReviewLedgerFromItems(
       confidence: row.confidence,
       suggestedCorrectAnswer: row.suggestedCorrectAnswer,
       note: row.note,
+      questionIssues: row.questionIssues,
       formulaIssues: row.formulaIssues,
       explanationIssues: row.explanationIssues,
       fixState: 'pending',
@@ -265,6 +270,7 @@ function applyFixResultToLedger(
         path,
         label: path,
         status: 'needs_review',
+        questionIssues: [],
         formulaIssues: [],
         explanationIssues: [],
       }),
@@ -285,6 +291,7 @@ function applyFixResultToLedger(
         status: skipped.status || 'needs_review',
         confidence: skipped.confidence,
         note: skipped.note,
+        questionIssues: [],
         formulaIssues: [],
         explanationIssues: [],
       }),
@@ -305,6 +312,7 @@ function applyFixResultToLedger(
       ...(previous || {
         path: issue.path,
         label: issue.label || issue.path,
+        questionIssues: [],
         formulaIssues: [],
         explanationIssues: [],
       }),
@@ -314,6 +322,7 @@ function applyFixResultToLedger(
       confidence: issue.confidence ?? previous?.confidence,
       suggestedCorrectAnswer: issue.suggestedCorrectAnswer || previous?.suggestedCorrectAnswer,
       note: issue.note || previous?.note,
+      questionIssues: issue.questionIssues || previous?.questionIssues || [],
       formulaIssues: issue.formulaIssues || previous?.formulaIssues || [],
       explanationIssues: issue.explanationIssues || previous?.explanationIssues || [],
       fixState: previous?.fixState === 'skipped' ? 'skipped' : 'pending',
@@ -384,6 +393,7 @@ function AiReviewLogPanel({
               </div>
               {row.suggestedCorrectAnswer && <p className="mt-1">Gợi ý đáp án: {row.suggestedCorrectAnswer}</p>}
               {row.note && <p className="mt-1 whitespace-pre-wrap">{row.note}</p>}
+              {row.questionIssues.map((issue, index) => <p key={`question-${index}`} className="mt-1">Câu hỏi/OCR: {issue}</p>)}
               {row.formulaIssues.map((issue, index) => <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>)}
               {row.explanationIssues.map((issue, index) => <p key={`explanation-${index}`} className="mt-1">Lời giải: {issue}</p>)}
             </div>
@@ -467,7 +477,7 @@ function ApplyFixResultPanel({ result }: { result: ApplyExamReviewFixesResult | 
           <div className="mt-2 space-y-1.5">
             {remainingIssues.slice(0, 20).map((item, index) => (
               <p key={`${item.path}-${index}`} className="text-xs">
-                <span className="font-bold">{item.label || item.path} - {getAiReviewLabel(item.status)}:</span> {item.note || item.formulaIssues?.[0] || item.explanationIssues?.[0] || 'Cần xem lại.'}
+                <span className="font-bold">{item.label || item.path} - {getAiReviewLabel(item.status)}:</span> {item.note || item.questionIssues?.[0] || item.formulaIssues?.[0] || item.explanationIssues?.[0] || 'Cần xem lại.'}
               </p>
             ))}
           </div>
@@ -523,6 +533,7 @@ function ReviewLedgerPanel({ ledger }: { ledger: Record<string, ReviewLogEntry> 
             ) : null}
             {row.note && row.fixState !== 'fixed' ? <p className="mt-1 whitespace-pre-wrap">{row.note}</p> : null}
             {row.suggestedCorrectAnswer && row.fixState !== 'fixed' ? <p className="mt-1">Gợi ý đáp án: {row.suggestedCorrectAnswer}</p> : null}
+            {row.questionIssues.map((issue, index) => <p key={`question-${index}`} className="mt-1">Câu hỏi/OCR: {issue}</p>)}
             {row.formulaIssues.map((issue, index) => <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>)}
             {row.explanationIssues.map((issue, index) => <p key={`explanation-${index}`} className="mt-1">Lời giải: {issue}</p>)}
           </div>

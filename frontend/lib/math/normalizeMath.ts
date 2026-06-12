@@ -501,6 +501,35 @@ function hasBalancedMathGroups(input: string): boolean {
   return stack.length === 0;
 }
 
+function wrapRawFormulaRuns(input: string): string {
+  return input
+    .split(WRAPPED_MATH_RE)
+    .map((part) => {
+      if (
+        !part ||
+        part.startsWith('\\(') ||
+        part.startsWith('\\[') ||
+        part.startsWith('$$') ||
+        part.startsWith('$')
+      ) return part;
+
+      return part.replace(
+        /(^|[\s:：为是得])([A-Za-z][A-Za-z0-9_']*\s*(?:=|<|>|\\le|\\ge|\\ne|\\approx)\s*[^。；;，,\n]{1,180})/g,
+        (match, prefix, formula) => {
+          const raw = String(formula || '').trim();
+          if (!/[=<>^_\\/]|\\[A-Za-z]+|\d|sin|cos|tan|log|sqrt|frac|theta|alpha|beta|gamma|mu|pi/i.test(raw)) {
+            return match;
+          }
+
+          const normalized = normalizeLatexMath(raw);
+          if (!normalized || !isMostlyMath(normalized) || !hasBalancedMathGroups(normalized)) return match;
+          return `${prefix}\\(${normalized}\\)`;
+        },
+      );
+    })
+    .join('');
+}
+
 function escapeSetLiteralBraces(input: string): string {
   let out = '';
   let cursor = 0;
@@ -816,7 +845,7 @@ export function normalizeRichMathText(input: string): string {
         return `$${normalizeLatexMath(part.slice(1, -1))}$`;
       }
 
-      const withEqualMath = wrapEqualMathInPlainText(part);
+      const withEqualMath = wrapEqualMathInPlainText(wrapRawFormulaRuns(part));
       return withEqualMath
         .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g)
         .map((segment) => {

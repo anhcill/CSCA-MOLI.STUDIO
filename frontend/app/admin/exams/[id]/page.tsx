@@ -135,6 +135,7 @@ function findQuestionItemIndex(items: QuestionListItem[], questionId: number) {
 
 function getAiReviewLabel(status?: string) {
     if (status === 'ok') return 'AI thấy ổn';
+    if (status === 'question_issue') return 'Nghi lỗi câu hỏi/OCR';
     if (status === 'formula_issue') return 'Nghi lỗi công thức';
     if (status === 'answer_issue') return 'Nghi sai đáp án';
     if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
@@ -524,6 +525,9 @@ function SavedExamAiReviewPanel({
                                     </div>
                                     {review.suggestedCorrectAnswer && <p className="mt-1">Gợi ý đáp án: {review.suggestedCorrectAnswer}</p>}
                                     {review.note && <p className="mt-1 whitespace-pre-wrap">{review.note}</p>}
+                                    {(review.questionIssues || []).map((issue, index) => (
+                                        <p key={`question-${index}`} className="mt-1">Câu hỏi/OCR: {issue}</p>
+                                    ))}
                                     {(review.formulaIssues || []).map((issue, index) => (
                                         <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>
                                     ))}

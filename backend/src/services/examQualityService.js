@@ -348,11 +348,40 @@ function repairMalformedInlineDollarDelimiters(value) {
   });
 }
 
+function wrapRawFormulaRuns(value) {
+  return stringValue(value)
+    .split(WRAPPED_MATH_RE)
+    .map((part) => {
+      if (
+        !part ||
+        part.startsWith("\\(") ||
+        part.startsWith("\\[") ||
+        part.startsWith("$$") ||
+        part.startsWith("$")
+      ) return part;
+
+      return part.replace(
+        /(^|[\s:：为是得])([A-Za-z][A-Za-z0-9_']*\s*(?:=|<|>|\\le|\\ge|\\ne|\\approx)\s*[^。；;，,\n]{1,180})/g,
+        (match, prefix, formula) => {
+          const raw = stringValue(formula).trim();
+          if (!/[=<>^_\\/]|\\[A-Za-z]+|\d|sin|cos|tan|log|sqrt|frac|theta|alpha|beta|gamma|mu|pi/i.test(raw)) {
+            return match;
+          }
+
+          const normalized = normalizeLooseMathSyntax(raw).trim();
+          if (!normalized || !isMostlyMath(normalized)) return match;
+          return `${prefix}\\(${normalized}\\)`;
+        },
+      );
+    })
+    .join("");
+}
+
 function normalizeStoredFormulaText(value, options = {}) {
   const input = repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(stringValue(value).replace(/\0/g, "")));
   if (!input.trim()) return "";
 
-  let out = normalizeMathSegments(repairOcrMathArtifacts(input))
+  let out = wrapRawFormulaRuns(normalizeMathSegments(repairOcrMathArtifacts(input)))
     .replace(/\\{2,}(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\}|[,;!:])/g, "\\")
     .replace(/\\right\s+leftharpoons/g, "\\rightleftharpoons")
     .replace(/\\left\s+right/g, "\\leftright")
@@ -662,7 +691,7 @@ function parseAiJson(raw) {
 
 function normalizeReviewStatus(value) {
   const status = stringValue(value).toLowerCase();
-  if (["ok", "formula_issue", "answer_issue", "explanation_issue", "needs_review"].includes(status)) {
+  if (["ok", "question_issue", "formula_issue", "answer_issue", "explanation_issue", "needs_review"].includes(status)) {
     return status;
   }
   return "needs_review";
@@ -759,6 +788,7 @@ Yêu cầu:
 - Nếu đáp án hiện tại có vẻ sai, status="answer_issue" và đưa suggestedCorrectAnswer.
 - Nếu lời giải sai, thiếu, hoặc trình bày không khớp đáp án, status="explanation_issue".
 - Nếu thiếu hình/dữ kiện hoặc không chắc, status="needs_review".
+- Nếu đề bài/câu hỏi bị sai chữ, thiếu dữ kiện, OCR lệch nghĩa, trộn ngôn ngữ hoặc mất đoạn quan trọng, dùng status="question_issue" và ghi rõ vào questionIssues.
 - confidence từ 0 đến 1. Câu đỏ chỉ khi confidence >= 0.75.
 
 Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
@@ -769,9 +799,10 @@ Trả dạng:
     {
       "index": 0,
       "path": "0",
-      "status": "ok|formula_issue|answer_issue|explanation_issue|needs_review",
+      "status": "ok|question_issue|formula_issue|answer_issue|explanation_issue|needs_review",
       "confidence": 0.9,
       "suggestedCorrectAnswer": "A",
+      "questionIssues": ["..."],
       "formulaIssues": ["..."],
       "explanationIssues": ["..."],
       "note": "ngắn gọn tiếng Việt"
@@ -794,6 +825,7 @@ function buildFallbackReview(entry, note) {
     status: "needs_review",
     confidence: 0,
     suggestedCorrectAnswer: "",
+    questionIssues: [],
     formulaIssues: [],
     explanationIssues: [],
     note,
@@ -908,6 +940,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
           status: normalizeReviewStatus(review.status),
           confidence: Math.max(0, Math.min(1, Number(review.confidence) || 0)),
           suggestedCorrectAnswer: stringValue(review.suggestedCorrectAnswer).toUpperCase().slice(0, 1),
+          questionIssues: Array.isArray(review.questionIssues) ? review.questionIssues.map(stringValue).filter(Boolean) : [],
           formulaIssues: Array.isArray(review.formulaIssues) ? review.formulaIssues.map(stringValue).filter(Boolean) : [],
           explanationIssues: Array.isArray(review.explanationIssues) ? review.explanationIssues.map(stringValue).filter(Boolean) : [],
           note: stringValue(review.note).slice(0, 600),
@@ -1132,6 +1165,7 @@ function hasDisplayFormatIssue(value) {
     hasStackedOcrMathFragments(text) ||
     isSuspiciousFormulaText(text) ||
     LATEX_COMMAND_RE.test(withoutWrapped) ||
+    /(^|[\s:：为是得])[A-Za-z][A-Za-z0-9_']*\s*(?:=|<|>|\\le|\\ge|\\ne|\\approx)\s*[^。；;，,\n]{1,180}/.test(withoutWrapped) ||
     /\\\w+\^\{?\d{2,}\}?\^\{?\\circ\}?/i.test(text) ||
     /\^\{?\\circ\}?\}/i.test(text) ||
     /(?:^|[^\w])(?:sin|cos|tan|sqrt|frac|log|ln)\s*[\^_{(]/i.test(text) ||
@@ -1210,6 +1244,9 @@ Yêu cầu:
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
 - Nếu có questionTextCn và missingExplanationCn=true, tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation.
 - Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
+- Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "FA=BIL=(B^2L^2v\\cos\\theta)/R" phải viết "\\(F_A=BIL=\\frac{B^2L^2v\\cos\\theta}{R}\\)".
+- Không dùng dấu $ hoặc $$ trong explanation/explanationCn. Chỉ dùng \\(...\\) cho inline math và \\[...\\] cho công thức dài đứng riêng.
+- Nếu lời giải dùng tiếng Trung trong explanationCn, phần chữ có thể là tiếng Trung nhưng công thức vẫn phải theo LaTeX chuẩn như trên.
 - Lời giải nên xuống dòng theo ý: Công thức/Phân tích, Thay tính, Kết luận/Chọn.
 - Nếu cần đọc ảnh nhưng không đủ dữ liệu từ text/answers để giải chắc, để explanation rỗng và note lý do, không đoán bừa.
 - Mỗi item trong dữ liệu phải có một object trong explanations.
@@ -1263,6 +1300,8 @@ Yêu cầu:
 - Chỉ sửa trường explanation. Không sửa đề, không sửa đáp án, không thêm ý mới làm đổi nghĩa.
 - Bắt buộc viết tiếng Việt CÓ DẤU. Chuyển "Phan tich", "Dieu kien", "Cong thuc", "Ket luan", "dap an" thành tiếng Việt đúng dấu.
 - Giữ nguyên công thức, ký hiệu, đáp án chọn và ý nghĩa toán/lý/hóa. Nếu thấy LaTeX thô, có thể bọc công thức bằng \\(...\\) nhưng không đổi nội dung.
+- Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "v1 = v cos theta" phải thành "\\(v_1=v\\cos\\theta\\)".
+- Không dùng dấu $ hoặc $$ trong explanation. Chỉ dùng \\(...\\) hoặc \\[...\\].
 - Trình bày dễ đọc bằng dòng ngắn: Phân tích, Điều kiện/Công thức, Suy ra/Kết luận, Chọn.
 - Nếu không chắc cách thêm dấu mà có thể đổi nghĩa, trả explanation rỗng và note lý do.
 
@@ -1724,6 +1763,7 @@ function collectRemainingImportedReviewIssues(items) {
         confidence: review.confidence,
         suggestedCorrectAnswer: review.suggestedCorrectAnswer,
         note: review.note,
+        questionIssues: review.questionIssues || [],
         formulaIssues: review.formulaIssues || [],
         explanationIssues: review.explanationIssues || [],
       };

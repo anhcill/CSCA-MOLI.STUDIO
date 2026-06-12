@@ -58,9 +58,10 @@ export interface ImportedQuestionAiReview {
     questionNumber?: number;
     questionType?: string;
     parentQuestionId?: number;
-    status: 'ok' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review';
+    status: 'ok' | 'question_issue' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review';
     confidence: number;
     suggestedCorrectAnswer?: string;
+    questionIssues?: string[];
     formulaIssues?: string[];
     explanationIssues?: string[];
     note?: string;
@@ -185,6 +186,7 @@ export interface ImportedItemsReviewResult {
         total: number;
         ok: number;
         issues: number;
+        question_issue?: number;
         formula_issue?: number;
         answer_issue?: number;
         explanation_issue?: number;
