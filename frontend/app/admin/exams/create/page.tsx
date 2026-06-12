@@ -8,6 +8,7 @@ import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEdi
 import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin/ReadingPassageGroup';
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
 import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
+import BackButton from '@/components/layout/BackButton';
 import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -811,6 +812,7 @@ export default function CreateExamPage() {
             <div className="max-w-5xl mx-auto px-6">
                 {/* Header */}
                 <div className="mb-8">
+                    <BackButton fallbackHref="/admin/exams" className="mb-4" />
                     <h1 className="text-3xl font-bold text-gray-900">Tạo Đề Thi Mới</h1>
                     <p className="text-gray-600 mt-2">Nhập thông tin đề thi và thêm câu hỏi</p>
                 </div>
