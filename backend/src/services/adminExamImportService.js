@@ -1079,7 +1079,7 @@ const CHINESE_SOCIAL_OPTION_LABEL_RE = /[（(]\s*([A-H])\s*[）)]/gi;
 const CHINESE_SOCIAL_GROUP_POOL_RE = /(?:^|\n)\s*(?:第\s*)?(\d{1,3})\s*-\s*(\d{1,3})\s*(?:题)?\s*[:：]\s*([^\n]*(?:[（(]\s*[A-H]\s*[）)][^\n]*)+)/gi;
 const CHINESE_SOCIAL_READING_GROUP_RE = /(?:^|\n)\s*第\s*(\d{1,3})\s*-\s*(\d{1,3})\s*题\s*[:：]?\s*/gi;
 const CHINESE_SOCIAL_SECTION_READING_RE = /(?:^|\n)\s*(?:VI|Ⅵ)[.．]\s*阅读理解/i;
-const CHINESE_SCIENCE_QUESTION_LINE_RE = /^(?:\[Hình\]\s*)?(\d{1,3})[.\uFF0E\u3001]\s*(.*)$/;
+const CHINESE_SCIENCE_QUESTION_LINE_RE = /^(?:\[H??nh\]\s*)?(?:(?:\u7b2c\s*)?(\d{1,3})\s*\u9898\s*[:\uFF1A]?|(\d{1,3})[.\uFF0E\u3001])\s*(.*)$/;
 const CHINESE_SCIENCE_OPTION_LINE_RE = /^(?:[\uFF08(]\s*([A-H])\s*[\uFF09)]|([A-H])[.\uFF0E\u3001])\s*/i;
 const CHINESE_SCIENCE_OPTION_RE = /(?:^|[ \t\n])(?:[\uFF08(]\s*([A-H])\s*[\uFF09)]|([A-H])[ \t]*[.\uFF0E\u3001])[ \t]*/gi;
 const CHINESE_SCIENCE_EXPLANATION_LINE_RE = /^(?:解答|解析|答案解析|说明|答案)\s*[:：]?/i;
@@ -1220,7 +1220,7 @@ function getChineseScienceQuestionMarkers(lines) {
   const markers = [];
   lines.forEach((line, index) => {
     const match = line.match(CHINESE_SCIENCE_QUESTION_LINE_RE);
-    const questionNumber = Number.parseInt(match?.[1], 10);
+    const questionNumber = Number.parseInt(match?.[1] || match?.[2], 10);
     if (Number.isFinite(questionNumber) && questionNumber > 0 && questionNumber <= PDF_IMPORT_MAX_QUESTIONS) {
       markers.push({ index, questionNumber });
     }
@@ -1310,9 +1310,44 @@ function cleanChineseScienceOptionText(rawText) {
   return text;
 }
 
+function isLikelyChineseScienceUnlabeledOption(line) {
+  const text = cleanChineseScienceOptionText(line);
+  if (!text || text.length > 140) return false;
+  if (/^(?:\[H??nh\]|\[image\]|\[figure\])$/i.test(text)) return false;
+  return /(?:\\\(|\\frac|\\sqrt|[0-9A-Za-z+\-*/=<>]|Kh?ng|kh?ng|\u4e0d|\u65e0|\u5b58\u5728)/i.test(text);
+}
+
+function parseChineseScienceUnlabeledOptions(questionAndOptions) {
+  const lines = stringValue(questionAndOptions)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 5) return null;
+
+  const optionCandidates = [];
+  for (let index = lines.length - 1; index >= 1 && optionCandidates.length < 4; index--) {
+    if (isLikelyChineseScienceUnlabeledOption(lines[index])) {
+      optionCandidates.unshift({ index, text: cleanChineseScienceOptionText(lines[index]) });
+    }
+  }
+  if (optionCandidates.length < 4) return null;
+
+  const firstOptionIndex = optionCandidates[0].index;
+  const questionText = cleanRuleBasedTextFragment(lines.slice(0, firstOptionIndex).join("\n"));
+  if (!questionText) return null;
+
+  return {
+    questionText,
+    options: optionCandidates.map((option, index) => ({
+      key: RULE_IMPORT_ANSWER_KEYS[index],
+      text: option.text,
+    })),
+  };
+}
+
 function parseChineseScienceQuestionBlock(block) {
   const firstLineMatch = block.lines[0]?.match(CHINESE_SCIENCE_QUESTION_LINE_RE);
-  const firstQuestionLine = firstLineMatch ? firstLineMatch[2] : block.lines[0];
+  const firstQuestionLine = firstLineMatch ? firstLineMatch[3] : block.lines[0];
   const body = [firstQuestionLine, ...block.lines.slice(1)].filter(Boolean).join("\n");
   const explanationMatch = body.match(CHINESE_SCIENCE_EXPLANATION_RE);
   const questionAndOptions = (explanationMatch ? body.slice(0, explanationMatch.index) : body).trim();
@@ -1321,12 +1356,17 @@ function parseChineseScienceQuestionBlock(block) {
     : "";
   const optionMatches = getChineseScienceOptionMatches(questionAndOptions);
 
-  if (optionMatches.length < 2) return null;
+  const unlabeledOptions = optionMatches.length < 2
+    ? parseChineseScienceUnlabeledOptions(questionAndOptions)
+    : null;
 
-  const questionText = cleanRuleBasedTextFragment(questionAndOptions.slice(0, optionMatches[0].labelStart));
+  if (optionMatches.length < 2 && !unlabeledOptions) return null;
+
+  const questionText = unlabeledOptions?.questionText ||
+    cleanRuleBasedTextFragment(questionAndOptions.slice(0, optionMatches[0].labelStart));
   if (!questionText) return null;
 
-  const parsedOptions = optionMatches
+  const parsedOptions = unlabeledOptions?.options || optionMatches
     .slice(0, 8)
     .map((option, index, allOptions) => {
       const nextOption = allOptions[index + 1];
