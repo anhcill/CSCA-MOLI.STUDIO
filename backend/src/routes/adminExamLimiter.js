@@ -29,7 +29,10 @@ function examAiReviewCooldown(req, res, next) {
   const startedAt = now;
   aiReviewCooldowns.set(key, { inFlight: true, startedAt });
 
-  res.on("finish", () => {
+  let released = false;
+  const releaseAiReviewLock = () => {
+    if (released) return;
+    released = true;
     const record = aiReviewCooldowns.get(key);
     if (record?.startedAt !== startedAt) return;
 
@@ -41,7 +44,10 @@ function examAiReviewCooldown(req, res, next) {
         aiReviewCooldowns.delete(key);
       }
     }, AI_REVIEW_COOLDOWN_MS + 1000);
-  });
+  };
+
+  res.once("finish", releaseAiReviewLock);
+  res.once("close", releaseAiReviewLock);
 
   next();
 }
