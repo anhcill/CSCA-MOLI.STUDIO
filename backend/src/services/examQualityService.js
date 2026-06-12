@@ -220,7 +220,10 @@ function repairLatexControlChars(value) {
 }
 
 function repairMalformedInlineDollarDelimiters(value) {
-  return stringValue(value).replace(/\$\$?/g, (match, offset, whole) => {
+  return stringValue(value)
+    .replace(/\$\$([^$\n]{1,240}?)\$(?!\$)/g, (_, formula) => `\\(${String(formula).trim()}\\)`)
+    .replace(/\$\$([^$\n]{1,240}?)(?=(?:[。.;]|$|\n))/g, (_, formula) => `\\(${String(formula).trim()}\\)`)
+    .replace(/\$\$?/g, (match, offset, whole) => {
     const before = whole.slice(0, offset);
     const after = whole.slice(offset + match.length);
     const lineBefore = before.slice(before.lastIndexOf("\n") + 1);
@@ -1200,6 +1203,7 @@ function buildDisplayFormatPrompt(batch, context = {}) {
       formatterInstructions: [
         "Rewrite the whole broken field into a clean natural version in the same original language when format is broken.",
         "Remove stray malformed $ or $$ delimiters.",
+        "Never leave $$ inside a sentence. Convert inline math to \\(...\\), for example: hay $$(x+1)^{2}+(y+1)^{2}=2 -> hay \\((x+1)^2+(y+1)^2=2\\).",
         "Examples: (x-2)^{2}+(y+1)^{2}$$=5 -> \\((x-2)^2+(y+1)^2=5\\); y^2$$/16 -> \\frac{y^2}{16}; (4,0)$$: -> \\((4,0)\\):.",
         "Keep meaning and correct answer unchanged.",
       ],

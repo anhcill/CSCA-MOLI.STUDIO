@@ -49,6 +49,19 @@ function formatLeadingLabel(value: string) {
   return `**${label}:** ${body}`;
 }
 
+function normalizeCommonMathOcr(value: string) {
+  return value
+    .replace(/(^|[^A-Za-z\\])V\s*\{\s*(π|pi)\s*\}/gi, (_, prefix) => `${prefix}\\sqrt{\\pi}`)
+    .replace(/(^|[^A-Za-z\\])V\s*(π|pi)(?=$|[^A-Za-z])/gi, (_, prefix) => `${prefix}\\sqrt{\\pi}`)
+    .replace(/(?<![A-Za-z\\])sqrt\s*\(?\s*π\s*\)?/gi, String.raw`\sqrt{\pi}`)
+    .replace(/(?<![A-Za-z\\])sqrt\s*\(?\s*pi\s*\)?/gi, String.raw`\sqrt{\pi}`)
+    .replace(/(?<!\\)log_\s*([A-Za-zπ])\s*([A-Za-z])/g, (_, base, arg) => `\\log_{${base === 'π' ? '\\pi' : base}} ${arg}`)
+    .replace(/(?<!\\)log\s*_\{\s*π\s*\}/g, String.raw`\log_{\pi}`)
+    .replace(/([0-9])\s*\{\s*,\s*\}\s*([0-9])/g, '$1,$2')
+    .replace(/π/g, String.raw`\pi`)
+    .replace(/∞/g, String.raw`\infty`);
+}
+
 export function normalizeAIFormattedText(value: string) {
   const lines = value
     .replace(/\r\n?/g, '\n')
@@ -64,7 +77,7 @@ export function normalizeAIFormattedText(value: string) {
   };
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    const line = normalizeCommonMathOcr(rawLine.trim());
     const fence = line.match(/^(```|~~~)/);
 
     if (fence) {
@@ -128,7 +141,7 @@ export function normalizeAIFormattedText(value: string) {
       continue;
     }
 
-    out.push(formatLeadingLabel(rawLine.trimEnd()));
+    out.push(formatLeadingLabel(normalizeCommonMathOcr(rawLine.trimEnd())));
   }
 
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();

@@ -756,7 +756,10 @@ function mergeAdjacentInlineMath(input: string): string {
 }
 
 function repairMalformedInlineDollarDelimiters(input: string): string {
-  return input.replace(/\$\$?/g, (match, offset: number, whole: string) => {
+  return input
+    .replace(/\$\$([^$\n]{1,240}?)\$(?!\$)/g, (_, formula) => `\\(${formula.trim()}\\)`)
+    .replace(/\$\$([^$\n]{1,240}?)(?=(?:[。.;]|$|\n))/g, (_, formula) => `\\(${formula.trim()}\\)`)
+    .replace(/\$\$?/g, (match, offset: number, whole: string) => {
     const before = whole.slice(0, offset);
     const after = whole.slice(offset + match.length);
     const lineBefore = before.slice(before.lastIndexOf('\n') + 1);

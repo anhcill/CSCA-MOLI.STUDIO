@@ -115,6 +115,9 @@ function BilingualMathText({
 const REVIEW_AI_ACCURACY_RULE =
   'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
 
+const REVIEW_AI_FORMAT_RULE =
+  String.raw`Dinh dang cong thuc bang LaTeX: viet \(\sqrt{\pi}\), \(\log_{\pi} x\), \(e \approx 2{,}718\), \(\pi \approx 3{,}1416\). Khong viet Vpi/Vπ, log_πx, 3{,}14 ngoai LaTeX. Moi y giai thich nen la mot cau ro rang, khong tach cong thuc thanh bullet rieng neu lam mat nghia.`;
+
 function buildQuestionExplanationPrompt(question: QuestionResult) {
   const questionNo = question.sub_question_number || question.question_number;
   const questionText = question.question_text || question.question_text_cn || '';
@@ -125,6 +128,7 @@ function buildQuestionExplanationPrompt(question: QuestionResult) {
     questionText ? `Nội dung câu hỏi: ${questionText}` : '',
     `Đáp án đúng: ${correctAnswer}`,
     REVIEW_AI_ACCURACY_RULE,
+    REVIEW_AI_FORMAT_RULE,
   ].filter(Boolean).join('\n');
 
   const status = getQuestionReviewStatus(question);
