@@ -157,6 +157,97 @@ function normalizeLinkedOptions(rawOptions) {
   return normalized.length >= 2 ? normalized : null;
 }
 
+async function syncMultipleChoiceAnswers(client, questionId, answers, normalizedAnswers, correctAnswer) {
+  const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const existingResult = await client.query(
+    `SELECT a.*,
+            EXISTS (
+              SELECT 1 FROM user_answers ua WHERE ua.selected_answer_id = a.id
+            ) AS is_referenced
+     FROM answers a
+     WHERE a.question_id = $1
+     ORDER BY a.answer_key ASC, a.id ASC
+     FOR UPDATE`,
+    [questionId],
+  );
+
+  const existingByKey = new Map();
+  for (const answer of existingResult.rows) {
+    const key = String(answer.answer_key || "").trim();
+    if (!existingByKey.has(key)) existingByKey.set(key, []);
+    existingByKey.get(key).push(answer);
+  }
+
+  const activeKeys = new Set();
+  for (let i = 0; i < answers.length; i++) {
+    const key = answerKeys[i];
+    activeKeys.add(key);
+    const rows = existingByKey.get(key) || [];
+    const primary = rows.find((row) => row.is_referenced) || rows[0];
+
+    if (primary) {
+      await client.query(
+        `UPDATE answers
+         SET answer_text = $1,
+             answer_text_cn = $2,
+             is_correct = $3,
+             image_url = $4
+         WHERE id = $5`,
+        [
+          sanitize(normalizedAnswers[i].en),
+          sanitize(normalizedAnswers[i].cn),
+          key === correctAnswer,
+          answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
+          primary.id,
+        ],
+      );
+
+      const duplicateIds = rows
+        .filter((row) => row.id !== primary.id && !row.is_referenced)
+        .map((row) => row.id);
+      if (duplicateIds.length) {
+        await client.query("DELETE FROM answers WHERE id = ANY($1::int[])", [duplicateIds]);
+      }
+      const referencedDuplicateIds = rows
+        .filter((row) => row.id !== primary.id && row.is_referenced)
+        .map((row) => row.id);
+      if (referencedDuplicateIds.length) {
+        await client.query(
+          "UPDATE answers SET is_correct = false WHERE id = ANY($1::int[])",
+          [referencedDuplicateIds],
+        );
+      }
+    } else {
+      await client.query(
+        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          questionId,
+          key,
+          sanitize(normalizedAnswers[i].en),
+          sanitize(normalizedAnswers[i].cn),
+          key === correctAnswer,
+          answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
+        ],
+      );
+    }
+  }
+
+  const obsolete = existingResult.rows.filter((answer) => !activeKeys.has(String(answer.answer_key || "").trim()));
+  const obsoleteUnreferencedIds = obsolete.filter((answer) => !answer.is_referenced).map((answer) => answer.id);
+  if (obsoleteUnreferencedIds.length) {
+    await client.query("DELETE FROM answers WHERE id = ANY($1::int[])", [obsoleteUnreferencedIds]);
+  }
+
+  const obsoleteReferencedIds = obsolete.filter((answer) => answer.is_referenced).map((answer) => answer.id);
+  if (obsoleteReferencedIds.length) {
+    await client.query(
+      "UPDATE answers SET is_correct = false WHERE id = ANY($1::int[])",
+      [obsoleteReferencedIds],
+    );
+  }
+}
+
 async function getAppendQuestionPosition(client, examId) {
   const result = await client.query(
     "SELECT COALESCE(MAX(question_number), 0)::int + 1 AS position FROM questions WHERE exam_id = $1 AND question_number > 0 AND deleted_at IS NULL",
@@ -1897,23 +1988,7 @@ const AdminExamController = {
               await client.query("ROLLBACK");
               return res.status(400).json({ message: "Mỗi đáp án phải có nội dung" });
             }
-            await client.query("DELETE FROM answers WHERE question_id = $1", [questionId]);
-            const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-            for (let i = 0; i < answers.length; i++) {
-              const key = answerKeys[i];
-              await client.query(
-                `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [
-                  questionId,
-                  key,
-                  sanitize(normalizedAnswers[i].en),
-                  sanitize(normalizedAnswers[i].cn),
-                  key === correctAnswer,
-                  answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
-                ],
-              );
-            }
+            await syncMultipleChoiceAnswers(client, questionId, answers, normalizedAnswers, correctAnswer);
           }
         }
 

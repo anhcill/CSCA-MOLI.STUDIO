@@ -11,6 +11,7 @@ import {
   FaTimes,
 } from 'react-icons/fa';
 import type { DailyGiftLetter } from '@/hooks/useDailyGift';
+import { PetFace } from '@/components/common/MoliPet';
 
 interface GiftLetterModalProps {
   letter: DailyGiftLetter;
@@ -28,24 +29,12 @@ const DOODLES = [
   { Icon: FaRegSmileBeam, className: 'right-5 top-28 text-violet-300', rotate: 14 },
 ];
 
-function CuteCat() {
+function GiftPetBadge() {
   return (
-    <div className="pointer-events-none absolute -right-1 -top-10 h-24 w-24 sm:-right-5 sm:-top-12">
-      <div className="absolute bottom-2 left-5 h-16 w-16 rounded-[28px] bg-slate-100 shadow-lg ring-4 ring-white">
-        <span className="absolute -left-1 top-0 h-6 w-6 -rotate-12 rounded-tl-3xl bg-slate-100" />
-        <span className="absolute -right-1 top-0 h-6 w-6 rotate-12 rounded-tr-3xl bg-slate-100" />
-        <span className="absolute left-1 top-2 h-3 w-3 -rotate-12 rounded-tl-2xl bg-rose-200" />
-        <span className="absolute right-1 top-2 h-3 w-3 rotate-12 rounded-tr-2xl bg-rose-200" />
-        <span className="absolute left-4 top-7 h-2 w-2 rounded-full bg-slate-700" />
-        <span className="absolute right-4 top-7 h-2 w-2 rounded-full bg-slate-700" />
-        <span className="absolute left-1/2 top-9 h-2 w-2 -translate-x-1/2 rotate-45 rounded-sm bg-rose-300" />
-        <span className="absolute left-3 top-10 h-2 w-4 rounded-full bg-rose-200/80" />
-        <span className="absolute right-3 top-10 h-2 w-4 rounded-full bg-rose-200/80" />
-        <span className="absolute left-2 top-12 h-1 w-8 rotate-12 rounded-full bg-slate-300" />
-        <span className="absolute right-0 top-12 h-1 w-8 -rotate-12 rounded-full bg-slate-300" />
-      </div>
-      <div className="absolute bottom-0 right-5 h-3 w-12 -rotate-[28deg] rounded-full bg-amber-300 shadow-sm">
-        <span className="absolute right-0 top-0 h-3 w-3 rounded-full bg-rose-400" />
+    <div className="pointer-events-none absolute -right-1 -top-9 z-20 h-20 w-20 rounded-[28px] border border-white/80 bg-white/75 shadow-xl shadow-rose-200/60 ring-4 ring-white/70 backdrop-blur sm:-right-5 sm:-top-12 sm:h-24 sm:w-24">
+      <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-sky-50 via-white to-rose-50" />
+      <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 scale-[0.82] sm:scale-95">
+        <PetFace color="ocean" variant="cat" mood="happy" facing="left" waving />
       </div>
     </div>
   );
@@ -81,9 +70,7 @@ export default function GiftLetterModal({
         transition={{ type: 'spring', stiffness: 240, damping: 24 }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="hidden sm:block">
-          <CuteCat />
-        </div>
+        <GiftPetBadge />
 
         {DOODLES.map(({ Icon, className, rotate }) => (
           <motion.span
@@ -101,7 +88,7 @@ export default function GiftLetterModal({
             type="button"
             aria-label="Đóng thư quà hôm nay"
             onClick={onClose}
-            className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-400 shadow-sm transition-colors hover:bg-rose-50 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+            className="absolute right-4 top-4 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-400 shadow-sm transition-colors hover:bg-rose-50 hover:text-rose-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
           >
             <FaTimes size={14} />
           </button>

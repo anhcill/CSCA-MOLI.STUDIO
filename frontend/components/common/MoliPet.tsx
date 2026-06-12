@@ -658,7 +658,7 @@ function MolyThreeCat({
   return <div ref={mountRef} className="h-20 w-20" aria-hidden="true" />;
 }
 
-function PetFace({
+export function PetFace({
   color,
   variant,
   mood,
