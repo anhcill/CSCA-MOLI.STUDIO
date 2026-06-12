@@ -122,17 +122,63 @@ export default function PWAInstallSettings() {
     setMessage('');
   }, []);
 
-  const installApp = useCallback(async (fallbackGuide?: GuideType) => {
-    if (!promptEvent) {
-      openGuide(fallbackGuide || getDefaultGuide());
-      return;
+  const waitForInstallPrompt = useCallback(async () => {
+    if (window.moliDeferredPwaPrompt) return window.moliDeferredPwaPrompt;
+
+    if ('serviceWorker' in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.update();
+      } catch {
+        // Browser may block update checks; keep falling back to guide.
+      }
     }
 
+    return new Promise<BeforeInstallPromptEvent | null>((resolve) => {
+      if (window.moliDeferredPwaPrompt) {
+        resolve(window.moliDeferredPwaPrompt);
+        return;
+      }
+
+      const timer = window.setTimeout(() => {
+        window.removeEventListener('moli-pwa-install-ready', handleReady);
+        window.removeEventListener('beforeinstallprompt', handlePrompt);
+        resolve(window.moliDeferredPwaPrompt || null);
+      }, 1200);
+
+      const done = (prompt: BeforeInstallPromptEvent | null) => {
+        window.clearTimeout(timer);
+        window.removeEventListener('moli-pwa-install-ready', handleReady);
+        window.removeEventListener('beforeinstallprompt', handlePrompt);
+        resolve(prompt);
+      };
+
+      const handleReady = () => done(window.moliDeferredPwaPrompt || null);
+      const handlePrompt = (event: Event) => {
+        event.preventDefault();
+        const nextPrompt = event as BeforeInstallPromptEvent;
+        window.moliDeferredPwaPrompt = nextPrompt;
+        setPromptEvent(nextPrompt);
+        done(nextPrompt);
+      };
+
+      window.addEventListener('moli-pwa-install-ready', handleReady);
+      window.addEventListener('beforeinstallprompt', handlePrompt);
+    });
+  }, []);
+
+  const installApp = useCallback(async (fallbackGuide?: GuideType) => {
     try {
       setBusy(true);
       setMessage('');
-      await promptEvent.prompt();
-      const choice = await promptEvent.userChoice;
+      const prompt = promptEvent || await waitForInstallPrompt();
+      if (!prompt) {
+        openGuide(fallbackGuide || getDefaultGuide());
+        return;
+      }
+
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
       window.moliDeferredPwaPrompt = null;
       setPromptEvent(null);
       localStorage.setItem('pwa-install-dismissed', '1');
@@ -146,7 +192,7 @@ export default function PWAInstallSettings() {
     } finally {
       setBusy(false);
     }
-  }, [openGuide, promptEvent]);
+  }, [openGuide, promptEvent, waitForInstallPrompt]);
 
   const copyLink = useCallback(async () => {
     try {
@@ -209,7 +255,7 @@ export default function PWAInstallSettings() {
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? <FiRefreshCw className="animate-spin" size={14} /> : installed ? <FiCheckCircle size={14} /> : <FiDownload size={14} />}
-            {installed ? 'Đã cài' : promptEvent ? 'Cài ngay' : 'Xem cách cài'}
+            {installed ? 'Đã cài' : 'Cài ngay'}
           </button>
         </div>
 
