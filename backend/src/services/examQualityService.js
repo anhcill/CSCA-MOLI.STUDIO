@@ -42,7 +42,7 @@ function compactWhitespace(value) {
 }
 
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
-const LATEX_COMMAND_RE = /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|le|ge|ne|leq|geq|neq|approx)\b/;
+const LATEX_COMMAND_RE = /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|infty|emptyset|in|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|le|ge|ne|leq|geq|neq|approx)\b/;
 const ZERO_WIDTH_RE = /[\u200b-\u200f\ufeff\u2060]/g;
 
 function cleanStackedMathLine(value) {
@@ -171,6 +171,13 @@ function normalizeMathUnicode(value) {
   ), stringValue(value));
 }
 
+function normalizeEscapedLatexBackslashes(value) {
+  return stringValue(value).replace(
+    /\\{2,}(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\}|[,;!:])/g,
+    "\\",
+  );
+}
+
 function findMatchingForward(input, openIndex) {
   const open = input[openIndex];
   const close = open === "(" ? ")" : open === "[" ? "]" : "}";
@@ -224,7 +231,7 @@ function escapeSetLiteralBraces(input) {
 }
 
 function normalizeLooseMathSyntax(value) {
-  return escapeSetLiteralBraces(normalizeMathUnicode(value)
+  return escapeSetLiteralBraces(normalizeMathUnicode(normalizeEscapedLatexBackslashes(value))
     .replace(/(^|\n)-(?=\s*[A-Z]\s*(?:\\cap|\\cup|\\setminus)\b)/g, "$1")
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc|ln|lg|log)\b\s*/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g, (_, fn) => `\\${fn}^{-1}`)
@@ -346,7 +353,7 @@ function normalizeStoredFormulaText(value, options = {}) {
   if (!input.trim()) return "";
 
   let out = normalizeMathSegments(repairOcrMathArtifacts(input))
-    .replace(/\\\\(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\})/g, "\\")
+    .replace(/\\{2,}(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\}|[,;!:])/g, "\\")
     .replace(/\\right\s+leftharpoons/g, "\\rightleftharpoons")
     .replace(/\\left\s+right/g, "\\leftright")
     .replace(/\\le\s+ft/g, "\\left")

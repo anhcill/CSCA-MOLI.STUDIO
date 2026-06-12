@@ -93,10 +93,10 @@ function getAiReviewLabel(status?: string) {
 }
 
 function getAiReviewTone(status?: string) {
-  if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800';
-  if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800';
-  return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/70 dark:bg-emerald-950/70 dark:text-emerald-100';
+  if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/70 dark:bg-rose-950/70 dark:text-rose-100';
+  if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-400/70 dark:bg-indigo-950/70 dark:text-indigo-100';
+  return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50';
 }
 
 type ReviewLogState = 'pending' | 'fixed' | 'skipped';
@@ -336,18 +336,18 @@ function AiReviewLogPanel({
   if (!summary && !diagnostics?.length && issueRows.length === 0) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800 shadow-sm">
+    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-black text-slate-950">Log AI review</p>
+          <p className="font-black text-slate-950 dark:text-white">Log AI review</p>
           {summary && (
-            <p className="text-xs font-semibold text-slate-500">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-300">
               Model: {summary.model || 'chưa rõ'} - Gọi AI: {summary.aiCalls ?? 0} batch, lỗi: {summary.failedBatches ?? 0}, JSON lỗi: {summary.invalidBatches ?? 0}
             </p>
           )}
         </div>
         {summary && (
-          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-100">
             {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} có review
           </span>
         )}
@@ -375,7 +375,7 @@ function AiReviewLogPanel({
       {issueRows.length > 0 ? (
         <div className="space-y-2">
           {issueRows.map((row) => (
-            <div key={row.key} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <div key={row.key} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50">
               <div className="flex flex-wrap items-center gap-2 font-black">
                 <span>{row.label}</span>
                 <span>-</span>

@@ -142,10 +142,10 @@ function getAiReviewLabel(status?: string) {
 }
 
 function getAiReviewTone(status?: string) {
-    if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-    if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800';
-    if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800';
-    return 'border-amber-200 bg-amber-50 text-amber-900';
+    if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/70 dark:bg-emerald-950/70 dark:text-emerald-100';
+    if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/70 dark:bg-rose-950/70 dark:text-rose-100';
+    if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-400/70 dark:bg-indigo-950/70 dark:text-indigo-100';
+    return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50';
 }
 
 function getExamReviewIssues(result: StoredExamReviewResult | null) {
@@ -434,23 +434,23 @@ function SavedExamAiReviewPanel({
     const safeFix = result?.safeFixPreview;
 
     return (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm">
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                    <p className="font-black text-slate-950">AI soát đề đã lưu</p>
+                    <p className="font-black text-slate-950 dark:text-white">AI soát đề đã lưu</p>
                     {reviewing ? (
                         <p className="mt-1 flex items-center gap-2 text-indigo-700">
                             <FiRefreshCw className="animate-spin" size={15} />
                             Đang soát câu hỏi, đáp án và lời giải...
                         </p>
                     ) : summary ? (
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 text-slate-600 dark:text-slate-300">
                             {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} câu có review: {summary.ok} ổn, {summary.issues} cần xem.
                             {summary.model ? ` Model: ${summary.model}.` : ''}
                         </p>
                     ) : null}
                     {safeFix && (
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 text-slate-600 dark:text-slate-300">
                             Sửa công thức chắc chắn: {safeFix.changedCount || 0} chỗ. Nghi lỗi cần xem tay: {safeFix.warningCount || 0} chỗ.
                         </p>
                     )}
@@ -512,7 +512,7 @@ function SavedExamAiReviewPanel({
             {issueRows.length > 0 ? (
                 <div className="mt-4 space-y-2">
                     {issueRows.map((review) => (
-                        <div key={`${review.path}-${review.questionId || ''}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
+                        <div key={`${review.path}-${review.questionId || ''}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50">
                             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2 font-black">
@@ -534,7 +534,7 @@ function SavedExamAiReviewPanel({
                                 <button
                                     type="button"
                                     onClick={() => onOpenQuestion(review)}
-                                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-300/70 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-950"
                                 >
                                     <FiEdit2 size={13} /> Sửa câu
                                 </button>

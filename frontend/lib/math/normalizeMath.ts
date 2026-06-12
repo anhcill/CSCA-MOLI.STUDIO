@@ -58,10 +58,10 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
 };
 
 const INLINE_MATH_COMMAND_RE =
-  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)\b/;
+  /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)\b/;
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_BOUNDARY_RE =
-  /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
+  /\\(sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|in|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|le|ge|ne|approx)(?=[A-Za-z])/g;
 const MATH_WORD_RE =
   /^(?:sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|alpha|beta|gamma|delta|theta|lambda|mu|pi)$/i;
 const SIMPLE_INTERVAL_ENDPOINT_RE_SOURCE =
@@ -102,7 +102,7 @@ export function normalizeMathUnicode(input: string): string {
 
 export function normalizeEscapedLatexBackslashes(input: string): string {
   return input.replace(
-    /\\\\(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\})/g,
+    /\\{2,}(?=(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|rightleftharpoons|leftrightharpoons|left|right|infty|emptyset|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|leq|geq|neq|approx)\b|\(|\)|\[|\]|\{|\}|[,;!:])/g,
     '\\',
   );
 }
