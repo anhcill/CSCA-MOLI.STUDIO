@@ -1,6 +1,6 @@
 // Service Worker - Safe caching strategy
 // Version bump -> old caches purged on activate
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 const CACHE_VERSION = `csca-moli-v${APP_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;

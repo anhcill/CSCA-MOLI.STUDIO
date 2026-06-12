@@ -222,6 +222,16 @@ export default function PWAInstallSettings() {
     }
   }, []);
 
+  const openChromeApps = useCallback(async () => {
+    try {
+      window.open('chrome://apps', '_blank', 'noopener,noreferrer');
+      await navigator.clipboard?.writeText('chrome://apps');
+      setMessage('Nếu Chrome không mở trang apps, hãy dán chrome://apps vào thanh địa chỉ.');
+    } catch {
+      setMessage('Dán chrome://apps vào thanh địa chỉ Chrome để mở danh sách app.');
+    }
+  }, []);
+
   const currentGuide = useMemo(() => (guide ? guideCopy[guide] : null), [guide]);
   const GuideIcon = currentGuide?.icon || FiDownload;
   const uninstallCopy = useMemo(() => {
@@ -461,14 +471,13 @@ export default function PWAInstallSettings() {
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               {uninstallCopy.link && (
-                <a
-                  href={uninstallCopy.link}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={openChromeApps}
                   className="inline-flex flex-1 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"
                 >
                   Mở chrome://apps
-                </a>
+                </button>
               )}
               <button
                 type="button"
