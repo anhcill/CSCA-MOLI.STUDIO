@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { FiRefreshCw, FiX, FiZap } from 'react-icons/fi';
+import { APP_VERSION } from '@/lib/appVersion';
 
 interface UpdateToastProps {
   visible: boolean;
@@ -10,7 +11,7 @@ interface UpdateToastProps {
   onUpdate: () => void;
 }
 
-export default function UpdateToast({ visible, version = '3.0', onUpdate }: UpdateToastProps) {
+export default function UpdateToast({ visible, version = APP_VERSION, onUpdate }: UpdateToastProps) {
   const pathname = usePathname();
   const [dismissed, setDismissed] = useState(false);
   const isExamPage = pathname?.startsWith('/exam/') && !pathname?.includes('/result');
