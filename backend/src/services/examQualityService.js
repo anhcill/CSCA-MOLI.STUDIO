@@ -5,6 +5,7 @@ const { repairOcrMathArtifacts } = require("./ocrMathRepairService");
 const ANSWER_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const REVIEW_BATCH_SIZE = Number.parseInt(process.env.AI_EXAM_REVIEW_BATCH_SIZE || "6", 10);
 const REVIEW_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_ITEMS || "120", 10);
+const EXPLANATION_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_QUESTIONS || "300", 10);
 const REVIEW_APPLY_MIN_CONFIDENCE = Number.parseFloat(process.env.AI_EXAM_REVIEW_APPLY_MIN_CONFIDENCE || "0.75");
 
 function getReviewModel() {
@@ -921,6 +922,9 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         rawPreview: batchReviews.length ? undefined : stringValue(raw).slice(0, 500),
       });
       if (!batchReviews.length) {
+        for (const entry of batch) {
+          reviews.push(buildFallbackReview(entry, "AI không trả JSON review hợp lệ cho batch này. Cần chạy lại hoặc xem log."));
+        }
         continue;
       }
       for (const entry of batch) {
@@ -960,6 +964,9 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
       };
       diagnostics.push(diagnostic);
       console.warn("AI imported exam review batch failed:", diagnostic);
+      for (const entry of batch) {
+        reviews.push(buildFallbackReview(entry, "AI phát hiện lỗi bị lỗi ở batch này. Cần chạy lại hoặc xem log."));
+      }
     }
   }
 
@@ -1183,7 +1190,7 @@ function getMissingExplanationTargets(entries) {
     const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
     const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
     return hasPromptText && hasAnswer && (missingMain || missingChinese);
-  }).slice(0, REVIEW_MAX_ITEMS);
+  }).slice(0, EXPLANATION_MAX_ITEMS);
 }
 
 function getPolishExplanationTargets(entries) {
@@ -1243,6 +1250,8 @@ Yêu cầu:
 - Trường explanation bắt buộc viết bằng tiếng Việt CÓ DẤU. Không được viết kiểu không dấu như "Tap hop", "dap an", "loi giai".
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
 - Nếu có questionTextCn và missingExplanationCn=true, tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation.
+- Nếu missingExplanation=true thì bắt buộc trả explanation tiếng Việt có dấu. Không được chỉ trả explanationCn.
+- Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
 - Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "FA=BIL=(B^2L^2v\\cos\\theta)/R" phải viết "\\(F_A=BIL=\\frac{B^2L^2v\\cos\\theta}{R}\\)".
 - Không dùng dấu $ hoặc $$ trong explanation/explanationCn. Chỉ dùng \\(...\\) cho inline math và \\[...\\] cho công thức dài đứng riêng.
@@ -1399,6 +1408,7 @@ function normalizeGeneratedExplanationItem(rawItem, entry) {
     label: entry.label,
     questionId: entry.questionId,
     questionNumber: entry.questionNumber,
+    needsExplanation: isBlankText(entry.question?.explanation),
     needsExplanationCn: !isBlankText(entry.question?.questionTextCn) && isBlankText(entry.question?.explanationCn),
     confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
     explanation: normalizeGeneratedExplanation(rawItem?.explanation),
@@ -1546,7 +1556,10 @@ async function polishExplanationsWithAI(entries, context = {}) {
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
         const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
-        if (item) explanations.push(normalizeGeneratedExplanationItem(item, entry));
+        explanations.push(normalizeGeneratedExplanationItem(
+          item || { note: "AI không trả lời giải cho câu này." },
+          entry,
+        ));
       }
     } catch (error) {
       const diagnostic = {
@@ -1570,7 +1583,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
     diagnostics,
     summary: {
       total: targets.length,
-      generated: explanations.length,
+      generated: explanations.filter(item => item.explanation || item.explanationCn).length,
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
@@ -1632,7 +1645,10 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
         const item = batchItems.find((candidate) => candidate?.path === entry.path || candidate?.questionId === entry.questionId || candidate?.index === localIndex);
-        if (item) explanations.push(normalizeGeneratedExplanationItem(item, entry));
+        explanations.push(normalizeGeneratedExplanationItem(
+          item || { note: "AI không trả lời giải cho câu này." },
+          entry,
+        ));
       }
     } catch (error) {
       const diagnostic = {
@@ -1648,6 +1664,12 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       };
       diagnostics.push(diagnostic);
       console.warn("AI missing explanation batch failed:", diagnostic);
+      for (const entry of batch) {
+        explanations.push(normalizeGeneratedExplanationItem(
+          { note: "AI thêm giải thích lỗi ở batch này. Cần chạy lại hoặc xem log." },
+          entry,
+        ));
+      }
     }
   }
 
@@ -1656,7 +1678,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
     diagnostics,
     summary: {
       total: targets.length,
-      generated: explanations.length,
+      generated: explanations.filter(item => item.explanation || item.explanationCn).length,
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
@@ -2465,6 +2487,19 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
       continue;
     }
 
+    const needsExplanation = isBlankText(question.explanation);
+    const nextExplanation = normalizeGeneratedExplanation(item.explanation);
+    const nextExplanationCn = normalizeGeneratedExplanation(item.explanationCn);
+    if (needsExplanation && (!nextExplanation || !VIETNAMESE_DIACRITIC_RE.test(nextExplanation))) {
+      skipped.push({
+        path: item.path,
+        questionId,
+        questionNumber: question.question_number,
+        reason: item.note || "AI chưa trả explanation tiếng Việt có dấu, nên không lưu riêng explanation_cn.",
+      });
+      continue;
+    }
+
     const fields = [];
     const params = [];
     const addField = (column, value, before) => {
@@ -2480,9 +2515,9 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
       });
     };
 
-    addField("explanation", item.explanation, question.explanation);
+    addField("explanation", nextExplanation, question.explanation);
     if (item.needsExplanationCn) {
-      addField("explanation_cn", item.explanationCn, question.explanation_cn);
+      addField("explanation_cn", nextExplanationCn, question.explanation_cn);
     }
 
     if (!fields.length) {
