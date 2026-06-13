@@ -2658,10 +2658,7 @@ export default function AdminExamDetailPage() {
                                                         {q.question_number}
                                                     </span>
                                                     <div className="flex-1">
-                                                        <RichMathText value={q.question_text} className="font-medium text-gray-900" />
-                                                        {q.question_text_cn && q.question_text_cn !== q.question_text && (
-                                                            <RichMathText value={q.question_text_cn} className="mt-1 text-gray-500" />
-                                                        )}
+                                                        <RichMathText value={q.question_text_cn || q.question_text} className="font-medium text-gray-900" />
                                                         {q.image_url && (
                                                             <img src={q.image_url} alt="question" className="mt-2 max-h-32 rounded-lg border border-gray-200" />
                                                         )}

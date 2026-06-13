@@ -7,6 +7,12 @@ import MathInput from './MathInput';
 import SingleQuestionOcrPaste from './SingleQuestionOcrPaste';
 import RichMathText from '@/components/common/RichMathText';
 import { normalizeRichMathText } from '@/lib/math/normalizeMath';
+import {
+  isPlainTextMathValue,
+  markPlainTextMathValue,
+  preservePlainTextMathMode,
+  stripPlainTextMathMarker,
+} from '@/lib/math/plainTextMathMode';
 import type { ParsedSingleQuestionOcr } from '@/lib/ocr-question/parseSingleQuestionOcr';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────────
@@ -126,13 +132,18 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
+  const setMathText = (key: 'questionText' | 'questionTextCn', value: string) =>
+    setForm(prev => ({ ...prev, [key]: preservePlainTextMathMode(prev[key], value) }));
+
   const renderMathPreview = (
     value: string,
     onChange: (value: string) => void,
     title = 'Xem trước:',
     draftKey = title,
   ) => {
-    if (!value) return null;
+    const isPlainText = isPlainTextMathValue(value);
+    const editableValue = stripPlainTextMathMarker(value);
+    if (!editableValue) return null;
 
     if (!showMathPreviews) {
       return (
@@ -147,12 +158,34 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       );
     }
 
-    const normalized = normalizeRichMathText(value);
-    const canApplyNormalized = Boolean(normalized && normalized !== value);
-    const draftValue = previewDrafts[draftKey] ?? value;
+    if (isPlainText) {
+      return (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-amber-800">Đang dùng text thường, không render LaTeX</span>
+            <button
+              type="button"
+              onClick={() => onChange(editableValue)}
+              className="rounded border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              Dùng LaTeX lại
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const normalized = normalizeRichMathText(editableValue);
+    const canApplyNormalized = Boolean(normalized && normalized !== editableValue);
+    const draftValue = previewDrafts[draftKey] ?? editableValue;
     const editorRows = Math.min(6, Math.max(2, draftValue.split('\n').length));
     const applyDraftValue = () => {
       onChange(draftValue);
+      setPreviewDrafts(prev => ({ ...prev, [draftKey]: draftValue }));
+      setShowMathPreviews(false);
+    };
+    const applyPlainTextValue = () => {
+      onChange(markPlainTextMathValue(draftValue));
       setPreviewDrafts(prev => ({ ...prev, [draftKey]: draftValue }));
       setShowMathPreviews(false);
     };
@@ -179,6 +212,13 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           </button>
           <button
             type="button"
+            onClick={applyPlainTextValue}
+            className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+          >
+            Dùng text thường
+          </button>
+          <button
+            type="button"
             onClick={() => setShowMathPreviews(false)}
             className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
           >
@@ -187,7 +227,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           </button>
         </div>
         <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
-          <RichMathText value={normalized || value} className="admin-question-preview-math text-gray-900" />
+          <RichMathText value={normalized || editableValue} className="admin-question-preview-math text-gray-900" />
         </div>
         <textarea
           value={draftValue}
@@ -391,8 +431,8 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">Câu hỏi (Tiếng Việt)</label>
         <textarea
-          value={form.questionText}
-          onChange={e => set('questionText', e.target.value)}
+          value={stripPlainTextMathMarker(form.questionText)}
+          onChange={e => setMathText('questionText', e.target.value)}
           rows={2}
           className={ADMIN_TEXTAREA_CLASS}
           placeholder="Nhập câu hỏi..."
@@ -402,8 +442,8 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
         <textarea
-          value={form.questionTextCn}
-          onChange={e => set('questionTextCn', e.target.value)}
+          value={stripPlainTextMathMarker(form.questionTextCn)}
+          onChange={e => setMathText('questionTextCn', e.target.value)}
           rows={2}
           className={ADMIN_TEXTAREA_CLASS}
           placeholder="输入中文问题..."

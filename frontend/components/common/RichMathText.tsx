@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkMath from 'remark-math';
 import { isLikelyLooseMathLine, normalizeLatexMath, normalizeRichMathText } from '@/lib/math/normalizeMath';
+import { isPlainTextMathValue, stripPlainTextMathMarker } from '@/lib/math/plainTextMathMode';
 
 interface RichMathTextProps {
   value: string;
@@ -93,10 +94,20 @@ function autoWrapLooseMathLines(text: string) {
 }
 
 function RichMathText({ value, className = '', readableBreaks = false }: RichMathTextProps) {
-  const source = useMemo(() => (readableBreaks ? restoreReadableBreaks(value) : value), [readableBreaks, value]);
+  const isPlainText = isPlainTextMathValue(value);
+  const cleanValue = stripPlainTextMathMarker(value);
+  const source = useMemo(() => (readableBreaks ? restoreReadableBreaks(cleanValue) : cleanValue), [readableBreaks, cleanValue]);
   const markdown = useMemo(() => (source ? normalizeMathDelimiters(source) : ''), [source]);
 
   if (!value) return null;
+
+  if (isPlainText) {
+    return (
+      <div className={`rich-math-text whitespace-pre-wrap text-sm leading-relaxed ${className}`}>
+        {source}
+      </div>
+    );
+  }
 
   return (
     <div className={`rich-math-text text-sm leading-relaxed ${className}`}>
