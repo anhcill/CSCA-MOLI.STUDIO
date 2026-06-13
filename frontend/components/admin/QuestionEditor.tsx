@@ -150,7 +150,6 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
     const normalized = normalizeRichMathText(value);
     const canApplyNormalized = Boolean(normalized && normalized !== value);
     const draftValue = previewDrafts[draftKey] ?? value;
-    const canApplyDraft = draftValue !== value;
     const editorRows = Math.min(6, Math.max(2, draftValue.split('\n').length));
 
     return (
@@ -166,22 +165,20 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
               Dùng bản chuẩn hóa
             </button>
           )}
-          {canApplyDraft && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange(draftValue);
-                setPreviewDrafts(prev => {
-                  const next = { ...prev };
-                  delete next[draftKey];
-                  return next;
-                });
-              }}
-              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-            >
-              Lấy nội dung ô dưới
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              onChange(draftValue);
+              setPreviewDrafts(prev => {
+                const next = { ...prev };
+                delete next[draftKey];
+                return next;
+              });
+            }}
+            className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+          >
+            Dùng ô dưới
+          </button>
           <button
             type="button"
             onClick={() => setShowMathPreviews(false)}
