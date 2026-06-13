@@ -6,7 +6,7 @@ const db = require("../config/database");
 const ISSUER = process.env.ADMIN_MFA_ISSUER || "CSCA Moly";
 const STEP_SECONDS = 30;
 const DIGITS = 6;
-const WINDOW = 1;
+const WINDOW = Math.max(1, Number.parseInt(process.env.ADMIN_MFA_WINDOW_STEPS || "2", 10));
 const BACKUP_CODE_COUNT = 10;
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -218,10 +218,10 @@ async function confirmSetup(user, code) {
          backup_codes_hash = $3::jsonb,
          totp_enabled = TRUE,
          confirmed_at = NOW(),
-         last_totp_step = $4,
+         last_totp_step = NULL,
          updated_at = NOW()
      WHERE user_id = $1`,
-    [user.id, encryptSecret(secret), JSON.stringify(backupCodeHashes), verified.step],
+    [user.id, encryptSecret(secret), JSON.stringify(backupCodeHashes)],
   );
 
   return { success: true, backupCodes };
