@@ -497,9 +497,9 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
             </div>
             <input
               type="text"
-              value={ans.text}
+              value={stripPlainTextMathMarker(ans.text)}
               onChange={e => {
-                const a = [...form.answers]; a[i] = { ...a[i], text: e.target.value };
+                const a = [...form.answers]; a[i] = { ...a[i], text: preservePlainTextMathMode(ans.text, e.target.value) };
                 set('answers', a);
               }}
               className={`${ADMIN_INPUT_CLASS} mb-1.5 py-1`}
@@ -507,9 +507,9 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
             />
             <input
               type="text"
-              value={ans.textCn}
+              value={stripPlainTextMathMarker(ans.textCn)}
               onChange={e => {
-                const a = [...form.answers]; a[i] = { ...a[i], textCn: e.target.value };
+                const a = [...form.answers]; a[i] = { ...a[i], textCn: preservePlainTextMathMode(ans.textCn, e.target.value) };
                 set('answers', a);
               }}
               className={`${ADMIN_INPUT_CLASS} py-1`}
@@ -519,11 +519,11 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
             {ans.text && renderMathPreview(ans.text, value => {
               const a = [...form.answers]; a[i] = { ...a[i], text: value };
               set('answers', a);
-            }, 'Xem trước đáp án:')}
+            }, 'Xem trước đáp án:', `answer-${i}-text`)}
             {ans.textCn && ans.textCn !== ans.text && renderMathPreview(ans.textCn, value => {
               const a = [...form.answers]; a[i] = { ...a[i], textCn: value };
               set('answers', a);
-            }, 'Xem trước đáp án Trung:')}
+            }, 'Xem trước đáp án Trung:', `answer-${i}-textCn`)}
 
             {/* Ảnh đính kèm đáp án */}
             {ans.imageUrl && (

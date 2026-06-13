@@ -2705,12 +2705,9 @@ export default function AdminExamDetailPage() {
                                                         </span>
                                                         <div className="flex-1 text-base leading-7">
                                                             <RichMathText
-                                                                value={a.answer_text}
+                                                                value={a.answer_text || a.answer_text_cn}
                                                                 className={a.is_correct ? 'text-base font-medium leading-7 text-green-800' : 'text-base leading-7 text-gray-700'}
                                                             />
-                                                            {a.answer_text_cn && a.answer_text_cn !== a.answer_text && (
-                                                                <RichMathText value={a.answer_text_cn} className="mt-0.5 text-base leading-7 text-gray-500" />
-                                                            )}
                                                             {a.image_url && (
                                                                 <img src={a.image_url} alt={a.answer_key} className="mt-1 max-h-16 rounded border border-gray-200" />
                                                             )}

@@ -1155,14 +1155,9 @@ export default function ExamPage() {
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
                           <RichMathText
-                            value={answer.answer_text || ''}
+                            value={answer.answer_text || answer.answer_text_cn || ''}
                             className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
                           />
-                          {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
-                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
-                               <RichMathText value={answer.answer_text_cn} className="text-inherit" />
-                            </div>
-                          )}
                           {answer.image_url && (
                             <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
                               <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />

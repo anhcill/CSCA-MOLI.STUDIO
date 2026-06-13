@@ -220,13 +220,7 @@ export default function PracticeSetPage() {
                     >
                       <span className="font-extrabold shrink-0">{answer.answer_key}.</span>
                       <div className="flex-1">
-                        <RichMathText value={answer.answer_text || ''} className="font-normal" />
-                        {answer.answer_text_cn && (
-                          <RichMathText
-                            value={answer.answer_text_cn}
-                            className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-normal"
-                          />
-                        )}
+                        <RichMathText value={answer.answer_text || answer.answer_text_cn || ''} className="font-normal" />
                       </div>
                       {revealCorrect && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓ Đúng</span>}
                       {revealWrong && <span className="text-xs text-rose-600 dark:text-rose-400 font-bold shrink-0">✗ Bạn chọn</span>}
