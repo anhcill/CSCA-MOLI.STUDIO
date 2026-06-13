@@ -474,7 +474,8 @@ export default function LoginForm() {
                   value={adminMfaCode}
                   onChange={e => setAdminMfaCode(e.target.value.replace(/\s/g, '').slice(0, 16))}
                   disabled={adminMfaLoading}
-                  className="w-full rounded-lg border border-emerald-300 bg-emerald-50/50 px-4 py-3 text-center text-xl font-bold tracking-normal text-slate-950 caret-emerald-700 outline-none placeholder:text-slate-500 focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                  style={{ color: '#020617', WebkitTextFillColor: '#020617' }}
+                  className="w-full rounded-lg border border-emerald-300 bg-emerald-50/50 px-4 py-3 text-center text-xl font-bold tracking-normal !text-slate-950 caret-emerald-700 outline-none placeholder:!text-slate-500 focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500"
                   placeholder="Nhập mã vào đây"
                 />
               </div>
