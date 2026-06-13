@@ -1183,6 +1183,36 @@ function normalizeGeneratedExplanation(value) {
 
 const VIETNAMESE_DIACRITIC_RE = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 const UNACCENTED_VIETNAMESE_HINT_RE = /\b(phan tich|dieu kien|cong thuc|ket luan|dap an|loi giai|giai thich|tap hop|phan tu|so tap|chon|nen|voi|cua|khong|dung|sai|suy ra|ta co|thay vao)\b/i;
+const CJK_TEXT_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
+
+function countMatches(value, regex) {
+  return (stringValue(value).match(regex) || []).length;
+}
+
+function hasCjkText(value) {
+  return CJK_TEXT_RE.test(stringValue(value));
+}
+
+function hasVietnameseText(value) {
+  return VIETNAMESE_DIACRITIC_RE.test(stringValue(value));
+}
+
+function isLikelyChineseExplanation(value) {
+  const text = compactWhitespace(value);
+  if (!text || !hasCjkText(text)) return false;
+  const cjkCount = countMatches(text, /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g);
+  const latinCount = countMatches(text, /[A-Za-zÀ-ỹ]/g);
+  if (cjkCount >= 4 && !hasVietnameseText(text)) return true;
+  return cjkCount >= 8 && cjkCount >= latinCount;
+}
+
+function isLikelyVietnameseExplanation(value) {
+  const text = compactWhitespace(value);
+  if (!text || !hasVietnameseText(text)) return false;
+  const cjkCount = countMatches(text, /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g);
+  const latinCount = countMatches(text, /[A-Za-zÀ-ỹ]/g);
+  return latinCount >= cjkCount;
+}
 
 function needsVietnameseExplanationPolish(value) {
   const text = compactWhitespace(value);
@@ -1211,8 +1241,8 @@ function getMissingExplanationTargets(entries) {
   return (entries || []).filter((entry) => {
     const q = entry.question || {};
     if (q.explanationImageUrl || q.explanation_image_url) return false;
-    const missingMain = isBlankText(q.explanation);
-    const missingChinese = isBlankText(q.explanationCn);
+    const missingMain = isBlankText(q.explanation) || isLikelyChineseExplanation(q.explanation);
+    const missingChinese = isBlankText(q.explanationCn) || isLikelyVietnameseExplanation(q.explanationCn);
     const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
     const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
     return hasPromptText && hasAnswer && (missingMain || missingChinese);
@@ -1265,8 +1295,8 @@ function buildMissingExplanationsPrompt(batch, context = {}) {
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
       currentExplanation: q.explanation || "",
       currentExplanationCn: q.explanationCn || "",
-      missingExplanation: isBlankText(q.explanation),
-      missingExplanationCn: isBlankText(q.explanationCn),
+      missingExplanation: isBlankText(q.explanation) || isLikelyChineseExplanation(q.explanation),
+      missingExplanationCn: isBlankText(q.explanationCn) || isLikelyVietnameseExplanation(q.explanationCn),
     };
   });
 
@@ -1279,6 +1309,10 @@ Yêu cầu:
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
 - Nếu missingExplanationCn=true, bắt buộc tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation/currentExplanation.
 - Nếu missingExplanation=true thì bắt buộc trả explanation tiếng Việt có dấu. Không được chỉ trả explanationCn.
+- Nếu missingExplanation=true và currentExplanation đang là tiếng Trung, hãy viết lại nội dung đó sang tiếng Việt có dấu trong explanation.
+- Nếu missingExplanationCn=true và currentExplanationCn đang là tiếng Việt, hãy viết lại nội dung đó sang tiếng Trung trong explanationCn.
+- Tuyệt đối không đặt tiếng Trung vào field explanation. Tuyệt đối không đặt tiếng Việt vào field explanationCn.
+- Nếu thiếu cả 2 field, bắt buộc trả cả explanation tiếng Việt và explanationCn tiếng Trung.
 - Nếu currentExplanation đã có tiếng Việt và thiếu explanationCn, hãy dịch/diễn đạt lại sang tiếng Trung trong explanationCn.
 - Nếu currentExplanationCn đã có tiếng Trung và thiếu explanation, hãy dịch/diễn đạt lại sang tiếng Việt có dấu trong explanation.
 - Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
@@ -1433,16 +1467,32 @@ ${JSON.stringify(payload)}`;
 }
 
 function normalizeGeneratedExplanationItem(rawItem, entry) {
+  let explanation = normalizeGeneratedExplanation(rawItem?.explanation || rawItem?.explanationVi || rawItem?.explanation_vi || rawItem?.vietnameseExplanation);
+  let explanationCn = normalizeGeneratedExplanation(rawItem?.explanationCn || rawItem?.explanation_cn || rawItem?.chineseExplanation || rawItem?.zhExplanation);
+
+  if (isLikelyChineseExplanation(explanation) && isLikelyVietnameseExplanation(explanationCn)) {
+    [explanation, explanationCn] = [explanationCn, explanation];
+  } else {
+    if (isLikelyChineseExplanation(explanation) && isBlankText(explanationCn)) {
+      explanationCn = explanation;
+      explanation = "";
+    }
+    if (isLikelyVietnameseExplanation(explanationCn) && isBlankText(explanation)) {
+      explanation = explanationCn;
+      explanationCn = "";
+    }
+  }
+
   return {
     path: entry.path,
     label: entry.label,
     questionId: entry.questionId,
     questionNumber: entry.questionNumber,
-    needsExplanation: isBlankText(entry.question?.explanation),
-    needsExplanationCn: isBlankText(entry.question?.explanationCn),
+    needsExplanation: isBlankText(entry.question?.explanation) || isLikelyChineseExplanation(entry.question?.explanation),
+    needsExplanationCn: isBlankText(entry.question?.explanationCn) || isLikelyVietnameseExplanation(entry.question?.explanationCn),
     confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
-    explanation: normalizeGeneratedExplanation(rawItem?.explanation || rawItem?.explanationVi || rawItem?.explanation_vi || rawItem?.vietnameseExplanation),
-    explanationCn: normalizeGeneratedExplanation(rawItem?.explanationCn || rawItem?.explanation_cn || rawItem?.chineseExplanation || rawItem?.zhExplanation),
+    explanation,
+    explanationCn,
     note: stringValue(rawItem?.note).slice(0, 600),
   };
 }
@@ -2596,23 +2646,17 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
       continue;
     }
 
-    const needsExplanation = isBlankText(question.explanation);
+    const needsExplanation = isBlankText(question.explanation) || isLikelyChineseExplanation(question.explanation);
+    const needsExplanationCn = isBlankText(question.explanation_cn) || isLikelyVietnameseExplanation(question.explanation_cn);
     const nextExplanation = normalizeGeneratedExplanation(item.explanation);
     const nextExplanationCn = normalizeGeneratedExplanation(item.explanationCn);
-    if (needsExplanation && (!nextExplanation || !VIETNAMESE_DIACRITIC_RE.test(nextExplanation))) {
-      skipped.push({
-        path: item.path,
-        questionId,
-        questionNumber: question.question_number,
-        reason: item.note || "AI chưa trả explanation tiếng Việt có dấu, nên không lưu riêng explanation_cn.",
-      });
-      continue;
-    }
+    const hasValidVietnamese = !isBlankText(nextExplanation) && isLikelyVietnameseExplanation(nextExplanation) && !isLikelyChineseExplanation(nextExplanation);
+    const hasValidChinese = !isBlankText(nextExplanationCn) && hasCjkText(nextExplanationCn) && !isLikelyVietnameseExplanation(nextExplanationCn);
 
     const fields = [];
     const params = [];
-    const addField = (column, value, before) => {
-      if (!isBlankText(before) || isBlankText(value)) return;
+    const addField = (column, value, before, shouldReplace) => {
+      if (!shouldReplace || isBlankText(value)) return;
       params.push(value);
       fields.push(`${column} = $${params.length}`);
       changes.push({
@@ -2620,13 +2664,35 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
         questionId,
         questionNumber: question.question_number,
         field: column,
+        before,
         after: value,
       });
     };
 
-    addField("explanation", nextExplanation, question.explanation);
-    if (item.needsExplanationCn) {
-      addField("explanation_cn", nextExplanationCn, question.explanation_cn);
+    if (needsExplanation) {
+      if (hasValidVietnamese) {
+        addField("explanation", nextExplanation, question.explanation, true);
+      } else {
+        skipped.push({
+          path: item.path,
+          questionId,
+          questionNumber: question.question_number,
+          reason: item.note || "AI chua tra explanation tieng Viet co dau hop le.",
+        });
+      }
+    }
+
+    if (needsExplanationCn) {
+      if (hasValidChinese) {
+        addField("explanation_cn", nextExplanationCn, question.explanation_cn, true);
+      } else {
+        skipped.push({
+          path: item.path,
+          questionId,
+          questionNumber: question.question_number,
+          reason: item.note || "AI chua tra explanationCn tieng Trung hop le.",
+        });
+      }
     }
 
     if (!fields.length) {
