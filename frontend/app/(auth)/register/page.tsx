@@ -13,7 +13,7 @@ export default function RegisterPage() {
               <span className="text-white font-black text-2xl lowercase">m</span>
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-cyan-100 border border-white"></span>
             </div>
-            <span className="text-3xl font-black lowercase bg-gradient-to-r from-blue-700 via-sky-600 to-cyan-500 bg-clip-text text-transparent">moly.study</span>
+            <span className="text-3xl font-black bg-gradient-to-r from-blue-700 via-sky-600 to-cyan-500 bg-clip-text text-transparent">CSCA Moly</span>
           </Link>
 
           {/* Heading */}

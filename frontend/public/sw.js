@@ -1,6 +1,6 @@
 // Service Worker - Safe caching strategy
 // Version bump -> old caches purged on activate
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 const CACHE_VERSION = `csca-moli-v${APP_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
@@ -8,7 +8,7 @@ const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 // Pre-cache: offline page + app shell essentials
 const PRECACHE = [
   '/offline.html',
-  '/manifest.webmanifest',
+  '/manifest.webmanifest?v=3.3',
   '/icons/app-icon-v3-192x192.png',
   '/icons/app-icon-v3-512x512.png',
   '/icons/apple-touch-icon-v3.png',
@@ -63,7 +63,7 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const data = event.data.json();
-    const title = data.title || 'CSCA MOLI';
+    const title = data.title || 'CSCA Moly';
     const options = {
       body: data.body || '',
       icon: '/icons/app-icon-v3-192x192.png',
@@ -75,7 +75,7 @@ self.addEventListener('push', (event) => {
   } catch (e) {
     // Fallback for plain text
     event.waitUntil(
-      self.registration.showNotification('CSCA MOLI', {
+      self.registration.showNotification('CSCA Moly', {
         body: event.data.text(),
         icon: '/icons/app-icon-v3-192x192.png',
       })
@@ -178,10 +178,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Manifest: cache-first ──
+  // ── Manifest: network-first so installed app names update faster ──
   if (url.pathname === '/manifest.webmanifest') {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
+      fetch(request, { cache: 'no-store' })
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }

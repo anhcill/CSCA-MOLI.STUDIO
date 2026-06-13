@@ -75,7 +75,7 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} ${plusJakarta.variable}`}>
       <head>
         {/* PWA Manifest */}
-        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="manifest" href="/manifest.webmanifest?v=3.3" />
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-v3-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-v3-16x16.png" />
         <meta name="theme-color" content="#1e40af" />

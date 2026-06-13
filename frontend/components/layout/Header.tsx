@@ -115,7 +115,7 @@ export default function Header() {
               <span className="text-lg font-black leading-none text-white sm:text-xl">m</span>
             </div>
             <span className="text-xl font-black tracking-tight text-gray-900 dark:text-white sm:text-2xl">
-              moly.study
+              CSCA Moly
             </span>
           </Link>
 

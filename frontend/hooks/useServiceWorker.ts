@@ -9,7 +9,7 @@ import { useEffect, useState, useCallback } from 'react';
 export function useServiceWorker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
-  const [updateVersion, setUpdateVersion] = useState('3.0');
+  const [updateVersion, setUpdateVersion] = useState('3.3');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
