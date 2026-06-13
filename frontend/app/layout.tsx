@@ -27,24 +27,24 @@ const SITE_URL = getCanonicalSiteUrl();
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc - MOLI.STUDIO',
-    template: '%s | CSCA MOLI.STUDIO',
+    default: 'CSCA Moly | Ôn Thi Học Bổng Du Học Trung Quốc',
+    template: '%s | CSCA Moly',
   },
   description: 'Nền tảng ôn thi CSCA, luyện đề học bổng CSC và chuẩn bị du học Trung Quốc chuyên nghiệp dành cho học sinh Việt Nam: đề thi mô phỏng chuẩn format, từ vựng tiếng Trung, lộ trình ôn tập cá nhân hóa và đáp án giải chi tiết.',
   keywords: ['CSCA', 'ôn thi CSCA', 'luyện thi CSCA', 'luyện thi CSCA online', 'đề thi CSCA', 'mock test CSCA', 'thi thử HSK online', 'luyện HSK miễn phí', 'AI phân tích bài thi', 'nền tảng ôn thi tiếng Trung', 'ôn thi học bổng', 'học bổng CSC', 'du học Trung Quốc', 'luyện đề học bổng Trung Quốc', 'tiếng Trung CSCA'],
-  authors: [{ name: 'CSCA MOLI.STUDIO' }],
-  creator: 'CSCA MOLI.STUDIO',
+  authors: [{ name: 'CSCA Moly' }],
+  creator: 'CSCA Moly',
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
-    siteName: 'CSCA MOLI.STUDIO',
+    siteName: 'CSCA Moly',
     title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
     description: 'Luyện thi CSCA, ôn học bổng CSC và chuẩn bị du học Trung Quốc với đề mô phỏng, từ vựng, lộ trình cá nhân hóa.',
     images: [{
       url: '/images/du-hoc-trung-quoc-1200x799.jpg',
       width: 1200,
       height: 799,
-      alt: 'CSCA MOLI.STUDIO - Luyện thi HSK/HSKK & CSCA',
+      alt: 'CSCA Moly - Luyện thi HSK/HSKK & CSCA',
     }],
   },
   twitter: {
@@ -83,7 +83,7 @@ export default function RootLayout({
         {/* Apple PWA */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="CSCA MOLI" />
+        <meta name="apple-mobile-web-app-title" content="CSCA Moly" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon-v3.png" />
 
         {/* Google Analytics */}
@@ -106,12 +106,12 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
-              "name": "CSCA MOLI.STUDIO",
+              "name": "CSCA Moly",
               "url": SITE_URL,
               "description": "Nền tảng ôn thi CSCA, học bổng CSC và du học Trung Quốc cho học sinh Việt Nam",
               "publisher": {
                 "@type": "Organization",
-                "name": "CSCA MOLI.STUDIO",
+                "name": "CSCA Moly",
                 "url": SITE_URL,
                 "logo": {
                   "@type": "ImageObject",
@@ -130,7 +130,7 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "EducationalOrganization",
-              "name": "CSCA MOLI.STUDIO",
+              "name": "CSCA Moly",
               "url": SITE_URL,
               "logo": `${SITE_URL}/images/logo.svg`,
               "description": "Nền tảng giáo dục trực tuyến chuyên ôn thi CSCA, học bổng CSC và du học Trung Quốc",
@@ -148,7 +148,7 @@ export default function RootLayout({
                       "description": "Luyện thi CSCA online với đề mô phỏng chuẩn format, tài liệu ôn tập, AI phân tích kết quả và lộ trình học thông minh.",
                       "provider": {
                         "@type": "EducationalOrganization",
-                        "name": "CSCA MOLI.STUDIO",
+                        "name": "CSCA Moly",
                         "url": SITE_URL
                       },
                       "url": `${SITE_URL}/on-thi-csca`

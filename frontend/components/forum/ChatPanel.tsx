@@ -78,6 +78,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
   };
 
+  const keepMobileViewportStable = useCallback(() => {
+    if (typeof window === 'undefined' || window.innerWidth >= 768) return;
+    const scrollY = window.scrollY;
+    window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    window.setTimeout(() => window.scrollTo(0, scrollY), 80);
+  }, []);
+
   useEffect(() => {
     isAtBottomRef.current = false;
     const el = messagesScrollRef.current;
@@ -814,6 +821,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               value={text}
               onChange={e => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={keepMobileViewportStable}
               placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn..."}
               rows={1}
               disabled={blocked}

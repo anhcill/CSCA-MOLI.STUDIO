@@ -210,7 +210,7 @@ const sparkleAnimation = {
 };
 
 const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
-  name: 'Moly',
+  name: 'MolyPet',
   color: 'ocean',
   mood: 'friendly',
   position,
@@ -826,6 +826,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const [dragging, setDragging] = useState(false);
   const [walking, setWalking] = useState(false);
   const [facing, setFacing] = useState<PetPosition>(defaultPosition);
+  const [visualViewportFrame, setVisualViewportFrame] = useState({ height: 0, offsetTop: 0 });
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const walkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragRef = useRef({
@@ -899,6 +900,29 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return;
+
+    const syncVisualViewport = () => {
+      const viewport = window.visualViewport;
+      setVisualViewportFrame({
+        height: viewport?.height || window.innerHeight,
+        offsetTop: viewport?.offsetTop || 0,
+      });
+    };
+
+    syncVisualViewport();
+    window.visualViewport?.addEventListener('resize', syncVisualViewport);
+    window.visualViewport?.addEventListener('scroll', syncVisualViewport);
+    window.addEventListener('resize', syncVisualViewport);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', syncVisualViewport);
+      window.visualViewport?.removeEventListener('scroll', syncVisualViewport);
+      window.removeEventListener('resize', syncVisualViewport);
+    };
   }, [mounted]);
 
   useEffect(() => {
@@ -987,6 +1011,16 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const isMobileViewport = viewportWidth < 640;
+  const mobileViewportHeight = visualViewportFrame.height || viewportHeight;
+  const mobilePanelHeight = Math.min(
+    620,
+    Math.max(320, mobileViewportHeight * 0.82),
+    Math.max(280, mobileViewportHeight - PET_PANEL_MARGIN * 2),
+  );
+  const mobilePanelTop = visualViewportFrame.offsetTop + Math.max(
+    PET_PANEL_MARGIN,
+    mobileViewportHeight - mobilePanelHeight - PET_PANEL_MARGIN,
+  );
   const dockedRight = petPoint.x > viewportWidth / 2;
   const panelWidth = Math.min(PET_PANEL_MAX_WIDTH, Math.max(220, viewportWidth - PET_PANEL_MARGIN * 2));
   const maxPanelLeft = Math.max(PET_PANEL_MARGIN, viewportWidth - panelWidth - PET_PANEL_MARGIN);
@@ -1018,10 +1052,10 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const mobilePanelStyle: CSSProperties = {
     left: PET_PANEL_MARGIN,
     right: PET_PANEL_MARGIN,
-    bottom: 'max(12px, env(safe-area-inset-bottom))',
+    top: mobilePanelTop,
     width: 'auto',
-    height: 'min(82dvh, 620px)',
-    maxHeight: 'calc(100dvh - 24px)',
+    height: mobilePanelHeight,
+    maxHeight: mobilePanelHeight,
   };
   const panelStyle = isMobileViewport ? mobilePanelStyle : desktopPanelStyle;
   const bubbleSideClass = dockedRight ? 'right-20' : 'left-20';
@@ -1103,6 +1137,13 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     setHidden(true);
   };
 
+  const keepMobileViewportStable = () => {
+    if (typeof window === 'undefined' || window.innerWidth >= 640) return;
+    const scrollY = window.scrollY;
+    window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    window.setTimeout(() => window.scrollTo(0, scrollY), 80);
+  };
+
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
@@ -1116,7 +1157,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     if (!isAuthenticated) {
       setMessages((current) => [
         ...current,
-        { role: 'assistant', content: 'Bạn đăng nhập xong Moly mới dùng AI để trò chuyện được nha.' },
+        { role: 'assistant', content: `Bạn đăng nhập xong ${settings.name} mới dùng AI để trò chuyện được nha.` },
       ]);
       return;
     }
@@ -1140,7 +1181,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
 
       setMessages((current) => [
         ...current,
-        { role: 'assistant', content: response.data?.answer || 'Moly nghe rồi nè.' },
+        { role: 'assistant', content: response.data?.answer || `${settings.name} nghe rồi nè.` },
       ]);
     } catch (error: any) {
       const retryAfter = Number(error?.response?.data?.retryAfter || 0);
@@ -1151,7 +1192,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
         ...current,
         {
           role: 'assistant',
-          content: error?.response?.data?.answer || error?.response?.data?.message || 'Moly bị nghẽn xíu. Bạn thử lại sau nha.',
+          content: error?.response?.data?.answer || error?.response?.data?.message || `${settings.name} bị nghẽn xíu. Bạn thử lại sau nha.`,
         },
       ]);
     } finally {
@@ -1409,6 +1450,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
               value={input}
               maxLength={600}
               onChange={(event) => setInput(event.target.value)}
+              onFocus={keepMobileViewportStable}
               placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name}...` : 'Đăng nhập để chat AI'}
               className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:border-cyan-400 sm:py-2 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />

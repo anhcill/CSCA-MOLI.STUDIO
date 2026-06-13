@@ -112,7 +112,7 @@ export default function PWAInstallPrompt() {
                 <FiDownload size={20} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Cài CSCA MOLI</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Cài CSCA Moly</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Mở nhanh như app trên máy này</p>
               </div>
             </div>

@@ -30,6 +30,32 @@ export default function MessagesPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<InboxFilter>('all');
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const previousBodyOverflow = body.style.overflow;
+    const syncViewportHeight = () => {
+      const height = window.visualViewport?.height || window.innerHeight;
+      root.style.setProperty('--messages-visual-height', `${height}px`);
+    };
+
+    syncViewportHeight();
+    body.style.overflow = 'hidden';
+    window.visualViewport?.addEventListener('resize', syncViewportHeight);
+    window.visualViewport?.addEventListener('scroll', syncViewportHeight);
+    window.addEventListener('resize', syncViewportHeight);
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      root.style.removeProperty('--messages-visual-height');
+      window.visualViewport?.removeEventListener('resize', syncViewportHeight);
+      window.visualViewport?.removeEventListener('scroll', syncViewportHeight);
+      window.removeEventListener('resize', syncViewportHeight);
+    };
+  }, []);
+
   const loadConversations = useCallback(async (pageNum: number) => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
@@ -199,7 +225,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-slate-50" style={{ height: 'var(--messages-visual-height, 100dvh)' }}>
 
       {/* ── Top Header ── */}
       <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white border-b border-slate-200">

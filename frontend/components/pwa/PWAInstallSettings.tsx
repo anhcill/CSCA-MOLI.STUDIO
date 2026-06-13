@@ -54,7 +54,7 @@ const guideCopy: Record<GuideType, { title: string; steps: string[]; icon: React
     steps: [
       'Mở web bằng Chrome hoặc Edge.',
       'Bấm biểu tượng cài app ở bên phải thanh địa chỉ.',
-      'Nếu không thấy biểu tượng, mở menu trình duyệt rồi chọn Cài đặt CSCA MOLI.',
+      'Nếu không thấy biểu tượng, mở menu trình duyệt rồi chọn Cài đặt CSCA Moly.',
       'Sau khi cài, app sẽ nằm ở màn hình chính hoặc danh sách ứng dụng.',
     ],
   },
@@ -75,7 +75,7 @@ const guideCopy: Record<GuideType, { title: string; steps: string[]; icon: React
       'Mở web bằng Safari. Chrome, Facebook, Zalo browser không cài PWA đúng được.',
       'Bấm nút Chia sẻ ở thanh dưới Safari.',
       'Kéo xuống chọn Thêm vào màn hình chính.',
-      'Bấm Thêm. Sau đó mở CSCA MOLI từ icon ngoài màn hình chính.',
+      'Bấm Thêm. Sau đó mở CSCA Moly từ icon ngoài màn hình chính.',
     ],
   },
 };
@@ -106,7 +106,7 @@ export default function PWAInstallSettings() {
       localStorage.setItem('pwa-install-dismissed', '1');
       setPromptEvent(null);
       setInstalled(true);
-      setMessage('Đã cài CSCA MOLI trên thiết bị này.');
+      setMessage('Đã cài CSCA Moly trên thiết bị này.');
     };
 
     window.addEventListener('moli-pwa-install-ready', syncPrompt);
@@ -242,7 +242,7 @@ export default function PWAInstallSettings() {
         icon: FiShare2,
         steps: [
           'Ra màn hình chính iPhone.',
-          'Giữ icon CSCA MOLI.',
+          'Giữ icon CSCA Moly.',
           'Chọn Xóa Dấu trang hoặc Xóa khỏi Màn hình chính.',
           'Nếu muốn cài lại, mở Safari vào web rồi chọn Chia sẻ > Thêm vào Màn hình chính.',
         ],
@@ -255,7 +255,7 @@ export default function PWAInstallSettings() {
         icon: FiSmartphone,
         steps: [
           'Ra màn hình chính hoặc danh sách ứng dụng.',
-          'Giữ icon CSCA MOLI.',
+          'Giữ icon CSCA Moly.',
           'Chọn Gỡ cài đặt hoặc Xóa khỏi màn hình chính.',
           'Nếu Chrome vẫn nhớ app cũ, mở Chrome > Cài đặt > Trang web > molystudio.online > Xóa dữ liệu.',
         ],
@@ -267,7 +267,7 @@ export default function PWAInstallSettings() {
       icon: FiMonitor,
       steps: [
         'Mở trang Chrome Apps bằng nút bên dưới.',
-        'Tìm CSCA MOLI.',
+        'Tìm CSCA Moly.',
         'Chuột phải vào app rồi chọn Remove from Chrome / Gỡ khỏi Chrome.',
         'Quay lại web và bấm Đã gỡ? Cài lại để xóa trạng thái cũ.',
       ],
@@ -285,7 +285,7 @@ export default function PWAInstallSettings() {
               {installed ? <FiCheckCircle size={18} /> : <FiDownload size={18} />}
             </div>
             <div>
-              <p className="text-sm font-black text-gray-900">Cài app CSCA MOLI</p>
+              <p className="text-sm font-black text-gray-900">Cài app CSCA Moly</p>
               <p className="mt-1 text-xs font-semibold leading-5 text-gray-500">
                 Thêm web vào màn hình chính để mở nhanh như app trên PC, Android và iPhone.
               </p>

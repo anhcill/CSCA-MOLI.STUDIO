@@ -101,7 +101,7 @@ export default function PWAInstallBanner() {
             {isIOSDevice() ? <FiShare2 size={18} /> : <FiDownload size={18} />}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-black">Cài CSCA MOLI vào màn hình chính</p>
+            <p className="text-sm font-black">Cài CSCA Moly vào màn hình chính</p>
             <p className="mt-0.5 text-xs font-semibold leading-5 text-indigo-50">
               Mở nhanh như app, học tiếp thuận tiện trên PC, Android và iPhone.
             </p>
