@@ -151,6 +151,11 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
     const canApplyNormalized = Boolean(normalized && normalized !== value);
     const draftValue = previewDrafts[draftKey] ?? value;
     const editorRows = Math.min(6, Math.max(2, draftValue.split('\n').length));
+    const applyDraftValue = () => {
+      onChange(draftValue);
+      setPreviewDrafts(prev => ({ ...prev, [draftKey]: draftValue }));
+      setShowMathPreviews(false);
+    };
 
     return (
       <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -167,14 +172,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           )}
           <button
             type="button"
-            onClick={() => {
-              onChange(draftValue);
-              setPreviewDrafts(prev => {
-                const next = { ...prev };
-                delete next[draftKey];
-                return next;
-              });
-            }}
+              onClick={applyDraftValue}
             className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
           >
             Dùng ô dưới
@@ -198,6 +196,15 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           className="mt-2 w-full rounded-md border border-gray-200 bg-white px-3 py-2 font-mono text-sm leading-6 text-gray-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 dark:bg-white dark:text-gray-900"
           aria-label="Sua nhanh noi dung preview"
         />
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={applyDraftValue}
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+          >
+            Dùng nội dung ô dưới và ẩn preview lỗi
+          </button>
+        </div>
       </div>
     );
   };
