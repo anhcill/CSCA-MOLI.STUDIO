@@ -110,6 +110,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
   const [showMathPreviews, setShowMathPreviews] = useState(true);
+  const [previewDrafts, setPreviewDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setForm(getDefaults(initialData));
@@ -129,6 +130,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
     value: string,
     onChange: (value: string) => void,
     title = 'Xem trước:',
+    draftKey = title,
   ) => {
     if (!value) return null;
 
@@ -147,7 +149,9 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
 
     const normalized = normalizeRichMathText(value);
     const canApplyNormalized = Boolean(normalized && normalized !== value);
-    const editorRows = Math.min(6, Math.max(2, value.split('\n').length));
+    const draftValue = previewDrafts[draftKey] ?? value;
+    const canApplyDraft = draftValue !== value;
+    const editorRows = Math.min(6, Math.max(2, draftValue.split('\n').length));
 
     return (
       <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -160,6 +164,22 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
               className="rounded border border-blue-200 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
             >
               Dùng bản chuẩn hóa
+            </button>
+          )}
+          {canApplyDraft && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange(draftValue);
+                setPreviewDrafts(prev => {
+                  const next = { ...prev };
+                  delete next[draftKey];
+                  return next;
+                });
+              }}
+              className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              Lấy nội dung ô dưới
             </button>
           )}
           <button
@@ -175,8 +195,8 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           <RichMathText value={normalized || value} className="admin-question-preview-math text-gray-900" />
         </div>
         <textarea
-          value={value}
-          onChange={event => onChange(event.target.value)}
+          value={draftValue}
+          onChange={event => setPreviewDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))}
           rows={editorRows}
           className="mt-2 w-full rounded-md border border-gray-200 bg-white px-3 py-2 font-mono text-sm leading-6 text-gray-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 dark:bg-white dark:text-gray-900"
           aria-label="Sua nhanh noi dung preview"
@@ -373,7 +393,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           className={ADMIN_TEXTAREA_CLASS}
           placeholder="Nhập câu hỏi..."
         />
-        {renderMathPreview(form.questionText, value => set('questionText', value))}
+        {renderMathPreview(form.questionText, value => set('questionText', value), undefined, 'questionText')}
       </div>
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-1">问题 (中文)</label>
@@ -384,7 +404,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           className={ADMIN_TEXTAREA_CLASS}
           placeholder="输入中文问题..."
         />
-        {renderMathPreview(form.questionTextCn, value => set('questionTextCn', value))}
+        {renderMathPreview(form.questionTextCn, value => set('questionTextCn', value), undefined, 'questionTextCn')}
       </div>
 
       <ImageUpload
