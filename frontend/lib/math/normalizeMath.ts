@@ -629,6 +629,13 @@ function wrapEqualMathInPlainText(input: string): string {
     if (!relation || relation.index === undefined) break;
 
     const relationIndex = cursor + relation.index;
+    const wrappedMathEnd = getWrappedMathEndAt(input, relationIndex);
+    if (wrappedMathEnd > relationIndex) {
+      out += input.slice(cursor, wrappedMathEnd);
+      cursor = wrappedMathEnd;
+      continue;
+    }
+
     let start = relationIndex;
     while (start > cursor && isMathishChar(input[start - 1]) && !isBoundaryAfterVietnameseWord(input, start)) start--;
 
@@ -681,11 +688,16 @@ function wrapStandaloneFractions(input: string): string {
 }
 
 function isInsideWrappedMath(input: string, offset: number): boolean {
+  return getWrappedMathEndAt(input, offset) > offset;
+}
+
+function getWrappedMathEndAt(input: string, offset: number): number {
   for (const match of input.matchAll(WRAPPED_MATH_RE)) {
     const start = match.index ?? -1;
-    if (start >= 0 && offset > start && offset < start + match[0].length) return true;
+    const end = start + match[0].length;
+    if (start >= 0 && offset > start && offset < end) return end;
   }
-  return false;
+  return -1;
 }
 
 function latexGroupDepthAt(input: string, offset: number): number {
