@@ -4,6 +4,7 @@ const rateLimit = require("express-rate-limit");
 const { ipKeyGenerator } = require("express-rate-limit");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/authMiddleware");
+const { verifyTurnstile } = require("../middleware/turnstileMiddleware");
 const { validateRegister, validateLogin } = require("../utils/validators");
 const DeviceSessionService = require("../services/deviceSessionService");
 
@@ -22,8 +23,8 @@ const otpLimiter = rateLimit({
   },
 });
 
-router.post("/register", validateRegister, authController.register);
-router.post("/login", validateLogin, authController.login);
+router.post("/register", verifyTurnstile, validateRegister, authController.register);
+router.post("/login", verifyTurnstile, validateLogin, authController.login);
 router.get("/me", authenticate, authController.getCurrentUser);
 router.post("/logout", authenticate, authController.logout);
 router.post("/refresh", authController.refreshToken);
@@ -33,8 +34,8 @@ router.get("/facebook", authController.facebookAuthStart);
 router.get("/facebook/callback", authController.facebookAuthCallback);
 
 // Password reset (public - no auth needed)
-router.post("/forgot-password", authController.forgotPassword);
-router.post("/reset-password", authController.resetPassword);
+router.post("/forgot-password", verifyTurnstile, authController.forgotPassword);
+router.post("/reset-password", verifyTurnstile, authController.resetPassword);
 
 router.post("/verify-email", authController.verifyEmail);
 

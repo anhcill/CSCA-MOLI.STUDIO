@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
@@ -11,6 +11,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
+import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -28,6 +29,9 @@ export default function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
@@ -59,6 +63,9 @@ export default function RegisterForm() {
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = t('auth.passwordMismatch');
     }
+    if (isTurnstileEnabled && !turnstileToken) {
+      newErrors.general = 'Vui long xac nhan Cloudflare truoc khi dang ky.';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,6 +83,7 @@ export default function RegisterForm() {
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name || formData.username,
+        turnstileToken,
       });
       if (response.success && response.data) {
         const { user: registerUser, token, refreshToken } = response.data;
@@ -91,6 +99,8 @@ export default function RegisterForm() {
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
+      setTurnstileToken('');
+      setTurnstileResetKey(key => key + 1);
       setErrors({ general: error.response?.data?.message || t('auth.registerFailed') });
     } finally {
       setIsSubmitting(false);
@@ -262,9 +272,16 @@ export default function RegisterForm() {
           </label>
         </div>
 
+        <TurnstileBox
+          action="register"
+          disabled={isSubmitting}
+          resetKey={turnstileResetKey}
+          onTokenChange={handleTurnstileToken}
+        />
+
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (isTurnstileEnabled && !turnstileToken)}
           className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (

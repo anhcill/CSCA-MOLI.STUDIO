@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
@@ -10,6 +10,7 @@ import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
+import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -26,6 +27,9 @@ export default function LoginForm() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
@@ -68,6 +72,9 @@ export default function LoginForm() {
     } else if (formData.password.length < 6) {
       newErrors.password = t('auth.passwordMin6');
     }
+    if (isTurnstileEnabled && !turnstileToken) {
+      newErrors.general = 'Vui long xac nhan Cloudflare truoc khi dang nhap.';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -83,7 +90,7 @@ export default function LoginForm() {
     setErrors({});
 
     try {
-      const response = await login(formData);
+      const response = await login({ ...formData, turnstileToken });
       if (response.success) {
         // ── OTP Flow ──────────────────────────────────────────────────────
         if (response.requiresOtp && response.userId) {
@@ -119,6 +126,8 @@ export default function LoginForm() {
         }
       }
     } catch (error: any) {
+      setTurnstileToken('');
+      setTurnstileResetKey(key => key + 1);
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
 
@@ -408,6 +417,13 @@ export default function LoginForm() {
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
+        <TurnstileBox
+          action="login"
+          disabled={isSubmitting || isLocked}
+          resetKey={turnstileResetKey}
+          onTokenChange={handleTurnstileToken}
+        />
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
@@ -418,7 +434,7 @@ export default function LoginForm() {
 
         <button
           type="submit"
-          disabled={isSubmitting || isLocked}
+          disabled={isSubmitting || isLocked || (isTurnstileEnabled && !turnstileToken)}
           className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (

@@ -5,11 +5,13 @@ export interface RegisterData {
   email: string;
   password: string;
   full_name?: string;
+  turnstileToken?: string;
 }
 
 export interface LoginData {
   email: string;
   password: string;
+  turnstileToken?: string;
 }
 
 export interface User {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import axios from '@/lib/utils/axios';
 import { FiMail, FiArrowLeft, FiCheckCircle, FiFileText, FiShield } from 'react-icons/fi';
 import TermsModal from '@/components/auth/TermsModal';
+import TurnstileBox, { isTurnstileEnabled } from '@/components/auth/TurnstileBox';
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState('');
@@ -13,6 +14,9 @@ export default function ForgotPasswordPage() {
     const [error, setError] = useState('');
     const [showTermsModal, setShowTermsModal] = useState(false);
     const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+    const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,11 +27,18 @@ export default function ForgotPasswordPage() {
             return;
         }
 
+        if (isTurnstileEnabled && !turnstileToken) {
+            setError('Vui long xac nhan Cloudflare truoc khi tiep tuc.');
+            return;
+        }
+
         setLoading(true);
         try {
-            await axios.post('/auth/forgot-password', { email });
+            await axios.post('/auth/forgot-password', { email, turnstileToken });
             setSubmitted(true);
         } catch (err: any) {
+            setTurnstileToken('');
+            setTurnstileResetKey(key => key + 1);
             setError(err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại');
         } finally {
             setLoading(false);
@@ -99,9 +110,16 @@ export default function ForgotPasswordPage() {
                                     </div>
                                 </div>
 
+                                <TurnstileBox
+                                    action="forgot_password"
+                                    disabled={loading}
+                                    resetKey={turnstileResetKey}
+                                    onTokenChange={handleTurnstileToken}
+                                />
+
                                 <button
                                     type="submit"
-                                    disabled={loading}
+                                    disabled={loading || (isTurnstileEnabled && !turnstileToken)}
                                     className="w-full py-3 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
                                 >
                                     {loading ? 'Đang gửi...' : 'Gửi liên kết đặt lại mật khẩu'}
