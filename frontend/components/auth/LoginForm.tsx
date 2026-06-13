@@ -3,7 +3,20 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { login, googleAuth, getCurrentUser, verifyOtp, resendOtp } from '@/lib/api/auth';
+import {
+  login,
+  googleAuth,
+  getCurrentUser,
+  verifyOtp,
+  resendOtp,
+  startAdminMfaSetup,
+  confirmAdminMfaSetup,
+  verifyAdminMfa,
+  type AdminMfaSetupData,
+  type AuthResponse,
+  type OtpVerifyResponse,
+  type User,
+} from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
 import { sanitizeInput } from '@/lib/utils/security';
@@ -11,6 +24,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
+import { FiShield } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -38,6 +52,14 @@ export default function LoginForm() {
   const [otpResending, setOtpResending] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [adminMfaStep, setAdminMfaStep] = useState<'verify' | 'setup' | 'backup' | null>(null);
+  const [adminMfaToken, setAdminMfaToken] = useState('');
+  const [adminMfaEmail, setAdminMfaEmail] = useState('');
+  const [adminMfaCode, setAdminMfaCode] = useState('');
+  const [adminMfaSetup, setAdminMfaSetup] = useState<AdminMfaSetupData | null>(null);
+  const [adminMfaBackupCodes, setAdminMfaBackupCodes] = useState<string[]>([]);
+  const [adminMfaError, setAdminMfaError] = useState('');
+  const [adminMfaLoading, setAdminMfaLoading] = useState(false);
 
   // OTP countdown timer
   useEffect(() => {
@@ -81,6 +103,104 @@ export default function LoginForm() {
 
   const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
 
+  const completeAuth = async (user: User, token: string, refreshToken: string) => {
+    setAuth(user, token, refreshToken);
+    setLoginAttempts(0);
+
+    let effectiveUser = user;
+    try {
+      const me = await getCurrentUser();
+      if (me?.success && me?.data?.user) {
+        effectiveUser = me.data.user;
+        setAuth(effectiveUser, token, refreshToken);
+      }
+    } catch {
+      // Keep fallback
+    }
+    router.push(getDefaultAdminRoute(effectiveUser));
+  };
+
+  const startAdminMfaFlow = async (response: AuthResponse | OtpVerifyResponse) => {
+    if (!response.mfaToken) return false;
+
+    setOtpStep(false);
+    setAdminMfaToken(response.mfaToken);
+    setAdminMfaEmail(response.adminEmail || '');
+    setAdminMfaCode('');
+    setAdminMfaError('');
+    setAdminMfaBackupCodes([]);
+
+    if (response.requiresAdminMfaSetup) {
+      setAdminMfaStep('setup');
+      setAdminMfaLoading(true);
+      try {
+        const setupResponse = await startAdminMfaSetup(response.mfaToken);
+        setAdminMfaSetup(setupResponse.data);
+      } catch (error: any) {
+        setAdminMfaError(error.response?.data?.message || 'Khong tao duoc ma QR. Vui long dang nhap lai.');
+      } finally {
+        setAdminMfaLoading(false);
+      }
+      return true;
+    }
+
+    if (response.requiresAdminMfa) {
+      setAdminMfaStep('verify');
+      setAdminMfaSetup(null);
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleAdminMfaSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const code = adminMfaCode.trim();
+    if (!adminMfaToken || code.length < 6) {
+      setAdminMfaError('Nhap ma 6 so trong Microsoft Authenticator.');
+      return;
+    }
+
+    setAdminMfaLoading(true);
+    setAdminMfaError('');
+    try {
+      const response = adminMfaStep === 'setup'
+        ? await confirmAdminMfaSetup(adminMfaToken, code)
+        : await verifyAdminMfa(adminMfaToken, code);
+
+      if (response.success && response.data) {
+        if (response.backupCodes?.length) {
+          setAuth(response.data.user, response.data.token, response.data.refreshToken);
+          setAdminMfaBackupCodes(response.backupCodes);
+          setAdminMfaStep('backup');
+          return;
+        }
+        await completeAuth(response.data.user, response.data.token, response.data.refreshToken);
+      } else {
+        setAdminMfaError(response.message || 'Ma Microsoft Authenticator khong dung.');
+      }
+    } catch (error: any) {
+      setAdminMfaError(error.response?.data?.message || 'Ma Microsoft Authenticator khong dung.');
+    } finally {
+      setAdminMfaLoading(false);
+    }
+  };
+
+  const finishAdminMfaBackup = async () => {
+    const token = sessionStorage.getItem('token');
+    const refreshToken = sessionStorage.getItem('refreshToken');
+    if (token && refreshToken) {
+      try {
+        const me = await getCurrentUser();
+        if (me?.success && me?.data?.user) {
+          router.push(getDefaultAdminRoute(me.data.user));
+        }
+      } catch {
+        router.push('/admin');
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLocked) return;
@@ -92,6 +212,12 @@ export default function LoginForm() {
     try {
       const response = await login({ ...formData, turnstileToken });
       if (response.success) {
+        if (await startAdminMfaFlow(response)) {
+          setIsSubmitting(false);
+          setLoading(false);
+          return;
+        }
+
         // ── OTP Flow ──────────────────────────────────────────────────────
         if (response.requiresOtp && response.userId) {
           setPendingUserId(response.userId);
@@ -109,20 +235,7 @@ export default function LoginForm() {
         // ── Direct login (no OTP) ─────────────────────────────────────────
         if (response.data) {
           const { user: loginUser, token, refreshToken } = response.data;
-          setAuth(loginUser, token, refreshToken);
-          setLoginAttempts(0);
-
-          let effectiveUser = loginUser;
-          try {
-            const me = await getCurrentUser();
-            if (me?.success && me?.data?.user) {
-              effectiveUser = me.data.user;
-              setAuth(effectiveUser, token, refreshToken);
-            }
-          } catch {
-            // Keep fallback
-          }
-          router.push(getDefaultAdminRoute(effectiveUser));
+          await completeAuth(loginUser, token, refreshToken);
         }
       }
     } catch (error: any) {
@@ -155,21 +268,12 @@ export default function LoginForm() {
 
     try {
       const response = await googleAuth({ accessToken });
+      if (response.success && await startAdminMfaFlow(response)) {
+        return;
+      }
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
-        setAuth(loginUser, token, refreshToken);
-
-        let effectiveUser = loginUser;
-        try {
-          const me = await getCurrentUser();
-          if (me?.success && me?.data?.user) {
-            effectiveUser = me.data.user;
-            setAuth(effectiveUser, token, refreshToken);
-          }
-        } catch {
-          // Keep fallback
-        }
-        router.push(getDefaultAdminRoute(effectiveUser));
+        await completeAuth(loginUser, token, refreshToken);
       }
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || t('auth.googleLoginFailed') });
@@ -242,20 +346,12 @@ export default function LoginForm() {
 
     try {
       const response = await verifyOtp(pendingUserId, otp);
+      if (response.success && await startAdminMfaFlow(response)) {
+        return;
+      }
       if (response.success && response.data) {
         const { user, token, refreshToken } = response.data;
-        setAuth(user, token, refreshToken);
-        setLoginAttempts(0);
-
-        let effectiveUser = user;
-        try {
-          const me = await getCurrentUser();
-          if (me?.success && me?.data?.user) {
-            effectiveUser = me.data.user;
-            setAuth(effectiveUser, token, refreshToken);
-          }
-        } catch { /* keep fallback */ }
-        router.push(getDefaultAdminRoute(effectiveUser));
+        await completeAuth(user, token, refreshToken);
       } else {
         setOtpError(response.message || t('auth.otpInvalid'));
         setOtpValues(['', '', '', '', '', '']);
@@ -311,7 +407,107 @@ export default function LoginForm() {
       )}
 
       {/* ── OTP Step ─────────────────────────────────────────────────────── */}
-      {otpStep ? (
+      {adminMfaStep ? (
+        <div className="space-y-5">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+              <FiShield className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Bảo mật Admin</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {adminMfaEmail || 'Admin'} cần xác minh bằng Microsoft Authenticator.
+            </p>
+          </div>
+
+          {adminMfaStep === 'setup' && (
+            <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+              <div className="text-sm text-emerald-900">
+                Mở Microsoft Authenticator → bấm + → chọn tài khoản khác → quét QR.
+              </div>
+              {adminMfaLoading && !adminMfaSetup ? (
+                <div className="h-56 rounded-xl bg-white/70 animate-pulse" />
+              ) : adminMfaSetup ? (
+                <>
+                  <div className="flex justify-center rounded-2xl bg-white p-4 border border-emerald-100">
+                    <img src={adminMfaSetup.qrDataUrl} alt="Microsoft Authenticator QR" className="h-56 w-56" />
+                  </div>
+                  <div className="rounded-xl bg-white border border-emerald-100 p-3">
+                    <p className="text-xs font-semibold text-gray-500 mb-1">Mã nhập tay</p>
+                    <p className="break-all font-mono text-sm font-bold text-gray-900">{adminMfaSetup.manualKey}</p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
+          {adminMfaStep === 'backup' ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                Lưu các mã dự phòng này. Mỗi mã dùng một lần khi mất điện thoại.
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {adminMfaBackupCodes.map(code => (
+                  <div key={code} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-center font-mono text-sm font-bold text-gray-900">
+                    {code}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={finishAdminMfaBackup}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
+              >
+                Tôi đã lưu mã dự phòng
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleAdminMfaSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="adminMfaCode" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Mã 6 số hoặc mã dự phòng
+                </label>
+                <input
+                  id="adminMfaCode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={adminMfaCode}
+                  onChange={e => setAdminMfaCode(e.target.value.replace(/\s/g, '').slice(0, 16))}
+                  disabled={adminMfaLoading}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-center text-2xl font-bold tracking-[0.25em] text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                  placeholder="123456"
+                />
+              </div>
+
+              {adminMfaError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {adminMfaError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={adminMfaLoading || adminMfaCode.trim().length < 6}
+                className="w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {adminMfaLoading ? 'Đang xác minh...' : adminMfaStep === 'setup' ? 'Bật Authenticator' : 'Xác minh'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminMfaStep(null);
+                  setAdminMfaToken('');
+                  setAdminMfaCode('');
+                  setAdminMfaError('');
+                }}
+                className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Quay lại đăng nhập
+              </button>
+            </form>
+          )}
+        </div>
+      ) : otpStep ? (
         <div className="space-y-6">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">

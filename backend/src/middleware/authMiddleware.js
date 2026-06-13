@@ -118,6 +118,14 @@ const authMiddleware = async (req, res, next) => {
         return res.status(403).json({ success: false, message: "Account disabled" });
       }
 
+      if (freshUser.role === "admin" && decoded.admin_mfa !== true) {
+        return res.status(401).json({
+          success: false,
+          message: "Admin cần đăng nhập lại và xác minh Microsoft Authenticator.",
+          code: "ADMIN_MFA_REQUIRED",
+        });
+      }
+
       req.user = buildRequestUser(decoded, freshUser);
 
       next();

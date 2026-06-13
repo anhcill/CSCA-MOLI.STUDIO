@@ -46,11 +46,34 @@ export interface AuthResponse {
   message: string;
   requiresOtp?: boolean;
   userId?: number;
+  requiresAdminMfa?: boolean;
+  requiresAdminMfaSetup?: boolean;
+  mfaToken?: string;
+  adminEmail?: string;
   data?: {
     user: User;
     token: string;
     refreshToken: string;
   };
+}
+
+export interface AdminMfaSetupData {
+  issuer: string;
+  accountName: string;
+  manualKey: string;
+  otpauthUrl: string;
+  qrDataUrl: string;
+}
+
+export interface AdminMfaAuthResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    user: User;
+    token: string;
+    refreshToken: string;
+  };
+  backupCodes?: string[];
 }
 
 /**
@@ -104,11 +127,30 @@ export const googleAuth = async (
   return response.data;
 };
 
+export const startAdminMfaSetup = async (mfaToken: string): Promise<{ success: boolean; message: string; data: AdminMfaSetupData }> => {
+  const response = await axios.post('/auth/admin-mfa/setup/start', { mfaToken });
+  return response.data;
+};
+
+export const confirmAdminMfaSetup = async (mfaToken: string, code: string): Promise<AdminMfaAuthResponse> => {
+  const response = await axios.post('/auth/admin-mfa/setup/confirm', { mfaToken, code });
+  return response.data;
+};
+
+export const verifyAdminMfa = async (mfaToken: string, code: string): Promise<AdminMfaAuthResponse> => {
+  const response = await axios.post('/auth/admin-mfa/verify', { mfaToken, code });
+  return response.data;
+};
+
 // ─── OTP Authentication ─────────────────────────────────────────────────────────
 
 export interface OtpVerifyResponse {
   success: boolean;
   message: string;
+  requiresAdminMfa?: boolean;
+  requiresAdminMfaSetup?: boolean;
+  mfaToken?: string;
+  adminEmail?: string;
   data?: {
     user: User;
     token: string;

@@ -96,6 +96,11 @@ router.get(
 	authorizePermission("admin.super"),
 	adminController.getAdminActivities,
 );
+router.post(
+	"/admins/:adminId/mfa/reset",
+	authorizePermission("admin.super"),
+	adminController.resetAdminMfa,
+);
 
 module.exports = router;
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { adminControlApi, adminApi, AdminUser } from '@/lib/api/admin';
 import {
   FiSearch, FiEdit2, FiActivity, FiLock, FiUnlock,
-  FiX, FiChevronLeft, FiChevronRight, FiShield, FiEye
+  FiX, FiChevronLeft, FiChevronRight, FiShield, FiEye, FiRefreshCw
 } from 'react-icons/fi';
 
 const ROLE_OPTIONS = [
@@ -105,6 +105,7 @@ export default function AdminListTab({ onViewLog }: Props) {
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [savingRoles, setSavingRoles] = useState(false);
   const [permissionsModal, setPermissionsModal] = useState<AdminUser | null>(null);
+  const [resettingMfaId, setResettingMfaId] = useState<number | null>(null);
 
   useEffect(() => { loadAdmins(1); }, [roleFilter]);
 
@@ -135,6 +136,20 @@ export default function AdminListTab({ onViewLog }: Props) {
       await adminApi.updateUserStatus(admin.id, admin.is_active ? 'blocked' : 'active');
       setAdmins(prev => prev.map(a => a.id === admin.id ? { ...a, is_active: !a.is_active } : a));
     } catch { alert('Lỗi cập nhật trạng thái'); }
+  };
+
+  const handleResetMfa = async (admin: AdminUser) => {
+    if (!confirm(`Reset Microsoft Authenticator cho admin "${admin.full_name}"? Admin nay se bi dang xuat va phai quet QR lai.`)) return;
+    setResettingMfaId(admin.id);
+    try {
+      await adminControlApi.resetAdminMfa(admin.id);
+      setAdmins(prev => prev.map(a => a.id === admin.id ? { ...a, mfa_enabled: false } : a));
+      alert('Da reset Microsoft Authenticator');
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Loi reset Microsoft Authenticator');
+    } finally {
+      setResettingMfaId(null);
+    }
   };
 
   const openRoleEditor = (admin: AdminUser) => {
@@ -291,6 +306,11 @@ export default function AdminListTab({ onViewLog }: Props) {
                             : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-800'
                         }`}>
                         {admin.is_active !== false ? <FiLock size={15} /> : <FiUnlock size={15} />}
+                      </button>
+                      <button onClick={() => handleResetMfa(admin)} title="Reset Microsoft Authenticator"
+                        disabled={resettingMfaId === admin.id}
+                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-800 transition-all shadow-sm hover:shadow disabled:opacity-50">
+                        <FiRefreshCw size={15} className={resettingMfaId === admin.id ? 'animate-spin' : ''} />
                       </button>
                     </div>
                   </td>

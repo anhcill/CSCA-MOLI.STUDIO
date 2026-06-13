@@ -1,6 +1,8 @@
 const pool = require('../config/database');
 const UserActivity = require('../models/UserActivity');
 const { invalidateAuthorizationCache } = require('../services/rbacService');
+const DeviceSessionService = require('../services/deviceSessionService');
+const adminMfaService = require('../services/adminMfaService');
 
 const ADMIN_ROLE_CODES = [
     'super_admin',
@@ -621,6 +623,7 @@ const AdminController = {
                         ARRAY_REMOVE(ARRAY_AGG(DISTINCT p.code), NULL),
                         '{}'::text[]
                     ) AS permissions,
+                    COALESCE(amfa.totp_enabled, FALSE) AS mfa_enabled,
                     MAX(ua.created_at) AS last_active_at,
                     COUNT(DISTINCT ua.id) AS total_actions
                 FROM users u
@@ -628,9 +631,10 @@ const AdminController = {
                 LEFT JOIN roles r2 ON r2.id = ur.role_id
                 LEFT JOIN role_permissions rp ON rp.role_id = r2.id
                 LEFT JOIN permissions p ON p.id = rp.permission_id
+                LEFT JOIN admin_mfa_settings amfa ON amfa.user_id = u.id
                 LEFT JOIN user_activities ua ON ua.user_id = u.id AND ua.created_at >= NOW() - INTERVAL '30 days'
                 ${whereClause}
-                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at
+                GROUP BY u.id, u.email, u.full_name, u.role, u.is_active, u.created_at, amfa.totp_enabled
                 ORDER BY u.created_at DESC
                 LIMIT $${idx + 1} OFFSET $${idx + 2}
             `;
@@ -913,6 +917,45 @@ const AdminController = {
         } catch (error) {
             console.error('Error getting user activities:', error);
             res.status(500).json({ message: 'Server error' });
+        }
+    },
+
+    async resetAdminMfa(req, res) {
+        try {
+            const { adminId } = req.params;
+            const normalizedAdminId = Number.parseInt(adminId, 10);
+
+            if (!Number.isInteger(normalizedAdminId) || normalizedAdminId <= 0) {
+                return res.status(400).json({ success: false, message: 'Admin ID khong hop le' });
+            }
+
+            const target = await pool.query(
+                `SELECT id, email, full_name, role FROM users WHERE id = $1 LIMIT 1`,
+                [normalizedAdminId]
+            );
+
+            if (target.rowCount === 0 || target.rows[0].role !== 'admin') {
+                return res.status(404).json({ success: false, message: 'Khong tim thay admin' });
+            }
+
+            await adminMfaService.resetMfaForUser(normalizedAdminId);
+            await DeviceSessionService.removeAllUserSessions(normalizedAdminId).catch((error) => {
+                console.error('[resetAdminMfa] Session revoke error:', error.message);
+            });
+            invalidateAuthorizationCache(normalizedAdminId);
+
+            await UserActivity.log(req.user.id, 'admin.reset_mfa', {
+                targetUserId: normalizedAdminId,
+                targetEmail: target.rows[0].email,
+            });
+
+            return res.json({
+                success: true,
+                message: 'Da reset Microsoft Authenticator. Admin nay se phai dang nhap va quet QR lai.',
+            });
+        } catch (error) {
+            console.error('Error resetting admin MFA:', error);
+            return res.status(500).json({ success: false, message: 'Server error' });
         }
     },
 

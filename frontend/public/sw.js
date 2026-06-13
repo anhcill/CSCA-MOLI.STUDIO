@@ -1,6 +1,6 @@
 // Service Worker - Safe caching strategy
 // Version bump -> old caches purged on activate
-const APP_VERSION = '3.3';
+const APP_VERSION = '4.0';
 const CACHE_VERSION = `csca-moli-v${APP_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
@@ -8,7 +8,7 @@ const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 // Pre-cache: offline page + app shell essentials
 const PRECACHE = [
   '/offline.html',
-  '/manifest.webmanifest?v=3.3',
+  '/manifest.webmanifest?v=4.0',
   '/icons/app-icon-v3-192x192.png',
   '/icons/app-icon-v3-512x512.png',
   '/icons/apple-touch-icon-v3.png',

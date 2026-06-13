@@ -43,6 +43,11 @@ router.post("/verify-email", authController.verifyEmail);
 router.post("/otp/verify", otpLimiter, authController.verifyOtp);
 router.post("/otp/resend", otpLimiter, authController.resendOtp);
 
+// Admin Microsoft Authenticator MFA. Public because admin has no auth token yet.
+router.post("/admin-mfa/setup/start", otpLimiter, authController.adminMfaSetupStart);
+router.post("/admin-mfa/setup/confirm", otpLimiter, authController.adminMfaSetupConfirm);
+router.post("/admin-mfa/verify", otpLimiter, authController.adminMfaVerify);
+
 // Device session management
 router.get("/sessions", authenticate, async (req, res) => {
   try {

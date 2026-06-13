@@ -8,6 +8,7 @@ const emailService = require("../services/emailService");
 const DeviceSessionService = require("../services/deviceSessionService");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
+const adminMfaService = require("../services/adminMfaService");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -165,7 +166,7 @@ function getClientIp(req) {
 
 // ─── Token generation ─────────────────────────────────────────────────────────
 const generateToken = (payload) => {
-  const jti = crypto.randomBytes(16).toString("hex"); // unique token ID
+  const jti = payload?.jti || crypto.randomBytes(16).toString("hex"); // unique token ID
   return jwt.sign({ ...payload, jti }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "1d",
     issuer: "csca-app",
@@ -200,6 +201,122 @@ const buildTokenPayload = (user) => ({
 });
 
 const MODULE_ROLE_CODES = ['user_admin', 'exam_admin', 'content_admin', 'forum_admin', 'roadmap_admin'];
+const ADMIN_MFA_TOKEN_AUDIENCE = "admin-mfa";
+
+const isAdminUser = (user) => user?.role === "admin";
+
+const generateAdminMfaToken = (user, stage = "verify") =>
+  jwt.sign(
+    { id: user.id, email: user.email, purpose: "admin_mfa", stage },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.ADMIN_MFA_TOKEN_TTL || "10m",
+      issuer: "csca-app",
+      audience: ADMIN_MFA_TOKEN_AUDIENCE,
+    },
+  );
+
+const verifyAdminMfaToken = async (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+    issuer: "csca-app",
+    audience: ADMIN_MFA_TOKEN_AUDIENCE,
+  });
+  if (decoded?.purpose !== "admin_mfa" || !decoded.id) {
+    throw new Error("Invalid admin MFA token");
+  }
+  const user = await User.findById(decoded.id);
+  if (!user || !user.is_active || !isAdminUser(user)) {
+    throw new Error("Invalid admin MFA user");
+  }
+  return user;
+};
+
+const buildSafeUser = (user, authz, avatarFallback = null) => ({
+  id: user.id,
+  username: user.username,
+  email: user.email,
+  full_name: user.full_name,
+  avatar: user.avatar || user.avatar_url || avatarFallback,
+  avatar_url: user.avatar_url || avatarFallback,
+  role: user.role || "student",
+  bio: user.bio,
+  is_vip: isVipActive(user),
+  subscription_tier: user.subscription_tier || "basic",
+  vip_expires_at: user.vip_expires_at || null,
+  vip_package_id: user.vip_package_id || null,
+  vip_allowed_subjects: user.vip_allowed_subjects || [],
+  roles: authz.roles,
+  permissions: authz.permissions,
+  created_at: user.created_at,
+});
+
+const buildTokenPayloadWithMfa = (user, jti) => {
+  const payload = buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || "basic" });
+  if (isAdminUser(user)) {
+    payload.admin_mfa = true;
+    payload.admin_mfa_at = Math.floor(Date.now() / 1000);
+  }
+  return payload;
+};
+
+const buildRefreshPayloadWithMfa = (user) => {
+  const payload = { id: user.id };
+  if (isAdminUser(user)) {
+    payload.admin_mfa = true;
+  }
+  return payload;
+};
+
+const createAdminMfaRequiredResponse = async (user) => {
+  const enabled = await adminMfaService.isMfaEnabled(user.id);
+  return {
+    success: true,
+    message: enabled
+      ? "Vui lòng nhập mã Microsoft Authenticator để hoàn tất đăng nhập admin."
+      : "Admin cần bật Microsoft Authenticator để tiếp tục.",
+    requiresAdminMfa: enabled,
+    requiresAdminMfaSetup: !enabled,
+    mfaToken: generateAdminMfaToken(user, enabled ? "verify" : "setup"),
+    adminEmail: user.email,
+  };
+};
+
+const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityAction = "login", avatarFallback = null) => {
+  const jti = crypto.randomBytes(16).toString("hex");
+  const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
+  await DeviceSessionService.registerSession({
+    userId: user.id,
+    jti,
+    deviceInfo: req.get("User-Agent")?.substring(0, 200) || deviceInfo,
+    ipAddress: getClientIp(req),
+    userAgent: req.get("User-Agent"),
+    expiresAt,
+  });
+
+  UserActivity.log(user.id, activityAction, {
+    ip: getClientIp(req),
+    userAgent: req.get("User-Agent"),
+  });
+
+  const authz = await resolveAuthorizationContext(user);
+  const token = generateToken(buildTokenPayloadWithMfa(user, jti));
+  const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user));
+
+  return {
+    user: buildSafeUser(user, authz, avatarFallback),
+    token,
+    refreshToken,
+  };
+};
+
+const respondWithCompletedLogin = async (req, res, user, message, activityAction = "login", avatarFallback = null) => {
+  const data = await completeLoginForUser(req, user, "Unknown", activityAction, avatarFallback);
+  return res.json({
+    success: true,
+    message,
+    data,
+  });
+};
 
 const resolveAuthorizationContext = async (user) => {
   let authz = { roles: [], permissions: [] };
@@ -304,6 +421,11 @@ const register = async (req, res) => {
     });
 
     // Register session (auto-evicts oldest if at device limit — no blocking)
+    if (isAdminUser(user) && reason === 'login') {
+      const mfaResponse = await createAdminMfaRequiredResponse(user);
+      return res.json(mfaResponse);
+    }
+
     const jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
     await DeviceSessionService.registerSession({
@@ -474,7 +596,7 @@ const getCurrentUser = async (req, res) => {
     const authz = await resolveAuthorizationContext(user);
     
     // Tạo token mới để đồng bộ các thuộc tính như is_vip, subscription_tier
-    const token = generateToken(buildTokenPayload({ ...user, jti: req.user.jti }));
+    const token = generateToken(buildTokenPayloadWithMfa({ ...user, jti: req.user.jti }, req.user.jti));
 
     return res.json({
       success: true,
@@ -587,6 +709,14 @@ const refreshToken = async (req, res) => {
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
     }
 
+    if (isAdminUser(user) && decoded.admin_mfa !== true) {
+      return res.status(401).json({
+        success: false,
+        message: "Admin can dang nhap lai va xac minh Microsoft Authenticator.",
+        code: "ADMIN_MFA_REQUIRED",
+      });
+    }
+
     // Touch active sessions for this user to keep them alive
     await db.query(
       `UPDATE user_sessions SET last_active = NOW()
@@ -594,8 +724,8 @@ const refreshToken = async (req, res) => {
       [user.id]
     ).catch(() => {}); // non-blocking
 
-    const newToken = generateToken(buildTokenPayload(user));
-    const newRefreshToken = generateRefreshToken({ id: user.id });
+    const newToken = generateToken(buildTokenPayloadWithMfa(user));
+    const newRefreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user));
 
     return res.json({
       success: true,
@@ -842,6 +972,15 @@ const facebookAuthCallback = async (req, res) => {
       );
     }
 
+    if (isAdminUser(user)) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'admin_mfa_required',
+          message: 'Admin vui long dang nhap bang Google hoac email de xac minh Microsoft Authenticator.',
+        }),
+      );
+    }
+
     const facebookJti = crypto.randomBytes(16).toString('hex');
     await DeviceSessionService.registerSession({
       userId: user.id,
@@ -935,6 +1074,11 @@ const googleAuth = async (req, res) => {
       return res
         .status(403)
         .json({ success: false, message: "Tài khoản đã bị vô hiệu hóa" });
+    }
+
+    if (isAdminUser(user)) {
+      const mfaResponse = await createAdminMfaRequiredResponse(user);
+      return res.json(mfaResponse);
     }
 
     // Register session for Google login (auto-evicts oldest if at limit)
@@ -1197,6 +1341,99 @@ const verifyOtpController = async (req, res) => {
 };
 
 // ─── Resend OTP ───────────────────────────────────────────────────────────────
+const adminMfaSetupStart = async (req, res) => {
+  try {
+    const { mfaToken } = req.body;
+    if (!mfaToken) {
+      return res.status(400).json({ success: false, message: "Thieu token MFA." });
+    }
+
+    const user = await verifyAdminMfaToken(mfaToken);
+    const enabled = await adminMfaService.isMfaEnabled(user.id);
+    if (enabled) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin da bat Microsoft Authenticator. Hay nhap ma de dang nhap.",
+      });
+    }
+
+    const setup = await adminMfaService.createSetupChallenge(user);
+    return res.json({
+      success: true,
+      message: "Quet QR bang Microsoft Authenticator roi nhap ma 6 so.",
+      data: setup,
+    });
+  } catch (error) {
+    console.error("Admin MFA setup start error:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: "Phien MFA khong hop le hoac da het han. Vui long dang nhap lai.",
+      code: "ADMIN_MFA_TOKEN_INVALID",
+    });
+  }
+};
+
+const adminMfaSetupConfirm = async (req, res) => {
+  try {
+    const { mfaToken, code } = req.body;
+    if (!mfaToken || !code) {
+      return res.status(400).json({ success: false, message: "Thieu token MFA hoac ma xac minh." });
+    }
+
+    const user = await verifyAdminMfaToken(mfaToken);
+    const result = await adminMfaService.confirmSetup(user, code);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    const data = await completeLoginForUser(req, user, "Microsoft Authenticator", "admin_mfa_setup");
+    return res.json({
+      success: true,
+      message: "Da bat Microsoft Authenticator. Hay luu ma du phong.",
+      data,
+      backupCodes: result.backupCodes,
+    });
+  } catch (error) {
+    console.error("Admin MFA setup confirm error:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: "Phien MFA khong hop le hoac da het han. Vui long dang nhap lai.",
+      code: "ADMIN_MFA_TOKEN_INVALID",
+    });
+  }
+};
+
+const adminMfaVerify = async (req, res) => {
+  try {
+    const { mfaToken, code } = req.body;
+    if (!mfaToken || !code) {
+      return res.status(400).json({ success: false, message: "Thieu token MFA hoac ma xac minh." });
+    }
+
+    const user = await verifyAdminMfaToken(mfaToken);
+    const result = await adminMfaService.verifyLoginCode(user, code);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    const data = await completeLoginForUser(req, user, "Microsoft Authenticator", "admin_mfa_login");
+    return res.json({
+      success: true,
+      message: result.usedBackupCode
+        ? `Dang nhap thanh cong bang ma du phong. Con ${result.remainingBackupCodes} ma.`
+        : "Xac minh Microsoft Authenticator thanh cong.",
+      data,
+    });
+  } catch (error) {
+    console.error("Admin MFA verify error:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: "Phien MFA khong hop le hoac da het han. Vui long dang nhap lai.",
+      code: "ADMIN_MFA_TOKEN_INVALID",
+    });
+  }
+};
+
 const resendOtp = async (req, res) => {
   try {
     const { userId, reason = 'login' } = req.body;
@@ -1288,5 +1525,8 @@ module.exports = {
   resetPassword,
   verifyEmail,
   verifyOtp: verifyOtpController,
+  adminMfaSetupStart,
+  adminMfaSetupConfirm,
+  adminMfaVerify,
   resendOtp,
 };

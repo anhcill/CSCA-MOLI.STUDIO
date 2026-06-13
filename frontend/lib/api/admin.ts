@@ -18,6 +18,7 @@ export interface AdminUser {
     created_at: string;
     admin_roles: string[];
     permissions: string[];
+    mfa_enabled?: boolean;
     primary_admin_role: string | null;
     last_active_at: string | null;
     total_actions: number;
@@ -133,6 +134,11 @@ export const adminControlApi = {
     async getAdminActivities(adminId: number, page = 1, limit = 30) {
         const response = await axios.get(`/admin/admins/${adminId}/activities`, { params: { page, limit } });
         return response.data as { activities: AdminActivity[]; pagination: { currentPage: number; totalPages: number; totalActivities: number; limit: number } };
+    },
+
+    async resetAdminMfa(adminId: number) {
+        const response = await axios.post(`/admin/admins/${adminId}/mfa/reset`);
+        return response.data as { success: boolean; message: string };
     },
 };
 
