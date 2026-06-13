@@ -138,7 +138,11 @@ export function repairMathFormatArtifacts(
     .replace(/\bC\s*(?:\u211d|\\mathbb\{R\})\s*\(/g, 'C_{\\mathbb{R}}(')
     .replace(/\bC\s+R\s*\(/g, 'C_{\\mathbb{R}}(')
     .replace(/\bC\s*(?:\u211d|\\mathbb\{R\})\b/g, 'C_{\\mathbb{R}}')
-    .replace(/\bC\s+R\b/g, 'C_{\\mathbb{R}}');
+    .replace(/\bC\s+R\b/g, 'C_{\\mathbb{R}}')
+    .replace(
+      /(\\(?:notin|in)\s*(?:\\mathbb\{[A-Z]\}|[A-Za-z]+)\s*\\mid\s+)([A-Za-z])\s*\\mid\s*([<>=])/g,
+      '$1|$2|$3',
+    );
 
   const withIntervalAssignments = shouldWrapIntervalAssignments
     ? wrapIntervalAssignments(repaired.replace(ESCAPED_INTERVAL_ASSIGNMENT_RE, (_, variable, intervals) => (
@@ -559,7 +563,7 @@ function escapeSetLiteralBraces(input: string): string {
       .replace(/\\in\s*Z\b/g, '\\in \\mathbb{Z}')
       .replace(/\\in\s*N\b/g, '\\in \\mathbb{N}')
       .replace(/\\in\s*R\b/g, '\\in \\mathbb{R}')
-      .replace(/\s*\|\s*/g, ' \\mid ');
+      .replace(/(\\(?:notin|in)\s*(?:\\mathbb\{[A-Z]\}|[A-Za-z]+)\s*)\|/, '$1\\mid ');
     const looksLikeSetLiteral =
       ( /[,;\uff0c\uff1b]/.test(content) ||
         /(?:\\in|\\notin|\\mid|\|)/.test(content)
