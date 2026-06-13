@@ -114,6 +114,17 @@ function normalizeSetOperators(input: string): string {
     .replace(/\\setminus|\u2216/g, '\\setminus');
 }
 
+function repairSetBuilderAbsoluteValues(input: string): string {
+  const domain = String.raw`(?:\\mathbb\{[A-Z]\}|[A-Za-z]+)`;
+  const comparison = String.raw`(?:[<>=]|\\(?:le|leq|ge|geq|ne|neq))`;
+  const setBuilderAbsValuePattern = new RegExp(
+    String.raw`(\\(?:notin|in)\s*${domain}\s*)(?:\\mid|\|)\s*([A-Za-z])\s*(?:\\mid|\|)\s*(${comparison})`,
+    'g',
+  );
+
+  return input.replace(setBuilderAbsValuePattern, '$1\\mid |$2|$3');
+}
+
 function wrapIntervalAssignments(input: string): string {
   return input.replace(INTERVAL_ASSIGNMENT_RE, (match, variable, intervals, offset: number, whole: string) => {
     const before = whole.slice(Math.max(0, offset - 2), offset);
@@ -131,7 +142,7 @@ export function repairMathFormatArtifacts(
   if (!input) return '';
   const shouldWrapIntervalAssignments = options.wrapIntervalAssignments ?? true;
 
-  const repaired = normalizeSetOperators(repairOcrMathArtifacts(normalizeEscapedLatexBackslashes(input)))
+  const repairedBase = normalizeSetOperators(repairOcrMathArtifacts(normalizeEscapedLatexBackslashes(input)))
     .replace(/([=:\uff1a]\s*)\$\$+(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
     .replace(/\(\[\)\/\(([^)]*)\)\)/g, '[$1)')
     .replace(/\(\(\)\/\(([^)]*)\)\)/g, '($1)')
@@ -143,6 +154,7 @@ export function repairMathFormatArtifacts(
       /(\\(?:notin|in)\s*(?:\\mathbb\{[A-Z]\}|[A-Za-z]+)\s*\\mid\s+)([A-Za-z])\s*\\mid\s*([<>=])/g,
       '$1|$2|$3',
     );
+  const repaired = repairSetBuilderAbsoluteValues(repairedBase);
 
   const withIntervalAssignments = shouldWrapIntervalAssignments
     ? wrapIntervalAssignments(repaired.replace(ESCAPED_INTERVAL_ASSIGNMENT_RE, (_, variable, intervals) => (
@@ -454,13 +466,13 @@ export function normalizeMathText(input: string): string {
 }
 
 export function normalizeLatexMath(input: string): string {
-  return escapeSetLiteralBraces(normalizeSuperscriptSyntax(
+  return repairSetBuilderAbsoluteValues(escapeSetLiteralBraces(normalizeSuperscriptSyntax(
     normalizeLostSuperscripts(normalizeMathText(input)
       .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
       .replace(/[ \t]*\n[ \t]*/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()),
-  ));
+  )));
 }
 
 export function isLikelyLooseMathLine(input: string): boolean {
