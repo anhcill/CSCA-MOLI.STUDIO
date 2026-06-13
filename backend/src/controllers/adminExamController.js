@@ -1992,7 +1992,17 @@ const AdminExamController = {
           }
         }
 
+        await client.query(
+          `UPDATE exams e
+           SET updated_at = NOW()
+           FROM questions q
+           WHERE q.id = $1 AND q.exam_id = e.id`,
+          [questionId],
+        );
+
         await client.query("COMMIT");
+        cache.delByPrefix("exams:");
+        cache.del("exams:lobby");
         UserActivity.log(req.user.id, 'admin.update_question', { questionId, ip: req.ip, userAgent: req.headers['user-agent'] });
         res.json({ message: "Question updated" });
       } catch (error) {
