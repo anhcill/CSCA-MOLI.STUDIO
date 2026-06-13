@@ -64,7 +64,7 @@ export default function RegisterForm() {
       newErrors.confirmPassword = t('auth.passwordMismatch');
     }
     if (isTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui long xac nhan Cloudflare truoc khi dang ky.';
+      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng ký.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

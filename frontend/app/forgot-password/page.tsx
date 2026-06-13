@@ -28,7 +28,7 @@ export default function ForgotPasswordPage() {
         }
 
         if (isTurnstileEnabled && !turnstileToken) {
-            setError('Vui long xac nhan Cloudflare truoc khi tiep tuc.');
+            setError('Vui lòng xác nhận Cloudflare trước khi tiếp tục.');
             return;
         }
 

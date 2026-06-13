@@ -73,7 +73,7 @@ export default function LoginForm() {
       newErrors.password = t('auth.passwordMin6');
     }
     if (isTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui long xac nhan Cloudflare truoc khi dang nhap.';
+      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng nhập.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

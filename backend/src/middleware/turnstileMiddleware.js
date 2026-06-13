@@ -23,7 +23,7 @@ const verifyTurnstile = async (req, res, next) => {
   if (!token || typeof token !== "string") {
     return res.status(403).json({
       success: false,
-      message: "Vui long xac nhan Cloudflare truoc khi tiep tuc.",
+      message: "Vui lòng xác nhận Cloudflare trước khi tiếp tục.",
       code: "TURNSTILE_REQUIRED",
     });
   }
@@ -49,7 +49,7 @@ const verifyTurnstile = async (req, res, next) => {
     if (!data.success) {
       return res.status(403).json({
         success: false,
-        message: "Xac minh Cloudflare that bai. Vui long thu lai.",
+        message: "Xác minh Cloudflare thất bại. Vui lòng thử lại.",
         code: "TURNSTILE_FAILED",
       });
     }
@@ -59,7 +59,7 @@ const verifyTurnstile = async (req, res, next) => {
     console.error("Turnstile verify error:", error.message);
     return res.status(503).json({
       success: false,
-      message: "Chua xac minh duoc Cloudflare. Vui long thu lai sau.",
+      message: "Chưa xác minh được Cloudflare. Vui lòng thử lại sau.",
       code: "TURNSTILE_UNAVAILABLE",
     });
   }

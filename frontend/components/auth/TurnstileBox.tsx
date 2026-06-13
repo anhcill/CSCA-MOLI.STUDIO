@@ -93,7 +93,7 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
         className={disabled ? 'pointer-events-none opacity-60' : undefined}
       />
       <p className="text-xs text-gray-500">
-        Xac nhan Cloudflare de bao ve tai khoan khoi spam.
+        Xác nhận Cloudflare để bảo vệ tài khoản khỏi spam.
       </p>
     </div>
   );
