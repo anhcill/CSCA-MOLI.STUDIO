@@ -555,9 +555,15 @@ function escapeSetLiteralBraces(input: string): string {
     }
 
     const content = input.slice(openIndex + 1, closeIndex);
+    const normalizedSetBuilderContent = content
+      .replace(/\\in\s*Z\b/g, '\\in \\mathbb{Z}')
+      .replace(/\\in\s*N\b/g, '\\in \\mathbb{N}')
+      .replace(/\\in\s*R\b/g, '\\in \\mathbb{R}')
+      .replace(/\s*\|\s*/g, ' \\mid ');
     const looksLikeSetLiteral =
-      /[,;\uff0c\uff1b]/.test(content) &&
-      !/[{}]/.test(content) &&
+      ( /[,;\uff0c\uff1b]/.test(content) ||
+        /(?:\\in|\\notin|\\mid|\|)/.test(content)
+      ) &&
       /\S/.test(content);
 
     if (!looksLikeSetLiteral) {
@@ -566,7 +572,7 @@ function escapeSetLiteralBraces(input: string): string {
       continue;
     }
 
-    out += `${input.slice(cursor, openIndex)}\\{${content}\\}`;
+    out += `${input.slice(cursor, openIndex)}\\{${normalizedSetBuilderContent}\\}`;
     cursor = closeIndex + 1;
   }
 

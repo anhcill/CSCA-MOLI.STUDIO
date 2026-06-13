@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiTrash2, FiSave, FiPlus, FiX } from 'react-icons/fi';
 import ImageUpload from './ImageUpload';
 import MathInput from './MathInput';
 import SingleQuestionOcrPaste from './SingleQuestionOcrPaste';
@@ -109,6 +109,7 @@ const ADMIN_SELECT_CLASS =
 export default function QuestionEditor({ questionNumber, initialData, initialQuestionType, onSave, onDelete, onCancel, savedQuestionId }: QuestionEditorProps) {
   const [form, setForm] = useState<QuestionFormData>(getDefaults(initialData));
   const [saving, setSaving] = useState(false);
+  const [showMathPreviews, setShowMathPreviews] = useState(true);
 
   useEffect(() => {
     setForm(getDefaults(initialData));
@@ -131,6 +132,19 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
   ) => {
     if (!value) return null;
 
+    if (!showMathPreviews) {
+      return (
+        <button
+          type="button"
+          onClick={() => setShowMathPreviews(true)}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          <FiEye size={13} />
+          Hiện xem trước
+        </button>
+      );
+    }
+
     const normalized = normalizeRichMathText(value);
     const canApplyNormalized = Boolean(normalized && normalized !== value);
     const editorRows = Math.min(6, Math.max(2, value.split('\n').length));
@@ -148,6 +162,14 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
               Dùng bản chuẩn hóa
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setShowMathPreviews(false)}
+            className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            <FiEyeOff size={12} />
+            Ẩn
+          </button>
         </div>
         <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
           <RichMathText value={normalized || value} className="admin-question-preview-math text-gray-900" />

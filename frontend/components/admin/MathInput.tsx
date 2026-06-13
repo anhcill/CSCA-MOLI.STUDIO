@@ -3,7 +3,7 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { FiDivide, FiHash, FiRefreshCw } from 'react-icons/fi';
+import { FiDivide, FiEye, FiEyeOff, FiHash, FiRefreshCw } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
 import {
   normalizeAdminMathInputText,
@@ -145,6 +145,7 @@ export default function MathInput({
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
+  const [showPreview, setShowPreview] = useState(true);
   const [draftValue, setDraftValue] = useState(value || '');
   const [draftCnValue, setDraftCnValue] = useState(cnValue || '');
   const mathRef = useRef<HTMLTextAreaElement>(null);
@@ -489,9 +490,30 @@ export default function MathInput({
       )}
 
       {/* Inline preview of current value */}
-      {showInlinePreview && currentValue && (
+      {showInlinePreview && currentValue && !showPreview && (
+        <button
+          type="button"
+          onClick={() => setShowPreview(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          <FiEye size={13} />
+          Hiện xem trước
+        </button>
+      )}
+
+      {showInlinePreview && currentValue && showPreview && (
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500 mb-1">Xem trước:</div>
+          <div className="mb-1 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowPreview(false)}
+              className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              <FiEyeOff size={12} />
+              Ẩn
+            </button>
+          </div>
           <RichMathText value={repairedPreviewValue} className="text-base leading-relaxed text-gray-800" />
         </div>
       )}
