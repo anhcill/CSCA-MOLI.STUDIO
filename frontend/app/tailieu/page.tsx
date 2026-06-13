@@ -78,28 +78,64 @@ function PDFCard({ m }: { m: Material }) {
   const [expanded, setExpanded] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-  const queryString = token ? `?token=${token}` : '';
   const hasFile = Boolean(m.file_url);
   const hasPdfProxy = canUsePdfProxy(m.file_url);
   const hasContent = hasWebContent(m);
-  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}${queryString}` : m.file_url;
-  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}/download${queryString}` : m.file_url;
+  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}` : m.file_url;
+  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}/download` : m.file_url;
   const categoryData = CATEGORIES.find(c => c.value === m.category);
   const subjectData = SUBJECTS.find(s => s.value === m.subject);
   const locked = m.is_premium && !isVip;
 
-  const handlePdfClick = (e: React.MouseEvent) => {
+  const openProtectedPdf = async (url: string, download = false) => {
+    const token = sessionStorage.getItem('token');
+    if (!token) {
+      window.location.href = '/auth';
+      return;
+    }
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('PDF request failed');
+
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    if (download) {
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${m.title || 'tailieu'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+      return;
+    }
+    window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  };
+
+  const handlePdfClick = async (e: React.MouseEvent) => {
     if (locked) {
       e.preventDefault();
       setShowVipModal(true);
+      return;
+    }
+    if (hasPdfProxy && pdfUrl) {
+      e.preventDefault();
+      await openProtectedPdf(pdfUrl);
     }
   };
 
-  const handleDownloadClick = (e: React.MouseEvent) => {
+  const handleDownloadClick = async (e: React.MouseEvent) => {
     if (locked) {
       e.preventDefault();
       setShowVipModal(true);
+      return;
+    }
+    if (hasPdfProxy && downloadUrl) {
+      e.preventDefault();
+      await openProtectedPdf(downloadUrl, true);
     }
   };
 
@@ -232,7 +268,7 @@ function PDFCard({ m }: { m: Material }) {
           dangerouslySetInnerHTML={{ __html: m.content_html || textToHtml(m.content_text) }}
         />
       )}
-      {expanded && !locked && !hasContent && hasFile && (
+      {expanded && !locked && !hasContent && hasFile && !hasPdfProxy && (
         <div className="border-t border-gray-200 bg-gray-50 p-4">
           <iframe
             src={pdfUrl}
@@ -240,6 +276,18 @@ function PDFCard({ m }: { m: Material }) {
             title={m.title}
             loading="lazy"
           />
+        </div>
+      )}
+      {expanded && !locked && !hasContent && hasFile && hasPdfProxy && (
+        <div className="border-t border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">
+          <button
+            type="button"
+            onClick={handlePdfClick}
+            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
+          >
+            <FiExternalLink size={14} />
+            Mo PDF an toan
+          </button>
         </div>
       )}
       {expanded && !locked && !hasContent && !hasFile && (

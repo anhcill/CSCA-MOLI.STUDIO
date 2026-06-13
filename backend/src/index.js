@@ -61,8 +61,12 @@ app.use(
           "https://*.vercel.app",
           "https://*.molystudio.online",
           "https://*.moli.studio",
-          "wss://*",
-          "ws://*",
+          "wss://molystudio.online",
+          "wss://www.molystudio.online",
+          "wss://moli.studio",
+          "wss://www.moli.studio",
+          "ws://localhost:*",
+          "ws://127.0.0.1:*",
         ],
         // Cho phép frontend nhúng PDF từ backend vào iframe
         frameAncestors: [

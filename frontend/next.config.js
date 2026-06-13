@@ -1,9 +1,52 @@
+const path = require("path");
+
 const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
 const backendApiUrl = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
+const isDev = process.env.NODE_ENV !== "production";
+
+const imageRemotePatterns = [
+  ...(isDev
+    ? [{
+        protocol: "http",
+        hostname: "localhost",
+      }]
+    : []),
+  {
+    protocol: "https",
+    hostname: "res.cloudinary.com",
+  },
+  {
+    protocol: "https",
+    hostname: "ui-avatars.com",
+  },
+  {
+    protocol: "https",
+    hostname: "lh3.googleusercontent.com",
+  },
+  {
+    protocol: "https",
+    hostname: "graph.facebook.com",
+  },
+  {
+    protocol: "https",
+    hostname: "platform-lookaside.fbsbx.com",
+  },
+  {
+    protocol: "https",
+    hostname: "scontent.xx.fbcdn.net",
+  },
+  {
+    protocol: "https",
+    hostname: "images.unsplash.com",
+  },
+];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
 
   // API Proxy - chuyển /api requests sang Railway backend
   async rewrites() {
@@ -22,40 +65,7 @@ const nextConfig = {
 
   // Image optimization
   images: {
-    remotePatterns: [
-      {
-        protocol: "http",
-        hostname: "localhost",
-      },
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-      },
-      {
-        protocol: "https",
-        hostname: "ui-avatars.com",
-      },
-      {
-        protocol: "https",
-        hostname: "lh3.googleusercontent.com",
-      },
-      {
-        protocol: "https",
-        hostname: "graph.facebook.com",
-      },
-      {
-        protocol: "https",
-        hostname: "platform-lookaside.fbsbx.com",
-      },
-      {
-        protocol: "https",
-        hostname: "scontent.xx.fbcdn.net",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-      },
-    ],
+    remotePatterns: imageRemotePatterns,
     formats: ["image/webp", "image/avif"],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
@@ -68,7 +78,6 @@ const nextConfig = {
   generateEtags: true,
 
   // Production optimizations
-  swcMinify: true,
   productionBrowserSourceMaps: false,
 
   // Experimental features for better performance

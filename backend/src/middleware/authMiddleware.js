@@ -65,13 +65,10 @@ const authMiddleware = async (req, res, next) => {
   try {
     let token = null;
 
-    // Check authorization header first
+    // Check authorization header.
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
-    } else if (req.query.token) {
-      // Fallback to query param for direct download/iframe links
-      token = req.query.token;
     }
 
     if (!token) {

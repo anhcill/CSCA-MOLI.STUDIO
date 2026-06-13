@@ -1,9 +1,26 @@
 const express = require("express");
 const router = express.Router();
+const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/authMiddleware");
 const { validateRegister, validateLogin } = require("../utils/validators");
 const DeviceSessionService = require("../services/deviceSessionService");
+
+const otpLimiter = rateLimit({
+  windowMs: Number(process.env.OTP_RATE_LIMIT_WINDOW_MS || 5 * 60 * 1000),
+  max: Number(process.env.OTP_RATE_LIMIT_MAX || 8),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = String(req.body?.userId || "").trim();
+    return `${ipKeyGenerator(req.ip)}:${userId || "unknown"}`;
+  },
+  message: {
+    success: false,
+    message: "Ban nhap OTP qua nhieu lan. Vui long doi vai phut roi thu lai.",
+  },
+});
 
 router.post("/register", validateRegister, authController.register);
 router.post("/login", validateLogin, authController.login);
@@ -22,8 +39,8 @@ router.post("/reset-password", authController.resetPassword);
 router.post("/verify-email", authController.verifyEmail);
 
 // OTP routes
-router.post("/otp/verify", authController.verifyOtp);
-router.post("/otp/resend", authController.resendOtp);
+router.post("/otp/verify", otpLimiter, authController.verifyOtp);
+router.post("/otp/resend", otpLimiter, authController.resendOtp);
 
 // Device session management
 router.get("/sessions", authenticate, async (req, res) => {
