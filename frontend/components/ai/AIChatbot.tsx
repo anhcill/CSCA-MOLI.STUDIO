@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight } from 'react-icons/fi';
+import { useState, useRef, useEffect, type ClipboardEvent } from 'react';
+import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight, FiImage, FiX } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIFormattedText from '@/components/ai/AIFormattedText';
+import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 
 interface Message {
     id: string;
     role: 'user' | 'ai' | 'system';
     content: string;
+    imageDataUrl?: string;
     timestamp: string;
 }
 
@@ -47,6 +49,8 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         },
     ]);
     const [input, setInput] = useState('');
+    const [pastedImage, setPastedImage] = useState<PastedChatImage | null>(null);
+    const [processingImage, setProcessingImage] = useState(false);
     const [loading, setLoading] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -79,8 +83,26 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         }
     };
 
+    const handlePaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        if (loading || processingImage) return;
+        const file = getClipboardImageFile(event.clipboardData);
+        if (!file) return;
+        event.preventDefault();
+        try {
+            setProcessingImage(true);
+            setPastedImage(await preparePastedChatImage(file));
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Không thể đọc ảnh.');
+        } finally {
+            setProcessingImage(false);
+        }
+    };
+
     const sendMessage = async (text: string) => {
-        if (!text.trim() || loading) return;
+        const imageSnapshot = pastedImage;
+        const trimmedText = text.trim();
+        const questionText = trimmedText || (imageSnapshot ? 'Mình gửi ảnh này, bạn xem và giải thích giúp mình.' : '');
+        if ((!questionText && !imageSnapshot) || loading || processingImage) return;
 
         const conversationHistory = messages
             .filter(msg => msg.id !== 'welcome' && msg.content.trim() && (msg.role === 'user' || msg.role === 'ai'))
@@ -90,11 +112,13 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         const userMsg: Message = {
             id: Date.now().toString(),
             role: 'user',
-            content: text.trim(),
+            content: questionText,
+            imageDataUrl: imageSnapshot?.dataUrl,
             timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
+        setPastedImage(null);
         setLoading(true);
         setIsStreaming(true);
 
@@ -112,7 +136,8 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 method: 'POST',
                 credentials: 'include',
                 body: JSON.stringify({
-                    question: text.trim(),
+                    question: questionText,
+                    imageDataUrl: imageSnapshot?.dataUrl,
                     attemptId: attemptId,
                     conversationHistory,
                 }),
@@ -275,9 +300,20 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                 }`}>
                                     {msg.role === 'ai'
                                         ? (msg.content ? <AIFormattedText value={msg.content} className="min-w-0 overflow-x-auto text-gray-700 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" /> : (loading && messages[messages.length - 1]?.id === msg.id ? <ThinkingDots /> : <p className="text-sm text-gray-500">AI chưa có phản hồi. Vui lòng thử lại.</p>))
-                                        : msg.content.split('\n').map((line, i) => (
-                                            <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
-                                        ))
+                                        : (
+                                            <>
+                                                {msg.imageDataUrl && (
+                                                    <img
+                                                        src={msg.imageDataUrl}
+                                                        alt="Ảnh đã gửi"
+                                                        className="mb-2 max-h-56 max-w-full rounded-xl object-contain"
+                                                    />
+                                                )}
+                                                {msg.content.split('\n').map((line, i) => (
+                                                    <p key={i} className={i > 0 ? 'mt-1' : ''}>{line}</p>
+                                                ))}
+                                            </>
+                                        )
                                     }
                                     {/* Typing cursor */}
                                     {msg.role === 'ai' && msg.content && isStreaming && messages[messages.length - 1]?.id === msg.id && (
@@ -362,28 +398,57 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
 
             {/* Input Area */}
             <div className="shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:px-6 sm:py-4">
+                {(pastedImage || processingImage) && (
+                    <div className="mb-2 flex items-center gap-3 rounded-2xl border border-purple-100 bg-purple-50 px-3 py-2">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-purple-100">
+                            {pastedImage ? (
+                                <img src={pastedImage.dataUrl} alt="Ảnh sắp gửi" className="h-full w-full object-cover" />
+                            ) : (
+                                <FiImage className="animate-pulse text-purple-500" />
+                            )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-bold text-purple-700">
+                                {processingImage ? 'Đang đọc ảnh...' : 'Ảnh đã sẵn sàng'}
+                            </p>
+                            <p className="text-[11px] font-medium text-purple-500">Bấm gửi để AI xem ảnh cùng câu hỏi.</p>
+                        </div>
+                        {pastedImage && (
+                            <button
+                                type="button"
+                                onClick={() => setPastedImage(null)}
+                                className="rounded-full bg-white p-2 text-purple-500 shadow-sm hover:text-red-500"
+                                title="Xóa ảnh"
+                            >
+                                <FiX size={14} />
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className="flex items-end gap-2 sm:gap-3">
                     <textarea
                         ref={inputRef}
                         value={input}
                         onChange={e => setInput(e.target.value)}
+                        onPaste={handlePaste}
                         onKeyDown={e => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 sendMessage(input);
                             }
                         }}
-                        placeholder="Nhập câu hỏi cho AI..."
+                        placeholder="Nhập câu hỏi hoặc dán ảnh cho AI..."
                         maxLength={3000}
                         rows={2}
+                        disabled={processingImage}
                         className="min-w-0 flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition-all placeholder:text-gray-400 focus:border-transparent focus:ring-2 focus:ring-purple-500 sm:px-4 sm:py-3"
                         style={{ maxHeight: '120px' }}
                     />
                     <button
                         onClick={() => sendMessage(input)}
-                        disabled={!input.trim() || loading}
+                        disabled={(!input.trim() && !pastedImage) || loading || processingImage}
                         className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white transition-all hover:shadow-lg hover:shadow-purple-200 disabled:cursor-not-allowed disabled:opacity-40 sm:h-12 sm:w-12">
-                        <FiSend size={18} />
+                        {loading || processingImage ? <FiZap className="animate-pulse" size={18} /> : <FiSend size={18} />}
                     </button>
                 </div>
             </div>

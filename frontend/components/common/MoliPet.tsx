@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ClipboardEvent as ReactClipboardEvent, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
 import * as THREE from 'three';
 import {
@@ -16,6 +16,7 @@ import {
 import { usePathname } from 'next/navigation';
 import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
+import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 
 type PetColor = 'ocean' | 'berry' | 'leaf' | 'sun';
 type PetMood = 'friendly' | 'happy' | 'focus' | 'sleepy';
@@ -39,6 +40,7 @@ interface MoliPetProps {
 interface PetMessage {
   role: 'user' | 'assistant';
   content: string;
+  imageDataUrl?: string;
 }
 
 const SETTINGS_KEY = 'moli_pet_settings_v1';
@@ -818,6 +820,8 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<MoliPetSettings>(() => getDefaultSettings(defaultPosition));
   const [input, setInput] = useState('');
+  const [pastedImage, setPastedImage] = useState<PastedChatImage | null>(null);
+  const [processingImage, setProcessingImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownNow, setCooldownNow] = useState(0);
@@ -1150,15 +1154,33 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     window.setTimeout(restore, 180);
   };
 
+  const handlePasteImage = async (event: ReactClipboardEvent<HTMLInputElement>) => {
+    if (loading || processingImage) return;
+    const file = getClipboardImageFile(event.clipboardData);
+    if (!file) return;
+    event.preventDefault();
+    try {
+      setProcessingImage(true);
+      setPastedImage(await preparePastedChatImage(file));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không thể đọc ảnh.');
+    } finally {
+      setProcessingImage(false);
+    }
+  };
+
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || loading) return;
+    const imageSnapshot = pastedImage;
+    const messageText = text || (imageSnapshot ? 'Mình gửi ảnh này, bạn xem giúp mình nhé.' : '');
+    if ((!messageText && !imageSnapshot) || loading || processingImage) return;
     if (cooldownSeconds > 0) return;
 
-    const nextMessages: PetMessage[] = [...messages, { role: 'user', content: text }];
+    const nextMessages: PetMessage[] = [...messages, { role: 'user', content: messageText, imageDataUrl: imageSnapshot?.dataUrl }];
     setMessages(nextMessages);
     setInput('');
+    setPastedImage(null);
 
     if (!isAuthenticated) {
       setMessages((current) => [
@@ -1171,7 +1193,8 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
     try {
       setLoading(true);
       const response = await axios.post('/ai/moli-pet', {
-        message: text,
+        message: messageText,
+        imageDataUrl: imageSnapshot?.dataUrl,
         page: pathname,
         pageType: studyContext.pageType,
         subject: studyContext.subject,
@@ -1432,6 +1455,13 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
                       : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100'
                   }`}
                 >
+                  {message.imageDataUrl && (
+                    <img
+                      src={message.imageDataUrl}
+                      alt="Ảnh đã gửi"
+                      className="mb-2 max-h-40 w-full rounded-xl object-contain"
+                    />
+                  )}
                   {message.content}
                 </div>
               </div>
@@ -1451,22 +1481,49 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
             </div>
           )}
 
+          {(pastedImage || processingImage) && (
+            <div className="mx-3 mt-3 flex shrink-0 items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700 dark:border-slate-700 dark:bg-slate-800 dark:text-cyan-200">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-cyan-100 dark:bg-slate-900 dark:ring-slate-700">
+                {pastedImage ? (
+                  <img src={pastedImage.dataUrl} alt="Ảnh sắp gửi" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <FiRefreshCw className="animate-spin" />
+                  </div>
+                )}
+              </div>
+              <span className="min-w-0 flex-1 truncate">{processingImage ? 'Đang đọc ảnh...' : 'Ảnh sẵn sàng gửi'}</span>
+              {pastedImage && (
+                <button
+                  type="button"
+                  onClick={() => setPastedImage(null)}
+                  className="rounded-lg bg-white p-2 text-cyan-700 hover:text-rose-500 dark:bg-slate-900 dark:text-cyan-200"
+                  title="Xóa ảnh"
+                >
+                  <FiX />
+                </button>
+              )}
+            </div>
+          )}
+
           <form onSubmit={sendMessage} className="flex shrink-0 items-center gap-2 border-t border-slate-100 p-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-700">
             <input
               value={input}
               maxLength={600}
               onChange={(event) => setInput(event.target.value)}
+              onPaste={handlePasteImage}
               onFocus={keepMobileViewportStable}
-              placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name}...` : 'Đăng nhập để chat AI'}
+              placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name} hoặc dán ảnh...` : 'Đăng nhập để chat AI'}
+              disabled={processingImage}
               className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:border-cyan-400 sm:py-2 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
             <button
               type="submit"
-              disabled={!input.trim() || loading || cooldownSeconds > 0}
+              disabled={(!input.trim() && !pastedImage) || loading || processingImage || cooldownSeconds > 0}
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${theme.button}`}
               title="Gửi"
             >
-              {loading ? <FiRefreshCw className="animate-spin" /> : <FiSend />}
+              {loading || processingImage ? <FiRefreshCw className="animate-spin" /> : <FiSend />}
             </button>
           </form>
         </section>

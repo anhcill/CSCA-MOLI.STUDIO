@@ -14,6 +14,7 @@ const AI_CHAT_WINDOW_MS = 60 * 1000;
 const AI_CHAT_MAX_PER_WINDOW = 12;
 const AI_CHAT_MIN_INTERVAL_MS = 2500;
 const AI_CHAT_MAX_QUESTION_LENGTH = 3000;
+const AI_CHAT_MAX_IMAGE_DATA_URL_LENGTH = Number.parseInt(process.env.AI_CHAT_MAX_IMAGE_DATA_URL_LENGTH, 10) || 1_600_000;
 const moliPetWindows = new Map();
 const moliPetInFlightUsers = new Set();
 const MOLI_PET_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -28,6 +29,19 @@ const INSIGHT_TYPES = {
   examAnalysis: 'exam_analysis',
   wrongAnswerExplanations: 'wrong_answer_explanations',
 };
+
+function normalizeAiImageDataUrl(value) {
+  if (!value) return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false, message: 'Anh khong hop le.' };
+  const dataUrl = value.trim();
+  if (Buffer.byteLength(dataUrl, 'utf8') > AI_CHAT_MAX_IMAGE_DATA_URL_LENGTH) {
+    return { ok: false, message: 'Anh qua lon. Hay cat nho hoac nen anh roi gui lai.' };
+  }
+  if (!/^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(dataUrl)) {
+    return { ok: false, message: 'Chi chap nhan anh PNG, JPG hoac WEBP.' };
+  }
+  return { ok: true, value: dataUrl.replace(/\s+/g, '') };
+}
 
 // ─── In-flight deduplication ────────────────────────────────────────────────────
 const inFlightRequests = new Map();
@@ -805,7 +819,11 @@ async function askAI(req, res) {
       return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
     }
 
-    const { question, attemptId, conversationHistory } = req.body;
+    const { question, attemptId, conversationHistory, imageDataUrl } = req.body;
+    const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
+    if (!imageCheck.ok) {
+      return res.status(400).json({ success: false, message: imageCheck.message, answer: imageCheck.message });
+    }
 
     if (!question || question.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
@@ -840,6 +858,7 @@ async function askAI(req, res) {
       context = await getAttemptAIContext(userId, attemptId);
     }
     context.conversationHistory = conversationHistory;
+    context.imageDataUrl = imageCheck.value;
 
     if (aiService.isRateLimited()) {
       return res.json({
@@ -882,7 +901,11 @@ async function askMoliPet(req, res) {
   let petLockUserId = null;
   try {
     const userId = req.user.id;
-    const { message, page, pageType, subject, routeHint, localTime, petName, mood, conversationHistory } = req.body || {};
+    const { message, imageDataUrl, page, pageType, subject, routeHint, localTime, petName, mood, conversationHistory } = req.body || {};
+    const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
+    if (!imageCheck.ok) {
+      return res.status(400).json({ success: false, message: imageCheck.message, answer: imageCheck.message });
+    }
     const trimmedMessage = String(message || '').trim();
 
     if (trimmedMessage.length < 2) {
@@ -944,6 +967,7 @@ async function askMoliPet(req, res) {
       localTime: safeLocalTime,
       mood: safeMood,
       conversationHistory: normalizeMoliPetHistory(conversationHistory),
+      imageDataUrl: imageCheck.value,
     });
 
     return res.json({
@@ -1400,7 +1424,11 @@ async function askAIStream(req, res) {
       return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
     }
 
-    const { question, attemptId, conversationHistory } = req.body;
+    const { question, attemptId, conversationHistory, imageDataUrl } = req.body;
+    const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
+    if (!imageCheck.ok) {
+      return res.status(400).json({ success: false, message: imageCheck.message });
+    }
 
     if (!question || question.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Câu hỏi quá ngắn' });
@@ -1435,6 +1463,7 @@ async function askAIStream(req, res) {
       context = await getAttemptAIContext(userId, attemptId);
     }
     context.conversationHistory = conversationHistory;
+    context.imageDataUrl = imageCheck.value;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');

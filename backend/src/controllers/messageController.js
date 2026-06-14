@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const { uploadStream } = require("../config/cloudinary");
 const { getIO } = require("../socket/singleton");
 const { emitNewMessage, emitUnreadCount } = require("../socket");
 
@@ -311,6 +312,56 @@ exports.sendMessage = async (req, res) => {
   } catch (error) {
     console.error("Send message error:", error);
     res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+/**
+ * Upload an image used inside private chat.
+ * @route   POST /api/messages/upload-image
+ * @access  Private
+ */
+exports.uploadMessageImage = async (req, res) => {
+  try {
+    const senderId = req.user.id;
+    const receiverId = parseInt(req.body.receiver_id);
+
+    if (!req.file || !receiverId) {
+      return res.status(400).json({ success: false, message: "Thieu anh hoac nguoi nhan" });
+    }
+
+    if (senderId === receiverId) {
+      return res.status(400).json({ success: false, message: "Khong the nhan tin cho chinh minh" });
+    }
+
+    const userCheck = await db.query(`SELECT id FROM users WHERE id = $1 AND is_active = true`, [receiverId]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Nguoi dung khong ton tai" });
+    }
+
+    const blockCheck = await db.query(`
+      SELECT 1 FROM forum_blocks
+      WHERE (blocker_id = $1 AND blocked_id = $2)
+         OR (blocker_id = $2 AND blocked_id = $1)
+      LIMIT 1
+    `, [senderId, receiverId]);
+
+    if (blockCheck.rows.length > 0) {
+      return res.status(403).json({ success: false, message: "Khong the gui anh: da bi chan" });
+    }
+
+    const result = await uploadStream(req.file.buffer, {
+      folder: "csca/messages",
+      resource_type: "image",
+    });
+
+    res.json({
+      success: true,
+      data: { url: result.secure_url, publicId: result.public_id },
+      message: "Upload anh thanh cong",
+    });
+  } catch (error) {
+    console.error("Message image upload error:", error);
+    res.status(500).json({ success: false, message: "Loi upload anh" });
   }
 };
 

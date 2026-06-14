@@ -7,7 +7,7 @@ import {
 } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useChatBgStore, CHAT_BG_PRESETS } from '@/lib/store/chatBgStore';
-import { getMessages, sendMessage, reportMessage, blockUser, deleteMessage, ForumMessage } from '@/lib/api/messages';
+import { getMessages, sendMessage, uploadMessageImage, reportMessage, blockUser, deleteMessage, ForumMessage } from '@/lib/api/messages';
 import {
   initSocket, joinConversation, leaveConversation,
   startTyping, stopTyping,
@@ -19,6 +19,7 @@ const QUICK_EMOJIS = ['😀', '👍', '🙏', '❤️', '😊', '🎉', '💯', 
 const PAGE_SIZE = 50;
 const TYPING_TIMEOUT = 3000;
 const TYPING_DEBOUNCE = 500;
+const MAX_CHAT_IMAGE_SIZE = 8 * 1024 * 1024;
 
 interface Props {
   partnerId: number;
@@ -34,6 +35,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const [messages, setMessages] = useState<ForumMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -249,7 +251,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
   const handleSend = async () => {
     const content = text.trim();
-    if (!content || sending) return;
+    if (!content || sending || uploadingImage) return;
     setSending(true);
     setText('');
     const replyId = replyingTo?.id;
@@ -290,6 +292,56 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const getClipboardImage = (clipboardData: DataTransfer) => {
+    const item = Array.from(clipboardData.items || []).find(
+      entry => entry.kind === 'file' && entry.type.startsWith('image/'),
+    );
+    const itemFile = item?.getAsFile();
+    if (itemFile) return itemFile;
+    return Array.from(clipboardData.files || []).find(file => file.type.startsWith('image/')) || null;
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (blocked || sending || uploadingImage) return;
+    const file = getClipboardImage(e.clipboardData);
+    if (!file) return;
+
+    e.preventDefault();
+    if (file.size > MAX_CHAT_IMAGE_SIZE) {
+      alert('Ảnh quá lớn. Tối đa 8MB.');
+      return;
+    }
+
+    const replySnapshot = replyingTo;
+    const replyId = replySnapshot?.id;
+    setShowEmoji(false);
+    setReplyingTo(null);
+    setUploadingImage(true);
+    stopTyping(partnerId);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    try {
+      const uploadRes = await uploadMessageImage(partnerId, file);
+      const imageUrl = uploadRes.data?.url;
+      if (!imageUrl) throw new Error('Không lấy được link ảnh.');
+
+      setSending(true);
+      const res = await sendMessage(partnerId, imageUrl, replyId);
+      if (res.success && res.data?.message) {
+        setMessages(prev => [...prev, res.data.message]);
+        onNewMessageReceived?.(res.data.message);
+      }
+    } catch (err: any) {
+      if (replySnapshot) setReplyingTo(replySnapshot);
+      alert(err?.response?.data?.message || err?.message || 'Không thể gửi ảnh.');
+    } finally {
+      setSending(false);
+      setUploadingImage(false);
+      focusInputSafely();
     }
   };
 
@@ -814,6 +866,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           </div>
         )}
 
+        {uploadingImage && (
+          <div className="mb-2 flex items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-600">
+            <div className="h-3.5 w-3.5 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
+            Đang tải ảnh và gửi...
+          </div>
+        )}
+
         <div className="flex items-end gap-1.5 sm:gap-2">
           <button
             onClick={() => { setShowEmoji(v => !v); }}
@@ -833,10 +892,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               value={text}
               onChange={e => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={keepMobileViewportStable}
-              placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn..."}
+              placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn hoặc dán ảnh..."}
               rows={1}
-              disabled={blocked}
+              disabled={blocked || uploadingImage}
               className="w-full px-4 py-3 rounded-2xl bg-gray-50/80 border border-gray-200 text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-gray-400"
               style={{ height: '48px', maxHeight: '120px', overflowY: 'auto' }}
             />
@@ -844,14 +904,14 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
           <button
             onClick={handleSend}
-            disabled={!text.trim() || sending || blocked}
+            disabled={!text.trim() || sending || uploadingImage || blocked}
             className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition-all active:scale-95 ${
-              text.trim() && !sending && !blocked
+              text.trim() && !sending && !uploadingImage && !blocked
                 ? 'bg-gradient-to-br from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-200 hover:shadow-xl hover:-translate-y-0.5'
                 : 'bg-gray-100 text-gray-300 cursor-not-allowed'
             }`}
           >
-            {sending ? (
+            {sending || uploadingImage ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <FiSend size={18} />

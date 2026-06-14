@@ -76,6 +76,17 @@ export const sendMessage = async (receiverId: number, content: string, replyToId
   return res.data as { success: boolean; data: { message: ForumMessage } };
 };
 
+export const uploadMessageImage = async (receiverId: number, image: File) => {
+  const formData = new FormData();
+  formData.append('receiver_id', String(receiverId));
+  formData.append('image', image);
+  const res = await axios.post('/messages/upload-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  });
+  return res.data as { success: boolean; data: { url: string; publicId: string }; message?: string };
+};
+
 /**
  * Thu hồi tin nhắn
  * @route DELETE /api/messages/:id

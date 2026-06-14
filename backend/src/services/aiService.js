@@ -1007,6 +1007,23 @@ function buildConversationHistoryContext(conversationHistory = []) {
   return items.length ? items.join('\n') : '(không có)';
 }
 
+function buildVisionUserMessage(prompt, imageDataUrl, note = '') {
+  if (!imageDataUrl) return { role: 'user', content: prompt };
+  return {
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text: `${prompt}\n\n${note || 'User pasted an image. Read the image directly and answer based on both text and image. If the image is unclear, say exactly what is unclear.'}`,
+      },
+      {
+        type: 'image_url',
+        image_url: { url: imageDataUrl },
+      },
+    ],
+  };
+}
+
 function buildAIChatPrompt(question, context = {}) {
   const { examTitle, subjectName, questions = [], userScore, questionStats, conversationHistory = [] } = context;
 
@@ -1055,7 +1072,10 @@ async function askAI(question, context = {}) {
   const prompt = buildAIChatPrompt(question, context);
 
   try {
-    const response = await callBeeknoee(prompt, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+    const response = await callBeeknoeeMessages(
+      [buildVisionUserMessage(prompt, context.imageDataUrl)],
+      { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
+    );
     return {
       answer: response,
       timestamp: new Date().toISOString(),
@@ -1142,12 +1162,15 @@ async function askMoliPet(message, context = {}) {
   const maxTokens = Math.min(BEE.petChatMaxTokens || 700, 900);
 
   try {
-    const response = await callBeeknoee(prompt, {
-      model,
-      temperature: 0.35,
-      maxTokens,
-      timeout: Math.min(BEE.timeout || 90000, 45000),
-    });
+    const response = await callBeeknoeeMessages(
+      [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image and answer warmly, briefly, and accurately.')],
+      {
+        model,
+        temperature: 0.35,
+        maxTokens,
+        timeout: Math.min(BEE.timeout || 90000, 45000),
+      },
+    );
     return {
       answer: response,
       model,
@@ -1308,7 +1331,7 @@ async function askAIStream(question, context = {}, res) {
   const BEE = aiConfig.beeknoee;
   const payload = {
     model: BEE.model,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [buildVisionUserMessage(prompt, context.imageDataUrl)],
     max_tokens: BEE.chatMaxTokens || 2200,
     temperature: 0.5,
     stream: true
