@@ -49,13 +49,25 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const [isStreaming, setIsStreaming] = useState(false);
 
+    const isMobileViewport = () => typeof window !== 'undefined' && window.innerWidth < 768;
+
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const container = messagesContainerRef.current;
+        if (!container) return;
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth',
+        });
     }, [messages, isStreaming]);
+
+    const focusInputSafely = () => {
+        if (isMobileViewport()) return;
+        inputRef.current?.focus({ preventScroll: true });
+    };
 
     const copyMessage = async (text: string, id: string) => {
         try {
@@ -170,7 +182,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         } finally {
             setLoading(false);
             setIsStreaming(false);
-            inputRef.current?.focus();
+            focusInputSafely();
         }
     };
 
@@ -234,7 +246,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             <div className="flex min-h-0 flex-1 overflow-hidden">
 
                 {/* Messages Area */}
-                <div className="min-w-0 flex-1 space-y-4 overflow-y-auto bg-gray-50/50 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-5">
+                <div ref={messagesContainerRef} className="min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-gray-50/50 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-5">
                     {messages.map(msg => (
                         <div key={msg.id} className={`flex w-full min-w-0 gap-2 sm:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
 
@@ -308,7 +320,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                         </div>
                     ))}
 
-                    <div ref={messagesEndRef} />
+                    <div />
                 </div>
 
                 {/* Quick Questions Sidebar */}

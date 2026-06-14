@@ -81,8 +81,20 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const keepMobileViewportStable = useCallback(() => {
     if (typeof window === 'undefined' || window.innerWidth >= 768) return;
     const scrollY = window.scrollY;
-    window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
-    window.setTimeout(() => window.scrollTo(0, scrollY), 80);
+    const messagesScrollTop = messagesScrollRef.current?.scrollTop ?? 0;
+    const restore = () => {
+      window.scrollTo(0, scrollY);
+      if (messagesScrollRef.current) messagesScrollRef.current.scrollTop = messagesScrollTop;
+    };
+    window.requestAnimationFrame(restore);
+    window.setTimeout(restore, 80);
+    window.setTimeout(restore, 180);
+  }, []);
+
+  const focusInputSafely = useCallback(() => {
+    if (!inputRef.current) return;
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return;
+    inputRef.current.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
@@ -257,7 +269,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       alert(msg);
     } finally {
       setSending(false);
-      inputRef.current?.focus();
+      focusInputSafely();
     }
   };
 
@@ -290,7 +302,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
     setText(newText);
     setTimeout(() => {
       el.selectionStart = el.selectionEnd = start + emoji.length;
-      el.focus();
+      focusInputSafely();
     }, 0);
   };
 
@@ -374,7 +386,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const handleReplyMessage = (msg: ForumMessage) => {
     setReplyingTo(msg);
     setSelectedMsgId(null);
-    inputRef.current?.focus();
+    focusInputSafely();
   };
 
   const handleMsgTouchStart = (msgId: number) => {

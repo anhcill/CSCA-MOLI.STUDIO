@@ -1140,8 +1140,14 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
   const keepMobileViewportStable = () => {
     if (typeof window === 'undefined' || window.innerWidth >= 640) return;
     const scrollY = window.scrollY;
-    window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
-    window.setTimeout(() => window.scrollTo(0, scrollY), 80);
+    const messagesScrollTop = messagesScrollRef.current?.scrollTop ?? 0;
+    const restore = () => {
+      window.scrollTo(0, scrollY);
+      if (messagesScrollRef.current) messagesScrollRef.current.scrollTop = messagesScrollTop;
+    };
+    window.requestAnimationFrame(restore);
+    window.setTimeout(restore, 80);
+    window.setTimeout(restore, 180);
   };
 
   const sendMessage = async (event: FormEvent) => {

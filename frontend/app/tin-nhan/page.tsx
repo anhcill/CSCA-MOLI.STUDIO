@@ -196,7 +196,7 @@ export default function MessagesPage() {
 
   const handleSelect = (partnerId: number) => {
     setSelectedPartner(partnerId);
-    router.replace(`/tin-nhan?to=${partnerId}`);
+    router.replace(`/tin-nhan?to=${partnerId}`, { scroll: false });
   };
 
   const handleConversationActivity = (message?: ForumMessage) => {
