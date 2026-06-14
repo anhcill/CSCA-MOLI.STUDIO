@@ -33,6 +33,24 @@ const PDF_IMPORT_PRESETS = {
       "Keep long reading passages intact. Put Chinese text in questionTextCn/textCn when available.",
     ],
   },
+  chinese_natural: {
+    label: "Chinese Natural CSCA",
+    ruleParser: true,
+    instruction: [
+      "This is a CSCA Chinese Natural Science language exam. Prefer the CSCA Chinese rule parser first.",
+      "Handle Vietnamese headers like Cau 1, Cau 11-15, Doan 1 (34-38), Chinese passages, word banks, cloze passages, and reading groups.",
+      "If the answer key is missing, do not invent it. Leave correctAnswer/correctAnswerKey empty and add reviewNotes.",
+    ],
+  },
+  chinese_social: {
+    label: "Chinese Social CSCA",
+    ruleParser: true,
+    instruction: [
+      "This is a CSCA Chinese Social Science language exam. Prefer the CSCA Chinese rule parser first.",
+      "Handle Vietnamese headers like Cau 1, Cau 11-15, Doan 1 (34-38), Chinese passages, word banks, cloze passages, and reading groups.",
+      "If the answer key is missing, do not invent it. Leave correctAnswer/correctAnswerKey empty and add reviewNotes.",
+    ],
+  },
   humanities: {
     label: "Humanities",
     ruleParser: false,
@@ -79,7 +97,12 @@ Preset-specific rules:
 ${buildPresetInstructions(preset)}
 
 Task:
+- Think like a strict exam import auditor, but output JSON only. Preserve every question number and return the full exam structure whenever possible.
 - For math PDFs, prioritize answer accuracy and formula cleanup over token savings.
+- For Chinese CSCA language exams, handle "Cau 11-15" word banks, "Doan (34-38)" cloze passages, and reading groups before falling back to ordinary single-choice parsing.
+- If a Word/PDF contains both Chinese original and Vietnamese translation, prioritize the original exam block first and do not duplicate translated questions unless the original block is missing.
+- Never skip early questions because later examples or translations look easier. Each source question number should appear once in the returned items.
+- For fill_blank_group without an answer key, keep all blank subItems and leave correctAnswerKey empty with reviewNotes; do not drop blanks just because the answer is unknown.
 - Repair PDF math extraction artifacts before returning text: remove stray "$$", convert (()/(...)) to (...), ([)/(a,b)) to [a,b), convert C R / C ℝ to C_{\\mathbb{R}}, and keep set operations as \\cup, \\cap, \\setminus.
 - For math sequences, convert a^2, a^5, a n to sequence subscripts a_2, a_5, a_n when the context is a sequence term, not exponentiation.
 - Always map correctAnswer to A-H when the explanation conclusion clearly matches an option, including short one-character options like 0, 2, 3, √2. Examples: q=2 -> the option text 2; a·b=0 -> the option text 0; 最小值为3 -> the option text 3; 共3个 -> the option text 3.
@@ -99,6 +122,7 @@ Task:
 - For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).
 - If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn and do not keep it in questionText/questionTextCn or answers.
 - Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.
+- If the file has an explicit total question count, compare it with the returned structure. If the returned count is lower, add a warning naming the likely missing range.
 - Put unsupported items such as essay/listening-only tasks into warnings, not items.
 - Return one valid JSON object only. No markdown fence. No explanation outside JSON.
 

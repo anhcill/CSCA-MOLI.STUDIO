@@ -806,6 +806,7 @@ export default function CreateExamPage() {
     };
 
     const pdfPreviewItems = getImportPreviewItems(pdfImportPreview);
+    const selectedImportSubject = subjects.find(subject => subject.id === examData.subjectId);
 
     return (
         <div className="min-h-screen bg-gray-50 py-8">
@@ -1157,6 +1158,8 @@ export default function CreateExamPage() {
 
                         <PdfImportPanel
                             canImport={Boolean(currentExamId)}
+                            subjectCode={selectedImportSubject?.code}
+                            subjectName={selectedImportSubject?.name}
                             preview={pdfImportPreview}
                             items={pdfPreviewItems}
                             saving={pdfImportSaving}

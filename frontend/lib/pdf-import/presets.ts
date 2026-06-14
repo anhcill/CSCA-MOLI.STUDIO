@@ -3,6 +3,8 @@ export type PdfImportPreset =
     | 'math'
     | 'science'
     | 'language'
+    | 'chinese_natural'
+    | 'chinese_social'
     | 'humanities'
     | 'image_heavy';
 
@@ -32,6 +34,16 @@ export const PDF_IMPORT_PRESETS: PdfImportPresetOption[] = [
         key: 'language',
         label: 'Ngôn ngữ',
         description: 'Ưu tiên đọc hiểu, từ vựng, song ngữ, giải thích.',
+    },
+    {
+        key: 'chinese_natural',
+        label: 'Trung TN',
+        description: 'Rule riêng cho đề Tiếng Trung Tự nhiên CSCA.',
+    },
+    {
+        key: 'chinese_social',
+        label: 'Trung XH',
+        description: 'Rule riêng cho đề Tiếng Trung Xã hội CSCA.',
     },
     {
         key: 'humanities',

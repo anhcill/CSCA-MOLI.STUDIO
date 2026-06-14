@@ -8,6 +8,8 @@ import PdfImportReview from './PdfImportReview';
 
 interface PdfImportPanelProps {
   canImport: boolean;
+  subjectCode?: string;
+  subjectName?: string;
   preview: PdfImportPreview | null;
   items: ImportedExamItem[];
   saving: boolean;
@@ -87,8 +89,26 @@ function getPreviewProgress(elapsedMs: number) {
   };
 }
 
+function normalizeSubjectToken(value?: string) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/đ/g, 'd');
+}
+
+function getChineseSubjectPreset(subjectCode?: string, subjectName?: string): PdfImportPreset | null {
+  const text = normalizeSubjectToken(`${subjectCode || ''} ${subjectName || ''}`);
+  if (!text.includes('trung') && !text.includes('chinese')) return null;
+  if (/(tu\s*nhien|natural|khoa\s*hoc\s*tu\s*nhien|tn|science)/.test(text)) return 'chinese_natural';
+  if (/(xa\s*hoi|social|xh|humanities)/.test(text)) return 'chinese_social';
+  return null;
+}
+
 export default function PdfImportPanel({
   canImport,
+  subjectCode,
+  subjectName,
   preview,
   items,
   saving,
@@ -111,6 +131,7 @@ export default function PdfImportPanel({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timedOutRef = useRef(false);
+  const autoChinesePreset = getChineseSubjectPreset(subjectCode, subjectName);
 
   useEffect(() => {
     return () => {
@@ -119,6 +140,16 @@ export default function PdfImportPanel({
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (autoChinesePreset && preset !== autoChinesePreset) {
+      setPreset(autoChinesePreset);
+      return;
+    }
+    if (!autoChinesePreset && (preset === 'chinese_natural' || preset === 'chinese_social')) {
+      setPreset('auto');
+    }
+  }, [autoChinesePreset, preset]);
 
   const clearPreviewTimer = () => {
     if (timeoutRef.current) {
@@ -186,7 +217,11 @@ export default function PdfImportPanel({
       startProgress();
       setLoading(true);
       setErrorMessage('');
-      const nextPreview = await examAdminApi.previewPdfImport(file, preset, controller.signal);
+      const activePreset = autoChinesePreset || preset;
+      const nextPreview = await examAdminApi.previewPdfImport(file, activePreset, controller.signal, {
+        subjectCode,
+        subjectName,
+      });
       if (activeRequestRef.current !== requestId || controller.signal.aborted) return;
 
       stopProgress();
@@ -237,10 +272,12 @@ export default function PdfImportPanel({
               key={option.key}
               type="button"
               onClick={() => setPreset(option.key)}
+              disabled={Boolean(autoChinesePreset) && option.key !== autoChinesePreset}
               className={`rounded-lg border px-3 py-2 text-left transition-colors ${
                 preset === option.key
                   ? 'border-blue-500 bg-blue-50 text-blue-900'
                   : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              } ${Boolean(autoChinesePreset) && option.key !== autoChinesePreset ? 'opacity-50' : ''
               }`}
             >
               <span className="block text-sm font-semibold">{option.label}</span>
@@ -248,6 +285,12 @@ export default function PdfImportPanel({
             </button>
           ))}
         </div>
+
+        {autoChinesePreset && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+            Môn này đang dùng parser riêng cho Tiếng Trung CSCA: rule mạnh trước, AI chỉ hỗ trợ khi rule thiếu/lệch.
+          </div>
+        )}
 
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="flex-1">

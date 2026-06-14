@@ -352,10 +352,17 @@ export const examAdminApi = {
     },
 
     // Preview questions from a text PDF before saving
-    previewPdfImport: async (file: File, importPreset: PdfImportPreset = 'auto', signal?: AbortSignal): Promise<PdfImportPreview> => {
+    previewPdfImport: async (
+        file: File,
+        importPreset: PdfImportPreset = 'auto',
+        signal?: AbortSignal,
+        subject?: { subjectCode?: string; subjectName?: string },
+    ): Promise<PdfImportPreview> => {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('importPreset', importPreset);
+        if (subject?.subjectCode) formData.append('subjectCode', subject.subjectCode);
+        if (subject?.subjectName) formData.append('subjectName', subject.subjectName);
         const response = await axios.post('/admin/exams/import/pdf/preview', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 300000,

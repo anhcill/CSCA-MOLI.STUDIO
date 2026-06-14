@@ -806,6 +806,10 @@ function buildReviewPrompt(batch, context = {}) {
 
 Yêu cầu:
 - Chỉ trả JSON hợp lệ, không markdown.
+- Return exactly one review object for every input item. Never skip index 0 or the first questions in a batch.
+- First solve the question independently from questionText/questionTextCn/contextText/options, then compare with currentCorrectAnswer and current explanations.
+- If currentCorrectAnswer is empty but the answer can be inferred confidently from text/options/context, use status="answer_issue" and suggestedCorrectAnswer.
+- For Chinese language exams, preserve Chinese meaning, pinyin, word-bank context, and reading passage context. Do not translate the question while reviewing.
 - Không tự sửa nội dung đề trong JSON.
 - contextText là đoạn đọc hiểu/đoạn điền từ nếu có; phải dùng khi giải câu con.
 - Nếu có imageUrl/contextImageUrl/explanationImageUrl mà ảnh cần để giải nhưng bạn không đọc được ảnh, status="needs_review".
@@ -815,6 +819,8 @@ Yêu cầu:
 - Chỉ báo formula_issue khi lỗi format có thể làm hiển thị/sai nghĩa; không bắt lỗi style nhỏ.
 - Nếu đáp án hiện tại có vẻ sai, status="answer_issue" và đưa suggestedCorrectAnswer.
 - Nếu lời giải sai, thiếu, hoặc trình bày không khớp đáp án, status="explanation_issue".
+- If explanation is only Chinese in explanation, or only Vietnamese in explanationCn, mark explanation_issue so the fix/explanation step can put each language into the correct field.
+- If formula/display format is broken but the answer is still clear, prefer formula_issue over answer_issue.
 - Nếu thiếu hình/dữ kiện hoặc không chắc, status="needs_review".
 - Nếu đề bài/câu hỏi bị sai chữ, thiếu dữ kiện, OCR lệch nghĩa, trộn ngôn ngữ hoặc mất đoạn quan trọng, dùng status="question_issue" và ghi rõ vào questionIssues.
 - confidence từ 0 đến 1. Câu đỏ chỉ khi confidence >= 0.75.
@@ -1099,8 +1105,12 @@ function buildFixPrompt(batch, context = {}) {
 
 Yêu cầu:
 - Chỉ trả JSON hợp lệ, không markdown.
+- Return exactly one fix object for every input item, even when the result is "skip with note".
+- Apply the review log directly. Fix all clear questionIssues, formulaIssues, explanationIssues, and answer issues in the same pass.
 - Chỉ sửa những trường cần sửa. Không tự chế đề mới.
+- For Chinese CSCA language exams, preserve Chinese text in questionTextCn/textCn/explanationCn and Vietnamese text in questionText/text/explanation. If a field contains the wrong language, move/translate it into the correct field.
 - Nếu sửa đáp án, correctAnswer phải là một key đang có trong answers.
+- If currentCorrectAnswer is empty and the correct key is clear from the question/options/context, set correctAnswer. If not clear, do not guess; explain in note.
 - Nếu sửa công thức/lời giải, trả lại nguyên field đã sửa hoàn chỉnh, giữ đúng ngôn ngữ gốc.
 - Công thức toán phải dùng LaTeX chuẩn, bọc inline bằng \\(...\\) khi field có cả chữ và công thức. Tập hợp dùng \\{...\\}; giao/hợp dùng \\cap/\\cup; hàm dùng \\sin, \\cos, \\log, \\sqrt{...}, \\frac{...}{...}.
 - Lời giải dài phải xuống dòng theo bước: Công thức, Thay, Suy ra/Kết luận, Chọn.
@@ -1108,6 +1118,7 @@ Yêu cầu:
 - Phải trả một object fix cho từng mục trong dữ liệu. Nếu không sửa được mục nào, vẫn trả path/index của mục đó kèm note lý do, không gửi field sửa.
 - Note phải nói rõ đã sửa field nào, hoặc lý do chính xác vì sao bỏ qua.
 - Ưu tiên sửa lỗi trong review.note, formulaIssues, explanationIssues.
+- For display-only OCR/math issues, rewrite the whole broken field cleanly using language understanding, not only regex patterns. Keep semantic meaning unchanged.
 
 Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
 
@@ -1304,6 +1315,8 @@ function buildMissingExplanationsPrompt(batch, context = {}) {
 
 Yêu cầu:
 - Chỉ trả JSON hợp lệ, không markdown.
+- Return exactly one explanations object for every input item. Never skip the first item in a batch.
+- Use correctAnswer/currentCorrectAnswer and the matching option as the anchor. Do not choose a new answer unless the prompt explicitly asks for review/fix.
 - Không sửa đề, không sửa đáp án, chỉ tạo explanation/explanationCn.
 - Trường explanation bắt buộc viết bằng tiếng Việt CÓ DẤU. Không được viết kiểu không dấu như "Tap hop", "dap an", "loi giai".
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
@@ -1313,6 +1326,10 @@ Yêu cầu:
 - Nếu missingExplanationCn=true và currentExplanationCn đang là tiếng Việt, hãy viết lại nội dung đó sang tiếng Trung trong explanationCn.
 - Tuyệt đối không đặt tiếng Trung vào field explanation. Tuyệt đối không đặt tiếng Việt vào field explanationCn.
 - Nếu thiếu cả 2 field, bắt buộc trả cả explanation tiếng Việt và explanationCn tiếng Trung.
+- If the source question is Chinese and missingExplanation=true, explanation must be Vietnamese with full diacritics, not a copy of Chinese text.
+- If the source question is Vietnamese/Chinese bilingual and missingExplanationCn=true, explanationCn must be natural Chinese, not Vietnamese written in the Chinese field.
+- For word-bank/fill-blank items, explain why the selected word fits the blank in that sentence or passage, not just "chon dap an".
+- For reading groups, cite the key sentence/idea from contextText briefly.
 - Nếu currentExplanation đã có tiếng Việt và thiếu explanationCn, hãy dịch/diễn đạt lại sang tiếng Trung trong explanationCn.
 - Nếu currentExplanationCn đã có tiếng Trung và thiếu explanation, hãy dịch/diễn đạt lại sang tiếng Việt có dấu trong explanation.
 - Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
@@ -1370,12 +1387,14 @@ function buildPolishExplanationsPrompt(batch, context = {}) {
 
 Yêu cầu:
 - Chỉ trả JSON hợp lệ, không markdown.
+- Return exactly one explanations object for every input item.
 - Chỉ sửa trường explanation. Không sửa đề, không sửa đáp án, không thêm ý mới làm đổi nghĩa.
 - Bắt buộc viết tiếng Việt CÓ DẤU. Chuyển "Phan tich", "Dieu kien", "Cong thuc", "Ket luan", "dap an" thành tiếng Việt đúng dấu.
 - Giữ nguyên công thức, ký hiệu, đáp án chọn và ý nghĩa toán/lý/hóa. Nếu thấy LaTeX thô, có thể bọc công thức bằng \\(...\\) nhưng không đổi nội dung.
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "v1 = v cos theta" phải thành "\\(v_1=v\\cos\\theta\\)".
 - Không dùng dấu $ hoặc $$ trong explanation. Chỉ dùng \\(...\\) hoặc \\[...\\].
 - Trình bày dễ đọc bằng dòng ngắn: Phân tích, Điều kiện/Công thức, Suy ra/Kết luận, Chọn.
+- If explanation contains Chinese text, do not keep it in explanation; return explanation empty with note unless you can safely rewrite it into Vietnamese with full diacritics.
 - Nếu không chắc cách thêm dấu mà có thể đổi nghĩa, trả explanation rỗng và note lý do.
 
 Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
@@ -1433,14 +1452,19 @@ function buildDisplayFormatPrompt(batch, context = {}) {
 
 Yêu cầu bắt buộc:
 - Chỉ trả JSON hợp lệ, không markdown.
+- Return exactly one fix object for every input item. If no safe change is needed, return only index/path/note/confidence.
+- Use language understanding to repair broken OCR/LaTeX when regex did not catch it, but only for format/display. Do not re-solve the exam here.
 - Không đổi đáp án đúng, không gửi correctAnswer, không chấm lại bài.
 - Không đổi ý toán/lý/hóa. Chỉ sửa OCR/LaTeX/format hiển thị chắc chắn.
 - Giữ đúng ngôn ngữ gốc của từng field: questionTextCn/explanationCn giữ tiếng Trung; questionText/explanation giữ tiếng Việt nếu đang là tiếng Việt.
+- If a field has duplicated rendered text, stacked single-character OCR lines, stray duplicated formulas, or mixed preview artifacts, rewrite that whole field into one clean readable version.
+- If Chinese and Vietnamese are accidentally mixed in one field, keep the original field language and remove/relocate only the obvious duplicate translation when it is safe.
 - Bọc công thức inline bằng \\(...\\). Ví dụ: P=... 的值是 -> \\(P=...\\) 的值是.
 - Sửa lệnh LaTeX thô/sai rõ ràng: \\sin, \\cos, \\tan, \\sqrt{}, \\frac{}{}, \\circ, \\mathbb{}, \\in, \\cap, \\cup.
 - Với lỗi OCR lượng giác rõ ràng như \\sin^{215}^{\\circ}, hiểu là \\sin^2 15^\\circ; \\sin^{275}^{\\circ} hiểu là \\sin^2 75^\\circ.
 - Lời giải phải xuống dòng dễ đọc, giữ kết luận/đáp án hiện có.
 - Nếu cần suy luận có thể đổi nghĩa hoặc không chắc, không sửa field đó; ghi note ngắn.
+- Never output "$" or "$$". Use \\(...\\) for inline math and \\[...\\] only for a standalone long formula.
 
 Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
 

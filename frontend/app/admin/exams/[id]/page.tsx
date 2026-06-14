@@ -1554,6 +1554,7 @@ export default function AdminExamDetailPage() {
     const visibleQuestions = isEditingExam ? questions.slice(0, editVisibleCount) : questions;
     const hiddenQuestionCount = isEditingExam ? Math.max(questions.length - visibleQuestions.length, 0) : 0;
     const pdfPreviewItems = getImportPreviewItems(pdfImportPreview);
+    const selectedImportSubject = subjects.find(subject => subject.id === metaForm.subjectId);
 
     // Compute the next question number by finding the max in localQuestions
     // (savedQuestions have real numbers from DB, pending groups track their own)
@@ -2360,6 +2361,8 @@ export default function AdminExamDetailPage() {
                 {isEditingExam && (
                     <PdfImportPanel
                         canImport={Boolean(exam.id)}
+                        subjectCode={selectedImportSubject?.code || exam.subject_code}
+                        subjectName={selectedImportSubject?.name || exam.subject_name}
                         preview={pdfImportPreview}
                         items={pdfPreviewItems}
                         saving={pdfImportSaving}

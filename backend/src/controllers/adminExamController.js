@@ -411,7 +411,11 @@ const AdminExamController = {
         return res.status(400).json({ message: "PDF or Word .doc/.docx file is required" });
       }
 
-      const preview = await previewImportFile(req.file, req.body?.importPreset);
+      const preview = await previewImportFile(req.file, {
+        importPreset: req.body?.importPreset,
+        subjectCode: req.body?.subjectCode,
+        subjectName: req.body?.subjectName,
+      });
       res.json(preview);
     } catch (error) {
       console.error("Preview file import error:", getSafeErrorLog(error));

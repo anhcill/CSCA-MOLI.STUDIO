@@ -772,7 +772,7 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
         .toUpperCase()
         .slice(0, 1);
 
-      if (!optionKeys.has(correctAnswerKey)) return null;
+      if (correctAnswerKey && !optionKeys.has(correctAnswerKey)) return null;
       if (clozeMode === "sentences" && !normalizedQuestion) return null;
 
       return {
@@ -785,6 +785,7 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
         correctAnswerKey,
         difficulty: ["easy", "medium", "hard"].includes(item?.difficulty) ? item.difficulty : "medium",
         subQuestionNumber: Number.parseInt(item?.subQuestionNumber, 10) || subIndex + 1,
+        reviewNotes: stringValue(item?.reviewNotes || item?.review_notes),
       };
     })
     .filter(Boolean);
@@ -1085,6 +1086,13 @@ const CHINESE_SCIENCE_OPTION_RE = /(?:^|[ \t\n])(?:[\uFF08(]\s*([A-H])\s*[\uFF09
 const CHINESE_SCIENCE_EXPLANATION_LINE_RE = /^(?:解答|解析|答案解析|说明|答案)\s*[:：]?/i;
 const CHINESE_SCIENCE_EXPLANATION_RE = /(?:^|\n)\s*(?:解答|解析|答案解析|说明|答案)\s*[:：]?\s*/i;
 const CHINESE_SCIENCE_EXPLICIT_ANSWER_RE = /(?:答案|正确答案|故选|应选|选|得答案)\s*[:：为是]?\s*([A-H])/i;
+const CHINESE_CSCA_IMPORT_PRESETS = new Set(["chinese_natural", "chinese_social"]);
+const CHINESE_CSCA_RANGE_LINE_RE = /^\s*C(?:\u00e2|a)u\s+(\d{1,3})\s*[-\u2010-\u2015]\s*(\d{1,3})\b(.*)$/i;
+const CHINESE_CSCA_QUESTION_LINE_RE = /^\s*C(?:\u00e2|a)u\s+(\d{1,3})\s*[:\uFF1A]\s*(.*)$/i;
+const CHINESE_CSCA_NUMBERED_QUESTION_LINE_RE = /^\s*(\d{1,3})[.\uFF0E\u3001]\s+(.+)$/;
+const CHINESE_CSCA_PASSAGE_LINE_RE = /^\s*(?:\u0110|D)o(?:\u1ea1|a)n\s+\d+\s*\(\s*(?:C(?:\u00e2|a)u\s*)?(\d{1,3})\s*[-\u2010-\u2015]\s*(\d{1,3})\s*\)\s*[:\uFF1A]?\s*(.*)$/i;
+const CHINESE_CSCA_OPTION_LABEL_RE = /(?:^|[\s\n])(?:[\uFF08(]\s*([A-H])\s*[\uFF09)]|([A-H])\s*[.\uFF0E\u3001])\s*/gi;
+const CHINESE_CSCA_BLANK_RE = /_{2,}|\uFF3F+|__+\d{1,3}__+|_{1,}\d{1,3}_{1,}/;
 
 function getSequentialVietnameseQuestionMatches(text) {
   const matches = [];
@@ -1708,6 +1716,462 @@ function parseChineseSocialTextWithRules(rawText, sourceMeta) {
   }, sourceMeta);
 }
 
+function normalizeSubjectToken(value) {
+  return stringValue(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\u0111/g, "d");
+}
+
+function getChineseCscaPresetFromSubject(subjectCode, subjectName) {
+  const text = normalizeSubjectToken(`${subjectCode || ""} ${subjectName || ""}`);
+  if (!text.includes("trung") && !text.includes("chinese")) return "";
+  if (/(tu\s*nhien|natural|khoa\s*hoc\s*tu\s*nhien|tn|science)/.test(text)) return "chinese_natural";
+  if (/(xa\s*hoi|social|xh|humanities)/.test(text)) return "chinese_social";
+  return "";
+}
+
+function isChineseCscaImportPreset(importPreset) {
+  return CHINESE_CSCA_IMPORT_PRESETS.has(normalizePdfImportPreset(importPreset));
+}
+
+function getPrimaryChineseCscaText(rawText) {
+  const text = normalizeChineseSocialText(rawText);
+  const duplicateTitle = [...text.matchAll(/\n\s*\u0110\u1ec0\s+THI[\s\S]{0,80}?TI\u1ebeNG\s+TRUNG/gi)]
+    .find((match) => match.index > 1000);
+  if (duplicateTitle) {
+    return text.slice(0, duplicateTitle.index).trim();
+  }
+  const translationMatch = text.match(/\n\s*(?:\([^)]*B\u1ea3n\s+d\u1ecbch\s+ti\u1ebfng\s+Vi\u1ec7t[^)]*\)|B\u1ea3n\s+d\u1ecbch\s+ti\u1ebfng\s+Vi\u1ec7t)\s*/i);
+  if (translationMatch && translationMatch.index > 1000) {
+    return text.slice(0, translationMatch.index).trim();
+  }
+  return text;
+}
+
+function getExpectedChineseCscaQuestionCount(text) {
+  const viMatch = stringValue(text).match(/S\u1ed1\s+c(?:\u00e2|a)u\s+h(?:\u1ecf|o)i\s*[:：]?\s*(\d{1,3})\s*c(?:\u00e2|a)u/i);
+  const cnMatch = stringValue(text).match(/(?:共|合计|總共|总共)\s*(\d{1,3})\s*(?:题|題)/);
+  const count = Number.parseInt(viMatch?.[1] || cnMatch?.[1], 10);
+  return Number.isFinite(count) && count > 0 && count <= PDF_IMPORT_MAX_QUESTIONS ? count : 0;
+}
+
+function getChineseCscaAnswerKeyMap(text) {
+  const answerMap = new Map();
+  const answerSectionMatch = stringValue(text).match(/(?:^|\n)\s*(?:(?:B(?:\u1ea3|a)ng|Bang)\s+)?(?:\u0110(?:\u00e1|a)p\s*(?:\u00e1|a)n|Dap\s*an|答案|參考答案|参考答案)\s*[:：\n][\s\S]*$/i);
+  const answerText = answerSectionMatch?.[0] || "";
+  if (!answerText) return answerMap;
+
+  for (const match of answerText.matchAll(/(?:C(?:\u00e2|a)u\s*)?(\d{1,3})\s*[\).:\-]?\s*([A-H])\b/gi)) {
+    const questionNumber = Number.parseInt(match[1], 10);
+    const key = stringValue(match[2]).toUpperCase();
+    if (Number.isFinite(questionNumber) && questionNumber > 0 && questionNumber <= PDF_IMPORT_MAX_QUESTIONS) {
+      answerMap.set(questionNumber, key);
+    }
+  }
+  return answerMap;
+}
+
+function normalizeChineseCscaLines(rawText) {
+  return getPrimaryChineseCscaText(rawText)
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => cleanRuleBasedTextFragment(line))
+    .filter(Boolean);
+}
+
+function matchChineseCscaRangeLine(line) {
+  const match = stringValue(line).match(CHINESE_CSCA_RANGE_LINE_RE);
+  if (!match) return null;
+  const start = Number.parseInt(match[1], 10);
+  const end = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return { start, end, tail: stringValue(match[3]) };
+}
+
+function matchChineseCscaQuestionLine(line) {
+  const cauMatch = stringValue(line).match(CHINESE_CSCA_QUESTION_LINE_RE);
+  if (cauMatch) {
+    const questionNumber = Number.parseInt(cauMatch[1], 10);
+    if (Number.isFinite(questionNumber) && questionNumber > 0 && questionNumber <= PDF_IMPORT_MAX_QUESTIONS) {
+      return { questionNumber, rest: stringValue(cauMatch[2]) };
+    }
+  }
+
+  const numberedMatch = stringValue(line).match(CHINESE_CSCA_NUMBERED_QUESTION_LINE_RE);
+  if (!numberedMatch) return null;
+  const questionNumber = Number.parseInt(numberedMatch[1], 10);
+  const rest = stringValue(numberedMatch[2]);
+  if (!Number.isFinite(questionNumber) || questionNumber <= 0 || questionNumber > PDF_IMPORT_MAX_QUESTIONS) return null;
+  if (CHINESE_CSCA_BLANK_RE.test(rest) && !/[\u4e00-\u9fffA-Za-z\u00c0-\u1ef9]/.test(rest.replace(CHINESE_CSCA_BLANK_RE, ""))) {
+    return null;
+  }
+  return { questionNumber, rest };
+}
+
+function matchChineseCscaPassageLine(line) {
+  const match = stringValue(line).match(CHINESE_CSCA_PASSAGE_LINE_RE);
+  if (!match) return null;
+  const start = Number.parseInt(match[1], 10);
+  const end = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return { start, end, tail: stringValue(match[3]) };
+}
+
+function isChineseCscaSectionLine(line) {
+  return /^\s*PH(?:\u1ea6|A)N\s+\d+/i.test(stringValue(line));
+}
+
+function isChineseCscaSingleBoundary(line) {
+  return Boolean(matchChineseCscaRangeLine(line) || matchChineseCscaQuestionLine(line) || matchChineseCscaPassageLine(line) || isChineseCscaSectionLine(line));
+}
+
+function isChineseCscaGroupBoundary(line) {
+  return Boolean(matchChineseCscaRangeLine(line) || matchChineseCscaPassageLine(line) || isChineseCscaSectionLine(line));
+}
+
+function getChineseCscaOptionMatches(text) {
+  return [...stringValue(text).matchAll(CHINESE_CSCA_OPTION_LABEL_RE)]
+    .map((match) => ({
+      key: stringValue(match[1] || match[2]).toUpperCase(),
+      labelStart: match.index + match[0].search(/[\uFF08(A-H]/i),
+      contentStart: match.index + match[0].length,
+    }))
+    .filter((match) => /^[A-H]$/.test(match.key) && match.labelStart >= 0);
+}
+
+function parseChineseCscaOptionsFromText(text) {
+  const optionMatches = getChineseCscaOptionMatches(text);
+  if (optionMatches.length < 2) return { answers: [], linkedOptions: [], firstOptionIndex: -1 };
+
+  const options = optionMatches.slice(0, 8).map((option, index, allOptions) => {
+    const nextOption = allOptions[index + 1];
+    const optionText = splitRuleBasedOptionText(text.slice(option.contentStart, nextOption?.labelStart ?? text.length));
+    return {
+      key: option.key,
+      text: "",
+      textCn: optionText,
+    };
+  }).filter((option) => option.key && (option.text || option.textCn));
+
+  return {
+    answers: options.map((option) => ({ text: option.text, textCn: option.textCn })),
+    linkedOptions: options,
+    firstOptionIndex: optionMatches[0].labelStart,
+  };
+}
+
+function splitChineseCscaWordBank(blockLines) {
+  const optionLines = [];
+  let contentStartIndex = -1;
+  let sawOptions = false;
+
+  for (let index = 0; index < blockLines.length; index++) {
+    const line = blockLines[index];
+    if (getChineseCscaOptionMatches(line).length > 0) {
+      optionLines.push(line);
+      sawOptions = true;
+      continue;
+    }
+    if (sawOptions) {
+      contentStartIndex = index;
+      break;
+    }
+  }
+
+  if (!sawOptions) return { linkedOptions: [], contentLines: blockLines };
+
+  const optionText = optionLines.join("\n");
+  const { linkedOptions } = parseChineseCscaOptionsFromText(optionText);
+  return {
+    linkedOptions,
+    contentLines: blockLines.slice(contentStartIndex >= 0 ? contentStartIndex : blockLines.length),
+  };
+}
+
+function buildChineseCscaMissingAnswerNote() {
+  return "Chưa có đáp án đúng trong file gốc. Admin cần chọn đáp án trước khi lưu.";
+}
+
+function parseChineseCscaSingleChoiceFromLines(blockLines, questionNumber, answerKeyMap) {
+  if (!blockLines.length) return null;
+  const firstLine = blockLines[0];
+  const firstQuestion = matchChineseCscaQuestionLine(firstLine);
+  const bodyLines = [
+    firstQuestion?.rest ?? firstLine,
+    ...blockLines.slice(1),
+  ].filter(Boolean);
+  const body = bodyLines.join("\n").trim();
+  const split = splitPdfExplanationMarker(body);
+  const questionAndOptions = split.text || body;
+  const parsedOptions = parseChineseCscaOptionsFromText(questionAndOptions);
+  if (parsedOptions.answers.length < 2 || parsedOptions.firstOptionIndex < 0) return null;
+
+  const questionText = cleanRuleBasedTextFragment(questionAndOptions.slice(0, parsedOptions.firstOptionIndex));
+  if (!questionText) return null;
+
+  const correctAnswer = answerKeyMap.get(questionNumber) || inferCorrectAnswerFromExplanation(parsedOptions.answers, split.explanation);
+  const needsImage = PDF_IMPORT_IMAGE_HINT_RE.test(`${questionText} ${split.explanation}`);
+  return {
+    itemType: "single_choice",
+    questionType: "single_choice",
+    questionText: "",
+    questionTextCn: questionText,
+    answers: parsedOptions.answers,
+    correctAnswer,
+    explanation: "",
+    explanationCn: split.explanation,
+    points: 1,
+    difficulty: "medium",
+    subQuestionNumber: questionNumber,
+    needsImage,
+    imageHint: needsImage ? "Câu này có thể cần hình ảnh/bảng/biểu đồ trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
+    reviewNotes: correctAnswer ? "" : buildChineseCscaMissingAnswerNote(),
+  };
+}
+
+function getChineseCscaNumberedBlankRefs(text) {
+  return [...stringValue(text).matchAll(/(\d{1,3})[.\uFF0E]\s*(?:_{2,}|\uFF3F+)/g)]
+    .map((match) => Number.parseInt(match[1], 10))
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= PDF_IMPORT_MAX_QUESTIONS);
+}
+
+function stripChineseCscaTrailingBlankList(lines) {
+  const nextLines = [...lines];
+  while (
+    nextLines.length &&
+    /^(?:\d{1,3}[.\uFF0E]\s*(?:_{2,}|\uFF3F+)\s*)+$/i.test(nextLines[nextLines.length - 1])
+  ) {
+    nextLines.pop();
+  }
+  return nextLines;
+}
+
+function parseChineseCscaRangeFillBlank(blockLines, range, answerKeyMap, warnings) {
+  const { linkedOptions, contentLines } = splitChineseCscaWordBank(blockLines);
+  if (linkedOptions.length < 2) return null;
+
+  const explicitQuestionLines = [];
+  const plainBlankLines = [];
+  contentLines.forEach((line) => {
+    const question = matchChineseCscaQuestionLine(line);
+    if (question && question.questionNumber >= range.start && question.questionNumber <= range.end) {
+      explicitQuestionLines.push(question);
+      return;
+    }
+    if (CHINESE_CSCA_BLANK_RE.test(line) && !/^(?:\d{1,3}[.\uFF0E]\s*(?:_{2,}|\uFF3F+)\s*)+$/i.test(line)) {
+      plainBlankLines.push(line);
+    }
+  });
+
+  const sourceQuestions = explicitQuestionLines.length
+    ? explicitQuestionLines.map((question) => ({ questionNumber: question.questionNumber, text: question.rest }))
+    : plainBlankLines.slice(0, range.end - range.start + 1).map((line, index) => ({
+        questionNumber: range.start + index,
+        text: line,
+      }));
+
+  const subItems = sourceQuestions.map((question) => ({
+    questionText: "",
+    questionTextCn: cleanRuleBasedTextFragment(question.text),
+    correctAnswerKey: answerKeyMap.get(question.questionNumber) || "",
+    explanation: "",
+    explanationCn: "",
+    points: 1,
+    difficulty: "medium",
+    subQuestionNumber: question.questionNumber,
+    reviewNotes: answerKeyMap.get(question.questionNumber) ? "" : buildChineseCscaMissingAnswerNote(),
+  })).filter((item) => item.questionTextCn);
+
+  if (!subItems.length) return null;
+  if (subItems.length !== range.end - range.start + 1) {
+    warnings.push(`Nhóm Câu ${range.start}-${range.end} chỉ tách được ${subItems.length}/${range.end - range.start + 1} chỗ trống. Hãy kiểm tra lại.`);
+  }
+
+  return {
+    itemType: "fill_blank_group",
+    clozeMode: "sentences",
+    passageText: "",
+    linkedOptions,
+    subItems,
+    needsImage: false,
+    imageHint: "",
+    reviewNotes: subItems.some((item) => !item.correctAnswerKey) ? buildChineseCscaMissingAnswerNote() : "",
+  };
+}
+
+function parseChineseCscaPassageFillBlank(blockLines, passageRange, answerKeyMap, warnings) {
+  const { linkedOptions, contentLines } = splitChineseCscaWordBank(blockLines);
+  if (linkedOptions.length < 2) return null;
+
+  const blockText = blockLines.join("\n");
+  const explicitBlankNumbers = getChineseCscaNumberedBlankRefs(blockText);
+  const subQuestionNumbers = explicitBlankNumbers.length
+    ? [...new Set(explicitBlankNumbers)]
+    : Array.from({ length: passageRange.end - passageRange.start + 1 }, (_, index) => passageRange.start + index);
+
+  if (
+    subQuestionNumbers.length &&
+    (subQuestionNumbers[0] !== passageRange.start || subQuestionNumbers[subQuestionNumbers.length - 1] !== passageRange.end)
+  ) {
+    warnings.push(`Đoạn (${passageRange.start}-${passageRange.end}) có số chỗ trống trong thân bài là ${subQuestionNumbers.join(", ")}. Hệ thống ưu tiên số trong thân bài.`);
+  }
+
+  const passageLines = stripChineseCscaTrailingBlankList(contentLines);
+  const passageText = cleanRuleBasedTextFragment(passageLines.join("\n"));
+  if (!passageText) return null;
+
+  const subItems = subQuestionNumbers.map((questionNumber) => ({
+    questionText: "",
+    questionTextCn: `Chỗ trống ${questionNumber}`,
+    correctAnswerKey: answerKeyMap.get(questionNumber) || "",
+    explanation: "",
+    explanationCn: "",
+    points: 1,
+    difficulty: "medium",
+    subQuestionNumber: questionNumber,
+    reviewNotes: answerKeyMap.get(questionNumber) ? "" : buildChineseCscaMissingAnswerNote(),
+  }));
+
+  return {
+    itemType: "fill_blank_group",
+    clozeMode: "passage",
+    passageText,
+    linkedOptions,
+    subItems,
+    needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(passageText),
+    imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(passageText) ? "Đoạn này có thể cần hình ảnh/bảng/biểu đồ trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
+    reviewNotes: subItems.some((item) => !item.correctAnswerKey) ? buildChineseCscaMissingAnswerNote() : "",
+  };
+}
+
+function getChineseCscaQuestionBlocksFromText(text) {
+  const lines = stringValue(text).split("\n").map((line) => cleanRuleBasedTextFragment(line)).filter(Boolean);
+  const markers = [];
+  lines.forEach((line, index) => {
+    const question = matchChineseCscaQuestionLine(line);
+    if (question) markers.push({ index, ...question });
+  });
+
+  return markers.map((marker, index) => {
+    const next = markers[index + 1];
+    return {
+      questionNumber: marker.questionNumber,
+      lines: lines.slice(marker.index, next?.index ?? lines.length),
+    };
+  });
+}
+
+function parseChineseCscaReadingGroup(blockLines, passageRange, answerKeyMap, warnings) {
+  const firstPassage = matchChineseCscaPassageLine(blockLines[0]);
+  const normalizedLines = [
+    firstPassage?.tail || "",
+    ...blockLines.slice(1),
+  ].filter(Boolean);
+  const segment = normalizedLines.join("\n");
+  const questionBlocks = getChineseCscaQuestionBlocksFromText(segment);
+  if (!questionBlocks.length) return null;
+
+  const firstQuestionIndex = segment.indexOf(questionBlocks[0].lines[0]);
+  const passageText = cleanRuleBasedTextFragment(segment.slice(0, firstQuestionIndex >= 0 ? firstQuestionIndex : 0));
+  const subQuestions = questionBlocks
+    .filter((block) => block.questionNumber >= passageRange.start && block.questionNumber <= passageRange.end)
+    .map((block) => parseChineseCscaSingleChoiceFromLines(block.lines, block.questionNumber, answerKeyMap))
+    .filter(Boolean)
+    .map((question) => ({ ...question, itemType: undefined }));
+
+  if (!passageText || !subQuestions.length) return null;
+  if (subQuestions.length !== passageRange.end - passageRange.start + 1) {
+    warnings.push(`Đoạn đọc (${passageRange.start}-${passageRange.end}) chỉ tách được ${subQuestions.length}/${passageRange.end - passageRange.start + 1} câu. Hãy kiểm tra lại.`);
+  }
+
+  return {
+    itemType: "reading_group",
+    passageText,
+    passageImageUrl: "",
+    subQuestions,
+    needsImage: PDF_IMPORT_IMAGE_HINT_RE.test(passageText),
+    imageHint: PDF_IMPORT_IMAGE_HINT_RE.test(passageText) ? "Đoạn đọc hiểu có thể cần hình ảnh trong file. Hãy thêm ảnh thủ công trước khi xuất bản." : "",
+    reviewNotes: subQuestions.some((question) => !question.correctAnswer) ? buildChineseCscaMissingAnswerNote() : "",
+  };
+}
+
+function parseChineseCscaPassageBlock(blockLines, passageRange, answerKeyMap, warnings) {
+  const hasWordBank = splitChineseCscaWordBank(blockLines).linkedOptions.length >= 2;
+  const hasBlank = blockLines.some((line) => CHINESE_CSCA_BLANK_RE.test(line));
+  if (hasWordBank && hasBlank) {
+    return parseChineseCscaPassageFillBlank(blockLines, passageRange, answerKeyMap, warnings);
+  }
+  return parseChineseCscaReadingGroup(blockLines, passageRange, answerKeyMap, warnings);
+}
+
+function parseChineseCscaLanguageTextWithRules(rawText, sourceMeta) {
+  const text = getPrimaryChineseCscaText(rawText);
+  if (!/[\u4e00-\u9fff]/.test(text) || !/C(?:\u00e2|a)u\s+\d+/i.test(text)) return null;
+
+  const lines = normalizeChineseCscaLines(text);
+  const answerKeyMap = getChineseCscaAnswerKeyMap(text);
+  const expectedCount = getExpectedChineseCscaQuestionCount(text);
+  const warnings = [
+    "Bản xem trước dùng parser CSCA tiếng Trung riêng cho môn Tiếng Trung Tự nhiên/Xã hội. Hãy kiểm tra đáp án đúng, đoạn điền từ và đoạn đọc trước khi lưu.",
+  ];
+  const items = [];
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const range = matchChineseCscaRangeLine(line);
+    if (range) {
+      let endIndex = index + 1;
+      while (endIndex < lines.length && !isChineseCscaGroupBoundary(lines[endIndex])) endIndex++;
+      const group = parseChineseCscaRangeFillBlank(lines.slice(index, endIndex), range, answerKeyMap, warnings);
+      if (group) items.push(group);
+      index = endIndex - 1;
+      continue;
+    }
+
+    const passageRange = matchChineseCscaPassageLine(line);
+    if (passageRange) {
+      let endIndex = index + 1;
+      while (endIndex < lines.length && !matchChineseCscaPassageLine(lines[endIndex]) && !isChineseCscaSectionLine(lines[endIndex])) endIndex++;
+      const group = parseChineseCscaPassageBlock(lines.slice(index, endIndex), passageRange, answerKeyMap, warnings);
+      if (group) items.push(group);
+      index = endIndex - 1;
+      continue;
+    }
+
+    const question = matchChineseCscaQuestionLine(line);
+    if (question) {
+      let endIndex = index + 1;
+      while (endIndex < lines.length && !isChineseCscaSingleBoundary(lines[endIndex])) endIndex++;
+      const item = parseChineseCscaSingleChoiceFromLines(lines.slice(index, endIndex), question.questionNumber, answerKeyMap);
+      if (item) items.push(item);
+      index = endIndex - 1;
+    }
+  }
+
+  if (!items.length) return null;
+
+  const totalQuestionCount = items.reduce((sum, item) => sum + countImportedItemQuestions(item), 0);
+  if (expectedCount && totalQuestionCount !== expectedCount) {
+    warnings.push(`File ghi ${expectedCount} câu, parser tách được ${totalQuestionCount} câu. Hãy xem lại các nhóm bị lệch.`);
+  }
+  if (!answerKeyMap.size) {
+    warnings.push("File chưa có bảng đáp án rõ ràng, nên các ô đáp án đúng đang để trống để admin chọn thủ công hoặc chạy AI soát đề.");
+  }
+
+  return normalizePdfImportResult({
+    exam: {
+      title: sourceMeta?.fileName ? String(sourceMeta.fileName).replace(/\.(pdf|docx?|doc)$/i, "") : "Imported Chinese CSCA exam",
+      duration: 90,
+      totalPoints: Math.max(totalQuestionCount, 1),
+    },
+    items,
+    warnings,
+  }, sourceMeta);
+}
+
 function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
   const text = normalizeRuleBasedMathLayout(rawText)
     .replace(/\r/g, "\n")
@@ -1779,6 +2243,16 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
 }
 
 function parsePdfTextWithRules(pdfText, sourceMeta) {
+  if (isChineseCscaImportPreset(sourceMeta?.importPreset)) {
+    const chineseCscaPreview = parseChineseCscaLanguageTextWithRules(pdfText, sourceMeta);
+    if (chineseCscaPreview?.items?.length) return chineseCscaPreview;
+
+    const fallbackChinesePreview = sourceMeta?.importPreset === "chinese_social"
+      ? parseChineseSocialTextWithRules(pdfText, sourceMeta)
+      : parseChineseScienceTextWithRules(pdfText, sourceMeta);
+    if (fallbackChinesePreview?.items?.length) return fallbackChinesePreview;
+  }
+
   const vietnamesePreview = parseVietnameseChoiceTextWithRules(pdfText, sourceMeta);
   if (vietnamesePreview?.items?.length) return vietnamesePreview;
 
@@ -2178,11 +2652,24 @@ function createImportPreviewError(statusCode, responseBody, cause) {
   return error;
 }
 
+function normalizePreviewImportOptions(importPresetInput) {
+  const rawOptions = importPresetInput && typeof importPresetInput === "object"
+    ? importPresetInput
+    : { importPreset: importPresetInput };
+  const subjectPreset = getChineseCscaPresetFromSubject(rawOptions.subjectCode, rawOptions.subjectName);
+  return {
+    importPreset: subjectPreset || normalizePdfImportPreset(rawOptions.importPreset),
+    subjectCode: stringValue(rawOptions.subjectCode),
+    subjectName: stringValue(rawOptions.subjectName),
+  };
+}
+
 async function previewImportFile(file, importPresetInput) {
   let ruleBasedPreview = null;
 
   try {
-    const importPreset = normalizePdfImportPreset(importPresetInput);
+    const previewOptions = normalizePreviewImportOptions(importPresetInput);
+    const importPreset = previewOptions.importPreset;
     const importFile = await extractImportFileText(file);
     const extractedText = stringValue(importFile.text)
       .replace(/\r/g, "\n")
@@ -2197,12 +2684,18 @@ async function previewImportFile(file, importPresetInput) {
     }
 
     const truncatedText = extractedText.slice(0, PDF_IMPORT_TEXT_LIMIT);
+    const expectedQuestionCount = isChineseCscaImportPreset(importPreset)
+      ? getExpectedChineseCscaQuestionCount(truncatedText)
+      : 0;
     const sourceMeta = {
       fileName: normalizeUploadedFileName(file.originalname),
       pages: importFile.pages || null,
       textLength: extractedText.length,
       truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
       importPreset,
+      subjectCode: previewOptions.subjectCode,
+      subjectName: previewOptions.subjectName,
+      expectedQuestionCount: expectedQuestionCount || null,
       fileType: importFile.fileType,
     };
 
@@ -2211,11 +2704,15 @@ async function previewImportFile(file, importPresetInput) {
       : null;
 
     const ruleBasedCountBeforeAi = ruleBasedPreview?.totalQuestionCount || 0;
+    const canTrustChineseRulePreview = !isChineseCscaImportPreset(importPreset) ||
+      !expectedQuestionCount ||
+      ruleBasedCountBeforeAi >= expectedQuestionCount;
     if (
       ruleBasedPreview?.items?.length
       && Number.isFinite(PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN)
       && PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN > 0
       && ruleBasedCountBeforeAi >= PDF_IMPORT_RULE_PARSER_AI_SKIP_MIN
+      && canTrustChineseRulePreview
     ) {
       return withRuleBasedOnlyWarning(ruleBasedPreview);
     }
