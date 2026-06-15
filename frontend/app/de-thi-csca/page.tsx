@@ -124,7 +124,7 @@ export default function DeThiCSCA() {
                 desc: 'Văn hóa, lịch sử, địa lý Trung Quốc và kiến thức thời sự.',
                 questions: '30 câu / 30 điểm',
                 exams: '6 đề mô phỏng',
-                href: '/mon/toan/de-mo-phong',
+                href: '/toan/de-mo-phong',
                 tags: ['Văn hóa Trung Quốc', 'Lịch sử Trung Quốc', 'Địa lý Trung Quốc'],
               },
               {

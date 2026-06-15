@@ -6,7 +6,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   const SUBJECTS = [
-    { name: 'Toán', href: '/mon/toan' },
+    { name: 'Toán', href: '/toan/de-mo-phong' },
     { name: 'Vật Lý', href: '/mon/vat-ly' },
     { name: 'Hóa Học', href: '/mon/hoa' },
     { name: 'Tiếng Trung XH', href: '/tiengtrung-xahoi' },

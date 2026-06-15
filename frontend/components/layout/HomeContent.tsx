@@ -33,7 +33,7 @@ const SUBJECTS = [
     id: 'math',
     labelKey: 'subject.math',
     nameCn: '数学',
-    href: '/mon/toan',
+    href: '/toan/de-mo-phong',
     gradient: 'from-blue-500 to-indigo-600',
     desc: { vi: 'Đại số · Giải tích · Hình học', en: 'Algebra · Calculus · Geometry', zh: '代数 · 微积分 · 几何' },
   },
@@ -181,7 +181,7 @@ const FEATURES = [
 const STEPS = [
   {
     step: '01',
-    href: '/mon/toan',
+    href: '/toan/de-mo-phong',
     title: { vi: 'Chọn môn học', en: 'Choose a subject', zh: '选择科目' },
     desc: { vi: 'Toán, Vật Lý, Hóa Học hoặc Tiếng Trung theo khối thi của bạn.', en: 'Math, Physics, Chemistry or Chinese based on your track.', zh: '按你的考试方向选择数学、物理、化学或中文。' },
   },

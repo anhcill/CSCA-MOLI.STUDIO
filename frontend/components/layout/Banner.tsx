@@ -29,7 +29,7 @@ const SLIDE_COPY = [
       en: 'Start preparing',
       zh: '开始备考',
     },
-    ctaHref: '/mon/toan',
+    ctaHref: '/toan/de-mo-phong',
     icon: FiTarget,
     bgImage: '/images/du-hoc-trung-quoc-1200x799.jpg',
     accentColor: 'from-blue-500 to-indigo-600',
@@ -149,7 +149,7 @@ const QUICK_STATS = [
 ];
 
 const SUBJECT_PILLS = [
-  { labelKey: 'subject.math', href: '/mon/toan' },
+  { labelKey: 'subject.math', href: '/toan/de-mo-phong' },
   { labelKey: 'subject.physics', href: '/vat-ly' },
   { labelKey: 'subject.chemistry', href: '/hoa' },
   { labelKey: 'subject.chineseSoc', href: '/tiengtrung-xahoi' },

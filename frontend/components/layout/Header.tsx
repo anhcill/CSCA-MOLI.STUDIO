@@ -34,7 +34,7 @@ import ThemeToggle from './ThemeToggle';
 import DailyQuestBanner from './DailyQuestBanner';
 
 const COURSE_ITEMS = [
-  { id: 'math', labelKey: 'subject.math', href: '/mon/toan' },
+  { id: 'math', labelKey: 'subject.math', href: '/toan/de-mo-phong' },
   { id: 'physics', labelKey: 'subject.physics', href: '/vat-ly' },
   { id: 'chemistry', labelKey: 'subject.chemistry', href: '/hoa' },
   { id: 'chinese-soc', labelKey: 'subject.chineseSoc', href: '/tiengtrung-xahoi' },
