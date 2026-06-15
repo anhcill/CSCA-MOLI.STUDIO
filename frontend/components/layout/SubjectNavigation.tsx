@@ -81,7 +81,7 @@ export default function SubjectNavigation({
         </button>
 
         <Link
-          href={subjectSlug ? `/lich-su?subject=${subjectSlug}` : '/lich-su'}
+          href={buildSubjectHref('/lich-su')}
           className="flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold transition-all duration-300 rounded-xl text-center text-gray-500 hover:text-gray-800 hover:bg-gray-50/50"
         >
           {t('course.section.history')}

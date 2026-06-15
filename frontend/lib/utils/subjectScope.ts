@@ -82,5 +82,13 @@ export const subjectMatches = (actual?: string | null, selected?: string | null)
 export const buildSubjectScopedHref = (href: string, subjectSlug?: string) => {
   const subject = normalizeContentSubject(subjectSlug);
   if (!subject) return href;
-  return `${href}?subject=${encodeURIComponent(subject)}`;
+
+  const [baseWithQuery, hash = ''] = href.split('#');
+  const [basePath, query = ''] = baseWithQuery.split('?');
+  const params = new URLSearchParams(query);
+  params.set('subject', subject);
+
+  const nextQuery = params.toString();
+  const nextHash = hash ? `#${hash}` : '';
+  return `${basePath}${nextQuery ? `?${nextQuery}` : ''}${nextHash}`;
 };

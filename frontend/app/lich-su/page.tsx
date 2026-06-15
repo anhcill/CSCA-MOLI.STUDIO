@@ -82,6 +82,13 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function getAttemptResultHref(item: Pick<HistoryItem, 'id' | 'exam_id'>) {
+  const examId = Number(item.exam_id);
+  return Number.isFinite(examId) && examId > 0
+    ? `/exam/${examId}/result?attemptId=${item.id}`
+    : `/exam/result/${item.id}`;
+}
+
 function StatCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string | number; sub?: string; color: string;
 }) {
@@ -299,7 +306,7 @@ export default function LichSuPage() {
               return (
                 <Link
                   key={item.id}
-                  href={`/exam/${item.exam_id}/result?attemptId=${item.id}`}
+                  href={getAttemptResultHref(item)}
                   className="grid cursor-pointer grid-cols-12 items-center gap-2 border-b border-gray-50 px-5 py-4 transition-colors hover:bg-indigo-50/60"
                 >
                   <div className="col-span-5 min-w-0">

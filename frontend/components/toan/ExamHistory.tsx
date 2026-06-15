@@ -10,6 +10,13 @@ interface ExamHistoryProps {
   subjectCode: string;
 }
 
+function getAttemptResultHref(item: { id: number | string; exam_id?: number | string | null }) {
+  const examId = Number(item.exam_id);
+  return Number.isFinite(examId) && examId > 0
+    ? `/exam/${examId}/result?attemptId=${item.id}`
+    : `/exam/result/${item.id}`;
+}
+
 export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
   const router = useRouter();
   const [history, setHistory] = useState<any[]>([]);
@@ -151,7 +158,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
         ) : history.map((item, index) => (
           <button
             key={index}
-            onClick={() => router.push(`/exam/${item.exam_id}/result?attemptId=${item.id}`)}
+            onClick={() => router.push(getAttemptResultHref(item))}
             className="w-full border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left"
           >
             <div className="flex items-start justify-between mb-3">

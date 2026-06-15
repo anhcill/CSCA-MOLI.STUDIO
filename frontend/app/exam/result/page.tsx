@@ -39,6 +39,13 @@ interface AttemptResult {
     answers: QuestionResult[];
 }
 
+function getAttemptResultHref(attempt: Pick<AttemptResult, 'id' | 'exam_id'>) {
+    const examId = Number(attempt.exam_id);
+    return Number.isFinite(examId) && examId > 0
+        ? `/exam/${examId}/result?attemptId=${attempt.id}`
+        : `/exam/result/${attempt.id}`;
+}
+
 export default function ExamResultListPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -193,7 +200,7 @@ export default function ExamResultListPage() {
                                         </div>
                                         <div className="flex gap-2">
                                             <button
-                                                onClick={() => router.push(`/exam/${attempt.exam_id}/result?attemptId=${attempt.id}`)}
+                                                onClick={() => router.push(getAttemptResultHref(attempt))}
                                                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg shadow-purple-650/10 active:scale-[0.97]"
                                             >
                                                 <span>Xem chi tiết</span>
