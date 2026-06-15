@@ -299,7 +299,7 @@ export default function LichSuPage() {
               return (
                 <Link
                   key={item.id}
-                  href={`/exam/result/${item.id}`}
+                  href={`/exam/${item.exam_id}/result?attemptId=${item.id}`}
                   className="grid cursor-pointer grid-cols-12 items-center gap-2 border-b border-gray-50 px-5 py-4 transition-colors hover:bg-indigo-50/60"
                 >
                   <div className="col-span-5 min-w-0">

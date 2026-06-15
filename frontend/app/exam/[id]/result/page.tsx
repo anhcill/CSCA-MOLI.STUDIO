@@ -168,6 +168,8 @@ function ExamResultContent() {
   useEffect(() => {
     if (attemptId) {
       fetchResult();
+    } else {
+      setLoading(false);
     }
   }, [attemptId]);
 
