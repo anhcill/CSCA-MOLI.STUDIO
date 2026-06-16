@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { isVipActive } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
+import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
 
 interface Material {
   id: number;
@@ -45,24 +46,6 @@ const SUBJECTS = [
 ];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function textToHtml(value?: string) {
-  return (value || '')
-    .split(/\n{2,}/)
-    .map(block => block.trim())
-    .filter(Boolean)
-    .map(block => `<p>${escapeHtml(block).replace(/\n/g, '<br />')}</p>`)
-    .join('');
-}
 
 function hasWebContent(material: Material) {
   return Boolean(material.content_html || material.content_text);
@@ -263,9 +246,10 @@ function PDFCard({ m }: { m: Material }) {
 
       {/* Preview */}
       {expanded && !locked && hasContent && (
-        <article
-          className="border-t border-gray-200 bg-white px-5 py-6 text-sm leading-7 text-gray-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_p]:mb-4 [&_li]:mb-2 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6"
-          dangerouslySetInnerHTML={{ __html: m.content_html || textToHtml(m.content_text) }}
+        <MaterialContentViewer
+          contentHtml={m.content_html}
+          contentText={m.content_text}
+          className="border-t border-gray-200"
         />
       )}
       {expanded && !locked && !hasContent && hasFile && !hasPdfProxy && (

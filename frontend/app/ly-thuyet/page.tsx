@@ -12,6 +12,7 @@ import {
 } from '@/lib/utils/subjectScope';
 import { useLanguage } from '@/context/LanguageContext';
 import { FiBook, FiDownload, FiExternalLink, FiX, FiSearch } from 'react-icons/fi';
+import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
 
 interface Material {
   id: number;
@@ -35,24 +36,6 @@ const SUBJECT_LABEL_KEYS: Record<string, string> = {
   'tieng-trung-xh': 'subject.chineseSoc',
   'tieng-trung-tn': 'subject.chineseSci',
 };
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function textToHtml(value?: string) {
-  return (value || '')
-    .split(/\n{2,}/)
-    .map(block => block.trim())
-    .filter(Boolean)
-    .map(block => `<p>${escapeHtml(block).replace(/\n/g, '<br />')}</p>`)
-    .join('');
-}
 
 function hasWebContent(material?: Material | null) {
   return Boolean(material?.content_html || material?.content_text);
@@ -144,7 +127,80 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
   );
 }
 
-function TopicSection({ topic, materials, onView }: { topic: string; materials: Material[]; onView: (m: Material) => void }) {
+function InlineMaterialViewer({ material, onClose }: { material: Material; onClose: () => void }) {
+  const { t } = useLanguage();
+  const [viewerLoaded, setViewerLoaded] = useState(false);
+  const [useGoogleViewer, setUseGoogleViewer] = useState(false);
+
+  useEffect(() => {
+    setViewerLoaded(false);
+    setUseGoogleViewer(false);
+  }, [material.id]);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm shadow-emerald-900/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-emerald-950 px-4 py-3 text-white">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-bold sm:text-base">{material.title}</h2>
+          {material.topic && <p className="truncate text-xs text-emerald-100/80">{material.topic}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          {material.file_url && (
+            <>
+              <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>
+              <a href={material.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
+            </>
+          )}
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/15 hover:text-white" aria-label="Dong tai lieu">
+            <FiX size={18} />
+          </button>
+        </div>
+      </div>
+
+      {hasWebContent(material) ? (
+        <MaterialContentViewer
+          contentHtml={material.content_html}
+          contentText={material.content_text}
+          className="max-h-[72vh] overflow-y-auto"
+        />
+      ) : material.file_url ? (
+        <div className="relative h-[72vh] bg-gray-800">
+          {!viewerLoaded && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <p className="text-sm text-gray-300">{t('materials.loadingDoc')}</p>
+            </div>
+          )}
+          <iframe
+            src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true` : material.file_url}
+            className="h-full w-full border-0"
+            title={material.title}
+            onLoad={() => setViewerLoaded(true)}
+            onError={() => setUseGoogleViewer(true)}
+          />
+        </div>
+      ) : (
+        <div className="bg-white px-5 py-12 text-center text-sm text-gray-500">
+          {t('materials.none')}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TopicSection({
+  topic,
+  materials,
+  viewing,
+  onView,
+  onClose,
+}: {
+  topic: string;
+  materials: Material[];
+  viewing: Material | null;
+  onView: (m: Material) => void;
+  onClose: () => void;
+}) {
   const { t } = useLanguage();
 
   return (
@@ -156,7 +212,16 @@ function TopicSection({ topic, materials, onView }: { topic: string; materials: 
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {materials.map(m => <PDFCard key={m.id} m={m} onView={onView} />)}
+        {materials.map(m => (
+          <div key={m.id} className="contents">
+            <PDFCard m={m} onView={onView} />
+            {viewing?.id === m.id && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <InlineMaterialViewer material={viewing} onClose={onClose} />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -172,8 +237,6 @@ export default function LyThuyetPage() {
   const [search, setSearch] = useState('');
   const [activeSubject, setActiveSubject] = useState(subjectParam);
   const [viewing, setViewing] = useState<Material | null>(null);
-  const [viewerLoaded, setViewerLoaded] = useState(false);
-  const [useGoogleViewer, setUseGoogleViewer] = useState(false);
 
   useEffect(() => {
     setActiveSubject(subjectParam);
@@ -213,13 +276,12 @@ export default function LyThuyetPage() {
       setViewing(null);
       return;
     }
-    if (!viewing || !filtered.some(m => m.id === viewing.id)) setViewing(filtered[0]);
+    if (viewing && !filtered.some(m => m.id === viewing.id)) setViewing(null);
   }, [filtered, viewing]);
 
-  useEffect(() => {
-    setViewerLoaded(false);
-    setUseGoogleViewer(false);
-  }, [viewing?.id]);
+  const handleViewMaterial = (material: Material) => {
+    setViewing(current => (current?.id === material.id ? null : material));
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, Material[]>();
@@ -264,51 +326,6 @@ export default function LyThuyetPage() {
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" />
           </div>
 
-          {viewing && (
-            <section className="mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-gray-900 text-white">
-                <div className="min-w-0">
-                  <h2 className="font-semibold truncate">{viewing.title}</h2>
-                  {viewing.topic && <p className="text-xs text-gray-300 truncate">{viewing.topic}</p>}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {viewing.file_url && (
-                    <>
-                      <a href={viewing.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiDownload size={13} /> {t('materials.download')}</a>
-                      <a href={viewing.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
-                    </>
-                  )}
-                </div>
-              </div>
-              {hasWebContent(viewing) ? (
-                <article
-                  className="max-h-[72vh] overflow-y-auto bg-white px-5 py-6 text-sm leading-7 text-gray-700 sm:px-8 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-gray-950 [&_h3]:mb-3 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-gray-900 [&_p]:mb-4 [&_li]:mb-2 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6"
-                  dangerouslySetInnerHTML={{ __html: viewing.content_html || textToHtml(viewing.content_text) }}
-                />
-              ) : viewing.file_url ? (
-                <div className="relative h-[72vh] bg-gray-800">
-                  {!viewerLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
-                      <div className="animate-spin rounded-full h-10 w-10 border-2 border-white border-t-transparent" />
-                      <p className="text-sm text-gray-300">{t('materials.loadingDoc')}</p>
-                    </div>
-                  )}
-                  <iframe
-                    src={useGoogleViewer ? `https://docs.google.com/viewer?url=${encodeURIComponent(viewing.file_url)}&embedded=true` : viewing.file_url}
-                    className="w-full h-full border-0"
-                    title={viewing.title}
-                    onLoad={() => setViewerLoaded(true)}
-                    onError={() => setUseGoogleViewer(true)}
-                  />
-                </div>
-              ) : (
-                <div className="bg-white px-5 py-12 text-center text-sm text-gray-500">
-                  {t('materials.none')}
-                </div>
-              )}
-            </section>
-          )}
-
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[...Array(6)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />)}
@@ -320,7 +337,14 @@ export default function LyThuyetPage() {
             </div>
           ) : (
             Array.from(grouped.entries()).map(([topic, items]) => (
-              <TopicSection key={topic} topic={topic} materials={items} onView={setViewing} />
+              <TopicSection
+                key={topic}
+                topic={topic}
+                materials={items}
+                viewing={viewing}
+                onView={handleViewMaterial}
+                onClose={() => setViewing(null)}
+              />
             ))
           )}
     </div>
