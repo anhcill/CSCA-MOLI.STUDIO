@@ -224,7 +224,7 @@ export default function AdminQADashboard() {
 
   return (
     <AdminLayout title="Hỏi Giảng Viên" description="Quản lý hội thoại 1:1 của học viên Pre">
-      <div className="relative h-[calc(100dvh-132px)] min-h-[560px] overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="relative h-[calc(100dvh-132px)] min-h-0 max-h-[calc(100dvh-132px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
         {toast && (
           <div className="absolute right-4 top-4 z-30 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
             {toast}
