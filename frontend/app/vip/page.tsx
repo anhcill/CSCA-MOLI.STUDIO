@@ -400,7 +400,6 @@ export default function VipPricingPage() {
                     <FiTag size={15} />
                     4 gói nạp - mỗi gói dùng 3 tháng
                   </div>
-                  <p className="text-sm font-medium text-gray-500">Giá gốc được gạch bỏ, giá sale là giá thanh toán hiện tại.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4 items-stretch">
