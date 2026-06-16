@@ -4,8 +4,11 @@ const uploadController = require("../controllers/uploadController");
 const upload = require("../middleware/uploadMiddleware");
 const { authenticate, authorizeAnyPermission } = require("../middleware/authMiddleware");
 
-router.use(authenticate);
-router.use(authorizeAnyPermission("content.manage", "exams.manage"));
+router.use(
+  "/upload",
+  authenticate,
+  authorizeAnyPermission("content.manage", "exams.manage"),
+);
 
 router.post(
   "/upload/question-image",

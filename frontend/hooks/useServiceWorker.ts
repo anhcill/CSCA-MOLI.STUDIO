@@ -39,9 +39,10 @@ export function useServiceWorker() {
     };
 
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         registration = reg;
+        reg.update().catch(() => {});
 
         // Already a waiting worker (e.g. page refreshed after deploy)
         if (reg.waiting) {
