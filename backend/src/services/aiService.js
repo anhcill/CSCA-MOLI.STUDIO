@@ -33,6 +33,16 @@ function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUnti
 // ─── Round-robin API key pool ────────────────────────────────────────────────
 const BEE = aiConfig.beeknoee;
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
+const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
+const PUBLIC_AI_BUSY_MESSAGE = 'AI đang bận lúc này. Bạn thử lại sau nhé.';
+const PRIVATE_AI_PROVIDER_ERROR_PATTERNS = [
+  /https?:\/\//i,
+  /www\./i,
+  /\b(?:beeknoee|beegnoee|benoke|bennoke|9router|openrouter)\b/i,
+  /\b(?:insufficient|balance|billing|payment|credit|credits|quota|recharge|top\s*up|api\s*key|api-key|apikey|no\s+api\s+key|not\s+enough|resource\s+exhausted)\b/i,
+  /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit)\b/i,
+  /余额|账户|充值|额度|欠费/,
+];
 const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và giải thích admin trước khi suy luận.
 - Giữ nguyên ký hiệu toán/logic và điều kiện trong đề: <, <=, ≤, >, >=, ≥, =, ≠, ∈, ∉, ∪, ∩, ∅, |.
 - Không đổi ≤ thành <, ≥ thành >, không đổi dấu âm, số mũ, chỉ số, miền xác định, tập nghiệm hoặc đáp án.
@@ -143,6 +153,73 @@ function getProviderResponseMessage(err) {
   } catch {
     return 'AI provider request failed';
   }
+}
+
+function stringifyAIErrorValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) {
+    return [
+      value.message,
+      value.providerMessage,
+      value.providerCode,
+      value.code,
+      value.response?.data,
+    ].map(stringifyAIErrorValue).filter(Boolean).join(' ');
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeAIErrorText(value) {
+  return stringifyAIErrorValue(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function hasPrivateAIProviderDetails(value) {
+  const text = normalizeAIErrorText(value);
+  return Boolean(text) && PRIVATE_AI_PROVIDER_ERROR_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function getPublicAIErrorMessage(error, fallback = PUBLIC_AI_UNAVAILABLE_MESSAGE) {
+  const message = typeof error?.message === 'string' ? error.message.trim() : '';
+  if (['INSUFFICIENT_COINS', 'PREMIUM_REQUIRED'].includes(error?.code)) return message || fallback;
+  if (error?.message === 'RATE_LIMITED') return PUBLIC_AI_BUSY_MESSAGE;
+  if (error?.message === 'AI_PROVIDER_ERROR' || error?.message === 'AI_TIMEOUT') return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+  if (error?.providerMessage || error?.providerCode) return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+  if (hasPrivateAIProviderDetails(error)) return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+
+  return message || fallback;
+}
+
+function getPublicProviderStreamError(data) {
+  if (!data || data === '[DONE]') return '';
+
+  try {
+    const parsed = JSON.parse(data);
+    const content = parsed?.choices?.[0]?.delta?.content || parsed?.choices?.[0]?.message?.content;
+    if (content) return '';
+    if (parsed?.error || parsed?.message || parsed?.detail) {
+      return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+    }
+  } catch {
+    if (hasPrivateAIProviderDetails(data)) return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+  }
+
+  return '';
+}
+
+function writeAIStreamPublicError(res, message = PUBLIC_AI_UNAVAILABLE_MESSAGE) {
+  if (res.writableEnded || res.destroyed) return;
+  res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+  res.write('data: [DONE]\n\n');
+  res.end();
 }
 
 function extractOpenAICompatibleText(data) {
@@ -1114,7 +1191,7 @@ async function askAI(question, context = {}) {
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
     return {
-      answer: 'Xin lỗi, hiện tại AI đang bận. Bạn hãy thử lại sau nhé!',
+      answer: getPublicAIErrorMessage(err),
       timestamp: new Date().toISOString(),
       error: true,
     };
@@ -1345,8 +1422,7 @@ async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
 
   if (isRateLimited()) {
-    res.write(`data: ${JSON.stringify({ error: 'AI limit. Vui lòng thử lại sau.' })}\n\n`);
-    res.end();
+    writeAIStreamPublicError(res, PUBLIC_AI_BUSY_MESSAGE);
     return;
   }
 
@@ -1354,8 +1430,7 @@ async function askAIStream(question, context = {}, res) {
 
   const apiKey = getNextKey();
   if (!apiKey) {
-    res.write(`data: ${JSON.stringify({ error: 'Không có cấu hình AI key' })}\n\n`);
-    res.end();
+    writeAIStreamPublicError(res);
     return;
   }
 
@@ -1387,7 +1462,24 @@ async function askAIStream(question, context = {}, res) {
       let sentDone = false;
 
       await new Promise((resolve) => {
+        let streamFinished = false;
+        let settled = false;
+        const resolveOnce = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const finishWithPublicError = (message = PUBLIC_AI_UNAVAILABLE_MESSAGE) => {
+          if (streamFinished) return;
+          console.warn('AI provider stream returned an error; hiding provider details from user.');
+          streamFinished = true;
+          writeAIStreamPublicError(res, message);
+          response.data.destroy();
+          resolveOnce();
+        };
+
         response.data.on('data', chunk => {
+          if (streamFinished) return;
           buffer += chunk.toString('utf8');
           const parts = buffer.split(/\r?\n/);
           buffer = parts.pop() || '';
@@ -1396,24 +1488,36 @@ async function askAIStream(question, context = {}, res) {
             if (!line.startsWith('data:')) continue;
             const data = line.slice(5).trim();
             if (!data) continue;
-            if (data === '[DONE]') sentDone = true;
+            if (data === '[DONE]') {
+              sentDone = true;
+              res.write(`data: ${data}\n\n`);
+              continue;
+            }
+            const publicError = getPublicProviderStreamError(data);
+            if (publicError) {
+              finishWithPublicError(publicError);
+              break;
+            }
             res.write(`data: ${data}\n\n`);
           }
         });
 
         response.data.on('end', () => {
+          if (streamFinished) return resolveOnce();
           if (!sentDone) {
             res.write('data: [DONE]\n\n');
           }
+          streamFinished = true;
           res.end();
-          resolve();
+          resolveOnce();
         });
 
         response.data.on('error', err => {
+          if (streamFinished) return resolveOnce();
           console.error('AI Stream Error:', err);
-          res.write(`data: ${JSON.stringify({ error: 'Lỗi stream AI' })}\n\n`);
-          res.end();
-          resolve();
+          streamFinished = true;
+          writeAIStreamPublicError(res);
+          resolveOnce();
         });
       });
     });
@@ -1424,8 +1528,7 @@ async function askAIStream(question, context = {}, res) {
       currentKeyIndex++;
       setRateLimit(aiConfig.general?.globalBackoffMs || 60000);
     }
-    res.write(`data: ${JSON.stringify({ error: 'Lỗi khi gọi AI' })}\n\n`);
-    res.end();
+    writeAIStreamPublicError(res, getPublicAIErrorMessage(err));
   }
 }
 
@@ -1835,6 +1938,10 @@ JSON schema:
 }
 
 module.exports = {
+  PUBLIC_AI_UNAVAILABLE_MESSAGE,
+  PUBLIC_AI_BUSY_MESSAGE,
+  getPublicAIErrorMessage,
+  hasPrivateAIProviderDetails,
   // Core functions
   callBeeknoee,
   callBeeknoeeMessages,

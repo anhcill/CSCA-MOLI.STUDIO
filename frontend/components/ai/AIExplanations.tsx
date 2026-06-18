@@ -36,6 +36,26 @@ interface AIExplanationsProps {
     questions: QuestionResult[];
 }
 
+const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
+const PRIVATE_AI_ERROR_PATTERNS = [
+    /https?:\/\//i,
+    /www\./i,
+    /\b(?:beeknoee|beegnoee|benoke|bennoke|9router|openrouter)\b/i,
+    /\b(?:insufficient|balance|billing|payment|credit|credits|quota|recharge|top\s*up|api\s*key|api-key|apikey|no\s+api\s+key|not\s+enough|resource\s+exhausted)\b/i,
+    /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit)\b/i,
+    /余额|账户|充值|额度|欠费/,
+];
+
+function sanitizeAIUserError(value: unknown, fallback = 'AI đang gặp lỗi khi trả lời.'): string {
+    const message = typeof value === 'string' ? value.trim() : fallback;
+    if (!message) return fallback;
+    const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (PRIVATE_AI_ERROR_PATTERNS.some(pattern => pattern.test(normalized))) {
+        return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+    }
+    return message;
+}
+
 export default function AIExplanations({ attemptId, questions }: AIExplanationsProps) {
     const { pick } = useLanguage();
     const [explanations, setExplanations] = useState<Explanation[]>([]);
@@ -134,7 +154,7 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
 
             if (!res.ok) {
                 const data = await res.json().catch(() => null);
-                throw new Error(data?.message || 'AI đang bận. Vui lòng thử lại.');
+                throw new Error(sanitizeAIUserError(data?.message || 'AI đang bận. Vui lòng thử lại.'));
             }
 
             if (!res.body) throw new Error('Không nhận được phản hồi từ AI');
@@ -168,7 +188,7 @@ export default function AIExplanations({ attemptId, questions }: AIExplanationsP
                         const error = parsed?.error;
 
                         if (error) {
-                            fullContent = typeof error === 'string' ? error : 'AI đang gặp lỗi khi trả lời.';
+                            fullContent = sanitizeAIUserError(typeof error === 'string' ? error : 'AI đang gặp lỗi khi trả lời.');
                             done = true;
                         } else if (content) {
                             fullContent += content;

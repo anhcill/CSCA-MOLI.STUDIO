@@ -595,7 +595,7 @@ async function analyzeExamResult(req, res) {
     if (error.status) {
       return res.status(error.status).json({
         success: false,
-        message: error.message || 'Lỗi phân tích bài thi',
+        message: aiService.getPublicAIErrorMessage(error, 'Lỗi phân tích bài thi'),
         code: error.code,
         cost: 50,
       });
@@ -1315,7 +1315,7 @@ async function analyzeUserPerformance(req, res) {
         recommendedMaterials: [],
         analyzedAt: new Date().toISOString(),
         fallback: true,
-        fallbackReason: analysisError.message,
+        fallbackReason: 'AI_ANALYSIS_FALLBACK',
       };
     }
 
@@ -1357,7 +1357,7 @@ async function analyzeUserPerformance(req, res) {
     if (error.status) {
       return res.status(error.status).json({
         success: false,
-        message: error.message || 'Loi phan tich.',
+        message: aiService.getPublicAIErrorMessage(error, 'Loi phan tich.'),
         code: error.code,
       });
     }
@@ -1475,9 +1475,10 @@ async function askAIStream(req, res) {
   } catch (error) {
     console.error('askAIStream error:', error);
     if (!res.headersSent) {
-      res.status(500).json({ success: false, message: 'Lỗi chatbot AI stream' });
+      res.status(500).json({ success: false, message: aiService.PUBLIC_AI_UNAVAILABLE_MESSAGE });
     } else {
-      res.write(`data: ${JSON.stringify({ error: true, text: 'Lỗi server' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: aiService.PUBLIC_AI_UNAVAILABLE_MESSAGE })}\n\n`);
+      res.write('data: [DONE]\n\n');
       res.end();
     }
   } finally {

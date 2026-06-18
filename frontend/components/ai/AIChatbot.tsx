@@ -26,6 +26,26 @@ const QUICK_QUESTIONS = [
     { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện sau bài này?', emoji: '🎯' },
 ];
 
+const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
+const PRIVATE_AI_ERROR_PATTERNS = [
+    /https?:\/\//i,
+    /www\./i,
+    /\b(?:beeknoee|beegnoee|benoke|bennoke|9router|openrouter)\b/i,
+    /\b(?:insufficient|balance|billing|payment|credit|credits|quota|recharge|top\s*up|api\s*key|api-key|apikey|no\s+api\s+key|not\s+enough|resource\s+exhausted)\b/i,
+    /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit)\b/i,
+    /余额|账户|充值|额度|欠费/,
+];
+
+function sanitizeAIUserError(value: unknown, fallback = 'AI đang gặp lỗi khi trả lời. Vui lòng thử lại.'): string {
+    const message = typeof value === 'string' ? value.trim() : fallback;
+    if (!message) return fallback;
+    const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (PRIVATE_AI_ERROR_PATTERNS.some(pattern => pattern.test(normalized))) {
+        return PUBLIC_AI_UNAVAILABLE_MESSAGE;
+    }
+    return message;
+}
+
 function ThinkingDots({ label = 'AI đang đọc bài và chuẩn bị trả lời...' }: { label?: string }) {
     return (
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -145,7 +165,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
 
             if (!res.ok) {
                 const errorData = await res.json().catch(() => null);
-                throw new Error(errorData?.message || errorData?.answer || 'AI đang bận. Vui lòng thử lại sau.');
+                throw new Error(sanitizeAIUserError(errorData?.message || errorData?.answer || 'AI đang bận. Vui lòng thử lại sau.'));
             }
 
             if (!res.body) throw new Error('Không nhận được phản hồi từ AI');
@@ -180,9 +200,10 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                                 ));
                             }
                             if (parsed?.error) {
-                                fullContent = typeof parsed.error === 'string'
+                                const rawError = typeof parsed.error === 'string'
                                     ? parsed.error
                                     : parsed.text || 'AI đang gặp lỗi khi trả lời. Vui lòng thử lại.';
+                                fullContent = sanitizeAIUserError(rawError);
                                 setMessages(prev => prev.map(m =>
                                     m.id === tempAiId ? { ...m, content: fullContent } : m
                                 ));
@@ -196,9 +217,9 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
                 }
             }
         } catch (error) {
-            const message = error instanceof Error
+            const message = sanitizeAIUserError(error instanceof Error
                 ? error.message
-                : 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!';
+                : 'Đã xảy ra lỗi kết nối. Vui lòng thử lại!');
             setMessages(prev => prev.map(m =>
                 m.id === tempAiId
                     ? { ...m, content: message }
