@@ -53,6 +53,44 @@ function getSafeErrorLog(error) {
   return safe;
 }
 
+function createRequestAbortSignal(req, res) {
+  const controller = new AbortController();
+
+  const cleanup = () => {
+    req.off("aborted", abort);
+    res.off("close", onResponseClose);
+    res.off("finish", cleanup);
+  };
+
+  const abort = () => {
+    if (!controller.signal.aborted) controller.abort();
+    cleanup();
+  };
+
+  const onResponseClose = () => {
+    if (res.writableEnded) {
+      cleanup();
+      return;
+    }
+    abort();
+  };
+
+  req.once("aborted", abort);
+  res.once("close", onResponseClose);
+  res.once("finish", cleanup);
+
+  if (req.aborted) abort();
+  return controller.signal;
+}
+
+function sendAiAbortResponse(req, res, error) {
+  if (error?.message !== "AI_REQUEST_ABORTED" && !req.aborted && !res.destroyed) return false;
+  if (!res.headersSent && !res.writableEnded && !res.destroyed) {
+    res.status(499).json({ message: "Yeu cau AI da bi huy vi ket noi bi ngat. Vui long chay lai." });
+  }
+  return true;
+}
+
 function normalizeLedgerKey(value) {
   return String(value || "").trim().slice(0, 500);
 }
@@ -66,6 +104,8 @@ const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
 const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
 const EXAM_AI_LOCK_NAMESPACE = 910612;
+const EXAM_AI_LOCK_WAIT_MS = Number.parseInt(process.env.EXAM_AI_LOCK_WAIT_MS || "15000", 10);
+const EXAM_AI_LOCK_RETRY_MS = Number.parseInt(process.env.EXAM_AI_LOCK_RETRY_MS || "250", 10);
 const EXAM_AI_ACTIONS = {
   REVIEW: "review_quality",
   FIX: "apply_fixes",
@@ -272,7 +312,11 @@ async function ensureExamExists(client, examId) {
   return result.rows.length > 0;
 }
 
-async function acquireExamAiLock(client, examId) {
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function acquireExamAiLock(client, examId, options = {}) {
   const parsedExamId = Number.parseInt(examId, 10);
   if (!Number.isInteger(parsedExamId) || parsedExamId <= 0) {
     const error = new Error("EXAM_NOT_FOUND");
@@ -280,16 +324,30 @@ async function acquireExamAiLock(client, examId) {
     throw error;
   }
 
-  const result = await client.query(
-    "SELECT pg_try_advisory_lock($1::int, $2::int) AS locked",
-    [EXAM_AI_LOCK_NAMESPACE, parsedExamId],
-  );
+  const waitMs = Number.isFinite(options.waitMs) ? Math.max(0, options.waitMs) : EXAM_AI_LOCK_WAIT_MS;
+  const retryMs = Math.max(50, EXAM_AI_LOCK_RETRY_MS);
+  const deadline = Date.now() + waitMs;
 
-  if (!result.rows[0]?.locked) {
-    const error = new Error("EXAM_AI_BUSY");
-    error.statusCode = 409;
-    throw error;
-  }
+  do {
+    if (options.signal?.aborted) {
+      throw new Error("AI_REQUEST_ABORTED");
+    }
+
+    const result = await client.query(
+      "SELECT pg_try_advisory_lock($1::int, $2::int) AS locked",
+      [EXAM_AI_LOCK_NAMESPACE, parsedExamId],
+    );
+
+    if (result.rows[0]?.locked) return;
+
+    if (Date.now() < deadline) {
+      await wait(Math.min(retryMs, Math.max(0, deadline - Date.now())));
+    }
+  } while (Date.now() < deadline);
+
+  const error = new Error("EXAM_AI_BUSY");
+  error.statusCode = 409;
+  throw error;
 }
 
 async function releaseExamAiLock(client, examId) {
@@ -374,7 +432,9 @@ const AdminExamController = {
         return res.status(400).json({ message: "Cần gửi ảnh câu hỏi" });
       }
 
-      const text = await extractSingleQuestionImageOcrText(req.file);
+      const text = await extractSingleQuestionImageOcrText(req.file, {
+        signal: createRequestAbortSignal(req, res),
+      });
       if (!text) {
         return res.status(422).json({ message: "Không đọc được chữ từ ảnh" });
       }
@@ -388,6 +448,7 @@ const AdminExamController = {
         },
       });
     } catch (error) {
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Single question image OCR error:", error);
 
       if (error.message === "RATE_LIMITED") {
@@ -415,9 +476,11 @@ const AdminExamController = {
         importPreset: req.body?.importPreset,
         subjectCode: req.body?.subjectCode,
         subjectName: req.body?.subjectName,
+        signal: createRequestAbortSignal(req, res),
       });
       res.json(preview);
     } catch (error) {
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Preview file import error:", getSafeErrorLog(error));
       res.status(error.statusCode || 500).json(error.responseBody || { message: "Failed to preview import file" });
     }
@@ -544,6 +607,7 @@ const AdminExamController = {
 
       const result = await reviewImportedItemsWithAI(items, {
         subject: req.body?.subject || req.body?.subjectName || "CSCA",
+        signal: createRequestAbortSignal(req, res),
       });
 
       UserActivity.log(req.user.id, "admin.review_imported_exam_items", {
@@ -555,6 +619,7 @@ const AdminExamController = {
 
       res.json(result);
     } catch (error) {
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Review imported items error:", getSafeErrorLog(error));
       if (error.message === "RATE_LIMITED") {
         return res.status(429).json({
@@ -586,6 +651,7 @@ const AdminExamController = {
 
       const result = await applyImportedReviewFixesWithAI(items, reviews, {
         subject: req.body?.subject || req.body?.subjectName || "CSCA",
+        signal: createRequestAbortSignal(req, res),
       });
 
       UserActivity.log(req.user.id, "admin.apply_imported_exam_review_fixes", {
@@ -598,6 +664,7 @@ const AdminExamController = {
 
       res.json(result);
     } catch (error) {
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Apply imported review fixes error:", getSafeErrorLog(error));
       if (error.message === "RATE_LIMITED") {
         return res.status(429).json({
@@ -693,6 +760,7 @@ const AdminExamController = {
 
       const result = await reviewStoredExamWithAI(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal: createRequestAbortSignal(req, res),
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW, req.user.id, {
         total: result.summary?.total || 0,
@@ -713,6 +781,7 @@ const AdminExamController = {
 
       res.json(result);
     } catch (error) {
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Review saved exam quality error:", getSafeErrorLog(error));
       if (error.message === "RATE_LIMITED") {
         return res.status(429).json({
@@ -758,6 +827,7 @@ const AdminExamController = {
         applySafeFormulas: req.body?.applySafeFormulas !== false,
         applySuggestedAnswers: req.body?.applySuggestedAnswers !== false,
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal: createRequestAbortSignal(req, res),
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FIX, req.user.id, {
         changedCount: result.changedCount,
@@ -780,6 +850,7 @@ const AdminExamController = {
       res.json(result);
     } catch (error) {
       await client.query("ROLLBACK");
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Apply exam review fixes error:", getSafeErrorLog(error));
       if (error.message === "EXAM_AI_BUSY") {
         return getExamAiBusyResponse(res);
@@ -814,6 +885,7 @@ const AdminExamController = {
 
       const result = await applyExamDisplayFormatFixes(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal: createRequestAbortSignal(req, res),
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FORMAT, req.user.id, {
         changedCount: result.changedCount,
@@ -839,6 +911,7 @@ const AdminExamController = {
       res.json(result);
     } catch (error) {
       await client.query("ROLLBACK");
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Apply exam display format fixes error:", getSafeErrorLog(error));
       if (error.message === "EXAM_AI_BUSY") {
         return getExamAiBusyResponse(res);
@@ -873,6 +946,7 @@ const AdminExamController = {
 
       const result = await generateMissingExamExplanations(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal: createRequestAbortSignal(req, res),
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.EXPLAIN, req.user.id, {
         changedCount: result.changedCount,
@@ -897,6 +971,7 @@ const AdminExamController = {
       res.json(result);
     } catch (error) {
       await client.query("ROLLBACK");
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Generate missing explanations error:", getSafeErrorLog(error));
       if (error.message === "EXAM_AI_BUSY") {
         return getExamAiBusyResponse(res);
@@ -934,6 +1009,7 @@ const AdminExamController = {
 
       const result = await polishExamExplanations(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal: createRequestAbortSignal(req, res),
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.POLISH_EXPLANATIONS, req.user.id, {
         changedCount: result.changedCount,
@@ -958,6 +1034,7 @@ const AdminExamController = {
       res.json(result);
     } catch (error) {
       await client.query("ROLLBACK");
+      if (sendAiAbortResponse(req, res, error)) return;
       console.error("Polish explanations error:", getSafeErrorLog(error));
       if (error.message === "EXAM_AI_BUSY") {
         return getExamAiBusyResponse(res);

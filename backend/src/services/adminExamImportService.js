@@ -107,6 +107,7 @@ async function callPdfImportAI(prompt, options) {
           ...aiOptions,
           ...modelConfig,
           models: aiConfig.adminExam?.importModels,
+          signal: aiOptions.signal,
         });
       } catch (error) {
         lastError = error;
@@ -2661,6 +2662,7 @@ function normalizePreviewImportOptions(importPresetInput) {
     importPreset: subjectPreset || normalizePdfImportPreset(rawOptions.importPreset),
     subjectCode: stringValue(rawOptions.subjectCode),
     subjectName: stringValue(rawOptions.subjectName),
+    signal: rawOptions.signal,
   };
 }
 
@@ -2722,6 +2724,7 @@ async function previewImportFile(file, importPresetInput) {
       maxTokens: 6500,
       timeout: 90000,
       attemptsPerModel: 1,
+      signal: previewOptions.signal,
     });
     const aiResult = parseAiJsonObject(rawAi);
 

@@ -49,7 +49,7 @@ Rules:
   ];
 }
 
-async function extractSingleQuestionImageOcrText(file) {
+async function extractSingleQuestionImageOcrText(file, options = {}) {
   const raw = await aiService.callAdminExamAIMessages(
     buildSingleQuestionImageOcrMessages(file),
     {
@@ -59,6 +59,7 @@ async function extractSingleQuestionImageOcrText(file) {
       models: aiConfig.adminExam?.ocrModels,
       fallbackModel: BEE.ocrModel,
       timeout: aiConfig.adminExam?.ocrTimeout || BEE.ocrTimeout,
+      signal: options.signal,
     },
   );
 

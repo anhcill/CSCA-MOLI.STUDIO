@@ -908,6 +908,11 @@ function getBatchLabelRange(batch) {
   return `${labels[0]} - ${labels[labels.length - 1]}`;
 }
 
+function throwIfAiRequestAborted(context = {}) {
+  if (!context.signal?.aborted) return;
+  throw new Error("AI_REQUEST_ABORTED");
+}
+
 async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   const entries = (sourceEntries || []).slice(0, REVIEW_MAX_ITEMS);
   if (!entries.length) {
@@ -950,6 +955,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   }
 
   async function reviewBatch(batchJob) {
+    throwIfAiRequestAborted(context);
     const { batch, batchNumber, model } = batchJob;
     const startedAt = Date.now();
     const prompt = buildReviewPrompt(batch, context);
@@ -963,6 +969,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         temperature: 0.1,
         maxTokens: REVIEW_MAX_TOKENS,
         timeout: REVIEW_TIMEOUT_MS,
+        signal: context.signal,
       });
       const parsed = parseAiJson(raw);
       const batchReviews = Array.isArray(parsed?.reviews) ? parsed.reviews : [];
@@ -1017,6 +1024,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         });
       }
     } catch (error) {
+      if (error.message === "AI_REQUEST_ABORTED") throw error;
       const diagnostic = {
         batch: batchNumber,
         range: getBatchLabelRange(batch),
@@ -1041,6 +1049,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   }
 
   for (let i = 0; i < batches.length; i += parallelBatches) {
+    throwIfAiRequestAborted(context);
     await Promise.all(batches.slice(i, i + parallelBatches).map(reviewBatch));
   }
 
@@ -1610,6 +1619,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
   const batchSize = Math.max(1, Math.min(8, Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_BATCH_SIZE || "5", 10)));
 
   for (let i = 0; i < targets.length; i += batchSize) {
+    throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
     const model = getFixModel();
     const startedAt = Date.now();
@@ -1621,6 +1631,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
         temperature: 0.03,
         maxTokens: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_TIMEOUT_MS || "120000", 10),
+        signal: context.signal,
       });
       const parsed = parseAiJson(raw);
       const batchFixes = Array.isArray(parsed?.fixes) ? parsed.fixes : [];
@@ -1646,6 +1657,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
         if (fix) fixes.push(normalizeAiFix({ ...fix, correctAnswer: "" }, entry));
       }
     } catch (error) {
+      if (error.message === "AI_REQUEST_ABORTED") throw error;
       const diagnostic = {
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1696,6 +1708,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
   const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_BATCH_SIZE || "8", 10)));
 
   for (let i = 0; i < targets.length; i += batchSize) {
+    throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
     const model = getFixModel();
     const startedAt = Date.now();
@@ -1707,6 +1720,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10),
+        signal: context.signal,
       });
       const parsed = parseAiJson(raw);
       const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
@@ -1737,6 +1751,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
         ));
       }
     } catch (error) {
+      if (error.message === "AI_REQUEST_ABORTED") throw error;
       const diagnostic = {
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1787,6 +1802,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
   const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_BATCH_SIZE || "8", 10)));
 
   for (let i = 0; i < targets.length; i += batchSize) {
+    throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
     const model = getFixModel();
     const startedAt = Date.now();
@@ -1798,6 +1814,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         temperature: 0.1,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+        signal: context.signal,
       });
       const parsed = parseAiJson(raw);
       const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
@@ -1832,6 +1849,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
 
       if (retryEntries.length && batch.length > 1) {
         for (const entry of retryEntries) {
+          throwIfAiRequestAborted(context);
           const retryStartedAt = Date.now();
           try {
             const retryRaw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt([entry], context), {
@@ -1841,6 +1859,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
               temperature: 0.1,
               maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1200", 10),
               timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+              signal: context.signal,
             });
             const retryParsed = parseAiJson(retryRaw);
             const retryItems = getAiItems(retryParsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
@@ -1863,6 +1882,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
               entry,
             ));
           } catch (retryError) {
+            if (retryError.message === "AI_REQUEST_ABORTED") throw retryError;
             diagnostics.push({
               batch: `${Math.floor(i / batchSize) + 1}.${entry.questionNumber || entry.questionId || "retry"}`,
               range: entry.label,
@@ -1889,6 +1909,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         }
       }
     } catch (error) {
+      if (error.message === "AI_REQUEST_ABORTED") throw error;
       const diagnostic = {
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1945,6 +1966,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
   const batchSize = Math.max(1, Math.min(8, Number.parseInt(process.env.AI_EXAM_FIX_BATCH_SIZE || "4", 10)));
 
   for (let i = 0; i < targets.length; i += batchSize) {
+    throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
     const model = getFixModel();
     const startedAt = Date.now();
@@ -1956,6 +1978,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10),
+        signal: context.signal,
       });
       const parsed = parseAiJson(raw);
       const batchFixes = Array.isArray(parsed?.fixes) ? parsed.fixes : [];
@@ -1981,6 +2004,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         if (fix) fixes.push(normalizeAiFix(fix, entry));
       }
     } catch (error) {
+      if (error.message === "AI_REQUEST_ABORTED") throw error;
       const diagnostic = {
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),

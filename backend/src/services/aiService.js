@@ -186,6 +186,17 @@ function createSafeProviderError(err) {
   return error;
 }
 
+function isAbortError(err, signal) {
+  return signal?.aborted || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError';
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error('AI_REQUEST_ABORTED');
+  error.providerCode = 'ERR_CANCELED';
+  throw error;
+}
+
 async function waitBetweenRequests() {
   const delay = BEE.delayBetweenRequests || 500;
   const elapsed = Date.now() - lastRequestTime;
@@ -236,7 +247,9 @@ async function callBeeknoeeMessages(messages, options = {}) {
     temperature = BEE.temperature,
     model = BEE.model,
     timeout = BEE.timeout,
+    signal,
   } = options;
+  throwIfAborted(signal);
   const apiKey = getNextKey();
 
   if (!apiKey) {
@@ -257,6 +270,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
         payload,
         {
           timeout,
+          signal,
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
@@ -268,6 +282,9 @@ async function callBeeknoeeMessages(messages, options = {}) {
       const text = extractOpenAICompatibleText(response.data);
       return text || JSON.stringify(response.data);
     } catch (err) {
+      if (isAbortError(err, signal)) {
+        throwIfAborted(signal);
+      }
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         const e = new Error('AI_TIMEOUT');
         throw e;
@@ -307,7 +324,9 @@ async function callAdminExamAIMessages(messages, options = {}) {
     temperature = ADMIN_EXAM_AI.temperature ?? BEE.temperature,
     timeout = ADMIN_EXAM_AI.timeout || BEE.timeout,
     fallbackOnTimeout = true,
+    signal,
   } = options;
+  throwIfAborted(signal);
 
   for (const model of modelCandidates) {
     const keyCount = (ADMIN_EXAM_AI.apiKeys || []).filter(Boolean).length;
@@ -315,6 +334,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
 
     for (let attempt = 0; attempt < attempts; attempt++) {
       await waitAdminExamBetweenRequests();
+      throwIfAborted(signal);
 
       const keyInfo = getNextAdminExamKey();
       const headers = { 'Content-Type': 'application/json' };
@@ -332,7 +352,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
           const response = await axios.post(
             getChatCompletionsUrl(ADMIN_EXAM_AI.baseUrl),
             payload,
-            { timeout, headers },
+            { timeout, signal, headers },
           );
           const text = extractOpenAICompatibleText(response.data);
           return text || JSON.stringify(response.data);
@@ -341,6 +361,9 @@ async function callAdminExamAIMessages(messages, options = {}) {
         const status = err.response?.status;
         const message = getProviderResponseMessage(err);
         const keyLabel = keyInfo ? `key #${keyInfo.keyNumber}/${keyInfo.total}` : 'no key';
+        if (isAbortError(err, signal)) {
+          throwIfAborted(signal);
+        }
         const timedOut = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
         if (timedOut && fallbackOnTimeout === false) {
           const timeoutError = new Error('AI_TIMEOUT');
