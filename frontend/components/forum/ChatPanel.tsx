@@ -547,7 +547,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
   const isOwn = (msg: ForumMessage) => msg.sender_id === user?.id;
 
   return (
-    <>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white [overscroll-behavior:contain]">
       {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 border-b border-gray-100/60 bg-white/90 backdrop-blur-xl shrink-0 shadow-sm relative z-50">
         <button
@@ -617,13 +617,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       </div>
 
       {/* ── Chat Background ── */}
-      <div className="flex-1 overflow-y-auto relative" style={{ background: bgValue }}>
+      <div className="relative min-h-0 flex-1 overflow-hidden overscroll-contain" style={{ background: bgValue }}>
         {/* Overlay for custom images to ensure readability */}
         {bgType === 'custom' && (
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] pointer-events-none" />
         )}
 
-        <div ref={messagesScrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto px-2 py-3 sm:px-3 sm:py-4">
+        <div ref={messagesScrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto overscroll-contain px-2 py-3 sm:px-3 sm:py-4 [touch-action:pan-y]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <div className="w-8 h-8 border-[2.5px] border-violet-200/50 border-t-violet-600 rounded-full animate-spin" />
@@ -820,7 +820,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
       </div>
 
       {/* ── Input Area ── */}
-      <div className="shrink-0 border-t border-violet-100/50 bg-white/95 px-2 py-2 backdrop-blur-xl shadow-[0_-4px_20px_rgba(139,92,246,0.05)] sm:px-3 sm:py-3" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+      <div className="relative z-40 shrink-0 border-t border-violet-100/50 bg-white/95 px-2 py-2 backdrop-blur-xl shadow-[0_-4px_20px_rgba(139,92,246,0.05)] sm:px-3 sm:py-3" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
         {blocked && (
           <div className="mb-2 flex flex-col gap-2 rounded-2xl border border-red-100 bg-red-50 p-2.5 text-center text-xs font-bold text-red-500 sm:flex-row sm:items-center sm:justify-between sm:text-left">
             <span>
@@ -875,7 +875,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
         <div className="flex items-end gap-1.5 sm:gap-2">
           <button
-            onClick={() => { setShowEmoji(v => !v); }}
+            onClick={() => { keepMobileViewportStable(); setShowEmoji(v => !v); }}
             disabled={blocked}
             className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all active:scale-90 ${
               blocked ? 'bg-gray-50 text-gray-300 cursor-not-allowed' :
@@ -893,6 +893,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               onChange={e => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onPointerDown={keepMobileViewportStable}
               onFocus={keepMobileViewportStable}
               placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn hoặc dán ảnh..."}
               rows={1}
@@ -1100,6 +1101,6 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

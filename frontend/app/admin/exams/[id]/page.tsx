@@ -153,6 +153,14 @@ function getExamReviewIssues(result: StoredExamReviewResult | null) {
     return (result?.reviews || []).filter(review => review.status !== 'ok');
 }
 
+function formatTokenEstimate(value?: number) {
+    const tokens = Number(value);
+    if (!Number.isFinite(tokens) || tokens <= 0) return '';
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M token`;
+    if (tokens >= 1000) return `${Math.round(tokens / 100) / 10}k token`;
+    return `${Math.round(tokens)} token`;
+}
+
 function getExamAiRunLabel(action: string) {
     if (action === 'review_quality') return 'AI soát đề';
     if (action === 'apply_fixes') return 'AI sửa log';
@@ -433,6 +441,8 @@ function SavedExamAiReviewPanel({
     const summary = result?.summary;
     const issueRows = getExamReviewIssues(result);
     const safeFix = result?.safeFixPreview;
+    const tokenEstimate = formatTokenEstimate(summary?.tokenEstimate);
+    const maxTokenBudget = formatTokenEstimate(summary?.maxTokenBudget);
 
     return (
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -448,8 +458,15 @@ function SavedExamAiReviewPanel({
                         <p className="mt-1 text-slate-600 dark:text-slate-300">
                             {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} câu có review: {summary.ok} ổn, {summary.issues} cần xem.
                             {summary.model ? ` Model: ${summary.model}.` : ''}
+                            {tokenEstimate ? ` Uoc tinh da dung: ${tokenEstimate}.` : ''}
+                            {maxTokenBudget ? ` Tran yeu cau: ${maxTokenBudget}.` : ''}
                         </p>
                     ) : null}
+                    {summary && (
+                        <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            Batch {summary.batchSize || '?'} cau, song song {summary.parallelBatches || 1}, timeout {summary.timeoutMs ? `${Math.round(summary.timeoutMs / 1000)}s/batch` : 'mac dinh'}.
+                        </p>
+                    )}
                     {safeFix && (
                         <p className="mt-1 text-slate-600 dark:text-slate-300">
                             Sửa công thức chắc chắn: {safeFix.changedCount || 0} chỗ. Nghi lỗi cần xem tay: {safeFix.warningCount || 0} chỗ.
@@ -504,6 +521,7 @@ function SavedExamAiReviewPanel({
                                 <span>{log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'JSON lỗi' : log.status === 'no_questions' ? 'Không có câu' : 'Lỗi'}</span>
                             </div>
                             <p className="mt-1">Model: {log.model || summary?.model || 'chưa rõ'}{log.durationMs ? ` - ${Math.round(log.durationMs / 1000)}s` : ''}</p>
+                            {log.tokenEstimate ? <p className="mt-1">Token uoc tinh: {formatTokenEstimate(log.tokenEstimate)} / tran {formatTokenEstimate(log.maxTokenBudget) || 'chua ro'}.</p> : null}
                             {log.message && <p className="mt-1 whitespace-pre-wrap">{log.message}</p>}
                         </div>
                     ))}

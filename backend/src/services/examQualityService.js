@@ -3,8 +3,23 @@ const aiService = require("./aiService");
 const { repairOcrMathArtifacts } = require("./ocrMathRepairService");
 
 const ANSWER_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const REVIEW_BATCH_SIZE = Number.parseInt(process.env.AI_EXAM_REVIEW_BATCH_SIZE || "6", 10);
-const REVIEW_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_ITEMS || "120", 10);
+function parsePositiveIntEnv(name, fallback, max = Number.MAX_SAFE_INTEGER) {
+  const value = Number.parseInt(process.env[name], 10);
+  const normalized = Number.isFinite(value) && value > 0 ? value : fallback;
+  return Math.max(1, Math.min(max, normalized));
+}
+
+function estimateTokenCount(value) {
+  const text = stringValue(value);
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+const REVIEW_BATCH_SIZE = parsePositiveIntEnv("AI_EXAM_REVIEW_BATCH_SIZE", 6, 12);
+const REVIEW_PARALLEL_BATCHES = parsePositiveIntEnv("AI_EXAM_REVIEW_PARALLEL_BATCHES", 3, 3);
+const REVIEW_MAX_ITEMS = parsePositiveIntEnv("AI_EXAM_REVIEW_MAX_ITEMS", 120, 300);
+const REVIEW_MAX_TOKENS = parsePositiveIntEnv("AI_EXAM_REVIEW_MAX_TOKENS", 5000, 12000);
+const REVIEW_TIMEOUT_MS = parsePositiveIntEnv("AI_EXAM_REVIEW_TIMEOUT_MS", 120000, 300000);
 const EXPLANATION_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_QUESTIONS || "300", 10);
 const REVIEW_APPLY_MIN_CONFIDENCE = Number.parseFloat(process.env.AI_EXAM_REVIEW_APPLY_MIN_CONFIDENCE || "0.75");
 
@@ -924,29 +939,47 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   const reviews = [];
   const diagnostics = [];
   const batchSize = Math.max(1, Math.min(12, REVIEW_BATCH_SIZE || 6));
+  const parallelBatches = Math.max(1, Math.min(3, REVIEW_PARALLEL_BATCHES || 3));
+  const batches = [];
   for (let i = 0; i < entries.length; i += batchSize) {
-    const batch = entries.slice(i, i + batchSize);
-    const model = getReviewModel();
+    batches.push({
+      batch: entries.slice(i, i + batchSize),
+      batchNumber: Math.floor(i / batchSize) + 1,
+      model: getReviewModel(),
+    });
+  }
+
+  async function reviewBatch(batchJob) {
+    const { batch, batchNumber, model } = batchJob;
     const startedAt = Date.now();
+    const prompt = buildReviewPrompt(batch, context);
+    const inputTokenEstimate = estimateTokenCount(prompt);
     try {
-      const raw = await aiService.callAdminExamAI(buildReviewPrompt(batch, context), {
+      const raw = await aiService.callAdminExamAI(prompt, {
         model,
         models: getReviewModels(),
         fallbackModel: getReviewFallbackModel(),
+        fallbackOnTimeout: false,
         temperature: 0.1,
-        maxTokens: Number.parseInt(process.env.AI_EXAM_REVIEW_MAX_TOKENS || "3000", 10),
-        timeout: Number.parseInt(process.env.AI_EXAM_REVIEW_TIMEOUT_MS || "90000", 10),
+        maxTokens: REVIEW_MAX_TOKENS,
+        timeout: REVIEW_TIMEOUT_MS,
       });
       const parsed = parseAiJson(raw);
       const batchReviews = Array.isArray(parsed?.reviews) ? parsed.reviews : [];
+      const outputTokenEstimate = estimateTokenCount(raw);
       diagnostics.push({
-        batch: Math.floor(i / batchSize) + 1,
+        batch: batchNumber,
         range: getBatchLabelRange(batch),
         paths: batch.map(entry => entry.path),
         labels: batch.map(entry => entry.label),
         model,
         status: batchReviews.length ? "ok" : "invalid_response",
         durationMs: Date.now() - startedAt,
+        inputTokenEstimate,
+        outputTokenEstimate,
+        tokenEstimate: inputTokenEstimate + outputTokenEstimate,
+        maxOutputTokens: REVIEW_MAX_TOKENS,
+        maxTokenBudget: inputTokenEstimate + REVIEW_MAX_TOKENS,
         returnedReviews: batchReviews.length,
         expectedReviews: batch.length,
         message: batchReviews.length
@@ -958,7 +991,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         for (const entry of batch) {
           reviews.push(buildFallbackReview(entry, "AI không trả JSON review hợp lệ cho batch này. Cần chạy lại hoặc xem log."));
         }
-        continue;
+        return;
       }
       for (const entry of batch) {
         const localIndex = batch.indexOf(entry);
@@ -985,7 +1018,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
       }
     } catch (error) {
       const diagnostic = {
-        batch: Math.floor(i / batchSize) + 1,
+        batch: batchNumber,
         range: getBatchLabelRange(batch),
         paths: batch.map(entry => entry.path),
         labels: batch.map(entry => entry.label),
@@ -993,6 +1026,10 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         status: "failed",
         durationMs: Date.now() - startedAt,
         expectedReviews: batch.length,
+        inputTokenEstimate,
+        tokenEstimate: inputTokenEstimate,
+        maxOutputTokens: REVIEW_MAX_TOKENS,
+        maxTokenBudget: inputTokenEstimate + REVIEW_MAX_TOKENS,
         ...getReviewErrorDiagnostic(error),
       };
       diagnostics.push(diagnostic);
@@ -1002,6 +1039,17 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
       }
     }
   }
+
+  for (let i = 0; i < batches.length; i += parallelBatches) {
+    await Promise.all(batches.slice(i, i + parallelBatches).map(reviewBatch));
+  }
+
+  const entryOrder = new Map(entries.map((entry, index) => [entry.path, index]));
+  diagnostics.sort((a, b) => (Number(a.batch) || 0) - (Number(b.batch) || 0));
+  reviews.sort((a, b) => (
+    (entryOrder.get(a.path) ?? Number.MAX_SAFE_INTEGER) -
+    (entryOrder.get(b.path) ?? Number.MAX_SAFE_INTEGER)
+  ));
 
   const counts = reviews.reduce((acc, review) => {
     acc.total += 1;
@@ -1016,6 +1064,13 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   counts.model = getReviewModel();
   counts.questionTotal = entries.length;
   counts.reviewedCount = reviews.length;
+  counts.inputTokenEstimate = diagnostics.reduce((sum, item) => sum + (Number(item.inputTokenEstimate) || 0), 0);
+  counts.outputTokenEstimate = diagnostics.reduce((sum, item) => sum + (Number(item.outputTokenEstimate) || 0), 0);
+  counts.tokenEstimate = diagnostics.reduce((sum, item) => sum + (Number(item.tokenEstimate) || 0), 0);
+  counts.maxTokenBudget = diagnostics.reduce((sum, item) => sum + (Number(item.maxTokenBudget) || 0), 0);
+  counts.batchSize = batchSize;
+  counts.parallelBatches = parallelBatches;
+  counts.timeoutMs = REVIEW_TIMEOUT_MS;
 
   return {
     reviews,

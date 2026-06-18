@@ -11,6 +11,16 @@ const { runOptimizations } = require("./config/migrations");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const SERVER_TIMEOUT_MS = Number.parseInt(process.env.API_SERVER_TIMEOUT_MS || "1200000", 10);
+
+function configureServerTimeouts(server) {
+  if (!server || !Number.isFinite(SERVER_TIMEOUT_MS) || SERVER_TIMEOUT_MS <= 0) return server;
+  server.requestTimeout = SERVER_TIMEOUT_MS;
+  server.timeout = SERVER_TIMEOUT_MS;
+  server.keepAliveTimeout = Number.parseInt(process.env.API_KEEP_ALIVE_TIMEOUT_MS || "65000", 10);
+  server.headersTimeout = Math.max(server.keepAliveTimeout + 5000, 70000);
+  return server;
+}
 
 // ====================================
 // MIDDLEWARE
@@ -259,6 +269,7 @@ let io = null;
 try {
   const { initSocket } = require('./socket');
   const httpServer = http.createServer(app);
+  configureServerTimeouts(httpServer);
   io = initSocket(httpServer);
   const { setIO } = require('./socket/singleton');
   setIO(io);
@@ -289,10 +300,11 @@ try {
   app.locals.io = io;
 } catch (err) {
   console.warn('⚠️  Socket.io failed to initialize, falling back to HTTP-only mode:', err.message);
-  app.listen(PORT, async () => {
+  const server = app.listen(PORT, async () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
     await runOptimizations();
   });
+  configureServerTimeouts(server);
 }
 
 // Handle unhandled promise rejections

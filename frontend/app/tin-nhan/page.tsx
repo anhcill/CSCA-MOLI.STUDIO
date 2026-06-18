@@ -36,6 +36,7 @@ export default function MessagesPage() {
     const root = document.documentElement;
     const body = document.body;
     const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
     const syncViewportHeight = () => {
       const height = window.visualViewport?.height || window.innerHeight;
       root.style.setProperty('--messages-visual-height', `${height}px`);
@@ -43,12 +44,14 @@ export default function MessagesPage() {
 
     syncViewportHeight();
     body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
     window.visualViewport?.addEventListener('resize', syncViewportHeight);
     window.visualViewport?.addEventListener('scroll', syncViewportHeight);
     window.addEventListener('resize', syncViewportHeight);
 
     return () => {
       body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
       root.style.removeProperty('--messages-visual-height');
       window.visualViewport?.removeEventListener('resize', syncViewportHeight);
       window.visualViewport?.removeEventListener('scroll', syncViewportHeight);
@@ -225,7 +228,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-slate-50" style={{ height: 'var(--messages-visual-height, 100dvh)' }}>
+    <div className="fixed inset-0 flex flex-col overflow-hidden overscroll-none bg-slate-50" style={{ height: 'var(--messages-visual-height, 100dvh)' }}>
 
       {/* ── Top Header ── */}
       <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white border-b border-slate-200">
@@ -413,7 +416,7 @@ export default function MessagesPage() {
         </div>
 
         {/* ── Chat Panel ── */}
-        <div className={`${selectedPartner ? 'flex' : 'hidden xl:flex'} flex-1 flex-col bg-transparent min-h-0`}>
+        <div className={`${selectedPartner ? 'flex' : 'hidden xl:flex'} h-full min-h-0 flex-1 flex-col overflow-hidden bg-transparent`}>
           {selectedPartner ? (
             <ChatPanel
               partnerId={selectedPartner}

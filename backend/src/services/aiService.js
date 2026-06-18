@@ -306,6 +306,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
     maxTokens = ADMIN_EXAM_AI.maxTokens || BEE.maxTokens,
     temperature = ADMIN_EXAM_AI.temperature ?? BEE.temperature,
     timeout = ADMIN_EXAM_AI.timeout || BEE.timeout,
+    fallbackOnTimeout = true,
   } = options;
 
   for (const model of modelCandidates) {
@@ -340,6 +341,13 @@ async function callAdminExamAIMessages(messages, options = {}) {
         const status = err.response?.status;
         const message = getProviderResponseMessage(err);
         const keyLabel = keyInfo ? `key #${keyInfo.keyNumber}/${keyInfo.total}` : 'no key';
+        const timedOut = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+        if (timedOut && fallbackOnTimeout === false) {
+          const timeoutError = new Error('AI_TIMEOUT');
+          timeoutError.providerCode = err.code;
+          timeoutError.providerMessage = message;
+          throw timeoutError;
+        }
         if ([401, 403, 429].includes(status)) {
           console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} ${keyLabel} model ${model} blocked/quota limited, trying next key/model:`, message);
         } else {

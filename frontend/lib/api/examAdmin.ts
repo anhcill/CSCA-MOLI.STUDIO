@@ -83,6 +83,11 @@ export interface ImportedItemsReviewDiagnostic {
     retryAfter?: number;
     providerStatus?: number;
     providerCode?: string;
+    inputTokenEstimate?: number;
+    outputTokenEstimate?: number;
+    tokenEstimate?: number;
+    maxOutputTokens?: number;
+    maxTokenBudget?: number;
 }
 
 export interface ImportedReadingGroupData {
@@ -197,6 +202,13 @@ export interface ImportedItemsReviewResult {
         model?: string;
         questionTotal?: number;
         reviewedCount?: number;
+        inputTokenEstimate?: number;
+        outputTokenEstimate?: number;
+        tokenEstimate?: number;
+        maxTokenBudget?: number;
+        batchSize?: number;
+        parallelBatches?: number;
+        timeoutMs?: number;
     };
 }
 
