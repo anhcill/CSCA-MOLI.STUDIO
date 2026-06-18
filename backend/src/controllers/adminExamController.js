@@ -103,7 +103,7 @@ function normalizeLedgerObject(value) {
 const MAX_POINTS_PER_QUESTION = 100;
 const MAX_QUESTIONS_PER_EXAM = 200;
 const MISSING_EXAM_MESSAGE = "De thi khong ton tai hoac da bi xoa. Vui long tai lai danh sach de.";
-const EXAM_AI_LOCK_NAMESPACE = 910612;
+const EXAM_AI_LOCK_NAMESPACE = 910613;
 const EXAM_AI_LOCK_WAIT_MS = Number.parseInt(process.env.EXAM_AI_LOCK_WAIT_MS || "15000", 10);
 const EXAM_AI_LOCK_RETRY_MS = Number.parseInt(process.env.EXAM_AI_LOCK_RETRY_MS || "250", 10);
 const EXAM_AI_ACTIONS = {
@@ -334,7 +334,7 @@ async function acquireExamAiLock(client, examId, options = {}) {
     }
 
     const result = await client.query(
-      "SELECT pg_try_advisory_lock($1::int, $2::int) AS locked",
+      "SELECT pg_try_advisory_xact_lock($1::int, $2::int) AS locked",
       [EXAM_AI_LOCK_NAMESPACE, parsedExamId],
     );
 
@@ -752,15 +752,18 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
+      const signal = createRequestAbortSignal(req, res);
+      await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
+        await client.query("ROLLBACK");
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
       const result = await reviewStoredExamWithAI(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
-        signal: createRequestAbortSignal(req, res),
+        signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW, req.user.id, {
         total: result.summary?.total || 0,
@@ -768,6 +771,7 @@ const AdminExamController = {
         ok: result.summary?.ok || 0,
         model: result.summary?.model,
       });
+      await client.query("COMMIT");
 
       UserActivity.log(req.user.id, "admin.review_saved_exam_quality", {
         examId,
@@ -781,6 +785,7 @@ const AdminExamController = {
 
       res.json(result);
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
       if (sendAiAbortResponse(req, res, error)) return;
       console.error("Review saved exam quality error:", getSafeErrorLog(error));
       if (error.message === "RATE_LIMITED") {
@@ -815,8 +820,9 @@ const AdminExamController = {
     }
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
+      const signal = createRequestAbortSignal(req, res);
       await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         await client.query("ROLLBACK");
@@ -827,7 +833,7 @@ const AdminExamController = {
         applySafeFormulas: req.body?.applySafeFormulas !== false,
         applySuggestedAnswers: req.body?.applySuggestedAnswers !== false,
         subject: req.body?.subject || req.body?.subjectName || undefined,
-        signal: createRequestAbortSignal(req, res),
+        signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FIX, req.user.id, {
         changedCount: result.changedCount,
@@ -875,8 +881,9 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
+      const signal = createRequestAbortSignal(req, res);
       await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         await client.query("ROLLBACK");
@@ -885,7 +892,7 @@ const AdminExamController = {
 
       const result = await applyExamDisplayFormatFixes(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
-        signal: createRequestAbortSignal(req, res),
+        signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FORMAT, req.user.id, {
         changedCount: result.changedCount,
@@ -936,8 +943,9 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
+      const signal = createRequestAbortSignal(req, res);
       await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         await client.query("ROLLBACK");
@@ -946,7 +954,7 @@ const AdminExamController = {
 
       const result = await generateMissingExamExplanations(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
-        signal: createRequestAbortSignal(req, res),
+        signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.EXPLAIN, req.user.id, {
         changedCount: result.changedCount,
@@ -999,8 +1007,9 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
+      const signal = createRequestAbortSignal(req, res);
       await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         await client.query("ROLLBACK");
@@ -1009,7 +1018,7 @@ const AdminExamController = {
 
       const result = await polishExamExplanations(client, examId, {
         subject: req.body?.subject || req.body?.subjectName || undefined,
-        signal: createRequestAbortSignal(req, res),
+        signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.POLISH_EXPLANATIONS, req.user.id, {
         changedCount: result.changedCount,
@@ -1062,8 +1071,8 @@ const AdminExamController = {
     const { examId } = req.params;
     const client = await pool.connect();
     try {
-      await acquireExamAiLock(client, examId);
       await client.query("BEGIN");
+      await acquireExamAiLock(client, examId);
       const exists = await ensureExamExists(client, examId);
       if (!exists) {
         await client.query("ROLLBACK");
