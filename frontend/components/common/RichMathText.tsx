@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import { memo, useMemo } from 'react';
+import katex from 'katex';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkMath from 'remark-math';
@@ -46,6 +47,88 @@ function restoreReadableBreaks(value: string) {
   return tidyReadableBreaks(applyReadableBreakRules(normalized));
 }
 
+function canRenderLatex(formula: string, displayMode = false) {
+  try {
+    katex.renderToString(formula.trim(), {
+      displayMode,
+      throwOnError: true,
+      strict: false,
+      trust: false,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function stripMathPunctuation(formula: string) {
+  const trimmed = formula.trim();
+  const match = trimmed.match(/^([\s\S]*?)([.,;:，。；：]+)$/);
+  if (!match) return { formula: trimmed, suffix: '' };
+  return { formula: match[1].trim(), suffix: match[2] };
+}
+
+function escapeFailedMathText(value: string) {
+  return value.replace(/\$/g, '\\$');
+}
+
+function normalizeRenderableLatex(formula: string, displayMode = false): { formula: string; suffix: string } | null {
+  const raw = formula.trim();
+  const stripped = stripMathPunctuation(raw);
+  const candidates = [
+    { formula: raw, suffix: '' },
+    { formula: normalizeLatexMath(raw), suffix: '' },
+    stripped,
+    { formula: normalizeLatexMath(stripped.formula), suffix: stripped.suffix },
+  ]
+    .map(candidate => ({
+      formula: candidate.formula
+        .replace(/\\left\s+(?=[,.;:，。；：]|$)/g, '')
+        .replace(/\\right\s+(?=[,.;:，。；：]|$)/g, '')
+        .trim(),
+      suffix: candidate.suffix,
+    }))
+    .filter(candidate => candidate.formula);
+
+  for (const candidate of candidates) {
+    if (canRenderLatex(candidate.formula, displayMode)) return candidate;
+  }
+
+  return null;
+}
+
+function sanitizeInlineMath(formula: string) {
+  const renderable = normalizeRenderableLatex(formula, false);
+  if (renderable) return `$${renderable.formula}$${renderable.suffix}`;
+  return escapeFailedMathText(formula.trim());
+}
+
+function sanitizeDisplayMath(formula: string) {
+  const renderable = normalizeRenderableLatex(formula, true);
+  if (renderable) return `$$\n${renderable.formula}\n$$${renderable.suffix}`;
+  return escapeFailedMathText(formula.trim());
+}
+
+function sanitizeKatexSegments(value: string) {
+  return value
+    .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g)
+    .map((part) => {
+      if (part.startsWith('```') || part.startsWith('~~~')) return part;
+
+      return part
+        .split(/(`[^`\n]*`)/g)
+        .map((inlinePart) => {
+          if (inlinePart.startsWith('`')) return inlinePart;
+
+          return inlinePart
+            .replace(/\$\$([\s\S]*?)\$\$/g, (_, formula) => sanitizeDisplayMath(formula))
+            .replace(/\$([^$\n]*?)\$/g, (_, formula) => sanitizeInlineMath(formula));
+        })
+        .join('');
+    })
+    .join('');
+}
+
 function normalizeMathDelimiters(value: string) {
   const normalizeText = (text: string) =>
     autoWrapLooseMathLines(
@@ -55,7 +138,7 @@ function normalizeMathDelimiters(value: string) {
         .replace(/(^|\n)\$\$([^\n]+?)\$\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}$$\n${normalizeLatexMath(formula)}\n$$`),
     );
 
-  return value
+  const normalized = value
     .replace(/\r\n?/g, '\n')
     .split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g)
     .map((part) => {
@@ -67,6 +150,8 @@ function normalizeMathDelimiters(value: string) {
         .join('');
     })
     .join('');
+
+  return sanitizeKatexSegments(normalized);
 }
 
 function autoWrapLooseMathLines(text: string) {
@@ -113,7 +198,10 @@ function RichMathText({ value, className = '', readableBreaks = false }: RichMat
     <div className={`rich-math-text text-sm leading-relaxed ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
-        rehypePlugins={[rehypeSanitize, rehypeKatex]}
+        rehypePlugins={[
+          rehypeSanitize,
+          [rehypeKatex, { throwOnError: false, strict: false, errorColor: '#334155' }],
+        ]}
         components={{
           p: ({ children }) => <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>,
           ul: ({ children }) => <ul className="mb-2 list-disc pl-5 space-y-1">{children}</ul>,
