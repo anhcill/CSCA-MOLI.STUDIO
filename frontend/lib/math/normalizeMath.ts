@@ -107,6 +107,89 @@ export function normalizeEscapedLatexBackslashes(input: string): string {
   );
 }
 
+const LATEX_TWO_ARG_COMMANDS = new Set(['frac', 'dfrac', 'tfrac', 'binom']);
+
+function readLatexGroup(input: string, index: number): { body: string; end: number } | null {
+  let cursor = index;
+  while (/\s/.test(input[cursor] || '')) cursor += 1;
+
+  const escaped = input[cursor] === '\\' && input[cursor + 1] === '{';
+  const normal = input[cursor] === '{';
+  if (!escaped && !normal) return null;
+
+  if (escaped) {
+    const start = cursor + 2;
+    let depth = 1;
+    for (let i = start; i < input.length; i += 1) {
+      if (input[i] === '\\' && input[i + 1] === '{') {
+        depth += 1;
+        i += 1;
+        continue;
+      }
+      if (input[i] === '\\' && input[i + 1] === '}') {
+        depth -= 1;
+        if (depth === 0) return { body: input.slice(start, i), end: i + 2 };
+        i += 1;
+      }
+    }
+    return null;
+  }
+
+  const start = cursor + 1;
+  let depth = 1;
+  for (let i = start; i < input.length; i += 1) {
+    if (input[i] === '\\') {
+      i += 1;
+      continue;
+    }
+    if (input[i] === '{') depth += 1;
+    if (input[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return { body: input.slice(start, i), end: i + 1 };
+    }
+  }
+  return null;
+}
+
+function normalizeEscapedLatexGroupBraces(value: string): string {
+  const input = String(value || '');
+  let out = '';
+
+  for (let index = 0; index < input.length;) {
+    const commandMatch = input.slice(index).match(/^\\(dfrac|tfrac|frac|binom|sqrt|mathbb|mathrm|mathbf|operatorname|text)\b/);
+    if (!commandMatch) {
+      out += input[index];
+      index += 1;
+      continue;
+    }
+
+    const command = commandMatch[1];
+    const first = readLatexGroup(input, index + commandMatch[0].length);
+    if (!first) {
+      out += commandMatch[0];
+      index += commandMatch[0].length;
+      continue;
+    }
+
+    if (LATEX_TWO_ARG_COMMANDS.has(command)) {
+      const second = readLatexGroup(input, first.end);
+      if (!second) {
+        out += commandMatch[0];
+        index += commandMatch[0].length;
+        continue;
+      }
+      out += `\\${command}{${first.body.trim()}}{${second.body.trim()}}`;
+      index = second.end;
+      continue;
+    }
+
+    out += `\\${command}{${first.body.trim()}}`;
+    index = first.end;
+  }
+
+  return out.replace(/([_^])\\\{([^\\{}]{1,180})\\\}/g, (_, marker, body) => `${marker}{${String(body).trim()}}`);
+}
+
 function normalizeSetOperators(input: string): string {
   return input
     .replace(/\\cup|\u222a/g, '\\cup')
@@ -168,7 +251,7 @@ export function repairMathFormatArtifacts(
 }
 
 function normalizeLooseMathSyntax(input: string): string {
-  return repairLooseSqrtRadicands(normalizeOcrMathSyntax(input))
+  return repairLooseSqrtRadicands(normalizeOcrMathSyntax(normalizeEscapedLatexGroupBraces(input)))
     .replace(/\\sqrt\{\s*\(\(\s*([^{}()\n]+?)\s*\)\s*\/\s*([^{}()\n]+?)\s*\)\)+\s*\}/g, '\\sqrt{\\frac{$1}{$2}}')
     .replace(/([=:\uff1a]\s*)\$\$(?=\s*[\[(+\-\\A-Za-z0-9])/g, '$1')
     .replace(LATEX_COMMAND_BOUNDARY_RE, (match, command: string, offset: number, whole: string) => {
@@ -558,7 +641,11 @@ function escapeSetLiteralBraces(input: string): string {
     }
 
     const before = input[openIndex - 1] || '';
-    if (before === '\\' || before === '_' || before === '^') {
+    const commandArgPrefix = input.slice(Math.max(0, openIndex - 240), openIndex);
+    const isCommandArg =
+      /\\(?:frac|dfrac|tfrac|binom|sqrt|mathbb|mathrm|mathbf|operatorname|text|vec|bar|hat|tilde)\s*$/.test(commandArgPrefix) ||
+      /\\(?:frac|dfrac|tfrac|binom)\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*$/.test(commandArgPrefix);
+    if (before === '\\' || before === '_' || before === '^' || isCommandArg) {
       out += input.slice(cursor, openIndex + 1);
       cursor = openIndex + 1;
       continue;
@@ -576,9 +663,14 @@ function escapeSetLiteralBraces(input: string): string {
       .replace(/\\in\s*N\b/g, '\\in \\mathbb{N}')
       .replace(/\\in\s*R\b/g, '\\in \\mathbb{R}')
       .replace(/(\\(?:notin|in)\s*(?:\\mathbb\{[A-Z]\}|[A-Za-z]+)\s*)\|/, '$1\\mid ');
+    const hasPlainSetBuilderBar =
+      /\|/.test(content) &&
+      /[<>=]|\\(?:in|notin)\b/.test(content) &&
+      !/\\(?:sqrt|frac|dfrac|tfrac|sin|cos|tan|cot|sec|csc|log|ln|lg|left|right)\b/.test(content);
     const looksLikeSetLiteral =
       ( /[,;\uff0c\uff1b]/.test(content) ||
-        /(?:\\in|\\notin|\\mid|\|)/.test(content)
+        /(?:\\in|\\notin|\\mid)/.test(content) ||
+        hasPlainSetBuilderBar
       ) &&
       /\S/.test(content);
 
@@ -854,10 +946,100 @@ function repairMalformedInlineDollarDelimiters(input: string): string {
   });
 }
 
+function cleanStackedMathLine(value: string): string {
+  return String(value || '').replace(/[\u200b-\u200f\ufeff\u2060]/g, '').trim();
+}
+
+function isStackedMathFragmentLine(value: string): boolean {
+  const text = cleanStackedMathLine(value);
+  if (!text || text.length > 24) return false;
+  if (/\\\(|\\\[|\$\$?/.test(text)) return false;
+  if (/[\u4e00-\u9fff]/.test(text)) return false;
+
+  const compact = text.replace(/\s+/g, '');
+  if (!compact || compact.length > 24) return false;
+  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+)$/iu.test(compact);
+  if (!mathOnly) return false;
+  return (
+    /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim)$/iu.test(compact) ||
+    /^[A-Za-z]$/.test(compact) ||
+    /^[0-9]+$/.test(compact) ||
+    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+$/u.test(compact)
+  );
+}
+
+const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
+
+function compactStackedMathText(value: string): string {
+  return cleanStackedMathLine(value).replace(/[\s.,;:\u3001\uff0c\u3002\uff1b\uff1a]/g, '');
+}
+
+function hasStackedMathSignal(value: string): boolean {
+  return STACKED_MATH_SIGNAL_RE.test(String(value || ''));
+}
+
+function hasRenderedDuplicateAfter(lines: string[], cursor: number, signal: string): boolean {
+  const compactSignal = compactStackedMathText(signal);
+  if (compactSignal.length < 2) return false;
+
+  let checked = 0;
+  for (let index = cursor; index < lines.length && checked < 3; index += 1) {
+    const compactLine = compactStackedMathText(lines[index]);
+    if (!compactLine) continue;
+    checked += 1;
+    if (compactLine.includes(compactSignal)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function stripStackedOcrMathFragments(input: string): string {
+  const lines = String(input || '').split(/\r?\n/);
+  const kept: string[] = [];
+
+  for (let index = 0; index < lines.length;) {
+    if (!isStackedMathFragmentLine(lines[index])) {
+      kept.push(lines[index]);
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    let cursor = index;
+    let fragmentCount = 0;
+    let signal = '';
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      if (!cleanStackedMathLine(line)) {
+        cursor += 1;
+        continue;
+      }
+      if (!isStackedMathFragmentLine(line)) break;
+      fragmentCount += 1;
+      signal += cleanStackedMathLine(line);
+      cursor += 1;
+    }
+
+    const hasRenderedDuplicate = hasRenderedDuplicateAfter(lines, cursor, signal);
+    if (fragmentCount >= 3 && hasRenderedDuplicate) {
+      if (kept.length && cleanStackedMathLine(kept[kept.length - 1]) === '') kept.pop();
+      index = cursor;
+      continue;
+    }
+
+    kept.push(...lines.slice(start, cursor));
+    index = cursor;
+  }
+
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(input)))
+  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(input))))
     .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {

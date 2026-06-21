@@ -79,6 +79,33 @@ function isStackedMathFragmentLine(value) {
   );
 }
 
+const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
+
+function compactStackedMathText(value) {
+  return cleanStackedMathLine(value).replace(/[\s.,;:\u3001\uff0c\u3002\uff1b\uff1a]/g, "");
+}
+
+function hasStackedMathSignal(value) {
+  return STACKED_MATH_SIGNAL_RE.test(stringValue(value));
+}
+
+function hasRenderedDuplicateAfter(lines, cursor, signal) {
+  const compactSignal = compactStackedMathText(signal);
+  if (compactSignal.length < 2) return false;
+
+  let checked = 0;
+  for (let index = cursor; index < lines.length && checked < 3; index += 1) {
+    const compactLine = compactStackedMathText(lines[index]);
+    if (!compactLine) continue;
+    checked += 1;
+    if (compactLine.includes(compactSignal)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function hasStackedOcrMathFragments(value) {
   const lines = stringValue(value).split(/\r?\n/);
   let count = 0;
@@ -88,7 +115,7 @@ function hasStackedOcrMathFragments(value) {
     if (isStackedMathFragmentLine(line)) {
       count += 1;
       signal += cleanStackedMathLine(line);
-      if (count >= 3 && /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[0-9=<>≤≥≠≈∈∉∩∪∖|∣+\-−–*/{}()[\]^_])/iu.test(signal)) {
+      if (count >= 3 && hasStackedMathSignal(signal)) {
         return true;
       }
       continue;
@@ -128,8 +155,8 @@ function stripStackedOcrMathFragments(value) {
       cursor += 1;
     }
 
-    const hasSignal = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[0-9=<>≤≥≠≈∈∉∩∪∖|∣+\-−–*/{}()[\]^_])/iu.test(signal);
-    if (fragmentCount >= 3 && hasSignal) {
+    const hasRenderedDuplicate = hasRenderedDuplicateAfter(lines, cursor, signal);
+    if (fragmentCount >= 3 && hasRenderedDuplicate) {
       if (kept.length && cleanStackedMathLine(kept[kept.length - 1]) === "") {
         kept.pop();
       }
@@ -190,6 +217,89 @@ function normalizeEscapedLatexBackslashes(value) {
   );
 }
 
+const LATEX_TWO_ARG_COMMANDS = new Set(["frac", "dfrac", "tfrac", "binom"]);
+
+function readLatexGroup(input, index) {
+  let cursor = index;
+  while (/\s/.test(input[cursor] || "")) cursor += 1;
+
+  const escaped = input[cursor] === "\\" && input[cursor + 1] === "{";
+  const normal = input[cursor] === "{";
+  if (!escaped && !normal) return null;
+
+  if (escaped) {
+    const start = cursor + 2;
+    let depth = 1;
+    for (let i = start; i < input.length; i += 1) {
+      if (input[i] === "\\" && input[i + 1] === "{") {
+        depth += 1;
+        i += 1;
+        continue;
+      }
+      if (input[i] === "\\" && input[i + 1] === "}") {
+        depth -= 1;
+        if (depth === 0) return { body: input.slice(start, i), end: i + 2 };
+        i += 1;
+      }
+    }
+    return null;
+  }
+
+  const start = cursor + 1;
+  let depth = 1;
+  for (let i = start; i < input.length; i += 1) {
+    if (input[i] === "\\") {
+      i += 1;
+      continue;
+    }
+    if (input[i] === "{") depth += 1;
+    if (input[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return { body: input.slice(start, i), end: i + 1 };
+    }
+  }
+  return null;
+}
+
+function normalizeEscapedLatexGroupBraces(value) {
+  const input = stringValue(value);
+  let out = "";
+
+  for (let index = 0; index < input.length;) {
+    const commandMatch = input.slice(index).match(/^\\(dfrac|tfrac|frac|binom|sqrt|mathbb|mathrm|mathbf|operatorname|text)\b/);
+    if (!commandMatch) {
+      out += input[index];
+      index += 1;
+      continue;
+    }
+
+    const command = commandMatch[1];
+    const first = readLatexGroup(input, index + commandMatch[0].length);
+    if (!first) {
+      out += commandMatch[0];
+      index += commandMatch[0].length;
+      continue;
+    }
+
+    if (LATEX_TWO_ARG_COMMANDS.has(command)) {
+      const second = readLatexGroup(input, first.end);
+      if (!second) {
+        out += commandMatch[0];
+        index += commandMatch[0].length;
+        continue;
+      }
+      out += `\\${command}{${first.body.trim()}}{${second.body.trim()}}`;
+      index = second.end;
+      continue;
+    }
+
+    out += `\\${command}{${first.body.trim()}}`;
+    index = first.end;
+  }
+
+  return out.replace(/([_^])\\\{([^\\{}]{1,180})\\\}/g, (_, marker, body) => `${marker}{${String(body).trim()}}`);
+}
+
 function findMatchingForward(input, openIndex) {
   const open = input[openIndex];
   const close = open === "(" ? ")" : open === "[" ? "]" : "}";
@@ -217,7 +327,11 @@ function escapeSetLiteralBraces(input) {
     }
 
     const before = input[openIndex - 1] || "";
-    if (before === "\\" || before === "_" || before === "^") {
+    const commandArgPrefix = input.slice(Math.max(0, openIndex - 240), openIndex);
+    const isCommandArg =
+      /\\(?:frac|dfrac|tfrac|binom|sqrt|mathbb|mathrm|mathbf|operatorname|text|vec|bar|hat|tilde)\s*$/.test(commandArgPrefix) ||
+      /\\(?:frac|dfrac|tfrac|binom)\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*$/.test(commandArgPrefix);
+    if (before === "\\" || before === "_" || before === "^" || isCommandArg) {
       out += input.slice(cursor, openIndex + 1);
       cursor = openIndex + 1;
       continue;
@@ -243,7 +357,7 @@ function escapeSetLiteralBraces(input) {
 }
 
 function normalizeLooseMathSyntax(value) {
-  return escapeSetLiteralBraces(normalizeMathUnicode(normalizeEscapedLatexBackslashes(value))
+  return escapeSetLiteralBraces(normalizeMathUnicode(normalizeEscapedLatexGroupBraces(normalizeEscapedLatexBackslashes(value)))
     .replace(/(^|\n)-(?=\s*[A-Z]\s*(?:\\cap|\\cup|\\setminus)\b)/g, "$1")
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc|ln|lg|log)\b\s*/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g, (_, fn) => `\\${fn}^{-1}`)
@@ -469,6 +583,17 @@ function normalizeField(value, options = {}) {
 function normalizeFixValue(value, options = {}) {
   const normalized = normalizeField(value, options);
   return normalized.changed ? normalized.after : normalized.before;
+}
+
+function normalizeExplanationValue(value) {
+  const before = stringValue(value).trim();
+  if (!before) return "";
+  const after = normalizeStoredFormulaText(before, { explanation: true });
+  if (!after || /<[^>]+>/.test(after)) return before;
+
+  const ratio = after.length / Math.max(before.length, 1);
+  if (ratio < 0.2 || ratio > 2.4) return before;
+  return after;
 }
 
 function pushChange(changes, question, field, before, after) {
@@ -1219,8 +1344,8 @@ function normalizeAiFix(rawFix, entry) {
     correctAnswer: answerKeys.has(correctAnswer) ? correctAnswer : "",
     questionText: normalizeFixValue(rawFix?.questionText),
     questionTextCn: normalizeFixValue(rawFix?.questionTextCn),
-    explanation: normalizeFixValue(rawFix?.explanation, { explanation: true }),
-    explanationCn: normalizeFixValue(rawFix?.explanationCn, { explanation: true }),
+    explanation: normalizeExplanationValue(rawFix?.explanation),
+    explanationCn: normalizeExplanationValue(rawFix?.explanationCn),
     note: stringValue(rawFix?.note).slice(0, 600),
     answers: [],
   };
@@ -1245,7 +1370,7 @@ function isBlankText(value) {
 }
 
 function normalizeGeneratedExplanation(value) {
-  return compactWhitespace(normalizeFixValue(value, { explanation: true }))
+  return compactWhitespace(normalizeExplanationValue(value))
     .replace(/\0/g, "")
     .replace(/<[^>]*>/g, "")
     .slice(0, 6000);
@@ -1387,6 +1512,8 @@ Yêu cầu:
 - Nếu thiếu cả 2 field, bắt buộc trả cả explanation tiếng Việt và explanationCn tiếng Trung.
 - If the source question is Chinese and missingExplanation=true, explanation must be Vietnamese with full diacritics, not a copy of Chinese text.
 - If the source question is Vietnamese/Chinese bilingual and missingExplanationCn=true, explanationCn must be natural Chinese, not Vietnamese written in the Chinese field.
+- Do not output stacked OCR/ruby fragments. Never split one formula over many one-character lines; write one readable formula only, e.g. \\(xy=1\\).
+- Never output escaped LaTeX group braces like \\frac\\{a\\}\\{b\\} or \\sqrt\\{x\\}; use \\frac{a}{b} and \\sqrt{x}.
 - For word-bank/fill-blank items, explain why the selected word fits the blank in that sentence or passage, not just "chon dap an".
 - For reading groups, cite the key sentence/idea from contextText briefly.
 - Nếu currentExplanation đã có tiếng Việt và thiếu explanationCn, hãy dịch/diễn đạt lại sang tiếng Trung trong explanationCn.
@@ -1453,6 +1580,8 @@ Yêu cầu:
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "v1 = v cos theta" phải thành "\\(v_1=v\\cos\\theta\\)".
 - Không dùng dấu $ hoặc $$ trong explanation. Chỉ dùng \\(...\\) hoặc \\[...\\].
 - Trình bày dễ đọc bằng dòng ngắn: Phân tích, Điều kiện/Công thức, Suy ra/Kết luận, Chọn.
+- Do not output stacked OCR/ruby fragments. Never split one formula over many one-character lines; write one readable formula only.
+- Never output escaped LaTeX group braces like \\frac\\{a\\}\\{b\\} or \\sqrt\\{x\\}; use \\frac{a}{b} and \\sqrt{x}.
 - If explanation contains Chinese text, do not keep it in explanation; return explanation empty with note unless you can safely rewrite it into Vietnamese with full diacritics.
 - Nếu không chắc cách thêm dấu mà có thể đổi nghĩa, trả explanation rỗng và note lý do.
 
@@ -1502,6 +1631,8 @@ function buildDisplayFormatPrompt(batch, context = {}) {
         "Remove stray malformed $ or $$ delimiters.",
         "Never leave $$ inside a sentence. Convert inline math to \\(...\\), for example: hay $$(x+1)^{2}+(y+1)^{2}=2 -> hay \\((x+1)^2+(y+1)^2=2\\).",
         "Examples: (x-2)^{2}+(y+1)^{2}$$=5 -> \\((x-2)^2+(y+1)^2=5\\); y^2$$/16 -> \\frac{y^2}{16}; (4,0)$$: -> \\((4,0)\\):.",
+        "Never output escaped group braces like \\frac\\{a\\}\\{b\\} or \\sqrt\\{x\\}; output \\frac{a}{b} and \\sqrt{x}.",
+        "Remove stacked OCR/ruby fragments such as one formula split across many one-character lines; keep one clean readable formula only.",
         "Keep meaning and correct answer unchanged.",
       ],
     };
@@ -1517,6 +1648,8 @@ Yêu cầu bắt buộc:
 - Không đổi ý toán/lý/hóa. Chỉ sửa OCR/LaTeX/format hiển thị chắc chắn.
 - Giữ đúng ngôn ngữ gốc của từng field: questionTextCn/explanationCn giữ tiếng Trung; questionText/explanation giữ tiếng Việt nếu đang là tiếng Việt.
 - If a field has duplicated rendered text, stacked single-character OCR lines, stray duplicated formulas, or mixed preview artifacts, rewrite that whole field into one clean readable version.
+- Do not output stacked OCR/ruby fragments. Never split one formula over many one-character lines; write one readable formula only.
+- Never output escaped LaTeX group braces like \\frac\\{a\\}\\{b\\} or \\sqrt\\{x\\}; use \\frac{a}{b} and \\sqrt{x}.
 - If Chinese and Vietnamese are accidentally mixed in one field, keep the original field language and remove/relocate only the obvious duplicate translation when it is safe.
 - Bọc công thức inline bằng \\(...\\). Ví dụ: P=... 的值是 -> \\(P=...\\) 的值是.
 - Sửa lệnh LaTeX thô/sai rõ ràng: \\sin, \\cos, \\tan, \\sqrt{}, \\frac{}{}, \\circ, \\mathbb{}, \\in, \\cap, \\cup.
