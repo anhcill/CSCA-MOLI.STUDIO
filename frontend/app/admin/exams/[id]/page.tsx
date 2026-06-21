@@ -810,20 +810,34 @@ export default function AdminExamDetailPage() {
     const isDownloadAllowedForTier = (vipTier?: string, isPremium?: boolean) =>
         (vipTier || 'basic') === 'basic' && isPremium !== true;
 
-    const handleSaveMeta = async () => {
-        if (!exam) return;
-        if (!metaForm.subjectId) {
+    const saveMetaForm = async () => {
+        if (!exam) return false;
+
+        const parsedSubjectId = Number(metaForm.subjectId);
+        const parsedDuration = Number(metaForm.duration);
+        const parsedTotalPoints = Number(metaForm.totalPoints);
+
+        if (!Number.isInteger(parsedSubjectId) || parsedSubjectId <= 0) {
             alert('Vui lòng chọn môn học');
-            return;
+            return false;
         }
+        if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
+            alert('Thời gian làm bài phải là số phút lớn hơn 0.');
+            return false;
+        }
+        if (!Number.isFinite(parsedTotalPoints) || parsedTotalPoints <= 0) {
+            alert('Tổng điểm phải lớn hơn 0.');
+            return false;
+        }
+
         try {
             setSavingMeta(true);
             await examAdminApi.updateExam(exam.id, {
                 title: metaForm.title,
                 titleCn: metaForm.titleCn,
-                subjectId: metaForm.subjectId,
-                duration: metaForm.duration,
-                totalPoints: metaForm.totalPoints,
+                subjectId: parsedSubjectId,
+                duration: parsedDuration,
+                totalPoints: parsedTotalPoints,
                 description: metaForm.description,
                 allow_download: isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium),
                 is_premium: metaForm.is_premium,
@@ -833,25 +847,40 @@ export default function AdminExamDetailPage() {
                 vip_tier: metaForm.vip_tier,
                 is_simulated: metaForm.is_simulated,
             });
-            const selectedSubject = subjects.find(subject => subject.id === metaForm.subjectId);
+            const selectedSubject = subjects.find(subject => subject.id === parsedSubjectId);
             const nextAllowDownload = isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium);
-            setExam({ ...exam, title: metaForm.title, duration: metaForm.duration,
-                subject_id: metaForm.subjectId, subject_name: selectedSubject?.name || exam.subject_name,
-                subject_code: selectedSubject?.code || exam.subject_code, total_points: metaForm.totalPoints, allow_download: nextAllowDownload,
+            setExam(prev => prev ? ({ ...prev, title: metaForm.title, duration: parsedDuration,
+                subject_id: parsedSubjectId, subject_name: selectedSubject?.name || prev.subject_name,
+                subject_code: selectedSubject?.code || prev.subject_code, total_points: parsedTotalPoints, allow_download: nextAllowDownload,
                 is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
-                vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated });
+                vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated }) : prev);
+            setMetaForm(prev => ({
+                ...prev,
+                subjectId: parsedSubjectId,
+                duration: parsedDuration,
+                totalPoints: parsedTotalPoints,
+                allow_download: nextAllowDownload,
+            }));
             setMetaDirty(false);
             setEditingMeta(false);
-            markEditSessionSavedWork('Đã cập nhật thông tin đề và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
+            return true;
         } catch (error: any) {
             if (isMissingExamError(error)) {
                 handleMissingExam();
-                return;
+                return false;
             }
             alert('Lỗi lưu metadata: ' + (error.response?.data?.message || ''));
+            return false;
         } finally {
             setSavingMeta(false);
+        }
+    };
+
+    const handleSaveMeta = async () => {
+        const saved = await saveMetaForm();
+        if (saved) {
+            markEditSessionSavedWork('Đã cập nhật thông tin đề và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         }
     };
 
@@ -1379,6 +1408,10 @@ export default function AdminExamDetailPage() {
     const handleSaveEditSession = async () => {
         try {
             setSavingEditSession(true);
+            if (editingMeta && metaDirty) {
+                const saved = await saveMetaForm();
+                if (!saved) return;
+            }
             setEditMode('view');
             setEditingQuestionId(null);
             setShowQuickAdd(false);

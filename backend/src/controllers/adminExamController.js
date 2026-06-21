@@ -120,6 +120,11 @@ function parsePositiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parsePositiveInteger(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
 }
@@ -1259,6 +1264,13 @@ const AdminExamController = {
         totalPoints === undefined
           ? undefined
           : parsePositiveNumber(totalPoints, 100);
+      const parsedDuration =
+        duration === undefined
+          ? undefined
+          : parsePositiveInteger(duration);
+      if (duration !== undefined && parsedDuration === null) {
+        return res.status(400).json({ message: "Invalid exam duration" });
+      }
 
       const updates = [];
       const params = [];
@@ -1284,7 +1296,7 @@ const AdminExamController = {
         updates.push(`subject_id = $${idx++}`);
         params.push(parsedSubjectId);
       }
-      if (duration !== undefined) { updates.push(`duration = $${idx++}`); params.push(duration); }
+      if (parsedDuration !== undefined) { updates.push(`duration = $${idx++}`); params.push(parsedDuration); }
       if (parsedTotalPoints !== undefined) { updates.push(`total_points = $${idx++}`); params.push(parsedTotalPoints); }
       if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description ? sanitize(description) : null); }
       if (difficulty_level !== undefined) { updates.push(`difficulty_level = $${idx++}`); params.push(difficulty_level); }
