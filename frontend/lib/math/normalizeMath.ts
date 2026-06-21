@@ -27,6 +27,7 @@ const SYMBOL_REPLACEMENTS: Record<string, string> = {
   ['\u00d7']: '\\times ',
   ['\u00f7']: '\\div ',
   ['\u00b7']: '\\cdot ',
+  ['\u22c5']: '\\cdot ',
   ['\u00b1']: '\\pm ',
   ['\u21d2']: '\\Rightarrow ',
   ['\u21d4']: '\\Leftrightarrow ',
@@ -395,7 +396,7 @@ function isMostlyMath(value: string): boolean {
     .filter(word => !/^(?:d[xyztun]|mg|kg|cm|mm|dm|km|ms|mol|rad|hz|pa|ev|kw|w|j|n|v|a|c)$/i.test(word));
   if (words.length > 0) return false;
 
-  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&']/g, '');
+  const leftovers = withoutCommands.replace(/[0-9A-Za-z\s{}()[\]^_+\-=*/<>.,;:|&'!−–⋅·]/g, '');
   return leftovers.length === 0;
 }
 
@@ -566,7 +567,7 @@ export function isLikelyLooseMathLine(input: string): boolean {
 }
 
 function isMathishChar(char: string): boolean {
-  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,;|\s']/.test(char) && !/[À-ỹ]/.test(char);
+  return /[A-Za-z0-9\\{}()[\]^_+\-*/=<>.,;|\s'!−–⋅·]/.test(char) && !/[À-ỹ]/.test(char);
 }
 
 function isAsciiLetterBeforeVietnamese(input: string, index: number): boolean {
@@ -958,17 +959,17 @@ function isStackedMathFragmentLine(value: string): boolean {
 
   const compact = text.replace(/\s+/g, '');
   if (!compact || compact.length > 24) return false;
-  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+)$/iu.test(compact);
+  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞!⋅·]+)$/iu.test(compact);
   if (!mathOnly) return false;
   return (
     /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim)$/iu.test(compact) ||
     /^[A-Za-z]$/.test(compact) ||
     /^[0-9]+$/.test(compact) ||
-    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+$/u.test(compact)
+    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞!⋅·]+$/u.test(compact)
   );
 }
 
-const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
+const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|!\u22c5\u00b7]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
 
 function compactStackedMathText(value: string): string {
   return cleanStackedMathLine(value).replace(/[\s.,;:\u3001\uff0c\u3002\uff1b\uff1a]/g, '');
@@ -987,7 +988,10 @@ function hasRenderedDuplicateAfter(lines: string[], cursor: number, signal: stri
     const compactLine = compactStackedMathText(lines[index]);
     if (!compactLine) continue;
     checked += 1;
-    if (compactLine.includes(compactSignal)) {
+    if (
+      compactLine.includes(compactSignal) ||
+      (compactSignal.length >= 2 && compactLine.startsWith(compactSignal))
+    ) {
       return true;
     }
   }
@@ -1023,7 +1027,8 @@ function stripStackedOcrMathFragments(input: string): string {
     }
 
     const hasRenderedDuplicate = hasRenderedDuplicateAfter(lines, cursor, signal);
-    if (fragmentCount >= 3 && hasRenderedDuplicate) {
+    const isShortPrefixDuplicate = fragmentCount === 1 && compactStackedMathText(signal).length >= 2;
+    if ((fragmentCount >= 3 || isShortPrefixDuplicate) && hasRenderedDuplicate) {
       if (kept.length && cleanStackedMathLine(kept[kept.length - 1]) === '') kept.pop();
       index = cursor;
       continue;

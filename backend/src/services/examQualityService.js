@@ -55,6 +55,7 @@ function compactWhitespace(value) {
 
 const WRAPPED_MATH_RE = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g;
 const LATEX_COMMAND_RE = /\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|lim|sum|int|vec|bar|hat|tilde|frac|binom|mathbb|mathrm|operatorname|text|begin|end|infty|emptyset|in|notin|setminus|cup|cap|times|div|cdot|quad|qquad|circ|pi|alpha|beta|gamma|delta|theta|lambda|mu|Delta|partial|pm|Rightarrow|Leftrightarrow|to|le|ge|ne|leq|geq|neq|approx)\b/;
+const MATH_WORD_RE = /^(?:sin|cos|tan|cot|sec|csc|log|ln|lg|lim|sum|int|alpha|beta|gamma|delta|theta|lambda|mu|pi)$/i;
 const ZERO_WIDTH_RE = /[\u200b-\u200f\ufeff\u2060]/g;
 
 function cleanStackedMathLine(value) {
@@ -69,17 +70,17 @@ function isStackedMathFragmentLine(value) {
 
   const compact = text.replace(/\s+/g, "");
   if (!compact || compact.length > 24) return false;
-  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+)$/iu.test(compact);
+  const mathOnly = /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[A-Za-z0-9+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞!⋅·]+)$/iu.test(compact);
   if (!mathOnly) return false;
   return (
     /^(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim)$/iu.test(compact) ||
     /^[A-Za-z]$/.test(compact) ||
     /^[0-9]+$/.test(compact) ||
-    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞]+$/u.test(compact)
+    /^[+\-−–*/=<>≤≥≠≈∈∉∩∪∖\\|∣()[\]{}.,;，；:_^⁡°∞!⋅·]+$/u.test(compact)
   );
 }
 
-const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
+const STACKED_MATH_SIGNAL_RE = /(?:log|ln|lg|sin|cos|tan|cot|sec|csc|sqrt|lim|[=<>+\-*/{}()[\]^_\\|!\u22c5\u00b7]|\u2264|\u2265|\u2260|\u2248|\u2208|\u2209|\u2229|\u222a|\u2216|\u2223|\u2212|\u2013)/iu;
 
 function compactStackedMathText(value) {
   return cleanStackedMathLine(value).replace(/[\s.,;:\u3001\uff0c\u3002\uff1b\uff1a]/g, "");
@@ -98,7 +99,10 @@ function hasRenderedDuplicateAfter(lines, cursor, signal) {
     const compactLine = compactStackedMathText(lines[index]);
     if (!compactLine) continue;
     checked += 1;
-    if (compactLine.includes(compactSignal)) {
+    if (
+      compactLine.includes(compactSignal) ||
+      (compactSignal.length >= 2 && compactLine.startsWith(compactSignal))
+    ) {
       return true;
     }
   }
@@ -156,7 +160,8 @@ function stripStackedOcrMathFragments(value) {
     }
 
     const hasRenderedDuplicate = hasRenderedDuplicateAfter(lines, cursor, signal);
-    if (fragmentCount >= 3 && hasRenderedDuplicate) {
+    const isShortPrefixDuplicate = fragmentCount === 1 && compactStackedMathText(signal).length >= 2;
+    if ((fragmentCount >= 3 || isShortPrefixDuplicate) && hasRenderedDuplicate) {
       if (kept.length && cleanStackedMathLine(kept[kept.length - 1]) === "") {
         kept.pop();
       }
@@ -186,6 +191,7 @@ function normalizeMathUnicode(value) {
     [/∅/g, "\\emptyset "],
     [/×/g, "\\times "],
     [/÷/g, "\\div "],
+    [/⋅|·/g, "\\cdot "],
     [/±/g, "\\pm "],
     [/<=/g, "\\le "],
     [/>=/g, "\\ge "],
@@ -384,7 +390,9 @@ function normalizeLooseMathSyntax(value) {
 function isMostlyMath(value) {
   const text = stringValue(value).replace(LATEX_COMMAND_RE, "").replace(/\s/g, "");
   if (!text) return true;
-  const mathChars = (text.match(/[A-Za-z0-9{}()[\]^_+\-*/=<>.,;|\\]/g) || []).length;
+  const words = (text.match(/[A-Za-zÀ-ỹ]{2,}/g) || []).filter(word => !MATH_WORD_RE.test(word));
+  if (words.length > 0) return false;
+  const mathChars = (text.match(/[A-Za-z0-9{}()[\]^_+\-*/=<>.,;|\\!−–⋅·]/g) || []).length;
   return mathChars / Math.max(text.length, 1) >= 0.75;
 }
 
