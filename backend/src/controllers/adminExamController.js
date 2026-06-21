@@ -960,6 +960,11 @@ const AdminExamController = {
         changedCount: result.changedCount,
         questionChangedCount: result.questionChangedCount,
         skippedCount: result.skippedCount,
+        total: result.summary?.total,
+        generated: result.summary?.generated,
+        aiCalls: result.summary?.aiCalls,
+        failedBatches: result.summary?.failedBatches,
+        invalidBatches: result.summary?.invalidBatches,
         model: result.summary?.model,
       });
       await client.query("COMMIT");

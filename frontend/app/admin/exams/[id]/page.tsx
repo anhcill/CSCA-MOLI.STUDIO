@@ -788,6 +788,9 @@ export default function AdminExamDetailPage() {
     const confirmRepeatAiAction = async (action: ExamAiRun['action']) => {
         const run = getLatestAiRun(action);
         if (!run) return true;
+        if (action === 'missing_explanations' && Number(run.summary?.skippedCount || 0) > 0) {
+            return true;
+        }
         return new Promise<boolean>((resolve) => {
             setAiRepeatConfirm({ action, run, resolve });
         });

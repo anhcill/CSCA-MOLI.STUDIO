@@ -1400,6 +1400,11 @@ function hasVietnameseText(value) {
   return VIETNAMESE_DIACRITIC_RE.test(stringValue(value));
 }
 
+function hasLatinExplanationText(value) {
+  const text = compactWhitespace(value);
+  return /[A-Za-zÀ-ỹ]{3,}/.test(text);
+}
+
 function isLikelyChineseExplanation(value) {
   const text = compactWhitespace(value);
   if (!text || !hasCjkText(text)) return false;
@@ -2884,7 +2889,7 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
     const needsExplanationCn = isBlankText(question.explanation_cn) || isLikelyVietnameseExplanation(question.explanation_cn);
     const nextExplanation = normalizeGeneratedExplanation(item.explanation);
     const nextExplanationCn = normalizeGeneratedExplanation(item.explanationCn);
-    const hasValidVietnamese = !isBlankText(nextExplanation) && isLikelyVietnameseExplanation(nextExplanation) && !isLikelyChineseExplanation(nextExplanation);
+    const hasValidVietnamese = !isBlankText(nextExplanation) && !isLikelyChineseExplanation(nextExplanation) && (isLikelyVietnameseExplanation(nextExplanation) || hasLatinExplanationText(nextExplanation));
     const hasValidChinese = !isBlankText(nextExplanationCn) && hasCjkText(nextExplanationCn) && !isLikelyVietnameseExplanation(nextExplanationCn);
 
     const fields = [];
