@@ -88,15 +88,13 @@ async function callPdfImportAI(prompt, options) {
   const maxAttemptsPerModel = Math.max(1, Math.min(3, Number.parseInt(attemptsPerModel, 10) || 2));
   const models = [
     {
-      model: aiConfig.adminExam?.importModel || aiConfig.beeknoee.importModel,
-      fallbackModel: aiConfig.beeknoee.importModel,
+      model: aiConfig.adminExam?.importModel,
     },
     {
-      model: aiConfig.adminExam?.importFallbackModel || aiConfig.beeknoee.importFallbackModel,
-      fallbackModel: aiConfig.beeknoee.importFallbackModel || aiConfig.beeknoee.importModel,
+      model: aiConfig.adminExam?.importFallbackModel,
     },
   ].filter((item, index, all) => (
-    item.model && all.findIndex(other => other.model === item.model && other.fallbackModel === item.fallbackModel) === index
+    item.model && all.findIndex(other => other.model === item.model) === index
   ));
 
   let lastError = null;

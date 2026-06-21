@@ -24,7 +24,7 @@ const EXPLANATION_MAX_ITEMS = Number.parseInt(process.env.AI_EXAM_EXPLANATION_MA
 const REVIEW_APPLY_MIN_CONFIDENCE = Number.parseFloat(process.env.AI_EXAM_REVIEW_APPLY_MIN_CONFIDENCE || "0.75");
 
 function getReviewModel() {
-  return aiConfig.adminExam?.reviewModel || aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+  return aiConfig.adminExam?.reviewModel || "cx/gpt-5.5";
 }
 
 function getReviewModels() {
@@ -32,15 +32,11 @@ function getReviewModels() {
 }
 
 function getFixModel() {
-  return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
+  return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || "cx/gpt-5.5";
 }
 
 function getFixModels() {
   return aiConfig.adminExam?.fixModels?.length ? aiConfig.adminExam.fixModels : [getFixModel()];
-}
-
-function getReviewFallbackModel() {
-  return aiConfig.beeknoee.reviewModel || aiConfig.beeknoee.importModel;
 }
 
 function stringValue(value, fallback = "") {
@@ -964,7 +960,6 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
       const raw = await aiService.callAdminExamAI(prompt, {
         model,
         models: getReviewModels(),
-        fallbackModel: getReviewFallbackModel(),
         fallbackOnTimeout: false,
         temperature: 0.1,
         maxTokens: REVIEW_MAX_TOKENS,
@@ -1627,7 +1622,6 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
       const raw = await aiService.callAdminExamAI(buildDisplayFormatPrompt(batch, context), {
         model,
         models: getFixModels(),
-        fallbackModel: getReviewFallbackModel(),
         temperature: 0.03,
         maxTokens: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_TIMEOUT_MS || "120000", 10),
@@ -1716,7 +1710,6 @@ async function polishExplanationsWithAI(entries, context = {}) {
       const raw = await aiService.callAdminExamAI(buildPolishExplanationsPrompt(batch, context), {
         model,
         models: getFixModels(),
-        fallbackModel: getReviewFallbackModel(),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10),
@@ -1810,7 +1803,6 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       const raw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt(batch, context), {
         model,
         models: getFixModels(),
-        fallbackModel: getReviewFallbackModel(),
         temperature: 0.1,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || "5000", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
@@ -1855,7 +1847,6 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
             const retryRaw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt([entry], context), {
               model,
               models: getFixModels(),
-              fallbackModel: getReviewFallbackModel(),
               temperature: 0.1,
               maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1200", 10),
               timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
@@ -1974,7 +1965,6 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
       const raw = await aiService.callAdminExamAI(buildFixPrompt(batch, context), {
         model,
         models: getFixModels(),
-        fallbackModel: getReviewFallbackModel(),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
         timeout: Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10),

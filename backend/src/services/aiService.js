@@ -109,8 +109,7 @@ function isUsableAdminExamRouterModel(model) {
   if (!isNineRouterAdminExam()) return true;
 
   // This project wires admin exam AI to Codex/Antigravity accounts in 9router.
-  // Plain google/* models require separate Google API-key credentials in 9router;
-  // keep those for Beeknoee fallback instead of wasting a failed router call.
+  // Plain google/* models require separate Google API-key credentials in 9router.
   return value.startsWith('cx/') || value.startsWith('ag/');
 }
 
@@ -128,11 +127,13 @@ function getAdminExamModelCandidates(options = {}) {
   return [...new Set(candidates)];
 }
 
-function getAdminExamFallbackModel(options = {}) {
-  const model = options.fallbackModel || options.beeknoeeModel;
-  if (model) return model;
-  if (String(options.model || '').startsWith('ag/')) return BEE.importModel || BEE.model;
-  return options.model || BEE.importModel || BEE.model;
+function createAdminExamAIError(message = 'ADMIN_EXAM_AI_UNAVAILABLE', err) {
+  const error = new Error(message);
+  error.provider = ADMIN_EXAM_AI.provider || 'admin-exam-ai';
+  error.providerStatus = err?.providerStatus ?? err?.response?.status;
+  error.providerCode = err?.providerCode ?? err?.code;
+  error.providerMessage = err ? getProviderResponseMessage(err) : 'Admin exam AI provider is unavailable';
+  return error;
 }
 
 function getProviderResponseMessage(err) {
@@ -386,14 +387,20 @@ async function callBeeknoee(prompt, options = {}) {
 }
 
 async function callAdminExamAIMessages(messages, options = {}) {
-  const fallbackOptions = {
-    ...options,
-    model: getAdminExamFallbackModel(options),
-  };
   const modelCandidates = getAdminExamModelCandidates(options);
 
-  if (!isAdminExamProviderEnabled() || isAdminExamRateLimited()) {
-    return callBeeknoeeMessages(messages, fallbackOptions);
+  if (!isAdminExamProviderEnabled()) {
+    throw createAdminExamAIError('ADMIN_EXAM_AI_NOT_CONFIGURED');
+  }
+
+  if (isAdminExamRateLimited()) {
+    const error = createAdminExamAIError('ADMIN_EXAM_AI_RATE_LIMITED');
+    error.retryAfter = getAdminExamRateLimitRemaining();
+    throw error;
+  }
+
+  if (!modelCandidates.length) {
+    throw createAdminExamAIError('ADMIN_EXAM_AI_NO_USABLE_MODEL');
   }
 
   const {
@@ -404,6 +411,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
     signal,
   } = options;
   throwIfAborted(signal);
+  let lastError = null;
 
   for (const model of modelCandidates) {
     const keyCount = (ADMIN_EXAM_AI.apiKeys || []).filter(Boolean).length;
@@ -435,6 +443,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
           return text || JSON.stringify(response.data);
         });
       } catch (err) {
+        lastError = err;
         const status = err.response?.status;
         const message = getProviderResponseMessage(err);
         const keyLabel = keyInfo ? `key #${keyInfo.keyNumber}/${keyInfo.total}` : 'no key';
@@ -457,9 +466,9 @@ async function callAdminExamAIMessages(messages, options = {}) {
     }
   }
 
-  console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} exhausted model chain, falling back to Beeknoee.`);
+  console.warn(`${ADMIN_EXAM_AI.provider || 'Admin exam AI'} exhausted model chain; admin exam AI will not fall back to Beeknoee.`);
   setAdminExamRateLimit(ADMIN_EXAM_AI.backoffMs || aiConfig.general.globalBackoffMs);
-  return callBeeknoeeMessages(messages, fallbackOptions);
+  throw createAdminExamAIError('ADMIN_EXAM_AI_EXHAUSTED', lastError);
 }
 
 async function callAdminExamAI(prompt, options = {}) {

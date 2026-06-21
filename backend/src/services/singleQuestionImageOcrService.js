@@ -2,7 +2,6 @@ const aiService = require("./aiService");
 const aiConfig = require("../config/aiConfig");
 
 const IMAGE_OCR_MAX_TOKENS = 4500;
-const BEE = aiConfig.beeknoee;
 
 function cleanOcrText(value) {
   return String(value || "")
@@ -55,10 +54,9 @@ async function extractSingleQuestionImageOcrText(file, options = {}) {
     {
       temperature: 0,
       maxTokens: IMAGE_OCR_MAX_TOKENS,
-      model: aiConfig.adminExam?.ocrModel || BEE.ocrModel,
+      model: aiConfig.adminExam?.ocrModel,
       models: aiConfig.adminExam?.ocrModels,
-      fallbackModel: BEE.ocrModel,
-      timeout: aiConfig.adminExam?.ocrTimeout || BEE.ocrTimeout,
+      timeout: aiConfig.adminExam?.ocrTimeout,
       signal: options.signal,
     },
   );
