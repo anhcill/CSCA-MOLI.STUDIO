@@ -1143,7 +1143,6 @@ export default function AdminExamDetailPage() {
 
     const handleGenerateMissingExplanations = async () => {
         if (!exam?.id || generatingMissingExplanations) return;
-        if (!(await confirmRepeatAiAction('missing_explanations'))) return;
         if (!confirm('Cho AI thêm giải thích cho các câu đang trống? Hệ thống chỉ điền ô chưa có giải thích và lưu trực tiếp vào DB.')) return;
 
         try {

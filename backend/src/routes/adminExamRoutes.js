@@ -79,7 +79,7 @@ router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController
 router.post("/:examId/review-quality", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewExamQuality);
 router.post("/:examId/apply-ai-review-fixes", examWriteLimiter, examAiReviewCooldown, AdminExamController.applyExamReviewFixes);
 router.post("/:examId/apply-display-format-fixes", examWriteLimiter, examAiReviewCooldown, AdminExamController.applyExamDisplayFormatFixes);
-router.post("/:examId/generate-missing-explanations", examWriteLimiter, examAiReviewCooldown, AdminExamController.generateMissingExplanations);
+router.post("/:examId/generate-missing-explanations", examWriteLimiter, AdminExamController.generateMissingExplanations);
 router.post("/:examId/polish-explanations", examWriteLimiter, examAiReviewCooldown, AdminExamController.polishExplanations);
 
 // Question insertion at specific position

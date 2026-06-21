@@ -547,7 +547,7 @@ export const examAdminApi = {
 
     generateMissingExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
         const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, {}, {
-            timeout: 600000,
+            timeout: 1200000,
         });
         return response.data;
     },
