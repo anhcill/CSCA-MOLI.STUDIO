@@ -9,6 +9,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const aiConfig = require('../config/aiConfig');
+const { DEFAULT_SETTINGS, getSettings } = require('./siteSettingsService');
 
 // ─── Rate limiting (global, file-based) ─────────────────────────────────────────
 const RATE_LIMIT_FILE = path.join(__dirname, '../../.ai_ratelimit');
@@ -475,6 +476,130 @@ async function callAdminExamAI(prompt, options = {}) {
   return callAdminExamAIMessages([{ role: 'user', content: prompt }], options);
 }
 
+const PUBLIC_AI_SETTING_KEYS = [
+  'public_ai_provider',
+  'public_ai_9router_model',
+  'public_ai_beeknoee_model',
+  'public_ai_fallback_provider',
+];
+
+async function getPublicAISettings() {
+  try {
+    const settings = await getSettings(PUBLIC_AI_SETTING_KEYS);
+    return { ...DEFAULT_SETTINGS, ...settings };
+  } catch (error) {
+    console.warn('Public AI settings unavailable, using env/defaults:', error.message);
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function normalizeRuntimeProvider(provider, fallback = '9router') {
+  const value = String(provider || '').trim().toLowerCase();
+  return ['9router', 'beeknoee'].includes(value) ? value : fallback;
+}
+
+function getPublicAIModel(provider, settings) {
+  if (provider === '9router') {
+    return settings.public_ai_9router_model || process.env.PUBLIC_AI_9ROUTER_MODEL || DEFAULT_SETTINGS.public_ai_9router_model;
+  }
+  return settings.public_ai_beeknoee_model || process.env.PUBLIC_AI_BEEKNOEE_MODEL || BEE.model || DEFAULT_SETTINGS.public_ai_beeknoee_model;
+}
+
+function getPublicAIBaseUrl(provider) {
+  if (provider === '9router') return process.env.PUBLIC_AI_9ROUTER_BASE_URL || ADMIN_EXAM_AI.baseUrl || '';
+  return BEE.baseUrl;
+}
+
+function getPublicAIKey(provider) {
+  if (provider === '9router') return getNextAdminExamKey()?.key || '';
+  return getNextKey() || '';
+}
+
+async function getPublicAIRuntime(preferredProvider) {
+  const settings = await getPublicAISettings();
+  const primary = normalizeRuntimeProvider(
+    preferredProvider || settings.public_ai_provider || process.env.PUBLIC_AI_PROVIDER,
+    DEFAULT_SETTINGS.public_ai_provider,
+  );
+  const fallback = normalizeRuntimeProvider(
+    settings.public_ai_fallback_provider || process.env.PUBLIC_AI_FALLBACK_PROVIDER,
+    DEFAULT_SETTINGS.public_ai_fallback_provider,
+  );
+  return { primary, fallback, settings };
+}
+
+function createPublicAIProviderError(provider, err, fallbackMessage = 'AI_PROVIDER_ERROR') {
+  const error = new Error(fallbackMessage);
+  error.provider = provider;
+  error.providerStatus = err?.providerStatus ?? err?.response?.status;
+  error.providerCode = err?.providerCode ?? err?.code;
+  error.providerMessage = err ? getProviderResponseMessage(err) : `${provider} provider is unavailable`;
+  return error;
+}
+
+async function callOpenAICompatibleMessages(provider, messages, options, settings) {
+  const {
+    maxTokens = BEE.maxTokens,
+    temperature = BEE.temperature,
+    timeout = provider === '9router' ? (ADMIN_EXAM_AI.timeout || BEE.timeout) : BEE.timeout,
+    signal,
+  } = options || {};
+  const model = options?.model || getPublicAIModel(provider, settings);
+  const baseUrl = getPublicAIBaseUrl(provider);
+  const apiKey = getPublicAIKey(provider);
+
+  if (!baseUrl || !apiKey) throw createPublicAIProviderError(provider, null, 'PUBLIC_AI_NOT_CONFIGURED');
+
+  throwIfAborted(signal);
+  const response = await axios.post(
+    getChatCompletionsUrl(baseUrl),
+    { model, messages, max_tokens: maxTokens, temperature },
+    {
+      timeout,
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+    },
+  );
+  const text = extractOpenAICompatibleText(response.data);
+  return text || JSON.stringify(response.data);
+}
+
+async function callPublicAIMessages(messages, options = {}) {
+  if (isRateLimited()) {
+    const e = new Error('RATE_LIMITED');
+    e.retryAfter = getRateLimitRemaining();
+    throw e;
+  }
+
+  await waitBetweenRequests();
+  const runtime = await getPublicAIRuntime(options.provider);
+  const providers = [...new Set([runtime.primary, runtime.fallback].filter(Boolean))];
+  let lastError = null;
+
+  for (const provider of providers) {
+    try {
+      return await withConcurrency(() => callOpenAICompatibleMessages(provider, messages, options, runtime.settings));
+    } catch (err) {
+      lastError = err;
+      if (isAbortError(err, options.signal)) throwIfAborted(options.signal);
+      if (err.response?.status === 429 && provider === 'beeknoee') {
+        currentKeyIndex++;
+        setRateLimit(aiConfig.general.globalBackoffMs);
+      }
+      console.warn(`Public AI ${provider} failed, trying fallback if available:`, getProviderResponseMessage(err));
+    }
+  }
+
+  throw createPublicAIProviderError(runtime.primary, lastError);
+}
+
+async function callPublicAI(prompt, options = {}) {
+  return callPublicAIMessages([{ role: 'user', content: prompt }], options);
+}
+
 // ─── Parse JSON từ AI response ────────────────────────────────────────────────
 function getAnswerText(options, key) {
   if (!options || !key) return '';
@@ -888,7 +1013,7 @@ TRẢ VỀ JSON:
   ]
 }`;
 
-    const raw = await callBeeknoee(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800 });
+    const raw = await callPublicAI(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800 });
     const ai = parseAIMaybeJSON(raw);
     return normalizeExplanationResult(ai, batch).explanations;
   }
@@ -1189,7 +1314,7 @@ async function askAI(question, context = {}) {
   const prompt = buildAIChatPrompt(question, context);
 
   try {
-    const response = await callBeeknoeeMessages(
+    const response = await callPublicAIMessages(
       [buildVisionUserMessage(prompt, context.imageDataUrl)],
       { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
     );
@@ -1429,6 +1554,21 @@ async function generateDailyGiftLetter(giftDate, context = {}) {
 
 async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
+
+  try {
+    const answer = await callPublicAIMessages(
+      [buildVisionUserMessage(prompt, context.imageDataUrl)],
+      { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
+    );
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+    return;
+  } catch (err) {
+    console.error('Public AI stream failed:', err.message);
+    writeAIStreamPublicError(res, getPublicAIErrorMessage(err));
+    return;
+  }
 
   if (isRateLimited()) {
     writeAIStreamPublicError(res, PUBLIC_AI_BUSY_MESSAGE);
@@ -1926,7 +2066,7 @@ JSON schema:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
+    const raw = await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');

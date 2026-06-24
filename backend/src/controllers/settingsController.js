@@ -1,68 +1,95 @@
-const db = require("../config/database");
-const { authenticate, authorize } = require("../middleware/authMiddleware");
+const {
+  DEFAULT_SETTINGS,
+  ensureSettingsTable,
+  getSettings,
+  updateSettings: saveSettings,
+} = require("../services/siteSettingsService");
 
-/**
- * Đảm bảo bảng site_settings tồn tại + insert defaults nếu chưa có.
- * Được gọi 1 lần khi controller load.
- */
-const initSettings = (async () => {
-    try {
-        await db.query(`
-      CREATE TABLE IF NOT EXISTS site_settings (
-        key        TEXT PRIMARY KEY,
-        value      TEXT NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-        await db.query(`
-      INSERT INTO site_settings (key, value) VALUES
-        ('exam_date', '2026-06-10T08:00:00')
-      ON CONFLICT (key) DO NOTHING
-    `);
-    } catch (e) {
-        console.error("initSettings error:", e.message);
-    }
-})();
+const PUBLIC_KEYS = ["exam_date"];
+const ADMIN_KEYS = [
+  "exam_date",
+  "public_ai_provider",
+  "public_ai_9router_model",
+  "public_ai_beeknoee_model",
+  "public_ai_fallback_provider",
+];
 
-/** GET /api/settings/public — Public */
+ensureSettingsTable().catch((error) => {
+  console.error("initSettings error:", error.message);
+});
+
+function normalizeProvider(value, fallback = "9router") {
+  const provider = String(value || "").trim().toLowerCase();
+  return ["9router", "beeknoee"].includes(provider) ? provider : fallback;
+}
+
+function normalizeModel(value, fallback) {
+  const model = String(value || "").trim();
+  return model || fallback;
+}
+
 async function getPublicSettings(req, res) {
-    try {
-        const { rows } = await db.query(
-            "SELECT key, value FROM site_settings WHERE key = ANY($1)",
-            [["exam_date"]],
-        );
-        const data = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-        res.json({ success: true, data });
-    } catch (e) {
-        res.status(500).json({ success: false, message: "Lỗi server" });
-    }
+  try {
+    const data = await getSettings(PUBLIC_KEYS);
+    res.json({ success: true, data: { exam_date: data.exam_date } });
+  } catch (e) {
+    res.status(500).json({ success: false, message: "Loi server" });
+  }
 }
 
-/** PUT /api/admin/settings — Admin only */
+async function getAdminSettings(req, res) {
+  try {
+    const data = await getSettings(ADMIN_KEYS);
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: "Loi server" });
+  }
+}
+
 async function updateSettings(req, res) {
-    try {
-        const { exam_date } = req.body;
-        if (!exam_date) {
-            return res.status(400).json({ success: false, message: "Thiếu exam_date" });
-        }
+  try {
+    const next = {};
 
-        // Validate datetime string
-        if (isNaN(Date.parse(exam_date))) {
-            return res.status(400).json({ success: false, message: "exam_date không hợp lệ" });
-        }
-
-        await db.query(
-            `INSERT INTO site_settings (key, value, updated_at)
-       VALUES ('exam_date', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-            [exam_date],
-        );
-
-        res.json({ success: true, message: "Cập nhật thành công", data: { exam_date } });
-    } catch (e) {
-        console.error("updateSettings error:", e.message);
-        res.status(500).json({ success: false, message: "Lỗi server" });
+    if (req.body.exam_date !== undefined) {
+      if (!req.body.exam_date) {
+        return res.status(400).json({ success: false, message: "Thieu exam_date" });
+      }
+      if (Number.isNaN(Date.parse(req.body.exam_date))) {
+        return res.status(400).json({ success: false, message: "exam_date khong hop le" });
+      }
+      next.exam_date = req.body.exam_date;
     }
+
+    if (req.body.public_ai_provider !== undefined) {
+      next.public_ai_provider = normalizeProvider(req.body.public_ai_provider);
+    }
+    if (req.body.public_ai_fallback_provider !== undefined) {
+      next.public_ai_fallback_provider = normalizeProvider(req.body.public_ai_fallback_provider, "beeknoee");
+    }
+    if (req.body.public_ai_9router_model !== undefined) {
+      next.public_ai_9router_model = normalizeModel(
+        req.body.public_ai_9router_model,
+        DEFAULT_SETTINGS.public_ai_9router_model,
+      );
+    }
+    if (req.body.public_ai_beeknoee_model !== undefined) {
+      next.public_ai_beeknoee_model = normalizeModel(
+        req.body.public_ai_beeknoee_model,
+        DEFAULT_SETTINGS.public_ai_beeknoee_model,
+      );
+    }
+
+    if (!Object.keys(next).length) {
+      return res.status(400).json({ success: false, message: "Khong co cai dat can luu" });
+    }
+
+    await saveSettings(next);
+    const data = await getSettings(ADMIN_KEYS);
+    res.json({ success: true, message: "Cap nhat thanh cong", data });
+  } catch (e) {
+    console.error("updateSettings error:", e.message);
+    res.status(500).json({ success: false, message: "Loi server" });
+  }
 }
 
-module.exports = { getPublicSettings, updateSettings };
+module.exports = { getPublicSettings, getAdminSettings, updateSettings };

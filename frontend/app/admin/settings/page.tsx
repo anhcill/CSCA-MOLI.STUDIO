@@ -1,12 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { FiSave, FiSettings, FiCalendar, FiCheckCircle } from 'react-icons/fi';
+import { FiCalendar, FiCheckCircle, FiCpu, FiSave, FiSettings } from 'react-icons/fi';
 import axiosInstance from '@/lib/utils/axios';
 
+type Provider = '9router' | 'beeknoee';
+
+interface SettingsData {
+    exam_date?: string;
+    public_ai_provider?: Provider;
+    public_ai_9router_model?: string;
+    public_ai_beeknoee_model?: string;
+    public_ai_fallback_provider?: Provider;
+}
+
+const DEFAULT_SETTINGS: Required<SettingsData> = {
+    exam_date: '',
+    public_ai_provider: '9router',
+    public_ai_9router_model: 'ag/claude-sonnet-4-6',
+    public_ai_beeknoee_model: 'gpt-5.4-mini',
+    public_ai_fallback_provider: 'beeknoee',
+};
+
 export default function AdminSettingsPage() {
-    const [examDate, setExamDate] = useState('');
+    const [settings, setSettings] = useState<Required<SettingsData>>(DEFAULT_SETTINGS);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
@@ -15,20 +33,28 @@ export default function AdminSettingsPage() {
         loadSettings();
     }, []);
 
+    const patchSettings = (patch: Partial<SettingsData>) => {
+        setSettings((current) => ({ ...current, ...patch }));
+    };
+
+    const toDateTimeLocal = (value?: string) => {
+        if (!value) return '';
+        const dateObj = new Date(value);
+        if (Number.isNaN(dateObj.getTime())) return '';
+        const tzOffset = dateObj.getTimezoneOffset() * 60000;
+        return new Date(dateObj.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
+
     const loadSettings = async () => {
         try {
             setLoading(true);
-            const res = await axiosInstance.get('/settings/public');
-            if (res.data?.success && res.data?.data?.exam_date) {
-                // Parse date to datetime-local format format for input: YYYY-MM-DDTHH:mm
-                const dateObj = new Date(res.data.data.exam_date);
-                if (!isNaN(dateObj.getTime())) {
-                    // Adjust to local timezone string
-                    const tzOffset = dateObj.getTimezoneOffset() * 60000;
-                    const localISOTime = (new Date(dateObj.getTime() - tzOffset)).toISOString().slice(0, 16);
-                    setExamDate(localISOTime);
-                }
-            }
+            const res = await axiosInstance.get('/settings');
+            const data = res.data?.data || {};
+            setSettings({
+                ...DEFAULT_SETTINGS,
+                ...data,
+                exam_date: toDateTimeLocal(data.exam_date),
+            });
         } catch (error) {
             console.error('Error loading settings:', error);
         } finally {
@@ -37,22 +63,26 @@ export default function AdminSettingsPage() {
     };
 
     const handleSave = async () => {
-        if (!examDate) {
+        if (!settings.exam_date) {
             alert('Vui lòng chọn ngày!');
             return;
         }
-        
+
         try {
             setSaving(true);
             setSuccessMessage('');
-            
-            // Convert back to UTC string format matching original backend expectations
-            const dateObj = new Date(examDate);
-            const isoString = dateObj.toISOString();
-
-            const res = await axiosInstance.put('/settings', { exam_date: isoString });
+            const res = await axiosInstance.put('/settings', {
+                ...settings,
+                exam_date: new Date(settings.exam_date).toISOString(),
+            });
             if (res.data?.success) {
                 setSuccessMessage('Cập nhật cài đặt thành công!');
+                const data = res.data.data || {};
+                setSettings((current) => ({
+                    ...current,
+                    ...data,
+                    exam_date: toDateTimeLocal(data.exam_date || current.exam_date),
+                }));
                 setTimeout(() => setSuccessMessage(''), 3000);
             }
         } catch (error: any) {
@@ -66,73 +96,126 @@ export default function AdminSettingsPage() {
     return (
         <AdminLayout
             title="Cấu hình hệ thống"
-            description="Quản lý các cài đặt chung cho toàn hệ thống"
+            description="Quản lý cài đặt chung và AI public"
         >
-            <div className="max-w-3xl space-y-6">
+            <div className="max-w-4xl space-y-6">
                 {successMessage && (
-                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
                         <FiCheckCircle size={20} />
-                        <span className="font-medium text-sm">{successMessage}</span>
+                        <span className="text-sm font-medium">{successMessage}</span>
                     </div>
                 )}
-                
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 overflow-hidden shadow-sm">
-                    <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400">
-                                <FiSettings size={20} />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Cài đặt chung</h2>
-                                <p className="text-xs text-gray-500 dark:text-slate-400">Thiết lập các mốc thời gian quan trọng</p>
-                            </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400">
+                            <FiSettings size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Cài đặt chung</h2>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">Mốc thời gian hiển thị trên website</p>
                         </div>
                     </div>
-                    
+
                     <div className="p-6">
                         {loading ? (
-                            <div className="animate-pulse space-y-4">
-                                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/4"></div>
-                                <div className="h-12 bg-slate-200 dark:bg-slate-800 rounded w-full max-w-sm"></div>
+                            <div className="space-y-4">
+                                <div className="h-4 w-1/4 rounded bg-slate-200 dark:bg-slate-800" />
+                                <div className="h-12 w-full max-w-sm rounded bg-slate-200 dark:bg-slate-800" />
                             </div>
                         ) : (
-                            <div className="space-y-6">
-                                {/* Exam Date Setting */}
-                                <div className="flex flex-col sm:flex-row gap-6 items-start">
-                                    <div className="flex-1 max-w-sm">
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 gap-2 items-center flex mb-2">
-                                            <FiCalendar className="text-violet-500" />
-                                            Ngày đếm ngược kỳ thi
-                                        </label>
-                                        <p className="text-xs text-gray-500 dark:text-slate-500 mb-3">
-                                            Mốc thời gian này sẽ được hiển thị trên đồng hồ đếm ngược ở trang web (ví dụ: ngày thi Gaokao/HSK).
-                                        </p>
-                                        <input
-                                            type="datetime-local"
-                                            value={examDate}
-                                            onChange={(e) => setExamDate(e.target.value)}
-                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-800 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-violet-500 outline-none transition-shadow"
-                                        />
-                                    </div>
-                                </div>
+                            <div className="max-w-sm">
+                                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-slate-300">
+                                    <FiCalendar className="text-violet-500" />
+                                    Ngày đếm ngược kỳ thi
+                                </label>
+                                <input
+                                    type="datetime-local"
+                                    value={settings.exam_date}
+                                    onChange={(event) => patchSettings({ exam_date: event.target.value })}
+                                    className="w-full rounded-lg bg-gray-50 px-4 py-3 text-sm font-medium outline-none ring-1 ring-transparent transition focus:ring-2 focus:ring-violet-500 dark:bg-slate-800"
+                                />
                             </div>
                         )}
-                        
                     </div>
-                    <div className="px-6 py-4 bg-gray-50 dark:bg-slate-800/50 border-t border-gray-200 dark:border-slate-800 flex justify-end">
-                        <button
-                            onClick={handleSave}
-                            disabled={loading || saving}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold rounded-xl shadow-lg hover:shadow-violet-500/25 transition-all disabled:opacity-50"
-                        >
-                            {saving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <FiSave size={18} />
-                            )}
-                            {saving ? 'Đang lưu...' : 'Lưu cài đặt'}
-                        </button>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400">
+                            <FiCpu size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI người dùng</h2>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">Đổi nhanh giữa 9Router và Beeknoee khi cần chữa cháy</p>
+                        </div>
                     </div>
+
+                    <div className="grid gap-5 p-6 md:grid-cols-2">
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Provider đang dùng</span>
+                            <select
+                                value={settings.public_ai_provider}
+                                onChange={(event) => patchSettings({ public_ai_provider: event.target.value as Provider })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                <option value="9router">9Router production</option>
+                                <option value="beeknoee">Beeknoee fallback</option>
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Fallback provider</span>
+                            <select
+                                value={settings.public_ai_fallback_provider}
+                                onChange={(event) => patchSettings({ public_ai_fallback_provider: event.target.value as Provider })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                <option value="beeknoee">Beeknoee</option>
+                                <option value="9router">9Router</option>
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model</span>
+                            <select
+                                value={settings.public_ai_9router_model}
+                                onChange={(event) => patchSettings({ public_ai_9router_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                <option value="ag/claude-sonnet-4-6">ag/claude-sonnet-4-6</option>
+                                <option value="cx/gpt-5.4-mini">cx/gpt-5.4-mini</option>
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Beeknoee model</span>
+                            <select
+                                value={settings.public_ai_beeknoee_model}
+                                onChange={(event) => patchSettings({ public_ai_beeknoee_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                <option value="gpt-5.4-mini">gpt-5.4-mini</option>
+                                <option value="google/gemini-3.1-pro-preview">google/gemini-3.1-pro-preview</option>
+                                <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="flex justify-end">
+                    <button
+                        onClick={handleSave}
+                        disabled={loading || saving}
+                        className="flex items-center gap-2 rounded-lg bg-violet-600 px-6 py-2.5 font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50"
+                    >
+                        {saving ? (
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        ) : (
+                            <FiSave size={18} />
+                        )}
+                        {saving ? 'Đang lưu...' : 'Lưu cài đặt'}
+                    </button>
                 </div>
             </div>
         </AdminLayout>

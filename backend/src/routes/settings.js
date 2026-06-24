@@ -1,15 +1,20 @@
 const express = require("express");
 const router = express.Router();
-const { getPublicSettings, updateSettings } = require("../controllers/settingsController");
+const { getPublicSettings, getAdminSettings, updateSettings } = require("../controllers/settingsController");
 const {
 	authenticate,
 	authorizePermission,
 } = require("../middleware/authMiddleware");
 
-// GET /api/settings/public — Public
 router.get("/public", getPublicSettings);
 
-// PUT /api/settings — Admin only
+router.get(
+	"/",
+	authenticate,
+	authorizePermission("system.manage"),
+	getAdminSettings,
+);
+
 router.put(
 	"/",
 	authenticate,
