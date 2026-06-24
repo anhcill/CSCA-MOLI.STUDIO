@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect, type ClipboardEvent } from 'react';
 import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZap, FiChevronRight, FiImage, FiX } from 'react-icons/fi';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIFormattedText from '@/components/ai/AIFormattedText';
+import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
 import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 
 interface Message {
@@ -46,19 +47,24 @@ function sanitizeAIUserError(value: unknown, fallback = 'AI đang gặp lỗi kh
     return message;
 }
 
-function ThinkingDots({ label = 'AI đang đọc bài và chuẩn bị trả lời...' }: { label?: string }) {
+function ThinkingDots({ label }: { label?: string }) {
+    const [message] = useState(() => label || pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
     return (
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-violet-100 bg-gradient-to-r from-violet-50 to-fuchsia-50 px-3 py-2 shadow-sm">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-base shadow-sm">
+                🤖
             </div>
-            <span className="min-w-0 text-xs text-gray-500 sm:text-sm">{label}</span>
+            <div className="min-w-0">
+                <span className="block truncate text-xs font-bold text-violet-700 sm:text-sm">{message}</span>
+                <div className="mt-1 flex gap-1.5">
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" style={{ animationDelay: '0ms' }} />
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-fuchsia-400" style={{ animationDelay: '150ms' }} />
+                    <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-400" style={{ animationDelay: '300ms' }} />
+                </div>
+            </div>
         </div>
     );
 }
-
 export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -476,3 +482,4 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         </div>
     );
 }
+

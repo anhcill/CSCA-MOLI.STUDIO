@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -15,6 +15,7 @@ import RichMathText from '@/components/common/RichMathText';
 import AIFormattedText from '@/components/ai/AIFormattedText';
 import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
+import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
 
 const AI_ANALYSIS_COST = 50;
 
@@ -1021,56 +1022,52 @@ function LessonLoading() {
 }
 
 function AIStepLoading({ title, steps, tone }: { title: string; steps: string[]; tone: 'purple' | 'indigo' }) {
+  const [cuteMessage] = useState(() => pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
   const colors = {
     purple: {
-      iconBg: 'bg-purple-50',
-      spinner: 'border-purple-200 border-t-purple-600',
-      row: 'border-purple-100 bg-purple-50/60',
-      number: 'text-purple-600',
-      track: 'bg-purple-100',
-      bar: 'bg-purple-500',
-      label: 'text-purple-700',
+      iconBg: 'from-violet-50 via-purple-50 to-fuchsia-50',
+      iconText: 'text-violet-700',
+      track: 'bg-violet-100',
+      bar: 'from-violet-500 via-fuchsia-500 to-sky-400',
+      label: 'text-violet-700',
+      ring: 'ring-violet-100',
     },
     indigo: {
-      iconBg: 'bg-indigo-50',
-      spinner: 'border-indigo-200 border-t-indigo-600',
-      row: 'border-indigo-100 bg-indigo-50/60',
-      number: 'text-indigo-600',
+      iconBg: 'from-indigo-50 via-violet-50 to-sky-50',
+      iconText: 'text-indigo-700',
       track: 'bg-indigo-100',
-      bar: 'bg-indigo-500',
+      bar: 'from-indigo-500 via-violet-500 to-sky-400',
       label: 'text-indigo-700',
+      ring: 'ring-indigo-100',
     },
   }[tone];
 
   return (
-    <div className="py-8" aria-live="polite">
-      <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${colors.iconBg}`}>
-        <div className={`h-8 w-8 animate-spin rounded-full border-[3px] ${colors.spinner}`} />
+    <div className={`rounded-3xl border border-white bg-gradient-to-b ${colors.iconBg} px-4 py-8 shadow-sm ring-1 ${colors.ring}`} aria-live="polite">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-3xl shadow-lg ring-1 ring-white/80">
+        🤖
       </div>
-      <p className="text-center text-sm font-semibold text-gray-700">
-        {title}<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
-      </p>
-      <div className="mx-auto mt-5 max-w-sm space-y-2">
+      <p className={`text-center text-base font-black sm:text-lg ${colors.iconText}`}>{cuteMessage}</p>
+      <p className="mx-auto mt-2 max-w-sm text-center text-sm font-semibold text-slate-600">{title}</p>
+      <div className="mx-auto mt-6 max-w-md space-y-3">
         {steps.map((step, index) => (
-          <div key={step} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${colors.row}`}>
-            <span className={`flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-black shadow-sm ${colors.number}`}>
+          <div key={step} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-2xl border border-white bg-white/85 px-3 py-3 shadow-sm">
+            <span className={`flex h-8 w-8 items-center justify-center rounded-2xl bg-white text-xs font-black shadow-sm ${colors.label}`}>
               {index + 1}
             </span>
-            <div className={`h-2 flex-1 overflow-hidden rounded-full ${colors.track}`}>
+            <div className={`h-2.5 overflow-hidden rounded-full ${colors.track}`}>
               <div
-                className={`h-full rounded-full ${colors.bar}`}
-                style={{ width: `${35 + index * 25}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
+                className={`h-full rounded-full bg-gradient-to-r ${colors.bar}`}
+                style={{ width: `${38 + index * 24}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
               />
             </div>
-            <span className={`w-28 text-xs font-bold ${colors.label}`}>{step}</span>
+            <span className={`min-w-[6.5rem] text-xs font-black ${colors.label}`}>{step}</span>
           </div>
         ))}
       </div>
     </div>
   );
 }
-
-// ─── Grade Essay Modal ──────────────────────────────────────────────────────────────
 function GradeEssayModal({ question, attemptId, onClose }: {
   question: QuestionResult; attemptId: number; onClose: () => void;
 }) {
@@ -1426,3 +1423,4 @@ export default function ExamResultPage() {
     </Suspense>
   );
 }
+

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -17,6 +17,7 @@ import AIFormattedText from '@/components/ai/AIFormattedText';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
+import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
 
 const AI_ANALYSIS_COST = 50;
 
@@ -690,40 +691,45 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     );
 }
 
-function QuestionAnalysisLoading() {
-    const steps = ['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích'];
+function QuestionAnalysisLoading({ mode = 'explain' }: { mode?: ReviewAIMode }) {
+    const [cuteMessage] = useState(() => pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
+    const steps = mode === 'theory'
+        ? ['Tìm điểm kiến thức', 'Kiểm tra ví dụ', 'Soạn mẹo dễ nhớ']
+        : ['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích'];
+    const subtitle = mode === 'theory'
+        ? 'AI đang gom ý chính, ví dụ và mẹo nhớ cho bài học này.'
+        : 'AI đang đọc lại đề, đáp án và soạn lời giải dễ hiểu.';
+
     return (
-        <div className="rounded-2xl border border-violet-100 bg-gradient-to-b from-violet-50 to-white px-4 py-8">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-lg shadow-violet-100">
-                <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-violet-100 border-t-violet-600" />
+        <div className="rounded-3xl border border-violet-100 bg-gradient-to-b from-white via-violet-50/80 to-fuchsia-50/70 px-4 py-7 shadow-sm sm:px-6">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-3xl shadow-lg shadow-violet-100 ring-1 ring-violet-100">
+                🤖
             </div>
-            <p className="text-center text-sm font-black text-slate-800">
-                AI đang phân tích câu này<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
+            <p className="text-center text-base font-black text-violet-800 sm:text-lg">
+                {cuteMessage}
             </p>
-            <p className="mx-auto mt-1 max-w-xs text-center text-xs font-medium text-slate-500">
-                AI đang đọc lại đề, đáp án và soạn lời giải dễ hiểu.
+            <p className="mx-auto mt-2 max-w-sm text-center text-sm font-semibold text-slate-600">
+                {subtitle}
             </p>
-            <div className="mx-auto mt-5 max-w-md space-y-2.5">
+            <div className="mx-auto mt-6 max-w-md space-y-3">
                 {steps.map((step, index) => (
-                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-violet-100 bg-white/80 px-3 py-2.5 shadow-sm">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-black text-violet-700">
+                    <div key={step} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-2xl border border-white bg-white/85 px-3 py-3 shadow-sm shadow-violet-100/60 ring-1 ring-violet-100/70">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-xs font-black text-violet-700 shadow-sm">
                             {index + 1}
                         </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-violet-100">
+                        <div className="h-2.5 overflow-hidden rounded-full bg-violet-100">
                             <div
-                                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                                style={{ width: `${35 + index * 25}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
+                                className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-400"
+                                style={{ width: `${38 + index * 24}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
                             />
                         </div>
-                        <span className="w-28 text-xs font-bold text-violet-700">{step}</span>
+                        <span className="min-w-[6.5rem] text-xs font-black text-violet-700">{step}</span>
                     </div>
                 ))}
             </div>
         </div>
     );
 }
-
-// ─── AI Explanation Modal ──────────────────────────────────────────────────────
 function ExplanationModal({ question, mode, attemptId, onClose }: { question: QuestionResult; mode: ReviewAIMode; attemptId: number; onClose: () => void }) {
     const { pick } = useLanguage();
     const [explanation, setExplanation] = useState<any>(null);
@@ -826,7 +832,7 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                     </div>
 
                     {loading ? (
-                        <QuestionAnalysisLoading />
+                        <QuestionAnalysisLoading mode={mode} />
                     ) : explanation?.success ? (
                         <div className="space-y-4">
                             <div className="rounded-2xl border border-violet-200 bg-gradient-to-b from-violet-50 to-white p-4 shadow-sm sm:p-5">
@@ -881,3 +887,4 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
         </div>
     );
 }
+
