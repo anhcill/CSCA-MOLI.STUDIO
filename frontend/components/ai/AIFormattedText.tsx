@@ -19,6 +19,42 @@ function stripInlineMarkdown(value: string) {
     .trim();
 }
 
+function stripLooseMarkdown(value: string) {
+  return value
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/\*\*+/g, '')
+    .replace(/__+/g, '')
+    .replace(/(^|\s)#+\s*/g, '$1')
+    .trim();
+}
+
+function isSeparatorLine(value: string) {
+  const text = value.replace(/\s+/g, '');
+  return /^[-–—_]{3,}$/.test(text) || /^[−-]{3,}$/.test(text);
+}
+
+function normalizeLooseLatexCommands(value: string) {
+  return value
+    .replace(/\\to\b/g, '→')
+    .replace(/\\leq?\b/g, '≤')
+    .replace(/\\geq?\b/g, '≥')
+    .replace(/\\ne(q)?\b/g, '≠')
+    .replace(/\\in\b/g, '∈')
+    .replace(/\\mathbb\{Z\}/g, 'ℤ')
+    .replace(/\\mathbb\{R\}/g, 'ℝ')
+    .replace(/\\mathbb\{N\}/g, 'ℕ');
+}
+
+function cleanupAIMarkup(value: string) {
+  return normalizeLooseLatexCommands(stripLooseMarkdown(value))
+    .replace(/\$\$+/g, '')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\(\s*([A-Za-z])\s*\)/g, '($1)')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function hasMathSignal(value: string) {
   return /(\\\(|\\\[|\\\{|\\frac|\\sqrt|\\sum|\\int|\\cup|\\cap|\\setminus|\\ne|\\le|\\ge|[$=<>^_{}])/.test(value);
 }
@@ -77,7 +113,7 @@ export function normalizeAIFormattedText(value: string) {
   };
 
   for (const rawLine of lines) {
-    const line = normalizeCommonMathOcr(rawLine.trim());
+    const line = cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trim()));
     const fence = line.match(/^(```|~~~)/);
 
     if (fence) {
@@ -92,7 +128,7 @@ export function normalizeAIFormattedText(value: string) {
       continue;
     }
 
-    if (!line) {
+    if (!line || isSeparatorLine(line)) {
       if (pendingBullet) continue;
       if (out.length > 0 && out[out.length - 1] !== '') out.push('');
       continue;
@@ -141,10 +177,13 @@ export function normalizeAIFormattedText(value: string) {
       continue;
     }
 
-    out.push(formatLeadingLabel(normalizeCommonMathOcr(rawLine.trimEnd())));
+    out.push(formatLeadingLabel(cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trimEnd()))));
   }
 
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out.join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/([^\n])\n(→\s*)/g, '$1\n\n$2')
+    .trim();
 }
 
 export default function AIFormattedText({ value, className = '' }: AIFormattedTextProps) {

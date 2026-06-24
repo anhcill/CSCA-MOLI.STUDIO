@@ -116,7 +116,7 @@ const REVIEW_AI_ACCURACY_RULE =
   'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
 
 const REVIEW_AI_FORMAT_RULE =
-  String.raw`Dinh dang cong thuc bang LaTeX: viet \(\sqrt{\pi}\), \(\log_{\pi} x\), \(e \approx 2{,}718\), \(\pi \approx 3{,}1416\). Khong viet Vpi/Vπ, log_πx, 3{,}14 ngoai LaTeX. Moi y giai thich nen la mot cau ro rang, khong tach cong thuc thanh bullet rieng neu lam mat nghia.`;
+  String.raw`FORMAT BAT BUOC: Khong dung **bold**, ###, ---/___, $$ hoac markdown phuc tap. Cong thuc Toan/Khoa hoc chi viet inline bang \(...\), vi du \(2^5=32\), \(|x|<3\), \(x\in\mathbb{Z}\). Khong de cong thuc bi tach thanh tung ky tu/tung dong. Neu can nhan manh, viet tieu de plain text nhu "Buoc 1: ..." hoac "Luu y: ...". Dung ky hieu →, ≤, ≥, ∈ trong van ban thuong; khong viet \to ngoai LaTeX. Tra loi gon thanh 3-5 muc: ket luan, cach lam, vi sao sai/dung, meo nho.`;
 
 function buildQuestionExplanationPrompt(question: QuestionResult) {
   const questionNo = question.sub_question_number || question.question_number;

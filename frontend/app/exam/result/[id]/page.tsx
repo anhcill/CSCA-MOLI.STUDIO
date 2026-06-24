@@ -108,7 +108,7 @@ const REVIEW_AI_ACCURACY_RULE =
     'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
 
 const REVIEW_AI_FORMAT_RULE =
-    String.raw`Dinh dang cong thuc bang LaTeX: viet \(\sqrt{\pi}\), \(\log_{\pi} x\), \(e \approx 2{,}718\), \(\pi \approx 3{,}1416\). Khong viet Vpi/Vπ, log_πx, 3{,}14 ngoai LaTeX. Moi y giai thich nen la mot cau ro rang, khong tach cong thuc thanh bullet rieng neu lam mat nghia.`;
+    String.raw`FORMAT BAT BUOC: Khong dung **bold**, ###, ---/___, $$ hoac markdown phuc tap. Cong thuc Toan/Khoa hoc chi viet inline bang \(...\), vi du \(2^5=32\), \(|x|<3\), \(x\in\mathbb{Z}\). Khong de cong thuc bi tach thanh tung ky tu/tung dong. Neu can nhan manh, viet tieu de plain text nhu "Buoc 1: ..." hoac "Luu y: ...". Dung ky hieu →, ≤, ≥, ∈ trong van ban thuong; khong viet \to ngoai LaTeX. Tra loi gon thanh 3-5 muc: ket luan, cach lam, vi sao sai/dung, meo nho.`;
 
 function buildQuestionExplanationPrompt(question: QuestionResult, questionText: string) {
     const questionNo = question.sub_question_number || question.question_number;
@@ -149,6 +149,7 @@ function buildQuestionTheoryPrompt(question: QuestionResult, questionText: strin
         learnerState,
         `Đáp án đúng: ${correctAnswer}`,
         REVIEW_AI_ACCURACY_RULE,
+        REVIEW_AI_FORMAT_RULE,
         'Hãy giảng lại lý thuyết liên quan trực tiếp tới câu này.',
         'Trả lời bằng tiếng Việt có dấu, gồm: kiến thức trọng tâm, cách nhận biết, ví dụ ngắn, lỗi dễ nhầm, mẹo nhớ.',
     ].filter(Boolean).join('\n');
@@ -692,26 +693,29 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 function QuestionAnalysisLoading() {
     const steps = ['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích'];
     return (
-        <div className="py-8">
-            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50">
-                <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-purple-200 border-t-purple-600" />
+        <div className="rounded-2xl border border-violet-100 bg-gradient-to-b from-violet-50 to-white px-4 py-8">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-lg shadow-violet-100">
+                <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-violet-100 border-t-violet-600" />
             </div>
-            <p className="text-center text-sm font-semibold text-gray-700">
+            <p className="text-center text-sm font-black text-slate-800">
                 AI đang phân tích câu này<span className="inline-flex w-6 justify-start"><span className="animate-pulse">...</span></span>
             </p>
-            <div className="mx-auto mt-5 max-w-sm space-y-2">
+            <p className="mx-auto mt-1 max-w-xs text-center text-xs font-medium text-slate-500">
+                AI đang đọc lại đề, đáp án và soạn lời giải dễ hiểu.
+            </p>
+            <div className="mx-auto mt-5 max-w-md space-y-2.5">
                 {steps.map((step, index) => (
-                    <div key={step} className="flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/60 px-3 py-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-black text-purple-600 shadow-sm">
+                    <div key={step} className="flex items-center gap-3 rounded-2xl border border-violet-100 bg-white/80 px-3 py-2.5 shadow-sm">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-xs font-black text-violet-700">
                             {index + 1}
                         </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-purple-100">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-violet-100">
                             <div
-                                className="h-full rounded-full bg-purple-500"
+                                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
                                 style={{ width: `${35 + index * 25}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
                             />
                         </div>
-                        <span className="w-24 text-xs font-bold text-purple-700">{step}</span>
+                        <span className="w-28 text-xs font-bold text-violet-700">{step}</span>
                     </div>
                 ))}
             </div>
@@ -776,26 +780,26 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
     };
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 p-0 no-print sm:items-center sm:p-4" onClick={loading ? undefined : onClose}>
-            <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[24px] bg-white shadow-2xl sm:max-h-[80vh] sm:rounded-2xl" onClick={e => e.stopPropagation()}>
-                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white p-4 sm:p-6">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm no-print sm:items-center sm:p-4" onClick={loading ? undefined : onClose}>
+            <div className="max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-t-[28px] bg-white shadow-2xl sm:max-h-[86vh] sm:rounded-3xl" onClick={e => e.stopPropagation()}>
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50 p-4 sm:p-6">
                     <h3 className="min-w-0 pr-3 text-base font-bold text-gray-900 sm:text-lg">
                         Phân tích câu {question.question_number || question.sub_question_number}
                     </h3>
                     {!loading && (
-                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                            <span className="text-gray-400 text-xl">×</span>
+                        <button onClick={onClose} className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-white hover:text-slate-700">
+                            <span className="text-xl">×</span>
                         </button>
                     )}
                 </div>
                 <div className="p-4 sm:p-6">
                     {/* Câu hỏi */}
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
-                        <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
+                    <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                        <p className="mb-2 text-xs font-black uppercase tracking-wide text-violet-700">Câu hỏi</p>
                         <BilingualMathText
                             primary={question.question_text || question.question_text_en}
                             secondary={question.question_text_cn}
-                            className="break-words text-sm text-gray-800 [overflow-wrap:anywhere]"
+                            className="break-words text-sm font-medium leading-6 text-slate-900 [overflow-wrap:anywhere]"
                         />
                     </div>
 
@@ -824,12 +828,14 @@ function ExplanationModal({ question, mode, attemptId, onClose }: { question: Qu
                     {loading ? (
                         <QuestionAnalysisLoading />
                     ) : explanation?.success ? (
-                        <div className="space-y-3">
-                            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                                <p className="text-xs font-bold text-purple-700 mb-3 flex items-center gap-1.5">
+                        <div className="space-y-4">
+                            <div className="rounded-2xl border border-violet-200 bg-gradient-to-b from-violet-50 to-white p-4 shadow-sm sm:p-5">
+                                <p className="mb-4 flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-violet-700">
                                     <FiCpu size={12} /> 🤖 AI phân tích
                                 </p>
-                                <AIFormattedText value={explanation.answer} className="min-w-0 overflow-x-auto text-base leading-7 text-gray-800 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto" />
+                                <div className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+                                    <AIFormattedText value={explanation.answer} className="min-w-0 overflow-x-auto text-[15px] leading-7 text-slate-800 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto [&_p]:mb-3 [&_strong]:font-black [&_strong]:text-slate-950" />
+                                </div>
                             </div>
                             {(question.explanation || question.explanation_cn || question.explanation_image_url) && (
                                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">

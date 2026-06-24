@@ -1266,6 +1266,15 @@ function buildVisionUserMessage(prompt, imageDataUrl, note = '') {
   };
 }
 
+const AI_CHAT_FORMAT_RULES = `FORMAT BAT BUOC:
+- Khong dung **bold**, ###, ---/___, $$ hoac markdown phuc tap.
+- Cong thuc Toan/Khoa hoc chi viet inline bang \\( ... \\), vi du \\(2^5=32\\), \\(|x|<3\\), \\(x\\in\\mathbb{Z}\\).
+- Khong de cong thuc bi tach thanh tung ky tu/tung dong.
+- Neu can nhan manh, viet tieu de plain text nhu "Buoc 1: ..." hoac "Luu y: ...".
+- Dung ky hieu →, ≤, ≥, ∈ trong van ban thuong; khong viet \\to ngoai LaTeX.
+- Khong copy lai loi format nhu "**Liet ke ra:**", "32$$", "\\to Dap an".
+- Cau tra loi nen co 3-5 muc ngan: ket luan, cach lam, vi sao sai/dung, meo nho.`;
+
 function buildAIChatPrompt(question, context = {}) {
   const { examTitle, subjectName, questions = [], userScore, questionStats, conversationHistory = [] } = context;
 
@@ -1283,6 +1292,7 @@ function buildAIChatPrompt(question, context = {}) {
   return `Bạn là trợ lý AI học tập CSCA đa môn thân thiện. Trả lời bằng TIẾNG VIỆT có dấu.
 
 YÊU CẦU:
+${AI_CHAT_FORMAT_RULES}
 - CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
 - Viết tự nhiên như đang nhắn tin hướng dẫn.
 - Câu hỏi ngắn → trả lời ngắn gọn.
