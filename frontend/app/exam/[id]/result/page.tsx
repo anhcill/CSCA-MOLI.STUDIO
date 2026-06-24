@@ -16,6 +16,7 @@ import AIFormattedText from '@/components/ai/AIFormattedText';
 import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
+import CuteLoadingText from '@/components/ai/CuteLoadingText';
 
 const AI_ANALYSIS_COST = 50;
 
@@ -437,10 +438,32 @@ function ExamResultContent() {
                   <FiClock size={12} />
                   <span>{new Date(result.submit_time).toLocaleString('vi-VN')}</span>
                 </div>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Đúng', value: totalCorrect, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                    { label: 'Sai', value: totalIncorrect, tone: 'bg-rose-50 text-rose-700 border-rose-100' },
+                    { label: 'Bỏ qua', value: totalUnanswered, tone: 'bg-slate-50 text-slate-700 border-slate-100' },
+                  ].map((item) => (
+                    <div key={item.label} className={`rounded-2xl border px-3 py-2 text-center ${item.tone}`}>
+                      <p className="text-lg font-black leading-none">{item.value}</p>
+                      <p className="mt-1 text-[11px] font-bold">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className={`mt-4 rounded-2xl border px-4 py-3 ${gradeColors.bg} ${gradeColors.border}`}>
+                  <p className={`text-xs font-black uppercase tracking-wide ${gradeColors.text}`}>Gợi ý nhanh</p>
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-600 dark:text-slate-300">
+                    {totalIncorrect > 0
+                      ? `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
+                      : totalUnanswered > 0
+                        ? `Bạn còn ${totalUnanswered} câu bỏ qua, nên luyện cách suy luận nhanh.`
+                        : 'Bài này khá ổn, hãy củng cố dấu hiệu nhận biết để giữ phong độ.'}
+                  </p>
+                </div>
               </div>
 
               {/* Middle: Pie Chart */}
-              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 flex flex-col items-center justify-center transition-all hover:shadow-2xl">
+              <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 flex flex-col items-center justify-start transition-all hover:shadow-2xl">
                 <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Phân bố đáp án</p>
                 <div className="relative" style={{ width: '160px', height: '160px' }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -469,6 +492,26 @@ function ExamResultContent() {
                       <span className="text-xs text-gray-650 dark:text-gray-400">{d.name}: {d.value}</span>
                     </div>
                   ))}
+                </div>
+                <div className="mt-5 w-full space-y-3">
+                  {[
+                    { label: 'Đúng', value: totalCorrect, color: 'bg-emerald-500' },
+                    { label: 'Sai', value: totalIncorrect, color: 'bg-rose-500' },
+                    { label: 'Bỏ qua', value: totalUnanswered, color: 'bg-slate-400' },
+                  ].map((item) => {
+                    const percent = Math.round((item.value / total) * 100);
+                    return (
+                      <div key={item.label}>
+                        <div className="mb-1 flex items-center justify-between text-xs font-bold text-slate-500">
+                          <span>{item.label}</span>
+                          <span>{percent}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                          <div className={`h-full rounded-full ${item.color}`} style={{ width: `${percent}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1047,7 +1090,9 @@ function AIStepLoading({ title, steps, tone }: { title: string; steps: string[];
       <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-3xl shadow-lg ring-1 ring-white/80">
         🤖
       </div>
-      <p className={`text-center text-base font-black sm:text-lg ${colors.iconText}`}>{cuteMessage}</p>
+      <p className={`text-center text-base font-black sm:text-lg ${colors.iconText}`}>
+        <CuteLoadingText text={cuteMessage} />
+      </p>
       <p className="mx-auto mt-2 max-w-sm text-center text-sm font-semibold text-slate-600">{title}</p>
       <div className="mx-auto mt-6 max-w-md space-y-3">
         {steps.map((step, index) => (

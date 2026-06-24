@@ -5,6 +5,7 @@ import { FiSend, FiUser, FiCpu, FiTrash2, FiCopy, FiCheck, FiMessageCircle, FiZa
 import { authFetch } from '@/lib/utils/authFetch';
 import AIFormattedText from '@/components/ai/AIFormattedText';
 import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
+import CuteLoadingText from '@/components/ai/CuteLoadingText';
 import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 
 interface Message {
@@ -55,7 +56,7 @@ function ThinkingDots({ label }: { label?: string }) {
                 🤖
             </div>
             <div className="min-w-0">
-                <span className="block truncate text-xs font-bold text-violet-700 sm:text-sm">{message}</span>
+                <CuteLoadingText text={message} className="text-xs font-bold text-violet-700 sm:text-sm" />
                 <div className="mt-1 flex gap-1.5">
                     <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" style={{ animationDelay: '0ms' }} />
                     <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-fuchsia-400" style={{ animationDelay: '150ms' }} />
