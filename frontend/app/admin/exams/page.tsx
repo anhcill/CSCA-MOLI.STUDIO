@@ -2,11 +2,12 @@
 
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
+import { buildAdminExamListQuery, parseAdminExamFilter, withAdminExamListState, saveAdminExamListState, loadAdminExamListState, type AdminExamFilter } from '@/lib/utils/adminExamListState';
 import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -97,10 +98,9 @@ interface SubjectStat {
     avgPercentage: number;
 }
 
-type ExamFilter = 'all' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash';
-
 export default function ExamsPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, isAuthenticated } = useAuthStore();
     const [exams, setExams] = useState<Exam[]>([]);
     const [pagination, setPagination] = useState<Pagination>({
@@ -111,8 +111,16 @@ export default function ExamsPage() {
     });
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState<ExamFilter>('all');
-    const [subjectFilter, setSubjectFilter] = useState('');
+        const [filterType, setFilterType] = useState<AdminExamFilter>(() => {
+        const fromUrl = searchParams.get('type');
+        if (fromUrl) return parseAdminExamFilter(fromUrl);
+        return loadAdminExamListState().type;
+    });
+    const [subjectFilter, setSubjectFilter] = useState(() => {
+        const fromUrl = searchParams.get('subject');
+        if (fromUrl) return fromUrl;
+        return loadAdminExamListState().subject;
+    });
     const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, deleteRequests: 0, trash: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
@@ -133,6 +141,65 @@ export default function ExamsPage() {
     const [batchNormalizeMessage, setBatchNormalizeMessage] = useState('');
     const isSuperAdminUser = hasPermission(user, 'admin.super');
     const isTemporarilyDeletedExam = (exam: Exam) => Boolean(exam.deleted_at || exam.deletion_status === 'soft_deleted');
+    const withCurrentExamListState = (path: string) => withAdminExamListState(path, filterType, subjectFilter);
+
+    const replaceExamListState = (nextFilterType: AdminExamFilter, nextSubjectFilter: string) => {
+        const query = buildAdminExamListQuery(nextFilterType, nextSubjectFilter);
+        router.replace(`/admin/exams${query ? `?${query}` : ''}`, { scroll: false });
+    };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // Khi URL không có params nhưng sessionStorage có → sync URL lên
+        useEffect(() => {
+            const urlType = searchParams.get('type');
+            const urlSubject = searchParams.get('subject');
+            if (urlType === null && urlSubject === null) {
+                const saved = loadAdminExamListState();
+                if (saved.type !== 'all' || saved.subject) {
+                    replaceExamListState(saved.type, saved.subject);
+                }
+            }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, []);
+
+            // Khi URL không có params nhưng sessionStorage có → sync URL lên
+    useEffect(() => {
+        const urlType = searchParams.get('type');
+        const urlSubject = searchParams.get('subject');
+        if (urlType === null && urlSubject === null) {
+            const saved = loadAdminExamListState();
+            if (saved.type !== 'all' || saved.subject) {
+                replaceExamListState(saved.type, saved.subject);
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const urlType = searchParams.get('type');
+        const urlSubject = searchParams.get('subject');
+        // URL có params → dùng từ URL; không có → giữ state hiện tại (đã load từ sessionStorage)
+        if (urlType !== null || urlSubject !== null) {
+            const nextFilterType = parseAdminExamFilter(urlType);
+            const nextSubjectFilter = urlSubject || '';
+            setFilterType(prev => (prev === nextFilterType ? prev : nextFilterType));
+            setSubjectFilter(prev => (prev === nextSubjectFilter ? prev : nextSubjectFilter));
+            setPagination(prev => (prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 }));
+            saveAdminExamListState(nextFilterType, nextSubjectFilter);
+        }
+    }, [searchParams]);
 
     const loadExamCounts = async () => {
         try {
@@ -298,9 +365,11 @@ export default function ExamsPage() {
         }
     };
 
-    const handleFilterChange = (type: ExamFilter) => {
+        const handleFilterChange = (type: AdminExamFilter) => {
         setFilterType(type);
         setPagination(prev => ({ ...prev, currentPage: 1 }));
+        replaceExamListState(type, subjectFilter);
+        saveAdminExamListState(type, subjectFilter);
         loadExamCounts();
         loadStats();
     };
@@ -308,6 +377,8 @@ export default function ExamsPage() {
     const handleSubjectFilterChange = (subjectCode: string) => {
         setSubjectFilter(subjectCode);
         setPagination(prev => ({ ...prev, currentPage: 1 }));
+        replaceExamListState(filterType, subjectCode);
+        saveAdminExamListState(filterType, subjectCode);
     };
 
     const handleNormalizeManyExams = async () => {
@@ -440,7 +511,7 @@ export default function ExamsPage() {
                         {batchNormalizing ? 'Đang chuẩn hóa...' : 'Chuẩn hóa nhiều đề cũ'}
                     </button>
                     <Link
-                        href="/admin/exams/create"
+                        href={withCurrentExamListState('/admin/exams/create')}
                         className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all shrink-0"
                     >
                         <FiPlus size={16} /> Tạo đề mới
@@ -461,10 +532,10 @@ export default function ExamsPage() {
                         { value: 'mo-phong', label: 'Đề mô phỏng', emoji: '🎯', count: examCounts.moPhong },
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
                         ...(isSuperAdminUser ? [
-                            { value: 'delete-requests' as ExamFilter, label: 'Chờ duyệt xóa', emoji: '⚠', count: examCounts.deleteRequests },
-                            { value: 'trash' as ExamFilter, label: 'Xóa tạm', emoji: '↩', count: examCounts.trash },
+                                                        { value: 'delete-requests' as AdminExamFilter, label: 'Chờ duyệt xóa', emoji: '⚠', count: examCounts.deleteRequests },
+                            { value: 'trash' as AdminExamFilter, label: 'Xóa tạm', emoji: '↩', count: examCounts.trash },
                         ] : []),
-                    ] as { value: ExamFilter; label: string; emoji: string; count: number }[]).map(tab => (
+                    ] as { value: AdminExamFilter; label: string; emoji: string; count: number }[]).map(tab => (
                         <button
                             key={tab.value}
                             onClick={() => handleFilterChange(tab.value)}
@@ -555,7 +626,7 @@ export default function ExamsPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <button
-                                                onClick={() => router.push(`/admin/exams/${exam.id}`)}
+                                                onClick={() => router.push(withCurrentExamListState(`/admin/exams/${exam.id}`))}
                                                 className="text-left hover:text-purple-600 transition-colors"
                                             >
                                                 <div className="text-sm font-medium text-gray-900 dark:text-white">{exam.title}</div>
@@ -636,21 +707,21 @@ export default function ExamsPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm flex gap-2 justify-end">
                                             <Link
-                                                href={`/admin/exams/${exam.id}/schedule`}
+                                                href={withCurrentExamListState(`/admin/exams/${exam.id}/schedule`)}
                                                 className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"
                                                 title="Quản lý lịch thi"
                                             >
                                                 <FiCalendar size={17} />
                                             </Link>
                                             <Link
-                                                href={`/admin/exams/${exam.id}/official`}
+                                                href={withCurrentExamListState(`/admin/exams/${exam.id}/official`)}
                                                 className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"
                                                 title="Quan ly thi chinh thuc"
                                             >
                                                 <FiMonitor size={17} />
                                             </Link>
                                             <button
-                                                onClick={() => router.push(`/admin/exams/${exam.id}`)}
+                                                onClick={() => router.push(withCurrentExamListState(`/admin/exams/${exam.id}`))}
                                                 className="text-blue-600 hover:text-blue-800"
                                                 title="Xem chi tiết"
                                             >

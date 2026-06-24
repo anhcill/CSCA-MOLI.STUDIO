@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { adminApi, AdminUser } from '@/lib/api/admin';
+import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import {
   officialExamAdminApi,
   ExamRegistration,
@@ -103,6 +104,9 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 export default function OfficialExamAdminPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const examListHref = getAdminExamListStateHref('/admin/exams', searchParams);
+  const withExamListState = (path: string) => getAdminExamListStateHref(path, searchParams);
   const { user, isAuthenticated } = useAuthStore();
   const examId = Number(params?.id);
 
@@ -195,7 +199,7 @@ export default function OfficialExamAdminPage() {
       await loadOperationalData(false);
     } catch (error: any) {
       alert(error.response?.data?.message || 'Không thể tải dữ liệu kỳ thi chính thức');
-      router.push('/admin/exams');
+      router.push(examListHref);
     } finally {
       setLoading(false);
     }
@@ -276,7 +280,7 @@ export default function OfficialExamAdminPage() {
       <div className="space-y-5">
         <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link href="/admin/exams" className="mb-2 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600">
+            <Link href={examListHref} className="mb-2 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600">
               <FiChevronLeft /> Quay lại kho đề
             </Link>
             <h1 className="text-2xl font-black text-gray-900 dark:text-white">{exam?.title}</h1>
@@ -288,10 +292,10 @@ export default function OfficialExamAdminPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href={`/admin/exams/${examId}/schedule`} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
+            <Link href={withExamListState(`/admin/exams/${examId}/schedule`)} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
               Lịch thi
             </Link>
-            <Link href={`/admin/exams/${examId}`} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
+            <Link href={withExamListState(`/admin/exams/${examId}`)} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
               Sửa đề
             </Link>
             <button onClick={() => loadOperationalData()} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">

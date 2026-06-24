@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
+import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
 import { FiClock, FiUsers, FiSave, FiTrash2, FiArrowLeft, FiAlertCircle } from 'react-icons/fi';
 
@@ -42,6 +43,8 @@ function formatDateTime(isoString: string | null): string {
 export default function ExamSchedulePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const examListHref = getAdminExamListStateHref('/admin/exams', searchParams);
   const { user, isAuthenticated } = useAuthStore();
   const examId = params?.id as string;
 
@@ -136,7 +139,7 @@ export default function ExamSchedulePage() {
             <h1 className="text-2xl font-black text-gray-900">Quản lý Lịch Thi</h1>
             {schedule && <p className="text-sm text-gray-500 mt-0.5">{schedule.title}</p>}
           </div>
-          <button onClick={() => router.push('/admin/exams')} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+          <button onClick={() => router.push(examListHref)} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
             <FiArrowLeft /> Quay lại
           </button>
         </div>

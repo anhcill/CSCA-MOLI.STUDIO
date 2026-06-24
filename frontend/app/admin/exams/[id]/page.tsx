@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
+import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
 import { FiAlertCircle, FiChevronLeft, FiEdit2, FiTrash2, FiPlus, FiSave, FiX, FiCheckCircle, FiMonitor, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
@@ -611,6 +612,9 @@ function dbToFormData(q: SavedQuestion): QuestionFormData {
 export default function AdminExamDetailPage() {
     const { id } = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const examListHref = getAdminExamListStateHref('/admin/exams', searchParams);
+    const withExamListState = (path: string) => getAdminExamListStateHref(path, searchParams);
     const { user, isAuthenticated } = useAuthStore();
     const authPermissionKey = [
         user?.id || '',
@@ -695,7 +699,7 @@ export default function AdminExamDetailPage() {
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingExam = () => {
         alert('De thi nay khong con ton tai hoac da bi xoa. Vui long tai lai danh sach de.');
-        router.push('/admin/exams');
+        router.push(examListHref);
     };
 
     useEffect(() => {
@@ -776,7 +780,7 @@ export default function AdminExamDetailPage() {
                 return;
             }
             alert('Không thể tải đề thi: ' + (error.response?.data?.message || error.message));
-            router.push('/admin/exams');
+            router.push(examListHref);
         } finally {
             if (!options.silent) setLoading(false);
         }
@@ -1451,7 +1455,7 @@ export default function AdminExamDetailPage() {
             setNavigateAfterExit(false);
             await loadExam({ silent: true });
             if (shouldNavigate) {
-                router.push('/admin/exams');
+                router.push(examListHref);
             }
         } finally {
             setSavingEditSession(false);
@@ -1470,7 +1474,7 @@ export default function AdminExamDetailPage() {
             return;
         }
 
-        router.push('/admin/exams');
+        router.push(examListHref);
     };
 
     // ── Toggle exam settings ──────────────────────────────────────────────────
@@ -1496,7 +1500,7 @@ export default function AdminExamDetailPage() {
             setDeleteExamError('');
             await examAdminApi.deleteExam(Number(id));
             setShowDeleteExamConfirm(false);
-            router.push('/admin/exams');
+            router.push(examListHref);
         } catch (error: any) {
             setDeleteExamError(error.response?.data?.message || 'Xóa đề thi thất bại.');
         } finally {
@@ -1795,7 +1799,7 @@ export default function AdminExamDetailPage() {
                             ) : (
                                 <>
                                     <button
-                                        onClick={() => router.push(`/admin/exams/${exam.id}/official`)}
+                                        onClick={() => router.push(withExamListState(`/admin/exams/${exam.id}/official`))}
                                         className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium"
                                     >
                                         <FiMonitor size={16} /> Thi chính thức

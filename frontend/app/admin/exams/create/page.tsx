@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { FiPlus, FiEye, FiX } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import QuestionEditor, { QuestionFormData } from '@/components/admin/QuestionEditor';
@@ -12,6 +12,7 @@ import BackButton from '@/components/layout/BackButton';
 import { examAdminApi, ImportedExamItem, ImportedQuestionData, PdfImportPreview } from '@/lib/api/examAdmin';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
+import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
 
 interface Subject {
@@ -127,6 +128,8 @@ const validateImportedItems = (items: ImportedExamItem[]) => {
 
 export default function CreateExamPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const examListHref = getAdminExamListStateHref('/admin/exams', searchParams);
     const { user, isAuthenticated } = useAuthStore();
     const [loading, setLoading] = useState(false);
     const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -229,7 +232,7 @@ export default function CreateExamPage() {
         setExamMetadataDirty(false);
         sessionStorage.removeItem('currentExamId');
         alert('De thi nay khong con ton tai hoac da bi xoa. Vui long tai lai danh sach de.');
-        router.push('/admin/exams');
+        router.push(examListHref);
     };
 
     // Restore currentExamId from sessionStorage after mount (client-side only)
@@ -792,7 +795,7 @@ export default function CreateExamPage() {
 
             alert('Xuất bản đề thi thành công!');
             sessionStorage.removeItem('currentExamId');
-            router.push('/admin/exams');
+            router.push(examListHref);
         } catch (error) {
             console.error('Error publishing exam:', error);
             if (isMissingExamError(error)) {
@@ -813,7 +816,7 @@ export default function CreateExamPage() {
             <div className="max-w-5xl mx-auto px-6">
                 {/* Header */}
                 <div className="mb-8">
-                    <BackButton fallbackHref="/admin/exams" className="mb-4" />
+                    <BackButton fallbackHref={examListHref} className="mb-4" />
                     <h1 className="text-3xl font-bold text-gray-900">Tạo Đề Thi Mới</h1>
                     <p className="text-gray-600 mt-2">Nhập thông tin đề thi và thêm câu hỏi</p>
                 </div>
