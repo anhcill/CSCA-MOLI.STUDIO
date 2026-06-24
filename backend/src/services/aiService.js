@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const aiConfig = require('../config/aiConfig');
 const { DEFAULT_SETTINGS, getSettings } = require('./siteSettingsService');
+const moliPetAIService = require('./moliPetAIService');
 
 // ─── Rate limiting (global, file-based) ─────────────────────────────────────────
 const RATE_LIMIT_FILE = path.join(__dirname, '../../.ai_ratelimit');
@@ -1236,17 +1237,17 @@ function buildReviewQuestionContext(questions = []) {
 }
 
 function buildConversationHistoryContext(conversationHistory = []) {
-  if (!Array.isArray(conversationHistory)) return '(không có)';
+  if (!Array.isArray(conversationHistory)) return '(khong co)';
 
   const items = conversationHistory
     .filter((item) => ['user', 'ai'].includes(item?.role) && typeof item?.content === 'string' && item.content.trim())
     .slice(-8)
     .map((item) => {
-      const role = item.role === 'user' ? 'Học sinh' : 'AI';
+      const role = item.role === 'user' ? 'Hoc sinh' : 'AI';
       return `${role}: ${item.content.trim().slice(0, 800)}`;
     });
 
-  return items.length ? items.join('\n') : '(không có)';
+  return items.length ? items.join('\n') : '(khong co)';
 }
 
 function buildVisionUserMessage(prompt, imageDataUrl, note = '') {
@@ -1271,7 +1272,7 @@ const AI_CHAT_FORMAT_RULES = `FORMAT BAT BUOC:
 - Cong thuc Toan/Khoa hoc chi viet inline bang \\( ... \\), vi du \\(2^5=32\\), \\(|x|<3\\), \\(x\\in\\mathbb{Z}\\).
 - Khong de cong thuc bi tach thanh tung ky tu/tung dong.
 - Neu can nhan manh, viet tieu de plain text nhu "Buoc 1: ..." hoac "Luu y: ...".
-- Dung ky hieu →, ≤, ≥, ∈ trong van ban thuong; khong viet \\to ngoai LaTeX.
+- Dung ky hieu ->, <=, >=, in trong van ban thuong; khong viet \\to ngoai LaTeX.
 - Khong copy lai loi format nhu "**Liet ke ra:**", "32$$", "\\to Dap an".
 - Cau tra loi nen co 3-5 muc ngan: ket luan, cach lam, vi sao sai/dung, meo nho.`;
 
@@ -1279,45 +1280,45 @@ function buildAIChatPrompt(question, context = {}) {
   const { examTitle, subjectName, questions = [], userScore, questionStats, conversationHistory = [] } = context;
 
   const contextText = [
-    examTitle && `Đề thi: ${examTitle}`,
-    subjectName && `Môn: ${subjectName}`,
-    userScore !== undefined && `Điểm của bạn: ${userScore}%`,
-    questions.length > 0 && `Số câu: ${questions.length}`,
-    questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
+    examTitle && `De thi: ${examTitle}`,
+    subjectName && `Mon: ${subjectName}`,
+    userScore !== undefined && `Diem cua ban: ${userScore}%`,
+    questions.length > 0 && `So cau: ${questions.length}`,
+    questionStats && `Tong quan: dung ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bo qua ${questionStats.unanswered || 0}`,
   ].filter(Boolean).join('\n');
 
   const reviewQuestionContext = buildReviewQuestionContext(questions);
   const conversationContext = buildConversationHistoryContext(conversationHistory);
 
-  return `Bạn là trợ lý AI học tập CSCA đa môn thân thiện. Trả lời bằng TIẾNG VIỆT có dấu.
+  return `Ban la tro ly AI hoc tap CSCA da mon than thien. Tra loi bang TIENG VIET co dau.
 
-YÊU CẦU:
+YEU CAU:
 ${AI_CHAT_FORMAT_RULES}
-- CÓ THỂ dùng bullet (dấu -) để liệt kê cho dễ đọc. Không dùng ký hiệu markdown phức tạp.
-- Viết tự nhiên như đang nhắn tin hướng dẫn.
-- Câu hỏi ngắn → trả lời ngắn gọn.
-- Cần giải thích → giải thích đầy đủ nhưng không lan man, chia thành các ý nhỏ.
-- Nếu là tiếng Trung: từ mới phải ghi kèm pinyin ngay sau, ví dụ: 学习 (xué xí) = học.
-- Nếu là Toán/Khoa học: dùng công thức KaTeX-compatible trong \\( ... \\), ví dụ \\( y=\\frac{2x+3}{x-1} \\). Không viết công thức thành ảnh.
+- CO THE dung bullet (dau -) de liet ke cho de doc. Khong dung ky hieu markdown phuc tap.
+- Viet tu nhien nhu dang nhan tin huong dan.
+- Cau hoi ngan -> tra loi ngan gon.
+- Can giai thich -> giai thich day du nhung khong lan man, chia thanh cac y nho.
+- Neu la tieng Trung: tu moi phai ghi kem pinyin ngay sau, vi du: 学习 (xue xi) = hoc.
+- Neu la Toan/Khoa hoc: dung cong thuc KaTeX-compatible trong \\( ... \\), vi du \\( y=\\frac{2x+3}{x-1} \\). Khong viet cong thuc thanh anh.
 ${AI_ACCURACY_PROMPT_RULES}
-- Nếu là môn khác: giải thích đúng trọng tâm môn đó, không ép thành tiếng Trung.
-- Đưa ví dụ cụ thể trong đời thường khi cần.
-- Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
-- Nếu học sinh hỏi về câu bỏ qua, hãy hướng dẫn cách suy luận từ đầu, không trách người học.
-- Nếu học sinh hỏi tiếp bằng "ý trên", "câu đó", "giải thích kỹ hơn", hãy dựa vào lịch sử hội thoại gần đây.
+- Neu la mon khac: giai thich dung trong tam mon do, khong ep thanh tieng Trung.
+- Dua vi du cu the trong doi thuong khi can.
+- Neu hoc sinh hoi ve cau dung, hay cung co vi sao dung va chi ra dau hieu nhan biet.
+- Neu hoc sinh hoi ve cau bo qua, hay huong dan cach suy luan tu dau, khong trach nguoi hoc.
+- Neu hoc sinh hoi tiep bang "y tren", "cau do", "giai thich ky hon", hay dua vao lich su hoi thoai gan day.
 
-TRÁNH:
-- KHÔNG lặp lại câu hỏi của user.
-- KHÔNG bịa dữ liệu ngoài ngữ cảnh bài thi. Nếu thiếu dữ liệu, nói rõ và hướng dẫn cách tự kiểm tra.
+TRANH:
+- KHONG lap lai cau hoi cua user.
+- KHONG bia du lieu ngoai ngu canh bai thi. Neu thieu du lieu, noi ro va huong dan cach tu kiem tra.
 
-Ngữ cảnh bài thi (nếu có):
-${contextText || '(không có)'}
+Ngu canh bai thi (neu co):
+${contextText || '(khong co)'}
 Các câu trong bài để tham chiếu:
 ${reviewQuestionContext}
-Lịch sử hội thoại gần đây:
+Lich su hoi thoai gan day:
 ${conversationContext}
 
-Câu hỏi: ${question}`;
+Cau hoi: ${question}`;
 }
 
 async function askAI(question, context = {}) {
@@ -1342,225 +1343,7 @@ async function askAI(question, context = {}) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FEATURE 5b: Chatbot hỏi đáp AI (Streaming)
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * Chatbot trả lời câu hỏi của user về bài thi/kiến thức (Stream qua SSE)
- * @param {string} question - Câu hỏi của user
- * @param {Object} context  - Ngữ cảnh (attemptData, questions, etc.)
- * @param {Object} res - Express Response object (để pipe SSE)
- */
-function buildMoliPetPrompt(message, context = {}) {
-  const {
-    petName = 'Moly',
-    userName = 'ban',
-    page = '/',
-    pageType = 'hoc tap chung',
-    subject = '',
-    routeHint = '',
-    localTime = '',
-    mood = 'friendly',
-    conversationHistory = [],
-  } = context;
-  const history = buildConversationHistoryContext(conversationHistory);
-
-  return `Ban la ${petName}, mot pet hoc tap cuc de thuong cua CSCA MOLI.STUDIO.
-Tra loi bang tieng Viet co dau, tu nhien, thong minh, am ap, ngan gon va chinh xac.
-
-Tinh cach:
-${AI_ACCURACY_PROMPT_RULES}
-- Xung ho minh/ban, co the them mot cau hoi tham nhe neu hop ngu canh.
-- Noi nhu ban dong hanh nho: dang yeu nhung khong nham nhi, khong lam mau qua da.
-- Biet bam vao mon hoc/trang hien tai de goi y dung viec user dang lam.
-- Neu user hoi bai tap: tom tat y chinh, giai tung buoc ngan, chi ra loi hay sai, va neu thieu du kien thi hoi lai.
-- Neu user hoi tu vung/tieng Trung: co nghia, pinyin neu can, vi du ngan, meo nho.
-- Neu user hoi ke hoach hoc: dua 2-4 viec cu the co the lam ngay.
-- Neu user hoi ngoai hoc tap: tra loi lich su, ngan gon, an toan.
-- Khong noi minh la AI model. Khong nhac quota/model/key.
-- Khong bia diem so, loi sai, ho so, hoac du lieu rieng neu khong co trong ngu canh.
-
-Quy tac chinh xac bat buoc:
-- Neu khong co du kien trong cau hoi/ngu canh, noi ro "minh chua co du kien" va hoi lai; khong doan so lieu, gia, lich, thong tin hoc vien, de thi, dap an, uu dai, hay chinh sach.
-- Voi Toan/Ly/Hoa: kiem tra lai phep tinh, dau bat dang thuc, don vi, dieu kien, tap xac dinh va ket luan cuoi cung truoc khi tra loi.
-- Voi tieng Trung: neu viet pinyin thi viet dung thanh dieu; neu khong chac nghia/ngu phap thi noi khong chac thay vi khang dinh.
-- Voi cau hoi dung/sai: neu menh de sai, noi sai o dau bang 1 cau ro rang.
-- Voi cau hoi ve CSCA MOLI.STUDIO: chi dung thong tin co trong ngu canh hien tai; neu khong co thi noi minh chua co du lieu.
-- Khong tao link, ten tai lieu, cau truc de, diem chuan, ngay thi, thong ke, hay noi dung rieng neu khong duoc cung cap.
-
-Gioi han:
-- Mac dinh toi da 5 cau ngan. Neu can giai bai, dung cac buoc 1-3 ngan gon.
-- Khong dung markdown phuc tap; duoc dung bullet ngan khi can.
-- Khong bia thong tin ca nhan cua user.
-- Neu cau tra loi co dap an so/cu phap, dat dap an cuoi cung that ro o cau dau hoac cau cuoi.
-
-Ngu canh:
-- Ten user: ${userName || 'ban'}
-- Trang hien tai: ${page || '/'}
-- Loai trang: ${pageType || 'hoc tap chung'}
-- Mon hoc: ${subject || '(chua ro)'}
-- Goi y UI hien tai: ${routeHint || '(khong co)'}
-- Gio dia phuong user: ${localTime || '(khong ro)'}
-- Tam trang pet: ${mood || 'friendly'}
-- Lich su gan day:
-${history || '(khong co)'}
-
-User noi: ${message}`;
-}
-
-async function askMoliPet(message, context = {}) {
-  const prompt = buildMoliPetPrompt(message, context);
-  const model = BEE.petChatModel || BEE.model;
-  const maxTokens = Math.min(BEE.petChatMaxTokens || 700, 900);
-
-  try {
-    const response = await callBeeknoeeMessages(
-      [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image and answer warmly, briefly, and accurately.')],
-      {
-        model,
-        temperature: 0.35,
-        maxTokens,
-        timeout: Math.min(BEE.timeout || 90000, 45000),
-      },
-    );
-    return {
-      answer: response,
-      model,
-      timestamp: new Date().toISOString(),
-    };
-  } catch (err) {
-    if (err.message === 'RATE_LIMITED') throw err;
-    return {
-      answer: 'Moly dang hoi met xiu. Ban cho minh mot chut roi noi tiep nhe.',
-      timestamp: new Date().toISOString(),
-      error: true,
-    };
-  }
-}
-
-function getDailyGiftFallback(giftDate = '') {
-  const titles = [
-    'Một lá thư nhỏ cho ngày học mới',
-    'Gói năng lượng pastel đã tới',
-    'Hộp quà học tập từ Moly',
-    'Một chút may mắn cho hôm nay',
-  ];
-  const encouragements = [
-    'Hôm nay bạn không cần học thật nhiều mới tính là tiến bộ. Chỉ cần hiểu thêm một công thức Toán, nhớ thêm vài từ tiếng Trung, hoặc sửa lại một lỗi nhỏ trong bài CSCA là đã có điểm cộng rất xinh rồi.',
-    'Mỗi trang lý thuyết, mỗi câu từ vựng và mỗi bài toán bạn chạm vào đều đang xây thêm một viên gạch cho mục tiêu CSCA. Cứ đi chậm mà chắc, Moly tin bạn đang làm tốt.',
-    'Có những ngày não hơi đầy, nhưng một phiên học ngắn vẫn có thể giữ nhịp rất tốt. Bạn chỉ cần bắt đầu bằng phần dễ nhất, rồi để sự tập trung kéo mình đi tiếp.',
-    'CSCA là hành trình nhiều mảnh ghép: ngôn ngữ, Toán, tư duy và thói quen. Hôm nay mình nhặt một mảnh nhỏ thôi, nhưng nhặt đều thì bức tranh sẽ rõ dần.',
-  ];
-  const reminders = [
-    'Nhắc nhẹ hôm nay: chọn 1 mục tiêu nhỏ, học 20 phút thật gọn rồi đánh dấu hoàn thành nhé.',
-    'Nhắc nhẹ hôm nay: ôn lại 5 từ hoặc 1 dạng bài vừa sai, đừng để lỗi cũ trốn trong vở nha.',
-    'Nhắc nhẹ hôm nay: làm một câu dễ trước để khởi động, sau đó mới xử lý phần khó hơn.',
-    'Nhắc nhẹ hôm nay: uống nước, mở bài học, và cho bản thân một lượt tập trung không bị chen ngang.',
-  ];
-  const blessings = [
-    'Chúc bạn gặp đúng dạng bài mình đã ôn và giữ được cái đầu thật sáng.',
-    'Chúc bạn học đâu nhớ đó, làm bài bình tĩnh và may mắn ghé vai.',
-    'Chúc hôm nay của bạn nhẹ nhàng, có tiến bộ nhỏ và nhiều tự tin hơn hôm qua.',
-    'Chúc bạn gom đủ năng lượng, đủ kiên nhẫn và đủ may mắn cho buổi học này.',
-  ];
-  const seed = String(giftDate || new Date().toISOString().slice(0, 10))
-    .split('')
-    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
-
-  return {
-    title: titles[seed % titles.length],
-    greeting: 'Gửi bạn học viên chăm chỉ,',
-    encouragement: encouragements[seed % encouragements.length],
-    study_reminder: reminders[(seed + 1) % reminders.length],
-    blessing: blessings[(seed + 2) % blessings.length],
-    mood: ['sparkly', 'soft', 'focus', 'lucky'][seed % 4],
-    source_model: 'fallback',
-    raw_payload: { fallback: true, giftDate },
-  };
-}
-
-function normalizeDailyGiftLetter(value, giftDate) {
-  const fallback = getDailyGiftFallback(giftDate);
-  const safe = value && typeof value === 'object' ? value : {};
-
-  return {
-    title: asString(safe.title, fallback.title).slice(0, 140),
-    greeting: asString(safe.greeting, fallback.greeting).slice(0, 180),
-    encouragement: asString(safe.encouragement, fallback.encouragement).slice(0, 700),
-    study_reminder: asString(safe.study_reminder || safe.studyReminder, fallback.study_reminder).slice(0, 280),
-    blessing: asString(safe.blessing, fallback.blessing).slice(0, 240),
-    mood: asString(safe.mood, fallback.mood).slice(0, 60),
-  };
-}
-
-function buildDailyGiftLetterPrompt(giftDate, recentLetters = []) {
-  const recentContext = recentLetters.length
-    ? recentLetters.map((item, index) => {
-        return `${index + 1}. ${item.title || ''} | ${item.encouragement || ''} | ${item.study_reminder || ''}`;
-      }).join('\n')
-    : '(chua co thu gan day)';
-
-  return `Ban la Moly, pet hoc tap cua CSCA MOLI.STUDIO.
-Hay viet mot Daily Gift Letter bang tieng Viet co dau cho hoc vien on thi CSCA.
-
-Yeu cau:
-- Giong van cute, am ap, thong minh, pastel infographic hoc tap: mem, sach, de thuong nhung khong tre con qua.
-- Noi ve hanh trinh CSCA, ngon ngu/tieng Trung, Toan, tu duy logic, va thoi quen hoc deu.
-- Dong vien that cu the: tien bo nho, hoc 15-25 phut, on loi sai, nho tu moi, lam 1 cau de khoi dong.
-- Khong sao chep y/cau/nhan vat/an du tu cac thu gan day.
-- Khong hua diem cao, khong bia so lieu hoc vien, lich thi, hoc bong, gia khoa hoc, ho so rieng, hay thong tin khong co ngu canh.
-- Khong nhac minh la AI/model/API.
-- Khong dung markdown.
-- Moi truong frontend se tu chen ten hoc vien, vi vay greeting de dang goi chung.
-- Do dai vua phai, khong lan man, moi truong toi da 4 cau.
-- Co the them cam giac cute bang hinh anh nho nhu sao, sticker, but chi, sach, meo, nhung chi trong loi van; khong can emoji qua nhieu.
-- Loi nhac hoc phai nhe nhang, khong tao ap luc, co hanh dong ro trong hom nay.
-- Blessing phai may man, sang sua, hop voi hoc tap.
-
-Ngay sinh noi dung: ${giftDate}
-Thu gan day can tranh trung lap:
-${recentContext}
-
-Tra ve JSON hop le duy nhat, dung schema:
-{
-  "title": "tieu de cute toi da 10 tu",
-  "greeting": "loi chao chung, chua can ten rieng",
-  "encouragement": "doan dong vien 3-4 cau ve CSCA/ngon ngu/Toan, cute va khong trung lap",
-  "study_reminder": "mot cau nhac hoc nhe nhang hom nay",
-  "blessing": "mot cau chuc may man",
-  "mood": "sparkly|soft|focus|lucky"
-}`;
-}
-
-async function generateDailyGiftLetter(giftDate, context = {}) {
-  const model = BEE.petChatModel || BEE.model;
-  const prompt = buildDailyGiftLetterPrompt(giftDate, context.recentLetters || []);
-
-  try {
-    const raw = await callBeeknoee(prompt, {
-      model,
-      temperature: 0.72,
-      maxTokens: 650,
-      timeout: Math.min(BEE.timeout || 90000, 45000),
-    });
-    const parsed = parseAIMaybeJSON(raw);
-    const letter = normalizeDailyGiftLetter(parsed, giftDate);
-    return {
-      ...letter,
-      source_model: model,
-      raw_payload: parsed || { raw: String(raw || '').slice(0, 1200) },
-    };
-  } catch (err) {
-    const fallback = getDailyGiftFallback(giftDate);
-    return {
-      ...fallback,
-      raw_payload: {
-        ...fallback.raw_payload,
-        error: err.message || 'DAILY_GIFT_GENERATION_FAILED',
-      },
-    };
-  }
-}
+// Moli pet chat and daily gift generation live in ./moliPetAIService.
 
 async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
@@ -2115,9 +1898,9 @@ module.exports = {
   getPracticeRecommendations,
   askAI,
   askAIStream,
-  askMoliPet,
-  generateDailyGiftLetter,
-  getDailyGiftFallback,
+  askMoliPet: moliPetAIService.askMoliPet,
+  generateDailyGiftLetter: moliPetAIService.generateDailyGiftLetter,
+  getDailyGiftFallback: moliPetAIService.getDailyGiftFallback,
   analyzeProgress,
   recommendNextExam,
   generateFullAnalysis,

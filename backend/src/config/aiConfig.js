@@ -107,6 +107,19 @@ const config = {
     maxConcurrent: intEnv('AI_MAX_CONCURRENT', 3),
   },
 
+  moliPet: {
+    provider: process.env.MOLI_PET_PROVIDER || '9router',
+    model: process.env.MOLI_PET_MODEL || 'ag/gemini-3-flash-agent',
+    fallbackProvider: process.env.MOLI_PET_FALLBACK_PROVIDER || 'beeknoee',
+    fallbackModel: normalizeBeeknoeeModel(
+      process.env.MOLI_PET_FALLBACK_MODEL ||
+      process.env.BEEKNOEE_PET_CHAT_MODEL ||
+      'google/gemini-3.1-flash-lite',
+    ),
+    maxTokens: intEnv('MOLI_PET_MAX_TOKENS', 700),
+    timeout: intEnv('MOLI_PET_TIMEOUT_MS', 45000),
+  },
+
   adminExam: {
     provider: process.env.ADMIN_EXAM_AI_PROVIDER || '9router',
     apiKeys: parseAdminExamApiKeys(),
