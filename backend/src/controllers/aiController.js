@@ -4,6 +4,7 @@ const { cache, TTL } = require('../config/cache');
 const { canUseAIFeatures } = require('../middleware/authMiddleware');
 const coinService = require('../services/coinService');
 const dailyGiftLetterService = require('../services/dailyGiftLetterService');
+const aiAskCacheService = require('../services/aiAskCacheService');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -833,6 +834,37 @@ async function askAI(req, res) {
       return res.status(400).json({ success: false, message: `Câu hỏi quá dài. Tối đa ${AI_CHAT_MAX_QUESTION_LENGTH} ký tự.` });
     }
 
+    let context = {};
+    if (attemptId) {
+      context = await getAttemptAIContext(userId, attemptId);
+    }
+    context.conversationHistory = conversationHistory;
+    context.imageDataUrl = imageCheck.value;
+
+    const useAskCache = aiAskCacheService.shouldUseAskCache({
+      imageDataUrl: imageCheck.value,
+      conversationHistory,
+    });
+    if (useAskCache) {
+      try {
+        const cached = await aiAskCacheService.getCachedAskAnswer({ question, context });
+        if (cached) {
+          const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
+          return res.json({
+            success: true,
+            cached: true,
+            cacheSource: 'db',
+            cacheAge: age,
+            answer: cached.answer,
+            timestamp: new Date().toISOString(),
+            error: false,
+          });
+        }
+      } catch (error) {
+        console.error('AI ask cache lookup failed:', error.message);
+      }
+    }
+
     if (!tryStartAIChat(userId)) {
       return res.status(429).json({
         success: false,
@@ -853,13 +885,6 @@ async function askAI(req, res) {
       });
     }
 
-    let context = {};
-    if (attemptId) {
-      context = await getAttemptAIContext(userId, attemptId);
-    }
-    context.conversationHistory = conversationHistory;
-    context.imageDataUrl = imageCheck.value;
-
     if (aiService.isRateLimited()) {
       return res.json({
         success: false, rateLimited: true,
@@ -869,9 +894,19 @@ async function askAI(req, res) {
     }
 
     const result = await aiService.askAI(question, context);
+    if (useAskCache && !result.error) {
+      await aiAskCacheService.saveAskAnswer({
+        question,
+        context,
+        answer: result.answer,
+        userId,
+        attemptId,
+      }).catch((error) => console.error('Failed to save AI ask cache:', error.message));
+    }
 
     res.json({
       success: true,
+      cached: false,
       answer: result.answer,
       timestamp: result.timestamp,
       error: result.error || false,
