@@ -10,7 +10,6 @@ const fs = require('fs');
 const path = require('path');
 const aiConfig = require('../config/aiConfig');
 const { DEFAULT_SETTINGS, getSettings } = require('./siteSettingsService');
-const moliPetAIService = require('./moliPetAIService');
 
 // ─── Rate limiting (global, file-based) ─────────────────────────────────────────
 const RATE_LIMIT_FILE = path.join(__dirname, '../../.ai_ratelimit');
@@ -35,6 +34,7 @@ function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUnti
 // ─── Round-robin API key pool ────────────────────────────────────────────────
 const BEE = aiConfig.beeknoee;
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
+const getMoliPetAIService = () => require('./moliPetAIService');
 const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
 const PUBLIC_AI_BUSY_MESSAGE = 'AI đang bận lúc này. Bạn thử lại sau nhé.';
 const PRIVATE_AI_PROVIDER_ERROR_PATTERNS = [
@@ -1898,9 +1898,9 @@ module.exports = {
   getPracticeRecommendations,
   askAI,
   askAIStream,
-  askMoliPet: moliPetAIService.askMoliPet,
-  generateDailyGiftLetter: moliPetAIService.generateDailyGiftLetter,
-  getDailyGiftFallback: moliPetAIService.getDailyGiftFallback,
+  askMoliPet: (...args) => getMoliPetAIService().askMoliPet(...args),
+  generateDailyGiftLetter: (...args) => getMoliPetAIService().generateDailyGiftLetter(...args),
+  getDailyGiftFallback: (...args) => getMoliPetAIService().getDailyGiftFallback(...args),
   analyzeProgress,
   recommendNextExam,
   generateFullAnalysis,
