@@ -23,6 +23,7 @@ const {
   reviewImportedItemsWithAI,
   reviewStoredExamWithAI,
 } = require("../services/examQualityService");
+const { buildAiModeOptions, isDeepMode } = require("../services/adminExamAiModeService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -114,6 +115,18 @@ const EXAM_AI_ACTIONS = {
   POLISH_EXPLANATIONS: "polish_explanations",
   NORMALIZE: "normalize_formulas",
 };
+
+function getAdminExamAiMode(req) {
+  return buildAiModeOptions(req.body?.qualityMode || req.query?.qualityMode);
+}
+
+async function runDeepExamReviewIfNeeded(client, examId, modeOptions, baseContext = {}) {
+  if (!isDeepMode(modeOptions.qualityMode) || !modeOptions.deep) return null;
+  return reviewStoredExamWithAI(client, examId, {
+    ...baseContext,
+    ...modeOptions.deep,
+  });
+}
 
 function parsePositiveNumber(value, fallback) {
   const parsed = Number.parseFloat(value);
@@ -766,10 +779,22 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const result = await reviewStoredExamWithAI(client, examId, {
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
-      });
+        ...modeOptions.fast,
+      };
+      let result = await reviewStoredExamWithAI(client, examId, baseContext);
+      if (isDeepMode(modeOptions.qualityMode)) {
+        const fastSummary = result.summary;
+        result = await reviewStoredExamWithAI(client, examId, {
+          ...baseContext,
+          ...modeOptions,
+        });
+        result.fastReviewSummary = fastSummary;
+      }
+      result.qualityMode = modeOptions.qualityMode;
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW, req.user.id, {
         total: result.summary?.total || 0,
         issues: result.summary?.issues || 0,
@@ -834,10 +859,18 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const result = await applyStoredExamReviewFixes(client, examId, reviews, {
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
         applySafeFormulas: req.body?.applySafeFormulas !== false,
         applySuggestedAnswers: req.body?.applySuggestedAnswers !== false,
         subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal,
+        ...modeOptions.fast,
+      };
+      const result = await applyStoredExamReviewFixes(client, examId, reviews, baseContext);
+      result.qualityMode = modeOptions.qualityMode;
+      result.deepReview = await runDeepExamReviewIfNeeded(client, examId, modeOptions, {
+        subject: baseContext.subject,
         signal,
       });
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FIX, req.user.id, {
@@ -895,10 +928,15 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const result = await applyExamDisplayFormatFixes(client, examId, {
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
-      });
+        ...modeOptions.fast,
+      };
+      const result = await applyExamDisplayFormatFixes(client, examId, baseContext);
+      result.qualityMode = modeOptions.qualityMode;
+      result.deepReview = await runDeepExamReviewIfNeeded(client, examId, modeOptions, baseContext);
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FORMAT, req.user.id, {
         changedCount: result.changedCount,
         formulaChangedCount: result.formulaChangedCount,
@@ -957,10 +995,15 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const result = await generateMissingExamExplanations(client, examId, {
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
-      });
+        ...modeOptions.fast,
+      };
+      const result = await generateMissingExamExplanations(client, examId, baseContext);
+      result.qualityMode = modeOptions.qualityMode;
+      result.deepReview = await runDeepExamReviewIfNeeded(client, examId, modeOptions, baseContext);
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.EXPLAIN, req.user.id, {
         changedCount: result.changedCount,
         questionChangedCount: result.questionChangedCount,
@@ -1026,10 +1069,15 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
-      const result = await polishExamExplanations(client, examId, {
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
-      });
+        ...modeOptions.fast,
+      };
+      const result = await polishExamExplanations(client, examId, baseContext);
+      result.qualityMode = modeOptions.qualityMode;
+      result.deepReview = await runDeepExamReviewIfNeeded(client, examId, modeOptions, baseContext);
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.POLISH_EXPLANATIONS, req.user.id, {
         changedCount: result.changedCount,
         questionChangedCount: result.questionChangedCount,

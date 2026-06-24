@@ -693,6 +693,7 @@ export default function AdminExamDetailPage() {
     const [missingExplanationResult, setMissingExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [polishingExplanations, setPolishingExplanations] = useState(false);
     const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
+    const [aiQualityMode, setAiQualityMode] = useState<'fast' | 'deep'>('deep');
     const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
     const [aiBlockingStartedAt, setAiBlockingStartedAt] = useState<number | null>(null);
 
@@ -1091,7 +1092,7 @@ export default function AdminExamDetailPage() {
             setExamReviewError('');
             setExamReviewResult(null);
             setExamReviewApplyResult(null);
-            const result = await examAdminApi.reviewExamQuality(exam.id);
+            const result = await examAdminApi.reviewExamQuality(exam.id, { qualityMode: aiQualityMode });
             setExamReviewResult(result);
             await loadExam({ silent: true });
         } catch (error: any) {
@@ -1130,6 +1131,7 @@ export default function AdminExamDetailPage() {
                 reviews,
                 applySafeFormulas: true,
                 applySuggestedAnswers: true,
+                qualityMode: aiQualityMode,
             });
             setExamReviewApplyResult(result);
             setExamReviewResult(null);
@@ -1158,7 +1160,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setDisplayFormatApplyResult(null);
-            const result = await examAdminApi.applyDisplayFormatFixes(exam.id);
+            const result = await examAdminApi.applyDisplayFormatFixes(exam.id, { qualityMode: aiQualityMode });
             setDisplayFormatApplyResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã sửa format hiển thị và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1183,7 +1185,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('explain');
             setAiBlockingStartedAt(Date.now());
             setMissingExplanationResult(null);
-            const result = await examAdminApi.generateMissingExplanations(exam.id);
+            const result = await examAdminApi.generateMissingExplanations(exam.id, { qualityMode: aiQualityMode });
             setMissingExplanationResult(result);
             await loadExam();
             markEditSessionSavedWork('AI đã thêm giải thích và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1209,7 +1211,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('polish');
             setAiBlockingStartedAt(Date.now());
             setPolishExplanationResult(null);
-            const result = await examAdminApi.polishExplanations(exam.id);
+            const result = await examAdminApi.polishExplanations(exam.id, { qualityMode: aiQualityMode });
             setPolishExplanationResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã chuẩn hóa lời giải và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -2202,6 +2204,33 @@ export default function AdminExamDetailPage() {
                             <p className="text-sm text-blue-700">Nhấn <strong>✏️ Sửa</strong> ở câu để chỉnh sửa nội dung. <strong>+ Thêm</strong> để chèn câu mới (đánh số lại tự động).</p>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex overflow-hidden rounded-lg border border-blue-200 bg-white p-1 text-xs font-bold shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => setAiQualityMode('fast')}
+                                    disabled={!!aiBlockingTask}
+                                    className={`rounded-md px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        aiQualityMode === 'fast'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-blue-700 hover:bg-blue-50'
+                                    }`}
+                                >
+                                    Nhanh
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAiQualityMode('deep')}
+                                    disabled={!!aiBlockingTask}
+                                    className={`rounded-md px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        aiQualityMode === 'deep'
+                                            ? 'bg-violet-600 text-white'
+                                            : 'text-violet-700 hover:bg-violet-50'
+                                    }`}
+                                    title="Chạy GPT 5.5 trước, rồi Opus thinking soát lại. Lâu hơn nhưng chắc hơn."
+                                >
+                                    Kỹ
+                                </button>
+                            </div>
                             <button
                                 onClick={handleReviewCurrentExam}
                                 disabled={reviewingExam || !!aiBlockingTask}

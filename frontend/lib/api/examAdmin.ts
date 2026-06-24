@@ -521,40 +521,40 @@ export const examAdminApi = {
         return response.data;
     },
 
-    reviewExamQuality: async (examId: number): Promise<StoredExamReviewResult> => {
-        const response = await axios.post(`/admin/exams/${examId}/review-quality`, {}, {
-            timeout: 900000,
+    reviewExamQuality: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<StoredExamReviewResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/review-quality`, data, {
+            timeout: data.qualityMode === 'deep' ? 1800000 : 900000,
         });
         return response.data;
     },
 
     applyExamReviewFixes: async (
         examId: number,
-        data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean },
+        data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean; qualityMode?: 'fast' | 'deep' },
     ): Promise<ApplyExamReviewFixesResult> => {
         const response = await axios.post(`/admin/exams/${examId}/apply-ai-review-fixes`, data, {
-            timeout: 900000,
+            timeout: data.qualityMode === 'deep' ? 1800000 : 900000,
         });
         return response.data;
     },
 
-    applyDisplayFormatFixes: async (examId: number): Promise<ApplyExamReviewFixesResult> => {
-        const response = await axios.post(`/admin/exams/${examId}/apply-display-format-fixes`, {}, {
-            timeout: 600000,
+    applyDisplayFormatFixes: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<ApplyExamReviewFixesResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/apply-display-format-fixes`, data, {
+            timeout: data.qualityMode === 'deep' ? 1800000 : 600000,
         });
         return response.data;
     },
 
-    generateMissingExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
-        const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, {}, {
-            timeout: 1200000,
+    generateMissingExplanations: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<GenerateMissingExplanationsResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, data, {
+            timeout: data.qualityMode === 'deep' ? 1800000 : 1200000,
         });
         return response.data;
     },
 
-    polishExplanations: async (examId: number): Promise<GenerateMissingExplanationsResult> => {
-        const response = await axios.post(`/admin/exams/${examId}/polish-explanations`, {}, {
-            timeout: 600000,
+    polishExplanations: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<GenerateMissingExplanationsResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/polish-explanations`, data, {
+            timeout: data.qualityMode === 'deep' ? 1800000 : 600000,
         });
         return response.data;
     },

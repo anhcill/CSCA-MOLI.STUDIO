@@ -1,4 +1,4 @@
-const aiConfig = require("../config/aiConfig");
+﻿const aiConfig = require("../config/aiConfig");
 const aiService = require("./aiService");
 const { repairOcrMathArtifacts } = require("./ocrMathRepairService");
 
@@ -31,12 +31,33 @@ function getReviewModels() {
   return aiConfig.adminExam?.reviewModels?.length ? aiConfig.adminExam.reviewModels : [getReviewModel()];
 }
 
+function getContextReviewModel(context = {}) {
+  return context.reviewModel || getReviewModel();
+}
+
+function getContextReviewModels(context = {}) {
+  return Array.isArray(context.reviewModels) && context.reviewModels.length ? context.reviewModels : getReviewModels();
+}
+
 function getFixModel() {
   return aiConfig.adminExam?.fixModel || aiConfig.adminExam?.reviewModel || "cx/gpt-5.5";
 }
 
 function getFixModels() {
   return aiConfig.adminExam?.fixModels?.length ? aiConfig.adminExam.fixModels : [getFixModel()];
+}
+
+function getContextFixModel(context = {}) {
+  return context.fixModel || getFixModel();
+}
+
+function getContextFixModels(context = {}) {
+  return Array.isArray(context.fixModels) && context.fixModels.length ? context.fixModels : getFixModels();
+}
+
+function getContextTimeoutMs(context = {}, fallback) {
+  const value = Number.parseInt(context.aiTimeoutMs, 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function stringValue(value, fallback = "") {
@@ -1053,7 +1074,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         aiCalls: 0,
         failedBatches: 0,
         invalidBatches: 0,
-        model: getReviewModel(),
+        model: getContextReviewModel(context),
         questionTotal: 0,
         reviewedCount: 0,
       },
@@ -1063,7 +1084,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
         range: "Không có câu hợp lệ",
         labels: [],
         paths: [],
-        model: getReviewModel(),
+        model: getContextReviewModel(context),
         status: "no_questions",
         message: "Không gom được câu hỏi hợp lệ từ dữ liệu này nên chưa gọi model.",
       }],
@@ -1079,7 +1100,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
     batches.push({
       batch: entries.slice(i, i + batchSize),
       batchNumber: Math.floor(i / batchSize) + 1,
-      model: getReviewModel(),
+      model: getContextReviewModel(context),
     });
   }
 
@@ -1092,11 +1113,11 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
     try {
       const raw = await aiService.callAdminExamAI(prompt, {
         model,
-        models: getReviewModels(),
+        models: getContextReviewModels(context),
         fallbackOnTimeout: false,
         temperature: 0.1,
         maxTokens: REVIEW_MAX_TOKENS,
-        timeout: REVIEW_TIMEOUT_MS,
+        timeout: getContextTimeoutMs(context, REVIEW_TIMEOUT_MS),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
@@ -1198,7 +1219,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   counts.aiCalls = diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length;
   counts.failedBatches = diagnostics.filter(item => item.status === "failed").length;
   counts.invalidBatches = diagnostics.filter(item => item.status === "invalid_response").length;
-  counts.model = getReviewModel();
+  counts.model = getContextReviewModel(context);
   counts.questionTotal = entries.length;
   counts.reviewedCount = reviews.length;
   counts.inputTokenEstimate = diagnostics.reduce((sum, item) => sum + (Number(item.inputTokenEstimate) || 0), 0);
@@ -1207,7 +1228,7 @@ async function reviewQuestionEntriesWithAI(sourceEntries, context = {}) {
   counts.maxTokenBudget = diagnostics.reduce((sum, item) => sum + (Number(item.maxTokenBudget) || 0), 0);
   counts.batchSize = batchSize;
   counts.parallelBatches = parallelBatches;
-  counts.timeoutMs = REVIEW_TIMEOUT_MS;
+  counts.timeoutMs = getContextTimeoutMs(context, REVIEW_TIMEOUT_MS);
 
   return {
     reviews,
@@ -1751,7 +1772,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
         status: "no_questions",
         message: "Không tìm thấy field có dấu hiệu LaTeX/OCR cần AI sửa format.",
       }],
-      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getContextFixModel(context) },
     };
   }
 
@@ -1762,15 +1783,15 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
-    const model = getFixModel();
+    const model = getContextFixModel(context);
     const startedAt = Date.now();
     try {
       const raw = await aiService.callAdminExamAI(buildDisplayFormatPrompt(batch, context), {
         model,
-        models: getFixModels(),
+        models: getContextFixModels(context),
         temperature: 0.03,
         maxTokens: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_MAX_TOKENS || "5000", 10),
-        timeout: Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_TIMEOUT_MS || "120000", 10),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_DISPLAY_FORMAT_TIMEOUT_MS || "120000", 10)),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
@@ -1823,7 +1844,7 @@ async function generateDisplayFormatFixesWithAI(entries, context = {}) {
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
-      model: getFixModel(),
+      model: getContextFixModel(context),
     },
   };
 }
@@ -1839,7 +1860,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
         status: "no_questions",
         message: "Không tìm thấy lời giải không dấu hoặc cần chuẩn hóa.",
       }],
-      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getContextFixModel(context) },
     };
   }
 
@@ -1850,15 +1871,15 @@ async function polishExplanationsWithAI(entries, context = {}) {
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
-    const model = getFixModel();
+    const model = getContextFixModel(context);
     const startedAt = Date.now();
     try {
       const raw = await aiService.callAdminExamAI(buildPolishExplanationsPrompt(batch, context), {
         model,
-        models: getFixModels(),
+        models: getContextFixModels(context),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_MAX_TOKENS || "5000", 10),
-        timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_POLISH_TIMEOUT_MS || "120000", 10)),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
@@ -1916,7 +1937,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
-      model: getFixModel(),
+      model: getContextFixModel(context),
     },
   };
 }
@@ -1932,7 +1953,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         status: "no_questions",
         message: "Khong co cau nao can AI them giai thich.",
       }],
-      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+      summary: { total: 0, generated: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getContextFixModel(context) },
     };
   }
 
@@ -1943,15 +1964,15 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
-    const model = getFixModel();
+    const model = getContextFixModel(context);
     const startedAt = Date.now();
     try {
       const raw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt(batch, context), {
         model,
-        models: getFixModels(),
+        models: getContextFixModels(context),
         temperature: 0.1,
         maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || "5000", 10),
-        timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10)),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
@@ -1992,10 +2013,10 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
           try {
             const retryRaw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt([entry], context), {
               model,
-              models: getFixModels(),
+              models: getContextFixModels(context),
               temperature: 0.1,
               maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1200", 10),
-              timeout: Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10),
+              timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10)),
               signal: context.signal,
             });
             const retryParsed = parseAiJson(retryRaw);
@@ -2078,7 +2099,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
-      model: getFixModel(),
+      model: getContextFixModel(context),
     },
   };
 }
@@ -2094,7 +2115,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         status: "no_questions",
         message: "Không có log lỗi cần AI sửa.",
       }],
-      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getFixModel() },
+      summary: { total: 0, fixed: 0, aiCalls: 0, failedBatches: 0, invalidBatches: 0, model: getContextFixModel(context) },
     };
   }
 
@@ -2105,15 +2126,15 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
     const batch = targets.slice(i, i + batchSize);
-    const model = getFixModel();
+    const model = getContextFixModel(context);
     const startedAt = Date.now();
     try {
       const raw = await aiService.callAdminExamAI(buildFixPrompt(batch, context), {
         model,
-        models: getFixModels(),
+        models: getContextFixModels(context),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
-        timeout: Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10)),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
@@ -2166,7 +2187,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
-      model: getFixModel(),
+      model: getContextFixModel(context),
     },
   };
 }
@@ -2581,6 +2602,10 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
   const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
   const generated = await generateReviewFixesWithAI(entries, reviews, {
     subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
+    signal: options.signal,
+    fixModel: options.fixModel,
+    fixModels: options.fixModels,
+    aiTimeoutMs: options.aiTimeoutMs,
   });
 
   const changes = [];
@@ -3194,3 +3219,4 @@ module.exports = {
   reviewStoredExamWithAI,
   reviewImportedItemsWithAI,
 };
+
