@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 import Header from '@/components/layout/Header';
@@ -41,14 +41,12 @@ interface PublicProfile {
   isBlockedBy?: boolean;
 }
 
-interface Props {
-  params: { id: string };
-}
-
-export default function UserProfilePage({ params }: Props) {
+export default function UserProfilePage() {
   const router = useRouter();
+  const params = useParams();
   const { user: currentUser, isAuthenticated } = useAuthStore();
-  const userId = parseInt(params.id);
+  const rawUserId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const userId = Number.parseInt(String(rawUserId || ''), 10);
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +57,12 @@ export default function UserProfilePage({ params }: Props) {
   const [reporting, setReporting] = useState(false);
 
   const fetchProfile = useCallback(async () => {
+    if (!Number.isFinite(userId) || userId <= 0) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await axios.get(`/users/${userId}/profile`);
       setProfile(res.data.data?.profile || null);
