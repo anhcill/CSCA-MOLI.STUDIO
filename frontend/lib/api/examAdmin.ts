@@ -58,7 +58,7 @@ export interface ImportedQuestionAiReview {
     questionNumber?: number;
     questionType?: string;
     parentQuestionId?: number;
-    status: 'ok' | 'question_issue' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review';
+    status: 'ok' | 'question_issue' | 'formula_issue' | 'answer_issue' | 'explanation_issue' | 'needs_review' | 'missing_from_db' | 'missing_answer_from_source' | 'source_mismatch' | 'needs_source_review';
     confidence: number;
     suggestedCorrectAnswer?: string;
     questionIssues?: string[];
@@ -209,6 +209,9 @@ export interface ImportedItemsReviewResult {
         batchSize?: number;
         parallelBatches?: number;
         timeoutMs?: number;
+        sourceFileId?: number;
+        sourceFileName?: string;
+        sourceTextLength?: number;
     };
 }
 
@@ -220,15 +223,40 @@ export interface StoredExamReviewResult {
         subjectName?: string;
         subjectCode?: string;
     };
+    sourceFile?: AdminExamSourceFile | null;
     reviews: ImportedQuestionAiReview[];
     diagnostics?: ImportedItemsReviewDiagnostic[];
     summary: ImportedItemsReviewResult['summary'];
     safeFixPreview?: NormalizeFormulaResult;
 }
 
+export interface AdminExamSourceFile {
+    id: number;
+    examId?: number;
+    fileName: string;
+    fileType: string;
+    fileSize?: number;
+    textLength?: number;
+    pages?: number | null;
+    uploadedBy?: number | null;
+    createdAt?: string;
+}
+
+export interface ExamSourceFileListResult {
+    sourceFiles: AdminExamSourceFile[];
+}
+
+export interface ExamSourceFileUploadResult extends ExamSourceFileListResult {
+    message: string;
+    sourceFile?: AdminExamSourceFile;
+    warnings?: string[];
+    truncated?: boolean;
+}
+
 export interface ApplyExamReviewFixesResult {
     examId?: number;
     message: string;
+    sourceFile?: AdminExamSourceFile | null;
     changedCount?: number;
     answerChangedCount?: number;
     formulaChangedCount?: number;
@@ -354,6 +382,26 @@ export const examAdminApi = {
     // Get exam with questions for editing
     getExamForEdit: async (examId: number) => {
         const response = await axios.get(`/admin/exams/${examId}/edit`);
+        return response.data;
+    },
+
+    getExamSourceFiles: async (examId: number): Promise<ExamSourceFileListResult> => {
+        const response = await axios.get(`/admin/exams/${examId}/source-file`);
+        return response.data;
+    },
+
+    uploadExamSourceFile: async (examId: number, file: File): Promise<ExamSourceFileUploadResult> => {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const response = await axios.post(`/admin/exams/${examId}/source-file`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000,
+        });
+        return response.data;
+    },
+
+    deleteExamSourceFile: async (examId: number, sourceFileId: number): Promise<ExamSourceFileListResult & { message?: string }> => {
+        const response = await axios.delete(`/admin/exams/${examId}/source-file/${sourceFileId}`);
         return response.data;
     },
 

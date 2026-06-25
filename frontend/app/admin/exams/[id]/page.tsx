@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
+import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
@@ -14,6 +14,11 @@ import ReadingPassageGroup, { ReadingPassageGroupData } from '@/components/admin
 import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlankGroup';
 import RichMathText from '@/components/common/RichMathText';
 import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
+import ExamAiPanel from '@/components/admin/exam-ai/ExamAiPanel';
+import ExamAiActions from '@/components/admin/exam-ai/ExamAiActions';
+import ExamAiHistory, { ExamAiRun, formatAiRunTime, getExamAiRunDetail, getExamAiRunLabel } from '@/components/admin/exam-ai/ExamAiHistory';
+import ExamReviewResultPanel, { getExamReviewIssues } from '@/components/admin/exam-ai/ExamReviewResultPanel';
+import ExamSourceFilePanel from '@/components/admin/exam-ai/ExamSourceFilePanel';
 import {
     getImportItemsQuestionCount,
     getImportPreviewItems,
@@ -96,15 +101,6 @@ interface Exam {
     vip_tier?: string;
 }
 
-interface ExamAiRun {
-    action: 'review_quality' | 'apply_fixes' | 'display_format_fixes' | 'missing_explanations' | 'polish_explanations' | 'normalize_formulas' | string;
-    status: string;
-    summary?: Record<string, any>;
-    run_by?: number | null;
-    run_by_name?: string | null;
-    created_at: string;
-}
-
 interface Subject {
     id: number;
     name: string;
@@ -132,69 +128,6 @@ function findQuestionItemIndex(items: QuestionListItem[], questionId: number) {
         }
         return item.id === questionId;
     });
-}
-
-function getAiReviewLabel(status?: string) {
-    if (status === 'ok') return 'AI thấy ổn';
-    if (status === 'question_issue') return 'Nghi lỗi câu hỏi/OCR';
-    if (status === 'formula_issue') return 'Nghi lỗi công thức';
-    if (status === 'answer_issue') return 'Nghi sai đáp án';
-    if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
-    return 'Cần kiểm tra';
-}
-
-function getAiReviewTone(status?: string) {
-    if (status === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/70 dark:bg-emerald-950/70 dark:text-emerald-100';
-    if (status === 'failed') return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/70 dark:bg-rose-950/70 dark:text-rose-100';
-    if (status === 'requesting') return 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-400/70 dark:bg-indigo-950/70 dark:text-indigo-100';
-    return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50';
-}
-
-function getExamReviewIssues(result: StoredExamReviewResult | null) {
-    return (result?.reviews || []).filter(review => review.status !== 'ok');
-}
-
-function formatTokenEstimate(value?: number) {
-    const tokens = Number(value);
-    if (!Number.isFinite(tokens) || tokens <= 0) return '';
-    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M token`;
-    if (tokens >= 1000) return `${Math.round(tokens / 100) / 10}k token`;
-    return `${Math.round(tokens)} token`;
-}
-
-function getExamAiRunLabel(action: string) {
-    if (action === 'review_quality') return 'AI soát đề';
-    if (action === 'apply_fixes') return 'AI sửa log';
-    if (action === 'display_format_fixes') return 'AI sửa format hiển thị';
-    if (action === 'missing_explanations') return 'AI thêm giải thích';
-    if (action === 'polish_explanations') return 'AI chuẩn hóa lời giải';
-    if (action === 'normalize_formulas') return 'Chuẩn hóa công thức';
-    return action;
-}
-
-function formatAiRunTime(value?: string) {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
-}
-
-function getExamAiRunDetail(run: ExamAiRun) {
-    const summary = run.summary || {};
-    if (summary.questionChangedCount) return `${summary.questionChangedCount} câu đã sửa`;
-    if (summary.changedCount) return `${summary.changedCount} chỗ đã sửa`;
-    if (summary.formulaChangedCount) return `${summary.formulaChangedCount} công thức đã sửa`;
-    if (summary.generatedCount) return `${summary.generatedCount} giải thích đã thêm`;
-    if (summary.polishedCount) return `${summary.polishedCount} lời giải đã chuẩn hóa`;
-    if (summary.issues) return `${summary.issues} lỗi đã phát hiện`;
-    if (summary.total) return `${summary.total} câu đã quét`;
-    return 'Đã xử lý bằng AI';
 }
 
 function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; startedAt: number | null }) {
@@ -416,164 +349,6 @@ function groupToFillBlankData(group: SavedQuestionGroup): FillBlankGroupData {
     };
 }
 
-function SavedExamAiReviewPanel({
-    result,
-    error,
-    reviewing,
-    normalizingFormulas,
-    applyingReviewFixes,
-    applyResult,
-    onApplySafeFix,
-    onApplyAiFixes,
-    onOpenQuestion,
-}: {
-    result: StoredExamReviewResult | null;
-    error: string;
-    reviewing: boolean;
-    normalizingFormulas: boolean;
-    applyingReviewFixes: boolean;
-    applyResult: ApplyExamReviewFixesResult | null;
-    onApplySafeFix: () => void;
-    onApplyAiFixes: () => void;
-    onOpenQuestion: (review: StoredExamReviewResult['reviews'][number]) => void;
-}) {
-    if (!result && !error && !reviewing && !applyResult && !applyingReviewFixes) return null;
-
-    const summary = result?.summary;
-    const issueRows = getExamReviewIssues(result);
-    const safeFix = result?.safeFixPreview;
-    const tokenEstimate = formatTokenEstimate(summary?.tokenEstimate);
-    const maxTokenBudget = formatTokenEstimate(summary?.maxTokenBudget);
-
-    return (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                    <p className="font-black text-slate-950 dark:text-white">AI soát đề đã lưu</p>
-                    {reviewing ? (
-                        <p className="mt-1 flex items-center gap-2 text-indigo-700">
-                            <FiRefreshCw className="animate-spin" size={15} />
-                            Đang soát câu hỏi, đáp án và lời giải...
-                        </p>
-                    ) : summary ? (
-                        <p className="mt-1 text-slate-600 dark:text-slate-300">
-                            {summary.reviewedCount ?? summary.total}/{summary.questionTotal ?? summary.total} câu có review: {summary.ok} ổn, {summary.issues} cần xem.
-                            {summary.model ? ` Model: ${summary.model}.` : ''}
-                            {tokenEstimate ? ` Uoc tinh da dung: ${tokenEstimate}.` : ''}
-                            {maxTokenBudget ? ` Tran yeu cau: ${maxTokenBudget}.` : ''}
-                        </p>
-                    ) : null}
-                    {summary && (
-                        <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                            Batch {summary.batchSize || '?'} cau, song song {summary.parallelBatches || 1}, timeout {summary.timeoutMs ? `${Math.round(summary.timeoutMs / 1000)}s/batch` : 'mac dinh'}.
-                        </p>
-                    )}
-                    {safeFix && (
-                        <p className="mt-1 text-slate-600 dark:text-slate-300">
-                            Sửa công thức chắc chắn: {safeFix.changedCount || 0} chỗ. Nghi lỗi cần xem tay: {safeFix.warningCount || 0} chỗ.
-                        </p>
-                    )}
-                </div>
-                <div className="flex flex-wrap gap-2 md:justify-end">
-                    {issueRows.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={onApplyAiFixes}
-                            disabled={applyingReviewFixes}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <FiRefreshCw size={15} className={applyingReviewFixes ? 'animate-spin' : ''} />
-                            {applyingReviewFixes ? 'AI đang sửa...' : `AI sửa toàn bộ log (${issueRows.length})`}
-                        </button>
-                    )}
-                    {safeFix && (safeFix.changedCount > 0 || safeFix.warningCount > 0) && (
-                        <button
-                            type="button"
-                            onClick={onApplySafeFix}
-                            disabled={normalizingFormulas}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <FiRefreshCw size={15} className={normalizingFormulas ? 'animate-spin' : ''} />
-                            {normalizingFormulas ? 'Đang sửa...' : 'Sửa công thức chắc chắn'}
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {error && (
-                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">
-                    {error}
-                </div>
-            )}
-
-            {applyResult && (
-                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
-                    {applyResult.message || `AI đã sửa ${applyResult.changedCount || 0} chỗ.`}
-                    {!!applyResult.skippedCount && <span> Còn {applyResult.skippedCount} chỗ cần xem tay.</span>}
-                </div>
-            )}
-
-            {!!result?.diagnostics?.length && (
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                    {result.diagnostics.slice(0, 4).map((log) => (
-                        <div key={`${log.batch}-${log.status}-${log.range || ''}`} className={`rounded-lg border px-3 py-2 text-xs ${getAiReviewTone(log.status)}`}>
-                            <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
-                                <span>Batch {log.batch}: {log.range || 'không rõ câu'}</span>
-                                <span>{log.status === 'ok' ? 'Đã gọi AI' : log.status === 'invalid_response' ? 'JSON lỗi' : log.status === 'no_questions' ? 'Không có câu' : 'Lỗi'}</span>
-                            </div>
-                            <p className="mt-1">Model: {log.model || summary?.model || 'chưa rõ'}{log.durationMs ? ` - ${Math.round(log.durationMs / 1000)}s` : ''}</p>
-                            {log.tokenEstimate ? <p className="mt-1">Token uoc tinh: {formatTokenEstimate(log.tokenEstimate)} / tran {formatTokenEstimate(log.maxTokenBudget) || 'chua ro'}.</p> : null}
-                            {log.message && <p className="mt-1 whitespace-pre-wrap">{log.message}</p>}
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {issueRows.length > 0 ? (
-                <div className="mt-4 space-y-2">
-                    {issueRows.map((review) => (
-                        <div key={`${review.path}-${review.questionId || ''}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950 dark:border-amber-300/80 dark:bg-amber-950/75 dark:text-amber-50">
-                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                                <div>
-                                    <div className="flex flex-wrap items-center gap-2 font-black">
-                                        <FiAlertCircle className="shrink-0" size={15} />
-                                        <span>{review.label || `Câu ${review.questionNumber || '?'}`}</span>
-                                        <span>-</span>
-                                        <span>{getAiReviewLabel(review.status)}</span>
-                                        {Number.isFinite(review.confidence) && <span>{Math.round((review.confidence || 0) * 100)}%</span>}
-                                    </div>
-                                    {review.suggestedCorrectAnswer && <p className="mt-1">Gợi ý đáp án: {review.suggestedCorrectAnswer}</p>}
-                                    {review.note && <p className="mt-1 whitespace-pre-wrap">{review.note}</p>}
-                                    {(review.questionIssues || []).map((issue, index) => (
-                                        <p key={`question-${index}`} className="mt-1">Câu hỏi/OCR: {issue}</p>
-                                    ))}
-                                    {(review.formulaIssues || []).map((issue, index) => (
-                                        <p key={`formula-${index}`} className="mt-1">Công thức: {issue}</p>
-                                    ))}
-                                    {(review.explanationIssues || []).map((issue, index) => (
-                                        <p key={`explanation-${index}`} className="mt-1">Lời giải: {issue}</p>
-                                    ))}
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => onOpenQuestion(review)}
-                                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-300/70 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-950"
-                                >
-                                    <FiEdit2 size={13} /> Sửa câu
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : summary && !reviewing ? (
-                <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
-                    AI chưa đánh dấu câu lỗi.
-                </p>
-            ) : null}
-        </div>
-    );
-}
-
 // Convert saved DB question → QuestionFormData
 function dbToFormData(q: SavedQuestion): QuestionFormData {
     const answers = (q.answers || []).map(a => ({
@@ -680,6 +455,9 @@ export default function AdminExamDetailPage() {
     const [quickAddPosition, setQuickAddPosition] = useState<number | null>(null);
     const [pdfImportPreview, setPdfImportPreview] = useState<PdfImportPreview | null>(null);
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
+    const [sourceFiles, setSourceFiles] = useState<AdminExamSourceFile[]>([]);
+    const [sourceFileUploading, setSourceFileUploading] = useState(false);
+    const [sourceFileDeletingId, setSourceFileDeletingId] = useState<number | null>(null);
     const [normalizingFormulas, setNormalizingFormulas] = useState(false);
     const [normalizeResult, setNormalizeResult] = useState<NormalizeFormulaResult | null>(null);
     const [reviewingExam, setReviewingExam] = useState(false);
@@ -754,6 +532,7 @@ export default function AdminExamDetailPage() {
             const visibleQuestions = buildQuestionList(data.questions || []);
             setExam(data.exam);
             setAiHistory(Array.isArray(data.aiHistory) ? data.aiHistory : []);
+            setSourceFiles(Array.isArray(data.sourceFiles) ? data.sourceFiles : []);
             setSavedQuestions(visibleQuestions);
             setLocalQuestions(visibleQuestions);
             if (data.exam) {
@@ -1104,6 +883,33 @@ export default function AdminExamDetailPage() {
             setReviewingExam(false);
             setAiBlockingTask(null);
             setAiBlockingStartedAt(null);
+        }
+    };
+
+    const handleUploadSourceFile = async (file: File) => {
+        if (!exam?.id || sourceFileUploading) return;
+        try {
+            setSourceFileUploading(true);
+            const result = await examAdminApi.uploadExamSourceFile(exam.id, file);
+            setSourceFiles(Array.isArray(result.sourceFiles) ? result.sourceFiles : []);
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Upload file gốc thất bại.');
+        } finally {
+            setSourceFileUploading(false);
+        }
+    };
+
+    const handleDeleteSourceFile = async (sourceFileId: number) => {
+        if (!exam?.id || sourceFileDeletingId) return;
+        if (!confirm('Xóa file gốc đối chiếu của đề này?')) return;
+        try {
+            setSourceFileDeletingId(sourceFileId);
+            const result = await examAdminApi.deleteExamSourceFile(exam.id, sourceFileId);
+            setSourceFiles(Array.isArray(result.sourceFiles) ? result.sourceFiles : []);
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Xóa file gốc thất bại.');
+        } finally {
+            setSourceFileDeletingId(null);
         }
     };
 
@@ -2198,79 +2004,26 @@ export default function AdminExamDetailPage() {
 
                 {/* ── Questions Section ── */}
                 {isEditingExam && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <p className="font-bold text-blue-900">Chế độ sửa đề</p>
-                            <p className="text-sm text-blue-700">Nhấn <strong>✏️ Sửa</strong> ở câu để chỉnh sửa nội dung. <strong>+ Thêm</strong> để chèn câu mới (đánh số lại tự động).</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <div className="flex overflow-hidden rounded-lg border border-blue-200 bg-white p-1 text-xs font-bold shadow-sm">
-                                <button
-                                    type="button"
-                                    onClick={() => setAiQualityMode('fast')}
-                                    disabled={!!aiBlockingTask}
-                                    className={`rounded-md px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                        aiQualityMode === 'fast'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-blue-700 hover:bg-blue-50'
-                                    }`}
-                                >
-                                    Nhanh
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setAiQualityMode('deep')}
-                                    disabled={!!aiBlockingTask}
-                                    className={`rounded-md px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                                        aiQualityMode === 'deep'
-                                            ? 'bg-violet-600 text-white'
-                                            : 'text-violet-700 hover:bg-violet-50'
-                                    }`}
-                                    title="Chạy GPT 5.5 trước, rồi Opus thinking soát lại. Lâu hơn nhưng chắc hơn."
-                                >
-                                    Kỹ
-                                </button>
-                            </div>
-                            <button
-                                onClick={handleReviewCurrentExam}
-                                disabled={reviewingExam || !!aiBlockingTask}
-                                className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <FiAlertCircle size={15} />
-                                {reviewingExam ? 'AI đang soát...' : 'AI soát đề này'}
-                            </button>
-                            <button
-                                onClick={handleApplyDisplayFormatFixes}
-                                disabled={applyingDisplayFormatFixes || !!aiBlockingTask}
-                                className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <FiRefreshCw size={15} className={applyingDisplayFormatFixes ? 'animate-spin' : ''} />
-                                {applyingDisplayFormatFixes ? 'AI đang sửa format...' : 'AI sửa format hiển thị'}
-                            </button>
-                            <button
-                                onClick={handleGenerateMissingExplanations}
-                                disabled={generatingMissingExplanations || !!aiBlockingTask}
-                                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <FiRefreshCw size={15} className={generatingMissingExplanations ? 'animate-spin' : ''} />
-                                {generatingMissingExplanations ? 'AI đang thêm...' : 'AI thêm giải thích thiếu'}
-                            </button>
-                            <button
-                                onClick={handlePolishExplanations}
-                                disabled={polishingExplanations || !!aiBlockingTask}
-                                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <FiRefreshCw size={15} className={polishingExplanations ? 'animate-spin' : ''} />
-                                {polishingExplanations ? 'AI đang chuẩn hóa...' : 'AI chuẩn hóa lời giải'}
-                            </button>
-                            <button
-                                onClick={handleNormalizeCurrentExam}
-                                disabled={normalizingFormulas || !!aiBlockingTask}
-                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <FiRefreshCw size={15} className={normalizingFormulas ? 'animate-spin' : ''} />
-                                {normalizingFormulas ? 'Đang chuẩn hóa...' : 'Chuẩn hóa công thức đề này'}
-                            </button>
+                    <ExamAiPanel
+                        title="Chế độ sửa đề"
+                        description="Sửa câu, thêm câu, upload file gốc và chạy AI soát đề trong cùng một khu vực."
+                        actions={
+                            <>
+                                <ExamAiActions
+                                qualityMode={aiQualityMode}
+                                disabled={!!aiBlockingTask}
+                                reviewingExam={reviewingExam}
+                                applyingDisplayFormatFixes={applyingDisplayFormatFixes}
+                                generatingMissingExplanations={generatingMissingExplanations}
+                                polishingExplanations={polishingExplanations}
+                                normalizingFormulas={normalizingFormulas}
+                                onQualityModeChange={setAiQualityMode}
+                                onReview={handleReviewCurrentExam}
+                                onApplyDisplayFormatFixes={handleApplyDisplayFormatFixes}
+                                onGenerateMissingExplanations={handleGenerateMissingExplanations}
+                                onPolishExplanations={handlePolishExplanations}
+                                onNormalize={handleNormalizeCurrentExam}
+                            />
                             <button
                                 onClick={() => {
                                     const nextNum = getNextQuestionNum();
@@ -2322,39 +2075,21 @@ export default function AdminExamDetailPage() {
                             >
                                 <FiPlus size={15} /> Trắc Nghiệm
                             </button>
-                        </div>
-                    </div>
+                            </>
+                        }
+                    />
+                )}
+                {isEditingExam && (
+                    <ExamSourceFilePanel
+                        sourceFiles={sourceFiles}
+                        uploading={sourceFileUploading}
+                        deletingId={sourceFileDeletingId}
+                        onUpload={handleUploadSourceFile}
+                        onDelete={handleDeleteSourceFile}
+                    />
                 )}
 
-                {isEditingExam && aiHistory.length > 0 && (
-                    <div className="mb-6 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <div>
-                                <p className="font-black">Lịch sử AI của đề này</p>
-                                <p className="mt-1 text-cyan-800">Đề đã được AI xử lý. Bấm lại vẫn được, nhưng hệ thống sẽ hỏi xác nhận để tránh tốn tiền.</p>
-                            </div>
-                        </div>
-                        <div className="mt-3 grid gap-2 md:grid-cols-2">
-                            {aiHistory.slice(0, 6).map((run) => {
-                                const summary = run.summary || {};
-                                return (
-                                    <div key={`${run.action}-${run.created_at}`} className="rounded-lg border border-cyan-200 bg-white/70 px-3 py-2">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <span className="font-bold">{getExamAiRunLabel(run.action)}</span>
-                                            <span className="text-xs font-semibold text-cyan-700">{formatAiRunTime(run.created_at)}</span>
-                                        </div>
-                                        <p className="mt-1 text-xs text-cyan-800">
-                                            {run.run_by_name ? `Bởi ${run.run_by_name}` : 'Không rõ admin'}
-                                            {` · ${getExamAiRunDetail(run)}`}
-                                            {summary.model ? ` · ${summary.model}` : ''}
-                                        </p>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
+                {isEditingExam && <ExamAiHistory runs={aiHistory} />}
                 {isEditingExam && normalizeResult && (
                     <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                         <p className="font-bold">{normalizeResult.message}</p>
@@ -2431,7 +2166,7 @@ export default function AdminExamDetailPage() {
                 )}
 
                 {isEditingExam && (
-                    <SavedExamAiReviewPanel
+                    <ExamReviewResultPanel
                         result={examReviewResult}
                         error={examReviewError}
                         reviewing={reviewingExam}

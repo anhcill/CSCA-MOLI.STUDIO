@@ -23,6 +23,11 @@ const {
   reviewImportedItemsWithAI,
   reviewStoredExamWithAI,
 } = require("../services/examQualityService");
+const {
+  deleteExamSourceFile: deleteExamSourceFileRecord,
+  listExamSourceFiles: listExamSourceFileRecords,
+  saveExamSourceFile: saveExamSourceFileRecord,
+} = require("../services/exam-ai/examSourceService");
 const { buildAiModeOptions, isDeepMode } = require("../services/adminExamAiModeService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
@@ -504,6 +509,109 @@ const AdminExamController = {
     }
   },
 
+  async listExamSourceFiles(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const sourceFiles = await listExamSourceFileRecords(client, examId);
+      res.json({ sourceFiles });
+    } catch (error) {
+      console.error("List exam source files error:", getSafeErrorLog(error));
+      res.status(500).json({ message: "Không tải được file gốc của đề." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async uploadExamSourceFile(req, res) {
+    const { examId } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ message: "Cần upload file PDF hoặc Word .doc/.docx." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await saveExamSourceFileRecord(client, examId, req.file, req.user.id);
+      const sourceFiles = await listExamSourceFileRecords(client, examId);
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.upload_exam_source_file", {
+        examId,
+        sourceFileId: result.sourceFile?.id,
+        fileName: result.sourceFile?.fileName,
+        fileType: result.sourceFile?.fileType,
+        textLength: result.sourceFile?.textLength,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.status(201).json({
+        message: "Đã lưu file gốc để AI đối chiếu.",
+        ...result,
+        sourceFiles,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Upload exam source file error:", getSafeErrorLog(error));
+      if (error.message === "SOURCE_FILE_TEXT_TOO_SHORT") {
+        return res.status(422).json({ message: "File gốc không có đủ chữ để AI đối chiếu." });
+      }
+      if (error.message === "UNSUPPORTED_IMPORT_FILE") {
+        return res.status(400).json({ message: "Chỉ hỗ trợ PDF và Word .doc/.docx." });
+      }
+      res.status(error.statusCode || 500).json({ message: "Upload file gốc thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteExamSourceFile(req, res) {
+    const { examId, sourceFileId } = req.params;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const deleted = await deleteExamSourceFileRecord(client, examId, sourceFileId);
+      if (!deleted) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Không tìm thấy file gốc." });
+      }
+      const sourceFiles = await listExamSourceFileRecords(client, examId);
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.delete_exam_source_file", {
+        examId,
+        sourceFileId,
+        fileName: deleted.file_name,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json({
+        message: "Đã xóa file gốc.",
+        deleted,
+        sourceFiles,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Delete exam source file error:", getSafeErrorLog(error));
+      res.status(500).json({ message: "Xóa file gốc thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
   async bulkImportQuestions(req, res) {
     const { examId } = req.params;
     const rawItems = Array.isArray(req.body?.items)
@@ -803,6 +911,8 @@ const AdminExamController = {
         issues: result.summary?.issues || 0,
         ok: result.summary?.ok || 0,
         model: result.summary?.model,
+        sourceFileId: result.sourceFile?.id,
+        sourceFileName: result.sourceFile?.fileName,
       });
       await client.query("COMMIT");
 
@@ -882,6 +992,8 @@ const AdminExamController = {
         formulaChangedCount: result.formulaChangedCount,
         skippedCount: result.skippedCount,
         model: result.summary?.model,
+        sourceFileId: result.sourceFile?.id,
+        sourceFileName: result.sourceFile?.fileName,
       });
       await client.query("COMMIT");
 
@@ -2929,11 +3041,13 @@ const AdminExamController = {
       const exam = examResult.rows[0];
       exam.allow_download = getExamAllowDownload(normalizeExamAccess(exam.is_premium, exam.vip_tier));
       const aiHistory = await getExamAiHistory(examId);
+      const sourceFiles = await listExamSourceFileRecords(pool, examId);
 
       res.json({
         exam,
         questions,
         aiHistory,
+        sourceFiles,
       });
     } catch (error) {
       console.error("Get exam error:", error);

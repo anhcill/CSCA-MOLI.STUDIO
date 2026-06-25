@@ -2802,6 +2802,8 @@ async function previewImportFile(file, importPresetInput) {
 }
 
 module.exports = {
+  extractImportFileText,
+  normalizeUploadedFileName,
   previewImportFile,
   normalizeImportedItem,
   validateImportItems,
