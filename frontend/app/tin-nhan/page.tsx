@@ -35,14 +35,34 @@ export default function MessagesPage() {
 
     const root = document.documentElement;
     const body = document.body;
+    const scrollY = window.scrollY;
+    const previousRootOverflow = root.style.overflow;
+    const previousRootHeight = root.style.height;
     const previousBodyOverflow = body.style.overflow;
     const previousBodyOverscroll = body.style.overscrollBehavior;
+    const previousBodyPosition = body.style.position;
+    const previousBodyTop = body.style.top;
+    const previousBodyLeft = body.style.left;
+    const previousBodyRight = body.style.right;
+    const previousBodyWidth = body.style.width;
+    const previousBodyHeight = body.style.height;
     const syncViewportHeight = () => {
-      const height = window.visualViewport?.height || window.innerHeight;
+      const viewport = window.visualViewport;
+      const height = viewport?.height || window.innerHeight;
+      const offsetTop = viewport?.offsetTop || 0;
       root.style.setProperty('--messages-visual-height', `${height}px`);
+      root.style.setProperty('--messages-visual-top', `${offsetTop}px`);
     };
 
     syncViewportHeight();
+    root.style.overflow = 'hidden';
+    root.style.height = '100%';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.height = '100%';
     body.style.overflow = 'hidden';
     body.style.overscrollBehavior = 'none';
     window.visualViewport?.addEventListener('resize', syncViewportHeight);
@@ -50,12 +70,22 @@ export default function MessagesPage() {
     window.addEventListener('resize', syncViewportHeight);
 
     return () => {
+      root.style.overflow = previousRootOverflow;
+      root.style.height = previousRootHeight;
       body.style.overflow = previousBodyOverflow;
       body.style.overscrollBehavior = previousBodyOverscroll;
+      body.style.position = previousBodyPosition;
+      body.style.top = previousBodyTop;
+      body.style.left = previousBodyLeft;
+      body.style.right = previousBodyRight;
+      body.style.width = previousBodyWidth;
+      body.style.height = previousBodyHeight;
       root.style.removeProperty('--messages-visual-height');
+      root.style.removeProperty('--messages-visual-top');
       window.visualViewport?.removeEventListener('resize', syncViewportHeight);
       window.visualViewport?.removeEventListener('scroll', syncViewportHeight);
       window.removeEventListener('resize', syncViewportHeight);
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -228,7 +258,13 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden overscroll-none bg-slate-50" style={{ height: 'var(--messages-visual-height, 100dvh)' }}>
+    <div
+      className="fixed inset-x-0 top-0 flex flex-col overflow-hidden overscroll-none bg-slate-50 [touch-action:manipulation]"
+      style={{
+        height: 'var(--messages-visual-height, 100dvh)',
+        transform: 'translateY(var(--messages-visual-top, 0px))',
+      }}
+    >
 
       {/* ── Top Header ── */}
       <div className="shrink-0 px-3 py-3 sm:px-6 sm:py-4 flex items-center gap-3 sm:gap-4 bg-white border-b border-slate-200">
@@ -271,7 +307,7 @@ export default function MessagesPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Tìm cuộc trò chuyện..."
-                className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-slate-400"
+                className="w-full pl-11 pr-4 py-3 text-base sm:text-sm rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-slate-400"
               />
             </div>
             <div className="grid grid-cols-3 gap-2">

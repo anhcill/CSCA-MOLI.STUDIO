@@ -82,15 +82,13 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
 
   const keepMobileViewportStable = useCallback(() => {
     if (typeof window === 'undefined' || window.innerWidth >= 768) return;
-    const scrollY = window.scrollY;
-    const messagesScrollTop = messagesScrollRef.current?.scrollTop ?? 0;
-    const restore = () => {
-      window.scrollTo(0, scrollY);
-      if (messagesScrollRef.current) messagesScrollRef.current.scrollTop = messagesScrollTop;
+    const keepChatPinned = () => {
+      if (!messagesScrollRef.current) return;
+      messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
     };
-    window.requestAnimationFrame(restore);
-    window.setTimeout(restore, 80);
-    window.setTimeout(restore, 180);
+    window.requestAnimationFrame(keepChatPinned);
+    window.setTimeout(keepChatPinned, 120);
+    window.setTimeout(keepChatPinned, 280);
   }, []);
 
   const focusInputSafely = useCallback(() => {
@@ -894,11 +892,16 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onPointerDown={keepMobileViewportStable}
-              onFocus={keepMobileViewportStable}
+              onFocus={() => {
+                setShowEmoji(false);
+                keepMobileViewportStable();
+              }}
+              enterKeyHint="send"
+              inputMode="text"
               placeholder={blocked ? "Không thể nhắn tin" : "Nhập tin nhắn hoặc dán ảnh..."}
               rows={1}
               disabled={blocked || uploadingImage}
-              className="w-full px-4 py-3 rounded-2xl bg-gray-50/80 border border-gray-200 text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-gray-400"
+              className="w-full px-4 py-3 rounded-2xl bg-gray-50/80 border border-gray-200 text-base leading-6 sm:text-sm resize-none focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-gray-400"
               style={{ height: '48px', maxHeight: '120px', overflowY: 'auto' }}
             />
           </div>
@@ -1008,7 +1011,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                     onChange={(e) => { setCustomBgUrl(e.target.value); setBgError(''); }}
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCustomBg()}
                     placeholder="Dán URL hình ảnh vào đây..."
-                    className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-xs focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-gray-300"
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-base sm:text-xs focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-gray-300"
                   />
                   <button
                     onClick={handleApplyCustomBg}
@@ -1081,7 +1084,7 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
               value={reportReason}
               onChange={e => setReportReason(e.target.value)}
               placeholder="Lý do báo cáo (tối thiểu 5 ký tự)..."
-              className="w-full p-3 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 resize-none h-24"
+              className="w-full p-3 rounded-2xl border border-gray-200 text-base sm:text-sm focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 resize-none h-24"
             />
             <div className="flex gap-2.5">
               <button
