@@ -623,10 +623,13 @@ const AdminExamController = {
         return res.status(400).json({ message: "Không có câu hỏi để AI soát." });
       }
 
+      const modeOptions = getAdminExamAiMode(req);
       const result = await reviewImportedItemsWithAI(items, {
         subject: req.body?.subject || req.body?.subjectName || "CSCA",
         signal: createRequestAbortSignal(req, res),
+        ...(isDeepMode(modeOptions.qualityMode) ? modeOptions.deep : modeOptions.fast),
       });
+      result.qualityMode = modeOptions.qualityMode;
 
       UserActivity.log(req.user.id, "admin.review_imported_exam_items", {
         total: result.summary?.total || 0,
@@ -790,7 +793,7 @@ const AdminExamController = {
         const fastSummary = result.summary;
         result = await reviewStoredExamWithAI(client, examId, {
           ...baseContext,
-          ...modeOptions,
+          ...modeOptions.deep,
         });
         result.fastReviewSummary = fastSummary;
       }
