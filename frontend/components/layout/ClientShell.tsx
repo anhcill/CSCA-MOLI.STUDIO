@@ -46,7 +46,10 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/forgot') ||
     pathname?.startsWith('/reset');
   const isExam = pathname?.startsWith('/exam/');
-  const isChat = pathname?.startsWith('/hoi-dap') || pathname?.startsWith('/gop-y');
+  const isChat = pathname?.startsWith('/hoi-dap') ||
+    pathname?.startsWith('/gop-y') ||
+    pathname?.startsWith('/tin-nhan') ||
+    pathname?.startsWith('/ho-tro/messages');
   const isGame = pathname?.startsWith('/games');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
