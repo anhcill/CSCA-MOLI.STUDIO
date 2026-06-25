@@ -1515,7 +1515,7 @@ export default function MoliPet({ defaultPosition = 'left' }: MoliPetProps) {
               onFocus={keepMobileViewportStable}
               placeholder={cooldownSeconds > 0 ? `Đợi ${cooldownSeconds}s...` : isAuthenticated ? `Nhắn ${settings.name} hoặc dán ảnh...` : 'Đăng nhập để chat AI'}
               disabled={processingImage}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-base text-slate-800 outline-none focus:border-cyan-400 sm:py-2 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-0 text-base leading-5 text-slate-800 outline-none placeholder:leading-5 focus:border-cyan-400 sm:h-10 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
             <button
               type="submit"
