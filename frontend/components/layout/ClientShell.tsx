@@ -57,7 +57,9 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showDailyGift = showMoliPet && isAuthenticated;
-  const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame;
+  const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  const showPwaPrompt = !isChat;
+  const showUpdateToast = !isChat;
   const moliPetPosition = 'left';
 
   // Register service worker + detect updates
@@ -68,8 +70,8 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showFloatingContacts && mounted && <FloatingContactButtons />}
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
-      {mounted && <PWAInstallPrompt />}
-      {mounted && (
+      {mounted && showPwaPrompt && <PWAInstallPrompt />}
+      {mounted && showUpdateToast && (
         <UpdateToast
           visible={updateAvailable}
           version={updateVersion}
