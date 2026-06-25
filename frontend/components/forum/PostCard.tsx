@@ -295,43 +295,49 @@ function CommentsSection({
     <div className="bg-gray-50/50 dark:bg-slate-950/40 border-t border-gray-100 dark:border-slate-800 px-6 py-5">
       {/* Comment input */}
       {isAuthenticated && (
-        <div className="flex gap-4 items-start mb-6">
+        <div className="flex gap-3 items-start mb-6">
           <div className="shrink-0">
             <img
               src={getAvatarUrl(user?.avatar, user?.avatar_url, user?.full_name, 36)}
               alt=""
-              className="w-9 h-9 rounded-2xl object-cover"
+              className="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm"
             />
           </div>
-          <div className="flex-1 relative group">
+          <div className="flex-1 min-w-0">
             {isReplyingTo && (
-              <div className="absolute -top-6 left-2 flex items-center gap-2 text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 px-3 py-1 rounded-t-lg">
-                <span>Đang phản hồi {replyName}</span>
-                <button onClick={() => onSetReplyingTo?.(null)} className="hover:text-red-500 ml-1">
-                  <FiX size={14} />
+              <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[12px] font-bold text-violet-700 shadow-sm">
+                <span className="truncate">Đang phản hồi {replyName}</span>
+                <button
+                  onClick={() => onSetReplyingTo?.(null)}
+                  className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-violet-500 transition-colors hover:bg-white hover:text-red-500"
+                  aria-label="Hủy phản hồi"
+                >
+                  <FiX size={13} />
                 </button>
               </div>
             )}
-            <textarea
-              value={currentText}
-              onChange={e => onCommentTextChange?.(post.id, e.target.value)}
-              placeholder={isReplyingTo ? `Phản hồi ${replyName}...` : "Nhập ý kiến của bạn..."}
-              rows={1}
-              className={`w-full bg-white dark:bg-slate-900 rounded-2xl border ${isReplyingTo ? 'border-violet-300 rounded-tl-none' : 'border-gray-200 dark:border-slate-700'} focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 px-5 py-3 pr-12 text-[15px] font-medium text-gray-800 dark:text-slate-100 outline-none placeholder-gray-400 dark:placeholder-slate-500 shadow-sm resize-none`}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAddComment?.(post.id); } }}
-              onInput={e => {
-                const el = e.target as HTMLTextAreaElement;
-                el.style.height = 'auto';
-                el.style.height = el.scrollHeight + 'px';
-              }}
-            />
-            <button
-              onClick={() => onAddComment?.(post.id)}
-              disabled={!currentText.trim()}
-              className="absolute right-2 bottom-2 p-2 rounded-xl bg-violet-100 text-violet-600 hover:bg-violet-600 hover:text-white disabled:opacity-0 disabled:scale-75 transition-all duration-300"
-            >
-              <FiSend size={16} />
-            </button>
+            <div className="relative">
+              <textarea
+                value={currentText}
+                onChange={e => onCommentTextChange?.(post.id, e.target.value)}
+                placeholder={isReplyingTo ? `Phản hồi ${replyName}...` : "Viết bình luận..."}
+                rows={1}
+                className="w-full resize-none rounded-[1.25rem] border border-gray-200 bg-white px-4 py-3 pr-12 text-[15px] font-medium text-gray-800 outline-none shadow-sm transition placeholder:text-gray-400 focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAddComment?.(post.id); } }}
+                onInput={e => {
+                  const el = e.target as HTMLTextAreaElement;
+                  el.style.height = 'auto';
+                  el.style.height = el.scrollHeight + 'px';
+                }}
+              />
+              <button
+                onClick={() => onAddComment?.(post.id)}
+                disabled={!currentText.trim()}
+                className="absolute bottom-2.5 right-2.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-white shadow-sm transition-all hover:bg-violet-700 disabled:pointer-events-none disabled:scale-90 disabled:opacity-0"
+              >
+                <FiSend size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -398,11 +404,11 @@ function CommentThread({
           <img
             src={getAvatarUrl(comment.author_avatar, comment.author_avatar, comment.author_name)}
             alt=""
-            className="w-9 h-9 rounded-2xl object-cover hover:opacity-80 transition-opacity"
+            className="w-9 h-9 rounded-full object-cover hover:opacity-80 transition-opacity ring-2 ring-white shadow-sm"
           />
         </div>
         <div className="flex-1">
-          <div className="inline-block bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm rounded-2xl px-4 py-2">
+          <div className="inline-block max-w-full rounded-[1.15rem] bg-slate-100 px-4 py-2.5 text-left shadow-sm dark:bg-slate-800">
             <p className="text-[13px] font-black text-gray-900 dark:text-white mb-0.5">{comment.author_name}</p>
             <p className="text-[14px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
               {comment.reply_to_user_name && (
@@ -411,7 +417,7 @@ function CommentThread({
               {comment.content}
             </p>
           </div>
-          <div className="flex items-center gap-3 ml-2 mt-1.5 text-[11px] font-bold">
+          <div className="flex items-center gap-3 ml-2 mt-1.5 text-[11px] font-bold text-gray-500">
             <span className="text-gray-400 dark:text-slate-500">{timeAgo(comment.created_at)}</span>
             <button
               onClick={() => onLikeComment?.(postId, comment)}
@@ -436,7 +442,7 @@ function CommentThread({
 
       {/* Replies */}
       {replies.length > 0 && (
-        <div className="ml-10 border-l-2 border-gray-100 dark:border-slate-700 pl-4 mt-3 space-y-3">
+        <div className="ml-10 border-l border-gray-200/80 pl-4 mt-3 space-y-3 dark:border-slate-700">
           {replies.map(r => (
             <div key={r.id} className="flex gap-3 items-start">
               <div
@@ -446,11 +452,11 @@ function CommentThread({
                 <img
                   src={getAvatarUrl(r.author_avatar, r.author_avatar, r.author_name)}
                   alt=""
-                  className="w-7 h-7 rounded-xl object-cover hover:opacity-80 transition-opacity"
+                  className="w-7 h-7 rounded-full object-cover hover:opacity-80 transition-opacity ring-2 ring-white shadow-sm"
                 />
               </div>
               <div className="flex-1">
-                <div className="inline-block bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm rounded-2xl px-3 py-1.5">
+                <div className="inline-block max-w-full rounded-[1.05rem] bg-white px-3 py-1.5 shadow-sm dark:bg-slate-800">
                   <p className="text-[12px] font-black text-gray-900 dark:text-white mb-0.5">{r.author_name}</p>
                   <p className="text-[13px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
                     {r.reply_to_user_name && (
@@ -459,7 +465,7 @@ function CommentThread({
                     {r.content}
                   </p>
                 </div>
-                <div className="flex items-center gap-3 ml-1 mt-1 text-[10px] font-bold">
+                <div className="flex items-center gap-3 ml-1 mt-1 text-[10px] font-bold text-gray-500">
                   <span className="text-gray-400 dark:text-slate-500">{timeAgo(r.created_at)}</span>
                   <button
                     onClick={() => onLikeComment?.(postId, r)}
