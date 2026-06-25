@@ -2941,7 +2941,7 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
           path: item.path,
           questionId,
           questionNumber: question.question_number,
-          reason: item.note || "AI chua tra explanation tieng Viet co dau hop le.",
+          reason: item.note || "AI chưa trả explanation tiếng Việt có dấu hợp lệ.",
         });
       }
     }
@@ -2954,7 +2954,7 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
           path: item.path,
           questionId,
           questionNumber: question.question_number,
-          reason: item.note || "AI chua tra explanationCn tieng Trung hop le.",
+          reason: item.note || "AI chưa trả explanationCn tiếng Trung hợp lệ.",
         });
       }
     }
@@ -2964,7 +2964,7 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
         path: item.path,
         questionId,
         questionNumber: question.question_number,
-        reason: item.note || "AI chua tao duoc loi giai hop le hoac cau da co giai thich.",
+        reason: item.note || "AI chưa tạo được lời giải hợp lệ hoặc câu đã có giải thích.",
       });
       continue;
     }

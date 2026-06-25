@@ -33,13 +33,13 @@ const INSIGHT_TYPES = {
 
 function normalizeAiImageDataUrl(value) {
   if (!value) return { ok: true, value: null };
-  if (typeof value !== 'string') return { ok: false, message: 'Anh khong hop le.' };
+  if (typeof value !== 'string') return { ok: false, message: 'Ảnh không hợp lệ.' };
   const dataUrl = value.trim();
   if (Buffer.byteLength(dataUrl, 'utf8') > AI_CHAT_MAX_IMAGE_DATA_URL_LENGTH) {
-    return { ok: false, message: 'Anh qua lon. Hay cat nho hoac nen anh roi gui lai.' };
+    return { ok: false, message: 'Ảnh quá lớn. Hãy cắt nhỏ hoặc nén ảnh rồi gửi lại.' };
   }
   if (!/^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(dataUrl)) {
-    return { ok: false, message: 'Chi chap nhan anh PNG, JPG hoac WEBP.' };
+    return { ok: false, message: 'Chỉ chấp nhận ảnh PNG, JPG hoặc WEBP.' };
   }
   return { ok: true, value: dataUrl.replace(/\s+/g, '') };
 }
@@ -215,7 +215,7 @@ function checkMoliPetLimit(userId, message) {
     return {
       allowed: false,
       retryAfter: Math.ceil((nextAllowedAt - now) / 1000),
-      message: 'Moly nghe kip khong noi kip. Doi vai giay roi nhan tiep nhe.',
+      message: 'Moly nghe kịp nhưng nói chưa kịp. Đợi vài giây rồi nhắn tiếp nhé.',
     };
   }
 
@@ -228,7 +228,7 @@ function checkMoliPetLimit(userId, message) {
     return {
       allowed: false,
       retryAfter: Math.ceil((state.lastFingerprintAt + MOLI_PET_REPEAT_WINDOW_MS - now) / 1000),
-      message: 'Tin nay vua gui roi. Doi mot chut hoac hoi y khac nhe.',
+      message: 'Tin này vừa gửi rồi. Đợi một chút hoặc hỏi ý khác nhé.',
     };
   }
 
@@ -237,7 +237,7 @@ function checkMoliPetLimit(userId, message) {
     return {
       allowed: false,
       retryAfter: Math.ceil((state.burstStart + MOLI_PET_BURST_WINDOW_MS - now) / 1000),
-      message: `Ban dang nhan hoi nhanh. Moly chi nhan ${MOLI_PET_MAX_PER_BURST} tin/phut de tranh spam.`,
+      message: `Bạn đang nhắn hơi nhanh. Moly chỉ nhận ${MOLI_PET_MAX_PER_BURST} tin/phút để tránh spam.`,
     };
   }
 
@@ -246,7 +246,7 @@ function checkMoliPetLimit(userId, message) {
     return {
       allowed: false,
       retryAfter: Math.ceil((state.windowStart + MOLI_PET_WINDOW_MS - now) / 1000),
-      message: `Hom nay Moly da chat du ${MOLI_PET_MAX_PER_WINDOW} tin roi. Mai minh noi tiep nhe.`,
+      message: `Hôm nay Moly đã chat đủ ${MOLI_PET_MAX_PER_WINDOW} tin rồi. Mai mình nói tiếp nhé.`,
     };
   }
 
@@ -944,13 +944,13 @@ async function askMoliPet(req, res) {
     const trimmedMessage = String(message || '').trim();
 
     if (trimmedMessage.length < 2) {
-      return res.status(400).json({ success: false, message: 'Tin nhan qua ngan.' });
+      return res.status(400).json({ success: false, message: 'Tin nhắn quá ngắn.' });
     }
 
     if (trimmedMessage.length > MOLI_PET_MAX_MESSAGE_LENGTH) {
       return res.status(400).json({
         success: false,
-        message: `Tin nhan qua dai. Toi da ${MOLI_PET_MAX_MESSAGE_LENGTH} ky tu.`,
+        message: `Tin nhắn quá dài. Tối đa ${MOLI_PET_MAX_MESSAGE_LENGTH} ký tự.`,
       });
     }
 
@@ -959,7 +959,7 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: 3,
-        answer: 'Moly dang tra loi tin truoc. Doi minh mot xiu nhe.',
+        answer: 'Moly đang trả lời tin trước. Đợi mình một xíu nhé.',
       });
     }
     petLockUserId = userId;
@@ -979,7 +979,7 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: aiService.getRateLimitRemaining(),
-        answer: 'Moly dang bi ket noi cham. Thu lai sau mot chut nhe.',
+        answer: 'Moly đang bị kết nối chậm. Thử lại sau một chút nhé.',
       });
     }
 
@@ -1022,10 +1022,10 @@ async function askMoliPet(req, res) {
         success: false,
         rateLimited: true,
         retryAfter: error.retryAfter || aiService.getRateLimitRemaining(),
-        answer: 'Moly dang ban xiu. Ban thu lai sau nhe.',
+        answer: 'Moly đang bận xíu. Bạn thử lại sau nhé.',
       });
     }
-    return res.status(500).json({ success: false, message: 'Loi MoliPet chat.' });
+    return res.status(500).json({ success: false, message: 'Lỗi MoliPet chat.' });
   } finally {
     if (petLockUserId) finishMoliPet(petLockUserId);
   }
