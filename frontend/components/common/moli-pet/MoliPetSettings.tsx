@@ -19,8 +19,7 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
 
   return (
     <div
-      className={`shrink-0 overflow-y-auto overscroll-contain border-b p-3 sm:p-4 ${activeSkin.settingsClass}`}
-      style={{ maxHeight: 252 }}
+      className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 ${activeSkin.settingsClass}`}
     >
       <label className="block text-xs font-bold text-slate-500 dark:text-slate-300">
         Tên pet
@@ -106,20 +105,13 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
         ))}
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => movePetToSide(settings.position === 'left' ? 'right' : 'left')}
           className="rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
           Góc {settings.position === 'left' ? 'trái' : 'phải'}
-        </button>
-        <button
-          type="button"
-          onClick={() => updateSettings({ showBubble: !settings.showBubble })}
-          className="rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-        >
-          Bong bóng {settings.showBubble ? 'bật' : 'tắt'}
         </button>
         <button
           type="button"
@@ -135,7 +127,7 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
         <button
           type="button"
           onClick={hideForDay}
-          className="col-span-3 flex items-center justify-center gap-2 rounded-xl border border-rose-100 bg-white/85 px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-900 dark:text-rose-300"
+          className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-rose-100 bg-white/85 px-3 py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-900 dark:text-rose-300"
         >
           <FiEyeOff size={14} />
           Ẩn pet hôm nay

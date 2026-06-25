@@ -15,10 +15,6 @@ export function MoliPetTrigger({ controller }: { controller: MoliPetController }
     settings,
     petMood,
     isVocabularyRoute,
-    showHintBubble,
-    bubbleSideClass,
-    routeHint,
-    setOpen,
     setMinimized,
     hideForDay,
     handlePetPointerDown,
@@ -30,16 +26,6 @@ export function MoliPetTrigger({ controller }: { controller: MoliPetController }
 
   return (
     <>
-      {showHintBubble && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={`absolute bottom-5 ${bubbleSideClass} hidden max-w-[240px] rounded-2xl border px-4 py-3 text-left text-sm font-semibold shadow-xl sm:block ${skin.assistantBubbleClass}`}
-        >
-          {routeHint}
-        </button>
-      )}
-
       <div className="flex h-full w-full items-end justify-center gap-1">
         {minimized && open && (
           <button
