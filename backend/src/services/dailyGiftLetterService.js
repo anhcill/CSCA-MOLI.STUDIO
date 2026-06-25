@@ -28,7 +28,7 @@ function getVietnamDateKey(date = new Date()) {
 function formatDateValue(value) {
   if (!value) return getVietnamDateKey();
   if (typeof value === 'string') return value.slice(0, 10);
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return getVietnamDateKey(value);
   return String(value).slice(0, 10);
 }
 
