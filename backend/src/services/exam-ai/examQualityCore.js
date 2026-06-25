@@ -2152,7 +2152,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         models: getContextFixModels(context),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
-        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "120000", 10)),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "300000", 10)),
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
