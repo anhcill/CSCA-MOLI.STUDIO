@@ -432,6 +432,18 @@ export function PetFace({
 }) {
   const waveSideClass = facing === 'left' ? 'left-1' : 'right-1';
 
+  if (variant === 'moly-purple' || variant === 'moly-chibi') {
+    return (
+      <div className="relative h-20 w-20">
+        <div className="pointer-events-none absolute inset-[-14px] opacity-45">
+          <Lottie animationData={sparkleAnimation} loop autoplay />
+        </div>
+        <MolyReferencePet variant={variant} walking={walking} facing={facing} />
+        {waving && <WavePaw sideClass={waveSideClass} />}
+      </div>
+    );
+  }
+
   if (variant !== 'cat') {
     return (
       <div className="relative h-20 w-20">
@@ -470,12 +482,173 @@ function WavePaw({ sideClass }: { sideClass: string }) {
   );
 }
 
+function MolyReferencePet({
+  variant,
+  walking,
+  facing,
+}: {
+  variant: Extract<PetVariant, 'moly-purple' | 'moly-chibi'>;
+  walking: boolean;
+  facing: PetPosition;
+}) {
+  const id = useId().replace(/:/g, '');
+  const isChibi = variant === 'moly-chibi';
+  const shellClass = `moli-plush-shell relative h-20 w-20 ${walking ? 'moli-plush-walking' : ''}`;
+
+  return (
+    <div
+      className={shellClass}
+      style={{ '--moli-dir': facing === 'left' ? '-1' : '1' } as CSSProperties}
+    >
+      {isChibi ? <MolyChibiSvg id={id} /> : <MolyPurpleCatSvg id={id} />}
+    </div>
+  );
+}
+
+function MolyPurpleCatSvg({ id }: { id: string }) {
+  const fur = `moly-purple-fur-${id}`;
+  const belly = `moly-purple-belly-${id}`;
+  const eye = `moly-purple-eye-${id}`;
+  const shadow = `moly-purple-shadow-${id}`;
+
+  return (
+    <svg className="h-full w-full overflow-visible" viewBox="0 0 96 96" role="img" aria-label="Moly mèo tím">
+      <defs>
+        <radialGradient id={fur} cx="34%" cy="22%" r="78%">
+          <stop offset="0%" stopColor="#d6c0ff" />
+          <stop offset="50%" stopColor="#ad79ff" />
+          <stop offset="100%" stopColor="#8054d9" />
+        </radialGradient>
+        <radialGradient id={belly} cx="42%" cy="22%" r="75%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="72%" stopColor="#f3e9ff" />
+          <stop offset="100%" stopColor="#d8c1ff" />
+        </radialGradient>
+        <radialGradient id={eye} cx="35%" cy="25%" r="72%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="28%" stopColor="#3b244a" />
+          <stop offset="72%" stopColor="#1b1322" />
+          <stop offset="100%" stopColor="#050509" />
+        </radialGradient>
+        <filter id={shadow} x="-35%" y="-35%" width="170%" height="180%">
+          <feDropShadow dx="0" dy="9" stdDeviation="5" floodColor="#7c3aed" floodOpacity="0.32" />
+        </filter>
+      </defs>
+
+      <ellipse cx="48" cy="86" rx="27" ry="6" fill="#0f172a" opacity="0.18" />
+      <path d="M20 64c-12 8-15 21-7 24 12 4 26-7 29-22 2-12-9-9-22-2Z" fill={`url(#${fur})`} filter={`url(#${shadow})`} />
+      <path d="M72 58c13 5 18 16 11 21-8 6-22-2-23-13-.6-7 4-11 12-8Z" fill={`url(#${fur})`} filter={`url(#${shadow})`} />
+      <ellipse cx="48" cy="60" rx="29" ry="31" fill={`url(#${fur})`} filter={`url(#${shadow})`} />
+      <ellipse cx="48" cy="69" rx="15" ry="17" fill={`url(#${belly})`} opacity="0.96" />
+
+      <path d="M22 36 12 9l24 16Z" fill={`url(#${fur})`} stroke="#7f56d9" strokeWidth="2.4" />
+      <path d="M18 28 15 15l12 9Z" fill="#ffb7d3" opacity="0.95" />
+      <path d="M74 36 84 9 60 25Z" fill={`url(#${fur})`} stroke="#7f56d9" strokeWidth="2.4" />
+      <path d="M78 28 81 15l-12 9Z" fill="#ffb7d3" opacity="0.95" />
+
+      <ellipse cx="48" cy="38" rx="34" ry="31" fill={`url(#${fur})`} filter={`url(#${shadow})`} />
+      <path d="M39 9c7-6 13-2 11 8 7-6 12-2 8 7 7-2 11 1 7 7-7-7-23-11-38-4 5-5 9-6 12-18Z" fill="#9362e8" opacity="0.95" />
+      <path d="M13 43c7 2 10 4 14 9M83 43c-7 2-10 4-14 9" fill="none" stroke="#f7d6ff" strokeLinecap="round" strokeWidth="2" opacity="0.82" />
+      <path d="M17 53c7 1 10 1 15 4M79 53c-7 1-10 1-15 4" fill="none" stroke="#f7d6ff" strokeLinecap="round" strokeWidth="2" opacity="0.72" />
+
+      <circle cx="35" cy="39" r="8.6" fill={`url(#${eye})`} />
+      <circle cx="61" cy="39" r="8.6" fill={`url(#${eye})`} />
+      <circle cx="31.5" cy="35.5" r="3.2" fill="#ffffff" />
+      <circle cx="57.5" cy="35.5" r="3.2" fill="#ffffff" />
+      <circle cx="39" cy="43" r="1.2" fill="#ffffff" opacity="0.9" />
+      <circle cx="65" cy="43" r="1.2" fill="#ffffff" opacity="0.9" />
+      <ellipse cx="26" cy="51" rx="5" ry="3.2" fill="#ff8fb8" opacity="0.78" />
+      <ellipse cx="70" cy="51" rx="5" ry="3.2" fill="#ff8fb8" opacity="0.78" />
+      <path d="M45 47c2-2 4-2 6 0l-3 3Z" fill="#4b2030" />
+      <path d="M39 54c4 7 14 7 18 0" fill="none" stroke="#80253f" strokeLinecap="round" strokeWidth="3" />
+      <path d="M41 56c1.5 5 12.5 5 14 0-3 4-11 4-14 0Z" fill="#ff6f9d" opacity="0.8" />
+
+      <path d="M30 62c7 4 28 4 36 0" fill="none" stroke="#53d6ff" strokeLinecap="round" strokeWidth="4" />
+      <circle cx="48" cy="65" r="6.2" fill="#ffd166" stroke="#bf7c1f" strokeWidth="1.8" />
+      <circle cx="46" cy="63" r="1.4" fill="#fff8c8" />
+      <ellipse cx="33" cy="80" rx="8" ry="5" fill="#8e61e8" />
+      <ellipse cx="63" cy="80" rx="8" ry="5" fill="#8e61e8" />
+    </svg>
+  );
+}
+
+function MolyChibiSvg({ id }: { id: string }) {
+  const hood = `moly-chibi-hood-${id}`;
+  const skin = `moly-chibi-skin-${id}`;
+  const hair = `moly-chibi-hair-${id}`;
+  const eye = `moly-chibi-eye-${id}`;
+  const shadow = `moly-chibi-shadow-${id}`;
+
+  return (
+    <svg className="h-full w-full overflow-visible" viewBox="0 0 96 96" role="img" aria-label="Moly chibi áo mèo">
+      <defs>
+        <radialGradient id={hood} cx="35%" cy="22%" r="78%">
+          <stop offset="0%" stopColor="#fff7f7" />
+          <stop offset="62%" stopColor="#ffe6ea" />
+          <stop offset="100%" stopColor="#ffb6c9" />
+        </radialGradient>
+        <radialGradient id={skin} cx="38%" cy="25%" r="78%">
+          <stop offset="0%" stopColor="#fff6ed" />
+          <stop offset="72%" stopColor="#ffd9c9" />
+          <stop offset="100%" stopColor="#f6b69f" />
+        </radialGradient>
+        <radialGradient id={hair} cx="40%" cy="20%" r="78%">
+          <stop offset="0%" stopColor="#b98775" />
+          <stop offset="62%" stopColor="#7b4b3f" />
+          <stop offset="100%" stopColor="#4a2c2b" />
+        </radialGradient>
+        <radialGradient id={eye} cx="34%" cy="25%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="30%" stopColor="#6d463f" />
+          <stop offset="76%" stopColor="#2c1a1d" />
+          <stop offset="100%" stopColor="#090608" />
+        </radialGradient>
+        <filter id={shadow} x="-35%" y="-35%" width="170%" height="180%">
+          <feDropShadow dx="0" dy="9" stdDeviation="5" floodColor="#fb7185" floodOpacity="0.28" />
+        </filter>
+      </defs>
+
+      <ellipse cx="48" cy="88" rx="28" ry="6" fill="#0f172a" opacity="0.15" />
+      <path d="M22 34 12 9l24 15Z" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="2.4" />
+      <path d="M18 27 15 15l12 8Z" fill="#ffc4d0" opacity="0.96" />
+      <path d="M74 34 84 9 60 24Z" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="2.4" />
+      <path d="M78 27 81 15l-12 8Z" fill="#ffc4d0" opacity="0.96" />
+
+      <ellipse cx="48" cy="41" rx="34" ry="34" fill={`url(#${hood})`} filter={`url(#${shadow})`} />
+      <path d="M21 44c-4 20 12 35 27 35s31-15 27-35c-7 12-47 12-54 0Z" fill={`url(#${hood})`} filter={`url(#${shadow})`} />
+      <ellipse cx="48" cy="43" rx="26" ry="25" fill={`url(#${skin})`} />
+      <path d="M25 37c7-18 41-18 47 0-11-8-36-8-47 0Z" fill={`url(#${hair})`} />
+      <path d="M29 32c7 11 30 12 39 2-1 10-4 17-8 21-6-7-18-8-25-1-5-5-7-12-6-22Z" fill={`url(#${hair})`} opacity="0.96" />
+      <path d="M31 32c6 5 8 13 5 20M42 29c5 6 5 13 2 19M56 29c-1 8 1 14 6 19" fill="none" stroke="#f0b5a7" strokeLinecap="round" strokeWidth="1.8" opacity="0.5" />
+
+      <circle cx="36" cy="45" r="8.4" fill={`url(#${eye})`} />
+      <circle cx="60" cy="45" r="8.4" fill={`url(#${eye})`} />
+      <circle cx="33" cy="41.5" r="3" fill="#ffffff" />
+      <circle cx="57" cy="41.5" r="3" fill="#ffffff" />
+      <circle cx="39.5" cy="49" r="1.2" fill="#ffffff" opacity="0.9" />
+      <circle cx="63.5" cy="49" r="1.2" fill="#ffffff" opacity="0.9" />
+      <ellipse cx="29" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
+      <ellipse cx="67" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
+      <path d="M45 54c2 2 4 2 6 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2.4" />
+      <path d="M48 58c3 4 8 4 11 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.2" />
+
+      <path d="M21 68c-10 1-13 13-5 16 8 3 15-3 18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
+      <path d="M75 68c10 1 13 13 5 16-8 3-15-3-18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
+      <circle cx="27" cy="74" r="7" fill="#fff5f5" stroke="#f1a5b5" strokeWidth="1.4" />
+      <circle cx="69" cy="74" r="7" fill="#fff5f5" stroke="#f1a5b5" strokeWidth="1.4" />
+      <path d="M32 72c8 9 24 9 32 0 2 11-5 17-16 17S30 83 32 72Z" fill="#fff1f3" stroke="#f1a5b5" strokeWidth="1.4" />
+      <path d="M42 72c2 4 10 4 12 0" fill="none" stroke="#f18ba6" strokeLinecap="round" strokeWidth="2" />
+      <path d="M57 19c7-5 18 2 15 12-7-6-15-7-24-4 1-4 4-6 9-8Z" fill="#fff8fb" opacity="0.65" />
+    </svg>
+  );
+}
+
 function MolyPlushPet({
   variant,
   walking,
   facing,
 }: {
-  variant: Exclude<PetVariant, 'cat'>;
+  variant: Extract<PetVariant, 'star' | 'bunny'>;
   walking: boolean;
   facing: PetPosition;
 }) {

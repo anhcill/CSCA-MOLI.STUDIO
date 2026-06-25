@@ -82,6 +82,22 @@ export const PET_VARIANTS: Record<PetVariant, { label: string; body: number; acc
     cheek: 0xf9a8d4,
     swatch: 'from-white via-pink-200 to-sky-200',
   },
+  'moly-purple': {
+    label: 'Moly tím',
+    body: 0xad79ff,
+    accent: 0xc4a1ff,
+    innerEar: 0xffc4dc,
+    cheek: 0xff8fb8,
+    swatch: 'from-violet-300 via-purple-300 to-violet-600',
+  },
+  'moly-chibi': {
+    label: 'Moly chibi',
+    body: 0xffe6ea,
+    accent: 0xff9fbd,
+    innerEar: 0xffc4d6,
+    cheek: 0xff8ba8,
+    swatch: 'from-rose-100 via-pink-200 to-rose-400',
+  },
 };
 
 export const MOODS: Record<PetMood, { label: string; hint: string }> = {
@@ -108,7 +124,7 @@ export const PET_SKINS: Record<PetSkinId, PetSkin> = {
     badge: '1',
     subtitle: 'Hồng mềm, bong bóng tim',
     defaultColor: 'berry',
-    defaultVariant: 'cat',
+    defaultVariant: 'moly-purple',
     panelClass: 'rounded-[24px] border border-rose-100 bg-rose-50/95 shadow-[0_24px_70px_rgba(244,114,182,0.28)] backdrop-blur-xl',
     headerClass: 'border-b border-rose-100 bg-gradient-to-r from-rose-50 via-white to-pink-50 text-slate-800',
     settingsClass: 'border-rose-100 bg-rose-50/85',
@@ -127,7 +143,7 @@ export const PET_SKINS: Record<PetSkinId, PetSkin> = {
     badge: '2',
     subtitle: 'Tím nổi, pet ngoài khung',
     defaultColor: 'berry',
-    defaultVariant: 'cat',
+    defaultVariant: 'moly-purple',
     panelClass: 'rounded-[28px] border border-violet-100 bg-white/94 shadow-[0_28px_80px_rgba(139,92,246,0.3)] backdrop-blur-xl',
     headerClass: 'border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-fuchsia-50 text-slate-800',
     settingsClass: 'border-violet-100 bg-violet-50/85',
@@ -165,7 +181,7 @@ export const PET_SKINS: Record<PetSkinId, PetSkin> = {
     badge: '4',
     subtitle: 'Sticker chibi, viền kẹo',
     defaultColor: 'berry',
-    defaultVariant: 'star',
+    defaultVariant: 'moly-chibi',
     panelClass: 'rounded-[26px] border-2 border-pink-100 bg-pink-50/95 shadow-[0_22px_64px_rgba(236,72,153,0.24)] backdrop-blur-xl',
     headerClass: 'border-b border-pink-100 bg-gradient-to-r from-pink-50 via-white to-rose-50 text-slate-800',
     settingsClass: 'border-pink-100 bg-pink-50/85',
@@ -253,7 +269,7 @@ export const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   position,
   showBubble: false,
   motion: false,
-  variant: 'cat',
+  variant: 'moly-purple',
   skin: 'bubble-cute',
 });
 
