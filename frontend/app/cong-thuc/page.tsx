@@ -209,16 +209,16 @@ function getGradeLabel(grade: GradeFilter) {
 
 function FormulaValue({ line }: { line: FormulaLine }) {
   return (
-    <div className="min-w-0 rounded-lg border border-sky-100 bg-sky-50/80 p-4 shadow-sm">
-      <div className="mb-2 text-sm font-black uppercase tracking-wide text-sky-700">{line.label}</div>
+    <div className="min-w-0 rounded-lg border border-sky-100 bg-sky-50/80 p-4 shadow-sm dark:border-sky-400/30 dark:bg-slate-900/95 dark:shadow-none">
+      <div className="mb-2 text-sm font-black uppercase tracking-wide text-sky-700 dark:text-sky-300">{line.label}</div>
       <RichMathText
         value={line.value}
-        className="min-w-0 overflow-x-auto text-base font-semibold leading-8 text-slate-950 [&_.katex-display]:overflow-x-auto [&_.katex]:text-[1.12em]"
+        className="min-w-0 overflow-x-auto text-base font-semibold leading-8 text-slate-950 dark:text-slate-50 [&_.katex-display]:overflow-x-auto [&_.katex]:text-[1.12em] dark:[&_.katex]:text-slate-50"
       />
       {line.note && (
         <RichMathText
           value={line.note}
-          className="mt-3 border-t border-sky-100 pt-3 text-[15px] leading-7 text-slate-600"
+          className="mt-3 border-t border-sky-100 pt-3 text-[15px] leading-7 text-slate-600 dark:border-slate-700 dark:text-slate-300 dark:[&_.katex]:text-slate-100"
         />
       )}
     </div>
@@ -229,18 +229,18 @@ function FormulaTopicSection({ item }: { item: FilteredFormulaTopic }) {
   const { topic, formulas } = item;
 
   return (
-    <section id={`formula-${topic.id}`} className="scroll-mt-5 border-t border-slate-200 pt-6">
+    <section id={`formula-${topic.id}`} className="scroll-mt-5 border-t border-slate-200 pt-6 dark:border-slate-700">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700">{getGradeLabel(topic.grade)}</span>
-            <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">{topic.area}</span>
-            {topic.chinese && <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700">{topic.chinese}</span>}
+            <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700 dark:bg-sky-400/15 dark:text-sky-200">{getGradeLabel(topic.grade)}</span>
+            <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200">{topic.area}</span>
+            {topic.chinese && <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-700 dark:bg-amber-400/15 dark:text-amber-200">{topic.chinese}</span>}
           </div>
-          <h2 className="text-xl font-black tracking-tight text-slate-950">{topic.title}</h2>
-          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">{topic.summary}</p>
+          <h2 className="text-xl font-black tracking-tight text-slate-950 dark:text-white">{topic.title}</h2>
+          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500 dark:text-slate-300">{topic.summary}</p>
         </div>
-        <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700">
+        <div className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
           {formulas.length} công thức
         </div>
       </div>
@@ -252,9 +252,9 @@ function FormulaTopicSection({ item }: { item: FilteredFormulaTopic }) {
       </div>
 
       {topic.notes?.length ? (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-400/40 dark:bg-amber-400/10">
           {topic.notes.map(note => (
-            <RichMathText key={note} value={note} className="text-sm font-medium leading-6 text-amber-900" />
+            <RichMathText key={note} value={note} className="text-sm font-medium leading-6 text-amber-900 dark:text-amber-100 dark:[&_.katex]:text-amber-50" />
           ))}
         </div>
       ) : null}
@@ -328,36 +328,36 @@ function FormulaRepository({
 
   return (
     <section className="space-y-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="relative">
-            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
             <input
               type="text"
               placeholder="Tìm công thức, chủ đề, từ khóa tiếng Trung..."
               value={search}
               onChange={event => setSearch(event.target.value)}
-              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100"
+              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-400 dark:focus:bg-slate-950 dark:focus:ring-sky-400/20"
             />
           </div>
           <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
-            <div className="rounded-lg bg-sky-50 px-3 py-2">
-              <div className="text-lg font-black text-sky-700">{filteredTopics.length}</div>
-              <div className="text-[11px] font-bold uppercase text-sky-500">chủ đề</div>
+            <div className="rounded-lg bg-sky-50 px-3 py-2 dark:bg-sky-400/15">
+              <div className="text-lg font-black text-sky-700 dark:text-sky-200">{filteredTopics.length}</div>
+              <div className="text-[11px] font-bold uppercase text-sky-500 dark:text-sky-300">chủ đề</div>
             </div>
-            <div className="rounded-lg bg-emerald-50 px-3 py-2">
-              <div className="text-lg font-black text-emerald-700">{visibleFormulaCount}</div>
-              <div className="text-[11px] font-bold uppercase text-emerald-500">đang hiện</div>
+            <div className="rounded-lg bg-emerald-50 px-3 py-2 dark:bg-emerald-400/15">
+              <div className="text-lg font-black text-emerald-700 dark:text-emerald-200">{visibleFormulaCount}</div>
+              <div className="text-[11px] font-bold uppercase text-emerald-500 dark:text-emerald-300">đang hiện</div>
             </div>
-            <div className="rounded-lg bg-amber-50 px-3 py-2">
-              <div className="text-lg font-black text-amber-700">{totalFormulaCount}</div>
-              <div className="text-[11px] font-bold uppercase text-amber-500">tổng</div>
+            <div className="rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-400/15">
+              <div className="text-lg font-black text-amber-700 dark:text-amber-200">{totalFormulaCount}</div>
+              <div className="text-[11px] font-bold uppercase text-amber-500 dark:text-amber-300">tổng</div>
             </div>
           </div>
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
             <FiFilter />
             Lớp
           </div>
@@ -370,7 +370,7 @@ function FormulaRepository({
                 className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-black transition ${
                   grade === option
                     ? 'border-sky-600 bg-sky-600 text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-sky-400 dark:hover:text-sky-200'
                 }`}
               >
                 {getGradeLabel(option)}
@@ -378,7 +378,7 @@ function FormulaRepository({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
             <FiBookOpen />
             Mảng kiến thức
           </div>
@@ -391,7 +391,7 @@ function FormulaRepository({
                 className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-black transition ${
                   area === option
                     ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-emerald-400 dark:hover:text-emerald-200'
                 }`}
               >
                 {option === ALL_AREA ? 'Tất cả' : option}
@@ -402,21 +402,21 @@ function FormulaRepository({
       </div>
 
       {filteredTopics.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-3 text-5xl">∑</div>
-          <p className="font-semibold text-slate-500">Không thấy công thức phù hợp.</p>
+          <p className="font-semibold text-slate-500 dark:text-slate-300">Không thấy công thức phù hợp.</p>
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[230px_1fr]">
           <aside className="hidden lg:block">
-            <div className="sticky top-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">Chủ đề</div>
+            <div className="sticky top-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400 dark:text-slate-500">Chủ đề</div>
               <div className="max-h-[70vh] space-y-1 overflow-y-auto pr-1">
                 {filteredTopics.map(({ topic }) => (
                   <a
                     key={topic.id}
                     href={`#formula-${topic.id}`}
-                    className="flex items-start gap-2 rounded-lg px-2 py-2 text-xs font-bold leading-5 text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                    className="flex items-start gap-2 rounded-lg px-2 py-2 text-xs font-bold leading-5 text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <FiChevronRight className="mt-0.5 shrink-0" />
                     <span>{topic.title}</span>
@@ -430,8 +430,8 @@ function FormulaRepository({
               <FormulaTopicSection key={item.topic.id} item={item} />
             ))}
             {hiddenTopicCount > 0 && (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center">
-                <p className="text-sm font-semibold text-sky-900">
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center dark:border-sky-400/30 dark:bg-sky-400/10">
+                <p className="text-sm font-semibold text-sky-900 dark:text-sky-100">
                   Còn {hiddenTopicCount} chủ đề chưa render để trang mở nhanh hơn.
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -445,7 +445,7 @@ function FormulaRepository({
                   <button
                     type="button"
                     onClick={() => setVisibleTopicCount(filteredTopics.length)}
-                    className="rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-black text-sky-700 hover:bg-sky-50"
+                    className="rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-black text-sky-700 hover:bg-sky-50 dark:border-sky-400/40 dark:bg-slate-900 dark:text-sky-200 dark:hover:bg-slate-800"
                   >
                     Hiện hết
                   </button>
@@ -777,8 +777,8 @@ export default function CongThucPage() {
               onClick={() => handleSubjectChange(subject.value)}
               className={`flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-black transition-all ${
                 activeSubject === subject.value
-                  ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-950'
+                  ? 'border-slate-950 bg-slate-950 text-white shadow-sm dark:border-sky-400 dark:bg-sky-500 dark:text-slate-950'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-400 dark:hover:text-white'
               }`}
             >
               <span>{subject.emoji}</span> {t(SUBJECT_LABEL_KEYS[subject.value] || subject.label)}
