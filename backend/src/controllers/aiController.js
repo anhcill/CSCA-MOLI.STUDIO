@@ -69,7 +69,7 @@ async function handleRateLimit(res, userId, retryAfter, message, insightType = I
     return res.json({
       success: true, cached: true, cacheSource: 'stale',
       cacheAge: age, rateLimited: true, retryAfter,
-      message, data: stale.data,
+      message, data: aiService.sanitizePublicAIValue(stale.data),
     });
   }
   return res.json({ success: false, rateLimited: true, retryAfter, message });
@@ -405,7 +405,7 @@ async function analyzeExamResult(req, res) {
         cacheAge: age,
         attempt: attemptPayload,
         previousAttempt,
-        aiAnalysis: cacheResult.rows[0].data,
+        aiAnalysis: aiService.sanitizePublicAIValue(cacheResult.rows[0].data),
       });
     }
 
@@ -449,7 +449,7 @@ async function analyzeExamResult(req, res) {
           retryAfter,
           attempt: attemptPayload,
           previousAttempt,
-          aiAnalysis: stale.data,
+          aiAnalysis: aiService.sanitizePublicAIValue(stale.data),
           message: 'AI đang bận, đang hiển thị phân tích đã lưu.',
         });
       }
@@ -552,6 +552,7 @@ async function analyzeExamResult(req, res) {
       inFlightRequests.set(inflightKey, analysisPromise);
       aiAnalysis = await analysisPromise;
     }
+    aiAnalysis = aiService.sanitizePublicAIValue(aiAnalysis);
 
     if (!isVip && !fromInflight) {
       chargedLedger = await coinService.debit(userId, 50, 'ai_exam_analysis', {
@@ -681,7 +682,7 @@ async function explainWrongAnswers(req, res) {
         cacheAge: age,
         wrongCount,
         questions,
-        explanations: cached.data,
+        explanations: aiService.sanitizePublicAIValue(cached.data),
       });
     }
 
@@ -694,7 +695,7 @@ async function explainWrongAnswers(req, res) {
       });
     }
 
-    const explanations = await aiService.explainWrongAnswers(questions);
+    const explanations = aiService.sanitizePublicAIValue(await aiService.explainWrongAnswers(questions));
 
     try {
       await db.query(
@@ -855,7 +856,7 @@ async function askAI(req, res) {
             cached: true,
             cacheSource: 'db',
             cacheAge: age,
-            answer: cached.answer,
+            answer: aiService.sanitizePublicAIText(cached.answer),
             timestamp: new Date().toISOString(),
             error: false,
           });
@@ -1213,7 +1214,7 @@ async function analyzeUserPerformance(req, res) {
 
     const memCached = skipCache ? null : cache.get(memKey);
     if (memCached) {
-      return res.json({ success: true, cached: true, cacheSource: 'memory', cacheAge: memCached.cacheAge, data: memCached.data });
+      return res.json({ success: true, cached: true, cacheSource: 'memory', cacheAge: memCached.cacheAge, data: aiService.sanitizePublicAIValue(memCached.data) });
     }
 
     if (!skipCache) {
@@ -1224,8 +1225,9 @@ async function analyzeUserPerformance(req, res) {
       );
       if (cached.rows.length > 0) {
         const age = Math.floor((Date.now() - new Date(cached.rows[0].created_at)) / 60000);
-        cache.set(memKey, { data: cached.rows[0].data, cacheAge: age }, TTL.VERY_LONG);
-        return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: cached.rows[0].data });
+        const safeData = aiService.sanitizePublicAIValue(cached.rows[0].data);
+        cache.set(memKey, { data: safeData, cacheAge: age }, TTL.VERY_LONG);
+        return res.json({ success: true, cached: true, cacheSource: 'db', cacheAge: age, data: safeData });
       }
     }
 
@@ -1256,7 +1258,11 @@ async function analyzeUserPerformance(req, res) {
 
     if (inFlightRequests.has(userId)) {
       const data = await inFlightRequests.get(userId);
-      if (data) { cache.set(memKey, { data, cacheAge: 0 }, TTL.VERY_LONG); return res.json({ success: true, cached: true, cacheSource: 'inflight', cacheAge: 0, data }); }
+      if (data) {
+        const safeData = aiService.sanitizePublicAIValue(data);
+        cache.set(memKey, { data: safeData, cacheAge: 0 }, TTL.VERY_LONG);
+        return res.json({ success: true, cached: true, cacheSource: 'inflight', cacheAge: 0, data: safeData });
+      }
       if (aiService.isRateLimited()) return handleRateLimit(res, userId, aiService.getRateLimitRemaining(), 'AI đang bận.');
     } else {
       let resolveInflight; const inflightPromise = new Promise(r => { resolveInflight = r; });
@@ -1353,6 +1359,7 @@ async function analyzeUserPerformance(req, res) {
         fallbackReason: 'AI_ANALYSIS_FALLBACK',
       };
     }
+    fullAnalysis = aiService.sanitizePublicAIValue(fullAnalysis);
 
     if (!isVip) {
       chargedLedger = await coinService.debit(userId, 50, 'ai_analysis', {

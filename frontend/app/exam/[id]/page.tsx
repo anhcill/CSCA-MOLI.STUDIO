@@ -28,6 +28,16 @@ function hasAnsweredValue(value: number | string | undefined) {
   return value !== undefined && value !== null;
 }
 
+function getChineseFirstText(chinese?: string | null, vietnamese?: string | null) {
+  return (chinese || vietnamese || '').trim();
+}
+
+function getVietnameseTranslation(chinese?: string | null, vietnamese?: string | null) {
+  const primary = getChineseFirstText(chinese, vietnamese);
+  const translation = (vietnamese || '').trim();
+  return translation && translation !== primary ? translation : '';
+}
+
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
@@ -57,6 +67,7 @@ export default function ExamPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
   const [practiceMode, setPracticeMode] = useState(false);
+  const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
   const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
@@ -672,6 +683,21 @@ export default function ExamPage() {
             </div>
 
             <div className="border-t border-slate-100 p-6 sm:p-8">
+              <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50">
+                <input
+                  type="checkbox"
+                  checked={showVietnameseTranslations}
+                  onChange={(event) => setShowVietnameseTranslations(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span className="block text-sm font-black text-slate-900">Hiện thêm tiếng Việt trong lúc làm bài</span>
+                  <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">
+                    Mặc định đề chỉ hiện tiếng Trung. Bật mục này nếu muốn xem thêm bản tiếng Việt dưới câu hỏi và đáp án.
+                  </span>
+                </span>
+              </label>
+
               <div className="mb-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
                 {inProgress && (
@@ -802,13 +828,25 @@ export default function ExamPage() {
 
   const currentQuestion = processedQuestions[currentQuestionIndex] as any;
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
+  const primaryQuestionText = getChineseFirstText(currentQuestion?.question_text_cn, currentQuestion?.question_text);
+  const vietnameseQuestionText = showVietnameseTranslations
+    ? getVietnameseTranslation(currentQuestion?.question_text_cn, currentQuestion?.question_text)
+    : '';
+  const currentFeedback = practiceFeedback[currentQuestion?.id];
+  const primaryFeedbackAnswer = getChineseFirstText(currentFeedback?.correct_answer_text_cn, currentFeedback?.correct_answer_text);
+  const vietnameseFeedbackAnswer = showVietnameseTranslations
+    ? getVietnameseTranslation(currentFeedback?.correct_answer_text_cn, currentFeedback?.correct_answer_text)
+    : '';
+  const primaryFeedbackExplanation = getChineseFirstText(currentFeedback?.explanation_cn, currentFeedback?.explanation);
+  const vietnameseFeedbackExplanation = showVietnameseTranslations
+    ? getVietnameseTranslation(currentFeedback?.explanation_cn, currentFeedback?.explanation)
+    : '';
   const answeredCount = questions.reduce(
     (count, question) => count + (hasAnsweredValue(selectedAnswers[question.id]) ? 1 : 0),
     0,
   );
   const progressPercent = (answeredCount / questions.length) * 100;
   const isTimeCritical = !practiceMode && timeLeft < 300; // less than 5 min
-  const currentFeedback = practiceFeedback[currentQuestion?.id];
   const displayedQuestionIndexes = questions
     .map((q, index) => ({ q, index }))
     .filter(({ q }) => {
@@ -1042,12 +1080,11 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
-                <RichMathText value={currentQuestion.question_text || ''} className="text-inherit" />
+                <RichMathText value={primaryQuestionText} className="text-inherit" />
                 
-                {/* Chinese / Secondary Translation if exist */}
-                {currentQuestion.question_text_cn && currentQuestion.question_text_cn !== currentQuestion.question_text && (
+                {vietnameseQuestionText && (
                   <div className="text-lg md:text-xl font-medium text-slate-500 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
-                    <RichMathText value={currentQuestion.question_text_cn} className="text-inherit" />
+                    <RichMathText value={vietnameseQuestionText} className="text-inherit" />
                   </div>
                 )}
              </div>
@@ -1135,6 +1172,10 @@ export default function ExamPage() {
                   return visibleAnswers.map((answer: any, index: number) => {
                     const isSelected = currentQuestionAnswer === answer.id || currentQuestionAnswer === answer.answer_key;
                     const letter = answer.answer_key || String.fromCharCode(65 + index);
+                    const primaryAnswerText = getChineseFirstText(answer.answer_text_cn, answer.answer_text);
+                    const vietnameseAnswerText = showVietnameseTranslations
+                      ? getVietnameseTranslation(answer.answer_text_cn, answer.answer_text)
+                      : '';
 
                     return (
                       <button
@@ -1155,9 +1196,14 @@ export default function ExamPage() {
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
                           <RichMathText
-                            value={answer.answer_text || answer.answer_text_cn || ''}
+                            value={primaryAnswerText}
                             className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
                           />
+                          {vietnameseAnswerText && (
+                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
+                              <RichMathText value={vietnameseAnswerText} className="text-inherit" />
+                            </div>
+                          )}
                           {answer.image_url && (
                             <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
                               <img src={answer.image_url} alt={`Lựa chọn ${letter}`} className="max-w-full max-h-32 object-contain mx-auto" />
@@ -1221,18 +1267,32 @@ export default function ExamPage() {
                  </p>
                  {!currentFeedback.is_correct && (
                    <p className="mb-2 text-sm font-semibold text-slate-700">
-                     Đáp án đúng: {currentFeedback.correct_answer_key}. {currentFeedback.correct_answer_text}
+                      Đáp án đúng: {currentFeedback.correct_answer_key}. {primaryFeedbackAnswer}
+                      {vietnameseFeedbackAnswer && (
+                        <span className="mt-1 block text-slate-500">{vietnameseFeedbackAnswer}</span>
+                      )}
                    </p>
                   )}
                   {(currentFeedback.explanation || currentFeedback.explanation_cn || currentFeedback.explanation_image_url) && (
                     <div className="mt-3 rounded-xl border border-white/70 bg-white/90 p-4 shadow-sm">
                       <p className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-800">Giải thích:</p>
-                      {(currentFeedback.explanation || currentFeedback.explanation_cn) && (
-                        <RichMathText
-                          value={currentFeedback.explanation || currentFeedback.explanation_cn || ''}
-                          readableBreaks
-                          className="text-base leading-7 text-slate-800"
-                        />
+                      {primaryFeedbackExplanation && (
+                        <>
+                          <RichMathText
+                            value={primaryFeedbackExplanation}
+                            readableBreaks
+                            className="text-base leading-7 text-slate-800"
+                          />
+                          {vietnameseFeedbackExplanation && (
+                            <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
+                              <RichMathText
+                                value={vietnameseFeedbackExplanation}
+                                readableBreaks
+                                className="text-base leading-7 text-slate-500"
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
                       {currentFeedback.explanation_image_url && (
                         <img

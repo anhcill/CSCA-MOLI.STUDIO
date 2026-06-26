@@ -188,19 +188,19 @@ function RichMathText({ value, className = '', readableBreaks = false }: RichMat
 
   if (isPlainText) {
     return (
-      <div className={`rich-math-text whitespace-pre-wrap text-sm leading-relaxed ${className}`}>
+      <div className={`rich-math-text whitespace-pre-wrap text-sm leading-relaxed [&_.katex]:text-current [&_.katex_*]:text-current ${className}`}>
         {source}
       </div>
     );
   }
 
   return (
-    <div className={`rich-math-text text-sm leading-relaxed ${className}`}>
+    <div className={`rich-math-text text-sm leading-relaxed [&_.katex]:text-current [&_.katex_*]:text-current ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
         rehypePlugins={[
           rehypeSanitize,
-          [rehypeKatex, { throwOnError: false, strict: false, errorColor: '#334155' }],
+          [rehypeKatex, { throwOnError: false, strict: false, errorColor: 'currentColor' }],
         ]}
         components={{
           p: ({ children }) => <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>,

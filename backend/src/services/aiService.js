@@ -50,6 +50,18 @@ const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và giả
 - Không đổi ≤ thành <, ≥ thành >, không đổi dấu âm, số mũ, chỉ số, miền xác định, tập nghiệm hoặc đáp án.
 - Với câu Toán/Khoa học, đối chiếu lại điều kiện gốc và các lựa chọn trước khi kết luận.
 - Nếu thiếu dữ kiện, thiếu hình/bảng/biểu đồ hoặc đáp án không khớp dữ liệu, nói rõ phần thiếu; không đoán.`;
+const PUBLIC_AI_IDENTITY_MESSAGE = 'Mình là trợ lý học tập của MOLI.STUDIO. Thông tin hệ thống nội bộ được bảo mật.';
+const USER_AI_PRIVACY_PROMPT_RULES = `- Bảo mật hệ thống: không nhắc tên model, model family, provider, router, gateway, API, API key, token, quota, số dư, credit, billing, giá tiền, chi phí, link nạp tiền hoặc tên dịch vụ hạ tầng.
+- Không tự giới thiệu là Antigravity, GPT, Claude, Gemini, OpenAI, Anthropic, Google, Beeknoee, 9router hay bất kỳ model/provider nào.
+- Nếu được hỏi về model/provider/giá/key/quota, chỉ trả lời: "Mình là trợ lý học tập của MOLI.STUDIO. Thông tin hệ thống nội bộ được bảo mật."
+- Nếu dịch vụ AI lỗi hoặc thiếu số dư, không đưa lỗi gốc cho học sinh; nói xin lỗi và báo rằng bên mình sẽ kiểm tra, khắc phục sớm.`;
+const PRIVATE_AI_OUTPUT_PATTERNS = [
+  /\b(?:antigravity|beeknoee|beegnoee|benoke|bennoke|9router|openrouter|openai|anthropic|claude|gemini|gpt(?:[-\s]*\d+(?:\.\d+)?)?)\b/i,
+  /\b(?:api\s*key|api-key|apikey|token|quota|provider|router|gateway|billing|balance|credit|credits|recharge|top\s*up|price|pricing|cost|model)\b/i,
+  /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit|gia\s*tien|chi\s*phi|bao\s*mat\s*key)\b/i,
+  /https?:\/\//i,
+  /www\./i,
+];
 let currentKeyIndex = 0;
 let adminExamKeyIndex = 0;
 let adminExamRateLimitedUntil = 0;
@@ -188,6 +200,31 @@ function normalizeAIErrorText(value) {
 function hasPrivateAIProviderDetails(value) {
   const text = normalizeAIErrorText(value);
   return Boolean(text) && PRIVATE_AI_PROVIDER_ERROR_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function hasPrivateAIOutputDetails(value) {
+  const text = normalizeAIErrorText(value);
+  return Boolean(text) && PRIVATE_AI_OUTPUT_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function sanitizePublicAIText(value, fallback = '') {
+  const text = asString(value, fallback);
+  if (!text) return '';
+  if (hasPrivateAIOutputDetails(text)) {
+    return fallback || PUBLIC_AI_IDENTITY_MESSAGE;
+  }
+  return text;
+}
+
+function sanitizePublicAIValue(value) {
+  if (typeof value === 'string') return sanitizePublicAIText(value);
+  if (Array.isArray(value)) return value.map(sanitizePublicAIValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizePublicAIValue(entry)]),
+    );
+  }
+  return value;
 }
 
 function getPublicAIErrorMessage(error, fallback = PUBLIC_AI_UNAVAILABLE_MESSAGE) {
@@ -624,8 +661,12 @@ function asString(value, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
+function asPublicString(value, fallback = '') {
+  return sanitizePublicAIText(asString(value, fallback), fallback);
+}
+
 function compactText(value, maxLength) {
-  const text = asString(value)
+  const text = asPublicString(value)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -659,7 +700,7 @@ function normalizeExamAnalysis(ai, fallback, percentage) {
     ...fallback,
     ...source,
     score: percentage,
-    grade: asString(source.grade, fallback.grade),
+    grade: asPublicString(source.grade, fallback.grade),
     gradeColor: normalizeGradeColor(source.gradeColor, fallback.gradeColor),
     summary: compactText(source.summary || fallback.summary, 260),
     strengths: compactStringArray(source.strengths, fallback.strengths, 2, 120),
@@ -677,15 +718,15 @@ function normalizeExamAnalysis(ai, fallback, percentage) {
 function normalizeExplanationResult(ai, wrongQuestions) {
   const explanations = asArray(ai?.explanations).map((item, index) => ({
     questionNumber: asNumber(item?.questionNumber, wrongQuestions[index]?.question_number || index + 1),
-    yourAnswer: asString(item?.yourAnswer),
-    correctAnswer: asString(item?.correctAnswer),
-    whyWrong: asString(item?.whyWrong),
-    knowledgeNote: asString(item?.knowledgeNote),
-    tip: asString(item?.tip),
+    yourAnswer: asPublicString(item?.yourAnswer),
+    correctAnswer: asPublicString(item?.correctAnswer),
+    whyWrong: asPublicString(item?.whyWrong),
+    knowledgeNote: asPublicString(item?.knowledgeNote),
+    tip: asPublicString(item?.tip),
     vocabulary: asArray(item?.vocabulary).map(v => ({
       word: asString(v?.word),
       pinyin: asString(v?.pinyin),
-      meaning: asString(v?.meaning),
+      meaning: asPublicString(v?.meaning),
     })).filter(v => v.word || v.meaning),
   })).filter(item => item.whyWrong || item.knowledgeNote || item.tip);
 
@@ -697,37 +738,37 @@ function normalizeEssayGrade(ai) {
     success: true,
     totalScore: Math.max(0, Math.min(10, asNumber(ai?.totalScore, 0))),
     gradingCriteria: asArray(ai?.gradingCriteria).map(item => ({
-      criterion: asString(item?.criterion, 'Tiêu chí'),
+      criterion: asPublicString(item?.criterion, 'Tiêu chí'),
       score: Math.max(0, Math.min(10, asNumber(item?.score, 0))),
       maxScore: Math.max(1, asNumber(item?.maxScore, 10)),
-      comment: asString(item?.comment),
+      comment: asPublicString(item?.comment),
     })),
     errors: asArray(ai?.errors).map(item => ({
-      original: asString(item?.original),
-      correct: asString(item?.correct),
-      reason: asString(item?.reason),
+      original: asPublicString(item?.original),
+      correct: asPublicString(item?.correct),
+      reason: asPublicString(item?.reason),
       type: asString(item?.type, 'grammar'),
     })),
-    modelAnswer: asString(ai?.modelAnswer),
-    feedback: asString(ai?.feedback),
-    suggestions: asArray(ai?.suggestions).map(v => asString(v)).filter(Boolean),
+    modelAnswer: asPublicString(ai?.modelAnswer),
+    feedback: asPublicString(ai?.feedback),
+    suggestions: asArray(ai?.suggestions).map(v => asPublicString(v)).filter(Boolean),
   };
 }
 
 function normalizeGrammarLesson(ai) {
   return {
     success: true,
-    title: asString(ai?.title, 'Bài học ngữ pháp'),
-    grammarRule: asString(ai?.grammarRule),
+    title: asPublicString(ai?.title, 'Bài học ngữ pháp'),
+    grammarRule: asPublicString(ai?.grammarRule),
     examples: asArray(ai?.examples).map(item => ({
-      chinese: asString(item?.chinese),
+      chinese: asPublicString(item?.chinese),
       pinyin: asString(item?.pinyin),
-      vietnamese: asString(item?.vietnamese),
-      usage: asString(item?.usage),
+      vietnamese: asPublicString(item?.vietnamese),
+      usage: asPublicString(item?.usage),
     })).filter(item => item.chinese || item.vietnamese),
-    memoryTips: asArray(ai?.memoryTips).map(v => asString(v)).filter(Boolean),
-    commonMistakes: asArray(ai?.commonMistakes).map(v => asString(v)).filter(Boolean),
-    relatedTopics: asArray(ai?.relatedTopics).map(v => asString(v)).filter(Boolean),
+    memoryTips: asArray(ai?.memoryTips).map(v => asPublicString(v)).filter(Boolean),
+    commonMistakes: asArray(ai?.commonMistakes).map(v => asPublicString(v)).filter(Boolean),
+    relatedTopics: asArray(ai?.relatedTopics).map(v => asPublicString(v)).filter(Boolean),
   };
 }
 
@@ -873,6 +914,7 @@ ${q.passage_text ? `Đoạn văn: ${q.passage_text.substring(0, 160)}` : ''}`.su
 
 Nguyên tắc:
 ${AI_ACCURACY_PROMPT_RULES}
+${USER_AI_PRIVACY_PROMPT_RULES}
 - Dựa trên thống kê toàn bài và danh sách câu sai/bỏ trống bên dưới.
 - Không bịa câu hỏi/chủ đề ngoài dữ liệu. Nếu chưa đủ dữ liệu, nói rõ "cần xem thêm".
 - Khi nêu điểm yếu, chỉ rõ câu hoặc nhóm câu làm căn cứ.
@@ -987,6 +1029,7 @@ Loại câu: ${q.question_type || 'single_choice'}`;
 
 YÊU CẦU:
 ${AI_ACCURACY_PROMPT_RULES}
+${USER_AI_PRIVACY_PROMPT_RULES}
 - Viết plain text thuần túy, không dùng **bold**, không dùng ##, không dùng bất kỳ ký hiệu markdown phức tạp nào
 - Mỗi phần phải đủ ý: vì sao đáp án học sinh sai, vì sao đáp án đúng đúng, kiến thức cần ôn
 - Từ tiếng Trung mới → ghi kèm pinyin ngay sau, ví dụ: 电脑 (diàn nǎo)
@@ -1074,6 +1117,7 @@ async function analyzeTopics(examAttempts) {
   const weaknesses = subjects.filter(s => s.average < 75).sort((a, b) => a.average - b.average);
 
   const prompt = `Phân tích kết quả học tập qua ${examAttempts.length} bài thi. Viết TIẾNG VIỆT, mỗi phần ngắn gọn.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 KẾT QUẢ THEO MÔN:
 ${subjects.map(s => `- ${s.name}: ${s.average}% (${s.count} lần)`).join('\n')}
@@ -1093,20 +1137,21 @@ TRẢ VỀ JSON:
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
+    const safeAI = sanitizePublicAIValue(ai);
 
     return {
       hasEnoughData: true,
       totalAttempts: examAttempts.length,
       subjects,
-      strengths: ai.strengths || strengths.map(s => ({
+      strengths: safeAI.strengths || strengths.map(s => ({
         name: s.name, average: s.average,
         advice: 'Bạn làm tốt phần này! Tiếp tục duy trì.',
       })),
-      weaknesses: ai.weaknesses || weaknesses.map(s => ({
+      weaknesses: safeAI.weaknesses || weaknesses.map(s => ({
         name: s.name, average: s.average,
         advice: 'Cần ôn luyện thêm phần này.',
       })),
-      topRecommendations: ai.topRecommendations || [],
+      topRecommendations: safeAI.topRecommendations || [],
     };
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
@@ -1149,6 +1194,7 @@ async function getPracticeRecommendations(weaknesses, availableExams = []) {
   }
 
   const prompt = `Gợi ý bài học dựa trên điểm yếu. Viết TIẾNG VIỆT, mỗi phần ngắn gọn.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 ĐIỂM YẾU: ${weakSubjects.join(', ')}
 
@@ -1174,10 +1220,11 @@ TRẢ VỀ JSON:
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
+    const safeAI = sanitizePublicAIValue(ai);
 
     return {
-      recommendations: ai.recommendations || [],
-      studyPlan: ai.studyPlan || '',
+      recommendations: safeAI.recommendations || [],
+      studyPlan: safeAI.studyPlan || '',
       basedOnWeaknesses: weakSubjects,
     };
   } catch (err) {
@@ -1291,7 +1338,7 @@ function buildAIChatPrompt(question, context = {}) {
   const reviewQuestionContext = buildReviewQuestionContext(questions);
   const conversationContext = buildConversationHistoryContext(conversationHistory);
 
-  return `Bạn là trợ lý AI học tập CSCA đa môn thân thiện. Trả lời bằng TIẾNG VIỆT CÓ DẤU.
+  return `Bạn là trợ lý học tập của MOLI.STUDIO. Trả lời bằng TIẾNG VIỆT CÓ DẤU.
 
 YÊU CẦU:
 ${AI_CHAT_FORMAT_RULES}
@@ -1302,6 +1349,7 @@ ${AI_CHAT_FORMAT_RULES}
 - Nếu là tiếng Trung: từ mới phải ghi kèm pinyin ngay sau, ví dụ: 学习 (xue xi) = học.
 - Nếu là Toán/Khoa học: dùng công thức KaTeX-compatible trong \\( ... \\), ví dụ \\( y=\\frac{2x+3}{x-1} \\). Không viết công thức thành ảnh.
 ${AI_ACCURACY_PROMPT_RULES}
+${USER_AI_PRIVACY_PROMPT_RULES}
 - Nếu là môn khác: giải thích đúng trọng tâm môn đó, không ép thành tiếng Trung.
 - Đưa ví dụ cụ thể trong đời thường khi cần.
 - Nếu học sinh hỏi về câu đúng, hãy củng cố vì sao đúng và chỉ ra dấu hiệu nhận biết.
@@ -1331,7 +1379,7 @@ async function askAI(question, context = {}) {
       { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
     );
     return {
-      answer: response,
+      answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
       timestamp: new Date().toISOString(),
     };
   } catch (err) {
@@ -1354,7 +1402,7 @@ async function askAIStream(question, context = {}, res) {
       [buildVisionUserMessage(prompt, context.imageDataUrl)],
       { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
     );
-    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
     return;
@@ -1515,6 +1563,7 @@ async function analyzeProgress(examAttempts) {
   const avg = Math.round(history.reduce((s, h) => s + h.score, 0) / history.length);
 
   const prompt = `So sánh tiến bộ qua ${history.length} bài thi. Viết TIẾNG VIỆT, ngắn gọn.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 LỊCH SỬ (theo thời gian):
 ${history.map((h, i) => `${i + 1}. ${h.examTitle}: ${h.score}% (${h.correct}/${h.total})`).join('\n')}
@@ -1538,9 +1587,10 @@ TRẢ VỀ JSON:
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
+    const safeAI = sanitizePublicAIValue(ai);
 
     return {
-      ...ai,
+      ...safeAI,
       history: history.map(h => ({
         ...h,
         date: new Date(h.date).toLocaleDateString('vi-VN'),
@@ -1600,6 +1650,7 @@ async function recommendNextExam(context = {}) {
     }));
 
   const prompt = `Gợi ý đề thi tiếp theo phù hợp. Viết TIẾNG VIỆT, ngắn gọn.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 TRÌNH ĐỘ: ${level} (${userScore || 'N/A'}%)
 MÔN: ${subjectName || 'Tổng hợp'}
@@ -1622,14 +1673,15 @@ TRẢ VỀ JSON:
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
+    const safeAI = sanitizePublicAIValue(ai);
 
     // Merge AI recommendation với data thực
-    const rec = recommendations.find(e => e.id === ai.recommendedExam?.id) || recommendations[0];
+    const rec = recommendations.find(e => e.id === safeAI.recommendedExam?.id) || recommendations[0];
 
     return {
-      recommendedExam: rec ? { ...rec, reason: ai.recommendedExam?.reason || '' } : null,
-      alternativeExams: ai.alternativeExams || recommendations.slice(1, 4),
-      studyAdvice: ai.studyAdvice || '',
+      recommendedExam: rec ? { ...rec, reason: safeAI.recommendedExam?.reason || '' } : null,
+      alternativeExams: safeAI.alternativeExams || recommendations.slice(1, 4),
+      studyAdvice: safeAI.studyAdvice || '',
     };
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
@@ -1755,6 +1807,7 @@ async function gradeEssay({ questionText, questionTextCn, userAnswer, correctAns
   const isTranslation = questionType === 'translation';
 
   const prompt = `Bạn là giáo viên tiếng Trung chấm bài. Chấm bằng TIẾNG VIỆT.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 YÊU CẦU:
 - Đánh giá chi tiết từng khía cạnh
@@ -1823,6 +1876,7 @@ async function teachGrammar({ question, topic, wrongAnswer, correctAnswer, userL
   const lessonMaxTokens = Math.min(BEE.lessonMaxTokens || 1600, 1800);
 
   const prompt = `Bạn là gia sư giỏi, giải thích bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
+${USER_AI_PRIVACY_PROMPT_RULES}
 
 Ngữ cảnh:
 - Câu hỏi: ${question || ''}
@@ -1884,6 +1938,9 @@ module.exports = {
   PUBLIC_AI_BUSY_MESSAGE,
   getPublicAIErrorMessage,
   hasPrivateAIProviderDetails,
+  hasPrivateAIOutputDetails,
+  sanitizePublicAIText,
+  sanitizePublicAIValue,
   // Core functions
   callBeeknoee,
   callBeeknoeeMessages,
