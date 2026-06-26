@@ -98,11 +98,15 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
   useEffect(() => {
     const scrollContainer = messagesScrollRef.current;
     if (!scrollContainer) return;
-    scrollContainer.scrollTo({
-      top: scrollContainer.scrollHeight,
-      behavior: 'smooth',
-    });
-  }, [messages, open]);
+    const scrollToBottom = () => {
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: 'auto',
+      });
+    };
+    window.requestAnimationFrame(scrollToBottom);
+    window.setTimeout(scrollToBottom, 80);
+  }, [messages, loading, open]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -228,15 +232,14 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
 
   const keepMobileViewportStable = () => {
     if (typeof window === 'undefined' || window.innerWidth >= 640) return;
-    const scrollY = window.scrollY;
-    const messagesScrollTop = messagesScrollRef.current?.scrollTop ?? 0;
-    const restore = () => {
-      window.scrollTo(0, scrollY);
-      if (messagesScrollRef.current) messagesScrollRef.current.scrollTop = messagesScrollTop;
+    const keepPanelPinned = () => {
+      const el = messagesScrollRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
     };
-    window.requestAnimationFrame(restore);
-    window.setTimeout(restore, 80);
-    window.setTimeout(restore, 180);
+    window.requestAnimationFrame(keepPanelPinned);
+    window.setTimeout(keepPanelPinned, 120);
+    window.setTimeout(keepPanelPinned, 280);
   };
 
   const handlePasteImage = async (event: ReactClipboardEvent<HTMLInputElement>) => {

@@ -2139,7 +2139,7 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
 
   const fixes = [];
   const diagnostics = [];
-  const batchSize = Math.max(1, Math.min(8, Number.parseInt(process.env.AI_EXAM_FIX_BATCH_SIZE || "4", 10)));
+  const batchSize = Math.max(1, Math.min(8, Number.parseInt(process.env.AI_EXAM_FIX_BATCH_SIZE || "2", 10)));
 
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
@@ -2152,7 +2152,8 @@ async function generateReviewFixesWithAI(entries, reviews, context = {}) {
         models: getContextFixModels(context),
         temperature: 0.05,
         maxTokens: Number.parseInt(process.env.AI_EXAM_FIX_MAX_TOKENS || "4500", 10),
-        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "300000", 10)),
+        timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_FIX_TIMEOUT_MS || "240000", 10)),
+        fallbackOnTimeout: false,
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);

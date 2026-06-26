@@ -111,6 +111,44 @@ type EditMode = 'view' | 'edit';
 type AiBlockingTask = 'review' | 'fix' | 'format' | 'normalize' | 'explain' | 'polish' | null;
 
 const EDIT_QUESTION_BATCH_SIZE = 20;
+const AI_REVIEW_FIX_CHUNK_SIZE = 2;
+
+function mergeApplyReviewFixResults(results: ApplyExamReviewFixesResult[], totalIssues: number): ApplyExamReviewFixesResult {
+    const last = results[results.length - 1];
+    const sum = (key: keyof ApplyExamReviewFixesResult) =>
+        results.reduce((total, item) => total + (Number(item[key]) || 0), 0);
+
+    return {
+        ...(last || { message: '' }),
+        message: results.length > 1
+            ? `AI đã sửa log theo ${results.length} lượt nhỏ để tránh timeout. Đã xử lý ${totalIssues} log.`
+            : last?.message || 'AI đã sửa log.',
+        changedCount: sum('changedCount'),
+        answerChangedCount: sum('answerChangedCount'),
+        formulaChangedCount: sum('formulaChangedCount'),
+        warningCount: sum('warningCount'),
+        skippedCount: sum('skippedCount'),
+        fixedIssueCount: sum('fixedIssueCount'),
+        remainingIssueCount: last?.remainingIssueCount,
+        answerChanges: results.flatMap(item => item.answerChanges || []).slice(0, 100),
+        changes: results.flatMap(item => item.changes || []).slice(0, 100),
+        skipped: results.flatMap(item => item.skipped || []).slice(0, 100),
+        diagnostics: results.flatMap(item => item.diagnostics || []).slice(0, 100),
+        remainingIssues: last?.remainingIssues,
+        items: last?.items,
+        sourceFile: last?.sourceFile,
+        formulaResult: last?.formulaResult,
+        summary: last?.summary
+            ? {
+                ...last.summary,
+                changedCount: sum('changedCount'),
+                fixedIssueCount: sum('fixedIssueCount'),
+                remainingIssueCount: last.remainingIssueCount,
+                skippedCount: sum('skippedCount'),
+            }
+            : undefined,
+    };
+}
 
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
@@ -933,13 +971,30 @@ export default function AdminExamDetailPage() {
             setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setExamReviewApplyResult(null);
-            const result = await examAdminApi.applyExamReviewFixes(exam.id, {
-                reviews,
-                applySafeFormulas: true,
-                applySuggestedAnswers: true,
-                qualityMode: aiQualityMode,
-            });
-            setExamReviewApplyResult(result);
+            const chunks = Array.from(
+                { length: Math.ceil(reviews.length / AI_REVIEW_FIX_CHUNK_SIZE) },
+                (_, index) => reviews.slice(index * AI_REVIEW_FIX_CHUNK_SIZE, (index + 1) * AI_REVIEW_FIX_CHUNK_SIZE),
+            );
+            const results: ApplyExamReviewFixesResult[] = [];
+
+            for (let index = 0; index < chunks.length; index += 1) {
+                try {
+                    const result = await examAdminApi.applyExamReviewFixes(exam.id, {
+                        reviews: chunks[index],
+                        applySafeFormulas: true,
+                        applySuggestedAnswers: true,
+                        qualityMode: aiQualityMode,
+                    });
+                    results.push(result);
+                    setExamReviewApplyResult(mergeApplyReviewFixResults(results, reviews.length));
+                } catch (chunkError: any) {
+                    if (results.length > 0) {
+                        setExamReviewApplyResult(mergeApplyReviewFixResults(results, reviews.length));
+                    }
+                    const message = chunkError?.response?.data?.message || chunkError?.message || 'AI sửa lỗi đề thất bại.';
+                    throw new Error(`Đã sửa ${results.length}/${chunks.length} lượt. Lượt ${index + 1} lỗi: ${message}`);
+                }
+            }
             setExamReviewResult(null);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã sửa log lỗi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -947,7 +1002,7 @@ export default function AdminExamDetailPage() {
             const retryText = error?.response?.data?.retryAfter
                 ? ` Thử lại sau ${error.response.data.retryAfter}s.`
                 : '';
-            setExamReviewError((error?.response?.data?.message || 'AI sửa lỗi đề thất bại.') + retryText);
+            setExamReviewError((error?.response?.data?.message || error?.message || 'AI sửa lỗi đề thất bại.') + retryText);
         } finally {
             setApplyingExamReviewFixes(false);
             setAiBlockingTask(null);

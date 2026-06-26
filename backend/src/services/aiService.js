@@ -1377,7 +1377,6 @@ async function askAIStream(question, context = {}, res) {
     return;
   }
 
-  const BEE = aiConfig.beeknoee;
   const payload = {
     model: BEE.model,
     messages: [buildVisionUserMessage(prompt, context.imageDataUrl)],

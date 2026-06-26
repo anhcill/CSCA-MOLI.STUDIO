@@ -71,14 +71,14 @@ export function MoliPetPanel({ controller }: { controller: MoliPetController }) 
         <MoliPetSettings controller={controller} />
       ) : (
         <>
-          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3 max-sm:px-3">
+          <div ref={messagesScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 pb-5 pt-3 max-sm:px-3 max-sm:pb-6">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm leading-relaxed max-sm:max-w-[88%] ${
+                  className={`max-w-[82%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm leading-relaxed max-sm:max-w-[88%] ${
                     message.role === 'user' ? skin.userBubbleClass : skin.assistantBubbleClass
                   }`}
                 >
