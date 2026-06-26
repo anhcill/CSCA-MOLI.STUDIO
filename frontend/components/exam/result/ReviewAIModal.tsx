@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FiCheckCircle, FiCpu, FiMaximize2, FiMessageCircle, FiMinimize2, FiX, FiZap } from 'react-icons/fi';
 import AIFormattedText from '@/components/ai/AIFormattedText';
 import CuteLoadingText from '@/components/ai/CuteLoadingText';
@@ -36,6 +36,9 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
   const answerStatus = getQuestionReviewStatus(question);
   const taskKey = `${attemptId}:${mode}:${question.question_id || question.id || question.question_number}:${question.sub_question_number || 0}`;
   const title = mode === 'theory' ? 'Giảng lại lý thuyết' : `Phân tích câu ${questionNo}`;
+
+  const minimizeModal = useCallback(() => setMinimized(true), []);
+  const restoreModal = useCallback(() => setMinimized(false), []);
 
   const answerBox = useMemo(() => {
     if (answerStatus === 'correct') {
@@ -103,11 +106,10 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
     };
   }, [minimized]);
 
-  if (minimized) {
-    return (
+  const minimizedLauncher = minimized ? (
       <button
         type="button"
-        onClick={() => setMinimized(false)}
+        onClick={restoreModal}
         className="fixed bottom-4 right-4 z-[9999] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-violet-200 bg-white px-4 py-3 text-left shadow-2xl shadow-violet-950/20 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:shadow-violet-950/30 dark:border-violet-800/70 dark:bg-gray-950 dark:ring-gray-800"
         aria-live="polite"
       >
@@ -124,12 +126,14 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
         </span>
         <FiMaximize2 className="shrink-0 text-slate-400" size={16} />
       </button>
-    );
-  }
+  ) : null;
 
   return (
+    <>
+    {minimizedLauncher}
     <div
-      className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm no-print sm:items-center sm:p-4"
+      className={`fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm no-print transition-opacity duration-150 sm:items-center sm:p-4 ${minimized ? 'pointer-events-none invisible opacity-0' : 'opacity-100'}`}
+      aria-hidden={minimized}
       onClick={loading ? undefined : onClose}
     >
       <div
@@ -153,7 +157,7 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
           <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
-              onClick={() => setMinimized(true)}
+              onClick={minimizeModal}
               className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-white hover:text-violet-700 dark:text-slate-300 dark:hover:bg-gray-900 dark:hover:text-violet-200"
               title="Thu nhỏ"
             >
@@ -239,7 +243,7 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
           {loading && (
             <button
               type="button"
-              onClick={() => setMinimized(true)}
+              onClick={minimizeModal}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700"
             >
               <FiMinimize2 size={14} /> Thu nhỏ xuống góc
@@ -258,7 +262,7 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
             <>
               <button
                 type="button"
-                onClick={() => setMinimized(true)}
+                onClick={minimizeModal}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
                 <FiMinimize2 size={14} /> Thu nhỏ
@@ -275,6 +279,7 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
         </div>
       </div>
     </div>
+    </>
   );
 }
 

@@ -103,13 +103,13 @@ export function MoliPetPanel({ controller }: { controller: MoliPetController }) 
           </div>
 
           <div className="shrink-0 px-3 pb-2 max-sm:px-2.5">
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <div className="grid grid-cols-1 gap-2">
               {SUGGESTED_ACTIONS.map((action) => (
                 <button
                   key={action}
                   type="button"
                   onClick={() => setInput(action)}
-                  className={`min-h-8 min-w-0 rounded-full border px-2.5 py-1.5 text-center text-[10px] font-bold leading-tight transition sm:px-3 sm:text-[11px] ${skin.actionClass}`}
+                  className={`min-h-8 w-full min-w-0 whitespace-normal rounded-full border px-3 py-1.5 text-center text-[11px] font-bold leading-tight transition ${skin.actionClass}`}
                 >
                   {action}
                 </button>
