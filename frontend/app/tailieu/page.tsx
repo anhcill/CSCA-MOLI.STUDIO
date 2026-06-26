@@ -1,437 +1,189 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Header from '@/components/layout/Header';
 import axios from '@/lib/utils/axios';
-import { FiBookmark, FiDownload, FiExternalLink, FiSearch, FiChevronDown, FiChevronUp, FiLock } from 'react-icons/fi';
-import { FaCrown } from 'react-icons/fa';
-import { useAuthStore } from '@/lib/store/authStore';
-import { isVipActive } from '@/lib/utils/permissions';
-import { ProUpgradeModal } from '@/components/common/ProModal';
-import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
-import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
+import { MaterialSearchBar } from '@/components/materials/MaterialSearchBar';
+import { MaterialSection } from '@/components/materials/MaterialSection';
+import { MaterialSubjectTabs } from '@/components/materials/MaterialSubjectTabs';
+import { MaterialTypeTabs } from '@/components/materials/MaterialTypeTabs';
+import {
+  FORMULA_CATEGORY,
+  MATERIAL_SUBJECTS,
+  MATERIAL_TYPES,
+  getMaterialSubject,
+  type Material,
+} from '@/components/materials/materialLibraryTypes';
 
-interface Material {
-  id: number;
-  title: string;
-  description: string;
-  file_url: string;
-  file_type: string;
-  category: string;
-  subject: string;
-  created_at: string;
-  is_premium?: boolean;
-  content_html?: string;
-  content_text?: string;
-  content_source?: string;
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
 }
 
-const CATEGORIES = [
-  { value: 'all', label: 'Tất Cả', icon: '📚', color: 'bg-purple-500' },
-  { value: 'ly-thuyet', label: 'Lý Thuyết', icon: '📖', color: 'bg-blue-500' },
-  { value: 'cau-truc-de', label: 'Cấu Trúc Đề', icon: '📋', color: 'bg-green-500' },
-  { value: 'de-mo-phong', label: 'Đề Mô Phỏng', icon: '📝', color: 'bg-orange-500' },
-  { value: 'tu-vung', label: 'Từ Vựng', icon: '✏️', color: 'bg-pink-500' },
-];
-
-const FORMULA_CATEGORY = 'cong-thuc-on-thi';
-
-const SUBJECTS = [
-  { value: '', label: 'Tất cả môn', emoji: '🎯' },
-  { value: 'toan', label: 'Toán', emoji: '🔢' },
-  { value: 'vat-ly', label: 'Vật Lý', emoji: '⚛️' },
-  { value: 'hoa-hoc', label: 'Hóa Học', emoji: '🧪' },
-  { value: 'tieng-trung-xh', label: 'Tiếng Trung XH', emoji: '🇨🇳' },
-  { value: 'tieng-trung-tn', label: 'Tiếng Trung TN', emoji: '🌿' },
-];
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-function hasWebContent(material: Material) {
-  return Boolean(material.content_html || material.content_text);
+function matchesSearch(material: Material, keyword: string) {
+  if (!keyword) return true;
+  return normalizeText(`${material.title} ${material.description || ''}`).includes(keyword);
 }
 
-function canUsePdfProxy(fileUrl?: string) {
-  return Boolean(fileUrl && /\/upload\/v\d+\//.test(fileUrl));
-}
-
-function PDFCard({ m }: { m: Material }) {
-  const user = useAuthStore((s) => s.user);
-  const isVip = isVipActive(user);
-  const [expanded, setExpanded] = useState(false);
-  const [showVipModal, setShowVipModal] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
-  const hasFile = Boolean(m.file_url);
-  const hasPdfProxy = canUsePdfProxy(m.file_url);
-  const hasContent = hasWebContent(m);
-  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}` : m.file_url;
-  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${m.id}/download` : m.file_url;
-  const categoryData = CATEGORIES.find(c => c.value === m.category);
-  const subjectData = SUBJECTS.find(s => s.value === m.subject);
-  const locked = m.is_premium && !isVip;
-
-  const openProtectedPdf = async (url: string, download = false) => {
-    const token = sessionStorage.getItem('token');
-    if (!token) {
-      window.location.href = '/auth';
-      return;
-    }
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error('PDF request failed');
-
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    if (download) {
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = `${m.title || 'tailieu'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-      return;
-    }
-    window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  };
-
-  const handlePdfClick = async (e: React.MouseEvent) => {
-    if (locked) {
-      e.preventDefault();
-      setShowVipModal(true);
-      return;
-    }
-    if (hasPdfProxy && pdfUrl) {
-      e.preventDefault();
-      await openProtectedPdf(pdfUrl);
-    }
-  };
-
-  const handleDownloadClick = async (e: React.MouseEvent) => {
-    if (locked) {
-      e.preventDefault();
-      setShowVipModal(true);
-      return;
-    }
-    if (hasPdfProxy && downloadUrl) {
-      e.preventDefault();
-      await openProtectedPdf(downloadUrl, true);
-    }
-  };
-
-  const toggleBookmark = async () => {
-    const next = !bookmarked;
-    setBookmarked(next);
-    try {
-      if (next) {
-        await saveBookmark({
-          entity_type: 'material',
-          entity_id: m.id,
-          title: m.title,
-          metadata: { category: m.category, subject: m.subject, file_type: m.file_type },
-        });
-      } else {
-        await deleteBookmark('material', m.id);
-      }
-    } catch {
-      setBookmarked(!next);
-    }
-  };
-
-  return (
-    <div className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 ${locked ? 'border-amber-200/70 hover:shadow-amber-500/10' : 'border-gray-200 hover:shadow-md'}`}>
-      <div className="p-5">
-        <div className="flex items-start gap-4">
-          {/* Icon */}
-          <div className={`w-12 h-12 ${categoryData?.color || 'bg-gray-500'} rounded-xl flex items-center justify-center shrink-0 shadow-md`}>
-            <span className="text-2xl">{categoryData?.icon || '📄'}</span>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-bold text-base leading-snug">{m.title}</h3>
-              {m.is_premium && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-400 text-orange-900 text-xs font-bold rounded-md shadow-sm">
-                  <FaCrown /> PRO
-                </span>
-              )}
-            </div>
-            {m.description && (
-              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{m.description}</p>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {categoryData && (
-                <span className={`inline-flex items-center gap-1 px-3 py-1 ${categoryData.color} text-white text-xs rounded-full font-medium`}>
-                  {categoryData.icon} {categoryData.label}
-                </span>
-              )}
-              {subjectData && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
-                  {subjectData.emoji} {subjectData.label}
-                </span>
-              )}
-              <span className="text-xs text-gray-400 ml-auto">
-                {new Date(m.created_at).toLocaleDateString('vi-VN')}
-              </span>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2 shrink-0">
-            <button
-              onClick={toggleBookmark}
-              className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${bookmarked ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-              title="Bookmark tai lieu"
-            >
-              <FiBookmark size={16} />
-            </button>
-            {locked ? (
-              <button
-                onClick={() => setShowVipModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-200 transition-all shadow-sm"
-              >
-                <FiLock size={14} />
-                Khóa PRO
-              </button>
-            ) : hasContent ? (
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
-              >
-                <FiExternalLink size={14} />
-                Xem noi dung
-              </button>
-            ) : hasFile ? (
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={handlePdfClick}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg"
-              >
-                <FiExternalLink size={14} />
-                Xem PDF
-              </a>
-            ) : (
-              <span className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-400 text-sm font-medium rounded-lg">
-                Chua co file
-              </span>
-            )}
-            {!locked && hasFile && (
-              <a
-                href={downloadUrl}
-                onClick={handleDownloadClick}
-                className="flex items-center justify-center w-10 h-10 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
-                title="Tải xuống PDF"
-              >
-                <FiDownload size={16} />
-              </a>
-            )}
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="flex items-center justify-center w-10 h-10 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              title={expanded ? "Thu gọn" : "Xem trước"}
-            >
-              {expanded ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Preview */}
-      {expanded && !locked && hasContent && (
-        <MaterialContentViewer
-          contentHtml={m.content_html}
-          contentText={m.content_text}
-          className="border-t border-gray-200"
-        />
-      )}
-      {expanded && !locked && !hasContent && hasFile && !hasPdfProxy && (
-        <div className="border-t border-gray-200 bg-gray-50 p-4">
-          <iframe
-            src={pdfUrl}
-            className="w-full h-[600px] rounded-lg border border-gray-200"
-            title={m.title}
-            loading="lazy"
-          />
-        </div>
-      )}
-      {expanded && !locked && !hasContent && hasFile && hasPdfProxy && (
-        <div className="border-t border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">
-          <button
-            type="button"
-            onClick={handlePdfClick}
-            className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
-          >
-            <FiExternalLink size={14} />
-            Mo PDF an toan
-          </button>
-        </div>
-      )}
-      {expanded && !locked && !hasContent && !hasFile && (
-        <div className="border-t border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-          Tai lieu nay chua co file hoac noi dung web.
-        </div>
-      )}
-      {expanded && locked && (
-        <div className="border-t border-amber-100 bg-amber-50 p-6 text-center">
-          <FaCrown className="text-amber-500 mx-auto mb-2" size={32} />
-          <p className="font-bold text-amber-800 mb-1">Tài liệu dành cho VIP</p>
-          <p className="text-sm text-amber-600 mb-3">Nâng cấp PRO để xem nội dung</p>
-          <button
-            onClick={() => setShowVipModal(true)}
-            className="px-5 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition"
-          >
-            Nâng cấp ngay
-          </button>
-        </div>
-      )}
-
-      {showVipModal && (
-        <ProUpgradeModal
-          isOpen={true}
-          onClose={() => setShowVipModal(false)}
-          title={`"${m.title}" chỉ dành cho VIP`}
-        />
-      )}
-    </div>
-  );
+function buildCounts(materials: Material[], key: 'subject' | 'category') {
+  const counts: Record<string, number> = { all: materials.length };
+  materials.forEach((material) => {
+    const value = key === 'subject' ? material.subject || 'unknown' : material.category || 'unknown';
+    counts[value] = (counts[value] || 0) + 1;
+  });
+  return counts;
 }
 
 export default function TaiLieuPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('all');
-  const [subject, setSubject] = useState('');
+  const [activeSubject, setActiveSubject] = useState('all');
+  const [activeType, setActiveType] = useState('all');
 
   useEffect(() => {
     axios.get('/materials')
-      .then(r => setMaterials((r.data.data || []).filter((m: Material) => m.category !== FORMULA_CATEGORY)))
+      .then((response) => {
+        const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+        setMaterials(rows.filter((material: Material) => material.category !== FORMULA_CATEGORY));
+      })
       .catch(() => setMaterials([]))
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = materials.filter(m => {
-    if (m.category === FORMULA_CATEGORY) return false;
-    const matchSearch = m.title.toLowerCase().includes(search.toLowerCase()) ||
-      (m.description || '').toLowerCase().includes(search.toLowerCase());
-    const matchCategory = category === 'all' || m.category === category;
-    const matchSubject = !subject || m.subject === subject;
-    return matchSearch && matchCategory && matchSubject;
-  });
+  const visibleMaterials = useMemo(() => {
+    const keyword = normalizeText(search);
+    return materials.filter((material) => {
+      if (material.category === FORMULA_CATEGORY) return false;
+      if (activeSubject !== 'all' && material.subject !== activeSubject) return false;
+      if (activeType !== 'all' && material.category !== activeType) return false;
+      return matchesSearch(material, keyword);
+    });
+  }, [activeSubject, activeType, materials, search]);
 
-  // Group by category for display
-  const groupedByCategory = CATEGORIES.reduce((acc, cat) => {
-    if (cat.value === 'all') return acc;
-    acc[cat.value] = filtered.filter(m => m.category === cat.value);
-    return acc;
-  }, {} as Record<string, Material[]>);
+  const subjectCounts = useMemo(() => buildCounts(materials, 'subject'), [materials]);
+  const typeCounts = useMemo(() => {
+    const bySubject = activeSubject === 'all'
+      ? materials
+      : materials.filter((material) => material.subject === activeSubject);
+    return buildCounts(bySubject, 'category');
+  }, [activeSubject, materials]);
+
+  const sections = useMemo(() => {
+    const subjects = activeSubject === 'all'
+      ? MATERIAL_SUBJECTS.filter((subject) => subject.value !== 'all')
+      : MATERIAL_SUBJECTS.filter((subject) => subject.value === activeSubject);
+
+    return subjects
+      .map((subject) => ({
+        subject,
+        materials: visibleMaterials.filter((material) => material.subject === subject.value),
+      }))
+      .filter((section) => section.materials.length > 0);
+  }, [activeSubject, visibleMaterials]);
+
+  const unknownMaterials = useMemo(
+    () => visibleMaterials.filter((material) => !getMaterialSubject(material.subject)),
+    [visibleMaterials],
+  );
+
+  const activeSubjectData = getMaterialSubject(activeSubject) || MATERIAL_SUBJECTS[0];
+  const activeTypeData = MATERIAL_TYPES.find((type) => type.value === activeType) || MATERIAL_TYPES[0];
+  const activeLabel = activeSubject === 'all'
+    ? `${activeSubjectData.label} · ${activeTypeData.label}`
+    : `${activeSubjectData.label} · ${activeTypeData.label}`;
+
+  const resetFilters = () => {
+    setSearch('');
+    setActiveSubject('all');
+    setActiveType('all');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-slate-50">
       <Header />
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
-        {/* Page Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl mb-4">
-            <span className="text-3xl">📚</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Tài Liệu Học Tập</h1>
-          <p className="text-gray-600">Kho tài liệu đầy đủ cho kỳ thi CSCA - Chia theo chủ đề và môn học</p>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
-          {/* Category Tabs */}
-          <div className="flex flex-wrap gap-2 mb-6">
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.value}
-                onClick={() => setCategory(cat.value)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${category === cat.value
-                  ? `${cat.color} text-white shadow-md scale-105`
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                <span>{cat.icon}</span>
-                <span>{cat.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Search and Subject Filter */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Tìm kiếm tài liệu..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center sm:p-8">
+            <div>
+              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-pink-500 text-3xl text-white shadow-sm">
+                📚
+              </div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Tài liệu học tập</h1>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
+                Chọn môn trước, sau đó chọn loại tài liệu. Mỗi môn được tách thành khu riêng để không bị lẫn nội dung.
+              </p>
             </div>
-
-            <select
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              className="px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-            >
-              {SUBJECTS.map(s => (
-                <option key={s.value} value={s.value}>
-                  {s.emoji} {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Results Count */}
-          <div className="mt-4 flex items-center justify-between text-sm">
-            <span className="text-gray-600">
-              Tìm thấy <strong className="text-purple-600">{filtered.length}</strong> tài liệu
-            </span>
-            {(search || category !== 'all' || subject) && (
-              <button
-                onClick={() => { setSearch(''); setCategory('all'); setSubject(''); }}
-                className="text-purple-600 hover:text-purple-700 font-medium"
-              >
-                Xóa bộ lọc
-              </button>
-            )}
+            <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-center sm:min-w-[260px]">
+              <div className="rounded-xl bg-white px-4 py-3 shadow-sm">
+                <p className="text-2xl font-black text-violet-600">{materials.length}</p>
+                <p className="text-xs font-bold text-slate-500">Tài liệu</p>
+              </div>
+              <div className="rounded-xl bg-white px-4 py-3 shadow-sm">
+                <p className="text-2xl font-black text-pink-600">{MATERIAL_SUBJECTS.length - 1}</p>
+                <p className="text-xs font-bold text-slate-500">Nhóm môn</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Materials List */}
+        <div className="mb-6 space-y-4">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-500">Bước 1</p>
+                <h2 className="text-lg font-black text-slate-950">Chọn môn cần học</h2>
+              </div>
+              {(activeSubject !== 'all' || activeType !== 'all' || search) && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-100"
+                >
+                  Xóa lọc
+                </button>
+              )}
+            </div>
+            <MaterialSubjectTabs value={activeSubject} counts={subjectCounts} onChange={setActiveSubject} />
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-500">Bước 2</p>
+              <h2 className="text-lg font-black text-slate-950">Chọn loại tài liệu</h2>
+            </div>
+            <MaterialTypeTabs value={activeType} counts={typeCounts} onChange={setActiveType} />
+          </div>
+
+          <MaterialSearchBar
+            value={search}
+            resultCount={visibleMaterials.length}
+            activeLabel={activeLabel}
+            onChange={setSearch}
+            onClear={resetFilters}
+          />
+        </div>
+
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="h-32 bg-white rounded-xl animate-pulse" />
+            {[1, 2, 3, 4].map((item) => (
+              <div key={item} className="h-36 animate-pulse rounded-3xl bg-white shadow-sm" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl">
-            <div className="text-6xl mb-4">📭</div>
-            <p className="text-gray-500">
-              {search || category !== 'all' || subject ? 'Không tìm thấy tài liệu phù hợp' : 'Chưa có tài liệu nào'}
-            </p>
-          </div>
-        ) : category === 'all' ? (
-          // Display all materials in list view
-          <div className="space-y-4">
-            {filtered.map(m => <PDFCard key={m.id} m={m} />)}
+        ) : visibleMaterials.length === 0 ? (
+          <div className="rounded-3xl border border-slate-200 bg-white py-20 text-center shadow-sm">
+            <div className="mb-4 text-5xl">📭</div>
+            <p className="text-lg font-black text-slate-700">Chưa có tài liệu phù hợp</p>
+            <p className="mt-2 text-sm font-medium text-slate-500">Thử đổi môn, đổi loại tài liệu hoặc xóa từ khóa tìm kiếm.</p>
           </div>
         ) : (
-          // Display grouped by category
-          <div className="space-y-4">
-            {filtered.map(m => <PDFCard key={m.id} m={m} />)}
+          <div className="space-y-6">
+            {sections.map((section) => (
+              <MaterialSection key={section.subject.value} subject={section.subject} materials={section.materials} />
+            ))}
+            {unknownMaterials.length > 0 && (
+              <MaterialSection subject={MATERIAL_SUBJECTS[0]} materials={unknownMaterials} />
+            )}
           </div>
         )}
       </main>
