@@ -16,7 +16,7 @@ import {
   type Material,
 } from './materialLibraryTypes';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export function MaterialCard({ material }: { material: Material }) {
   const user = useAuthStore((state) => state.user);
@@ -69,7 +69,11 @@ export function MaterialCard({ material }: { material: Material }) {
     }
     if (hasPdfProxy && pdfUrl) {
       event.preventDefault();
-      await openProtectedPdf(pdfUrl);
+      try {
+        await openProtectedPdf(pdfUrl);
+      } catch {
+        alert('Không mở được PDF. Bạn thử tải xuống hoặc đăng nhập lại nhé.');
+      }
     }
   };
 
@@ -81,7 +85,11 @@ export function MaterialCard({ material }: { material: Material }) {
     }
     if (hasPdfProxy && downloadUrl) {
       event.preventDefault();
-      await openProtectedPdf(downloadUrl, true);
+      try {
+        await openProtectedPdf(downloadUrl, true);
+      } catch {
+        alert('Không tải được PDF. Bạn thử đăng nhập lại nhé.');
+      }
     }
   };
 

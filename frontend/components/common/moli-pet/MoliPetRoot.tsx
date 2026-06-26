@@ -20,10 +20,10 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
         type="button"
         onClick={controller.restorePet}
         aria-label="Hiện MolyPet"
-        className={`fixed bottom-4 left-3 z-[65] rounded-xl border px-3 py-2 text-xs font-black shadow-lg backdrop-blur sm:bottom-5 sm:left-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm ${skin.actionClass}`}
+        className={`fixed bottom-3 left-2 z-[65] w-12 overflow-hidden whitespace-nowrap rounded-lg border px-2 py-1.5 text-center text-[10px] font-black leading-none shadow-md backdrop-blur sm:bottom-4 sm:left-3 sm:w-14 sm:px-2.5 sm:py-2 sm:text-[11px] ${skin.actionClass}`}
         title="Bật lại MolyPet"
       >
-        Hiện MolyPet
+        Moly
       </button>
     );
   }
