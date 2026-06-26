@@ -106,11 +106,11 @@ export default function ExamResultListPage() {
                 {/* Page Header */}
                 <div className="mb-8">
                     <button
-                        onClick={() => router.push('/')}
-                        className="flex items-center gap-2 text-gray-500 hover:text-purple-600 transition-colors mb-4 font-semibold text-sm group"
+                        onClick={() => router.back()}
+                        className="flex items-center gap-2 text-gray-500 hover:text-purple-600 transition-colors mb-4 font-semibold text-sm group dark:text-gray-400 dark:hover:text-purple-300"
                     >
                         <FiArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-                        <span>Quay lại trang chủ</span>
+                        <span>Quay lại</span>
                     </button>
                     <h1 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">Kết quả thi gần đây</h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1.5 font-medium">Xem lại và học tập từ các bài thi đã thực hiện</p>

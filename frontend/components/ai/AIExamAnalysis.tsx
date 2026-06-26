@@ -58,13 +58,13 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
     // Cảnh báo khi AI đang load
     const renderLoadingState = () => (
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-200 p-5 space-y-4">
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-200 p-5 space-y-4 dark:from-violet-950/25 dark:to-sky-950/20 dark:border-violet-900/60">
             {/* Warning banner */}
-            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3 dark:bg-amber-950/25 dark:border-amber-900/60">
                 <FiAlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
                 <div>
-                    <p className="font-bold text-amber-800 text-sm">Đợi AI phân tích xong nhé!</p>
-                    <p className="text-amber-700 text-xs mt-0.5">Đừng thoát trang — phân tích AI đang được chuẩn bị cho bạn. Thoát sẽ mất kết quả!</p>
+                    <p className="font-bold text-amber-800 text-sm dark:text-amber-100">Đợi AI phân tích xong nhé!</p>
+                    <p className="text-amber-700 text-xs mt-0.5 dark:text-amber-200">Đừng thoát trang — phân tích AI đang được chuẩn bị cho bạn. Thoát sẽ mất kết quả!</p>
                 </div>
             </div>
 
@@ -91,7 +91,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
             </div>
 
             {/* Progress hint */}
-            <p className="text-center text-xs text-purple-500 font-medium">
+            <p className="text-center text-xs text-purple-500 font-medium dark:text-purple-200">
                 🤖 AI đang phân tích bài thi của bạn... vui lòng chờ
             </p>
         </div>
@@ -103,12 +103,12 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
     if (aiAnalysis?.rateLimited) {
         return (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 dark:bg-amber-950/25 dark:border-amber-900/60">
                 <div className="flex items-center gap-2 mb-2">
                     <FiAlertCircle className="text-amber-600" size={18} />
-                    <p className="font-semibold text-amber-800">AI đang tạm bận</p>
+                    <p className="font-semibold text-amber-800 dark:text-amber-100">AI đang tạm bận</p>
                 </div>
-                <p className="text-amber-700 text-sm mb-3">
+                <p className="text-amber-700 text-sm mb-3 dark:text-amber-200">
                     Hệ thống AI đang có nhiều người dùng. Kết quả phân tích cơ bản được hiển thị bên dưới.
                 </p>
                 {analysis && (
@@ -121,24 +121,24 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
     if (!analysis) return null;
 
     return (
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border border-purple-200 overflow-hidden shadow-sm">
+        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border border-purple-200 overflow-hidden shadow-sm dark:from-violet-950/25 dark:to-sky-950/20 dark:border-violet-900/60">
             {/* Header */}
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="w-full flex items-center justify-between p-5 hover:bg-purple-100/50 transition-colors"
+                className="w-full flex items-center justify-between p-5 hover:bg-purple-100/50 transition-colors dark:hover:bg-violet-950/40"
             >
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-purple-600 rounded-xl flex items-center justify-center shadow-md">
                         <FiZap className="text-white" size={18} />
                     </div>
                     <div className="text-left">
-                        <h3 className="font-bold text-gray-900">🤖 Phân tích bài thi bằng AI</h3>
-                        <p className="text-gray-500 text-xs">Phân tích chi tiết từ AI</p>
+                        <h3 className="font-bold text-gray-900 dark:text-white">🤖 Phân tích bài thi bằng AI</h3>
+                        <p className="text-gray-500 text-xs dark:text-gray-400">Phân tích chi tiết từ AI</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={(e) => { e.stopPropagation(); onRefresh(); }}
-                        className="p-2 hover:bg-purple-200 rounded-lg transition-colors" title="Làm mới">
+                        className="p-2 hover:bg-purple-200 rounded-lg transition-colors dark:hover:bg-violet-900/60" title="Làm mới">
                         <FiRefreshCw size={16} className="text-purple-700" />
                     </button>
                     <FiAlertCircle size={18} className={`text-purple-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -150,7 +150,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* So sánh với lần trước */}
                     {previousAttempt && (
-                        <div className={`rounded-xl p-4 border flex items-center gap-4 ${
+                        <div className={`rounded-xl p-4 border flex items-center gap-4 dark:bg-gray-900/70 dark:border-gray-800 ${
                             previousAttempt.delta > 0 ? 'bg-emerald-50 border-emerald-200' :
                             previousAttempt.delta < 0 ? 'bg-red-50 border-red-200' :
                             'bg-gray-50 border-gray-200'
@@ -169,11 +169,11 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 )}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">So với lần trước</p>
-                                <p className="font-bold text-gray-900">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 dark:text-gray-400">So với lần trước</p>
+                                <p className="font-bold text-gray-900 dark:text-white">
                                     {previousAttempt.examTitle}
                                 </p>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gray-600 dark:text-gray-300">
                                     Lần trước: <strong>{previousAttempt.score}%</strong>
                                     <span className="mx-2">→</span>
                                     Lần này: <strong>{previousAttempt.score + previousAttempt.delta}%</strong>
@@ -191,7 +191,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Grade + Summary */}
                     {analysis.grade && (
-                        <div className={`rounded-xl p-5 border ${
+                        <div className={`rounded-xl p-5 border dark:bg-gray-900/70 dark:border-gray-800 ${
                             analysis.gradeColor === 'emerald' ? 'bg-emerald-50 border-emerald-200' :
                             analysis.gradeColor === 'blue'  ? 'bg-blue-50 border-blue-200' :
                             analysis.gradeColor === 'amber'  ? 'bg-amber-50 border-amber-200' :
@@ -208,7 +208,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 }`}>{analysis.grade}</span>
                             </div>
                             {analysis.summary && (
-                                <TypewriterPlain text={analysis.summary} className="text-gray-700" />
+                                <TypewriterPlain text={analysis.summary} className="text-gray-700 dark:text-gray-200" />
                             )}
                         </div>
                     )}
@@ -216,7 +216,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {/* Difficulty Breakdown */}
                     {analysis.difficultyBreakdown && (
                         <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-gray-400">
                                 <FiAward size={12} /> Phân tích theo độ khó
                             </h4>
                             <div className="grid grid-cols-3 gap-3">
@@ -226,10 +226,10 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                     const color = level === 'easy' ? 'green' : level === 'hard' ? 'red' : 'amber';
                                     const label = level === 'easy' ? 'Dễ' : level === 'hard' ? 'Khó' : 'TB';
                                     return (
-                                        <div key={level} className={`bg-${color}-50 border border-${color}-200 rounded-xl p-3`}>
+                                        <div key={level} className={`bg-${color}-50 border border-${color}-200 rounded-xl p-3 dark:bg-gray-900/80 dark:border-gray-800`}>
                                             <p className={`text-xs text-${color}-600 font-semibold mb-1`}>{label}</p>
                                             <p className={`text-2xl font-black text-${color}-700`}>{d.rate}%</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">{d.correct}/{d.total} câu</p>
+                                            <p className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{d.correct}/{d.total} câu</p>
                                         </div>
                                     );
                                 })}
@@ -240,16 +240,16 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {/* Strengths */}
                     {analysis.strengths?.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-gray-400">
                                 <FiCheckCircle className="text-green-500" size={12} /> Điểm mạnh của bạn
                             </h4>
                             <div className="space-y-2">
                                 {analysis.strengths.map((s: string, i: number) => (
-                                    <div key={i} className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                                    <div key={i} className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 dark:bg-green-950/25 dark:border-green-900/60">
                                         <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                                             <span className="text-white text-xs font-bold">{i + 1}</span>
                                         </div>
-                                        <PlainText text={s} className="text-sm text-green-800 leading-relaxed" />
+                                        <PlainText text={s} className="text-sm text-green-800 leading-relaxed dark:text-green-100" />
                                     </div>
                                 ))}
                             </div>
@@ -259,16 +259,16 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {/* Weaknesses */}
                     {analysis.weaknesses?.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-gray-400">
                                 <FiTrendingDown className="text-amber-500" size={12} /> Điểm cần cải thiện
                             </h4>
                             <div className="space-y-2">
                                 {analysis.weaknesses.map((w: string, i: number) => (
-                                    <div key={i} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                                    <div key={i} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 dark:bg-amber-950/25 dark:border-amber-900/60">
                                         <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                                             <span className="text-white text-xs font-bold">{i + 1}</span>
                                         </div>
-                                        <PlainText text={w} className="text-sm text-amber-800 leading-relaxed" />
+                                        <PlainText text={w} className="text-sm text-amber-800 leading-relaxed dark:text-amber-100" />
                                     </div>
                                 ))}
                             </div>
@@ -278,14 +278,14 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                     {/* Common Mistakes */}
                     {analysis.commonMistakes?.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-gray-400">
                                 <FiAlertCircle className="text-red-400" size={12} /> Lỗi sai phổ biến cần tránh
                             </h4>
                             <div className="space-y-2">
                                 {analysis.commonMistakes.map((m: string, i: number) => (
-                                    <div key={i} className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                                    <div key={i} className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 dark:bg-red-950/25 dark:border-red-900/60">
                                         <span className="text-red-400 shrink-0 mt-0.5">⚠️</span>
-                                        <PlainText text={m} className="text-sm text-red-800 leading-relaxed" />
+                                        <PlainText text={m} className="text-sm text-red-800 leading-relaxed dark:text-red-100" />
                                     </div>
                                 ))}
                             </div>
@@ -294,15 +294,15 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Exam Tips */}
                     {analysis.examTips?.length > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                            <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 dark:bg-blue-950/25 dark:border-blue-900/60">
+                            <h4 className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-blue-200">
                                 <FiTarget size={12} /> Mẹo làm bài thi
                             </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {analysis.examTips.map((tip: string, i: number) => (
-                                    <div key={i} className="flex items-start gap-2 bg-white rounded-lg px-3 py-2">
+                                    <div key={i} className="flex items-start gap-2 bg-white rounded-lg px-3 py-2 dark:bg-gray-900/80">
                                         <span className="text-blue-500 shrink-0">▸</span>
-                                        <PlainText text={tip} className="text-sm text-blue-800" />
+                                        <PlainText text={tip} className="text-sm text-blue-800 dark:text-blue-100" />
                                     </div>
                                 ))}
                             </div>
@@ -311,33 +311,33 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Analysis Detail */}
                     {analysis.analysis && (
-                        <div className="bg-white border border-purple-200 rounded-xl p-5">
-                            <h4 className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <div className="bg-white border border-purple-200 rounded-xl p-5 dark:bg-gray-900/80 dark:border-purple-900/60">
+                            <h4 className="text-xs font-bold text-purple-700 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-purple-200">
                                 <FiBookOpen size={12} /> Phân tích chi tiết
                             </h4>
-                            <PlainText text={analysis.analysis} className="text-gray-700" />
+                            <PlainText text={analysis.analysis} className="text-gray-700 dark:text-gray-200" />
                         </div>
                     )}
 
                     {/* Overall Advice */}
                     {analysis.overallAdvice && (
-                        <div className="bg-purple-100 border border-purple-300 rounded-xl p-5">
-                            <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <div className="bg-purple-100 border border-purple-300 rounded-xl p-5 dark:bg-purple-950/30 dark:border-purple-900/60">
+                            <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-purple-100">
                                 💡 Lời khuyên từ AI
                             </h4>
-                            <PlainText text={analysis.overallAdvice} className="font-medium text-purple-900" />
+                            <PlainText text={analysis.overallAdvice} className="font-medium text-purple-900 dark:text-purple-100" />
                         </div>
                     )}
 
                     {/* Priority Topics */}
                     {analysis.priorityTopics?.length > 0 && (
                         <div>
-                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-gray-400">
                                 🎯 Ưu tiên học trước
                             </h4>
                             <div className="flex flex-wrap gap-2">
                                 {analysis.priorityTopics.map((topic: string, i: number) => (
-                                    <span key={i} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold border border-purple-200">
+                                    <span key={i} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold border border-purple-200 dark:bg-purple-950/40 dark:text-purple-100 dark:border-purple-900/60">
                                         {i + 1}. {topic}
                                     </span>
                                 ))}
@@ -347,26 +347,26 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Next Exam Suggestion */}
                     {analysis.nextExamSuggestion && (
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-                            <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 dark:bg-indigo-950/25 dark:border-indigo-900/60">
+                            <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-2 flex items-center gap-1.5 dark:text-indigo-200">
                                 <FiClock size={12} /> Gợi ý bài thi tiếp theo
                             </h4>
-                            <PlainText text={analysis.nextExamSuggestion} className="text-indigo-800" />
+                            <PlainText text={analysis.nextExamSuggestion} className="text-indigo-800 dark:text-indigo-100" />
                         </div>
                     )}
 
                     {/* Kế hoạch học */}
                     {analysis.studyPlan && (
-                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-5">
-                            <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-5 dark:from-indigo-950/25 dark:to-blue-950/20 dark:border-indigo-900/60">
+                            <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-1.5 dark:text-indigo-200">
                                 <FiTarget size={12} /> Kế hoạch học cho bạn
                             </h4>
-                            <PlainText text={analysis.studyPlan} className="font-medium text-indigo-900" />
+                            <PlainText text={analysis.studyPlan} className="font-medium text-indigo-900 dark:text-indigo-100" />
                         </div>
                     )}
 
                     {/* Footer */}
-                    <p className="text-center text-xs text-gray-400 border-t border-gray-200 pt-3">
+                    <p className="text-center text-xs text-gray-400 border-t border-gray-200 pt-3 dark:border-gray-800 dark:text-gray-500">
                         Phân tích bởi AI · Nhấn ⚡ để làm mới phân tích
                     </p>
                 </div>
@@ -386,13 +386,13 @@ function MiniAnalysis({ data }: { data: any }) {
                 <span className={`font-bold text-${gradeColor}-700`}>
                     {score >= 85 ? '🎉 Xuất sắc!' : score >= 60 ? '✅ Đạt' : '⚠️ Cần cố gắng'}
                 </span>
-                <span className="text-gray-500 text-sm">({score}%)</span>
+                <span className="text-gray-500 text-sm dark:text-gray-400">({score}%)</span>
             </div>
             {data.analysis && (
-                <PlainText text={data.analysis} className="text-gray-700" />
+                <PlainText text={data.analysis} className="text-gray-700 dark:text-gray-200" />
             )}
             {data.overallAdvice && (
-                <PlainText text={data.overallAdvice} className="font-medium text-purple-700" />
+                <PlainText text={data.overallAdvice} className="font-medium text-purple-700 dark:text-purple-200" />
             )}
         </div>
     );

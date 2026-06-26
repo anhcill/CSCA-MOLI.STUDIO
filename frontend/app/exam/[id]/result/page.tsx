@@ -1,8 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiBook, FiArrowLeft } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -15,8 +15,12 @@ import RichMathText from '@/components/common/RichMathText';
 import AIFormattedText from '@/components/ai/AIFormattedText';
 import { createWeakTopicPractice, createWrongQuestionPractice, saveBookmark } from '@/lib/api/insights';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
-import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
-import CuteLoadingText from '@/components/ai/CuteLoadingText';
+import BilingualMathText from '@/components/exam/result/BilingualMathText';
+import QuestionExplanationBlock from '@/components/exam/result/QuestionExplanationBlock';
+import ReviewAIButtons from '@/components/exam/result/ReviewAIButtons';
+import ReviewAIModal from '@/components/exam/result/ReviewAIModal';
+import type { ReviewAIMode, ReviewAITask } from '@/components/exam/result/types';
+import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
 
 const AI_ANALYSIS_COST = 50;
 
@@ -26,7 +30,6 @@ interface AnswerOption {
   text_cn?: string | null;
   is_correct: boolean;
 }
-
 interface QuestionResult {
   id?: number;
   question_id?: number;
@@ -66,83 +69,6 @@ interface ExamResult {
   answers: QuestionResult[];
 }
 
-function getQuestionReviewStatus(question: QuestionResult) {
-  if (!question.selected_answer_key) return 'unanswered';
-  return question.is_correct ? 'correct' : 'incorrect';
-}
-
-function getReviewAIButtonLabel(status: string) {
-  if (status === 'correct') return 'Hỏi AI củng cố câu đúng';
-  if (status === 'unanswered') return 'Hỏi AI hướng dẫn câu bỏ qua';
-  return 'Hỏi AI giải thích thêm';
-}
-
-function formatReviewAnswer(key?: string | null, text?: string | null, fallback = 'Bỏ qua') {
-  if (!key) return fallback;
-  const cleanText = (text || '').trim();
-  return cleanText.startsWith(`${key}.`) ? cleanText : `${key}. ${cleanText}`.trim();
-}
-
-function hasAltText(primary?: string | null, alt?: string | null) {
-  const a = (primary || '').trim();
-  const b = (alt || '').trim();
-  return Boolean(b && b !== a);
-}
-
-function BilingualMathText({
-  primary,
-  secondary,
-  className = '',
-  secondaryClassName = 'mt-1 text-sm text-gray-500',
-  readableBreaks = false,
-}: {
-  primary?: string | null;
-  secondary?: string | null;
-  className?: string;
-  secondaryClassName?: string;
-  readableBreaks?: boolean;
-}) {
-  const main = (primary || secondary || '').trim();
-  if (!main) return null;
-  return (
-    <div className="min-w-0">
-      <RichMathText value={main} className={className} readableBreaks={readableBreaks} />
-      {hasAltText(main, secondary) && (
-        <RichMathText value={secondary || ''} className={secondaryClassName} readableBreaks={readableBreaks} />
-      )}
-    </div>
-  );
-}
-
-const REVIEW_AI_ACCURACY_RULE =
-  'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
-
-const REVIEW_AI_FORMAT_RULE =
-  String.raw`FORMAT BAT BUOC: Khong dung **bold**, ###, ---/___, $$ hoac markdown phuc tap. Cong thuc Toan/Khoa hoc chi viet inline bang \(...\), vi du \(2^5=32\), \(|x|<3\), \(x\in\mathbb{Z}\). Khong de cong thuc bi tach thanh tung ky tu/tung dong. Neu can nhan manh, viet tieu de plain text nhu "Buoc 1: ..." hoac "Luu y: ...". Dung ky hieu →, ≤, ≥, ∈ trong van ban thuong; khong viet \to ngoai LaTeX. Tra loi gon thanh 3-5 muc: ket luan, cach lam, vi sao sai/dung, meo nho.`;
-
-function buildQuestionExplanationPrompt(question: QuestionResult) {
-  const questionNo = question.sub_question_number || question.question_number;
-  const questionText = question.question_text || question.question_text_cn || '';
-  const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
-  const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
-  const base = [
-    `Câu ${questionNo}`,
-    questionText ? `Nội dung câu hỏi: ${questionText}` : '',
-    `Đáp án đúng: ${correctAnswer}`,
-    REVIEW_AI_ACCURACY_RULE,
-    REVIEW_AI_FORMAT_RULE,
-  ].filter(Boolean).join('\n');
-
-  const status = getQuestionReviewStatus(question);
-  if (status === 'correct') {
-    return `${base}\nHọc sinh đã chọn đúng: ${selectedAnswer}.\nHãy giải thích vì sao đáp án này đúng, chỉ ra kiến thức cần nhớ, dấu hiệu nhận biết và bẫy dễ nhầm. Trả lời bằng tiếng Việt có dấu, ngắn gọn nhưng đủ ý.`;
-  }
-  if (status === 'unanswered') {
-    return `${base}\nHọc sinh đã bỏ qua câu này.\nHãy hướng dẫn cách suy luận từ đầu, vì sao đáp án đúng là phù hợp, mẹo nhận biết lần sau và kiến thức cần ôn lại. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
-  }
-  return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
-}
-
 function ExamResultContent() {
   const params = useParams();
   const router = useRouter();
@@ -157,8 +83,7 @@ function ExamResultContent() {
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
-  const [showExplanationModal, setShowExplanationModal] = useState<QuestionResult | null>(null);
-  const [showTeachModal, setShowTeachModal] = useState<QuestionResult | null>(null);
+  const [reviewAITask, setReviewAITask] = useState<ReviewAITask | null>(null);
   const [showGradeModal, setShowGradeModal] = useState<QuestionResult | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -296,6 +221,14 @@ function ExamResultContent() {
     }
   };
 
+  const openReviewAI = (question: QuestionResult, mode: ReviewAIMode) => {
+    if (reviewAITask) {
+      alert('AI đang xử lý câu khác. Mở lại ô AI ở góc hoặc đóng kết quả hiện tại rồi hỏi tiếp.');
+      return;
+    }
+    setReviewAITask({ question, mode });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
@@ -372,7 +305,7 @@ function ExamResultContent() {
       {/* Minimal Header - chỉ nút quay lại */}
       <div className="sticky top-0 z-[60] bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 no-print dark:bg-gray-900/95 dark:border-gray-800">
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.back()}
           className="flex items-center gap-2 text-gray-600 hover:text-purple-650 dark:text-gray-300 dark:hover:text-purple-400 transition-colors font-medium text-sm"
         >
           <FiArrowLeft size={18} /> Quay lại
@@ -680,9 +613,7 @@ function ExamResultContent() {
             ) : (
               answers.map((q, index) => {
                 const status = getQuestionReviewStatus(q);
-                const borderCls = status === 'correct' ? 'bg-green-50 border-green-200'
-                  : status === 'incorrect' ? 'bg-red-50 border-red-200'
-                    : 'bg-gray-50 border-gray-200';
+                const borderCls = getReviewCardClass(status);
                 const isEssayQuestion = q.question_type === 'essay' || q.question_type === 'translation';
 
                 return (
@@ -690,9 +621,9 @@ function ExamResultContent() {
 
                     {/* Passage */}
                     {q.passage_text && index === 0 && (
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                        <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide">Đoạn văn</p>
-                        <p className="text-gray-800 leading-relaxed">{q.passage_text}</p>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4 dark:bg-purple-950/25 dark:border-purple-900/60">
+                        <p className="text-xs font-bold text-purple-700 mb-2 uppercase tracking-wide dark:text-purple-200">Đoạn văn</p>
+                        <p className="text-gray-800 leading-relaxed dark:text-gray-100">{q.passage_text}</p>
                       </div>
                     )}
 
@@ -709,21 +640,21 @@ function ExamResultContent() {
                             Câu {q.sub_question_number || q.question_number || index + 1}
                             {q.difficulty && (
                               <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                q.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
-                                q.difficulty === 'hard' ? 'bg-red-100 text-red-700' :
-                                'bg-amber-100 text-amber-700'
+                                q.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300' :
+                                q.difficulty === 'hard' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' :
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                               }`}>
                                 {q.difficulty === 'easy' ? 'Dễ' : q.difficulty === 'hard' ? 'Khó' : 'TB'}
                               </span>
                             )}
                           </span>
                           {status === 'incorrect' && q.selected_answer_key && (
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded dark:bg-red-950/40 dark:text-red-300">
                               Bạn: {q.selected_answer_key}
                             </span>
                           )}
                           {(q.topic_name || q.question_category) && (
-                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded dark:bg-slate-800 dark:text-slate-300">
                               {q.topic_name || q.question_category}
                             </span>
                           )}
@@ -732,7 +663,7 @@ function ExamResultContent() {
                         <BilingualMathText
                           primary={q.question_text}
                           secondary={q.question_text_cn}
-                          className="text-gray-900 font-medium leading-relaxed"
+                          className="text-gray-900 font-medium leading-relaxed dark:text-gray-100"
                         />
                       </div>
                     </div>
@@ -742,30 +673,28 @@ function ExamResultContent() {
                       {(q.options ?? []).map((opt) => {
                         const isCorrect = opt.is_correct;
                         const isUserPick = q.selected_answer_key === opt.key;
-                        let bg = 'bg-white', border = 'border-gray-200', text = 'text-gray-700';
-                        if (isCorrect) { bg = 'bg-green-100'; border = 'border-green-500'; text = 'text-green-900 font-semibold'; }
-                        else if (isUserPick) { bg = 'bg-red-100'; border = 'border-red-500'; text = 'text-red-900 font-semibold'; }
+                        const tone = getOptionToneClass(isCorrect, isUserPick);
 
                         return (
-                          <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${bg} ${border}`}>
-                            <span className={`font-bold text-sm shrink-0 ${text}`}>{opt.key}.</span>
+                          <div key={opt.key} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${tone.bg} ${tone.border}`}>
+                            <span className={`font-bold text-sm shrink-0 ${tone.text}`}>{opt.key}.</span>
                             <div className="flex-1">
                               <BilingualMathText
                                 primary={opt.text}
                                 secondary={opt.text_cn}
-                                className={`text-sm ${text}`}
-                                secondaryClassName={`mt-1 text-xs ${isCorrect ? 'text-green-700' : isUserPick ? 'text-red-700' : 'text-gray-500'}`}
+                                className={`text-sm ${tone.text}`}
+                                secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
                               />
                             </div>
-                            {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0">✓ Đúng</span>}
-                            {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0">✗ Bạn chọn</span>}
+                            {isCorrect && <span className="ml-auto text-green-700 font-bold text-xs shrink-0 dark:text-green-300">✓ Đúng</span>}
+                            {isUserPick && !isCorrect && <span className="ml-auto text-red-700 font-bold text-xs shrink-0 dark:text-red-300">✗ Bạn chọn</span>}
                           </div>
                         );
                       })}
 
                       {!q.selected_answer_key && (
-                        <p className="text-sm text-gray-400 italic">
-                          Bạn đã bỏ qua · Đáp án đúng: <strong className="text-gray-600">{q.correct_answer_key}</strong>
+                        <p className="text-sm text-gray-400 italic dark:text-gray-500">
+                          Bạn đã bỏ qua · Đáp án đúng: <strong className="text-gray-600 dark:text-gray-300">{q.correct_answer_key}</strong>
                         </p>
                       )}
                     </div>
@@ -773,58 +702,33 @@ function ExamResultContent() {
                     {/* Essay/Translation answer display */}
                     {isEssayQuestion && (
                       <div className="mt-4 ml-8 space-y-3">
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-                          <p className="text-xs font-bold text-indigo-700 mb-1">✍️ Câu trả lời của bạn</p>
-                          <RichMathText value={q.selected_answer_text || 'Chưa trả lời'} className="text-sm text-gray-800 leading-relaxed" />
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 dark:bg-indigo-950/25 dark:border-indigo-900/60">
+                          <p className="text-xs font-bold text-indigo-700 mb-1 dark:text-indigo-200">✍️ Câu trả lời của bạn</p>
+                          <RichMathText value={q.selected_answer_text || 'Chưa trả lời'} className="text-sm text-gray-800 leading-relaxed dark:text-gray-100" />
                         </div>
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                          <p className="text-xs font-bold text-green-700 mb-1">✓ Đáp án mẫu</p>
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 dark:bg-green-950/25 dark:border-green-900/60">
+                          <p className="text-xs font-bold text-green-700 mb-1 dark:text-green-200">✓ Đáp án mẫu</p>
                           <BilingualMathText
                             primary={q.correct_answer_text}
                             secondary={q.correct_answer_text_cn}
-                            className="text-sm text-gray-800"
-                            secondaryClassName="mt-1 text-xs text-green-700"
+                            className="text-sm text-gray-800 dark:text-gray-100"
+                            secondaryClassName="mt-1 text-xs text-green-700 dark:text-green-300"
                           />
                         </div>
                       </div>
                     )}
 
                     {/* Explanation */}
-                    {(q.explanation || q.explanation_cn || q.explanation_image_url) && (
-                      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm sm:ml-8">
-                        <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">💡 Giải thích:</p>
-                        {(q.explanation || q.explanation_cn) && (
-                          <BilingualMathText
-                            primary={q.explanation}
-                            secondary={q.explanation_cn}
-                            className="text-base leading-7 text-blue-950"
-                            secondaryClassName="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800"
-                            readableBreaks
-                          />
-                        )}
-                        {q.explanation_image_url && (
-                          <img
-                            src={q.explanation_image_url}
-                            alt="Ảnh giải thích"
-                            className="mt-3 max-h-[520px] w-full rounded-lg border border-blue-200 bg-white object-contain"
-                          />
-                        )}
-                      </div>
-                    )}
+                    <QuestionExplanationBlock question={q} className="mt-4 sm:ml-8" />
 
                     {/* AI buttons */}
                     {!isEssayQuestion && (
                       <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
-                        <button
-                          onClick={() => setShowExplanationModal(q)}
-                          className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5">
-                          <FiZap size={14} /> {getReviewAIButtonLabel(status)}
-                        </button>
-                        <button
-                          onClick={() => setShowTeachModal(q)}
-                          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1.5">
-                          <FiBook size={14} /> Giảng lại lý thuyết
-                        </button>
+                        <ReviewAIButtons
+                          status={status}
+                          disabled={Boolean(reviewAITask)}
+                          onOpen={(mode) => openReviewAI(q, mode)}
+                        />
                         {status === 'incorrect' && (
                           <button
                             onClick={() => handleSaveWrongQuestion(q)}
@@ -858,30 +762,20 @@ function ExamResultContent() {
 
         {/* ── TAB: CHATBOT AI ── */}
         {activeTab === 'chat' && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
           </div>
         )}
       </main>
 
-      {/* AI Explanation Modal */}
-      {showExplanationModal && (
-        <ExplanationModal
-          question={showExplanationModal}
+      {reviewAITask && (
+        <ReviewAIModal
+          question={reviewAITask.question}
+          mode={reviewAITask.mode}
           attemptId={result.id}
-          onClose={() => setShowExplanationModal(null)}
-        />
-      )}
-
-      {/* Teach Grammar Modal */}
-      {showTeachModal && (
-        <TeachGrammarModal
-          question={showTeachModal}
-          attemptId={result.id}
-          subjectName={result.subject_name}
-          onClose={() => setShowTeachModal(null)}
-          onAskAI={() => {
-            setShowTeachModal(null);
+          onClose={() => setReviewAITask(null)}
+          onOpenChat={() => {
+            setReviewAITask(null);
             setActiveTab('chat');
           }}
         />
@@ -895,221 +789,6 @@ function ExamResultContent() {
           onClose={() => setShowGradeModal(null)}
         />
       )}
-    </div>
-  );
-}
-
-// ─── AI Explanation Modal ──────────────────────────────────────────────────────
-function ExplanationModal({ question, attemptId, onClose }: { question: QuestionResult; attemptId: number; onClose: () => void }) {
-  const [explanation, setExplanation] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const answerStatus = getQuestionReviewStatus(question);
-  const answerBoxClass = answerStatus === 'correct'
-    ? 'bg-green-50 border border-green-200 rounded-lg p-3'
-    : answerStatus === 'unanswered'
-      ? 'bg-amber-50 border border-amber-200 rounded-lg p-3'
-      : 'bg-red-50 border border-red-200 rounded-lg p-3';
-  const answerLabelClass = answerStatus === 'correct'
-    ? 'text-xs font-bold text-green-600 mb-1'
-    : answerStatus === 'unanswered'
-      ? 'text-xs font-bold text-amber-600 mb-1'
-      : 'text-xs font-bold text-red-600 mb-1';
-  const answerTextClass = answerStatus === 'correct'
-    ? 'text-green-800 font-semibold text-sm'
-    : answerStatus === 'unanswered'
-      ? 'text-amber-800 font-semibold text-sm'
-      : 'text-red-800 font-semibold text-sm';
-
-  useEffect(() => {
-    loadExplanation();
-  }, []);
-
-  const loadExplanation = async () => {
-    try {
-      const res = await authFetch('/api/ai/ask', {
-        method: 'POST',
-        body: JSON.stringify({
-          question: buildQuestionExplanationPrompt(question),
-          attemptId,
-        }),
-      });
-      const data = await res.json();
-      setExplanation(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={loading ? undefined : onClose}>
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* Header — ẩn nút X khi đang loading */}
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-bold text-lg text-gray-900">
-            Phân tích câu {question.question_number || question.sub_question_number}
-          </h3>
-          {!loading && (
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <span className="text-gray-400 text-xl">×</span>
-            </button>
-          )}
-        </div>
-        <div className="p-6">
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4">
-            <p className="text-xs font-bold text-purple-700 mb-1">Câu hỏi</p>
-            <BilingualMathText
-              primary={question.question_text}
-              secondary={question.question_text_cn}
-              className="text-sm text-gray-800"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className={answerBoxClass}>
-              <p className={answerLabelClass}>
-                {answerStatus === 'unanswered' ? 'Chưa trả lời' : 'Đáp án của bạn'}
-              </p>
-              <BilingualMathText
-                primary={formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
-                secondary={question.selected_answer_text_cn}
-                className={answerTextClass}
-                secondaryClassName="mt-1 text-xs text-gray-600"
-              />
-            </div>
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-green-600 mb-1">✓ Đáp án đúng</p>
-              <BilingualMathText
-                primary={formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
-                secondary={question.correct_answer_text_cn}
-                className="text-green-800 font-semibold text-sm"
-                secondaryClassName="mt-1 text-xs text-green-700"
-              />
-            </div>
-          </div>
-
-          {loading ? (
-            <QuestionAnalysisLoading />
-          ) : explanation?.success ? (
-            <div className="space-y-3">
-              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                <p className="text-xs font-bold text-purple-700 mb-2 flex items-center gap-1.5">
-                  🤖 AI phân tích
-                </p>
-                <AIFormattedText value={explanation.answer} className="text-base leading-7 text-gray-800" />
-              </div>
-              {(question.explanation || question.explanation_cn || question.explanation_image_url) && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
-                  <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">📖 Giải thích có sẵn</p>
-                  {(question.explanation || question.explanation_cn) && (
-                    <BilingualMathText
-                      primary={question.explanation}
-                      secondary={question.explanation_cn}
-                      className="text-base leading-7 text-blue-950"
-                      secondaryClassName="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800"
-                      readableBreaks
-                    />
-                  )}
-                  {question.explanation_image_url && (
-                    <img
-                      src={question.explanation_image_url}
-                      alt="Ảnh giải thích"
-                      className="mt-3 max-h-[520px] w-full rounded-lg border border-blue-200 bg-white object-contain"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-center py-6 text-gray-500">
-              <p className="text-sm mb-2">
-                {explanation?.message || 'Không thể phân tích câu này'}
-              </p>
-              <p className="text-xs text-gray-400">
-                Thử vào tab "🤖 Hỏi AI" để hỏi chi tiết hơn
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
-          {!loading && (
-            <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm transition-colors">
-              Đóng
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QuestionAnalysisLoading() {
-  return (
-    <AIStepLoading
-      title="AI đang phân tích câu này"
-      tone="purple"
-      steps={['Đọc câu hỏi', 'Đối chiếu đáp án', 'Soạn giải thích']}
-    />
-  );
-}
-
-function LessonLoading() {
-  return (
-    <AIStepLoading
-      title="AI đang soạn bài học đúng trọng tâm"
-      tone="indigo"
-      steps={['Tìm điểm kiến thức', 'Kiểm tra đúng sai', 'Viết ví dụ dễ nhớ']}
-    />
-  );
-}
-
-function AIStepLoading({ title, steps, tone }: { title: string; steps: string[]; tone: 'purple' | 'indigo' }) {
-  const [cuteMessage] = useState(() => pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
-  const colors = {
-    purple: {
-      iconBg: 'from-violet-50 via-purple-50 to-fuchsia-50',
-      iconText: 'text-violet-700',
-      track: 'bg-violet-100',
-      bar: 'from-violet-500 via-fuchsia-500 to-sky-400',
-      label: 'text-violet-700',
-      ring: 'ring-violet-100',
-    },
-    indigo: {
-      iconBg: 'from-indigo-50 via-violet-50 to-sky-50',
-      iconText: 'text-indigo-700',
-      track: 'bg-indigo-100',
-      bar: 'from-indigo-500 via-violet-500 to-sky-400',
-      label: 'text-indigo-700',
-      ring: 'ring-indigo-100',
-    },
-  }[tone];
-
-  return (
-    <div className={`rounded-3xl border border-white bg-gradient-to-b ${colors.iconBg} px-4 py-8 shadow-sm ring-1 ${colors.ring}`} aria-live="polite">
-      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[24px] bg-white text-3xl shadow-lg ring-1 ring-white/80">
-        🤖
-      </div>
-      <p className={`text-center text-base font-black sm:text-lg ${colors.iconText}`}>
-        <CuteLoadingText text={cuteMessage} />
-      </p>
-      <p className="mx-auto mt-2 max-w-sm text-center text-sm font-semibold text-slate-600">{title}</p>
-      <div className="mx-auto mt-6 max-w-md space-y-3">
-        {steps.map((step, index) => (
-          <div key={step} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-2xl border border-white bg-white/85 px-3 py-3 shadow-sm">
-            <span className={`flex h-8 w-8 items-center justify-center rounded-2xl bg-white text-xs font-black shadow-sm ${colors.label}`}>
-              {index + 1}
-            </span>
-            <div className={`h-2.5 overflow-hidden rounded-full ${colors.track}`}>
-              <div
-                className={`h-full rounded-full bg-gradient-to-r ${colors.bar}`}
-                style={{ width: `${38 + index * 24}%`, animation: 'pulse 1.4s ease-in-out infinite' }}
-              />
-            </div>
-            <span className={`min-w-[6.5rem] text-xs font-black ${colors.label}`}>{step}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1287,173 +966,6 @@ function GradeEssayModal({ question, attemptId, onClose }: {
   );
 }
 
-// ─── Teach Grammar Modal (Mini-lesson) ──────────────────────────────────────────
-function TeachGrammarModal({ question, attemptId, subjectName, onClose, onAskAI }: {
-  question: QuestionResult; attemptId: number; subjectName?: string; onClose: () => void; onAskAI: () => void;
-}) {
-  const [lesson, setLesson] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const questionText = question.question_text || question.question_text_cn || '';
-  const answerStatus = getQuestionReviewStatus(question);
-  const selectedAnswer = answerStatus === 'correct'
-    ? `Học sinh đã chọn đúng: ${formatReviewAnswer(question.selected_answer_key, question.selected_answer_text)}`
-    : answerStatus === 'unanswered'
-      ? 'Học sinh đã bỏ qua câu này'
-      : `Học sinh đã chọn sai: ${formatReviewAnswer(question.selected_answer_key, question.selected_answer_text)}`;
-  const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
-  const lessonTopic = [subjectName, question.topic_name, question.question_category, question.difficulty].filter(Boolean).join(' / ');
-
-  useEffect(() => { loadLesson(); }, []);
-
-  const loadLesson = async () => {
-    setLoading(true);
-    setLesson(null);
-    try {
-      const res = await authFetch('/api/ai/teach-grammar', {
-        method: 'POST',
-        body: JSON.stringify({
-          question: questionText,
-          topic: lessonTopic,
-          wrongAnswer: selectedAnswer,
-          correctAnswer,
-        }),
-      });
-      const data = await res.json();
-      setLesson(data.success ? data : null);
-    } catch {
-      setLesson(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={loading ? undefined : onClose}>
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
-              <FiBook className="text-white" size={16} />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-900">Giảng lại lý thuyết</h3>
-              <p className="text-xs text-gray-400">Bài học về câu {question.question_number || question.sub_question_number}</p>
-            </div>
-          </div>
-          {!loading && (
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 text-xl">×</button>
-          )}
-        </div>
-
-        <div className="p-6">
-          {loading ? (
-            <LessonLoading />
-          ) : lesson ? (
-            <div className="space-y-5">
-              {/* Title */}
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-                <h4 className="font-bold text-indigo-900 text-lg mb-1">{lesson.title}</h4>
-                <p className="text-xs text-indigo-600">
-                  Câu hỏi gốc: {questionText}
-                </p>
-              </div>
-
-              {/* Grammar Rule */}
-              {lesson.grammarRule && (
-                <div>
-                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">📚 Ngữ pháp</h5>
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                    <AIFormattedText value={lesson.grammarRule} className="text-gray-700" />
-                  </div>
-                </div>
-              )}
-
-              {/* Examples */}
-              {lesson.examples?.length > 0 && (
-                <div>
-                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">💬 Ví dụ minh hoạ</h5>
-                  <div className="space-y-3">
-                    {lesson.examples.map((ex: any, i: number) => (
-                      <div key={i} className="bg-green-50 border border-green-200 rounded-xl p-4">
-                        <AIFormattedText value={ex.chinese} className="text-base font-semibold text-green-900 mb-1" />
-                        {ex.pinyin && <p className="text-xs text-green-600 italic mb-2">{ex.pinyin}</p>}
-                        <AIFormattedText value={ex.vietnamese} className="text-green-800 mb-1" />
-                        {ex.usage && <AIFormattedText value={`→ ${ex.usage}`} className="text-xs text-green-500" />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Memory Tips */}
-              {lesson.memoryTips?.length > 0 && (
-                <div>
-                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">💡 Mẹo ghi nhớ</h5>
-                  <ul className="space-y-2">
-                    {lesson.memoryTips.map((tip: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-                        <span className="text-amber-500 shrink-0 mt-0.5">✦</span>
-                        <AIFormattedText value={tip} className="text-gray-700" />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Common Mistakes */}
-              {lesson.commonMistakes?.length > 0 && (
-                <div>
-                  <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">⚠️ Lưu ý thường sai</h5>
-                  <ul className="space-y-2">
-                    {lesson.commonMistakes.map((m: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-                        <span className="text-red-500 shrink-0 mt-0.5">!</span>
-                        <AIFormattedText value={m} className="text-gray-700" />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Related Topics */}
-              {lesson.relatedTopics?.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {lesson.relatedTopics.map((t: string, i: number) => (
-                    <span key={i} className="px-3 py-1 bg-gray-100 border border-gray-200 text-gray-600 text-xs rounded-full font-medium">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="pt-2 border-t border-gray-100 flex gap-3">
-                <button
-                  onClick={onAskAI}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-colors">
-                  <FiMessageCircle size={14} /> Hỏi AI thêm
-                </button>
-                <button
-                  onClick={loadLesson}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium text-sm hover:bg-gray-200 transition-colors">
-                  <FiZap size={14} /> Soạn lại
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p className="text-sm mb-3">Không thể tải bài giảng lúc này.</p>
-              <button onClick={loadLesson} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-                Thử lại
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ExamResultPage() {
   return (
     <Suspense fallback={
@@ -1468,4 +980,3 @@ export default function ExamResultPage() {
     </Suspense>
   );
 }
-
