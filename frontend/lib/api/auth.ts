@@ -52,15 +52,9 @@ export interface AuthResponse {
   mfaToken?: string;
   adminEmail?: string;
   data?: {
-    user?: User;
-    token?: string;
-    refreshToken?: string;
-    deviceType?: string;
-    maxDevices?: number;
-    sessions?: DeviceSession[];
-    requestToken?: string | null;
-    approveUrl?: string | null;
-    expiresAt?: string | null;
+    user: User;
+    token: string;
+    refreshToken: string;
   };
 }
 
