@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission, canAccessAdminPanel } from '@/lib/utils/permissions';
 import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
-  FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield,
+  FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
   FiBarChart2, FiAward
 } from 'react-icons/fi';
@@ -164,6 +164,13 @@ const NAV_SECTIONS = [
         icon: FiSettings,
         href: '/admin/settings',
         permission: 'system.manage',
+        roles: [],
+      },
+      {
+        label: 'Risk Center',
+        icon: FiAlertTriangle,
+        href: '/admin/risk-center',
+        permission: 'risk_center.view',
         roles: [],
       },
     ],

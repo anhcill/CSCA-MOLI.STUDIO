@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const examController = require("../controllers/examController");
 const officialExamController = require("../controllers/officialExamController");
+const questionReportActions = require("../controllers/questionReportActionsController");
 const {
   authenticate,
   authorizePermission,
@@ -74,6 +75,13 @@ router.get(
   "/subjects/:subjectCode/stats",
   authenticate,
   examController.getTopicStats
+);
+
+// User-facing question report
+router.post(
+  "/question-reports",
+  authenticate,
+  questionReportActions.submitReport
 );
 
 // Admin routes - Require exam management permission

@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { ADMIN_ROOM } = require('./riskCenterRealtime');
 
 /**
  * Initialize Socket.io server
@@ -87,6 +88,18 @@ function initSocket(httpServer) {
 
     // Join personal room for receiving private messages
     socket.join(`user:${userId}`);
+
+    // ─── Admin Risk Center room ───────────────────────────────────────────
+    socket.on('join_admin_risk_center', () => {
+      if (['admin', 'super_admin'].includes(socket.user.role)) {
+        socket.join(ADMIN_ROOM);
+        socket.emit('admin_risk_center_joined');
+      }
+    });
+
+    socket.on('leave_admin_risk_center', () => {
+      socket.leave(ADMIN_ROOM);
+    });
 
     socket.on('join_exam_monitor', async (examId) => {
       const parsedExamId = parseInt(examId, 10);

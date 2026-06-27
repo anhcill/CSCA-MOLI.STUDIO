@@ -539,7 +539,9 @@ async function runOptimizations() {
         ('forum.post_as_admin', 'Forum Official Posting', 'Đăng bài chính thức dưới danh nghĩa admin'),
         ('roadmap.manage', 'Roadmap Management', 'Quản trị lộ trình học tập'),
         ('exams.manage', 'Exam Management', 'Quản lý đề thi và lịch thi phòng thi'),
-        ('content.manage', 'Content Management', 'Quản lý tài liệu, từ vựng, media admin')
+        ('content.manage', 'Content Management', 'Quản lý tài liệu, từ vựng, media admin'),
+        ('risk_center.view', 'Risk Center View', 'Xem Risk Center tổng quan'),
+        ('risk_center.manage', 'Risk Center Manage', 'Thao tác xử lý case trong Risk Center')
       ON CONFLICT (code) DO UPDATE
       SET name = EXCLUDED.name,
           description = EXCLUDED.description
@@ -573,6 +575,8 @@ async function runOptimizations() {
         "roadmap.manage",
         "exams.manage",
         "content.manage",
+        "risk_center.view",
+        "risk_center.manage",
       ],
       user_admin: ["admin.dashboard.view", "users.manage"],
       forum_admin: ["admin.dashboard.view", "forum.manage", "forum.post_as_admin"],
@@ -1030,6 +1034,9 @@ async function runOptimizations() {
       "034_replace_relaxing_external_games.sql",
       "035_upsert_3_month_vip_packages.sql",
       "036_vip_package_entitlements.sql",
+      "042_risk_center_foundation.sql",
+      "043_risk_center_phase_b_c.sql",
+      "044_risk_center_phase_d.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(
