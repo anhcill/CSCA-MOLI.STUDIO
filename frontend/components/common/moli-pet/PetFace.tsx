@@ -633,8 +633,9 @@ function MolyChibiSvg({ id }: { id: string }) {
       </g>
       <ellipse cx="29" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
       <ellipse cx="67" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
-      <path d="M45 54c2 2 4 2 6 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2.2" />
-      <path d="M48 57c-2.8 3.4-7 3.4-9.8 0M48 57c2.8 3.4 7 3.4 9.8 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.2" />
+      <path d="M45.5 54.2c1.7 1.4 3.3 1.4 5 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2" />
+      <path d="M41.5 57.6c3.2 4.4 9.8 4.4 13 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.25" />
+      <path d="M44.5 59.1c2.2 2 4.8 2 7 0" fill="none" stroke="#ff8aa4" strokeLinecap="round" strokeWidth="1.2" opacity="0.55" />
 
       <path d="M21 68c-10 1-13 13-5 16 8 3 15-3 18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
       <path d="M75 68c10 1 13 13 5 16-8 3-15-3-18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
