@@ -27,7 +27,9 @@ export function MaterialCard({ material }: { material: Material }) {
   const hasFile = Boolean(material.file_url);
   const hasPdfProxy = canUsePdfProxy(material.file_url);
   const hasContent = hasWebContent(material);
-  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${material.id}` : material.file_url;
+  const pdfUrl = hasPdfProxy
+    ? `/tailieu/pdf/${material.id}?title=${encodeURIComponent(material.title || 'Tài liệu')}`
+    : material.file_url;
   const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${material.id}/download` : material.file_url;
   const typeData = getMaterialType(material.category);
   const subjectData = getMaterialSubject(material.subject);
@@ -45,40 +47,37 @@ export function MaterialCard({ material }: { material: Material }) {
   };
 
   const openProtectedPdf = async (url: string, download = false) => {
-    const viewerWindow = !download ? window.open('', '_blank', 'noopener,noreferrer') : null;
-    const token = getAuthToken();
-    if (!token) {
-      viewerWindow?.close();
-      window.location.href = '/login';
-      return;
-    }
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        window.location.href = '/login';
+        return;
+      }
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      viewerWindow?.close();
-      throw new Error('PDF request failed');
-    }
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error('PDF request failed');
+      }
 
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    if (download) {
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = `${material.title || 'tailieu'}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      if (download) {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `${material.title || 'tailieu'}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       return;
     }
-    if (viewerWindow) {
-      viewerWindow.location.href = objectUrl;
-    } else {
       window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      throw error;
     }
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
   };
 
   const handlePdfClick = async (event: React.MouseEvent) => {
@@ -86,14 +85,6 @@ export function MaterialCard({ material }: { material: Material }) {
       event.preventDefault();
       setShowVipModal(true);
       return;
-    }
-    if (hasPdfProxy && pdfUrl) {
-      event.preventDefault();
-      try {
-        await openProtectedPdf(pdfUrl);
-      } catch {
-        alert('Không mở được PDF. Bạn thử tải xuống hoặc đăng nhập lại nhé.');
-      }
     }
   };
 
@@ -248,7 +239,7 @@ export function MaterialCard({ material }: { material: Material }) {
         <div className="border-t border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">
           <button
             type="button"
-            onClick={handlePdfClick}
+            onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 font-bold text-white hover:bg-violet-700"
           >
             <FiExternalLink size={14} />
