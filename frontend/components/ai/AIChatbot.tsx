@@ -145,6 +145,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
+        if (isMobileViewport()) inputRef.current?.blur();
         setPastedImage(null);
         setLoading(true);
         setIsStreaming(true);
@@ -249,7 +250,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
     };
 
     return (
-        <div className="flex h-[calc(100dvh-190px)] min-h-[360px] w-full min-w-0 max-h-[720px] flex-col overflow-hidden sm:h-[min(720px,calc(100dvh-140px))] sm:min-h-[500px]">
+        <div className="flex h-[min(680px,calc(100svh-150px))] min-h-[360px] w-full min-w-0 max-h-[720px] flex-col overflow-hidden sm:h-[min(720px,calc(100dvh-140px))] sm:min-h-[500px]">
 
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between gap-3 rounded-t-2xl border-b border-gray-100 bg-white px-3 py-3 sm:px-6 sm:py-4">
@@ -425,7 +426,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
             </div>
 
             {/* Input Area */}
-            <div className="shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:px-6 sm:py-4">
+            <div className="sticky bottom-0 shrink-0 rounded-b-2xl border-t border-gray-100 bg-white px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:px-6 sm:py-4">
                 {(pastedImage || processingImage) && (
                     <div className="mb-2 flex items-center gap-3 rounded-2xl border border-purple-100 bg-purple-50 px-3 py-2">
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-purple-100">

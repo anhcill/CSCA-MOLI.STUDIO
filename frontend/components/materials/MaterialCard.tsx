@@ -33,17 +33,33 @@ export function MaterialCard({ material }: { material: Material }) {
   const subjectData = getMaterialSubject(material.subject);
   const locked = material.is_premium && !isVip;
 
+  const getAuthToken = () => {
+    const sessionToken = sessionStorage.getItem('token');
+    if (sessionToken) return sessionToken;
+    try {
+      const stored = JSON.parse(localStorage.getItem('auth-storage') || '{}');
+      return stored?.state?.token || null;
+    } catch {
+      return null;
+    }
+  };
+
   const openProtectedPdf = async (url: string, download = false) => {
-    const token = sessionStorage.getItem('token');
+    const viewerWindow = !download ? window.open('', '_blank', 'noopener,noreferrer') : null;
+    const token = getAuthToken();
     if (!token) {
-      window.location.href = '/auth';
+      viewerWindow?.close();
+      window.location.href = '/login';
       return;
     }
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error('PDF request failed');
+    if (!res.ok) {
+      viewerWindow?.close();
+      throw new Error('PDF request failed');
+    }
 
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -57,7 +73,11 @@ export function MaterialCard({ material }: { material: Material }) {
       setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
       return;
     }
-    window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    if (viewerWindow) {
+      viewerWindow.location.href = objectUrl;
+    } else {
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    }
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
   };
 

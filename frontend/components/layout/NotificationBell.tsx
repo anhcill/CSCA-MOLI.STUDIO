@@ -149,7 +149,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="fixed left-3 right-3 top-16 z-50 max-h-[calc(100vh-5rem)] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none">
+        <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[9999] max-h-[calc(100svh-env(safe-area-inset-top)-5rem)] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-h-none">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="font-semibold text-gray-800 text-sm">Thông báo</span>
@@ -174,7 +174,7 @@ export default function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
+          <div className="max-h-[calc(100svh-env(safe-area-inset-top)-9rem)] overflow-y-auto overscroll-contain divide-y divide-gray-50 sm:max-h-96">
             {loading && (
               <div className="py-8 text-center text-sm text-gray-400">Đang tải...</div>
             )}

@@ -114,7 +114,7 @@ export default function Header() {
             <div className="relative flex h-9.5 w-9.5 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-500 shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5">
               <span className="text-lg font-black leading-none text-white sm:text-xl">m</span>
             </div>
-            <span className="text-xl font-black tracking-tight text-gray-900 dark:text-white sm:text-2xl">
+            <span className="hidden text-xl font-black tracking-tight text-gray-900 dark:text-white sm:inline sm:text-2xl">
               CSCA Moly
             </span>
           </Link>
@@ -207,7 +207,9 @@ export default function Header() {
 
             <MessageBadge />
             <NotificationBell />
-            <DailyQuestsBtn />
+            <div className="hidden sm:block">
+              <DailyQuestsBtn />
+            </div>
 
             {mounted && isAuthenticated && user ? (
               <div className="relative" ref={userMenuRef}>
