@@ -3,7 +3,7 @@ import type { MoliPetSettings, PetColor, PetMood, PetPoint, PetPosition, PetSkin
 export const SETTINGS_KEY = 'moli_pet_settings_v1';
 export const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
 export const POSITION_KEY = 'moli_pet_position_v2';
-export const SETTINGS_DEFAULTS_VERSION = 3;
+export const SETTINGS_DEFAULTS_VERSION = 4;
 export const PET_FRAME_SIZE = 88;
 export const PET_PANEL_MAX_WIDTH = 372;
 export const PET_PANEL_MARGIN = 12;
@@ -264,13 +264,13 @@ export const SUGGESTED_ACTIONS = [
 
 export const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   name: 'MolyPet',
-  color: 'ocean',
+  color: 'berry',
   mood: 'friendly',
   position,
   showBubble: false,
   motion: false,
-  variant: 'moly-purple',
-  skin: 'bubble-cute',
+  variant: 'moly-chibi',
+  skin: 'chibi-pet',
 });
 
 export const readSettings = (position: PetPosition) => {
@@ -284,13 +284,13 @@ export const readSettings = (position: PetPosition) => {
       ...defaults,
       ...saved,
       name: savedName && savedName.toLowerCase() !== 'moli' ? savedName : defaults.name,
-      color: COLOR_THEMES[saved.color as PetColor] ? saved.color : defaults.color,
+      color: hasCurrentDefaults && COLOR_THEMES[saved.color as PetColor] ? saved.color : defaults.color,
       mood: MOODS[saved.mood as PetMood] ? saved.mood : defaults.mood,
       position: hasCurrentDefaults && (saved.position === 'right' || saved.position === 'left') ? saved.position : defaults.position,
       showBubble: typeof saved.showBubble === 'boolean' ? saved.showBubble : defaults.showBubble,
       motion: hasCurrentDefaults && typeof saved.motion === 'boolean' ? saved.motion : defaults.motion,
-      variant: PET_VARIANTS[saved.variant as PetVariant] ? saved.variant : defaults.variant,
-      skin: PET_SKINS[saved.skin as PetSkinId] ? saved.skin : defaults.skin,
+      variant: hasCurrentDefaults && PET_VARIANTS[saved.variant as PetVariant] ? saved.variant : defaults.variant,
+      skin: hasCurrentDefaults && PET_SKINS[saved.skin as PetSkinId] ? saved.skin : defaults.skin,
     } as MoliPetSettings;
   } catch {
     return getDefaultSettings(position);

@@ -247,7 +247,7 @@ function MolyThreeCat({
     const eyeScaleY = mood === 'sleepy' ? 0.18 : mood === 'happy' ? 0.72 : 1;
     const makeEye = (x: number) => {
       const isCat = variant === 'cat';
-      const eyeSize = variant === 'bunny' ? 0.19 : isCat ? 0.165 : 0.14;
+      const eyeSize = variant === 'bunny' ? 0.17 : isCat ? 0.145 : 0.125;
       const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeSize, 28, 20), variant === 'bunny' ? blueEyeMaterial : isCat ? faceInkMaterial : blackMaterial);
       eye.scale.set(variant === 'bunny' ? 1.05 : isCat ? 0.94 : 0.9, eyeScaleY, isCat ? 0.48 : 0.42);
       eye.position.set(x, variant === 'bunny' ? 0.44 : isCat ? 0.49 : 0.48, isCat ? 0.94 : 0.9);
@@ -302,7 +302,7 @@ function MolyThreeCat({
     } else {
       const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 10), mouthMaterial);
       mouth.scale.set(1, 0.55, 0.2);
-      mouth.position.set(0.02, 0.03, 1.02);
+      mouth.position.set(0, 0.03, 1.02);
       root.add(mouth);
       makeLine(-0.18, 0.72, 0.9, 0.16, -0.18, lineMaterial);
     }
@@ -551,12 +551,14 @@ function MolyPurpleCatSvg({ id }: { id: string }) {
       <path d="M13 43c7 2 10 4 14 9M83 43c-7 2-10 4-14 9" fill="none" stroke="#f7d6ff" strokeLinecap="round" strokeWidth="2" opacity="0.82" />
       <path d="M17 53c7 1 10 1 15 4M79 53c-7 1-10 1-15 4" fill="none" stroke="#f7d6ff" strokeLinecap="round" strokeWidth="2" opacity="0.72" />
 
-      <circle cx="35" cy="39" r="8.6" fill={`url(#${eye})`} />
-      <circle cx="61" cy="39" r="8.6" fill={`url(#${eye})`} />
-      <circle cx="31.5" cy="35.5" r="3.2" fill="#ffffff" />
-      <circle cx="57.5" cy="35.5" r="3.2" fill="#ffffff" />
-      <circle cx="39" cy="43" r="1.2" fill="#ffffff" opacity="0.9" />
-      <circle cx="65" cy="43" r="1.2" fill="#ffffff" opacity="0.9" />
+      <g className="moli-blink" style={{ transformBox: 'fill-box', transformOrigin: 'center' } as CSSProperties}>
+        <circle cx="35" cy="39" r="7.4" fill={`url(#${eye})`} />
+        <circle cx="61" cy="39" r="7.4" fill={`url(#${eye})`} />
+        <circle cx="32" cy="36" r="2.6" fill="#ffffff" />
+        <circle cx="58" cy="36" r="2.6" fill="#ffffff" />
+        <circle cx="39" cy="42.5" r="1" fill="#ffffff" opacity="0.9" />
+        <circle cx="65" cy="42.5" r="1" fill="#ffffff" opacity="0.9" />
+      </g>
       <ellipse cx="26" cy="51" rx="5" ry="3.2" fill="#ff8fb8" opacity="0.78" />
       <ellipse cx="70" cy="51" rx="5" ry="3.2" fill="#ff8fb8" opacity="0.78" />
       <path d="M45 47c2-2 4-2 6 0l-3 3Z" fill="#4b2030" />
@@ -621,16 +623,18 @@ function MolyChibiSvg({ id }: { id: string }) {
       <path d="M29 32c7 11 30 12 39 2-1 10-4 17-8 21-6-7-18-8-25-1-5-5-7-12-6-22Z" fill={`url(#${hair})`} opacity="0.96" />
       <path d="M31 32c6 5 8 13 5 20M42 29c5 6 5 13 2 19M56 29c-1 8 1 14 6 19" fill="none" stroke="#f0b5a7" strokeLinecap="round" strokeWidth="1.8" opacity="0.5" />
 
-      <circle cx="36" cy="45" r="8.4" fill={`url(#${eye})`} />
-      <circle cx="60" cy="45" r="8.4" fill={`url(#${eye})`} />
-      <circle cx="33" cy="41.5" r="3" fill="#ffffff" />
-      <circle cx="57" cy="41.5" r="3" fill="#ffffff" />
-      <circle cx="39.5" cy="49" r="1.2" fill="#ffffff" opacity="0.9" />
-      <circle cx="63.5" cy="49" r="1.2" fill="#ffffff" opacity="0.9" />
+      <g className="moli-blink" style={{ transformBox: 'fill-box', transformOrigin: 'center' } as CSSProperties}>
+        <circle cx="36" cy="45" r="7.1" fill={`url(#${eye})`} />
+        <circle cx="60" cy="45" r="7.1" fill={`url(#${eye})`} />
+        <circle cx="33.5" cy="42" r="2.4" fill="#ffffff" />
+        <circle cx="57.5" cy="42" r="2.4" fill="#ffffff" />
+        <circle cx="39.5" cy="48.5" r="1" fill="#ffffff" opacity="0.9" />
+        <circle cx="63.5" cy="48.5" r="1" fill="#ffffff" opacity="0.9" />
+      </g>
       <ellipse cx="29" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
       <ellipse cx="67" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
-      <path d="M45 54c2 2 4 2 6 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2.4" />
-      <path d="M48 58c3 4 8 4 11 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.2" />
+      <path d="M45 54c2 2 4 2 6 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2.2" />
+      <path d="M48 57c-2.8 3.4-7 3.4-9.8 0M48 57c2.8 3.4 7 3.4 9.8 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.2" />
 
       <path d="M21 68c-10 1-13 13-5 16 8 3 15-3 18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
       <path d="M75 68c10 1 13 13 5 16-8 3-15-3-18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
@@ -698,9 +702,11 @@ function MolyPlushPet({
             <path d="M25 12c12-7 28-2 34 10-12-5-29 0-42 11 1-9 3-17 8-21Z" fill={`url(#${accentGradient})`} />
             <path d="M22 30c8-3 18-2 28 1-9 3-19 4-31 1l3-2Z" fill="#ffffff" opacity="0.45" />
             <path d="M20 22l3 5 5 2-5 3-3 5-3-5-5-3 5-2 3-5Z" fill="#ffffff" stroke="#7ec9ff" strokeWidth="1.5" />
-            <circle cx="28" cy="39" r="9" fill={`url(#${eyeGradient})`} />
-            <circle cx="25" cy="36" r="3.2" fill="#ffffff" />
-            <circle cx="31" cy="42" r="1.2" fill="#ffffff" opacity="0.9" />
+            <g className="moli-blink" style={{ transformBox: 'fill-box', transformOrigin: 'center' } as CSSProperties}>
+              <circle cx="28" cy="39" r="7.8" fill={`url(#${eyeGradient})`} />
+              <circle cx="25.5" cy="36.5" r="2.6" fill="#ffffff" />
+              <circle cx="31" cy="42" r="1" fill="#ffffff" opacity="0.9" />
+            </g>
             <path d="M49 39c3 4 8 4 11 0" fill="none" stroke="#23346f" strokeLinecap="round" strokeWidth="3" />
             <ellipse cx="22" cy="50" rx="5" ry="3" fill="#f9a8d4" opacity="0.72" />
             <ellipse cx="58" cy="50" rx="5" ry="3" fill="#f9a8d4" opacity="0.68" />
@@ -717,12 +723,14 @@ function MolyPlushPet({
             <path d="M55 15c3 4 3 16 0 25" stroke="#ffd4e8" strokeLinecap="round" strokeWidth="5" opacity="0.9" />
             <ellipse cx="40" cy="41" rx="29" ry="28" fill={`url(#${headGradient})`} filter={`url(#${softShadow})`} />
             <path d="M34 13c3-7 12-7 15 0 7-1 11 6 7 12-5 7-20 6-27 0-5-5-1-12 5-12Z" fill="#f9b8d5" filter={`url(#${softShadow})`} />
-            <circle cx="29" cy="41" r="9" fill={`url(#${eyeGradient})`} />
-            <circle cx="51" cy="41" r="9" fill={`url(#${eyeGradient})`} />
-            <circle cx="26" cy="37" r="3.2" fill="#ffffff" />
-            <circle cx="48" cy="37" r="3.2" fill="#ffffff" />
-            <circle cx="33" cy="45" r="1.2" fill="#ffffff" opacity="0.9" />
-            <circle cx="55" cy="45" r="1.2" fill="#ffffff" opacity="0.9" />
+            <g className="moli-blink" style={{ transformBox: 'fill-box', transformOrigin: 'center' } as CSSProperties}>
+              <circle cx="29" cy="41" r="7.8" fill={`url(#${eyeGradient})`} />
+              <circle cx="51" cy="41" r="7.8" fill={`url(#${eyeGradient})`} />
+              <circle cx="26.5" cy="37.5" r="2.6" fill="#ffffff" />
+              <circle cx="48.5" cy="37.5" r="2.6" fill="#ffffff" />
+              <circle cx="33" cy="44.5" r="1" fill="#ffffff" opacity="0.9" />
+              <circle cx="55" cy="44.5" r="1" fill="#ffffff" opacity="0.9" />
+            </g>
             <path d="M21 35c2-3 5-4 8-4" stroke="#1f3b78" strokeLinecap="round" strokeWidth="2" />
             <path d="M59 35c-2-3-5-4-8-4" stroke="#1f3b78" strokeLinecap="round" strokeWidth="2" />
             <ellipse cx="24" cy="52" rx="5" ry="3" fill="#f9a8d4" opacity="0.78" />

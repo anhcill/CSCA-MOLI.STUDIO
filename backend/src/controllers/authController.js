@@ -259,12 +259,64 @@ const buildTokenPayloadWithMfa = (user, jti) => {
   return payload;
 };
 
-const buildRefreshPayloadWithMfa = (user) => {
+const buildRefreshPayloadWithMfa = (user, jti = null) => {
   const payload = { id: user.id };
+  if (jti) payload.jti = jti;
   if (isAdminUser(user)) {
     payload.admin_mfa = true;
   }
   return payload;
+};
+
+const createDeviceLimitPayload = (error) => ({
+  success: false,
+  code: "DEVICE_LIMIT_REACHED",
+  message: error.message || "Bạn đã dùng hết slot thiết bị.",
+  data: {
+    deviceType: error.deviceType,
+    maxDevices: error.maxDevices,
+    sessions: error.sessions || [],
+    requestToken: error.requestToken || null,
+    approveUrl: error.approveUrl || null,
+    expiresAt: error.expiresAt || null,
+  },
+});
+
+const isDeviceLimitError = (error) => error?.code === "DEVICE_LIMIT_REACHED";
+
+const getFrontendUrl = () => (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+
+const buildDeviceApprovalUrl = (challengeToken) =>
+  `${getFrontendUrl()}/login?deviceApproval=${encodeURIComponent(challengeToken)}`;
+
+const completeDeviceLoginRequest = async (req, request) => {
+  const user = await User.findById(request.user_id);
+  if (!user || !user.is_active) {
+    const err = new Error("Tài khoản không hợp lệ hoặc đã bị khóa.");
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const jti = crypto.randomBytes(16).toString("hex");
+  const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
+  await DeviceSessionService.registerSession({
+    userId: user.id,
+    jti,
+    deviceInfo: request.new_device_info || req.get("User-Agent")?.substring(0, 200) || "Unknown",
+    deviceType: request.device_type || DeviceSessionService.getDeviceTypeFromUserAgent(request.new_user_agent),
+    ipAddress: request.new_ip_address || getClientIp(req),
+    userAgent: request.new_user_agent || req.get("User-Agent"),
+    expiresAt,
+  });
+
+  await DeviceSessionService.markLoginRequestCompleted(request.challenge_token);
+
+  const authz = await resolveAuthorizationContext(user);
+  return {
+    user: buildSafeUser(user, authz),
+    token: generateToken(buildTokenPayloadWithMfa(user, jti)),
+    refreshToken: generateRefreshToken(buildRefreshPayloadWithMfa(user, jti)),
+  };
 };
 
 const createAdminMfaRequiredResponse = async (user) => {
@@ -284,14 +336,29 @@ const createAdminMfaRequiredResponse = async (user) => {
 const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityAction = "login", avatarFallback = null) => {
   const jti = crypto.randomBytes(16).toString("hex");
   const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10)));
-  await DeviceSessionService.registerSession({
-    userId: user.id,
-    jti,
-    deviceInfo: req.get("User-Agent")?.substring(0, 200) || deviceInfo,
-    ipAddress: getClientIp(req),
-    userAgent: req.get("User-Agent"),
-    expiresAt,
-  });
+  try {
+    await DeviceSessionService.registerSession({
+      userId: user.id,
+      jti,
+      deviceInfo: req.get("User-Agent")?.substring(0, 200) || deviceInfo,
+      ipAddress: getClientIp(req),
+      userAgent: req.get("User-Agent"),
+      expiresAt,
+    });
+  } catch (error) {
+    if (!isDeviceLimitError(error)) throw error;
+    const deviceRequest = await DeviceSessionService.createLoginRequest({
+      userId: user.id,
+      deviceType: error.deviceType || DeviceSessionService.getDeviceTypeFromUserAgent(req.get("User-Agent")),
+      deviceInfo: req.get("User-Agent")?.substring(0, 200) || deviceInfo,
+      ipAddress: getClientIp(req),
+      userAgent: req.get("User-Agent"),
+    });
+    error.requestToken = deviceRequest.challengeToken;
+    error.approveUrl = buildDeviceApprovalUrl(deviceRequest.challengeToken);
+    error.expiresAt = deviceRequest.expiresAt;
+    throw error;
+  }
 
   UserActivity.log(user.id, activityAction, {
     ip: getClientIp(req),
@@ -300,7 +367,7 @@ const completeLoginForUser = async (req, user, deviceInfo = "Unknown", activityA
 
   const authz = await resolveAuthorizationContext(user);
   const token = generateToken(buildTokenPayloadWithMfa(user, jti));
-  const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user));
+  const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user, jti));
 
   return {
     user: buildSafeUser(user, authz, avatarFallback),
@@ -444,7 +511,7 @@ const register = async (req, res) => {
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
+    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti }, jti));
 
     const authz = await resolveAuthorizationContext(user);
 
@@ -541,6 +608,28 @@ const login = async (req, res) => {
 
     // Success - clear attempts
     clearAttempts(identifier);
+
+    const deviceType = DeviceSessionService.getDeviceTypeFromUserAgent(req.get('User-Agent'));
+    const loginAllowed = await DeviceSessionService.checkLoginAllowed(user.id, deviceType);
+    if (!loginAllowed.allowed) {
+      const deviceRequest = await DeviceSessionService.createLoginRequest({
+        userId: user.id,
+        deviceType,
+        deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
+        ipAddress: getClientIp(req),
+        userAgent: req.get('User-Agent'),
+      });
+      return res.status(409).json(createDeviceLimitPayload({
+        code: "DEVICE_LIMIT_REACHED",
+        message: loginAllowed.reason,
+        deviceType: loginAllowed.deviceType,
+        maxDevices: loginAllowed.maxDevices,
+        sessions: loginAllowed.sessions,
+        requestToken: deviceRequest.challengeToken,
+        approveUrl: buildDeviceApprovalUrl(deviceRequest.challengeToken),
+        expiresAt: deviceRequest.expiresAt,
+      }));
+    }
 
     // ── OTP: gửi mã khi đăng nhập ────────────────────────────────────────
     const otp = await storeOtp(user.id, user.email, 'login');
@@ -717,15 +806,31 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // Touch active sessions for this user to keep them alive
-    await db.query(
-      `UPDATE user_sessions SET last_active = NOW()
-       WHERE user_id = $1 AND expires_at > NOW()`,
-      [user.id]
-    ).catch(() => {}); // non-blocking
+    let sessionJti = decoded.jti;
+    if (sessionJti) {
+      const activeSession = await DeviceSessionService.assertActiveSession(sessionJti, user.id);
+      if (!activeSession) {
+        return res.status(401).json({
+          success: false,
+          message: "Phiên đăng nhập đã hết hiệu lực, vui lòng đăng nhập lại",
+          code: "SESSION_REVOKED",
+        });
+      }
+      await DeviceSessionService.touchSession(sessionJti, user.id).catch(() => {});
+    } else {
+      const sessions = await DeviceSessionService.getActiveSessions(user.id);
+      sessionJti = sessions[0]?.jti;
+      if (!sessionJti) {
+        return res.status(401).json({
+          success: false,
+          message: "Phiên đăng nhập đã hết hiệu lực, vui lòng đăng nhập lại",
+          code: "SESSION_REVOKED",
+        });
+      }
+    }
 
-    const newToken = generateToken(buildTokenPayloadWithMfa(user));
-    const newRefreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user));
+    const newToken = generateToken(buildTokenPayloadWithMfa(user, sessionJti));
+    const newRefreshToken = generateRefreshToken(buildRefreshPayloadWithMfa(user, sessionJti));
 
     return res.json({
       success: true,
@@ -997,7 +1102,7 @@ const facebookAuthCallback = async (req, res) => {
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti: facebookJti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
+    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti: facebookJti }, facebookJti));
 
     return res.redirect(
       buildRedirectWithHash(redirectTarget, {
@@ -1007,6 +1112,14 @@ const facebookAuthCallback = async (req, res) => {
     );
   } catch (error) {
     console.error('Facebook auth callback error:', error.message);
+    if (isDeviceLimitError(error)) {
+      return res.redirect(
+        buildRedirectWithHash(redirectTarget, {
+          error: 'device_limit_reached',
+          message: error.message,
+        }),
+      );
+    }
     return res.redirect(
       buildRedirectWithHash(redirectTarget, {
         error: 'server_error',
@@ -1099,7 +1212,7 @@ const googleAuth = async (req, res) => {
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti: googleJti, subscription_tier: user.subscription_tier || 'vip' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
+    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti: googleJti }, googleJti));
 
     const authz = await resolveAuthorizationContext(user);
 
@@ -1129,6 +1242,9 @@ const googleAuth = async (req, res) => {
       },
     });
   } catch (error) {
+    if (isDeviceLimitError(error)) {
+      return res.status(409).json(createDeviceLimitPayload(error));
+    }
     console.error("Google auth error:", error.message);
     return res
       .status(500)
@@ -1305,7 +1421,7 @@ const verifyOtpController = async (req, res) => {
     });
 
     const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken({ id: user.id });
+    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti }, jti));
     const authz = await resolveAuthorizationContext(user);
 
     return res.json({
@@ -1335,6 +1451,9 @@ const verifyOtpController = async (req, res) => {
       },
     });
   } catch (error) {
+    if (isDeviceLimitError(error)) {
+      return res.status(409).json(createDeviceLimitPayload(error));
+    }
     console.error('Verify OTP error:', error);
     return res.status(500).json({ success: false, message: 'Lỗi xác thực OTP.' });
   }
@@ -1394,6 +1513,9 @@ const adminMfaSetupConfirm = async (req, res) => {
       backupCodes: result.backupCodes,
     });
   } catch (error) {
+    if (isDeviceLimitError(error)) {
+      return res.status(409).json(createDeviceLimitPayload(error));
+    }
     console.error("Admin MFA setup confirm error:", error.message);
     return res.status(401).json({
       success: false,
@@ -1425,12 +1547,123 @@ const adminMfaVerify = async (req, res) => {
       data,
     });
   } catch (error) {
+    if (isDeviceLimitError(error)) {
+      return res.status(409).json(createDeviceLimitPayload(error));
+    }
     console.error("Admin MFA verify error:", error.message);
     return res.status(401).json({
       success: false,
       message: "Phien MFA khong hop le hoac da het han. Vui long dang nhap lai.",
       code: "ADMIN_MFA_TOKEN_INVALID",
     });
+  }
+};
+
+const getDeviceLoginRequestStatus = async (req, res) => {
+  try {
+    const request = await DeviceSessionService.getLoginRequest(req.params.token);
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Yêu cầu thay thiết bị không tồn tại." });
+    }
+    if (new Date(request.expires_at) < new Date() && request.status === "pending") {
+      await DeviceSessionService.expireLoginRequest(request.challenge_token);
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+    if (request.status === "approved") {
+      const data = await completeDeviceLoginRequest(req, request);
+      return res.json({ success: true, status: "completed", data });
+    }
+    return res.json({
+      success: true,
+      status: request.status,
+      expiresAt: request.expires_at,
+      deviceType: request.device_type,
+    });
+  } catch (error) {
+    console.error("Device login status error:", error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Không kiểm tra được yêu cầu thay thiết bị." });
+  }
+};
+
+const approveDeviceLoginRequest = async (req, res) => {
+  try {
+    const request = await DeviceSessionService.getLoginRequest(req.params.token);
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Yêu cầu thay thiết bị không tồn tại." });
+    }
+    if (request.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: "Bạn không có quyền duyệt yêu cầu này." });
+    }
+    if (request.status !== "pending" || new Date(request.expires_at) < new Date()) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+
+    const approved = await DeviceSessionService.markLoginRequestApproved(request.challenge_token, req.user.jti);
+    if (!approved) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+    const removed = await DeviceSessionService.removeSession(req.user.jti, req.user.id);
+    if (!removed) {
+      return res.status(401).json({ success: false, message: "Phiên thiết bị cũ không còn hợp lệ." });
+    }
+    return res.json({ success: true, message: "Đã duyệt thiết bị mới. Thiết bị hiện tại sẽ đăng xuất." });
+  } catch (error) {
+    console.error("Device login approve error:", error.message);
+    return res.status(500).json({ success: false, message: "Không thể duyệt thiết bị mới." });
+  }
+};
+
+const sendDeviceReplacementOtp = async (req, res) => {
+  try {
+    const request = await DeviceSessionService.getLoginRequest(req.params.token);
+    if (!request || request.status !== "pending" || new Date(request.expires_at) < new Date()) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+    const user = await User.findById(request.user_id);
+    if (!user || !user.email) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy tài khoản." });
+    }
+    const otp = await storeOtp(user.id, user.email, "device_replace");
+    await emailService.sendOtpEmail({
+      email: user.email,
+      name: user.full_name || user.username,
+      otp,
+      reason: "device_replace",
+    });
+    return res.json({ success: true, message: "Đã gửi mã OTP xác minh thay thiết bị.", userId: user.id });
+  } catch (error) {
+    console.error("Device replacement OTP error:", error.message);
+    return res.status(500).json({ success: false, message: "Không thể gửi OTP thay thiết bị." });
+  }
+};
+
+const verifyDeviceReplacementOtp = async (req, res) => {
+  try {
+    const { otp } = req.body || {};
+    const request = await DeviceSessionService.getLoginRequest(req.params.token);
+    if (!request || request.status !== "pending" || new Date(request.expires_at) < new Date()) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+    if (!otp) {
+      return res.status(400).json({ success: false, message: "Thiếu mã OTP." });
+    }
+    const result = await verifyOtp(request.user_id, otp, "device_replace");
+    if (!result.valid) {
+      const msgs = {
+        no_otp: "Không tìm thấy mã OTP. Vui lòng yêu cầu mã mới.",
+        expired: "Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.",
+        already_used: "Mã OTP đã được sử dụng. Vui lòng yêu cầu mã mới.",
+        invalid: "Mã OTP không đúng. Vui lòng thử lại.",
+      };
+      return res.status(400).json({ success: false, message: msgs[result.reason] || "OTP không hợp lệ." });
+    }
+
+    await DeviceSessionService.removeOldestSessionForType(request.user_id, request.device_type || "desktop");
+    const data = await completeDeviceLoginRequest(req, request);
+    return res.json({ success: true, message: "Đã xác minh và đăng nhập thiết bị mới.", data });
+  } catch (error) {
+    console.error("Device replacement verify error:", error.message);
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Không thể xác minh thay thiết bị." });
   }
 };
 
@@ -1525,6 +1758,10 @@ module.exports = {
   resetPassword,
   verifyEmail,
   verifyOtp: verifyOtpController,
+  getDeviceLoginRequestStatus,
+  approveDeviceLoginRequest,
+  sendDeviceReplacementOtp,
+  verifyDeviceReplacementOtp,
   adminMfaSetupStart,
   adminMfaSetupConfirm,
   adminMfaVerify,

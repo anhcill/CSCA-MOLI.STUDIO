@@ -9,11 +9,16 @@ import {
   getCurrentUser,
   verifyOtp,
   resendOtp,
+  getDeviceLoginStatus,
+  approveDeviceLogin,
+  sendDeviceReplacementOtp,
+  verifyDeviceReplacementOtp,
   startAdminMfaSetup,
   confirmAdminMfaSetup,
   verifyAdminMfa,
   type AdminMfaSetupData,
   type AuthResponse,
+  type DeviceLimitData,
   type OtpVerifyResponse,
   type User,
 } from '@/lib/api/auth';
@@ -28,7 +33,7 @@ import { FiShield } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
-  const { login: setAuth, setLoading } = useAuthStore();
+  const { login: setAuth, logout: clearAuth, setLoading, isAuthenticated } = useAuthStore();
   const { t, format } = useLanguage();
 
   const [formData, setFormData] = useState({
@@ -60,6 +65,14 @@ export default function LoginForm() {
   const [adminMfaBackupCodes, setAdminMfaBackupCodes] = useState<string[]>([]);
   const [adminMfaError, setAdminMfaError] = useState('');
   const [adminMfaLoading, setAdminMfaLoading] = useState(false);
+  const [deviceLimitData, setDeviceLimitData] = useState<DeviceLimitData | null>(null);
+  const [deviceApprovalToken, setDeviceApprovalToken] = useState('');
+  const [deviceApprovalMessage, setDeviceApprovalMessage] = useState('');
+  const [deviceApprovalError, setDeviceApprovalError] = useState('');
+  const [deviceApprovalLoading, setDeviceApprovalLoading] = useState(false);
+  const [deviceOtpOpen, setDeviceOtpOpen] = useState(false);
+  const [deviceOtp, setDeviceOtp] = useState('');
+  const [deviceOtpSending, setDeviceOtpSending] = useState(false);
 
   // OTP countdown timer
   useEffect(() => {
@@ -72,6 +85,12 @@ export default function LoginForm() {
     }, 1000);
     return () => clearInterval(timer);
   }, [otpCountdown]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = new URLSearchParams(window.location.search).get('deviceApproval') || '';
+    if (token) setDeviceApprovalToken(token);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -102,6 +121,14 @@ export default function LoginForm() {
   };
 
   const isLocked = lockedUntil !== null && Date.now() < lockedUntil;
+  const deviceTypeLabel = deviceLimitData?.deviceType === 'mobile' ? 'điện thoại' : 'máy tính';
+  const deviceApproveUrl = deviceLimitData?.approveUrl
+    || (deviceLimitData?.requestToken && typeof window !== 'undefined'
+      ? `${window.location.origin}/login?deviceApproval=${encodeURIComponent(deviceLimitData.requestToken)}`
+      : '');
+  const deviceQrUrl = deviceApproveUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(deviceApproveUrl)}`
+    : '';
 
   const completeAuth = async (user: User, token: string, refreshToken: string) => {
     setAuth(user, token, refreshToken);
@@ -118,6 +145,12 @@ export default function LoginForm() {
       // Keep fallback
     }
     router.push(getDefaultAdminRoute(effectiveUser));
+  };
+
+  const completeAuthData = async (data?: AuthResponse['data'] | OtpVerifyResponse['data']) => {
+    if (!data?.user || !data.token || !data.refreshToken) return false;
+    await completeAuth(data.user, data.token, data.refreshToken);
+    return true;
   };
 
   const startAdminMfaFlow = async (response: AuthResponse | OtpVerifyResponse) => {
@@ -233,14 +266,20 @@ export default function LoginForm() {
         }
 
         // ── Direct login (no OTP) ─────────────────────────────────────────
-        if (response.data) {
-          const { user: loginUser, token, refreshToken } = response.data;
-          await completeAuth(loginUser, token, refreshToken);
-        }
+        await completeAuthData(response.data);
       }
     } catch (error: any) {
       setTurnstileToken('');
       setTurnstileResetKey(key => key + 1);
+      if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
+        setDeviceLimitData(error.response.data.data as DeviceLimitData);
+        setDeviceApprovalMessage('');
+        setDeviceApprovalError('');
+        setDeviceOtpOpen(false);
+        setDeviceOtp('');
+        setErrors({});
+        return;
+      }
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
 
@@ -271,10 +310,7 @@ export default function LoginForm() {
       if (response.success && await startAdminMfaFlow(response)) {
         return;
       }
-      if (response.success && response.data) {
-        const { user: loginUser, token, refreshToken } = response.data;
-        await completeAuth(loginUser, token, refreshToken);
-      }
+      if (response.success) await completeAuthData(response.data);
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || t('auth.googleLoginFailed') });
     } finally {
@@ -349,9 +385,8 @@ export default function LoginForm() {
       if (response.success && await startAdminMfaFlow(response)) {
         return;
       }
-      if (response.success && response.data) {
-        const { user, token, refreshToken } = response.data;
-        await completeAuth(user, token, refreshToken);
+      if (response.success && await completeAuthData(response.data)) {
+        return;
       } else {
         setOtpError(response.message || t('auth.otpInvalid'));
         setOtpValues(['', '', '', '', '', '']);
@@ -389,6 +424,74 @@ export default function LoginForm() {
     setOtpError('');
   };
 
+  const handleCheckDeviceApproval = async () => {
+    if (!deviceLimitData?.requestToken) return;
+    setDeviceApprovalLoading(true);
+    setDeviceApprovalError('');
+    try {
+      const response = await getDeviceLoginStatus(deviceLimitData.requestToken);
+      if (response.success && response.data && await completeAuthData(response.data)) return;
+      setDeviceApprovalMessage(response.status === 'pending'
+        ? 'Thiết bị cũ chưa duyệt yêu cầu này.'
+        : response.message || 'Chưa thể đăng nhập thiết bị mới.');
+    } catch (error: any) {
+      setDeviceApprovalError(error.response?.data?.message || 'Không kiểm tra được trạng thái thay thiết bị.');
+    } finally {
+      setDeviceApprovalLoading(false);
+    }
+  };
+
+  const handleApproveDeviceLogin = async () => {
+    if (!deviceApprovalToken) return;
+    if (!isAuthenticated) {
+      setDeviceApprovalError('Vui lòng đăng nhập trên thiết bị cũ trước khi duyệt thiết bị mới.');
+      return;
+    }
+    setDeviceApprovalLoading(true);
+    setDeviceApprovalError('');
+    try {
+      const response = await approveDeviceLogin(deviceApprovalToken);
+      setDeviceApprovalMessage(response.message || 'Đã duyệt thiết bị mới.');
+      clearAuth();
+      router.replace('/login');
+    } catch (error: any) {
+      setDeviceApprovalError(error.response?.data?.message || 'Không duyệt được thiết bị mới.');
+    } finally {
+      setDeviceApprovalLoading(false);
+    }
+  };
+
+  const handleSendDeviceOtp = async () => {
+    if (!deviceLimitData?.requestToken) return;
+    setDeviceOtpSending(true);
+    setDeviceApprovalError('');
+    try {
+      const response = await sendDeviceReplacementOtp(deviceLimitData.requestToken);
+      setDeviceOtpOpen(true);
+      setDeviceApprovalMessage(response.message || 'Đã gửi OTP đến email tài khoản.');
+    } catch (error: any) {
+      setDeviceApprovalError(error.response?.data?.message || 'Không gửi được OTP thay thiết bị.');
+    } finally {
+      setDeviceOtpSending(false);
+    }
+  };
+
+  const handleVerifyDeviceOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deviceLimitData?.requestToken || deviceOtp.trim().length < 6) return;
+    setDeviceApprovalLoading(true);
+    setDeviceApprovalError('');
+    try {
+      const response = await verifyDeviceReplacementOtp(deviceLimitData.requestToken, deviceOtp.trim());
+      if (response.success && await completeAuthData(response.data)) return;
+      setDeviceApprovalError(response.message || 'OTP không đúng.');
+    } catch (error: any) {
+      setDeviceApprovalError(error.response?.data?.message || 'OTP không đúng.');
+    } finally {
+      setDeviceApprovalLoading(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-6 sm:mb-8">
@@ -407,7 +510,51 @@ export default function LoginForm() {
       )}
 
       {/* ── OTP Step ─────────────────────────────────────────────────────── */}
-      {adminMfaStep ? (
+      {deviceApprovalToken ? (
+        <div className="space-y-5">
+          <div className="text-center">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mb-4">
+              <FiShield className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Duyệt thiết bị mới</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Nhấn duyệt trên thiết bị cũ để đăng xuất thiết bị này và cho thiết bị mới đăng nhập.
+            </p>
+          </div>
+
+          {deviceApprovalMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {deviceApprovalMessage}
+            </div>
+          )}
+          {deviceApprovalError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {deviceApprovalError}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleApproveDeviceLogin}
+            disabled={deviceApprovalLoading}
+            className="w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deviceApprovalLoading ? 'Đang duyệt...' : 'Duyệt thiết bị mới'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDeviceApprovalToken('');
+              setDeviceApprovalError('');
+              setDeviceApprovalMessage('');
+              if (typeof window !== 'undefined') window.history.replaceState(null, '', '/login');
+            }}
+            className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Quay lại đăng nhập
+          </button>
+        </div>
+      ) : adminMfaStep ? (
         <div className="space-y-5">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
@@ -507,6 +654,97 @@ export default function LoginForm() {
               </button>
             </form>
           )}
+        </div>
+      ) : deviceLimitData ? (
+        <div className="space-y-5">
+          <div className="text-center">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 mb-4">
+              <FiShield className="h-8 w-8 text-amber-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Hết slot {deviceTypeLabel}</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Tài khoản đang dùng {deviceLimitData.sessions?.length || 0}/{deviceLimitData.maxDevices} slot {deviceTypeLabel}.
+              Duyệt bằng thiết bị cũ hoặc xác minh email để thay thiết bị.
+            </p>
+          </div>
+
+          {deviceApproveUrl && (
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-center">
+              {deviceQrUrl && (
+                <img src={deviceQrUrl} alt="QR duyệt thiết bị mới" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" />
+              )}
+              <p className="mt-3 break-all text-xs text-gray-500">{deviceApproveUrl}</p>
+            </div>
+          )}
+
+          {deviceApprovalMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {deviceApprovalMessage}
+            </div>
+          )}
+          {deviceApprovalError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {deviceApprovalError}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleCheckDeviceApproval}
+              disabled={deviceApprovalLoading}
+              className="rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deviceApprovalLoading ? 'Đang kiểm tra...' : 'Tôi đã duyệt'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSendDeviceOtp}
+              disabled={deviceOtpSending}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deviceOtpSending ? 'Đang gửi...' : 'Không còn thiết bị cũ'}
+            </button>
+          </div>
+
+          {deviceOtpOpen && (
+            <form onSubmit={handleVerifyDeviceOtp} className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <label htmlFor="deviceOtp" className="block text-sm font-medium text-amber-900">
+                OTP email
+              </label>
+              <input
+                id="deviceOtp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={deviceOtp}
+                onChange={e => setDeviceOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full rounded-lg border border-amber-300 bg-white px-4 py-3 text-center text-xl font-bold tracking-normal text-slate-950 outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500"
+                placeholder="Nhập 6 số"
+              />
+              <button
+                type="submit"
+                disabled={deviceApprovalLoading || deviceOtp.length < 6}
+                className="w-full rounded-lg bg-amber-600 px-4 py-3 font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deviceApprovalLoading ? 'Đang xác minh...' : 'Xác minh và đăng nhập'}
+              </button>
+            </form>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setDeviceLimitData(null);
+              setDeviceApprovalError('');
+              setDeviceApprovalMessage('');
+              setDeviceOtpOpen(false);
+              setDeviceOtp('');
+            }}
+            className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Quay lại đăng nhập
+          </button>
         </div>
       ) : otpStep ? (
         <div className="space-y-6">

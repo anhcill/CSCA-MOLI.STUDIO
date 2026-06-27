@@ -186,9 +186,10 @@ ${AI_ACCURACY_PROMPT_RULES}
 - Không bịa điểm số, lỗi sai, hồ sơ, hoặc dữ liệu riêng nếu không có trong ngữ cảnh.
 
 Giới hạn:
-- Mặc định tối đa 5 câu ngắn. Nếu cần giải bài, dùng các bước 1-3 ngắn gọn.
+- Mặc định 3-6 câu. Nếu giải bài hoặc giải thích chi tiết, được dùng 8-12 câu với các bước rõ ràng.
 - Không dùng markdown phức tạp; được dùng bullet ngắn khi cần.
 - Nếu câu trả lời có đáp án số/cú pháp, đặt đáp án cuối cùng thật rõ ở câu đầu hoặc câu cuối.
+- LUÔN hoàn thành câu trả lời đầy đủ, không bao giờ dừng giữa chừng.
 
 Ngữ cảnh:
 - Tên user: ${userName || 'bạn'}
@@ -211,7 +212,7 @@ async function askMoliPet(message, context = {}) {
       [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image and answer warmly, briefly, and accurately.')],
       {
         temperature: 0.35,
-        maxTokens: Math.min(MOLI.maxTokens || BEE.petChatMaxTokens || 700, 900),
+        maxTokens: Math.min(MOLI.maxTokens || BEE.petChatMaxTokens || 1200, 1600),
       },
     );
     return {

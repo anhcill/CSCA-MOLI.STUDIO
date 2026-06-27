@@ -19,7 +19,7 @@ const otpLimiter = rateLimit({
   },
   message: {
     success: false,
-    message: "Ban nhap OTP qua nhieu lan. Vui long doi vai phut roi thu lai.",
+    message: "Bạn nhập OTP quá nhiều lần. Vui lòng đợi vài phút rồi thử lại.",
   },
 });
 
@@ -48,16 +48,29 @@ router.post("/admin-mfa/setup/start", otpLimiter, authController.adminMfaSetupSt
 router.post("/admin-mfa/setup/confirm", otpLimiter, authController.adminMfaSetupConfirm);
 router.post("/admin-mfa/verify", otpLimiter, authController.adminMfaVerify);
 
+// Device replacement login requests
+router.get("/device-login-requests/:token/status", authController.getDeviceLoginRequestStatus);
+router.post("/device-login-requests/:token/approve", authenticate, authController.approveDeviceLoginRequest);
+router.post("/device-login-requests/:token/otp", otpLimiter, authController.sendDeviceReplacementOtp);
+router.post("/device-login-requests/:token/otp/verify", otpLimiter, authController.verifyDeviceReplacementOtp);
+
 // Device session management
 router.get("/sessions", authenticate, async (req, res) => {
   try {
     const sessions = await DeviceSessionService.getActiveSessions(req.user.id);
-    const maxDevices = await DeviceSessionService.getUserMaxDevices(req.user.id);
+    const limits = await DeviceSessionService.getDeviceLimits(req.user.id);
+    const usage = sessions.reduce((acc, session) => {
+      const type = session.device_type || "desktop";
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, { mobile: 0, desktop: 0 });
     res.json({
       success: true,
       data: {
         sessions,
-        maxDevices,
+        limits: { mobile: limits.mobile, desktop: limits.desktop },
+        usage,
+        maxDevices: limits.mobile + limits.desktop,
         currentJti: req.user.jti,
       },
     });
@@ -68,7 +81,10 @@ router.get("/sessions", authenticate, async (req, res) => {
 
 router.delete("/sessions/:jti", authenticate, async (req, res) => {
   try {
-    await DeviceSessionService.removeSession(req.params.jti);
+    const removed = await DeviceSessionService.removeSession(req.params.jti, req.user.id);
+    if (!removed) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thiết bị" });
+    }
     res.json({ success: true, message: "Đã đăng xuất thiết bị" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Lỗi đăng xuất thiết bị" });
@@ -77,10 +93,10 @@ router.delete("/sessions/:jti", authenticate, async (req, res) => {
 
 router.delete("/sessions", authenticate, async (req, res) => {
   try {
-    await DeviceSessionService.removeAllUserSessions(req.user.id);
-    res.json({ success: true, message: "Đã đăng xuất tất cả thiết bị" });
+    const removed = await DeviceSessionService.removeAllUserSessions(req.user.id, { exceptJti: req.user.jti });
+    res.json({ success: true, message: "Đã đăng xuất tất cả thiết bị khác", data: { removed } });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Lỗi đăng xuất tất cả thiết bị" });
+    res.status(500).json({ success: false, message: "Lỗi đăng xuất thiết bị khác" });
   }
 });
 

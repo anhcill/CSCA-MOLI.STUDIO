@@ -101,7 +101,7 @@ const config = {
     essayMaxTokens: intEnv('AI_ESSAY_MAX_TOKENS', 3000),
     lessonMaxTokens: intEnv('AI_LESSON_MAX_TOKENS', 3000),
     chatMaxTokens: intEnv('AI_CHAT_MAX_TOKENS', 2200),
-    petChatMaxTokens: intEnv('MOLI_PET_MAX_TOKENS', 700),
+    petChatMaxTokens: intEnv('MOLI_PET_MAX_TOKENS', 1200),
     temperature: floatEnv('BEEKNOEE_TEMPERATURE', 0.3),
     delayBetweenRequests: intEnv('AI_REQUEST_SPACING_MS', 300),
     maxConcurrent: intEnv('AI_MAX_CONCURRENT', 3),
@@ -116,7 +116,7 @@ const config = {
       process.env.BEEKNOEE_PET_CHAT_MODEL ||
       'google/gemini-3.1-flash-lite',
     ),
-    maxTokens: intEnv('MOLI_PET_MAX_TOKENS', 700),
+    maxTokens: intEnv('MOLI_PET_MAX_TOKENS', 1200),
     timeout: intEnv('MOLI_PET_TIMEOUT_MS', 45000),
   },
 

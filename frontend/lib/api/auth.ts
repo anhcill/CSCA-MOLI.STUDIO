@@ -44,6 +44,7 @@ export interface User {
 export interface AuthResponse {
   success: boolean;
   message: string;
+  code?: string;
   requiresOtp?: boolean;
   userId?: number;
   requiresAdminMfa?: boolean;
@@ -51,10 +52,35 @@ export interface AuthResponse {
   mfaToken?: string;
   adminEmail?: string;
   data?: {
-    user: User;
-    token: string;
-    refreshToken: string;
+    user?: User;
+    token?: string;
+    refreshToken?: string;
+    deviceType?: string;
+    maxDevices?: number;
+    sessions?: DeviceSession[];
+    requestToken?: string | null;
+    approveUrl?: string | null;
+    expiresAt?: string | null;
   };
+}
+
+export interface DeviceSession {
+  id?: number;
+  jti: string;
+  device_info?: string;
+  device_type?: 'mobile' | 'desktop';
+  ip_address?: string;
+  last_active?: string;
+  created_at?: string;
+}
+
+export interface DeviceLimitData {
+  deviceType: 'mobile' | 'desktop';
+  maxDevices: number;
+  sessions: DeviceSession[];
+  requestToken: string;
+  approveUrl: string;
+  expiresAt: string;
 }
 
 export interface AdminMfaSetupData {
@@ -171,6 +197,26 @@ export const verifyOtp = async (userId: number, otp: string): Promise<OtpVerifyR
  */
 export const resendOtp = async (userId: number): Promise<{ success: boolean; message: string }> => {
   const response = await axios.post('/auth/otp/resend', { userId, reason: 'login' });
+  return response.data;
+};
+
+export const getDeviceLoginStatus = async (token: string): Promise<AuthResponse & { status?: string }> => {
+  const response = await axios.get(`/auth/device-login-requests/${token}/status`);
+  return response.data;
+};
+
+export const approveDeviceLogin = async (token: string): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post(`/auth/device-login-requests/${token}/approve`);
+  return response.data;
+};
+
+export const sendDeviceReplacementOtp = async (token: string): Promise<{ success: boolean; message: string; userId?: number }> => {
+  const response = await axios.post(`/auth/device-login-requests/${token}/otp`);
+  return response.data;
+};
+
+export const verifyDeviceReplacementOtp = async (token: string, otp: string): Promise<OtpVerifyResponse> => {
+  const response = await axios.post(`/auth/device-login-requests/${token}/otp/verify`, { otp });
   return response.data;
 };
 

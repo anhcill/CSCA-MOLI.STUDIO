@@ -794,6 +794,7 @@ async function runOptimizations() {
         user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         jti           VARCHAR(64) UNIQUE NOT NULL,
         device_info   VARCHAR(500),
+        device_type   VARCHAR(20) NOT NULL DEFAULT 'desktop',
         ip_address    VARCHAR(45),
         user_agent    TEXT,
         last_active   TIMESTAMPTZ DEFAULT NOW(),
@@ -807,6 +808,14 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_user_sessions_jti ON user_sessions(jti)`,
     );
+    await pool.query(`
+      ALTER TABLE user_sessions
+      ADD COLUMN IF NOT EXISTS device_type VARCHAR(20) NOT NULL DEFAULT 'desktop'
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_user_type_active
+      ON user_sessions(user_id, device_type, expires_at, last_active DESC)
+    `);
 
     // Subscription tier device limits
     await pool.query(`
@@ -1037,6 +1046,8 @@ async function runOptimizations() {
       "042_risk_center_foundation.sql",
       "043_risk_center_phase_b_c.sql",
       "044_risk_center_phase_d.sql",
+      "045_device_session_type_limits.sql",
+      "046_device_login_requests.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

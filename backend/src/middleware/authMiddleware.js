@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
 const { canAccessVipContent } = require("../utils/vipEntitlements");
+const DeviceSessionService = require("../services/deviceSessionService");
 
 const getFreshAuthUser = async (userId) => {
   const { rows } = await db.query(
@@ -96,18 +97,22 @@ const authMiddleware = async (req, res, next) => {
         if (rows.length > 0) {
           return res.status(401).json({
             success: false,
-            message: "Token đã bị thu hồi, vui lòng đăng nhập lại",
+            message: "Phiên đăng nhập đã bị thu hồi, vui lòng đăng nhập lại",
             code: "TOKEN_REVOKED",
           });
         }
       }
 
-      // ── Device session touch (keep session alive) ───────────────────────────
       if (decoded.jti) {
-        db.query(
-          `UPDATE user_sessions SET last_active = NOW() WHERE jti = $1`,
-          [decoded.jti]
-        ).catch(() => {}); // non-blocking
+        const activeSession = await DeviceSessionService.assertActiveSession(decoded.jti, decoded.id);
+        if (!activeSession) {
+          return res.status(401).json({
+            success: false,
+            message: "Phiên đăng nhập đã hết hiệu lực, vui lòng đăng nhập lại",
+            code: "SESSION_REVOKED",
+          });
+        }
+        DeviceSessionService.touchSession(decoded.jti, decoded.id).catch(() => {});
       }
 
       const freshUser = await getFreshAuthUser(decoded.id);
@@ -273,6 +278,10 @@ const optionalAuth = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       if (decoded.id) {
+        if (decoded.jti) {
+          const activeSession = await DeviceSessionService.assertActiveSession(decoded.jti, decoded.id);
+          if (!activeSession) return next();
+        }
         const freshUser = await getFreshAuthUser(decoded.id);
         if (freshUser && freshUser.is_active !== false) {
           req.user = buildRequestUser(decoded, freshUser);

@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const { ADMIN_ROOM } = require('./riskCenterRealtime');
+const DeviceSessionService = require('../services/deviceSessionService');
 
 /**
  * Initialize Socket.io server
@@ -62,6 +63,11 @@ function initSocket(httpServer) {
         );
         if (rows.length > 0) {
           return next(new Error('Token has been revoked'));
+        }
+
+        const activeSession = await DeviceSessionService.assertActiveSession(decoded.jti, decoded.id);
+        if (!activeSession) {
+          return next(new Error('Session has been revoked'));
         }
       }
 

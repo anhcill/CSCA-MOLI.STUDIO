@@ -18,7 +18,7 @@ import {
   FiAward, FiTarget, FiMessageSquare, FiUpload,
   FiCheckCircle, FiLock, FiCalendar, FiEye, FiEyeOff,
   FiBell, FiShield, FiLogOut, FiAlertTriangle,
-  FiStar, FiZap, FiMonitor, FiRefreshCw, FiDownload,
+  FiStar, FiZap, FiMonitor, FiRefreshCw, FiDownload, FiSmartphone,
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -37,6 +37,30 @@ function derivePackageUI(pkg: any) {
 const Sk = ({ className }: { className: string }) => (
   <div className={`animate-pulse bg-gray-200/60 rounded-2xl ${className}`} />
 );
+
+type DeviceType = 'mobile' | 'desktop';
+
+type DeviceSession = {
+  id?: number;
+  jti: string;
+  device_info?: string;
+  device_type?: DeviceType;
+  ip_address?: string;
+  last_active?: string;
+  created_at?: string;
+};
+
+type DeviceLimits = Record<DeviceType, number>;
+
+const DEVICE_LABELS: Record<DeviceType, string> = {
+  mobile: 'Điện thoại',
+  desktop: 'Máy tính',
+};
+
+const DEVICE_ICONS = {
+  mobile: FiSmartphone,
+  desktop: FiMonitor,
+};
 
 const StatCard = ({ icon: Icon, label, value, color }: {
   icon: React.ElementType; label: string; value: number | string; color: string;
@@ -139,11 +163,12 @@ export default function ProfilePage() {
   const [purchasedPkgIds, setPurchasedPkgIds] = useState<Set<number>>(new Set());
   const [userPkgMap, setUserPkgMap] = useState<Record<number, any>>({}); // package_id -> package data
 
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<DeviceSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState('');
   const [sessionsFetched, setSessionsFetched] = useState(false);
-  const [sessionMaxDevices, setSessionMaxDevices] = useState(1);
+  const [sessionDeviceLimits, setSessionDeviceLimits] = useState<DeviceLimits>({ mobile: 1, desktop: 1 });
+  const [sessionDeviceUsage, setSessionDeviceUsage] = useState<DeviceLimits>({ mobile: 0, desktop: 0 });
   const [sessionCurrentJti, setSessionCurrentJti] = useState('');
   const [wallet, setWallet] = useState<{ balance: number; entries: any[] } | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
@@ -262,7 +287,8 @@ export default function ProfilePage() {
       .then(res => {
         const data = res.data?.data || {};
         setSessions(data?.sessions || []);
-        setSessionMaxDevices(data?.maxDevices || 1);
+        setSessionDeviceLimits(data?.limits || { mobile: 1, desktop: 1 });
+        setSessionDeviceUsage(data?.usage || { mobile: 0, desktop: 0 });
         setSessionCurrentJti(data?.currentJti || '');
         setSessionsFetched(true);
       })
@@ -432,6 +458,59 @@ export default function ProfilePage() {
   const completedExams = Number(stats?.total_exams || 0);
   const averageScore = Number(stats?.avg_score || 0);
   const currentStreak = Number(profileUser?.current_streak || 0);
+  const sessionsByType: Record<DeviceType, DeviceSession[]> = {
+    mobile: sessions.filter(session => (session.device_type || 'desktop') === 'mobile'),
+    desktop: sessions.filter(session => (session.device_type || 'desktop') === 'desktop'),
+  };
+  const totalDeviceSlots = sessionDeviceLimits.mobile + sessionDeviceLimits.desktop;
+  const usedDeviceSlots = sessionDeviceUsage.mobile + sessionDeviceUsage.desktop;
+
+  const getDeviceName = (session: DeviceSession) => {
+    const deviceParts = session.device_info?.split(' on ') || [];
+    const browser = deviceParts[0] || 'Trình duyệt';
+    const os = deviceParts[1] || DEVICE_LABELS[session.device_type || 'desktop'];
+    return `${browser} trên ${os}`;
+  };
+
+  const getLastActive = (session: DeviceSession) => (
+    session.last_active
+      ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : '—'
+  );
+
+  const updateDeviceUsageFromSessions = (nextSessions: DeviceSession[]) => {
+    setSessionDeviceUsage({
+      mobile: nextSessions.filter(session => (session.device_type || 'desktop') === 'mobile').length,
+      desktop: nextSessions.filter(session => (session.device_type || 'desktop') === 'desktop').length,
+    });
+  };
+
+  const removeSession = async (jti: string) => {
+    if (!confirm('Đăng xuất tài khoản khỏi thiết bị này?')) return;
+    try {
+      await axios.delete(`/auth/sessions/${jti}`);
+      const nextSessions = sessions.filter(session => session.jti !== jti);
+      setSessions(nextSessions);
+      updateDeviceUsageFromSessions(nextSessions);
+      showToast('Đăng xuất thiết bị thành công');
+    } catch {
+      showToast('Không thể đăng xuất thiết bị', 'error');
+    }
+  };
+
+  const removeOtherSessions = async () => {
+    if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
+    try {
+      await axios.delete('/auth/sessions');
+      const current = sessions.find(session => session.jti === sessionCurrentJti);
+      const nextSessions = current ? [current] : [];
+      setSessions(nextSessions);
+      updateDeviceUsageFromSessions(nextSessions);
+      showToast('Đã đăng xuất khỏi các thiết bị khác');
+    } catch {
+      showToast('Không thể đăng xuất thiết bị khác', 'error');
+    }
+  };
   const learnerLevel = completedExams >= 30 && averageScore >= 8
     ? { label: 'Cao thủ luyện đề', progress: 100, next: 'Duy trì phong độ và giữ streak mỗi ngày' }
     : completedExams >= 15 && averageScore >= 6
@@ -1041,113 +1120,110 @@ export default function ProfilePage() {
               {/* ── Tab Content: Thiết bị ─────────────────────── */}
               {activeTab === 'devices' && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Thiết bị đang đăng nhập</h3>
-                    <span className="text-xs text-gray-400 font-semibold">Giám sát các phiên đăng nhập</span>
+                  <div className="flex flex-col gap-2 border-b border-gray-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900 tracking-tight">Thiết bị đang đăng nhập</h3>
+                      <p className="text-xs font-semibold text-gray-400">Đang dùng {usedDeviceSlots}/{totalDeviceSlots} slot</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs font-bold text-gray-500">
+                      {(['mobile', 'desktop'] as DeviceType[]).map(type => (
+                        <div key={type} className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2 text-center">
+                          <span className="block text-gray-900">{sessionDeviceUsage[type]}/{sessionDeviceLimits[type]}</span>
+                          <span>{DEVICE_LABELS[type]}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {sessionsLoading ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map(i => (
-                        <div key={i} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
-                          <div className="w-10 h-10 rounded-xl bg-gray-100 animate-pulse shrink-0" />
+                        <div key={i} className="flex items-center gap-4 rounded-2xl border border-gray-100 p-4">
+                          <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-gray-100" />
                           <div className="flex-1 space-y-2">
-                            <div className="h-4 bg-gray-100 rounded animate-pulse w-1/3" />
-                            <div className="h-3 bg-gray-100 rounded animate-pulse w-1/4" />
+                            <div className="h-4 w-1/3 animate-pulse rounded bg-gray-100" />
+                            <div className="h-3 w-1/4 animate-pulse rounded bg-gray-100" />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : sessionsError ? (
-                    <div className="text-center py-8">
-                      <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+                    <div className="py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
                         <FiAlertTriangle size={20} className="text-red-400" />
                       </div>
-                      <p className="text-sm text-gray-500 font-bold">{sessionsError}</p>
+                      <p className="text-sm font-bold text-gray-500">{sessionsError}</p>
                       <button onClick={() => { setSessions([]); setSessionsFetched(false); }}
-                        className="mt-3 text-xs text-indigo-650 hover:text-indigo-850 underline font-bold">Thử tải lại</button>
+                        className="mt-3 text-xs font-bold text-indigo-650 underline hover:text-indigo-850">Thử tải lại</button>
                     </div>
-                  ) : sessions.length <= 1 ? (
-                    <div className="text-center py-8 border border-gray-100 rounded-3xl bg-gray-50/50">
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3 animate-pulse">
+                  ) : sessions.length === 0 ? (
+                    <div className="rounded-3xl border border-gray-100 bg-gray-50/50 py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
                         <FiMonitor size={20} className="text-gray-400" />
                       </div>
-                      <p className="text-sm text-gray-500 font-bold">Tài khoản an toàn. Chỉ có thiết bị hiện tại đăng nhập</p>
-                      <p className="text-xs text-gray-400 mt-1 font-semibold">Địa chỉ IP hiện tại: {sessions[0]?.ip_address || '—'}</p>
+                      <p className="text-sm font-bold text-gray-500">Chưa có phiên đăng nhập nào đang hoạt động</p>
                     </div>
                   ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                          <FiMonitor size={14} className="text-gray-400" />
-                          <span>Danh sách thiết bị ({sessions.length} phiên)</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        {sessions.map(session => {
-                          const isCurrent = session.jti === sessionCurrentJti;
-                          const deviceParts = session.device_info?.split(' on ') || [];
-                          const browser = deviceParts[0] || 'Trình duyệt';
-                          const os = deviceParts[1] || 'Hệ điều hành';
-
-                          const lastActive = session.last_active
-                            ? new Date(session.last_active).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                            : '—';
-
-                          return (
-                            <div key={session.id || session.jti} className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/30 transition-all duration-300">
-                              <div className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0">
-                                <FiMonitor size={18} className="text-gray-500" />
+                    <div className="space-y-5">
+                      {(['mobile', 'desktop'] as DeviceType[]).map(type => {
+                        const Icon = DEVICE_ICONS[type];
+                        const typedSessions = sessionsByType[type];
+                        return (
+                          <section key={type} className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-500">
+                                <Icon size={15} className="text-gray-400" />
+                                <span>{DEVICE_LABELS[type]}</span>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-bold text-gray-800 truncate">{browser} trên {os}</p>
-                                  {isCurrent && (
-                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-lg shrink-0 uppercase tracking-wider">Hiện tại</span>
+                              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-black text-gray-600">
+                                {typedSessions.length}/{sessionDeviceLimits[type]} slot
+                              </span>
+                            </div>
+
+                            {typedSessions.length === 0 ? (
+                              <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-4 text-sm font-semibold text-gray-400">
+                                Chưa có {DEVICE_LABELS[type].toLowerCase()} nào đăng nhập
+                              </div>
+                            ) : typedSessions.map(session => {
+                              const isCurrent = session.jti === sessionCurrentJti;
+                              return (
+                                <div key={session.id || session.jti} className="flex flex-col gap-3 rounded-2xl border border-gray-100 p-4 transition hover:border-gray-200 hover:bg-gray-50/30 sm:flex-row sm:items-center">
+                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-100 bg-gray-50">
+                                    <Icon size={18} className="text-gray-500" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="truncate text-sm font-bold text-gray-800">{getDeviceName(session)}</p>
+                                      {isCurrent && (
+                                        <span className="shrink-0 rounded-lg bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">Hiện tại</span>
+                                      )}
+                                    </div>
+                                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-gray-400">
+                                      <span>IP: {session.ip_address || '—'}</span>
+                                      <span>•</span>
+                                      <span>Hoạt động: <span className="font-bold text-gray-500">{getLastActive(session)}</span></span>
+                                    </div>
+                                  </div>
+                                  {!isCurrent && (
+                                    <button onClick={() => removeSession(session.jti)}
+                                      className="w-full rounded-xl border border-red-100/70 bg-red-50/20 px-3.5 py-2 text-xs font-bold text-red-600 transition hover:border-red-200 hover:bg-red-50 active:scale-[0.98] sm:w-auto">
+                                      Đăng xuất
+                                    </button>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2.5 mt-1.5 flex-wrap text-xs text-gray-400 font-semibold">
-                                  <span>IP: {session.ip_address || '—'}</span>
-                                  <span>•</span>
-                                  <span>Hoạt động: <span className="text-gray-500 font-bold">{lastActive}</span></span>
-                                </div>
-                              </div>
-                              {!isCurrent && (
-                                <button onClick={async () => {
-                                  if (!confirm('Đăng xuất tài khoản khỏi thiết bị này?')) return;
-                                  try {
-                                    await axios.delete(`/auth/sessions/${session.jti}`);
-                                    setSessions(prev => prev.filter(s => s.jti !== session.jti));
-                                    showToast('Đăng xuất thiết bị thành công');
-                                  } catch {
-                                    showToast('Không thể đăng xuất thiết bị', 'error');
-                                  }
-                                }}
-                                  className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 active:scale-[0.98] rounded-xl border border-red-100/50 bg-red-50/20 hover:border-red-200 transition-all shrink-0">
-                                  Đăng xuất
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                              );
+                            })}
+                          </section>
+                        );
+                      })}
 
-                      <button onClick={async () => {
-                        if (!confirm('Đăng xuất khỏi tất cả thiết bị khác?')) return;
-                        try {
-                          await axios.delete('/auth/sessions');
-                          const current = sessions.find(s => s.jti === sessionCurrentJti);
-                          setSessions(current ? [current] : []);
-                          showToast('Đã đăng xuất khỏi các thiết bị khác');
-                        } catch {
-                          showToast('Không thể đăng xuất thiết bị khác', 'error');
-                        }
-                      }}
-                        className="w-full py-3.5 text-sm font-bold text-gray-600 border border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 active:scale-[0.99] transition-all">
-                        Đăng xuất tất cả thiết bị khác
-                      </button>
-                    </>
+                      {sessions.length > 1 && (
+                        <button onClick={removeOtherSessions}
+                          className="w-full rounded-2xl border border-gray-200 py-3.5 text-sm font-bold text-gray-600 transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99]">
+                          Đăng xuất tất cả thiết bị khác
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
