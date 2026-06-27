@@ -16,8 +16,6 @@ import {
   type Material,
 } from './materialLibraryTypes';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
-
 export function MaterialCard({ material }: { material: Material }) {
   const user = useAuthStore((state) => state.user);
   const isVip = isVipActive(user);
@@ -30,7 +28,7 @@ export function MaterialCard({ material }: { material: Material }) {
   const pdfUrl = hasPdfProxy
     ? `/tailieu/pdf/${material.id}?title=${encodeURIComponent(material.title || 'Tài liệu')}`
     : material.file_url;
-  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${material.id}/download` : material.file_url;
+  const downloadUrl = hasPdfProxy ? `/api/materials/pdf/${material.id}/download` : material.file_url;
   const typeData = getMaterialType(material.category);
   const subjectData = getMaterialSubject(material.subject);
   const locked = material.is_premium && !isVip;

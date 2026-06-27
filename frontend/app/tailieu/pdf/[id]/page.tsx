@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FiDownload, FiRefreshCw } from 'react-icons/fi';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
-
 function getAuthToken() {
   const sessionToken = sessionStorage.getItem('token');
   if (sessionToken) return sessionToken;
@@ -26,7 +24,7 @@ export default function MaterialPdfViewerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const endpoint = useMemo(() => `${API_URL}/materials/pdf/${id}`, [id]);
+  const endpoint = useMemo(() => `/api/materials/pdf/${id}`, [id]);
 
   const loadPdf = useCallback(async () => {
     const token = getAuthToken();
