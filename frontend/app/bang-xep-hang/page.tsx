@@ -16,6 +16,7 @@ interface LeaderboardEntry {
     total_attempts: number;
     avg_score: number;
     best_score: number;
+    best_time_spent?: number | null;
     last_attempt_at: string;
 }
 
@@ -33,6 +34,14 @@ function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; s
             {name?.charAt(0)?.toUpperCase() || '?'}
         </div>
     );
+}
+
+function formatDuration(seconds?: number | null) {
+    if (!seconds || seconds <= 0) return 'Chưa có thời gian';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins <= 0) return `${secs}s`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 export default function LeaderboardPage() {
@@ -77,7 +86,7 @@ export default function LeaderboardPage() {
                         <FiAward className="text-yellow-500" size={32} />
                         Bảng Xếp Hạng
                     </h1>
-                    <p className="text-gray-500 mt-2 text-sm">Top học viên CSCA theo điểm trung bình</p>
+                    <p className="text-gray-500 mt-2 text-sm">Top học viên CSCA theo điểm cao nhất, cùng điểm thì thời gian thấp hơn xếp cao hơn</p>
                     <div className="mt-4 inline-flex rounded-xl border border-violet-100 bg-violet-50 p-1">
                         {([
                             { value: 'week', label: 'Tuần này' },
@@ -121,8 +130,8 @@ export default function LeaderboardPage() {
                         <div className="flex-1 min-w-0">
                             <p className="font-bold text-lg truncate">Bạn đang ở hạng {myEntry.rank}</p>
                             <p className="text-violet-200 text-sm">
-                                ĐTB: <strong className="text-white">{myEntry.avg_score}</strong> ·{' '}
-                                {myEntry.total_attempts} lần thi · Cao nhất: {myEntry.best_score}
+                                Điểm cao: <strong className="text-white">{myEntry.best_score}</strong> ·{' '}
+                                Thời gian: {formatDuration(myEntry.best_time_spent)} · {myEntry.total_attempts} lần thi
                             </p>
                         </div>
                     </div>
@@ -178,16 +187,16 @@ export default function LeaderboardPage() {
                                             {isMe && <span className="ml-2 text-xs font-normal text-violet-500">(Bạn)</span>}
                                         </p>
                                         <p className="text-xs text-gray-400 mt-0.5">
-                                            {entry.total_attempts} lần thi · Cao nhất: {entry.best_score} điểm
+                                            {entry.total_attempts} lần thi · Thời gian tốt nhất: {formatDuration(entry.best_time_spent)} · ĐTB: {entry.avg_score}
                                         </p>
                                     </div>
 
                                     {/* Score */}
                                     <div className="text-right shrink-0">
                                         <div className={`text-xl font-black ${isTop3 ? 'text-yellow-500' : isMe ? 'text-violet-600' : 'text-gray-700'}`}>
-                                            {entry.avg_score}
+                                            {entry.best_score}
                                         </div>
-                                        <div className="text-xs text-gray-400">ĐTB</div>
+                                        <div className="text-xs text-gray-400">Điểm cao</div>
                                     </div>
                                 </div>
                             );
