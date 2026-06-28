@@ -102,6 +102,7 @@ interface Exam {
     solution_description?: string;
     shuffle_mode?: boolean;
     vip_tier?: string;
+    language_mode?: string;
 }
 
 interface Subject {
@@ -477,7 +478,7 @@ export default function AdminExamDetailPage() {
         subjectId: 0,
         totalPoints: 100, description: '', allow_download: true,
         is_premium: false, shuffle_mode: false, solution_video_url: '',
-        solution_description: '', vip_tier: 'basic', is_simulated: false,
+        solution_description: '', vip_tier: 'basic', is_simulated: false, languageMode: 'zh',
     });
     const [metaDirty, setMetaDirty] = useState(false);
     const [savingMeta, setSavingMeta] = useState(false);
@@ -602,6 +603,7 @@ export default function AdminExamDetailPage() {
                     solution_description: data.exam.solution_description || '',
                     vip_tier: data.exam.vip_tier || 'basic',
                     is_simulated: data.exam.is_simulated || false,
+                    languageMode: data.exam.language_mode || 'zh',
                 });
             }
         } catch (error: any) {
@@ -676,6 +678,7 @@ export default function AdminExamDetailPage() {
                 allow_download: isDownloadAllowedForTier(metaForm.vip_tier, metaForm.is_premium),
                 is_premium: metaForm.is_premium,
                 shuffle_mode: metaForm.shuffle_mode,
+                languageMode: metaForm.languageMode,
                 solution_video_url: metaForm.solution_video_url,
                 solution_description: metaForm.solution_description,
                 vip_tier: metaForm.vip_tier,
@@ -688,7 +691,8 @@ export default function AdminExamDetailPage() {
                 subject_code: selectedSubject?.code || prev.subject_code, total_points: parsedTotalPoints, allow_download: nextAllowDownload,
                 is_premium: metaForm.is_premium, shuffle_mode: metaForm.shuffle_mode,
                 solution_video_url: metaForm.solution_video_url, solution_description: metaForm.solution_description,
-                vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated }) : prev);
+                vip_tier: metaForm.vip_tier, is_simulated: metaForm.is_simulated,
+                language_mode: metaForm.languageMode }) : prev);
             setMetaForm(prev => ({
                 ...prev,
                 subjectId: parsedSubjectId,
@@ -1791,6 +1795,24 @@ export default function AdminExamDetailPage() {
                                         <input type="number" value={metaForm.totalPoints}
                                             onChange={e => handleMetaChange('totalPoints', parseFloat(e.target.value))}
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Ngôn ngữ hiển thị khi làm bài</label>
+                                        <select
+                                            value={metaForm.languageMode || 'zh'}
+                                            onChange={e => handleMetaChange('languageMode', e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="zh">Chỉ tiếng Trung</option>
+                                            <option value="vi">Chỉ tiếng Việt</option>
+                                            <option value="en">Chỉ tiếng Anh</option>
+                                            <option value="vi_zh">Việt + Trung</option>
+                                            <option value="vi_en">Việt + Anh</option>
+                                            <option value="zh_en">Trung + Anh</option>
+                                            <option value="zh_vi">Trung + Việt</option>
+                                            <option value="en_vi">Anh + Việt</option>
+                                            <option value="en_zh">Anh + Trung</option>
+                                        </select>
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>

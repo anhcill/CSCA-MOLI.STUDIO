@@ -167,7 +167,12 @@ router.post(
       let webContent = null;
       let parseWarning = null;
       const fileSizeMb = req.file.size / (1024 * 1024);
-      if (fileSizeMb <= MAX_SYNC_PDF_PARSE_MB) {
+      const uploadMode = String(req.body?.mode || "").trim().toLowerCase();
+      const shouldExtractWebContent = uploadMode === "web";
+
+      if (!shouldExtractWebContent) {
+        parseWarning = null;
+      } else if (fileSizeMb <= MAX_SYNC_PDF_PARSE_MB) {
         try {
           webContent = await extractPdfWebContent(req.file.buffer);
         } catch (parseError) {
@@ -185,7 +190,7 @@ router.post(
           publicId: result.public_id,
           content_text: webContent?.contentText || "",
           content_html: webContent?.contentHtml || "",
-          content_meta: webContent?.meta || { uploadBytes: req.file.size, skippedSyncParse: fileSizeMb > MAX_SYNC_PDF_PARSE_MB },
+          content_meta: webContent?.meta || { uploadBytes: req.file.size, skippedSyncParse: shouldExtractWebContent && fileSizeMb > MAX_SYNC_PDF_PARSE_MB, importMode: shouldExtractWebContent ? "web" : "pdf" },
           content_source: webContent?.contentHtml ? "pdf_extract" : "file",
         },
         warnings: parseWarning ? [parseWarning] : [],

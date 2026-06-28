@@ -180,6 +180,12 @@ function normalizeExamAccess(isPremium, vipTier) {
   };
 }
 
+function normalizeExamLanguageMode(value) {
+  const mode = String(value || "").trim().toLowerCase().replace("-", "_");
+  const allowed = new Set(["vi", "zh", "en", "vi_zh", "vi_en", "zh_vi", "zh_en", "en_vi", "en_zh"]);
+  return allowed.has(mode) ? mode : "zh";
+}
+
 function getExamAllowDownload(access) {
   return access?.vipTier === "basic";
 }
@@ -1374,7 +1380,7 @@ const AdminExamController = {
   async createExam(req, res) {
     try {
       // P0: destructure titleCn
-      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level, languageMode, language_mode } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -1396,8 +1402,8 @@ const AdminExamController = {
       const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, 'draft', NOW(), $9, $10, $11, $12, $13, $14, $15, $16)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, language_mode, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'draft', NOW(), $10, $11, $12, $13, $14, $15, $16, $17)
          RETURNING *`,
         [
           examCode,
@@ -1408,6 +1414,7 @@ const AdminExamController = {
           parsedTotalPoints,
           safeDescription,
           difficulty_level || 'medium',
+          normalizeExamLanguageMode(languageMode || language_mode),
           access.isPremium,
           getExamAllowDownload(access),
           solution_video_url ? sanitize(solution_video_url) : null,
@@ -1439,7 +1446,7 @@ const AdminExamController = {
     try {
       const { examId } = req.params;
       // P0: destructure titleCn, descriptionCn
-      const { title, titleCn, subjectId, duration, totalPoints, description, difficulty_level, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, difficulty_level, languageMode, language_mode, status, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated } = req.body;
       const parsedTotalPoints =
         totalPoints === undefined
           ? undefined
@@ -1480,6 +1487,7 @@ const AdminExamController = {
       if (parsedTotalPoints !== undefined) { updates.push(`total_points = $${idx++}`); params.push(parsedTotalPoints); }
       if (description !== undefined) { updates.push(`description = $${idx++}`); params.push(description ? sanitize(description) : null); }
       if (difficulty_level !== undefined) { updates.push(`difficulty_level = $${idx++}`); params.push(difficulty_level); }
+      if (languageMode !== undefined || language_mode !== undefined) { updates.push(`language_mode = $${idx++}`); params.push(normalizeExamLanguageMode(languageMode || language_mode)); }
       if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
       if (is_premium !== undefined || vip_tier !== undefined) {
         const access = normalizeExamAccess(is_premium, vip_tier);

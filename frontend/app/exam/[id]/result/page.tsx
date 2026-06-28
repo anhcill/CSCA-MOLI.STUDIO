@@ -28,6 +28,7 @@ interface AnswerOption {
   key: string;
   text: string;
   text_cn?: string | null;
+  text_en?: string | null;
   is_correct: boolean;
 }
 interface QuestionResult {
@@ -37,18 +38,22 @@ interface QuestionResult {
   sub_question_number?: number;
   question_text: string;
   question_text_cn?: string;
+  question_text_en?: string;
   question_type?: string;
   passage_text?: string;
   selected_answer_key: string | null;
   selected_answer_text: string;
   selected_answer_text_cn?: string | null;
+  selected_answer_text_en?: string | null;
   correct_answer_key: string;
   correct_answer_text: string;
   correct_answer_text_cn?: string | null;
+  correct_answer_text_en?: string | null;
   is_correct: boolean;
   points: number;
   explanation?: string;
   explanation_cn?: string;
+  explanation_en?: string;
   explanation_image_url?: string;
   options: AnswerOption[];
   difficulty?: string;
@@ -60,6 +65,7 @@ interface ExamResult {
   id: number;
   exam_id: number;
   exam_title: string;
+  language_mode?: string;
   title_cn?: string;
   subject_name: string;
   total_score: number;
@@ -255,6 +261,7 @@ function ExamResultContent() {
   }
 
   const answers = result.answers ?? [];
+  const languageMode = result.language_mode || 'zh';
   const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
   const totalIncorrect = answers.filter(a => a.selected_answer_key && !a.is_correct).length;
   const totalUnanswered = answers.filter(a => !a.selected_answer_key).length;
@@ -663,6 +670,8 @@ function ExamResultContent() {
                         <BilingualMathText
                           primary={q.question_text}
                           secondary={q.question_text_cn}
+                          tertiary={q.question_text_en}
+                          languageMode={languageMode}
                           className="text-gray-900 font-medium leading-relaxed dark:text-gray-100"
                         />
                       </div>
@@ -682,6 +691,8 @@ function ExamResultContent() {
                               <BilingualMathText
                                 primary={opt.text}
                                 secondary={opt.text_cn}
+                                tertiary={opt.text_en}
+                                languageMode={languageMode}
                                 className={`text-sm ${tone.text}`}
                                 secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
                               />
@@ -711,6 +722,8 @@ function ExamResultContent() {
                           <BilingualMathText
                             primary={q.correct_answer_text}
                             secondary={q.correct_answer_text_cn}
+                            tertiary={q.correct_answer_text_en}
+                            languageMode={languageMode}
                             className="text-sm text-gray-800 dark:text-gray-100"
                             secondaryClassName="mt-1 text-xs text-green-700 dark:text-green-300"
                           />
@@ -719,7 +732,7 @@ function ExamResultContent() {
                     )}
 
                     {/* Explanation */}
-                    <QuestionExplanationBlock question={q} className="mt-4 sm:ml-8" />
+                    <QuestionExplanationBlock question={q} languageMode={languageMode} className="mt-4 sm:ml-8" />
 
                     {/* AI buttons */}
                     {!isEssayQuestion && (
@@ -773,6 +786,7 @@ function ExamResultContent() {
           question={reviewAITask.question}
           mode={reviewAITask.mode}
           attemptId={result.id}
+          languageMode={languageMode}
           onClose={() => setReviewAITask(null)}
           onOpenChat={() => {
             setReviewAITask(null);
@@ -808,8 +822,11 @@ function GradeEssayModal({ question, attemptId, onClose }: {
         body: JSON.stringify({
           questionText: question.question_text,
           questionTextCn: question.question_text_cn,
+          questionTextEn: question.question_text_en,
           userAnswer: question.selected_answer_text,
           correctAnswer: question.correct_answer_text,
+          correctAnswerCn: question.correct_answer_text_cn,
+          correctAnswerEn: question.correct_answer_text_en,
           questionType: question.question_type,
         }),
       });

@@ -19,9 +19,11 @@ export interface QuestionResult {
   selected_answer_key: string | null;
   selected_answer_text: string;
   selected_answer_text_cn?: string | null;
+  selected_answer_text_en?: string | null;
   correct_answer_key: string;
   correct_answer_text: string;
   correct_answer_text_cn?: string | null;
+  correct_answer_text_en?: string | null;
   is_correct: boolean;
   points: number;
   score_awarded?: number | string | null;
@@ -31,6 +33,7 @@ export interface QuestionResult {
   grading_result?: any;
   explanation?: string;
   explanation_cn?: string;
+  explanation_en?: string;
   explanation_image_url?: string;
   options: AnswerOption[];
   difficulty?: string;

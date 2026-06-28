@@ -421,10 +421,12 @@ const examController = {
           `SELECT
              q.explanation,
              q.explanation_cn,
+             q.explanation_en,
              q.explanation_image_url,
              a.answer_key AS correct_answer_key,
              a.answer_text AS correct_answer_text,
-             a.answer_text_cn AS correct_answer_text_cn
+             a.answer_text_cn AS correct_answer_text_cn,
+             a.answer_text_en AS correct_answer_text_en
            FROM questions q
            LEFT JOIN answers a ON a.question_id = q.id AND a.is_correct = TRUE
            WHERE q.id = $1

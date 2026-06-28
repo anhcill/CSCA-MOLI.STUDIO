@@ -1,4 +1,5 @@
 import type { QuestionResult, QuestionReviewStatus } from './types';
+import { getExamLanguageText } from '@/lib/exam/languageMode';
 
 export const REVIEW_AI_ACCURACY_RULE =
   'Luôn giữ nguyên ký hiệu toán/logic trong đề và đáp án: <, <=, ≤, >, >=, ≥, =, ≠. Không đổi ≤ thành < hoặc ≥ thành >; nếu thiếu dữ kiện/hình ảnh thì nói thiếu, không đoán.';
@@ -60,21 +61,70 @@ export function getOptionToneClass(isCorrect: boolean, isUserPick: boolean) {
   };
 }
 
-export function getQuestionDisplayText(question: QuestionResult, preferredText?: string) {
-  return (preferredText || question.question_text || question.question_text_en || question.question_text_cn || '').trim();
+export function getQuestionDisplayText(question: QuestionResult, preferredText?: string, languageMode?: string | null) {
+  if (preferredText) return preferredText.trim();
+  const selected = getExamLanguageText({
+    vi: question.question_text,
+    zh: question.question_text_cn,
+    en: question.question_text_en,
+  }, languageMode);
+  return [selected.primary, selected.secondary].filter(Boolean).join('\n').trim();
 }
 
-export function buildQuestionExplanationPrompt(question: QuestionResult, preferredText?: string) {
+function formatTrilingualBlock(label: string, values: { vi?: string | null; zh?: string | null; en?: string | null }) {
+  return [
+    values.zh ? `${label} (ZH): ${values.zh}` : '',
+    values.vi ? `${label} (VI): ${values.vi}` : '',
+    values.en ? `${label} (EN): ${values.en}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function buildQuestionLanguageContext(question: QuestionResult) {
+  const optionLines = (question.options || []).map((option) => [
+    `${option.key}.`,
+    option.text_cn ? `ZH: ${option.text_cn}` : '',
+    option.text ? `VI: ${option.text}` : '',
+    option.text_en ? `EN: ${option.text_en}` : '',
+  ].filter(Boolean).join(' '));
+
+  return [
+    formatTrilingualBlock('Nội dung câu hỏi', {
+      vi: question.question_text,
+      zh: question.question_text_cn,
+      en: question.question_text_en,
+    }),
+    optionLines.length ? `Các lựa chọn:\n${optionLines.join('\n')}` : '',
+    formatTrilingualBlock('Đáp án học sinh chọn', {
+      vi: formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua'),
+      zh: question.selected_answer_text_cn,
+      en: question.selected_answer_text_en,
+    }),
+    formatTrilingualBlock('Đáp án đúng', {
+      vi: formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng'),
+      zh: question.correct_answer_text_cn,
+      en: question.correct_answer_text_en,
+    }),
+    formatTrilingualBlock('Giải thích có sẵn', {
+      vi: question.explanation,
+      zh: question.explanation_cn,
+      en: question.explanation_en,
+    }),
+  ].filter(Boolean).join('\n');
+}
+
+export function buildQuestionExplanationPrompt(question: QuestionResult, preferredText?: string, languageMode?: string | null) {
   const questionNo = question.sub_question_number || question.question_number;
-  const questionText = getQuestionDisplayText(question, preferredText);
+  const questionText = getQuestionDisplayText(question, preferredText, languageMode);
   const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
   const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
   const base = [
     `Câu ${questionNo}`,
     questionText ? `Nội dung câu hỏi: ${questionText}` : '',
+    buildQuestionLanguageContext(question),
     `Đáp án đúng: ${correctAnswer}`,
     REVIEW_AI_ACCURACY_RULE,
     REVIEW_AI_FORMAT_RULE,
+    'Dữ liệu có thể có 3 ngôn ngữ: ZH/VI/EN. Khi giải thích, đọc đủ cả 3 field nếu có; không bỏ qua tiếng Anh.',
   ].filter(Boolean).join('\n');
 
   const status = getQuestionReviewStatus(question);
@@ -87,9 +137,9 @@ export function buildQuestionExplanationPrompt(question: QuestionResult, preferr
   return `${base}\nHọc sinh đã chọn sai: ${selectedAnswer}.\nHãy giải thích vì sao lựa chọn này sai, vì sao đáp án đúng là phù hợp, kiến thức liên quan và mẹo ghi nhớ. Trả lời bằng tiếng Việt có dấu, dễ hiểu.`;
 }
 
-export function buildQuestionTheoryPrompt(question: QuestionResult, preferredText?: string) {
+export function buildQuestionTheoryPrompt(question: QuestionResult, preferredText?: string, languageMode?: string | null) {
   const questionNo = question.sub_question_number || question.question_number;
-  const questionText = getQuestionDisplayText(question, preferredText);
+  const questionText = getQuestionDisplayText(question, preferredText, languageMode);
   const selectedAnswer = formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bỏ qua');
   const correctAnswer = formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng');
   const status = getQuestionReviewStatus(question);
@@ -102,10 +152,12 @@ export function buildQuestionTheoryPrompt(question: QuestionResult, preferredTex
   return [
     `Câu ${questionNo}`,
     questionText ? `Nội dung câu hỏi: ${questionText}` : '',
+    buildQuestionLanguageContext(question),
     learnerState,
     `Đáp án đúng: ${correctAnswer}`,
     REVIEW_AI_ACCURACY_RULE,
     REVIEW_AI_FORMAT_RULE,
+    'Dữ liệu có thể có 3 ngôn ngữ: ZH/VI/EN. Khi giảng lại, đọc đủ cả 3 field nếu có; không bỏ qua tiếng Anh.',
     'Hãy giảng lại lý thuyết liên quan trực tiếp tới câu này.',
     'Trả lời bằng tiếng Việt có dấu, gồm: kiến thức trọng tâm, cách nhận biết, ví dụ ngắn, lỗi dễ nhầm, mẹo nhớ.',
   ].filter(Boolean).join('\n');

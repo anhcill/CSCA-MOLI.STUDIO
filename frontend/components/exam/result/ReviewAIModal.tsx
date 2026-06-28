@@ -21,18 +21,19 @@ interface ReviewAIModalProps {
   question: QuestionResult;
   mode: ReviewAIMode;
   attemptId: number;
+  languageMode?: string | null;
   onClose: () => void;
   onOpenChat?: () => void;
 }
 
-export default function ReviewAIModal({ question, mode, attemptId, onClose, onOpenChat }: ReviewAIModalProps) {
+export default function ReviewAIModal({ question, mode, attemptId, languageMode, onClose, onOpenChat }: ReviewAIModalProps) {
   const [answer, setAnswer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [minimized, setMinimized] = useState(false);
   const [cuteMessage, setCuteMessage] = useState(() => pickCuteAILoadingMessage(Date.now()));
 
   const questionNo = question.sub_question_number || question.question_number;
-  const questionText = getQuestionDisplayText(question);
+  const questionText = getQuestionDisplayText(question, undefined, languageMode);
   const answerStatus = getQuestionReviewStatus(question);
   const taskKey = `${attemptId}:${mode}:${question.question_id || question.id || question.question_number}:${question.sub_question_number || 0}`;
   const title = mode === 'theory' ? 'Giảng lại lý thuyết' : `Phân tích câu ${questionNo}`;
@@ -76,8 +77,8 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
           method: 'POST',
           body: JSON.stringify({
             question: mode === 'theory'
-              ? buildQuestionTheoryPrompt(question, questionText)
-              : buildQuestionExplanationPrompt(question, questionText),
+              ? buildQuestionTheoryPrompt(question, questionText, languageMode)
+              : buildQuestionExplanationPrompt(question, questionText, languageMode),
             attemptId,
           }),
         });
@@ -182,6 +183,8 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
             <BilingualMathText
               primary={question.question_text || question.question_text_en}
               secondary={question.question_text_cn}
+              tertiary={question.question_text_en}
+              languageMode={languageMode}
               className="break-words text-sm font-medium leading-6 text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100"
               secondaryClassName="mt-2 text-sm text-violet-700 dark:text-violet-200"
             />
@@ -195,6 +198,8 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
               <BilingualMathText
                 primary={formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua')}
                 secondary={question.selected_answer_text_cn}
+                tertiary={question.selected_answer_text_en}
+                languageMode={languageMode}
                 className={`text-sm font-semibold ${answerBox.text}`}
                 secondaryClassName="mt-1 text-xs text-slate-600 dark:text-slate-300"
               />
@@ -204,6 +209,8 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
               <BilingualMathText
                 primary={formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng')}
                 secondary={question.correct_answer_text_cn}
+                tertiary={question.correct_answer_text_en}
+                languageMode={languageMode}
                 className="text-sm font-semibold text-green-800 dark:text-green-100"
                 secondaryClassName="mt-1 text-xs text-green-700 dark:text-green-300"
               />
@@ -225,7 +232,7 @@ export default function ReviewAIModal({ question, mode, attemptId, onClose, onOp
                   />
                 </div>
               </div>
-              <QuestionExplanationBlock question={question} title="📖 Giải thích có sẵn" />
+              <QuestionExplanationBlock question={question} languageMode={languageMode} title="📖 Giải thích có sẵn" />
             </div>
           ) : (
             <div className="py-6 text-center text-gray-500 dark:text-gray-400">

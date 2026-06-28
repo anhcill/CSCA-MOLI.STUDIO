@@ -42,9 +42,11 @@ interface QuestionResult {
     selected_answer_key: string | null;
     selected_answer_text: string;
     selected_answer_text_cn?: string | null;
+    selected_answer_text_en?: string | null;
     correct_answer_key: string;
     correct_answer_text: string;
     correct_answer_text_cn?: string | null;
+    correct_answer_text_en?: string | null;
     is_correct: boolean;
     points: number;
     score_awarded?: number | string | null;
@@ -54,6 +56,7 @@ interface QuestionResult {
     grading_result?: any;
     explanation?: string;
     explanation_cn?: string;
+    explanation_en?: string;
     explanation_image_url?: string;
     options: AnswerOption[];
     difficulty?: string;
@@ -63,6 +66,7 @@ interface AttemptResult {
     id: number;
     exam_id: number;
     exam_title: string;
+    language_mode?: string;
     title_cn?: string;
     subject_name: string;
     total_score: number;
@@ -188,6 +192,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     }
 
     const answers = result.answers ?? [];
+    const languageMode = result.language_mode || 'zh';
     const total = result.total_questions || answers.length || 1;
     const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
     const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && !a.is_correct).length;
@@ -514,6 +519,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                 <BilingualMathText
                                                     primary={q.question_text || q.question_text_en}
                                                     secondary={q.question_text_cn}
+                                                    tertiary={q.question_text_en}
+                                                    languageMode={languageMode}
                                                     className="text-sm font-medium leading-relaxed text-gray-900 dark:text-gray-100"
                                                 />
                                             </div>
@@ -533,6 +540,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                             <BilingualMathText
                                                                 primary={opt.text || opt.text_en}
                                                                 secondary={opt.text_cn}
+                                                                tertiary={opt.text_en}
+                                                                languageMode={languageMode}
                                                                 className={`text-sm ${tone.text}`}
                                                                 secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
                                                             />
@@ -550,7 +559,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                             )}
                                         </div>
 
-                                        <QuestionExplanationBlock question={q} className="mt-4 sm:ml-8" />
+                                        <QuestionExplanationBlock question={q} languageMode={languageMode} className="mt-4 sm:ml-8" />
 
                                         {/* AI giải thích thêm */}
                                         {q.question_type !== 'essay' && q.question_type !== 'translation' && (
@@ -603,6 +612,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                     question={reviewAITask.question}
                     mode={reviewAITask.mode}
                     attemptId={result.id}
+                    languageMode={languageMode}
                     onClose={() => setReviewAITask(null)}
                     onOpenChat={() => {
                         setReviewAITask(null);

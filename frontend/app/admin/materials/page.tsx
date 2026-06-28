@@ -57,6 +57,8 @@ const DEFAULT_FORM_DATA = {
   content_meta: {} as Record<string, any>,
 };
 
+type MaterialImportMode = 'pdf' | 'web';
+
 export default function AdminMaterialsPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
@@ -79,6 +81,7 @@ export default function AdminMaterialsPage() {
 
   // Form states
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
+  const [importMode, setImportMode] = useState<MaterialImportMode>('pdf');
 
   // Wait for auth to hydrate before checking
   useEffect(() => { setMounted(true); }, []);
@@ -129,6 +132,7 @@ export default function AdminMaterialsPage() {
       setUploadStatus('Đang gửi file lên server...');
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('mode', importMode);
 
       const res = await axios.post('/materials/upload-pdf', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -148,9 +152,12 @@ export default function AdminMaterialsPage() {
         file_url: res.data.data.url,
         title: prev.title || (prev.category === FORMULA_CATEGORY ? file.name.replace(/\.[^.]+$/, '') : prev.title),
         topic: prev.topic || (prev.category === FORMULA_CATEGORY ? 'Công thức' : prev.topic),
-        content_text: res.data.data.content_text || prev.content_text,
+        content_text: importMode === 'web' ? (res.data.data.content_text || prev.content_text) : '',
         content_html: '',
-        content_meta: res.data.data.content_meta || {},
+        content_meta: {
+          ...(res.data.data.content_meta || {}),
+          importMode,
+        },
       }));
       setUploadProgress(100);
       setUploadStatus('Upload xong');
@@ -201,6 +208,7 @@ export default function AdminMaterialsPage() {
       content_html: material.content_html || '',
       content_meta: material.content_meta || {},
     });
+    setImportMode(material.content_html || material.content_text ? 'web' : 'pdf');
     setUploadedUrl(material.file_url || '');
     setShowModal(true);
   };
@@ -231,6 +239,7 @@ export default function AdminMaterialsPage() {
     setUploadProgress(0);
     setUploadStatus('');
     setUploadFileName('');
+    setImportMode('pdf');
     setFormData({
       ...DEFAULT_FORM_DATA,
       category,
@@ -417,10 +426,41 @@ export default function AdminMaterialsPage() {
             </div>
 
             <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Kiểu nhập tài liệu
+                </label>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+                  {[
+                    { value: 'pdf', label: 'PDF thuần', desc: 'Chỉ lưu file PDF, không tạo nội dung web' },
+                    { value: 'web', label: 'Bài web', desc: 'Trích/nạp nội dung để hiển thị trên web' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setImportMode(option.value as MaterialImportMode);
+                        if (option.value === 'pdf') {
+                          setFormData(prev => ({ ...prev, content_text: '', content_html: '' }));
+                        }
+                      }}
+                      className={`rounded-lg px-3 py-2 text-left transition-colors ${
+                        importMode === option.value
+                          ? 'bg-white text-purple-700 shadow-sm'
+                          : 'text-gray-600 hover:bg-white/60'
+                      }`}
+                    >
+                      <span className="block text-sm font-bold">{option.label}</span>
+                      <span className="block text-xs">{option.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Upload PDF */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {formData.category === FORMULA_CATEGORY ? 'Upload PDF công thức' : 'Upload PDF'} <span className="text-gray-400 font-normal text-xs">(tự trích nội dung nếu PDF có text)</span>
+                  {formData.category === FORMULA_CATEGORY ? 'Upload PDF công thức' : 'Upload PDF'} <span className="text-gray-400 font-normal text-xs">{importMode === 'web' ? '(tự trích nội dung nếu PDF có text)' : '(PDF thuần, kh?ng t?o n?i dung web)'}</span>
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                   {uploadedUrl ? (
@@ -504,6 +544,7 @@ export default function AdminMaterialsPage() {
                 />
               </div>
 
+              {importMode === 'web' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {formData.category === FORMULA_CATEGORY ? 'Nội dung công thức OCR/extract' : 'Nội dung web'} <span className="text-gray-400 font-normal text-xs">(PDF upload sẽ tự điền, có thể sửa lại)</span>
@@ -521,6 +562,8 @@ export default function AdminMaterialsPage() {
                   </p>
                 )}
               </div>
+
+              )}
 
               {/* Category & Subject */}
               <div className="grid grid-cols-2 gap-4">

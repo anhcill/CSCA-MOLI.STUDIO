@@ -653,7 +653,7 @@ function normalizeLinkedOptions(rawOptions) {
   const warnings = [];
   const nextOptions = options.map((option, index) => {
     const next = { ...option };
-    for (const key of ["text", "textCn"]) {
+    for (const key of ["text", "textCn", "textEn"]) {
       const normalized = normalizeField(option?.[key]);
       if (normalized.changed) {
         next[key] = normalized.after;
@@ -683,14 +683,14 @@ function parseJsonValue(value, fallback = null) {
 async function normalizeExamFormulas(client, examId, options = {}) {
   const apply = options.apply !== false;
   const questionsResult = await client.query(
-    `SELECT id, question_number, question_text, question_text_cn, explanation, explanation_cn, passage_text, linked_options
+    `SELECT id, question_number, question_text, question_text_cn, question_text_en, explanation, explanation_cn, explanation_en, passage_text, linked_options
      FROM questions
      WHERE exam_id = $1 AND deleted_at IS NULL
      ORDER BY question_number, id`,
     [examId],
   );
   const answersResult = await client.query(
-    `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, q.question_number
+    `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.answer_text_en, q.question_number
      FROM answers a
      JOIN questions q ON q.id = a.question_id
      WHERE q.exam_id = $1 AND q.deleted_at IS NULL
@@ -705,7 +705,7 @@ async function normalizeExamFormulas(client, examId, options = {}) {
     const updates = [];
     const params = [];
 
-    for (const field of ["question_text", "question_text_cn", "passage_text"]) {
+    for (const field of ["question_text", "question_text_cn", "question_text_en", "passage_text"]) {
       const normalized = normalizeField(question[field]);
       if (normalized.changed) {
         params.push(normalized.after);
@@ -722,7 +722,7 @@ async function normalizeExamFormulas(client, examId, options = {}) {
       }
     }
 
-    for (const field of ["explanation", "explanation_cn"]) {
+    for (const field of ["explanation", "explanation_cn", "explanation_en"]) {
       const normalized = normalizeField(question[field], { explanation: true });
       if (normalized.changed) {
         params.push(normalized.after);
@@ -780,7 +780,7 @@ async function normalizeExamFormulas(client, examId, options = {}) {
   for (const answer of answersResult.rows) {
     const updates = [];
     const params = [];
-    for (const field of ["answer_text", "answer_text_cn"]) {
+    for (const field of ["answer_text", "answer_text_cn", "answer_text_en"]) {
       const normalized = normalizeField(answer[field]);
       if (normalized.changed) {
         params.push(normalized.after);
@@ -961,16 +961,19 @@ function buildReviewPrompt(batch, context = {}) {
       contextImageUrl: entry.contextImageUrl || q.passageImageUrl || q.passage_image_url || "",
       questionText: q.questionText || "",
       questionTextCn: q.questionTextCn || "",
+      questionTextEn: q.questionTextEn || "",
       questionImageUrl: q.imageUrl || q.image_url || "",
       answers: (q.answers || []).map((answer, answerIndex) => ({
         key: answer.key || ANSWER_KEYS[answerIndex],
         text: answer.text || answer.answer_text || "",
         textCn: answer.textCn || answer.answer_text_cn || "",
+        textEn: answer.textEn || answer.answer_text_en || "",
         imageUrl: answer.imageUrl || answer.image_url || "",
       })),
       currentCorrectAnswer: q.correctAnswer || q.correctAnswerKey || "",
       explanation: q.explanation || "",
       explanationCn: q.explanationCn || "",
+      explanationEn: q.explanationEn || "",
       explanationImageUrl: q.explanationImageUrl || q.explanation_image_url || "",
     };
   });
@@ -1312,16 +1315,19 @@ function buildFixPrompt(batch, context = {}) {
       contextImageUrl: entry.contextImageUrl || q.passageImageUrl || q.passage_image_url || "",
       questionText: q.questionText || "",
       questionTextCn: q.questionTextCn || "",
+      questionTextEn: q.questionTextEn || "",
       questionImageUrl: q.imageUrl || q.image_url || "",
       answers: (q.answers || []).map((answer, answerIndex) => ({
         key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
         text: answer.text || answer.answer_text || "",
         textCn: answer.textCn || answer.answer_text_cn || "",
+        textEn: answer.textEn || answer.answer_text_en || "",
         imageUrl: answer.imageUrl || answer.image_url || "",
       })),
       currentCorrectAnswer: q.correctAnswer || q.correctAnswerKey || "",
       explanation: q.explanation || "",
       explanationCn: q.explanationCn || "",
+      explanationEn: q.explanationEn || "",
       explanationImageUrl: q.explanationImageUrl || q.explanation_image_url || "",
     };
   });
@@ -1335,7 +1341,7 @@ Yêu cầu:
 - Return exactly one fix object for every input item, even when the result is "skip with note".
 - Apply the review log directly. Fix all clear questionIssues, formulaIssues, explanationIssues, and answer issues in the same pass.
 - Chỉ sửa những trường cần sửa. Không tự chế đề mới.
-- For Chinese CSCA language exams, preserve Chinese text in questionTextCn/textCn/explanationCn and Vietnamese text in questionText/text/explanation. If a field contains the wrong language, move/translate it into the correct field.
+- For Chinese CSCA language exams, preserve Chinese text in questionTextCn/textCn/explanationCn, English text in questionTextEn/textEn/explanationEn, and Vietnamese text in questionText/text/explanation. If a field contains the wrong language, move/translate it into the correct field.
 - Nếu sửa đáp án, correctAnswer phải là một key đang có trong answers.
 - If currentCorrectAnswer is empty and the correct key is clear from the question/options/context, set correctAnswer. If not clear, do not guess; explain in note.
 - Nếu sửa công thức/lời giải, trả lại nguyên field đã sửa hoàn chỉnh, giữ đúng ngôn ngữ gốc.
@@ -1360,9 +1366,10 @@ Trả dạng:
       "correctAnswer": "B",
       "questionText": "chỉ gửi nếu cần thay",
       "questionTextCn": "chỉ gửi nếu cần thay",
-      "answers": [{"key": "A", "text": "chỉ gửi nếu cần thay", "textCn": "chỉ gửi nếu cần thay"}],
+      "answers": [{"key": "A", "text": "chỉ gửi nếu cần thay", "textCn": "chỉ gửi nếu cần thay", "textEn": "only send if it needs changing"}],
       "explanation": "chỉ gửi nếu cần thay",
       "explanationCn": "chỉ gửi nếu cần thay",
+      "explanationEn": "only send if it needs changing",
       "note": "đã sửa gì hoặc vì sao bỏ qua"
     }
   ]
@@ -1391,8 +1398,10 @@ function normalizeAiFix(rawFix, entry) {
     correctAnswer: answerKeys.has(correctAnswer) ? correctAnswer : "",
     questionText: normalizeFixValue(rawFix?.questionText),
     questionTextCn: normalizeFixValue(rawFix?.questionTextCn),
+    questionTextEn: normalizeFixValue(rawFix?.questionTextEn),
     explanation: normalizeExplanationValue(rawFix?.explanation),
     explanationCn: normalizeExplanationValue(rawFix?.explanationCn),
+    explanationEn: normalizeExplanationValue(rawFix?.explanationEn),
     note: stringValue(rawFix?.note).slice(0, 600),
     answers: [],
   };
@@ -1405,6 +1414,7 @@ function normalizeAiFix(rawFix, entry) {
         key,
         text: normalizeFixValue(answer?.text),
         textCn: normalizeFixValue(answer?.textCn),
+        textEn: normalizeFixValue(answer?.textEn),
       };
     }).filter(Boolean);
   }
@@ -1490,9 +1500,11 @@ function getMissingExplanationTargets(entries) {
     if (q.explanationImageUrl || q.explanation_image_url) return false;
     const missingMain = isBlankText(q.explanation) || isLikelyChineseExplanation(q.explanation);
     const missingChinese = isBlankText(q.explanationCn) || isLikelyVietnameseExplanation(q.explanationCn);
-    const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(entry.contextText);
+    const hasEnglishSource = !isBlankText(q.questionTextEn) || (q.answers || []).some(answer => !isBlankText(answer?.textEn || answer?.answer_text_en));
+    const missingEnglish = hasEnglishSource && isBlankText(q.explanationEn);
+    const hasPromptText = !isBlankText(q.questionText) || !isBlankText(q.questionTextCn) || !isBlankText(q.questionTextEn) || !isBlankText(entry.contextText);
     const hasAnswer = !isBlankText(q.correctAnswer || q.correctAnswerKey);
-    return hasPromptText && hasAnswer && (missingMain || missingChinese);
+    return hasPromptText && hasAnswer && (missingMain || missingChinese || missingEnglish);
   }).slice(0, EXPLANATION_MAX_ITEMS);
 }
 
@@ -1509,11 +1521,14 @@ function getDisplayFormatTargets(entries) {
     if (hasDisplayFormatIssue(entry.contextText)) return true;
     if (hasDisplayFormatIssue(q.questionText)) return true;
     if (hasDisplayFormatIssue(q.questionTextCn)) return true;
+    if (hasDisplayFormatIssue(q.questionTextEn)) return true;
     if (hasDisplayFormatIssue(q.explanation)) return true;
     if (hasDisplayFormatIssue(q.explanationCn)) return true;
+    if (hasDisplayFormatIssue(q.explanationEn)) return true;
     return (q.answers || []).some(answer => (
       hasDisplayFormatIssue(answer?.text || answer?.answer_text) ||
-      hasDisplayFormatIssue(answer?.textCn || answer?.answer_text_cn)
+      hasDisplayFormatIssue(answer?.textCn || answer?.answer_text_cn) ||
+      hasDisplayFormatIssue(answer?.textEn || answer?.answer_text_en)
     ));
   }).slice(0, REVIEW_MAX_ITEMS);
 }
@@ -1532,18 +1547,22 @@ function buildMissingExplanationsPrompt(batch, context = {}) {
       contextImageUrl: entry.contextImageUrl || "",
       questionText: q.questionText || "",
       questionTextCn: q.questionTextCn || "",
+      questionTextEn: q.questionTextEn || "",
       questionImageUrl: q.imageUrl || q.image_url || "",
       answers: (q.answers || []).map((answer, answerIndex) => ({
         key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
         text: answer.text || answer.answer_text || "",
         textCn: answer.textCn || answer.answer_text_cn || "",
+        textEn: answer.textEn || answer.answer_text_en || "",
         imageUrl: answer.imageUrl || answer.image_url || "",
       })),
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
       currentExplanation: q.explanation || "",
       currentExplanationCn: q.explanationCn || "",
+      currentExplanationEn: q.explanationEn || "",
       missingExplanation: isBlankText(q.explanation) || isLikelyChineseExplanation(q.explanation),
       missingExplanationCn: isBlankText(q.explanationCn) || isLikelyVietnameseExplanation(q.explanationCn),
+      missingExplanationEn: (!isBlankText(q.questionTextEn) || (q.answers || []).some(answer => !isBlankText(answer?.textEn || answer?.answer_text_en))) && isBlankText(q.explanationEn),
     };
   });
 
@@ -1553,14 +1572,16 @@ Yêu cầu:
 - Chỉ trả JSON hợp lệ, không markdown.
 - Return exactly one explanations object for every input item. Never skip the first item in a batch.
 - Use correctAnswer/currentCorrectAnswer and the matching option as the anchor. Do not choose a new answer unless the prompt explicitly asks for review/fix.
-- Không sửa đề, không sửa đáp án, chỉ tạo explanation/explanationCn.
+- Không sửa đề, không sửa đáp án, chỉ tạo explanation/explanationCn/explanationEn.
 - Trường explanation bắt buộc viết bằng tiếng Việt CÓ DẤU. Không được viết kiểu không dấu như "Tap hop", "dap an", "loi giai".
 - explanation ngắn vừa đủ, 2-5 dòng, đúng trọng tâm cách ra đáp án.
 - Nếu missingExplanationCn=true, bắt buộc tạo explanationCn bằng tiếng Trung gọn, tương đương nội dung explanation/currentExplanation.
+- Nếu câu có questionTextEn hoặc đáp án textEn và thiếu explanationEn, tạo explanationEn bằng tiếng Anh gọn, đúng cùng ý với explanation.
 - Nếu missingExplanation=true thì bắt buộc trả explanation tiếng Việt có dấu. Không được chỉ trả explanationCn.
 - Nếu missingExplanation=true và currentExplanation đang là tiếng Trung, hãy viết lại nội dung đó sang tiếng Việt có dấu trong explanation.
 - Nếu missingExplanationCn=true và currentExplanationCn đang là tiếng Việt, hãy viết lại nội dung đó sang tiếng Trung trong explanationCn.
 - Tuyệt đối không đặt tiếng Trung vào field explanation. Tuyệt đối không đặt tiếng Việt vào field explanationCn.
+- Tuyệt đối không đặt tiếng Việt/Trung vào explanationEn.
 - Nếu thiếu cả 2 field, bắt buộc trả cả explanation tiếng Việt và explanationCn tiếng Trung.
 - If the source question is Chinese and missingExplanation=true, explanation must be Vietnamese with full diacritics, not a copy of Chinese text.
 - If the source question is Vietnamese/Chinese bilingual and missingExplanationCn=true, explanationCn must be natural Chinese, not Vietnamese written in the Chinese field.
@@ -1573,7 +1594,7 @@ Yêu cầu:
 - Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
 - Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "FA=BIL=(B^2L^2v\\cos\\theta)/R" phải viết "\\(F_A=BIL=\\frac{B^2L^2v\\cos\\theta}{R}\\)".
-- Không dùng dấu $ hoặc $$ trong explanation/explanationCn. Chỉ dùng \\(...\\) cho inline math và \\[...\\] cho công thức dài đứng riêng.
+- Không dùng dấu $ hoặc $$ trong explanation/explanationCn/explanationEn. Chỉ dùng \\(...\\) cho inline math và \\[...\\] cho công thức dài đứng riêng.
 - Nếu lời giải dùng tiếng Trung trong explanationCn, phần chữ có thể là tiếng Trung nhưng công thức vẫn phải theo LaTeX chuẩn như trên.
 - Lời giải nên xuống dòng theo ý: Công thức/Phân tích, Thay tính, Kết luận/Chọn.
 - Nếu cần đọc ảnh nhưng không đủ dữ liệu từ text/answers để giải chắc, để explanation rỗng và note lý do, không đoán bừa.
@@ -1591,6 +1612,7 @@ Trả dạng:
       "confidence": 0.9,
       "explanation": "Lời giải tiếng Việt có dấu nếu cần điền",
       "explanationCn": "中文解析 nếu cần điền",
+      "explanationEn": "English explanation if needed",
       "note": "ngắn gọn"
     }
   ]
@@ -1611,10 +1633,12 @@ function buildPolishExplanationsPrompt(batch, context = {}) {
       questionNumber: entry.questionNumber,
       questionText: q.questionText || "",
       questionTextCn: q.questionTextCn || "",
+      questionTextEn: q.questionTextEn || "",
       answers: (q.answers || []).map((answer, answerIndex) => ({
         key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
         text: answer.text || answer.answer_text || "",
         textCn: answer.textCn || answer.answer_text_cn || "",
+        textEn: answer.textEn || answer.answer_text_en || "",
       })),
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
       explanation: q.explanation || "",
@@ -1670,14 +1694,17 @@ function buildDisplayFormatPrompt(batch, context = {}) {
       contextText: entry.contextText || "",
       questionText: q.questionText || "",
       questionTextCn: q.questionTextCn || "",
+      questionTextEn: q.questionTextEn || "",
       answers: (q.answers || []).map((answer, answerIndex) => ({
         key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
         text: answer.text || answer.answer_text || "",
         textCn: answer.textCn || answer.answer_text_cn || "",
+        textEn: answer.textEn || answer.answer_text_en || "",
       })),
       correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
       explanation: q.explanation || "",
       explanationCn: q.explanationCn || "",
+      explanationEn: q.explanationEn || "",
       formatterInstructions: [
         "Rewrite the whole broken field into a clean natural version in the same original language when format is broken.",
         "Remove stray malformed $ or $$ delimiters.",
@@ -1722,9 +1749,10 @@ Trả dạng:
       "confidence": 0.95,
       "questionText": "chỉ gửi nếu cần thay",
       "questionTextCn": "chỉ gửi nếu cần thay",
-      "answers": [{"key": "A", "text": "chỉ gửi nếu cần thay", "textCn": "chỉ gửi nếu cần thay"}],
+      "answers": [{"key": "A", "text": "chỉ gửi nếu cần thay", "textCn": "chỉ gửi nếu cần thay", "textEn": "only send if it needs changing"}],
       "explanation": "chỉ gửi nếu cần thay",
       "explanationCn": "chỉ gửi nếu cần thay",
+      "explanationEn": "only send if it needs changing",
       "note": "đã sửa format nào hoặc vì sao bỏ qua"
     }
   ]
@@ -1737,6 +1765,7 @@ ${JSON.stringify(payload)}`;
 function normalizeGeneratedExplanationItem(rawItem, entry) {
   let explanation = normalizeGeneratedExplanation(rawItem?.explanation || rawItem?.explanationVi || rawItem?.explanation_vi || rawItem?.vietnameseExplanation);
   let explanationCn = normalizeGeneratedExplanation(rawItem?.explanationCn || rawItem?.explanation_cn || rawItem?.chineseExplanation || rawItem?.zhExplanation);
+  const explanationEn = normalizeGeneratedExplanation(rawItem?.explanationEn || rawItem?.explanation_en || rawItem?.englishExplanation);
 
   if (isLikelyChineseExplanation(explanation) && isLikelyVietnameseExplanation(explanationCn)) {
     [explanation, explanationCn] = [explanationCn, explanation];
@@ -1758,9 +1787,11 @@ function normalizeGeneratedExplanationItem(rawItem, entry) {
     questionNumber: entry.questionNumber,
     needsExplanation: isBlankText(entry.question?.explanation) || isLikelyChineseExplanation(entry.question?.explanation),
     needsExplanationCn: isBlankText(entry.question?.explanationCn) || isLikelyVietnameseExplanation(entry.question?.explanationCn),
+    needsExplanationEn: isBlankText(entry.question?.explanationEn),
     confidence: Math.max(0, Math.min(1, Number(rawItem?.confidence) || 0)),
     explanation,
     explanationCn,
+    explanationEn,
     note: stringValue(rawItem?.note).slice(0, 600),
   };
 }
@@ -1901,7 +1932,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
-      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
+      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "explanationVi", "explanation_vi", "vietnameseExplanation", "englishExplanation", "chineseExplanation", "zhExplanation"]);
       diagnostics.push({
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -1951,7 +1982,7 @@ async function polishExplanationsWithAI(entries, context = {}) {
     diagnostics,
     summary: {
       total: targets.length,
-      generated: explanations.filter(item => item.explanation || item.explanationCn).length,
+      generated: explanations.filter(item => item.explanation || item.explanationCn || item.explanationEn).length,
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
@@ -1994,7 +2025,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         signal: context.signal,
       });
       const parsed = parseAiJson(raw);
-      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
+      const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "explanationVi", "explanation_vi", "vietnameseExplanation", "englishExplanation", "chineseExplanation", "zhExplanation"]);
       diagnostics.push({
         batch: Math.floor(i / batchSize) + 1,
         range: getBatchLabelRange(batch),
@@ -2038,7 +2069,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
               signal: context.signal,
             });
             const retryParsed = parseAiJson(retryRaw);
-            const retryItems = getAiItems(retryParsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanation_cn", "explanationVi", "explanation_vi", "vietnameseExplanation", "chineseExplanation", "zhExplanation"]);
+            const retryItems = getAiItems(retryParsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "explanationVi", "explanation_vi", "vietnameseExplanation", "englishExplanation", "chineseExplanation", "zhExplanation"]);
             const retryItem = findAiItemForEntry(retryItems, entry, 0) || (retryItems.length === 1 ? retryItems[0] : null);
             diagnostics.push({
               batch: `${Math.floor(i / batchSize) + 1}.${entry.questionNumber || entry.questionId || "retry"}`,
@@ -2113,7 +2144,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
     diagnostics,
     summary: {
       total: targets.length,
-      generated: explanations.filter(item => item.explanation || item.explanationCn).length,
+      generated: explanations.filter(item => item.explanation || item.explanationCn || item.explanationEn).length,
       aiCalls: diagnostics.filter(item => item.status === "ok" || item.status === "invalid_response").length,
       failedBatches: diagnostics.filter(item => item.status === "failed").length,
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
@@ -2287,8 +2318,10 @@ function applyFixesToImportedItems(items, fixes = [], entries = []) {
     const beforeCount = changes.length;
     setField(target, "questionText", fix.questionText, { path: fix.path, field: "questionText" });
     setField(target, "questionTextCn", fix.questionTextCn, { path: fix.path, field: "questionTextCn" });
+    setField(target, "questionTextEn", fix.questionTextEn, { path: fix.path, field: "questionTextEn" });
     setField(target, "explanation", fix.explanation, { path: fix.path, field: "explanation" });
     setField(target, "explanationCn", fix.explanationCn, { path: fix.path, field: "explanationCn" });
+    setField(target, "explanationEn", fix.explanationEn, { path: fix.path, field: "explanationEn" });
 
     if (fix.correctAnswer) {
       if (parts[1] === "subItems") {
@@ -2312,6 +2345,7 @@ function applyFixesToImportedItems(items, fixes = [], entries = []) {
           if (!answer) continue;
           setField(answer, "text", answerFix.text, { path: fix.path, field: `answers.${answerFix.key}.text` });
           setField(answer, "textCn", answerFix.textCn, { path: fix.path, field: `answers.${answerFix.key}.textCn` });
+          setField(answer, "textEn", answerFix.textEn, { path: fix.path, field: `answers.${answerFix.key}.textEn` });
         }
       }
     }
@@ -2394,6 +2428,7 @@ function normalizeReviewAnswers(question) {
       key: option?.key || ANSWER_KEYS[index],
       text: option?.text || option?.answer_text || "",
       textCn: option?.textCn || option?.text_cn || option?.answer_text_cn || "",
+      textEn: option?.textEn || option?.text_en || option?.answer_text_en || "",
       imageUrl: option?.imageUrl || option?.image_url || "",
     }));
   }
@@ -2402,6 +2437,7 @@ function normalizeReviewAnswers(question) {
     key: answer?.answer_key || answer?.key || ANSWER_KEYS[index],
     text: answer?.answer_text || answer?.text || "",
     textCn: answer?.answer_text_cn || answer?.textCn || "",
+    textEn: answer?.answer_text_en || answer?.textEn || "",
     imageUrl: answer?.image_url || answer?.imageUrl || "",
   }));
 }
@@ -2470,6 +2506,7 @@ async function loadStoredExamReviewEntries(client, examId) {
            'answer_key', a.answer_key,
            'answer_text', a.answer_text,
            'answer_text_cn', a.answer_text_cn,
+           'answer_text_en', a.answer_text_en,
            'image_url', a.image_url,
            'is_correct', a.is_correct
          ) ORDER BY a.answer_key
@@ -2499,11 +2536,13 @@ async function loadStoredExamReviewEntries(client, examId) {
       question: {
         questionText: question.question_text || "",
         questionTextCn: question.question_text_cn || "",
+        questionTextEn: question.question_text_en || "",
         imageUrl: question.image_url || "",
         answers: normalizeReviewAnswers(question),
         correctAnswer: getCurrentCorrectAnswer(question),
         explanation: question.explanation || "",
         explanationCn: question.explanation_cn || "",
+        explanationEn: question.explanation_en || "",
         explanationImageUrl: question.explanation_image_url || "",
       },
     };
@@ -2673,8 +2712,10 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
 
     addField("question_text", fix.questionText);
     addField("question_text_cn", fix.questionTextCn);
+    addField("question_text_en", fix.questionTextEn);
     addField("explanation", fix.explanation);
     addField("explanation_cn", fix.explanationCn);
+    addField("explanation_en", fix.explanationEn);
 
     if (fields.length) {
       params.push(questionId);
@@ -2810,7 +2851,7 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
     }
 
     const questionResult = await client.query(
-      `SELECT id, question_number, question_text, question_text_cn, explanation, explanation_cn
+      `SELECT id, question_number, question_text, question_text_cn, question_text_en, explanation, explanation_cn, explanation_en
        FROM questions
        WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
        LIMIT 1`,
@@ -2836,8 +2877,10 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
 
     addQuestionField("question_text", fix.questionText);
     addQuestionField("question_text_cn", fix.questionTextCn);
+    addQuestionField("question_text_en", fix.questionTextEn);
     addQuestionField("explanation", fix.explanation);
     addQuestionField("explanation_cn", fix.explanationCn);
+    addQuestionField("explanation_en", fix.explanationEn);
 
     if (fields.length) {
       params.push(questionId);
@@ -2849,7 +2892,7 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
 
     if (Array.isArray(fix.answers) && fix.answers.length) {
       const answersResult = await client.query(
-        `SELECT id, answer_key, answer_text, answer_text_cn
+        `SELECT id, answer_key, answer_text, answer_text_cn, answer_text_en
          FROM answers
          WHERE question_id = $1
          ORDER BY answer_key`,
@@ -2883,6 +2926,7 @@ async function applyExamDisplayFormatFixes(client, examId, options = {}) {
 
         addAnswerField("answer_text", answerFix.text);
         addAnswerField("answer_text_cn", answerFix.textCn);
+        addAnswerField("answer_text_en", answerFix.textEn);
         if (!answerFields.length) continue;
 
         answerParams.push(current.id);
@@ -2937,7 +2981,7 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
     }
 
     const questionResult = await client.query(
-      `SELECT id, question_number, explanation, explanation_cn, explanation_image_url
+      `SELECT id, question_number, explanation, explanation_cn, explanation_en, explanation_image_url
        FROM questions
        WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
        LIMIT 1`,
@@ -2955,8 +2999,10 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
 
     const needsExplanation = isBlankText(question.explanation) || isLikelyChineseExplanation(question.explanation);
     const needsExplanationCn = isBlankText(question.explanation_cn) || isLikelyVietnameseExplanation(question.explanation_cn);
+    const needsExplanationEn = isBlankText(question.explanation_en) && !isBlankText(item.explanationEn);
     const nextExplanation = normalizeGeneratedExplanation(item.explanation);
     const nextExplanationCn = normalizeGeneratedExplanation(item.explanationCn);
+    const nextExplanationEn = normalizeGeneratedExplanation(item.explanationEn);
     const hasValidVietnamese = !isBlankText(nextExplanation) && !isLikelyChineseExplanation(nextExplanation) && (isLikelyVietnameseExplanation(nextExplanation) || hasLatinExplanationText(nextExplanation));
     const hasValidChinese = !isBlankText(nextExplanationCn) && hasCjkText(nextExplanationCn) && !isLikelyVietnameseExplanation(nextExplanationCn);
 
@@ -3000,6 +3046,10 @@ async function generateMissingExamExplanations(client, examId, options = {}) {
           reason: item.note || "AI chưa trả explanationCn tiếng Trung hợp lệ.",
         });
       }
+    }
+
+    if (needsExplanationEn) {
+      addField("explanation_en", nextExplanationEn, question.explanation_en, true);
     }
 
     if (!fields.length) {
@@ -3191,6 +3241,7 @@ async function reviewStoredExamWithAI(client, examId, context = {}) {
            'answer_key', a.answer_key,
            'answer_text', a.answer_text,
            'answer_text_cn', a.answer_text_cn,
+           'answer_text_en', a.answer_text_en,
            'image_url', a.image_url,
            'is_correct', a.is_correct
          ) ORDER BY a.answer_key
@@ -3220,11 +3271,13 @@ async function reviewStoredExamWithAI(client, examId, context = {}) {
       question: {
         questionText: question.question_text || "",
         questionTextCn: question.question_text_cn || "",
+        questionTextEn: question.question_text_en || "",
         imageUrl: question.image_url || "",
         answers: normalizeReviewAnswers(question),
         correctAnswer: getCurrentCorrectAnswer(question),
         explanation: question.explanation || "",
         explanationCn: question.explanation_cn || "",
+        explanationEn: question.explanation_en || "",
         explanationImageUrl: question.explanation_image_url || "",
       },
     };

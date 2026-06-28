@@ -19,6 +19,7 @@ export interface ExamCreateData {
     start_time?: string;
     end_time?: string;
     difficulty_level?: string; // P1: 'easy' | 'medium' | 'hard'
+    languageMode?: string;
 }
 
 export interface QuestionData {

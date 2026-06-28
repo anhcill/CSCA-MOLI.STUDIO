@@ -25,6 +25,7 @@ export interface Exam {
   solution_description?: string;
   shuffle_mode?: boolean;
   vip_tier?: string; // 'basic' | 'vip' | 'premium'
+  language_mode?: string;
   // New: Stats
   pass_rate?: number;
   overall_difficulty?: string;
@@ -89,8 +90,10 @@ export interface PracticeFeedback {
   correct_answer_key?: string;
   correct_answer_text?: string;
   correct_answer_text_cn?: string;
+  correct_answer_text_en?: string;
   explanation?: string;
   explanation_cn?: string;
+  explanation_en?: string;
   explanation_image_url?: string;
 }
 

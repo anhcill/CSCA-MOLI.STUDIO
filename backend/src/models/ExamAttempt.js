@@ -355,6 +355,7 @@ const ExamAttempt = {
         ea.submit_time AS submitted_at,
         e.code as exam_code,
         e.title as exam_title,
+        e.language_mode,
         e.total_questions,
         s.name as subject_name,
         s.code as subject_code,
@@ -434,12 +435,14 @@ const ExamAttempt = {
         COALESCE(q.deleted_question_number, q.question_number) AS question_number,
         q.question_text,
         q.question_text_cn,
+        q.question_text_en,
         q.question_type,
         q.difficulty,
         q.question_category,
         q.points,
         q.explanation,
         q.explanation_cn,
+        q.explanation_en,
         q.explanation_image_url,
         (
           SELECT qt.name
@@ -465,7 +468,7 @@ const ExamAttempt = {
 
     // FIX N+1: Fetch ALL answers for all questions in a single query
     const allAnswersResult = await pool.query(
-      `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.is_correct
+      `SELECT a.id, a.question_id, a.answer_key, a.answer_text, a.answer_text_cn, a.answer_text_en, a.is_correct
        FROM answers a
        INNER JOIN questions q ON a.question_id = q.id
        WHERE q.exam_id = $1
@@ -491,9 +494,11 @@ const ExamAttempt = {
       // Build a map: { 'A': 'text...', 'B': 'text...' }
       const optionMap = {};
       const optionCnMap = {};
+      const optionEnMap = {};
       questionAnswers.forEach((a) => {
         optionMap[a.answer_key] = a.answer_text;
         optionCnMap[a.answer_key] = a.answer_text_cn;
+        optionEnMap[a.answer_key] = a.answer_text_en;
       });
 
       const userAnswerKey = question.user_answer;
@@ -505,6 +510,7 @@ const ExamAttempt = {
         question_number: question.question_number,
         question_text: question.question_text,
         question_text_cn: question.question_text_cn,
+        question_text_en: question.question_text_en,
         question_type: question.question_type,
         difficulty: question.difficulty,
         question_category: question.question_category,
@@ -517,16 +523,23 @@ const ExamAttempt = {
         selected_answer_text_cn: userAnswerKey && optionCnMap[userAnswerKey] && optionCnMap[userAnswerKey] !== optionMap[userAnswerKey]
           ? `${userAnswerKey}. ${optionCnMap[userAnswerKey]}`
           : null,
+        selected_answer_text_en: userAnswerKey && optionEnMap[userAnswerKey] && optionEnMap[userAnswerKey] !== optionMap[userAnswerKey]
+          ? `${userAnswerKey}. ${optionEnMap[userAnswerKey]}`
+          : null,
         correct_answer_text: correctAnswerKey
           ? `${correctAnswerKey}. ${optionMap[correctAnswerKey] || ""}`
           : "",
         correct_answer_text_cn: correctAnswerKey && optionCnMap[correctAnswerKey] && optionCnMap[correctAnswerKey] !== optionMap[correctAnswerKey]
           ? `${correctAnswerKey}. ${optionCnMap[correctAnswerKey]}`
           : null,
+        correct_answer_text_en: correctAnswerKey && optionEnMap[correctAnswerKey] && optionEnMap[correctAnswerKey] !== optionMap[correctAnswerKey]
+          ? `${correctAnswerKey}. ${optionEnMap[correctAnswerKey]}`
+          : null,
         is_correct: question.is_correct || false,
         points: question.points,
         explanation: question.explanation,
         explanation_cn: question.explanation_cn,
+        explanation_en: question.explanation_en,
         explanation_image_url: question.explanation_image_url,
         options: questionAnswers.map((a) => ({
           key: a.answer_key,
@@ -534,6 +547,10 @@ const ExamAttempt = {
           text_cn:
             a.answer_text_cn && a.answer_text_cn !== a.answer_text
               ? a.answer_text_cn
+              : null,
+          text_en:
+            a.answer_text_en && a.answer_text_en !== a.answer_text
+              ? a.answer_text_en
               : null,
           is_correct: a.is_correct,
         })),

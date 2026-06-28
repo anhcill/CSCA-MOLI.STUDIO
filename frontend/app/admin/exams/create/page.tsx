@@ -149,6 +149,7 @@ export default function CreateExamPage() {
         vip_tier: 'basic',
         is_simulated: false,
         difficulty_level: 'medium',
+        languageMode: 'zh',
         start_time: '',
         end_time: '',
     });
@@ -905,6 +906,25 @@ export default function CreateExamPage() {
                                 <option value="easy">Dễ</option>
                                 <option value="medium">Trung bình</option>
                                 <option value="hard">Khó</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Ngôn ngữ hiển thị khi làm bài</label>
+                            <select
+                                value={examData.languageMode || 'zh'}
+                                onChange={(e) => { setExamData({ ...examData, languageMode: e.target.value }); setExamMetadataDirty(true); }}
+                                className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="zh">Chỉ tiếng Trung</option>
+                                <option value="vi">Chỉ tiếng Việt</option>
+                                <option value="en">Chỉ tiếng Anh</option>
+                                <option value="vi_zh">Việt + Trung</option>
+                                <option value="vi_en">Việt + Anh</option>
+                                <option value="zh_en">Trung + Anh</option>
+                                <option value="zh_vi">Trung + Việt</option>
+                                <option value="en_vi">Anh + Việt</option>
+                                <option value="en_zh">Anh + Trung</option>
                             </select>
                         </div>
 
