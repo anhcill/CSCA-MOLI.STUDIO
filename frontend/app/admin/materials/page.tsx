@@ -26,6 +26,15 @@ interface Material {
   content_meta?: Record<string, any>;
 }
 
+type MaterialImageItem = {
+  url: string;
+  publicId?: string;
+  caption?: string;
+  order: number;
+  width?: number | null;
+  height?: number | null;
+};
+
 const CATEGORIES = [
   { value: 'ly-thuyet', label: 'Lý Thuyết' },
   { value: 'cong-thuc-on-thi', label: 'Công Thức Ôn Thi' },
@@ -57,7 +66,7 @@ const DEFAULT_FORM_DATA = {
   content_meta: {} as Record<string, any>,
 };
 
-type MaterialImportMode = 'pdf' | 'web';
+type MaterialImportMode = 'pdf' | 'web' | 'images';
 
 export default function AdminMaterialsPage() {
   const router = useRouter();
@@ -82,6 +91,9 @@ export default function AdminMaterialsPage() {
   // Form states
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
   const [importMode, setImportMode] = useState<MaterialImportMode>('pdf');
+  const materialImages = ((formData.content_meta?.images || []) as MaterialImageItem[])
+    .slice()
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Wait for auth to hydrate before checking
   useEffect(() => { setMounted(true); }, []);
@@ -173,24 +185,129 @@ export default function AdminMaterialsPage() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!formData.title || !formData.category || (!formData.file_url && !formData.content_text.trim())) {
-      alert('Vui lòng nhập tiêu đề, danh mục và upload PDF hoặc nhập nội dung web');
+  const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    if (files.some(file => !file.type.startsWith('image/'))) {
+      alert('Chỉ chấp nhận file ảnh');
       return;
     }
 
     try {
+      setUploading(true);
+      setUploadProgress(0);
+      setUploadFileName(`${files.length} ảnh`);
+      setUploadStatus('Đang gửi ảnh lên Cloudinary...');
+      const payload = new FormData();
+      files.forEach(file => payload.append('files', file));
+
+      const res = await axios.post('/materials/upload-images', payload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 900000,
+        onUploadProgress: (event) => {
+          const total = event.total || files.reduce((sum, file) => sum + file.size, 0);
+          if (!total) return;
+          const percent = Math.min(100, Math.round((event.loaded / total) * 100));
+          setUploadProgress(percent);
+          setUploadStatus(percent >= 100 ? 'Đã gửi ảnh, đang lưu Cloudinary...' : `Đang upload ${percent}%`);
+        },
+      });
+
+      const currentImages = materialImages;
+      const nextImages = [
+        ...currentImages,
+        ...(res.data?.data?.images || []).map((image: MaterialImageItem, index: number) => ({
+          ...image,
+          order: currentImages.length + index + 1,
+        })),
+      ];
+
+      setFormData(prev => ({
+        ...prev,
+        file_url: prev.file_url || nextImages[0]?.url || '',
+        content_text: '',
+        content_html: '',
+        content_meta: {
+          ...prev.content_meta,
+          importMode: 'images',
+          images: nextImages,
+        },
+      }));
+      setUploadProgress(100);
+      setUploadStatus('Upload ảnh xong');
+    } catch (error: any) {
+      console.error('Images upload error:', error);
+      const message = error.response?.data?.message || error.message || 'Lỗi upload ảnh';
+      setUploadStatus(message);
+      alert(message);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const updateMaterialImage = (index: number, patch: Partial<MaterialImageItem>) => {
+    const nextImages = materialImages.map((image, imageIndex) => (
+      imageIndex === index ? { ...image, ...patch } : image
+    ));
+    setFormData(prev => ({
+      ...prev,
+      file_url: nextImages[0]?.url || '',
+      content_meta: { ...prev.content_meta, importMode: 'images', images: nextImages },
+    }));
+  };
+
+  const moveMaterialImage = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= materialImages.length) return;
+    const nextImages = [...materialImages];
+    [nextImages[index], nextImages[nextIndex]] = [nextImages[nextIndex], nextImages[index]];
+    const ordered = nextImages.map((image, imageIndex) => ({ ...image, order: imageIndex + 1 }));
+    setFormData(prev => ({
+      ...prev,
+      file_url: ordered[0]?.url || '',
+      content_meta: { ...prev.content_meta, importMode: 'images', images: ordered },
+    }));
+  };
+
+  const removeMaterialImage = (index: number) => {
+    const ordered = materialImages
+      .filter((_, imageIndex) => imageIndex !== index)
+      .map((image, imageIndex) => ({ ...image, order: imageIndex + 1 }));
+    setFormData(prev => ({
+      ...prev,
+      file_url: ordered[0]?.url || '',
+      content_meta: { ...prev.content_meta, importMode: 'images', images: ordered },
+    }));
+  };
+
+  const handleSubmit = async () => {
+    const hasImages = materialImages.length > 0;
+    const hasBody = Boolean(formData.file_url || formData.content_text.trim() || hasImages);
+    if (!formData.title || !formData.category || !hasBody) {
+      alert('Vui l?ng nh?p ti?u ??, danh m?c v? upload PDF, ?nh ho?c nh?p n?i dung web');
+      return;
+    }
+
+    try {
+      const payload = importMode === 'pdf'
+        ? { ...formData, content_text: '', content_html: '', content_meta: { ...formData.content_meta, importMode: 'pdf', images: [] } }
+        : importMode === 'images'
+          ? { ...formData, file_url: formData.file_url || materialImages[0]?.url || '', content_text: '', content_html: '', content_meta: { ...formData.content_meta, importMode: 'images', images: materialImages } }
+          : { ...formData, content_meta: { ...formData.content_meta, importMode: 'web' } };
+
       if (editingId) {
-        await axios.put(`/materials/${editingId}`, { ...formData, is_active: true });
+        await axios.put(`/materials/${editingId}`, { ...payload, is_active: true });
       } else {
-        await axios.post('/materials', formData);
+        await axios.post('/materials', payload);
       }
 
       resetForm();
       await loadMaterials();
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Lỗi khi lưu tài liệu');
+      alert('L?i khi l?u t?i li?u');
     }
   };
 
@@ -208,7 +325,7 @@ export default function AdminMaterialsPage() {
       content_html: material.content_html || '',
       content_meta: material.content_meta || {},
     });
-    setImportMode(material.content_html || material.content_text ? 'web' : 'pdf');
+    setImportMode((material.content_meta?.importMode === 'images' || Array.isArray(material.content_meta?.images)) ? 'images' : material.content_html || material.content_text ? 'web' : 'pdf');
     setUploadedUrl(material.file_url || '');
     setShowModal(true);
   };
@@ -338,8 +455,8 @@ export default function AdminMaterialsPage() {
                     <tr key={material.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded flex items-center justify-center text-xs ${material.content_html ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
-                            {material.content_html ? 'WEB' : 'PDF'}
+                          <div className={`w-8 h-8 rounded flex items-center justify-center text-xs ${Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'bg-sky-50 text-sky-600' : material.content_html ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+                            {Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'IMG' : material.content_html ? 'WEB' : 'PDF'}
                           </div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">{material.title}</p>
@@ -430,18 +547,29 @@ export default function AdminMaterialsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Kiểu nhập tài liệu
                 </label>
-                <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+                <div className="grid grid-cols-1 gap-2 rounded-xl bg-gray-100 p-1 sm:grid-cols-3">
                   {[
                     { value: 'pdf', label: 'PDF thuần', desc: 'Chỉ lưu file PDF, không tạo nội dung web' },
                     { value: 'web', label: 'Bài web', desc: 'Trích/nạp nội dung để hiển thị trên web' },
+                    { value: 'images', label: 'Ảnh theo chủ đề', desc: 'Upload nhiều ảnh cắt từ PDF' },
                   ].map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => {
+                        const nextMode = option.value as MaterialImportMode;
+                        if (importMode === 'images' && nextMode !== 'images') {
+                          setUploadedUrl('');
+                        }
                         setImportMode(option.value as MaterialImportMode);
                         if (option.value === 'pdf') {
-                          setFormData(prev => ({ ...prev, content_text: '', content_html: '' }));
+                          setFormData(prev => ({ ...prev, file_url: importMode === 'images' ? '' : prev.file_url, content_text: '', content_html: '', content_meta: { ...prev.content_meta, images: [] } }));
+                        }
+                        if (option.value === 'web' && importMode === 'images') {
+                          setFormData(prev => ({ ...prev, file_url: '', content_text: '', content_html: '', content_meta: { ...prev.content_meta, images: [] } }));
+                        }
+                        if (option.value === 'images') {
+                          setFormData(prev => ({ ...prev, content_text: '', content_html: '', file_url: materialImages[0]?.url || prev.file_url }));
                         }
                       }}
                       className={`rounded-lg px-3 py-2 text-left transition-colors ${
@@ -457,10 +585,11 @@ export default function AdminMaterialsPage() {
                 </div>
               </div>
 
-              {/* Upload PDF */}
+              {importMode !== 'images' && (
               <div>
+                {/* Upload PDF */}
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {formData.category === FORMULA_CATEGORY ? 'Upload PDF công thức' : 'Upload PDF'} <span className="text-gray-400 font-normal text-xs">{importMode === 'web' ? '(tự trích nội dung nếu PDF có text)' : '(PDF thuần, kh?ng t?o n?i dung web)'}</span>
+                  {formData.category === FORMULA_CATEGORY ? 'Upload PDF công thức' : 'Upload PDF'} <span className="text-gray-400 font-normal text-xs">{importMode === 'web' ? '(tự trích nội dung nếu PDF có text)' : '(PDF thuần, không tạo nội dung web)'}</span>
                 </label>
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                   {uploadedUrl ? (
@@ -517,6 +646,58 @@ export default function AdminMaterialsPage() {
                   )}
                 </div>
               </div>
+
+
+              )}
+
+              {importMode === 'images' && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Upload ảnh theo chủ đề <span className="text-gray-400 text-xs">(lưu Cloudinary, DB chỉ lưu URL)</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImagesUpload}
+                    disabled={uploading}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-purple-700 hover:file:bg-purple-100"
+                  />
+                  {uploading && (
+                    <div className="mt-3 text-left">
+                      <div className="flex items-center justify-between gap-3 text-xs text-purple-700">
+                        <span className="truncate">{uploadFileName || 'Đang upload ảnh...'}</span>
+                        <span className="font-semibold">{uploadProgress}%</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-purple-100">
+                        <div className="h-full rounded-full bg-purple-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                      <p className="mt-2 text-xs text-purple-600">{uploadStatus || 'Đang upload...'}</p>
+                    </div>
+                  )}
+                  {materialImages.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      {materialImages.map((image, index) => (
+                        <div key={image.publicId || image.url} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[96px_1fr_auto] sm:items-center">
+                          <img src={image.url} alt={image.caption || `Ảnh ${index + 1}`} className="h-24 w-24 rounded-lg border border-slate-200 object-cover" />
+                          <input
+                            type="text"
+                            value={image.caption || ''}
+                            onChange={(event) => updateMaterialImage(index, { caption: event.target.value })}
+                            placeholder={`Chú thích ảnh ${index + 1} (không bắt buộc)`}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                          <div className="flex gap-2 sm:flex-col">
+                            <button type="button" onClick={() => moveMaterialImage(index, -1)} disabled={index === 0} className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 disabled:opacity-40">Lên</button>
+                            <button type="button" onClick={() => moveMaterialImage(index, 1)} disabled={index === materialImages.length - 1} className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 disabled:opacity-40">Xuống</button>
+                            <button type="button" onClick={() => removeMaterialImage(index)} className="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-600">Xóa</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Title */}
               <div>
@@ -635,7 +816,7 @@ export default function AdminMaterialsPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleSubmit}
-                  disabled={!formData.title || (!formData.file_url && !formData.content_text.trim()) || uploading}
+                  disabled={!formData.title || (!formData.file_url && !formData.content_text.trim() && materialImages.length === 0) || uploading}
                   className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {editingId ? 'Cập Nhật' : 'Tạo Tài Liệu'}

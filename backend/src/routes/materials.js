@@ -58,7 +58,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_MATERIAL_UPLOAD_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ["application/pdf", "image/jpeg", "image/png"];
+    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error("Chỉ chấp nhận file PDF hoặc ảnh"));
   },
@@ -199,6 +199,60 @@ router.post(
     } catch (error) {
       console.error("PDF upload error:", error);
       res.status(500).json({ success: false, message: "Lỗi upload PDF" });
+    }
+  },
+);
+
+router.post(
+  "/upload-images",
+  authenticate,
+  authorizePermission("content.manage"),
+  upload.array("files", 40),
+  async (req, res) => {
+    try {
+      const files = Array.isArray(req.files) ? req.files : [];
+      if (!files.length) {
+        return res.status(400).json({ success: false, message: "Không có file ảnh" });
+      }
+
+      const images = [];
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        if (!file.mimetype?.startsWith("image/")) {
+          return res.status(400).json({ success: false, message: "Chỉ chấp nhận file ảnh" });
+        }
+
+        const result = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "csca/materials/images",
+              resource_type: "image",
+              access_mode: "public",
+              type: "upload",
+            },
+            (err, r) => (err ? reject(err) : resolve(r)),
+          );
+          stream.end(file.buffer);
+        });
+
+        images.push({
+          url: result.secure_url,
+          publicId: result.public_id,
+          caption: "",
+          order: index + 1,
+          width: result.width || null,
+          height: result.height || null,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: { images },
+        message: "Upload ảnh thành công",
+      });
+    } catch (error) {
+      console.error("Material images upload error:", error);
+      res.status(500).json({ success: false, message: "Lỗi upload ảnh" });
     }
   },
 );

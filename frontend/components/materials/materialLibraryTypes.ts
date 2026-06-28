@@ -13,6 +13,17 @@ export interface Material {
   content_html?: string;
   content_text?: string;
   content_source?: string;
+  content_meta?: {
+    importMode?: string;
+    images?: Array<{
+      url: string;
+      caption?: string;
+      order?: number;
+      width?: number | null;
+      height?: number | null;
+    }>;
+    [key: string]: any;
+  };
 }
 
 export interface MaterialTypeOption {
@@ -52,6 +63,14 @@ export const MATERIAL_SUBJECTS: MaterialSubjectOption[] = [
 
 export function hasWebContent(material: Material) {
   return Boolean(material.content_html || material.content_text);
+}
+
+export function getMaterialImages(material: Material) {
+  const images = Array.isArray(material.content_meta?.images) ? material.content_meta.images : [];
+  return images
+    .filter((image) => image?.url)
+    .slice()
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 export function canUsePdfProxy(fileUrl?: string) {

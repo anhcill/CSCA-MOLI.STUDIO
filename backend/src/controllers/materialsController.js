@@ -67,8 +67,12 @@ exports.createMaterial = async (req, res) => {
       file_type,
     });
     const normalizedFileUrl = String(file_url || "").trim();
+    const imageItems = Array.isArray(preparedContent.contentMeta?.images)
+      ? preparedContent.contentMeta.images.filter((item) => item && item.url)
+      : [];
+    const hasImageContent = imageItems.length > 0;
 
-    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml)) {
+    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml && !hasImageContent)) {
       return res.status(400).json({
         success: false,
         message: "Thiếu thông tin bắt buộc (title, category, file_url hoặc nội dung web)",
@@ -94,7 +98,7 @@ exports.createMaterial = async (req, res) => {
         is_premium === true,
         preparedContent.contentText,
         preparedContent.contentHtml,
-        preparedContent.contentSource,
+        (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
       ],
     );
@@ -137,8 +141,12 @@ exports.updateMaterial = async (req, res) => {
       file_type: req.body.file_type || "pdf",
     });
     const normalizedFileUrl = String(file_url || "").trim();
+    const imageItems = Array.isArray(preparedContent.contentMeta?.images)
+      ? preparedContent.contentMeta.images.filter((item) => item && item.url)
+      : [];
+    const hasImageContent = imageItems.length > 0;
 
-    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml)) {
+    if (!title || !category || (!normalizedFileUrl && !preparedContent.contentHtml && !hasImageContent)) {
       return res.status(400).json({
         success: false,
         message: "Thiếu thông tin bắt buộc (title, category, file_url hoặc nội dung web)",
@@ -162,7 +170,7 @@ exports.updateMaterial = async (req, res) => {
         is_premium === true ? true : null,
         preparedContent.contentText,
         preparedContent.contentHtml,
-        preparedContent.contentSource,
+        (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
         id,
       ],

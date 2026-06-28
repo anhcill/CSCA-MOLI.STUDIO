@@ -10,6 +10,7 @@ import { isVipActive } from '@/lib/utils/permissions';
 import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
 import {
   canUsePdfProxy,
+  getMaterialImages,
   getMaterialSubject,
   getMaterialType,
   hasWebContent,
@@ -23,8 +24,10 @@ export function MaterialCard({ material }: { material: Material }) {
   const [showVipModal, setShowVipModal] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const hasFile = Boolean(material.file_url);
-  const hasPdfProxy = canUsePdfProxy(material.file_url);
   const hasContent = hasWebContent(material);
+  const materialImages = getMaterialImages(material);
+  const hasImages = materialImages.length > 0;
+  const hasPdfProxy = !hasImages && canUsePdfProxy(material.file_url);
   const pdfUrl = hasPdfProxy
     ? `/tailieu/pdf/${material.id}?title=${encodeURIComponent(material.title || 'Tài liệu')}`
     : material.file_url;
@@ -172,14 +175,14 @@ export function MaterialCard({ material }: { material: Material }) {
                 <FiLock size={14} />
                 PRO
               </button>
-            ) : hasContent ? (
+            ) : hasContent || hasImages ? (
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
                 className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 px-4 text-sm font-black text-white shadow-sm transition hover:shadow-md"
               >
                 <FiExternalLink size={14} />
-                Xem nội dung
+                {hasImages ? 'Xem ảnh' : 'Xem nội dung'}
               </button>
             ) : hasFile ? (
               <a
@@ -195,7 +198,7 @@ export function MaterialCard({ material }: { material: Material }) {
             ) : (
               <span className="inline-flex h-10 items-center rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-400">Chưa có file</span>
             )}
-            {!locked && hasFile && (
+            {!locked && hasFile && !hasImages && (
               <a
                 href={downloadUrl}
                 onClick={handleDownloadClick}
@@ -223,7 +226,30 @@ export function MaterialCard({ material }: { material: Material }) {
           className="border-t border-slate-200"
         />
       )}
-      {expanded && !locked && !hasContent && hasFile && !hasPdfProxy && (
+      {expanded && !locked && !hasContent && hasImages && (
+        <div className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
+          <div className="mx-auto max-w-4xl space-y-4">
+            {materialImages.map((image, index) => (
+              <figure key={image.url} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <a href={image.url} target="_blank" rel="noreferrer">
+                  <img
+                    src={image.url}
+                    alt={image.caption || `${material.title} - ảnh ${index + 1}`}
+                    className="w-full bg-white object-contain"
+                    loading="lazy"
+                  />
+                </a>
+                {image.caption && (
+                  <figcaption className="border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-600">
+                    {image.caption}
+                  </figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        </div>
+      )}
+      {expanded && !locked && !hasContent && !hasImages && hasFile && !hasPdfProxy && (
         <div className="border-t border-slate-200 bg-slate-50 p-4">
           <iframe
             src={pdfUrl}
@@ -233,7 +259,7 @@ export function MaterialCard({ material }: { material: Material }) {
           />
         </div>
       )}
-      {expanded && !locked && !hasContent && hasFile && hasPdfProxy && (
+      {expanded && !locked && !hasContent && !hasImages && hasFile && hasPdfProxy && (
         <div className="border-t border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">
           <button
             type="button"
@@ -245,7 +271,7 @@ export function MaterialCard({ material }: { material: Material }) {
           </button>
         </div>
       )}
-      {expanded && !locked && !hasContent && !hasFile && (
+      {expanded && !locked && !hasContent && !hasImages && !hasFile && (
         <div className="border-t border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
           Tài liệu này chưa có file hoặc nội dung web.
         </div>
