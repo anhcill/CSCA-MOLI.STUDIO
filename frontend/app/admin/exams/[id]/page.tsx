@@ -1556,7 +1556,85 @@ export default function AdminExamDetailPage() {
                     : 'Đề này đã được xử lý bằng AI trước đó';
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="admin-exam-detail min-h-screen bg-gray-50">
+            <style jsx global>{`
+                .dark .admin-exam-detail {
+                    background: rgb(15 23 42);
+                    color: rgb(226 232 240);
+                }
+                .dark .admin-exam-detail .bg-white,
+                .dark .admin-exam-detail .bg-gray-50 {
+                    background-color: rgb(15 23 42) !important;
+                }
+                .dark .admin-exam-detail .bg-gray-100 {
+                    background-color: rgb(30 41 59) !important;
+                }
+                .dark .admin-exam-detail .bg-blue-50,
+                .dark .admin-exam-detail .bg-green-50,
+                .dark .admin-exam-detail .bg-purple-50,
+                .dark .admin-exam-detail .bg-amber-50,
+                .dark .admin-exam-detail .bg-red-50,
+                .dark .admin-exam-detail .bg-slate-50,
+                .dark .admin-exam-detail .bg-cyan-50,
+                .dark .admin-exam-detail .bg-sky-50,
+                .dark .admin-exam-detail .bg-emerald-50 {
+                    background-color: rgb(30 41 59) !important;
+                }
+                .dark .admin-exam-detail .text-gray-950,
+                .dark .admin-exam-detail .text-gray-900,
+                .dark .admin-exam-detail .text-gray-800,
+                .dark .admin-exam-detail .text-gray-700,
+                .dark .admin-exam-detail .text-slate-950,
+                .dark .admin-exam-detail .text-slate-900,
+                .dark .admin-exam-detail .text-slate-800,
+                .dark .admin-exam-detail .text-slate-700 {
+                    color: rgb(248 250 252) !important;
+                }
+                .dark .admin-exam-detail .text-gray-600,
+                .dark .admin-exam-detail .text-gray-500,
+                .dark .admin-exam-detail .text-slate-600,
+                .dark .admin-exam-detail .text-slate-500,
+                .dark .admin-exam-detail .text-slate-400 {
+                    color: rgb(203 213 225) !important;
+                }
+                .dark .admin-exam-detail .text-blue-950,
+                .dark .admin-exam-detail .text-blue-900,
+                .dark .admin-exam-detail .text-blue-800,
+                .dark .admin-exam-detail .text-green-900,
+                .dark .admin-exam-detail .text-green-800,
+                .dark .admin-exam-detail .text-purple-900,
+                .dark .admin-exam-detail .text-purple-800,
+                .dark .admin-exam-detail .text-amber-900,
+                .dark .admin-exam-detail .text-cyan-900,
+                .dark .admin-exam-detail .text-sky-900,
+                .dark .admin-exam-detail .text-emerald-900 {
+                    color: rgb(219 234 254) !important;
+                }
+                .dark .admin-exam-detail input:not([type="checkbox"]),
+                .dark .admin-exam-detail textarea,
+                .dark .admin-exam-detail select {
+                    background-color: rgb(15 23 42) !important;
+                    border-color: rgb(71 85 105) !important;
+                    color: rgb(248 250 252) !important;
+                }
+                .dark .admin-exam-detail input::placeholder,
+                .dark .admin-exam-detail textarea::placeholder {
+                    color: rgb(148 163 184) !important;
+                }
+                .dark .admin-exam-detail .border-gray-100,
+                .dark .admin-exam-detail .border-gray-200,
+                .dark .admin-exam-detail .border-gray-300,
+                .dark .admin-exam-detail .border-slate-100,
+                .dark .admin-exam-detail .border-slate-200,
+                .dark .admin-exam-detail .border-blue-200,
+                .dark .admin-exam-detail .border-green-200,
+                .dark .admin-exam-detail .border-purple-200 {
+                    border-color: rgb(71 85 105) !important;
+                }
+                .dark .admin-exam-detail img.bg-white {
+                    background-color: rgb(255 255 255) !important;
+                }
+            `}</style>
             <ExamAiBlockingOverlay task={aiBlockingTask} startedAt={aiBlockingStartedAt} />
             {aiRepeatConfirm && (
                 <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm" role="dialog" aria-modal="true">
