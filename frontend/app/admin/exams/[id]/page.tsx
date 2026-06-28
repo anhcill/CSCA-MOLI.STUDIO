@@ -121,24 +121,35 @@ function mergeApplyReviewFixResults(results: ApplyExamReviewFixesResult[], total
     const last = results[results.length - 1];
     const sum = (key: keyof ApplyExamReviewFixesResult) =>
         results.reduce((total, item) => total + (Number(item[key]) || 0), 0);
+    const remainingByPath = new Map<string, NonNullable<ApplyExamReviewFixesResult['remainingIssues']>[number]>();
+
+    for (const item of results) {
+        for (const issue of item.remainingIssues || []) {
+            if (issue.path) remainingByPath.set(issue.path, issue);
+        }
+    }
+
+    const remainingIssues = Array.from(remainingByPath.values());
+    const fixedIssueCount = sum('fixedIssueCount');
+    const remainingIssueCount = remainingIssues.length || Number(last?.remainingIssueCount || 0);
 
     return {
         ...(last || { message: '' }),
         message: results.length > 1
-            ? `AI đã sửa log theo ${results.length} lượt nhỏ để tránh timeout. Đã xử lý ${totalIssues} log.`
+            ? `AI đã sửa ${fixedIssueCount}/${totalIssues} log theo ${results.length} lượt nhỏ để tránh timeout. Còn ${remainingIssueCount} log cần xem lại.`
             : last?.message || 'AI đã sửa log.',
         changedCount: sum('changedCount'),
         answerChangedCount: sum('answerChangedCount'),
         formulaChangedCount: sum('formulaChangedCount'),
         warningCount: sum('warningCount'),
         skippedCount: sum('skippedCount'),
-        fixedIssueCount: sum('fixedIssueCount'),
-        remainingIssueCount: last?.remainingIssueCount,
+        fixedIssueCount,
+        remainingIssueCount,
         answerChanges: results.flatMap(item => item.answerChanges || []).slice(0, 100),
         changes: results.flatMap(item => item.changes || []).slice(0, 100),
         skipped: results.flatMap(item => item.skipped || []).slice(0, 100),
         diagnostics: results.flatMap(item => item.diagnostics || []).slice(0, 100),
-        remainingIssues: last?.remainingIssues,
+        remainingIssues,
         items: last?.items,
         sourceFile: last?.sourceFile,
         formulaResult: last?.formulaResult,
@@ -146,14 +157,13 @@ function mergeApplyReviewFixResults(results: ApplyExamReviewFixesResult[], total
             ? {
                 ...last.summary,
                 changedCount: sum('changedCount'),
-                fixedIssueCount: sum('fixedIssueCount'),
-                remainingIssueCount: last.remainingIssueCount,
+                fixedIssueCount,
+                remainingIssueCount,
                 skippedCount: sum('skippedCount'),
             }
             : undefined,
     };
 }
-
 function isSavedGroup(item: QuestionListItem): item is SavedQuestionGroup {
     return '_group' in item;
 }
@@ -1011,7 +1021,24 @@ export default function AdminExamDetailPage() {
                     throw new Error(`Đã sửa ${results.length}/${chunks.length} lượt. Lượt ${index + 1} lỗi: ${message}`);
                 }
             }
-            setExamReviewResult(null);
+            const finalApplyResult = mergeApplyReviewFixResults(results, reviews.length);
+            setExamReviewApplyResult(finalApplyResult);
+            if (finalApplyResult.remainingIssues?.length) {
+                setExamReviewResult(prev => prev ? ({
+                    ...prev,
+                    reviews: finalApplyResult.remainingIssues || [],
+                    summary: {
+                        ...prev.summary,
+                        ok: 0,
+                        issues: finalApplyResult.remainingIssues?.length || 0,
+                        total: finalApplyResult.remainingIssues?.length || 0,
+                        reviewedCount: finalApplyResult.remainingIssues?.length || 0,
+                        questionTotal: finalApplyResult.remainingIssues?.length || 0,
+                    },
+                }) : prev);
+            } else {
+                setExamReviewResult(null);
+            }
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã sửa log lỗi và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
         } catch (error: any) {

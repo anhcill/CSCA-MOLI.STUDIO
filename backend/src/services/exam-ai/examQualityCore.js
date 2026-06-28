@@ -2658,6 +2658,7 @@ async function applySuggestedAnswerFixes(client, examId, reviews = []) {
 async function applyExamReviewFixes(client, examId, reviews = [], options = {}) {
   const applySafeFormulas = options.applySafeFormulas !== false;
   const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const targets = getReviewFixTargetEntries(entries, reviews);
   const { reviewContext, sourceFile } = await buildStoredExamReviewContext(client, examId, {
     subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
     signal: options.signal,
@@ -2680,11 +2681,30 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
 
   const changes = [];
   const skipped = [];
+  const skippedPathSet = new Set();
+  const pushSkipped = (item, reason) => {
+    const path = item?.path || "";
+    if (path && skippedPathSet.has(path)) return;
+    if (path) skippedPathSet.add(path);
+    skipped.push({
+      path,
+      label: item?.label,
+      questionId: Number.parseInt(item?.questionId, 10) || undefined,
+      questionNumber: item?.questionNumber,
+      suggestedAnswer: item?.correctAnswer || item?.suggestedCorrectAnswer,
+      confidence: item?.confidence,
+      status: item?.reviewStatus || item?.status,
+      note: item?.note,
+      reason,
+    });
+  };
 
   for (const fix of generated.fixes) {
+    const changeStart = changes.length;
+    const skippedStart = skipped.length;
     const questionId = Number.parseInt(fix.questionId, 10);
     if (!questionId) {
-      skipped.push({ path: fix.path, reason: "AI không trả questionId hợp lệ." });
+      pushSkipped(fix, "AI không trả questionId hợp lệ.");
       continue;
     }
 
@@ -2697,7 +2717,7 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
     );
     const question = questionResult.rows[0];
     if (!question) {
-      skipped.push({ path: fix.path, questionId, reason: "Câu không còn thuộc đề này." });
+      pushSkipped({ ...fix, questionId }, "Câu không còn thuộc đề này.");
       continue;
     }
 
@@ -2707,7 +2727,14 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
       if (!value) return;
       params.push(value);
       fields.push(`${column} = $${params.length}`);
-      changes.push({ questionId, questionNumber: question.question_number, field: column });
+      changes.push({
+        path: fix.path,
+        label: fix.label,
+        status: fix.reviewStatus,
+        questionId,
+        questionNumber: question.question_number,
+        field: column,
+      });
     };
 
     addField("question_text", fix.questionText);
@@ -2737,15 +2764,7 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
     if (fix.correctAnswer) {
       const sourceSkipReason = getSourceAnswerFixSkipReason(fix, reviewByPath.get(fix.path));
       if (sourceSkipReason) {
-        skipped.push({
-          path: fix.path,
-          questionId,
-          questionNumber: question.question_number,
-          suggestedAnswer: fix.correctAnswer,
-          confidence: fix.confidence,
-          status: fix.reviewStatus,
-          reason: sourceSkipReason,
-        });
+        pushSkipped({ ...fix, questionId, questionNumber: question.question_number }, sourceSkipReason);
       } else if (answerKeys.has(fix.correctAnswer)) {
         const currentAnswer = answersResult.rows.find((answer) => answer.is_correct)?.answer_key || "";
         if (currentAnswer !== fix.correctAnswer) {
@@ -2756,6 +2775,9 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
             [questionId, fix.correctAnswer],
           );
           changes.push({
+            path: fix.path,
+            label: fix.label,
+            status: fix.reviewStatus,
             questionId,
             questionNumber: question.question_number,
             field: "correct_answer",
@@ -2764,12 +2786,7 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
           });
         }
       } else {
-        skipped.push({
-          path: fix.path,
-          questionId,
-          suggestedAnswer: fix.correctAnswer,
-          reason: "Đáp án AI trả không có trong lựa chọn hiện tại.",
-        });
+        pushSkipped({ ...fix, questionId, questionNumber: question.question_number }, "Đáp án AI trả không có trong lựa chọn hiện tại.");
       }
     }
 
@@ -2795,6 +2812,9 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
           updateParams,
         );
         changes.push({
+          path: fix.path,
+          label: fix.label,
+          status: fix.reviewStatus,
           questionId,
           questionNumber: question.question_number,
           answerKey: answerFix.key,
@@ -2802,6 +2822,22 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
         });
       }
     }
+
+    if (changes.length === changeStart && skipped.length === skippedStart) {
+      pushSkipped(fix, fix.note || "AI không trả field có thể áp dụng.");
+    }
+  }
+
+  const returnedFixPaths = new Set(generated.fixes.map((fix) => fix.path).filter(Boolean));
+  for (const target of targets) {
+    if (returnedFixPaths.has(target.path)) continue;
+    pushSkipped({
+      ...(target.review || {}),
+      path: target.path,
+      label: target.label,
+      questionId: target.questionId,
+      questionNumber: target.questionNumber,
+    }, "AI không trả bản sửa cho log này.");
   }
 
   const formulaResult = applySafeFormulas
@@ -2812,24 +2848,49 @@ async function applyExamReviewFixes(client, examId, reviews = [], options = {}) 
     await client.query("UPDATE exams SET updated_at = NOW() WHERE id = $1", [examId]);
   }
 
+  const skippedPathSetForRemaining = new Set(skipped.map(item => item.path).filter(Boolean));
+  const changedPathSet = new Set(changes.map(change => change.path).filter(Boolean));
+  const fixedIssueCount = targets.filter(target => changedPathSet.has(target.path) && !skippedPathSetForRemaining.has(target.path)).length;
+  const remainingIssues = targets
+    .filter(target => !changedPathSet.has(target.path) || skippedPathSetForRemaining.has(target.path))
+    .map(target => ({
+      ...(target.review || {}),
+      path: target.path,
+      label: target.label,
+      questionId: target.questionId,
+      questionNumber: target.questionNumber,
+      questionType: target.questionType,
+      parentQuestionId: target.parentQuestionId,
+      status: target.review?.status || "needs_review",
+      confidence: target.review?.confidence || 0,
+    }));
+
   return {
     examId: Number(examId),
-    message: `AI đã sửa ${changes.length} chỗ theo log và ${formulaResult?.changedCount || 0} chỗ công thức chắc chắn.`,
+    message: `AI đã sửa ${fixedIssueCount}/${targets.length} log, đổi ${changes.length} trường và ${formulaResult?.changedCount || 0} chỗ công thức chắc chắn. Còn ${remainingIssues.length} log cần xem lại.`,
     changedCount: changes.length,
     answerChangedCount: changes.filter(change => change.field === "correct_answer").length,
     formulaChangedCount: formulaResult?.changedCount || 0,
     warningCount: formulaResult?.warningCount || 0,
     skippedCount: skipped.length,
+    fixedIssueCount,
+    remainingIssueCount: remainingIssues.length,
     changes: changes.slice(0, 100),
     skipped: skipped.slice(0, 100),
+    remainingIssues: remainingIssues.slice(0, 100),
     fixes: generated.fixes,
     diagnostics: generated.diagnostics,
-    summary: generated.summary,
+    summary: {
+      ...generated.summary,
+      changedCount: changes.length,
+      fixedIssueCount,
+      remainingIssueCount: remainingIssues.length,
+      skippedCount: skipped.length,
+    },
     formulaResult,
     sourceFile,
   };
 }
-
 async function applyExamDisplayFormatFixes(client, examId, options = {}) {
   const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
   const generated = await generateDisplayFormatFixesWithAI(entries, {

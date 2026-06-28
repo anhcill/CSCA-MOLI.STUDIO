@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
-import { clearTokenCache } from '../utils/axios';
+import axios, { clearTokenCache } from '../utils/axios';
 
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -101,11 +101,21 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        clearTokenCache();
+        const token = typeof window !== 'undefined'
+          ? sessionStorage.getItem('token') || get().token
+          : get().token;
+
+        if (token) {
+          axios.post('/auth/logout', undefined, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+        }
+
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('token');
           sessionStorage.removeItem('refreshToken');
         }
+        clearTokenCache();
         set({
           user: null,
           token: null,

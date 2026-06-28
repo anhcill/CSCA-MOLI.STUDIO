@@ -610,8 +610,15 @@ const login = async (req, res) => {
     clearAttempts(identifier);
 
     const deviceType = DeviceSessionService.getDeviceTypeFromUserAgent(req.get('User-Agent'));
+    const hasMatchingDeviceSession = await DeviceSessionService.hasMatchingDeviceSession({
+      userId: user.id,
+      deviceType,
+      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
+      ipAddress: getClientIp(req),
+      userAgent: req.get('User-Agent'),
+    });
     const loginAllowed = await DeviceSessionService.checkLoginAllowed(user.id, deviceType);
-    if (!loginAllowed.allowed) {
+    if (!loginAllowed.allowed && !hasMatchingDeviceSession) {
       const deviceRequest = await DeviceSessionService.createLoginRequest({
         userId: user.id,
         deviceType,

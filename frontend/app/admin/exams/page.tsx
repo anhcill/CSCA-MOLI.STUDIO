@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { buildAdminExamListQuery, parseAdminExamFilter, withAdminExamListState, saveAdminExamListState, loadAdminExamListState, type AdminExamFilter } from '@/lib/utils/adminExamListState';
+import { buildAdminExamListQuery, parseAdminExamAccessFilter, parseAdminExamFilter, withAdminExamListState, saveAdminExamListState, loadAdminExamListState, type AdminExamAccessFilter, type AdminExamFilter } from '@/lib/utils/adminExamListState';
 import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw, FiRefreshCw } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 
@@ -111,7 +111,7 @@ export default function ExamsPage() {
     });
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-        const [filterType, setFilterType] = useState<AdminExamFilter>(() => {
+    const [filterType, setFilterType] = useState<AdminExamFilter>(() => {
         const fromUrl = searchParams.get('type');
         if (fromUrl) return parseAdminExamFilter(fromUrl);
         return loadAdminExamListState().type;
@@ -120,6 +120,11 @@ export default function ExamsPage() {
         const fromUrl = searchParams.get('subject');
         if (fromUrl) return fromUrl;
         return loadAdminExamListState().subject;
+    });
+    const [accessFilter, setAccessFilter] = useState<AdminExamAccessFilter>(() => {
+        const fromUrl = searchParams.get('access');
+        if (fromUrl) return parseAdminExamAccessFilter(fromUrl);
+        return loadAdminExamListState().access;
     });
     const [examCounts, setExamCounts] = useState<ExamCounts>({ all: 0, phongThi: 0, tuDo: 0, moPhong: 0, deleteRequests: 0, trash: 0 });
     const [stats, setStats] = useState<ExamStats | null>(null);
@@ -141,10 +146,10 @@ export default function ExamsPage() {
     const [batchNormalizeMessage, setBatchNormalizeMessage] = useState('');
     const isSuperAdminUser = hasPermission(user, 'admin.super');
     const isTemporarilyDeletedExam = (exam: Exam) => Boolean(exam.deleted_at || exam.deletion_status === 'soft_deleted');
-    const withCurrentExamListState = (path: string) => withAdminExamListState(path, filterType, subjectFilter);
+    const withCurrentExamListState = (path: string) => withAdminExamListState(path, filterType, subjectFilter, accessFilter);
 
-    const replaceExamListState = (nextFilterType: AdminExamFilter, nextSubjectFilter: string) => {
-        const query = buildAdminExamListQuery(nextFilterType, nextSubjectFilter);
+    const replaceExamListState = (nextFilterType: AdminExamFilter, nextSubjectFilter: string, nextAccessFilter: AdminExamAccessFilter) => {
+        const query = buildAdminExamListQuery(nextFilterType, nextSubjectFilter, nextAccessFilter);
         router.replace(`/admin/exams${query ? `?${query}` : ''}`, { scroll: false });
     };
 
@@ -165,10 +170,11 @@ export default function ExamsPage() {
         useEffect(() => {
             const urlType = searchParams.get('type');
             const urlSubject = searchParams.get('subject');
-            if (urlType === null && urlSubject === null) {
+            const urlAccess = searchParams.get('access');
+            if (urlType === null && urlSubject === null && urlAccess === null) {
                 const saved = loadAdminExamListState();
-                if (saved.type !== 'all' || saved.subject) {
-                    replaceExamListState(saved.type, saved.subject);
+                if (saved.type !== 'all' || saved.subject || saved.access !== 'all') {
+                    replaceExamListState(saved.type, saved.subject, saved.access);
                 }
             }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,10 +184,11 @@ export default function ExamsPage() {
     useEffect(() => {
         const urlType = searchParams.get('type');
         const urlSubject = searchParams.get('subject');
-        if (urlType === null && urlSubject === null) {
+        const urlAccess = searchParams.get('access');
+        if (urlType === null && urlSubject === null && urlAccess === null) {
             const saved = loadAdminExamListState();
-            if (saved.type !== 'all' || saved.subject) {
-                replaceExamListState(saved.type, saved.subject);
+            if (saved.type !== 'all' || saved.subject || saved.access !== 'all') {
+                replaceExamListState(saved.type, saved.subject, saved.access);
             }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,14 +197,17 @@ export default function ExamsPage() {
     useEffect(() => {
         const urlType = searchParams.get('type');
         const urlSubject = searchParams.get('subject');
+        const urlAccess = searchParams.get('access');
         // URL có params → dùng từ URL; không có → giữ state hiện tại (đã load từ sessionStorage)
-        if (urlType !== null || urlSubject !== null) {
+        if (urlType !== null || urlSubject !== null || urlAccess !== null) {
             const nextFilterType = parseAdminExamFilter(urlType);
             const nextSubjectFilter = urlSubject || '';
+            const nextAccessFilter = parseAdminExamAccessFilter(urlAccess);
             setFilterType(prev => (prev === nextFilterType ? prev : nextFilterType));
             setSubjectFilter(prev => (prev === nextSubjectFilter ? prev : nextSubjectFilter));
+            setAccessFilter(prev => (prev === nextAccessFilter ? prev : nextAccessFilter));
             setPagination(prev => (prev.currentPage === 1 ? prev : { ...prev, currentPage: 1 }));
-            saveAdminExamListState(nextFilterType, nextSubjectFilter);
+            saveAdminExamListState(nextFilterType, nextSubjectFilter, nextAccessFilter);
         }
     }, [searchParams]);
 
@@ -237,13 +247,14 @@ export default function ExamsPage() {
         loadExamCounts();
         loadStats();
         loadExams();
-    }, [isAuthenticated, user, router, pagination.currentPage, filterType, subjectFilter]);
+    }, [isAuthenticated, user, router, pagination.currentPage, filterType, subjectFilter, accessFilter]);
 
     const loadExams = async () => {
         try {
             setLoading(true);
             const typeParam = filterType === 'all' ? undefined : filterType;
-            const data = await examAdminApi.getAllExams(pagination.currentPage, pagination.limit, typeParam, subjectFilter || undefined);
+            const accessParam = accessFilter === 'all' ? undefined : accessFilter;
+            const data = await examAdminApi.getAllExams(pagination.currentPage, pagination.limit, typeParam, subjectFilter || undefined, accessParam);
             setExams(data.exams);
             setPagination(data.pagination);
         } catch (error) {
@@ -368,8 +379,8 @@ export default function ExamsPage() {
         const handleFilterChange = (type: AdminExamFilter) => {
         setFilterType(type);
         setPagination(prev => ({ ...prev, currentPage: 1 }));
-        replaceExamListState(type, subjectFilter);
-        saveAdminExamListState(type, subjectFilter);
+        replaceExamListState(type, subjectFilter, accessFilter);
+        saveAdminExamListState(type, subjectFilter, accessFilter);
         loadExamCounts();
         loadStats();
     };
@@ -377,8 +388,15 @@ export default function ExamsPage() {
     const handleSubjectFilterChange = (subjectCode: string) => {
         setSubjectFilter(subjectCode);
         setPagination(prev => ({ ...prev, currentPage: 1 }));
-        replaceExamListState(filterType, subjectCode);
-        saveAdminExamListState(filterType, subjectCode);
+        replaceExamListState(filterType, subjectCode, accessFilter);
+        saveAdminExamListState(filterType, subjectCode, accessFilter);
+    };
+
+    const handleAccessFilterChange = (access: AdminExamAccessFilter) => {
+        setAccessFilter(access);
+        setPagination(prev => ({ ...prev, currentPage: 1 }));
+        replaceExamListState(filterType, subjectFilter, access);
+        saveAdminExamListState(filterType, subjectFilter, access);
     };
 
     const handleNormalizeManyExams = async () => {
@@ -583,6 +601,55 @@ export default function ExamsPage() {
                     ))}
                 </div>
 
+                {/* Access Filters */}
+                <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-bold uppercase text-gray-500 dark:text-slate-400">Nhóm đề</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {subjectFilter ? `Môn ${subjectFilter}` : 'Tất cả môn'} - tách đề VIP và đề thường
+                            </p>
+                        </div>
+                        <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {pagination.totalExams.toLocaleString()} đề
+                        </span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                        {([
+                            { value: 'all', label: 'Tất cả', description: 'Xem đủ nhóm', icon: FiFileText },
+                            { value: 'normal', label: 'Đề thường', description: 'Không VIP', icon: FiFileText },
+                            { value: 'vip', label: 'Đề VIP', description: 'Có gói trả phí', icon: FaCrown },
+                        ] as { value: AdminExamAccessFilter; label: string; description: string; icon: typeof FiFileText }[]).map(option => {
+                            const Icon = option.icon;
+                            const active = accessFilter === option.value;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleAccessFilterChange(option.value)}
+                                    className={`flex min-h-[64px] items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all ${
+                                        active
+                                            ? option.value === 'vip'
+                                                ? 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200'
+                                                : 'border-sky-300 bg-sky-50 text-sky-900 shadow-sm dark:border-sky-500/50 dark:bg-sky-500/10 dark:text-sky-200'
+                                            : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-violet-300 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-violet-500/50'
+                                    }`}
+                                >
+                                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                                        active ? 'bg-white/80 dark:bg-slate-950/80' : 'bg-white dark:bg-slate-900'
+                                    }`}>
+                                        <Icon size={18} />
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block text-sm font-black">{option.label}</span>
+                                        <span className="block text-xs font-medium opacity-70">{option.description}</span>
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
                 {/* Exams Table */}
                 <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border overflow-hidden dark:border-slate-800">
                     <div className="overflow-x-auto">
@@ -674,7 +741,7 @@ export default function ExamsPage() {
                                                         <FiShuffle size={10} /> Xáo trộn
                                                     </span>
                                                 )}
-                                                {exam.vip_tier !== 'basic' ? (
+                                                {(exam.is_premium || (exam.vip_tier && exam.vip_tier !== 'basic')) ? (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-md shadow-sm bg-gradient-to-r from-amber-200 to-orange-300 text-orange-900">
                                                         <FaCrown size={10} /> VIP
                                                     </span>

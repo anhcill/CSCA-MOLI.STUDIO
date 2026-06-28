@@ -44,20 +44,34 @@ export interface CreateCommentData {
 
 const toCount = (value: unknown) => Number(value || 0);
 
+const toBool = (value: unknown) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1';
+    return Boolean(value);
+};
+
 const normalizePost = (post: Post): Post => ({
     ...post,
     like_count: toCount(post.like_count),
     comment_count: toCount(post.comment_count),
+    is_liked: toBool(post.is_liked),
 });
 
 const normalizeComment = (comment: Comment): Comment => ({
     ...comment,
     like_count: toCount(comment.like_count),
+    is_liked: toBool(comment.is_liked),
 });
 
-const normalizeCountResult = (data: { like_count: number }): { like_count: number } => ({
+export interface LikeResult {
+    like_count: number;
+    is_liked?: boolean;
+}
+
+const normalizeCountResult = (data: LikeResult): LikeResult => ({
     ...data,
     like_count: toCount(data?.like_count),
+    is_liked: data?.is_liked === undefined ? undefined : toBool(data.is_liked),
 });
 
 // Get all posts (feed)
@@ -84,13 +98,13 @@ export const deletePost = async (postId: number): Promise<void> => {
 };
 
 // Like post
-export const likePost = async (postId: number): Promise<{ like_count: number }> => {
+export const likePost = async (postId: number): Promise<LikeResult> => {
     const response = await axiosInstance.post(`/posts/${postId}/like`);
     return normalizeCountResult(response.data.data);
 };
 
 // Unlike post
-export const unlikePost = async (postId: number): Promise<{ like_count: number }> => {
+export const unlikePost = async (postId: number): Promise<LikeResult> => {
     const response = await axiosInstance.delete(`/posts/${postId}/like`);
     return normalizeCountResult(response.data.data);
 };
@@ -110,11 +124,11 @@ export const addComment = async (postId: number, data: CreateCommentData): Promi
 // Like comment
 export const likeComment = async (commentId: number): Promise<{ like_count: number }> => {
     const response = await axiosInstance.post(`/posts/comments/${commentId}/like`);
-    return response.data.data;
+    return normalizeCountResult(response.data.data);
 };
 
 // Unlike comment
 export const unlikeComment = async (commentId: number): Promise<{ like_count: number }> => {
     const response = await axiosInstance.delete(`/posts/comments/${commentId}/like`);
-    return response.data.data;
+    return normalizeCountResult(response.data.data);
 };

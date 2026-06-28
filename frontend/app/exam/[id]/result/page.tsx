@@ -2,9 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import examApi from '@/lib/api/exams';
+import examApi, { QuestionReportType } from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
@@ -23,6 +23,17 @@ import type { ReviewAIMode, ReviewAITask } from '@/components/exam/result/types'
 import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
 
 const AI_ANALYSIS_COST = 50;
+
+const QUESTION_REPORT_TYPES: { value: QuestionReportType; label: string }[] = [
+  { value: 'wrong_answer', label: 'Sai đáp án' },
+  { value: 'formula_error', label: 'Lỗi công thức' },
+  { value: 'translation_error', label: 'Lỗi dịch' },
+  { value: 'missing_image', label: 'Thiếu ảnh' },
+  { value: 'missing_data', label: 'Thiếu dữ kiện' },
+  { value: 'duplicate_question', label: 'Trùng câu' },
+  { value: 'answer_mismatch', label: 'Đề/đáp án không khớp' },
+  { value: 'other', label: 'Khác' },
+];
 
 interface AnswerOption {
   key: string;
@@ -97,6 +108,9 @@ function ExamResultContent() {
   const [aiLoaded, setAiLoaded] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [savedWrongQuestions, setSavedWrongQuestions] = useState<Set<number>>(new Set());
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<number>>(new Set());
+  const [reportQuestion, setReportQuestion] = useState<QuestionResult | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   useEffect(() => {
     if (attemptId) {
@@ -233,6 +247,37 @@ function ExamResultContent() {
       return;
     }
     setReviewAITask({ question, mode });
+  };
+
+  const handleSubmitQuestionReport = async (question: QuestionResult, reportType: QuestionReportType, description: string) => {
+    const questionId = question.question_id || question.id;
+    if (!questionId || !result?.exam_id) {
+      alert('Không đủ dữ liệu câu hỏi để báo lỗi.');
+      return;
+    }
+
+    try {
+      setReportSubmitting(true);
+      await examApi.submitQuestionReport({
+        question_id: questionId,
+        exam_id: result.exam_id,
+        report_type: reportType,
+        description: description.trim() || undefined,
+      });
+      setReportedQuestionIds(prev => new Set(prev).add(questionId));
+      setReportQuestion(null);
+    } catch (error: any) {
+      const message = error?.response?.status === 409
+        ? 'Bạn đã báo lỗi câu này rồi.'
+        : error?.response?.data?.message || 'Không thể gửi báo lỗi lúc này.';
+      if (error?.response?.status === 409) {
+        setReportedQuestionIds(prev => new Set(prev).add(questionId));
+        setReportQuestion(null);
+      }
+      alert(message);
+    } finally {
+      setReportSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -622,6 +667,8 @@ function ExamResultContent() {
                 const status = getQuestionReviewStatus(q);
                 const borderCls = getReviewCardClass(status);
                 const isEssayQuestion = q.question_type === 'essay' || q.question_type === 'translation';
+                const questionId = q.question_id || q.id;
+                const isReported = Boolean(questionId && reportedQuestionIds.has(questionId));
 
                 return (
                   <div key={index} className={`rounded-xl border-2 p-5 transition-all ${borderCls}`}>
@@ -674,6 +721,21 @@ function ExamResultContent() {
                           languageMode={languageMode}
                           className="text-gray-900 font-medium leading-relaxed dark:text-gray-100"
                         />
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => setReportQuestion(q)}
+                            disabled={!questionId || isReported}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                              isReported
+                                ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50'
+                            }`}
+                          >
+                            {isReported ? <FiCheckCircle size={13} /> : <FiFlag size={13} />}
+                            {isReported ? 'Đã báo lỗi' : 'Báo lỗi'}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -795,6 +857,15 @@ function ExamResultContent() {
         />
       )}
 
+      {reportQuestion && (
+        <QuestionReportModal
+          question={reportQuestion}
+          loading={reportSubmitting}
+          onClose={() => setReportQuestion(null)}
+          onSubmit={(reportType, description) => handleSubmitQuestionReport(reportQuestion, reportType, description)}
+        />
+      )}
+
       {/* Grade Essay Modal */}
       {showGradeModal && (
         <GradeEssayModal
@@ -806,6 +877,92 @@ function ExamResultContent() {
     </div>
   );
 }
+
+function QuestionReportModal({ question, loading, onClose, onSubmit }: {
+  question: QuestionResult;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (reportType: QuestionReportType, description: string) => void;
+}) {
+  const [reportType, setReportType] = useState<QuestionReportType>('wrong_answer');
+  const [description, setDescription] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-600">Báo lỗi câu hỏi</p>
+            <h3 className="mt-1 text-lg font-black text-gray-900 dark:text-white">
+              Câu {question.sub_question_number || question.question_number}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            <FiXCircle size={18} />
+          </button>
+        </div>
+
+        <div className="mb-4 max-h-28 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+          <RichMathText value={question.question_text} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {QUESTION_REPORT_TYPES.map((type) => (
+            <button
+              key={type.value}
+              type="button"
+              onClick={() => setReportType(type.value)}
+              className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition-colors ${
+                reportType === type.value
+                  ? 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200'
+                  : 'border-gray-200 text-gray-600 hover:border-amber-200 hover:bg-amber-50/60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              {type.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="mt-4 block text-sm font-bold text-gray-700 dark:text-slate-200" htmlFor="question-report-description">
+          Mô tả thêm
+        </label>
+        <textarea
+          id="question-report-description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          rows={4}
+          placeholder="Ví dụ: đáp án đúng phải là B vì..."
+          className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        />
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            onClick={() => onSubmit(reportType, description)}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-amber-700 disabled:opacity-50"
+          >
+            {loading ? 'Đang gửi...' : 'Gửi báo lỗi'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GradeEssayModal({ question, attemptId, onClose }: {
   question: QuestionResult; attemptId: number; onClose: () => void;
 }) {

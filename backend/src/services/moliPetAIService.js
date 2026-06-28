@@ -156,6 +156,41 @@ function buildConversationHistoryContext(history = []) {
     .join('\n');
 }
 
+function pickStable(items, seedText = '') {
+  if (!Array.isArray(items) || !items.length) return '';
+  const seed = String(seedText || '')
+    .split('')
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return items[seed % items.length];
+}
+
+function buildMoliStyleCue(message, context = {}) {
+  const pageType = String(context.pageType || '').toLowerCase();
+  const seedText = `${message || ''}|${context.page || ''}|${Date.now().toString().slice(0, -4)}`;
+  const opener = pickStable([
+    'Vào thẳng ý chính, thêm một nét mềm ở cuối.',
+    'Nói như đang ngồi cạnh bạn học, không đọc kịch bản.',
+    'Mở đầu bằng chi tiết cụ thể trong câu hỏi của user.',
+    'Nếu user đang rối, trấn an một câu ngắn rồi giải.',
+  ], seedText);
+  const cuteLevel = pageType.includes('exam') || pageType.includes('thi')
+    ? 'cute nhẹ, ưu tiên rõ đáp án và bước làm'
+    : pickStable(['cute nhỏ xíu', 'ấm áp gọn', 'tươi nhưng không nhí nhảnh'], seedText);
+
+  return `- Nhịp lượt này: ${opener}
+- Độ cute: ${cuteLevel}; được dùng "nè", "nhé", "xíu" vừa phải, không spam.
+- Không dùng opener/câu chốt rập khuôn như "Mình hiểu rồi", "Bạn cần hỗ trợ gì thêm?", "Hy vọng giúp được bạn".
+- Tránh trả lời y chang format cũ. Nếu câu hỏi đơn giản thì 2-4 câu tự nhiên; nếu bài khó mới chia bước.
+- Mỗi câu trả lời phải bám ít nhất 1 chi tiết thật từ lời user, trang hiện tại, môn học hoặc ảnh đính kèm.`;
+}
+
+function sanitizeMoliPetAnswer(text) {
+  return String(text || '')
+    .replace(/^\s*(với vai trò là|là một|as an)\s+(ai|mô hình|trợ lý)[^\n.?!]*[.?!]\s*/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function buildMoliPetPrompt(message, context = {}) {
   const {
     petName = 'Moly',
@@ -169,11 +204,15 @@ function buildMoliPetPrompt(message, context = {}) {
     conversationHistory = [],
   } = context;
   const history = buildConversationHistoryContext(conversationHistory);
+  const styleCue = buildMoliStyleCue(message, context);
 
   return `Bạn là ${petName}, một pet học tập cực dễ thương của CSCA MOLI.STUDIO.
 Trả lời bằng tiếng Việt có dấu, tự nhiên, thông minh, ấm áp, ngắn gọn và chính xác.
 
 Tính cách:
+Phong cách lần này:
+${styleCue}
+
 ${AI_ACCURACY_PROMPT_RULES}
 - Xưng hô mình/bạn, có thể thêm một câu hỏi thăm nhẹ nếu hợp ngữ cảnh.
 - Nói như bạn đồng hành nhỏ: đáng yêu nhưng không nhảm nhí, không làm màu quá đà.
@@ -209,14 +248,14 @@ async function askMoliPet(message, context = {}) {
   const prompt = buildMoliPetPrompt(message, context);
   try {
     const result = await callMoliMessages(
-      [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image and answer warmly, briefly, and accurately.')],
+      [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image carefully. Answer naturally, cutely but not in a template, and keep every academic detail accurate.')],
       {
-        temperature: 0.35,
+        temperature: 0.58,
         maxTokens: Math.min(MOLI.maxTokens || BEE.petChatMaxTokens || 1200, 1600),
       },
     );
     return {
-      answer: result.text,
+      answer: sanitizeMoliPetAnswer(result.text),
       model: result.model,
       provider: result.provider,
       timestamp: new Date().toISOString(),

@@ -2717,6 +2717,7 @@ const AdminExamController = {
       const offset = (page - 1) * limit;
       const type = req.query.type; // 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash' | undefined (all)
       const subject = typeof req.query.subject === "string" ? req.query.subject.trim() : "";
+      const access = typeof req.query.access === "string" ? req.query.access.trim().toLowerCase() : "";
 
       const params = [];
       let idx = 1;
@@ -2741,6 +2742,11 @@ const AdminExamController = {
       if (subject) {
         conditions.push(`EXISTS (SELECT 1 FROM subjects subject_filter WHERE subject_filter.id = e.subject_id AND subject_filter.code = $${idx++})`);
         params.push(subject);
+      }
+      if (access === "normal") {
+        conditions.push("(COALESCE(e.is_premium, FALSE) = FALSE AND COALESCE(e.vip_tier, 'basic') = 'basic')");
+      } else if (access === "vip") {
+        conditions.push("(COALESCE(e.is_premium, FALSE) = TRUE OR COALESCE(e.vip_tier, 'basic') <> 'basic')");
       }
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 

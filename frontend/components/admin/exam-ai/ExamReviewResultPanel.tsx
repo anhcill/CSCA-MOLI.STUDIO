@@ -122,12 +122,35 @@ export default function ExamReviewResultPanel({
       {error && <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">{error}</div>}
 
       {applyResult && (
-        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
-          {applyResult.message || `AI đã sửa ${applyResult.changedCount || 0} chỗ.`}
-          {!!applyResult.skippedCount && <span> Còn {applyResult.skippedCount} chỗ cần xem tay.</span>}
+        <div className={`mt-3 rounded-lg border px-3 py-2 ${applyResult.remainingIssueCount ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+          <p className="font-bold">
+            {applyResult.message || `AI đã sửa ${applyResult.changedCount || 0} chỗ.`}
+          </p>
+          <p className="mt-1 text-xs font-semibold">
+            Đã sửa {applyResult.fixedIssueCount ?? 0} log, đổi {applyResult.changedCount || 0} trường, còn {applyResult.remainingIssueCount ?? 0} log cần xem lại.
+          </p>
+          {!!applyResult.skipped?.length && (
+            <div className="mt-2 space-y-1 rounded-lg border border-amber-200 bg-white/70 p-2 text-xs">
+              <p className="font-black uppercase">AI bỏ qua</p>
+              {applyResult.skipped.slice(0, 8).map((item, index) => (
+                <p key={`${item.path || item.questionId || 'skip'}-${index}`}>
+                  <span className="font-bold">{item.label || item.path || `Câu ${item.questionNumber || '?'}`}:</span> {item.reason}
+                </p>
+              ))}
+            </div>
+          )}
+          {!!applyResult.remainingIssues?.length && (
+            <div className="mt-2 space-y-1 rounded-lg border border-rose-200 bg-white/70 p-2 text-xs text-rose-800">
+              <p className="font-black uppercase">Còn log</p>
+              {applyResult.remainingIssues.slice(0, 8).map((item, index) => (
+                <p key={`${item.path || item.questionId || 'remain'}-${index}`}>
+                  <span className="font-bold">{item.label || item.path || `Câu ${item.questionNumber || '?'}`}:</span> {item.note || item.questionIssues?.[0] || item.formulaIssues?.[0] || item.explanationIssues?.[0] || 'Cần xem lại.'}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
-
       {!!result?.diagnostics?.length && (
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {result.diagnostics.slice(0, 4).map((log) => (

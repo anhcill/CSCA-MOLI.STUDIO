@@ -520,9 +520,9 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string) => {
+    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string, access?: 'normal' | 'vip') => {
         const response = await axios.get('/admin/exams', {
-            params: { page, limit, ...(type ? { type } : {}), ...(subject ? { subject } : {}) }
+            params: { page, limit, ...(type ? { type } : {}), ...(subject ? { subject } : {}), ...(access ? { access } : {}) }
         });
         return response.data;
     },

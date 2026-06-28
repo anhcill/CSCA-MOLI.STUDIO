@@ -106,6 +106,35 @@ export interface TopicStats {
   error_percentage: number;
 }
 
+export type QuestionReportType =
+  | 'wrong_answer'
+  | 'formula_error'
+  | 'translation_error'
+  | 'missing_image'
+  | 'missing_data'
+  | 'duplicate_question'
+  | 'answer_mismatch'
+  | 'other';
+
+export interface SubmitQuestionReportData {
+  question_id: number;
+  exam_id: number;
+  report_type: QuestionReportType;
+  description?: string;
+}
+
+export interface SubmittedQuestionReport {
+  id: number;
+  question_id: number;
+  exam_id: number;
+  reporter_id: number;
+  report_type: QuestionReportType;
+  description: string | null;
+  status: string;
+  severity: string;
+  created_at: string;
+}
+
 // Map URL slug → DB subject code
 export const SUBJECT_SLUG_TO_CODE: Record<string, string> = {
   toan: 'MATH',
@@ -194,6 +223,11 @@ const examApi = {
   // Lấy chi tiết kết quả
   async getAttemptDetail(attemptId: number) {
     const response = await axios.get(`/attempts/${attemptId}`);
+    return response.data.data;
+  },
+
+  async submitQuestionReport(data: SubmitQuestionReportData): Promise<SubmittedQuestionReport> {
+    const response = await axios.post('/question-reports', data);
     return response.data.data;
   },
 

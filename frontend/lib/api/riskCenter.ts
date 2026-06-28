@@ -100,6 +100,48 @@ export interface QuestionReport {
   total_reports?: number;
 }
 
+export interface QuestionReportAnswer {
+  id: number;
+  answer_key: string;
+  answer_text: string;
+  answer_text_cn?: string | null;
+  is_correct: boolean;
+}
+
+export interface RelatedQuestionReport {
+  id: number;
+  report_type: string;
+  description: string | null;
+  status: string;
+  reporter_id: number | null;
+  created_at: string;
+}
+
+export interface RegradeLog {
+  id: number;
+  old_answer: string | null;
+  new_answer: string | null;
+  affected_count: number;
+  admin_name?: string;
+  created_at: string;
+}
+
+export interface QuestionReportDetail extends QuestionReport {
+  question_text_cn?: string | null;
+  question_type?: string | null;
+  correct_answer?: string | null;
+  explanation?: string | null;
+  explanation_cn?: string | null;
+  question_image?: string | null;
+  points?: number | null;
+  exam_is_hidden?: boolean;
+  resolved_by_name?: string | null;
+  relatedReports: RelatedQuestionReport[];
+  answers: QuestionReportAnswer[];
+  auditHistory: AuditLogEntry[];
+  regradeHistory: RegradeLog[];
+}
+
 export interface AdminNotification {
   id: number;
   type: string;
@@ -182,7 +224,7 @@ export const riskCenterApi = {
     const r = await axios.get(`${BASE}/question-reports`, { params });
     return r.data;
   },
-  getQuestionReportDetail: async (id: number): Promise<unknown> => {
+  getQuestionReportDetail: async (id: number): Promise<QuestionReportDetail> => {
     const r = await axios.get(`${BASE}/question-reports/${id}`);
     return r.data.data;
   },

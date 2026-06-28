@@ -492,11 +492,13 @@ export default function LoginForm() {
     }
   };
 
+  const loginInputBaseClass = 'w-full px-4 py-3 border rounded-lg bg-white dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none';
+
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{t('auth.loginTitle')}</h1>
-        <p className="text-gray-600">{t('auth.loginSubtitle')}</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.loginTitle')}</h1>
+        <p className="text-gray-600 dark:text-slate-300">{t('auth.loginSubtitle')}</p>
       </div>
 
       {isLocked && (
@@ -516,8 +518,8 @@ export default function LoginForm() {
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mb-4">
               <FiShield className="h-8 w-8 text-emerald-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Duyệt thiết bị mới</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Duyệt thiết bị mới</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Nhấn duyệt trên thiết bị cũ để đăng xuất thiết bị này và cho thiết bị mới đăng nhập.
             </p>
           </div>
@@ -549,7 +551,7 @@ export default function LoginForm() {
               setDeviceApprovalMessage('');
               if (typeof window !== 'undefined') window.history.replaceState(null, '', '/login');
             }}
-            className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+            className="w-full text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 underline"
           >
             Quay lại đăng nhập
           </button>
@@ -560,8 +562,8 @@ export default function LoginForm() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
               <FiShield className="w-8 h-8 text-emerald-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Bảo mật Admin</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Bảo mật Admin</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
               {adminMfaEmail || 'Admin'} cần xác minh bằng Microsoft Authenticator.
             </p>
           </div>
@@ -610,7 +612,7 @@ export default function LoginForm() {
           ) : (
             <form onSubmit={handleAdminMfaSubmit} className="space-y-4">
               <div>
-                <label htmlFor="adminMfaCode" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="adminMfaCode" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">
                   Mã 6 số hoặc mã dự phòng
                 </label>
                 <input
@@ -648,7 +650,7 @@ export default function LoginForm() {
                   setAdminMfaCode('');
                   setAdminMfaError('');
                 }}
-                className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+                className="w-full text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 underline"
               >
                 Quay lại đăng nhập
               </button>
@@ -661,19 +663,19 @@ export default function LoginForm() {
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 mb-4">
               <FiShield className="h-8 w-8 text-amber-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Hết slot {deviceTypeLabel}</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Hết slot {deviceTypeLabel}</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Tài khoản đang dùng {deviceLimitData.sessions?.length || 0}/{deviceLimitData.maxDevices} slot {deviceTypeLabel}.
               Duyệt bằng thiết bị cũ hoặc xác minh email để thay thiết bị.
             </p>
           </div>
 
           {deviceApproveUrl && (
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-center">
+            <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 p-4 text-center">
               {deviceQrUrl && (
                 <img src={deviceQrUrl} alt="QR duyệt thiết bị mới" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" />
               )}
-              <p className="mt-3 break-all text-xs text-gray-500">{deviceApproveUrl}</p>
+              <p className="mt-3 break-all text-xs text-gray-500 dark:text-slate-400">{deviceApproveUrl}</p>
             </div>
           )}
 
@@ -701,7 +703,7 @@ export default function LoginForm() {
               type="button"
               onClick={handleSendDeviceOtp}
               disabled={deviceOtpSending}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {deviceOtpSending ? 'Đang gửi...' : 'Không còn thiết bị cũ'}
             </button>
@@ -719,7 +721,7 @@ export default function LoginForm() {
                 autoComplete="one-time-code"
                 value={deviceOtp}
                 onChange={e => setDeviceOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full rounded-lg border border-amber-300 bg-white px-4 py-3 text-center text-xl font-bold tracking-normal text-slate-950 outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500"
+                className="w-full rounded-lg border border-amber-300 dark:border-amber-500 bg-white dark:bg-slate-950 px-4 py-3 text-center text-xl font-bold tracking-normal text-slate-950 dark:text-white outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500"
                 placeholder="Nhập 6 số"
               />
               <button
@@ -741,7 +743,7 @@ export default function LoginForm() {
               setDeviceOtpOpen(false);
               setDeviceOtp('');
             }}
-            className="w-full text-sm text-gray-500 hover:text-gray-700 underline"
+            className="w-full text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 underline"
           >
             Quay lại đăng nhập
           </button>
@@ -754,8 +756,8 @@ export default function LoginForm() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">{t('auth.otpTitle')}</h2>
-            <p className="text-sm text-gray-500 mt-1">{t('auth.otpSent')}</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('auth.otpTitle')}</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{t('auth.otpSent')}</p>
           </div>
 
           {/* OTP Input */}
@@ -771,7 +773,7 @@ export default function LoginForm() {
                 onChange={e => handleOtpChange(i, e.target.value)}
                 onKeyDown={e => handleOtpKeyDown(i, e)}
                 disabled={isSubmitting}
-                className={`w-10 h-10 sm:w-12 sm:h-12 text-center text-xl sm:text-2xl font-bold border rounded-xl transition-all outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${digit ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300'} ${isSubmitting ? 'opacity-50' : ''}`}
+                className={`w-10 h-10 sm:w-12 sm:h-12 text-center text-xl sm:text-2xl font-bold border rounded-xl text-slate-950 dark:text-white transition-all outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${digit ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/20' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950'} ${isSubmitting ? 'opacity-50' : ''}`}
               />
             ))}
           </div>
@@ -792,7 +794,7 @@ export default function LoginForm() {
           )}
 
           <div className="text-center space-y-2">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-slate-400">
               {t('auth.noOtp')}{' '}
               <button
                 type="button"
@@ -806,7 +808,7 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={handleBackToLogin}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
+              className="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 underline"
             >
               ← {t('auth.backToLogin')}
             </button>
@@ -821,7 +823,7 @@ export default function LoginForm() {
         )}
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.email')}</label>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.email')}</label>
           <input
             type="email"
             id="email"
@@ -830,14 +832,14 @@ export default function LoginForm() {
             value={formData.email}
             onChange={handleChange}
             disabled={isSubmitting || isLocked}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.email ? 'border-red-500' : 'border-gray-300'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${loginInputBaseClass} ${errors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="example@email.com"
           />
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.password')}</label>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.password')}</label>
           <input
             type="password"
             id="password"
@@ -846,7 +848,7 @@ export default function LoginForm() {
             value={formData.password}
             onChange={handleChange}
             disabled={isSubmitting || isLocked}
-            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.password ? 'border-red-500' : 'border-gray-300'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${loginInputBaseClass} ${errors.password ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="••••••••"
           />
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
@@ -862,7 +864,7 @@ export default function LoginForm() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-            <span className="ml-2 text-sm text-gray-600">{t('auth.remember')}</span>
+            <span className="ml-2 text-sm text-gray-600 dark:text-slate-300">{t('auth.remember')}</span>
           </label>
           <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">{t('auth.forgot')}</Link>
         </div>
@@ -896,7 +898,7 @@ export default function LoginForm() {
 
       {/* Terms and Privacy Links */}
       <div className="mt-6 pt-5 border-t border-gray-100 space-y-2">
-        <p className="text-xs text-gray-500 text-center leading-relaxed">
+        <p className="text-xs text-gray-500 dark:text-slate-400 text-center leading-relaxed">
           {t('auth.loginConsentPrefix')}{' '}
           <button
             type="button"
@@ -917,7 +919,7 @@ export default function LoginForm() {
         </p>
       </div>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-gray-600 dark:text-slate-300">
         {t('auth.noAccount')} <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.registerNow')}</Link>
       </p>
 

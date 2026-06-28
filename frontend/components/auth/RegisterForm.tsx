@@ -32,6 +32,7 @@ export default function RegisterForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
+  const inputBaseClass = 'w-full px-4 py-2.5 border rounded-lg bg-white dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none';
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
@@ -160,8 +161,8 @@ export default function RegisterForm() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('auth.registerTitle')}</h1>
-        <p className="text-gray-600">{t('auth.registerSubtitle')}</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.registerTitle')}</h1>
+        <p className="text-gray-600 dark:text-slate-300">{t('auth.registerSubtitle')}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -170,7 +171,7 @@ export default function RegisterForm() {
         )}
 
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.username')}</label>
+          <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.username')}</label>
           <input
             type="text"
             id="username"
@@ -179,14 +180,14 @@ export default function RegisterForm() {
             value={formData.username}
             onChange={handleChange}
             disabled={isSubmitting}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.username ? 'border-red-500' : 'border-gray-300'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${inputBaseClass} ${errors.username ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="username123"
           />
           {errors.username && <p className="mt-1.5 text-sm text-red-600">{errors.username}</p>}
         </div>
 
         <div>
-          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.fullName')} <span className="text-gray-400">({t('auth.optional')})</span></label>
+          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.fullName')} <span className="text-gray-400 dark:text-slate-500">({t('auth.optional')})</span></label>
           <input
             type="text"
             id="full_name"
@@ -195,13 +196,13 @@ export default function RegisterForm() {
             value={formData.full_name}
             onChange={handleChange}
             disabled={isSubmitting}
-            className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${inputBaseClass} border-gray-300 dark:border-slate-700 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder={t('auth.fullNamePlaceholder')}
           />
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.email')}</label>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.email')}</label>
           <input
             type="email"
             id="email"
@@ -210,14 +211,14 @@ export default function RegisterForm() {
             value={formData.email}
             onChange={handleChange}
             disabled={isSubmitting}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.email ? 'border-red-500' : 'border-gray-300'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${inputBaseClass} ${errors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="example@email.com"
           />
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.password')}</label>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.password')}</label>
           <input
             type="password"
             id="password"
@@ -226,7 +227,7 @@ export default function RegisterForm() {
             value={formData.password}
             onChange={handleChange}
             disabled={isSubmitting}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.password ? 'border-red-500' : 'border-gray-300'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${inputBaseClass} ${errors.password ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="••••••••"
           />
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
@@ -234,7 +235,7 @@ export default function RegisterForm() {
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">{t('auth.confirmPassword')}</label>
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.confirmPassword')}</label>
           <input
             type="password"
             id="confirmPassword"
@@ -243,7 +244,7 @@ export default function RegisterForm() {
             value={formData.confirmPassword}
             onChange={handleChange}
             disabled={isSubmitting}
-            className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none text-gray-900 placeholder-gray-400 ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`${inputBaseClass} ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             placeholder="••••••••"
           />
           {errors.confirmPassword && <p className="mt-1.5 text-sm text-red-600">{errors.confirmPassword}</p>}
@@ -251,7 +252,7 @@ export default function RegisterForm() {
 
         <div className="flex items-start">
           <input type="checkbox" id="terms" className="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
-          <label htmlFor="terms" className="ml-2 text-sm text-gray-600">
+          <label htmlFor="terms" className="ml-2 text-sm text-gray-600 dark:text-slate-300">
             {t('auth.registerConsentPrefix')}{' '}
             <button
               type="button"
@@ -305,7 +306,7 @@ export default function RegisterForm() {
         />
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-gray-600 dark:text-slate-300">
         {t('auth.haveAccount')} <Link href="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.loginNow')}</Link>
       </p>
 

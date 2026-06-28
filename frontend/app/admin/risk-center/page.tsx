@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { riskCenterApi, RiskSummary, ExamRiskCase, PaymentRisk, QuestionReport, AdminNotification, AuditLogEntry, Pagination, ExamRiskDetail } from '@/lib/api/riskCenter';
+import { riskCenterApi, RiskSummary, ExamRiskCase, PaymentRisk, QuestionReport, QuestionReportDetail, AdminNotification, AuditLogEntry, Pagination, ExamRiskDetail } from '@/lib/api/riskCenter';
 import {
   FiAlertTriangle, FiShield, FiCreditCard, FiFileText, FiBell, FiList,
   FiRefreshCw, FiChevronLeft, FiChevronRight, FiEye, FiCheck, FiX,
@@ -280,6 +280,177 @@ function ExamRiskDrawer({ detail, onClose, onAction }: {
   );
 }
 
+function QuestionReportDrawer({ detail, onClose, onAction }: {
+  detail: QuestionReportDetail | null;
+  onClose: () => void;
+  onAction: (id: number, action: string, body?: Record<string, unknown>) => Promise<void>;
+}) {
+  const [actionModal, setActionModal] = useState<{ action: string; title: string; requireAnswer?: boolean } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [newCorrectAnswer, setNewCorrectAnswer] = useState('');
+
+  if (!detail) return null;
+
+  const handleAction = async (reason: string) => {
+    if (!actionModal) return;
+    if (actionModal.requireAnswer && !newCorrectAnswer.trim()) {
+      alert('Vui lòng nhập đáp án đúng mới.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const body: Record<string, unknown> = { reason };
+      if (actionModal.requireAnswer) body.new_correct_answer = newCorrectAnswer.trim().toUpperCase();
+      await onAction(detail.id, actionModal.action, body);
+      setActionModal(null);
+      setNewCorrectAnswer('');
+      onClose();
+    } catch {
+      alert('Không thể xử lý báo lỗi này.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-2xl overflow-y-auto bg-white shadow-2xl dark:bg-slate-900">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+          <div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">Báo lỗi #{detail.id}</h2>
+            <div className="mt-1 flex gap-2">
+              <Badge text={detail.report_type} colorClass={SEVERITY_COLORS[detail.severity]} />
+              <Badge text={detail.status} colorClass={STATUS_COLORS[detail.status]} />
+              <span className="text-xs font-bold text-gray-400">Câu #{detail.question_number || detail.question_id}</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-xl p-2 hover:bg-gray-100 dark:hover:bg-slate-800"><FiX size={18} /></button>
+        </div>
+
+        <div className="space-y-5 px-6 py-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800">
+              <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Đề thi</p>
+              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{detail.exam_title || 'N/A'}</p>
+              <p className="text-xs text-gray-500">{detail.exam_code || `Exam #${detail.exam_id}`}</p>
+              {detail.exam_is_hidden && <Badge text="Đề đã ẩn" colorClass="bg-red-100 text-red-700 border-red-200" />}
+            </div>
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800">
+              <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Người báo</p>
+              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{detail.reporter_name || 'N/A'}</p>
+              <p className="truncate text-xs text-gray-500">{detail.reporter_email || 'N/A'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <p className="mb-1 text-xs font-bold uppercase text-amber-700 dark:text-amber-300">Mô tả người dùng</p>
+            <p className="text-sm text-gray-800 dark:text-slate-100">{detail.description || 'Không có mô tả thêm.'}</p>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase text-gray-400">Nội dung câu hỏi</p>
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100">
+              <p className="whitespace-pre-wrap">{detail.question_text || 'N/A'}</p>
+              {detail.question_text_cn && <p className="mt-3 whitespace-pre-wrap text-xs text-gray-500">{detail.question_text_cn}</p>}
+            </div>
+          </div>
+
+          {detail.answers.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase text-gray-400">Đáp án</p>
+              <div className="space-y-2">
+                {detail.answers.map(answer => (
+                  <div key={answer.id} className={`rounded-xl border px-3 py-2 text-sm ${answer.is_correct ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-100 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}>
+                    <span className="mr-2 font-black">{answer.answer_key}.</span>
+                    {answer.answer_text}
+                    {answer.is_correct && <span className="ml-2 text-xs font-black text-green-700">Đúng</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(detail.explanation || detail.explanation_cn) && (
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase text-gray-400">Lời giải</p>
+              <div className="max-h-40 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                {detail.explanation && <p className="whitespace-pre-wrap">{detail.explanation}</p>}
+                {detail.explanation_cn && <p className="mt-2 whitespace-pre-wrap">{detail.explanation_cn}</p>}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase text-gray-400">Thao tác xử lý</p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setActionModal({ action: 'resolve', title: 'Đánh dấu đã sửa' })} className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-50"><FiCheck size={12} /> Đã sửa</button>
+              <button onClick={() => setActionModal({ action: 'ignore', title: 'Bỏ qua báo lỗi' })} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50"><FiX size={12} /> Bỏ qua</button>
+              <button onClick={() => setActionModal({ action: 'hide-question', title: 'Ẩn câu hỏi' })} className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-bold text-orange-700 hover:bg-orange-50"><FiAlertTriangle size={12} /> Ẩn câu</button>
+              <button onClick={() => setActionModal({ action: 'hide-exam', title: 'Ẩn đề thi' })} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"><FiShield size={12} /> Ẩn đề</button>
+              <button onClick={() => setActionModal({ action: 'regrade-affected-attempts', title: 'Chấm lại bài bị ảnh hưởng', requireAnswer: true })} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-50"><FiRefreshCw size={12} /> Chấm lại</button>
+            </div>
+          </div>
+
+          {detail.relatedReports.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase text-gray-400">Báo lỗi cùng câu ({detail.relatedReports.length})</p>
+              <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                {detail.relatedReports.map(report => (
+                  <div key={report.id} className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <Badge text={report.report_type} colorClass={STATUS_COLORS[report.status]} />
+                      <span className="text-gray-400">{timeAgo(report.created_at)}</span>
+                    </div>
+                    <p>{report.description || 'Không có mô tả'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {detail.regradeHistory.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase text-gray-400">Lịch sử chấm lại</p>
+              <div className="space-y-1.5">
+                {detail.regradeHistory.map(log => (
+                  <div key={log.id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                    {log.old_answer || '?'} sang {log.new_answer || '?'} · {log.affected_count} bài · {timeAgo(log.created_at)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ActionModal
+        title={actionModal?.title || ''}
+        isOpen={!!actionModal}
+        onClose={() => {
+          setActionModal(null);
+          setNewCorrectAnswer('');
+        }}
+        onConfirm={handleAction}
+        loading={actionLoading}
+      >
+        {actionModal?.requireAnswer && (
+          <div className="mb-3">
+            <label className="mb-1 block text-xs font-bold uppercase text-gray-400" htmlFor="new-correct-answer">Đáp án đúng mới</label>
+            <input
+              id="new-correct-answer"
+              value={newCorrectAnswer}
+              onChange={event => setNewCorrectAnswer(event.target.value)}
+              placeholder="A, B, C..."
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm uppercase outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+        )}
+      </ActionModal>
+    </>
+  );
+}
+
 //  Tab Components
 
 type TabId = 'exam' | 'payment' | 'question' | 'notification' | 'audit';
@@ -318,6 +489,7 @@ export default function RiskCenterPage() {
 
   // Drawer
   const [selectedCase, setSelectedCase] = useState<ExamRiskDetail | null>(null);
+  const [selectedQuestionReport, setSelectedQuestionReport] = useState<QuestionReportDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
 
   // Socket.io realtime
@@ -434,9 +606,23 @@ export default function RiskCenterPage() {
     setDrawerLoading(false);
   };
 
+  const openQuestionDrawer = async (id: number) => {
+    setDrawerLoading(true);
+    try {
+      const detail = await riskCenterApi.getQuestionReportDetail(id);
+      setSelectedQuestionReport(detail);
+    } catch { alert('Không thể tải chi tiết báo lỗi'); }
+    setDrawerLoading(false);
+  };
+
   const handleExamAction = async (id: number, action: string, body?: Record<string, unknown>) => {
     await riskCenterApi.examRiskAction(id, action, body);
     await Promise.all([loadSummary(), loadExamRisks(examPagination.currentPage)]);
+  };
+
+  const handleQuestionAction = async (id: number, action: string, body?: Record<string, unknown>) => {
+    await riskCenterApi.questionReportAction(id, action, body);
+    await Promise.all([loadSummary(), loadQuestionReports(questionPagination.currentPage)]);
   };
 
   const handleMarkAllRead = async () => {
@@ -633,7 +819,7 @@ export default function RiskCenterPage() {
                 {questionReports.length === 0 ? (
                   <tr><td colSpan={7} className="text-center py-12 text-gray-400"><FiFileText size={32} className="mx-auto mb-2 opacity-40" /><p>Không có báo lỗi nào</p></td></tr>
                 ) : questionReports.map(qr => (
-                  <tr key={qr.id} className="border-b border-gray-50 dark:border-slate-800/50 hover:bg-gray-50/50 dark:hover:bg-slate-800/30">
+                  <tr key={qr.id} onClick={() => openQuestionDrawer(qr.id)} className="cursor-pointer border-b border-gray-50 hover:bg-gray-50/50 dark:border-slate-800/50 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3">
                       <p className="text-xs font-semibold text-gray-900 dark:text-white truncate max-w-[140px]">{qr.exam_title || 'N/A'}</p>
                       <p className="text-[10px] text-gray-400">Câu #{qr.question_number} {qr.question_is_hidden ? '(ẩn)' : ''}</p>
@@ -720,6 +906,14 @@ export default function RiskCenterPage() {
       {/* Exam Risk Drawer */}
       {selectedCase && (
         <ExamRiskDrawer detail={selectedCase} onClose={() => setSelectedCase(null)} onAction={handleExamAction} />
+      )}
+
+      {selectedQuestionReport && (
+        <QuestionReportDrawer
+          detail={selectedQuestionReport}
+          onClose={() => setSelectedQuestionReport(null)}
+          onAction={handleQuestionAction}
+        />
       )}
 
       {/* Loading overlay for drawer */}

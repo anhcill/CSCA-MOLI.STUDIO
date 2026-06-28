@@ -326,7 +326,7 @@ exports.likePost = async (req, res) => {
     res.json({
       success: true,
       message: "Đã thích bài viết",
-      data: { like_count: likeCount },
+      data: { like_count: likeCount, is_liked: true },
     });
   } catch (error) {
     logger.error("Like post error", { error: error.message });
@@ -350,7 +350,7 @@ exports.unlikePost = async (req, res) => {
     res.json({
       success: true,
       message: "Đã bỏ thích bài viết",
-      data: { like_count: likeCount },
+      data: { like_count: likeCount, is_liked: false },
     });
   } catch (error) {
     logger.error("Unlike post error", { error: error.message });

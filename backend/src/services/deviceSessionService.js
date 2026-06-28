@@ -53,10 +53,9 @@ class DeviceSessionService {
 
   static async getDeviceLimits(userId) {
     const hasActivePackage = await this.hasActivePackage(userId);
-    const limit = hasActivePackage ? 2 : 1;
     return {
-      mobile: limit,
-      desktop: limit,
+      mobile: hasActivePackage ? 3 : 2,
+      desktop: 2,
       hasActivePackage,
     };
   }
@@ -114,6 +113,38 @@ class DeviceSessionService {
     return { allowed: true, maxDevices, deviceType };
   }
 
+  static async hasMatchingDeviceSession({ userId, deviceType, deviceInfo, ipAddress, userAgent }) {
+    const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
+    const params = [userId, resolvedDeviceType];
+    let matchClause = "";
+
+    if (userAgent && ipAddress) {
+      params.push(userAgent, ipAddress);
+      matchClause = "AND user_agent = $3 AND ip_address = $4";
+    } else if (userAgent) {
+      params.push(userAgent);
+      matchClause = "AND user_agent = $3";
+    } else if (deviceInfo) {
+      params.push(deviceInfo);
+      matchClause = "AND device_info = $3";
+    } else {
+      return false;
+    }
+
+    const { rows } = await db.query(
+      `SELECT 1
+       FROM user_sessions
+       WHERE user_id = $1
+         AND COALESCE(device_type, 'desktop') = $2
+         AND expires_at > NOW()
+         ${matchClause}
+       LIMIT 1`,
+      params,
+    );
+
+    return rows.length > 0;
+  }
+
   static async registerSession({ userId, jti, deviceInfo, deviceType, ipAddress, userAgent, expiresAt }) {
     const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
 
@@ -135,6 +166,14 @@ class DeviceSessionService {
       );
       return { deviceType: resolvedDeviceType };
     }
+
+    await this.removeMatchingDeviceSessions({
+      userId,
+      deviceType: resolvedDeviceType,
+      deviceInfo,
+      ipAddress,
+      userAgent,
+    });
 
     const allowed = await this.checkLoginAllowed(userId, resolvedDeviceType);
     if (!allowed.allowed) {
@@ -282,6 +321,54 @@ class DeviceSessionService {
     return true;
   }
 
+  static async blacklistSessions(sessions) {
+    if (!sessions.length) return;
+
+    const values = sessions
+      .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
+      .join(", ");
+    const flat = sessions.flatMap((session) => [session.jti, session.user_id, session.expires_at]);
+
+    await db.query(
+      `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
+       VALUES ${values}
+       ON CONFLICT (token_jti) DO NOTHING`,
+      flat,
+    ).catch(() => {});
+  }
+
+  static async removeMatchingDeviceSessions({ userId, deviceType, deviceInfo, ipAddress, userAgent }) {
+    const resolvedDeviceType = deviceType || this.getDeviceTypeFromUserAgent(userAgent || deviceInfo);
+    const params = [userId, resolvedDeviceType];
+    let matchClause = "";
+
+    if (userAgent && ipAddress) {
+      params.push(userAgent, ipAddress);
+      matchClause = "AND user_agent = $3 AND ip_address = $4";
+    } else if (userAgent) {
+      params.push(userAgent);
+      matchClause = "AND user_agent = $3";
+    } else if (deviceInfo) {
+      params.push(deviceInfo);
+      matchClause = "AND device_info = $3";
+    } else {
+      return 0;
+    }
+
+    const { rows } = await db.query(
+      `DELETE FROM user_sessions
+       WHERE user_id = $1
+         AND COALESCE(device_type, 'desktop') = $2
+         AND expires_at > NOW()
+         ${matchClause}
+       RETURNING jti, user_id, expires_at`,
+      params,
+    );
+
+    await this.blacklistSessions(rows);
+    return rows.length;
+  }
+
   static async removeAllUserSessions(userId, options = {}) {
     const exceptJti = options.exceptJti || null;
     const params = exceptJti ? [userId, exceptJti] : [userId];
@@ -295,16 +382,7 @@ class DeviceSessionService {
     );
 
     if (sessions.rows.length > 0) {
-      const values = sessions.rows
-        .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
-        .join(", ");
-      const flat = sessions.rows.flatMap((session) => [session.jti, session.user_id, session.expires_at]);
-      await db.query(
-        `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
-         VALUES ${values}
-         ON CONFLICT (token_jti) DO NOTHING`,
-        flat,
-      );
+      await this.blacklistSessions(sessions.rows);
     }
 
     return sessions.rows.length;

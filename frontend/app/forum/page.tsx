@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   FiHeart, FiMessageCircle, FiShare2,
   FiSend, FiLoader, FiChevronDown,
@@ -42,6 +42,35 @@ function timeAgo(ts: string) {
   const d = Math.floor(s / 86400);
   if (d < 7) return `${d} ngày trước`;
   return new Date(ts).toLocaleDateString('vi-VN');
+}
+
+type LikeOverride = Pick<Post, 'is_liked' | 'like_count'>;
+
+function applyLikeOverrides(items: Post[], overrides: Record<number, LikeOverride>) {
+  return items.map((post) => {
+    const override = overrides[post.id];
+    return override ? { ...post, ...override } : post;
+  });
+}
+
+function getHttpStatus(error: unknown) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { status?: number } }).response;
+    return response?.status;
+  }
+  return undefined;
+}
+
+function notifyLikeError(error: unknown) {
+  const status = getHttpStatus(error);
+  console.error('Forum like toggle failed', { status, error });
+  if (typeof window === 'undefined') return;
+  const message = status
+    ? `Không thể cập nhật tim (HTTP ${status}). Vui lòng thử lại.`
+    : 'Không thể cập nhật tim. Vui lòng kiểm tra mạng và thử lại.';
+  const moliToast = (window as Window & { moliToast?: (message: string, type?: string) => void }).moliToast;
+  if (moliToast) moliToast(message, 'error');
+  else alert(message);
 }
 
 function Avatar({ src, name, size = 42 }: { src?: string; name?: string; size?: number }) {
@@ -95,6 +124,7 @@ export default function ForumPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'liked' | 'commented'>('newest');
   const [pendingLikeIds, setPendingLikeIds] = useState<Set<number>>(new Set());
+  const likeOverridesRef = useRef<Record<number, LikeOverride>>({});
 
   const [newPost, setNewPost] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
@@ -112,10 +142,18 @@ export default function ForumPage() {
     try {
       offset === 0 ? setLoading(true) : setLoadingMore(true);
       const data = await postsApi.getPosts(15, offset);
-      setPosts(prev => offset === 0 ? data : [...prev, ...data]);
+      const safeData = applyLikeOverrides(data, likeOverridesRef.current);
+      setPosts(prev => offset === 0 ? safeData : [...prev, ...safeData]);
       setHasMore(data.length === 15);
     } catch { /* silent */ }
     finally { setLoading(false); setLoadingMore(false); }
+  }, []);
+
+  const setLikeOverride = useCallback((postId: number, override: LikeOverride | null) => {
+    const next = { ...likeOverridesRef.current };
+    if (override) next[postId] = override;
+    else delete next[postId];
+    likeOverridesRef.current = next;
   }, []);
 
   useEffect(() => { loadPosts(0); }, [loadPosts]);
@@ -139,15 +177,21 @@ export default function ForumPage() {
     const nextLiked = !wasLiked;
     const optimisticCount = Math.max(0, Number(post.like_count || 0) + (wasLiked ? -1 : 1));
     setPendingLikeIds(prev => new Set(prev).add(post.id));
+    setLikeOverride(post.id, { is_liked: nextLiked, like_count: optimisticCount });
     setPosts(prev => prev.map(p =>
       p.id === post.id ? { ...p, is_liked: nextLiked, like_count: optimisticCount } : p
     ));
     try {
       const result = wasLiked ? await postsApi.unlikePost(post.id) : await postsApi.likePost(post.id);
+      const confirmedLiked = typeof result.is_liked === 'boolean' ? result.is_liked : nextLiked;
+      const confirmedCount = Number(result.like_count ?? optimisticCount);
+      setLikeOverride(post.id, { is_liked: confirmedLiked, like_count: confirmedCount });
       setPosts(prev => prev.map(p =>
-        p.id === post.id ? { ...p, is_liked: nextLiked, like_count: Number(result.like_count ?? optimisticCount) } : p
+        p.id === post.id ? { ...p, is_liked: confirmedLiked, like_count: confirmedCount } : p
       ));
-    } catch {
+    } catch (error) {
+      setLikeOverride(post.id, null);
+      notifyLikeError(error);
       setPosts(prev => prev.map(p => p.id === post.id ? { ...p, is_liked: wasLiked, like_count: Number(post.like_count || 0) } : p));
     } finally {
       setPendingLikeIds(prev => { const s = new Set(prev); s.delete(post.id); return s; });
