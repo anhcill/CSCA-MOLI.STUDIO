@@ -1102,7 +1102,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
   const updateSingleAnswer = (
     questionIndex: number,
     answerIndex: number,
-    updates: Partial<{ text: string; textCn: string; imageUrl: string }>,
+    updates: Partial<{ text: string; textCn: string; textEn: string; imageUrl: string }>,
   ) => {
     updateItem(questionIndex, (item) => {
       if (!isSingleChoice(item)) return null;
@@ -1165,7 +1165,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     groupIndex: number,
     subIndex: number,
     answerIndex: number,
-    updates: Partial<{ text: string; textCn: string; imageUrl: string }>,
+    updates: Partial<{ text: string; textCn: string; textEn: string; imageUrl: string }>,
   ) => {
     updateItem(groupIndex, (item) => {
       if (item.itemType !== 'reading_group') return null;
@@ -1214,7 +1214,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     updateItem(index, (item) => (item.itemType === 'fill_blank_group' ? { ...item, ...updates } : null));
   };
 
-  const updateFillBlankOption = (groupIndex: number, optionIndex: number, updates: Partial<{ key: string; text: string; textCn: string }>) => {
+  const updateFillBlankOption = (groupIndex: number, optionIndex: number, updates: Partial<{ key: string; text: string; textCn: string; textEn: string }>) => {
     updateItem(groupIndex, (item) => {
       if (item.itemType !== 'fill_blank_group') return null;
       const linkedOptions = [...item.linkedOptions];
@@ -1227,7 +1227,7 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
     updateItem(groupIndex, (item) => {
       if (item.itemType !== 'fill_blank_group' || item.linkedOptions.length >= IMPORT_ANSWER_KEYS.length) return null;
       const key = getNextOptionKey(item.linkedOptions.map((option) => option.key));
-      return { ...item, linkedOptions: [...item.linkedOptions, { key, text: '', textCn: '' }] };
+      return { ...item, linkedOptions: [...item.linkedOptions, { key, text: '', textCn: '', textEn: '' }] };
     });
   };
 

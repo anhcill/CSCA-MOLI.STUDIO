@@ -32,7 +32,7 @@ export function normalizeExamLanguageMode(value?: string | null): ExamLanguageMo
 export function getExamLanguageOrder(mode?: string | null): ExamLanguage[] {
   const normalized = normalizeExamLanguageMode(mode);
   if (normalized.includes('_')) return normalized.split('_') as ExamLanguage[];
-  return [normalized];
+  return [normalized as ExamLanguage];
 }
 
 export function getExamLanguageText(
