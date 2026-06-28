@@ -51,6 +51,18 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
+function normalizeTrilingualText(vi, cn, en) {
+  const viText = (vi || "").trim();
+  const cnText = (cn || "").trim();
+  const enText = (en || "").trim();
+  if (!viText && !cnText && !enText) return null;
+  return {
+    vi: viText || enText || cnText,
+    cn: cnText || viText || enText,
+    en: enText,
+  };
+}
+
 const PDF_EXPLANATION_MARKER_RE = /(?:^|\s)(?:\u7b54\u6848\u89e3\u6790|\u89e3\u6790|\u89e3\u91ca|\u89e3\u7b54|\u8bf4\u660e|\u89e3|analysis|explanation|l\u1eddi gi\u1ea3i|loi giai|gi\u1ea3i th\u00edch|giai thich)\s*[:\uff1a]\s*/i;
 
 function splitPdfExplanationMarker(value) {
@@ -616,17 +628,18 @@ function normalizeImportAnswers(rawAnswers) {
     .slice(0, 8)
     .map((answer) => {
       if (typeof answer === "string") {
-        return { text: repairPdfImportTextArtifacts(answer), textCn: "", imageUrl: "" };
+        return { text: repairPdfImportTextArtifacts(answer), textCn: "", textEn: "", imageUrl: "" };
       }
 
       return {
         text: repairPdfImportTextArtifacts(answer?.text || answer?.answerText || answer?.content),
         textCn: repairPdfImportTextArtifacts(answer?.textCn || answer?.answerTextCn || answer?.contentCn),
+        textEn: repairPdfImportTextArtifacts(answer?.textEn || answer?.answerTextEn || answer?.contentEn),
         imageUrl: stringValue(answer?.imageUrl),
         isCorrect: answer?.isCorrect === true,
       };
     })
-    .filter((answer) => answer.text || answer.textCn);
+    .filter((answer) => answer.text || answer.textCn || answer.textEn);
 }
 
 function normalizeCorrectAnswer(rawQuestion, answers) {
@@ -652,7 +665,9 @@ function normalizeCorrectAnswer(rawQuestion, answers) {
   const explanationText = [
     rawQuestion.explanation,
     rawQuestion.explanationCn,
+    rawQuestion.explanationEn,
     rawQuestion.explanation_cn,
+    rawQuestion.explanation_en,
   ].map(repairPdfImportTextArtifacts).filter(Boolean).join(" ");
   const inferred = inferCorrectAnswerFromExplanation(answers, explanationText);
   return inferred || "";
@@ -669,11 +684,14 @@ function normalizeImportedQuestion(rawQuestion, index) {
   const answers = normalizeImportAnswers(rawQuestion?.answers || rawQuestion?.options);
   const rawQuestionText = repairPdfImportTextArtifacts(rawQuestion?.questionText || rawQuestion?.question || rawQuestion?.text);
   const rawQuestionTextCn = repairPdfImportTextArtifacts(rawQuestion?.questionTextCn || rawQuestion?.question_cn || rawQuestion?.textCn);
+  const rawQuestionTextEn = repairPdfImportTextArtifacts(rawQuestion?.questionTextEn || rawQuestion?.question_en || rawQuestion?.textEn);
   const viQuestion = splitPdfExplanationMarker(rawQuestionText);
   const cnQuestion = splitPdfExplanationMarker(rawQuestionTextCn);
+  const enQuestion = splitPdfExplanationMarker(rawQuestionTextEn);
   const questionText = repairPdfImportTextArtifacts(viQuestion.explanation ? viQuestion.text : rawQuestionText);
   const questionTextCn = repairPdfImportTextArtifacts(cnQuestion.explanation ? cnQuestion.text : rawQuestionTextCn);
-  const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
+  const questionTextEn = repairPdfImportTextArtifacts(enQuestion.explanation ? enQuestion.text : rawQuestionTextEn);
+  const normalizedQuestion = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
 
   if (!normalizedQuestion || answers.length < 2) return null;
 
@@ -684,25 +702,29 @@ function normalizeImportedQuestion(rawQuestion, index) {
     ...rawQuestion,
     explanation: rawQuestion?.explanation || viQuestion.explanation,
     explanationCn: rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation,
+    explanationEn: rawQuestion?.explanationEn || rawQuestion?.explanation_en || enQuestion.explanation,
   }, answers);
   const imageHint = stringValue(rawQuestion?.imageHint || rawQuestion?.image_hint);
   const reviewNotes = stringValue(rawQuestion?.reviewNotes || rawQuestion?.review_notes);
-  const combinedText = `${questionText} ${questionTextCn} ${imageHint} ${reviewNotes}`;
+  const combinedText = `${questionText} ${questionTextCn} ${questionTextEn} ${imageHint} ${reviewNotes}`;
   const needsImage = rawQuestion?.needsImage === true || PDF_IMPORT_IMAGE_HINT_RE.test(combinedText);
   const subQuestionNumber = Number.parseInt(rawQuestion?.subQuestionNumber, 10);
 
   return {
     questionType: QUESTION_TYPES.SINGLE_CHOICE,
-    questionText: normalizedQuestion.en,
+    questionText: normalizedQuestion.vi,
     questionTextCn: normalizedQuestion.cn,
+    questionTextEn: normalizedQuestion.en,
     imageUrl: stringValue(rawQuestion?.imageUrl),
     explanationImageUrl: stringValue(rawQuestion?.explanationImageUrl || rawQuestion?.explanation_image_url),
     points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
     explanation: restoreImportedExplanationBreaks(rawQuestion?.explanation || viQuestion.explanation),
     explanationCn: restoreImportedExplanationBreaks(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
+    explanationEn: restoreImportedExplanationBreaks(rawQuestion?.explanationEn || rawQuestion?.explanation_en || enQuestion.explanation),
     answers: answers.map((answer) => ({
-      text: answer.text || answer.textCn,
-      textCn: answer.textCn || answer.text,
+      text: answer.text || answer.textEn || answer.textCn,
+      textCn: answer.textCn || answer.text || answer.textEn,
+      textEn: answer.textEn || "",
       imageUrl: answer.imageUrl || "",
     })),
     correctAnswer,
@@ -724,8 +746,9 @@ function normalizeImportLinkedOptions(rawOptions) {
       key: stringValue(option?.key || String.fromCharCode(65 + index)).toUpperCase().slice(0, 1) || String.fromCharCode(65 + index),
       text: stringValue(option?.text || option?.content),
       textCn: stringValue(option?.textCn || option?.contentCn),
+      textEn: stringValue(option?.textEn || option?.contentEn),
     }))
-    .filter((option) => option.text || option.textCn);
+    .filter((option) => option.text || option.textCn || option.textEn);
 }
 
 function countImportClozeBlanks(text) {
@@ -766,7 +789,8 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
     .map((item, subIndex) => {
       const questionText = stringValue(item?.questionText || item?.question || item?.text);
       const questionTextCn = stringValue(item?.questionTextCn || item?.question_cn || item?.textCn);
-      const normalizedQuestion = normalizeBilingualText(questionText, questionTextCn);
+      const questionTextEn = stringValue(item?.questionTextEn || item?.question_en || item?.textEn);
+      const normalizedQuestion = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
       const correctAnswerKey = stringValue(item?.correctAnswerKey || item?.correctAnswer || item?.answerKey || item?.answer)
         .toUpperCase()
         .slice(0, 1);
@@ -775,11 +799,13 @@ function normalizeImportedFillBlankGroup(rawGroup, index) {
       if (clozeMode === "sentences" && !normalizedQuestion) return null;
 
       return {
-        questionText: normalizedQuestion?.en || `Blank ${subIndex + 1}`,
+        questionText: normalizedQuestion?.vi || `Blank ${subIndex + 1}`,
         questionTextCn: normalizedQuestion?.cn || `Blank ${subIndex + 1}`,
+        questionTextEn: normalizedQuestion?.en || "",
         points: clamp(parsePositiveNumber(item?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
         explanation: stringValue(item?.explanation),
         explanationCn: stringValue(item?.explanationCn || item?.explanation_cn),
+        explanationEn: stringValue(item?.explanationEn || item?.explanation_en),
         explanationImageUrl: stringValue(item?.explanationImageUrl || item?.explanation_image_url),
         correctAnswerKey,
         difficulty: ["easy", "medium", "hard"].includes(item?.difficulty) ? item.difficulty : "medium",
@@ -2417,25 +2443,27 @@ function validateImportItems(items) {
 
 async function insertImportedSingleChoice(client, { examId, question, questionNumber }) {
   const answerKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  const normalizedQuestion = normalizeBilingualText(question.questionText, question.questionTextCn);
+  const normalizedQuestion = normalizeTrilingualText(question.questionText, question.questionTextCn, question.questionTextEn);
 
   const questionResult = await client.query(
     `INSERT INTO questions (
        exam_id, question_number, question_type,
-       question_text, question_text_cn,
-       points, explanation, explanation_cn,
+       question_text, question_text_cn, question_text_en,
+       points, explanation, explanation_cn, explanation_en,
        explanation_image_url, image_url, question_group_type, difficulty
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING id`,
     [
       examId,
       questionNumber,
       QUESTION_TYPES.SINGLE_CHOICE,
-      sanitize(normalizedQuestion.en),
+      sanitize(normalizedQuestion.vi),
       sanitize(normalizedQuestion.cn),
+      normalizedQuestion.en ? sanitize(normalizedQuestion.en) : null,
       clamp(parsePositiveNumber(question.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
       question.explanation ? sanitizeExplanation(question.explanation) : null,
       question.explanationCn ? sanitizeExplanation(question.explanationCn) : null,
+      question.explanationEn ? sanitizeExplanation(question.explanationEn) : null,
       question.explanationImageUrl ? sanitize(question.explanationImageUrl) : null,
       question.imageUrl ? sanitize(question.imageUrl) : null,
       QUESTION_TYPES.SINGLE_CHOICE,
@@ -2447,17 +2475,18 @@ async function insertImportedSingleChoice(client, { examId, question, questionNu
 
   for (let i = 0; i < question.answers.length; i++) {
     const answer = question.answers[i];
-    const normalizedAnswer = normalizeBilingualText(answer.text, answer.textCn);
+    const normalizedAnswer = normalizeTrilingualText(answer.text, answer.textCn, answer.textEn);
     const key = answerKeys[i];
 
     await client.query(
-      `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         questionId,
         key,
-        sanitize(normalizedAnswer.en),
+        sanitize(normalizedAnswer.vi),
         sanitize(normalizedAnswer.cn),
+        normalizedAnswer.en ? sanitize(normalizedAnswer.en) : null,
         key === question.correctAnswer,
         answer.imageUrl ? sanitize(answer.imageUrl) : null,
       ],
@@ -2540,8 +2569,9 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
   const containerNumber = await getNextContainerQuestionNumber(client, examId);
   const normalizedOpts = group.linkedOptions.map((option, index) => ({
     key: option.key || String.fromCharCode(65 + index),
-    text: option.text || option.textCn,
-    textCn: option.textCn || option.text,
+    text: option.text || option.textEn || option.textCn,
+    textCn: option.textCn || option.text || option.textEn,
+    textEn: option.textEn || "",
   }));
 
   const poolResult = await client.query(
@@ -2579,26 +2609,28 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
   for (const subItem of group.subItems) {
     questionNumber++;
     const parsedPoints = clamp(parsePositiveNumber(subItem.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-    const normQ = normalizeBilingualText(subItem.questionText, subItem.questionTextCn);
+    const normQ = normalizeTrilingualText(subItem.questionText, subItem.questionTextCn, subItem.questionTextEn);
 
     const subResult = await client.query(
       `INSERT INTO questions (
          exam_id, question_number, question_type,
-         question_text, question_text_cn,
-         points, explanation, explanation_cn, explanation_image_url,
+         question_text, question_text_cn, question_text_en,
+         points, explanation, explanation_cn, explanation_en, explanation_image_url,
          question_group_type, difficulty,
          sub_question_number, passage_group_id
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING id`,
       [
         examId,
         questionNumber,
         QUESTION_TYPES.FILL_BLANK_ITEM,
-        sanitize(normQ?.en || `Blank ${questionNumber}`),
+        sanitize(normQ?.vi || `Blank ${questionNumber}`),
         sanitize(normQ?.cn || `Blank ${questionNumber}`),
+        normQ?.en ? sanitize(normQ.en) : null,
         parsedPoints,
         subItem.explanation ? sanitizeExplanation(subItem.explanation) : null,
         subItem.explanationCn ? sanitizeExplanation(subItem.explanationCn) : null,
+        subItem.explanationEn ? sanitizeExplanation(subItem.explanationEn) : null,
         subItem.explanationImageUrl ? sanitize(subItem.explanationImageUrl) : null,
         QUESTION_TYPES.FILL_BLANK_ITEM,
         subItem.difficulty || "medium",
@@ -2610,13 +2642,14 @@ async function insertImportedFillBlankGroup(client, { examId, group, startQuesti
 
     for (const option of normalizedOpts) {
       await client.query(
-        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct)
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           questionId,
           option.key,
           sanitize(option.text),
           sanitize(option.textCn),
+          option.textEn ? sanitize(option.textEn) : null,
           option.key === subItem.correctAnswerKey,
         ],
       );

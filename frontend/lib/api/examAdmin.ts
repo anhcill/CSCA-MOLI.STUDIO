@@ -25,10 +25,12 @@ export interface QuestionData {
     questionType?: QuestionType;  // 'single_choice' | 'fill_blank_pool' | 'fill_blank_item' | 'reading_passage' | 'reading_item' | 'true_false'
     questionText: string;
     questionTextCn?: string;
+    questionTextEn?: string;
     imageUrl?: string;
     points?: number;
     explanation?: string;
     explanationCn?: string;
+    explanationEn?: string;
     explanationImageUrl?: string;
     answers?: AnswerData[];       // Cho single_choice, reading_item
     correctAnswer?: string;        // 'A','B','C','D' - cho single_choice
@@ -110,9 +112,11 @@ export interface ImportedFillBlankGroupData {
     subItems: {
         questionText: string;
         questionTextCn?: string;
+        questionTextEn?: string;
         points?: number;
         explanation?: string;
         explanationCn?: string;
+        explanationEn?: string;
         explanationImageUrl?: string;
         correctAnswerKey: string;
         difficulty?: string;
@@ -349,6 +353,7 @@ export interface LinkedOption {
     key: string;      // 'A', 'B', 'C', 'D', 'E', 'F'
     text: string;    // Tiếng Anh
     textCn: string;  // Tiếng Trung
+    textEn?: string;
 }
 
 // Question type enum
@@ -363,6 +368,7 @@ export type QuestionType =
 export interface AnswerData {
     text: string;
     textCn?: string;
+    textEn?: string;
     imageUrl?: string;
 }
 

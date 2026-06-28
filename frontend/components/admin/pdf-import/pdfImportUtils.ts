@@ -26,7 +26,7 @@ export const hasImportText = (...values: Array<string | undefined | null>) =>
   values.some(value => typeof value === 'string' && value.trim().length > 0);
 
 export const validateImportedSingleChoice = (item: ImportedQuestionData, label: string) => {
-  if (!hasImportText(item.questionText, item.questionTextCn)) {
+  if (!hasImportText(item.questionText, item.questionTextCn, item.questionTextEn)) {
     return `${label} can noi dung cau hoi`;
   }
 
@@ -35,7 +35,7 @@ export const validateImportedSingleChoice = (item: ImportedQuestionData, label: 
     return `${label} can tu 2 den 8 dap an`;
   }
 
-  const emptyAnswerIndex = answers.findIndex(answer => !hasImportText(answer.text, answer.textCn));
+  const emptyAnswerIndex = answers.findIndex(answer => !hasImportText(answer.text, answer.textCn, answer.textEn));
   if (emptyAnswerIndex !== -1) {
     return `${label} thieu noi dung dap an ${IMPORT_ANSWER_KEYS[emptyAnswerIndex]}`;
   }
@@ -76,7 +76,7 @@ export const validateImportedItems = (items: ImportedExamItem[]) => {
       if (options.length < 2) {
         return `${label} dien tu can it nhat 2 lua chon`;
       }
-      const emptyOptionIndex = options.findIndex(option => !hasImportText(option.text, option.textCn));
+      const emptyOptionIndex = options.findIndex(option => !hasImportText(option.text, option.textCn, option.textEn));
       if (emptyOptionIndex !== -1) {
         return `${label} thieu noi dung lua chon ${options[emptyOptionIndex]?.key || emptyOptionIndex + 1}`;
       }
@@ -88,7 +88,7 @@ export const validateImportedItems = (items: ImportedExamItem[]) => {
       }
       for (let subIndex = 0; subIndex < item.subItems.length; subIndex++) {
         const subItem = item.subItems[subIndex];
-        if (item.clozeMode !== 'passage' && !hasImportText(subItem.questionText, subItem.questionTextCn)) {
+        if (item.clozeMode !== 'passage' && !hasImportText(subItem.questionText, subItem.questionTextCn, subItem.questionTextEn)) {
           return `${label}.${subIndex + 1} can noi dung cau dien tu`;
         }
         if (!subItem.correctAnswerKey || !validOptionKeys.has(subItem.correctAnswerKey)) {
@@ -108,6 +108,7 @@ export const validateImportedItems = (items: ImportedExamItem[]) => {
 export const createEmptyImportedAnswer = () => ({
   text: '',
   textCn: '',
+  textEn: '',
   imageUrl: '',
 });
 
@@ -116,10 +117,12 @@ export const createEmptyImportedQuestion = (): ImportedQuestionData => ({
   questionType: 'single_choice',
   questionText: '',
   questionTextCn: '',
+  questionTextEn: '',
   imageUrl: '',
   points: 1,
   explanation: '',
   explanationCn: '',
+  explanationEn: '',
   answers: [createEmptyImportedAnswer(), createEmptyImportedAnswer()],
   correctAnswer: '',
   difficulty: 'medium',
@@ -137,9 +140,11 @@ export const createEmptyImportedFillBlankSubItem = (
 ): ImportedFillBlankGroupData['subItems'][number] => ({
   questionText: '',
   questionTextCn: '',
+  questionTextEn: '',
   points: 1,
   explanation: '',
   explanationCn: '',
+  explanationEn: '',
   correctAnswerKey: '',
   difficulty: 'medium',
   subQuestionNumber,
@@ -151,8 +156,8 @@ export const createEmptyImportedFillBlankGroup = (): ImportedFillBlankGroupData 
   passageText: '',
   passageImageUrl: '',
   linkedOptions: [
-    { key: 'A', text: '', textCn: '' },
-    { key: 'B', text: '', textCn: '' },
+    { key: 'A', text: '', textCn: '', textEn: '' },
+    { key: 'B', text: '', textCn: '', textEn: '' },
   ],
   subItems: [createEmptyImportedFillBlankSubItem()],
 });

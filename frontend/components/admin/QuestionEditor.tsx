@@ -26,20 +26,23 @@ export interface LinkedOption {
   key: string;   // 'A', 'B', 'C', 'D', 'E', 'F'
   text: string;  // tiếng Việt / mô tả
   textCn: string; // tiếng Trung
+  textEn?: string;
 }
 
 export interface QuestionFormData {
   questionType: QuestionType;
   questionText: string;
   questionTextCn: string;
+  questionTextEn: string;
   imageUrl: string;
   passageText: string;
   passageImageUrl: string;
   points: number;
   explanation: string;
   explanationCn: string;
+  explanationEn: string;
   explanationImageUrl: string;
-  answers: { text: string; textCn: string; imageUrl: string }[];
+  answers: { text: string; textCn: string; textEn?: string; imageUrl: string }[];
   correctAnswer: string;       // cho single_choice, reading_item, true_false
   linkedOptions: LinkedOption[]; // pool A-F cho fill_blank_pool
   correctAnswerKey: string;   // 'A','B'... cho fill_blank_item
@@ -64,15 +67,15 @@ interface QuestionEditorProps {
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────────
 const DEFAULT_ANSWERS = (count = 4) =>
-  Array.from({ length: count }, () => ({ text: '', textCn: '', imageUrl: '' }));
+  Array.from({ length: count }, () => ({ text: '', textCn: '', textEn: '', imageUrl: '' }));
 
 const DEFAULT_LINKED_OPTIONS: LinkedOption[] = [
-  { key: 'A', text: '', textCn: '' },
-  { key: 'B', text: '', textCn: '' },
-  { key: 'C', text: '', textCn: '' },
-  { key: 'D', text: '', textCn: '' },
-  { key: 'E', text: '', textCn: '' },
-  { key: 'F', text: '', textCn: '' },
+  { key: 'A', text: '', textCn: '', textEn: '' },
+  { key: 'B', text: '', textCn: '', textEn: '' },
+  { key: 'C', text: '', textCn: '', textEn: '' },
+  { key: 'D', text: '', textCn: '', textEn: '' },
+  { key: 'E', text: '', textCn: '', textEn: '' },
+  { key: 'F', text: '', textCn: '', textEn: '' },
 ];
 
 function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
@@ -80,12 +83,14 @@ function getDefaults(initial?: Partial<QuestionFormData>): QuestionFormData {
     questionType: (initial?.questionType as QuestionType) || 'single_choice',
     questionText: initial?.questionText || '',
     questionTextCn: initial?.questionTextCn || '',
+    questionTextEn: initial?.questionTextEn || '',
     imageUrl: initial?.imageUrl || '',
     passageText: initial?.passageText || '',
     passageImageUrl: initial?.passageImageUrl || '',
     points: initial?.points || 1,
     explanation: initial?.explanation || '',
     explanationCn: initial?.explanationCn || '',
+    explanationEn: initial?.explanationEn || '',
     explanationImageUrl: initial?.explanationImageUrl || '',
     answers: initial?.answers?.length ? initial.answers : DEFAULT_ANSWERS(),
     correctAnswer: initial?.correctAnswer || 'A',
@@ -132,7 +137,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
   const set = <K extends keyof QuestionFormData>(key: K, value: QuestionFormData[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
-  const setMathText = (key: 'questionText' | 'questionTextCn', value: string) =>
+  const setMathText = (key: 'questionText' | 'questionTextCn' | 'questionTextEn', value: string) =>
     setForm(prev => ({ ...prev, [key]: preservePlainTextMathMode(prev[key], value) }));
 
   const renderMathPreview = (
@@ -255,11 +260,13 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       questionType: 'single_choice',
       questionText: parsed.questionText,
       questionTextCn: parsed.questionTextCn,
+      questionTextEn: '',
       imageUrl: '',
       answers: parsed.answers.length
         ? parsed.answers.map(answer => ({
           text: answer.text,
           textCn: answer.textCn,
+          textEn: '',
           imageUrl: answer.imageUrl,
         }))
         : prev.answers,
@@ -267,6 +274,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       correctAnswerKey: parsed.correctAnswer || prev.correctAnswerKey,
       explanation: parsed.explanation,
       explanationCn: parsed.explanationCn,
+      explanationEn: '',
       explanationImageUrl: prev.explanationImageUrl,
     }));
   };
@@ -277,19 +285,21 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       questionType: 'single_choice',
       questionText: '',
       questionTextCn: '',
+      questionTextEn: '',
       imageUrl: '',
       answers: DEFAULT_ANSWERS(),
       correctAnswer: 'A',
       correctAnswerKey: 'A',
       explanation: '',
       explanationCn: '',
+      explanationEn: '',
       explanationImageUrl: '',
     }));
   };
 
   const handleSave = () => {
-    if (!form.questionText.trim() && !form.questionTextCn.trim()) {
-      alert('Vui lòng nhập nội dung câu hỏi (Tiếng Việt hoặc Tiếng Trung)');
+    if (!form.questionText.trim() && !form.questionTextCn.trim() && !form.questionTextEn.trim()) {
+      alert('Vui lòng nhập nội dung câu hỏi (Tiếng Việt, Tiếng Trung hoặc English)');
       return;
     }
 
@@ -299,13 +309,13 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
     }
 
     if (form.questionType === 'single_choice' &&
-        form.answers.every(a => !a.text.trim() && !a.textCn.trim())) {
+        form.answers.every(a => !a.text.trim() && !a.textCn.trim() && !a.textEn?.trim())) {
       alert('Vui lòng nhập ít nhất 2 đáp án');
       return;
     }
 
     if (form.questionType === 'fill_blank_pool') {
-      const filledOpts = form.linkedOptions.filter(o => o.text.trim() || o.textCn.trim());
+      const filledOpts = form.linkedOptions.filter(o => o.text.trim() || o.textCn.trim() || o.textEn?.trim());
       if (filledOpts.length < 2) {
         alert('Điền từ cần ít nhất 2 lựa chọn có nội dung');
         return;
@@ -411,6 +421,17 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                   className={`${ADMIN_INPUT_CLASS} flex-1 px-2 py-1`}
                   placeholder="词语 (中文)"
                 />
+                <input
+                  type="text"
+                  value={opt.textEn || ''}
+                  onChange={e => {
+                    const opts = [...form.linkedOptions];
+                    opts[i] = { ...opts[i], textEn: e.target.value };
+                    set('linkedOptions', opts);
+                  }}
+                  className={`${ADMIN_INPUT_CLASS} flex-1 px-2 py-1`}
+                  placeholder="Word (English)"
+                />
                 {form.linkedOptions.length > 2 && (
                   <button onClick={() => set('linkedOptions', form.linkedOptions.filter((_, j) => j !== i))}
                     className="text-red-400 hover:text-red-600">
@@ -450,6 +471,17 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         />
         {renderMathPreview(form.questionTextCn, value => set('questionTextCn', value), undefined, 'questionTextCn')}
       </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Question (English)</label>
+        <textarea
+          value={stripPlainTextMathMarker(form.questionTextEn)}
+          onChange={e => setMathText('questionTextEn', e.target.value)}
+          rows={2}
+          className={ADMIN_TEXTAREA_CLASS}
+          placeholder="Enter English question..."
+        />
+        {renderMathPreview(form.questionTextEn, value => set('questionTextEn', value), undefined, 'questionTextEn')}
+      </div>
 
       <ImageUpload
         label="Hình ảnh câu hỏi (tùy chọn)"
@@ -465,7 +497,7 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
       <div className="flex items-center justify-between">
         <h4 className="font-semibold text-gray-800 text-sm">Các lựa chọn</h4>
         {form.answers.length < 8 && (
-          <button onClick={() => set('answers', [...form.answers, { text: '', textCn: '', imageUrl: '' }])}
+          <button onClick={() => set('answers', [...form.answers, { text: '', textCn: '', textEn: '', imageUrl: '' }])}
             className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100">
             + Thêm lựa chọn
           </button>
@@ -514,6 +546,16 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
               }}
               className={`${ADMIN_INPUT_CLASS} py-1`}
               placeholder={`选项${key} (中文)...`}
+            />
+            <input
+              type="text"
+              value={stripPlainTextMathMarker(ans.textEn || '')}
+              onChange={e => {
+                const a = [...form.answers]; a[i] = { ...a[i], textEn: preservePlainTextMathMode(ans.textEn || '', e.target.value) };
+                set('answers', a);
+              }}
+              className={`${ADMIN_INPUT_CLASS} mt-1.5 py-1`}
+              placeholder={`Option ${key} (English)...`}
             />
 
             {ans.text && renderMathPreview(ans.text, value => {
@@ -629,6 +671,10 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
           cnValue={form.explanationCn}
           onCnChange={v => set('explanationCn', v)}
           cnPlaceholder="解释正确答案..."
+          enLabel="Explanation (English)"
+          enValue={form.explanationEn}
+          onEnChange={v => set('explanationEn', v)}
+          enPlaceholder="Explain the correct answer in English..."
           defaultTab="cn"
         />
         <div className="mt-4 rounded-lg border border-blue-100 bg-white/80 p-3">

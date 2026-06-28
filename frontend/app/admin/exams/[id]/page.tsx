@@ -30,6 +30,7 @@ interface Answer {
     answer_key: string;
     answer_text: string;
     answer_text_cn: string;
+    answer_text_en?: string;
     image_url?: string;
     is_correct: boolean;
 }
@@ -40,12 +41,14 @@ interface SavedQuestion {
     question_type: string;
     question_text: string;
     question_text_cn?: string;
+    question_text_en?: string;
     image_url?: string;
     passage_text?: string;
     passage_image_url?: string;
     points: number;
     explanation?: string;
     explanation_cn?: string;
+    explanation_en?: string;
     explanation_image_url?: string;
     difficulty?: string;
     linked_options?: any;
@@ -332,22 +335,25 @@ function groupToReadingData(group: SavedQuestionGroup): ReadingPassageGroupData 
             const answers = (q.answers || []).map(a => ({
                 text: a.answer_text || '',
                 textCn: a.answer_text_cn || '',
+                textEn: a.answer_text_en || '',
                 imageUrl: a.image_url || '',
             }));
             return {
                 _localId: `saved-reading-${q.id}`,
                 questionText: q.question_text || '',
                 questionTextCn: q.question_text_cn || '',
+                questionTextEn: q.question_text_en || '',
                 imageUrl: q.image_url || '',
                 points: q.points || 1,
                 explanation: q.explanation || '',
                 explanationCn: q.explanation_cn || '',
+                explanationEn: q.explanation_en || '',
                 explanationImageUrl: q.explanation_image_url || '',
                 answers: answers.length ? answers : [
-                    { text: '', textCn: '', imageUrl: '' },
-                    { text: '', textCn: '', imageUrl: '' },
-                    { text: '', textCn: '', imageUrl: '' },
-                    { text: '', textCn: '', imageUrl: '' },
+                    { text: '', textCn: '', textEn: '', imageUrl: '' },
+                    { text: '', textCn: '', textEn: '', imageUrl: '' },
+                    { text: '', textCn: '', textEn: '', imageUrl: '' },
+                    { text: '', textCn: '', textEn: '', imageUrl: '' },
                 ],
                 correctAnswer: (q.answers || []).find(a => a.is_correct)?.answer_key || 'A',
                 difficulty: q.difficulty || 'medium',
@@ -376,9 +382,11 @@ function groupToFillBlankData(group: SavedQuestionGroup): FillBlankGroupData {
             _localId: `saved-fill-item-${q.id}`,
             questionText: q.question_text || '',
             questionTextCn: q.question_text_cn || '',
+            questionTextEn: q.question_text_en || '',
             points: q.points || 1,
             explanation: q.explanation || '',
             explanationCn: q.explanation_cn || '',
+            explanationEn: q.explanation_en || '',
             explanationImageUrl: q.explanation_image_url || '',
             correctAnswerKey: (q.answers || []).find(a => a.is_correct)?.answer_key || 'A',
             difficulty: q.difficulty || 'medium',
@@ -392,6 +400,7 @@ function dbToFormData(q: SavedQuestion): QuestionFormData {
     const answers = (q.answers || []).map(a => ({
         text: a.answer_text || '',
         textCn: a.answer_text_cn || '',
+        textEn: a.answer_text_en || '',
         imageUrl: a.image_url || '',
     }));
 
@@ -402,12 +411,14 @@ function dbToFormData(q: SavedQuestion): QuestionFormData {
         questionType: (q.question_type as any) || 'single_choice',
         questionText: q.question_text || '',
         questionTextCn: q.question_text_cn || '',
+        questionTextEn: q.question_text_en || '',
         imageUrl: q.image_url || '',
         passageText: q.effective_passage_text || q.passage_text || '',
         passageImageUrl: q.passage_image_url || '',
         points: q.points || 1,
         explanation: q.explanation || '',
         explanationCn: q.explanation_cn || '',
+        explanationEn: q.explanation_en || '',
         explanationImageUrl: q.explanation_image_url || '',
         answers,
         correctAnswer,
@@ -415,6 +426,7 @@ function dbToFormData(q: SavedQuestion): QuestionFormData {
             key: o.key || 'A',
             text: o.text || '',
             textCn: o.textCn || '',
+            textEn: o.textEn || '',
         })),
         correctAnswerKey: correctAnswer,
         subQuestionNumber: q.sub_question_number || q.question_number || 0,

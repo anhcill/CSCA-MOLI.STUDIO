@@ -157,6 +157,18 @@ function normalizeBilingualText(en, cn) {
   };
 }
 
+function normalizeTrilingualText(vi, cn, en) {
+  const viText = (vi || "").trim();
+  const cnText = (cn || "").trim();
+  const enText = (en || "").trim();
+  if (!viText && !cnText && !enText) return null;
+  return {
+    vi: viText || enText || cnText,
+    cn: cnText || viText || enText,
+    en: enText,
+  };
+}
+
 function normalizeExamAccess(isPremium, vipTier) {
   const normalizedTier = vipTier && vipTier !== "basic" ? "vip" : "basic";
   const normalizedPremium =
@@ -209,13 +221,15 @@ function normalizeLinkedOptions(rawOptions) {
     .map((opt, i) => {
     const text = (opt.text || '').trim();
     const textCn = (opt.textCn || '').trim();
+    const textEn = (opt.textEn || '').trim();
     return {
       key:   opt.key || String.fromCharCode(65 + i),
       text,
       textCn,
+      textEn,
     };
   })
-    .filter((opt) => opt.text || opt.textCn);
+    .filter((opt) => opt.text || opt.textCn || opt.textEn);
 
   return normalized.length >= 2 ? normalized : null;
 }
@@ -253,12 +267,14 @@ async function syncMultipleChoiceAnswers(client, questionId, answers, normalized
         `UPDATE answers
          SET answer_text = $1,
              answer_text_cn = $2,
-             is_correct = $3,
-             image_url = $4
-         WHERE id = $5`,
+             answer_text_en = $3,
+             is_correct = $4,
+             image_url = $5
+         WHERE id = $6`,
         [
-          sanitize(normalizedAnswers[i].en),
+          sanitize(normalizedAnswers[i].vi),
           sanitize(normalizedAnswers[i].cn),
+          normalizedAnswers[i].en ? sanitize(normalizedAnswers[i].en) : null,
           key === correctAnswer,
           answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
           primary.id,
@@ -282,13 +298,14 @@ async function syncMultipleChoiceAnswers(client, questionId, answers, normalized
       }
     } else {
       await client.query(
-        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           questionId,
           key,
-          sanitize(normalizedAnswers[i].en),
+          sanitize(normalizedAnswers[i].vi),
           sanitize(normalizedAnswers[i].cn),
+          normalizedAnswers[i].en ? sanitize(normalizedAnswers[i].en) : null,
           key === correctAnswer,
           answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
         ],
@@ -1916,10 +1933,12 @@ const AdminExamController = {
         questionType,        // Loại câu hỏi: single_choice | fill_blank_pool | fill_blank_item | reading_passage | reading_item
         questionText,       // Nội dung câu hỏi (tiếng Anh, optional)
         questionTextCn,     // Nội dung câu hỏi (tiếng Trung)
+        questionTextEn,
         imageUrl,
         points,
         explanation,
         explanationCn,
+        explanationEn,
         explanationImageUrl,
         answers,           // Mảng [{text, textCn, isCorrect}] — cho single_choice / reading_item
         correctAnswer,     // Key đúng: 'A','B','C','D' — cho single_choice / reading_item
@@ -1939,7 +1958,7 @@ const AdminExamController = {
       if (qType !== QUESTION_TYPES.FILL_BLANK_ITEM && qType !== QUESTION_TYPES.FILL_BLANK_POOL && qType !== QUESTION_TYPES.READING_PASSAGE) {
         // Câu điền từ con, điền từ pool & đọc hiểu đầu đoạn KHÔNG bắt buộc questionText
         // (nội dung nằm trong passageText)
-        const normQ = normalizeBilingualText(questionText, questionTextCn);
+        const normQ = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
         if (!normQ) {
           return res.status(400).json({ message: "Câu hỏi phải có nội dung (Tiếng Anh hoặc Tiếng Trung)" });
         }
@@ -2007,7 +2026,7 @@ const AdminExamController = {
 
         // ── Validate answers: single_choice / reading_item ──
         if ((qType === QUESTION_TYPES.SINGLE_CHOICE || qType === QUESTION_TYPES.READING_ITEM) && qType !== QUESTION_TYPES.FILL_BLANK_ITEM) {
-          const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+          const normAnswers = (answers || []).map(a => normalizeTrilingualText(a.text, a.textCn, a.textEn));
           if (normAnswers.some(a => !a) || normAnswers.length < 2 || normAnswers.length > 8) {
             await client.query("ROLLBACK");
             return res.status(400).json({ message: "Cần từ 2 đến 8 đáp án" });
@@ -2027,29 +2046,31 @@ const AdminExamController = {
         }
 
         // ── INSERT câu hỏi ──
-        const normQ = normalizeBilingualText(questionText, questionTextCn);
+        const normQ = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
         const parsedPoints = clamp(parsePositiveNumber(points, 1), 0.1, MAX_POINTS_PER_QUESTION);
 
         const questionResult = await client.query(
           `INSERT INTO questions (
              exam_id, question_number, question_type,
-             question_text, question_text_cn,
-             points, explanation, explanation_cn,
+             question_text, question_text_cn, question_text_en,
+             points, explanation, explanation_cn, explanation_en,
              explanation_image_url, image_url,
              passage_text, passage_image_url,
              question_group_type, difficulty,
              linked_options, sub_question_number, passage_group_id
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
            RETURNING id`,
           [
             examId,
             questionNumber,
             qType,
-            sanitize(normQ?.en || ''),
+            sanitize(normQ?.vi || ''),
             sanitize(normQ?.cn || ''),
+            normQ?.en ? sanitize(normQ.en) : null,
             parsedPoints,
             explanation ? sanitizeExplanation(explanation) : null,
             explanationCn ? sanitizeExplanation(explanationCn) : null,
+            explanationEn ? sanitizeExplanation(explanationEn) : null,
             explanationImageUrl ? sanitize(explanationImageUrl) : null,
             imageUrl ? sanitize(imageUrl) : null,
             passageText ? sanitize(passageText) : null,
@@ -2074,18 +2095,19 @@ const AdminExamController = {
 
         // ── INSERT answers: single_choice / reading_item ──
         if (qType === QUESTION_TYPES.SINGLE_CHOICE || qType === QUESTION_TYPES.READING_ITEM) {
-          const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+          const normAnswers = (answers || []).map(a => normalizeTrilingualText(a.text, a.textCn, a.textEn));
           const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
           for (let i = 0; i < normAnswers.length; i++) {
             const key = answerKeys[i];
             await client.query(
-              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
               [
                 questionId,
                 key,
-                sanitize(normAnswers[i].en),
+                sanitize(normAnswers[i].vi),
                 sanitize(normAnswers[i].cn),
+                normAnswers[i].en ? sanitize(normAnswers[i].en) : null,
                 key === correctAnswer,
                 answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
               ],
@@ -2139,10 +2161,12 @@ const AdminExamController = {
         questionType,
         questionText,
         questionTextCn,
+        questionTextEn,
         imageUrl,
         points,
         explanation,
         explanationCn,
+        explanationEn,
         explanationImageUrl,
         answers,
         correctAnswer,
@@ -2155,8 +2179,8 @@ const AdminExamController = {
         subQuestionNumber,
       } = req.body;
 
-      const hasQuestionTextPayload = questionText !== undefined || questionTextCn !== undefined;
-      const normalizedQuestion = hasQuestionTextPayload ? normalizeBilingualText(questionText, questionTextCn) : null;
+      const hasQuestionTextPayload = questionText !== undefined || questionTextCn !== undefined || questionTextEn !== undefined;
+      const normalizedQuestion = hasQuestionTextPayload ? normalizeTrilingualText(questionText, questionTextCn, questionTextEn) : null;
 
       if (hasQuestionTextPayload && !normalizedQuestion) {
         return res.status(400).json({ message: "Câu hỏi không thể trống ở cả hai ngôn ngữ" });
@@ -2189,9 +2213,11 @@ const AdminExamController = {
 
         if (normalizedQuestion) {
           fields.push(`question_text = $${idx++}`);
-          vals.push(sanitize(normalizedQuestion.en));
+          vals.push(sanitize(normalizedQuestion.vi));
           fields.push(`question_text_cn = $${idx++}`);
           vals.push(sanitize(normalizedQuestion.cn));
+          fields.push(`question_text_en = $${idx++}`);
+          vals.push(normalizedQuestion.en ? sanitize(normalizedQuestion.en) : null);
         }
         if (imageUrl !== undefined) {
           fields.push(`image_url = $${idx++}`);
@@ -2208,6 +2234,10 @@ const AdminExamController = {
         if (explanationCn !== undefined) {
           fields.push(`explanation_cn = $${idx++}`);
           vals.push(explanationCn ? sanitizeExplanation(explanationCn) : null);
+        }
+        if (explanationEn !== undefined) {
+          fields.push(`explanation_en = $${idx++}`);
+          vals.push(explanationEn ? sanitizeExplanation(explanationEn) : null);
         }
         if (explanationImageUrl !== undefined) {
           fields.push(`explanation_image_url = $${idx++}`);
@@ -2253,7 +2283,7 @@ const AdminExamController = {
           if (qType === 'fill_blank_pool' || qType === 'fill_blank_item') {
             // Điền từ: không dùng bảng answers
           } else {
-            const normalizedAnswers = answers.map(a => normalizeBilingualText(a.text, a.textCn));
+            const normalizedAnswers = answers.map(a => normalizeTrilingualText(a.text, a.textCn, a.textEn));
             if (normalizedAnswers.some(a => !a)) {
               await client.query("ROLLBACK");
               return res.status(400).json({ message: "Mỗi đáp án phải có nội dung" });
@@ -2391,8 +2421,8 @@ const AdminExamController = {
         }
 
         const {
-            questionType, questionText, questionTextCn, imageUrl,
-            points, explanation, explanationCn, explanationImageUrl, answers, correctAnswer,
+            questionType, questionText, questionTextCn, questionTextEn, imageUrl,
+            points, explanation, explanationCn, explanationEn, explanationImageUrl, answers, correctAnswer,
             passageText, passageImageUrl, difficulty, linkedOptions,
             correctAnswerKey, subQuestionNumber,
         } = questionData;
@@ -2464,7 +2494,7 @@ const AdminExamController = {
 
                 // ── Validation ──
                 if (qType !== 'fill_blank_item' && qType !== 'fill_blank_pool' && qType !== 'reading_passage') {
-                    const normQ = normalizeBilingualText(questionText, questionTextCn);
+                    const normQ = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
                     if (!normQ) {
                         await client.query("ROLLBACK");
                         return res.status(400).json({ message: "Câu hỏi phải có nội dung" });
@@ -2486,7 +2516,7 @@ const AdminExamController = {
                 }
 
                 if ((qType === 'single_choice' || qType === 'reading_item') && qType !== 'fill_blank_item') {
-                    const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+                    const normAnswers = (answers || []).map(a => normalizeTrilingualText(a.text, a.textCn, a.textEn));
                     if (normAnswers.some(a => !a) || normAnswers.length < 2) {
                         await client.query("ROLLBACK");
                         return res.status(400).json({ message: "Cần ít nhất 2 đáp án" });
@@ -2498,25 +2528,27 @@ const AdminExamController = {
                 }
 
                 // ── Insert the new question ──
-                const normQ = normalizeBilingualText(questionText, questionTextCn);
+                const normQ = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
                 const parsedPoints = clamp(parsePositiveNumber(points, 1), 0.1, MAX_POINTS_PER_QUESTION);
 
                 const questionResult = await client.query(
                     `INSERT INTO questions (
                         exam_id, question_number, question_type,
-                        question_text, question_text_cn,
-                        points, explanation, explanation_cn,
+                        question_text, question_text_cn, question_text_en,
+                        points, explanation, explanation_cn, explanation_en,
                         explanation_image_url, image_url, passage_text, passage_image_url,
                         question_group_type, difficulty,
                         linked_options, sub_question_number, passage_group_id
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
                     RETURNING id`,
                     [
                         examId, targetPosition, qType,
-                        sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+                        sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
+                        normQ?.en ? sanitize(normQ.en) : null,
                         parsedPoints,
                         explanation ? sanitizeExplanation(explanation) : null,
                         explanationCn ? sanitizeExplanation(explanationCn) : null,
+                        explanationEn ? sanitizeExplanation(explanationEn) : null,
                         explanationImageUrl ? sanitize(explanationImageUrl) : null,
                         imageUrl ? sanitize(imageUrl) : null,
                         passageText ? sanitize(passageText) : null,
@@ -2539,16 +2571,17 @@ const AdminExamController = {
 
                 // ── Insert answers ──
                 if (qType === 'single_choice' || qType === 'reading_item') {
-                    const normAnswers = (answers || []).map(a => normalizeBilingualText(a.text, a.textCn));
+                    const normAnswers = (answers || []).map(a => normalizeTrilingualText(a.text, a.textCn, a.textEn));
                     const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
                     for (let i = 0; i < normAnswers.length; i++) {
                         const key = answerKeys[i];
                         await client.query(
-                            `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-                             VALUES ($1, $2, $3, $4, $5, $6)`,
+                            `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+                             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                             [
                                 questionId, key,
-                                sanitize(normAnswers[i].en), sanitize(normAnswers[i].cn),
+                                sanitize(normAnswers[i].vi), sanitize(normAnswers[i].cn),
+                                normAnswers[i].en ? sanitize(normAnswers[i].en) : null,
                                 key === correctAnswer,
                                 answers[i]?.imageUrl ? sanitize(answers[i].imageUrl) : null,
                             ],
@@ -3014,6 +3047,7 @@ const AdminExamController = {
                'answer_key', a.answer_key,
                'answer_text', a.answer_text,
                'answer_text_cn', a.answer_text_cn,
+               'answer_text_en', a.answer_text_en,
                'image_url', a.image_url,
                'is_correct', a.is_correct
              ) ORDER BY a.answer_key
@@ -3297,23 +3331,25 @@ const AdminExamController = {
         for (const q of validSubQs) {
           questionNumber++;
           const parsedPoints = clamp(parsePositiveNumber(q.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-          const normQ = normalizeBilingualText(q.questionText, q.questionTextCn);
+          const normQ = normalizeTrilingualText(q.questionText, q.questionTextCn, q.questionTextEn);
 
           const subResult = await client.query(
             `INSERT INTO questions (
                exam_id, question_number, question_type,
-               question_text, question_text_cn,
-               points, explanation, explanation_cn, explanation_image_url,
+               question_text, question_text_cn, question_text_en,
+               points, explanation, explanation_cn, explanation_en, explanation_image_url,
                question_group_type, difficulty,
                sub_question_number, passage_group_id
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
              RETURNING id`,
             [
               examId, questionNumber, QUESTION_TYPES.READING_ITEM,
-              sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+              sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
+              normQ?.en ? sanitize(normQ.en) : null,
               parsedPoints,
               q.explanation ? sanitizeExplanation(q.explanation) : null,
               q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
+              q.explanationEn ? sanitizeExplanation(q.explanationEn) : null,
               q.explanationImageUrl ? sanitize(q.explanationImageUrl) : null,
               QUESTION_TYPES.READING_ITEM,
               q.difficulty || 'medium',
@@ -3326,14 +3362,15 @@ const AdminExamController = {
           // Insert answers
           const answerKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
           for (let i = 0; i < q.answers.length; i++) {
-            const normA = normalizeBilingualText(q.answers[i].text, q.answers[i].textCn);
+            const normA = normalizeTrilingualText(q.answers[i].text, q.answers[i].textCn, q.answers[i].textEn);
             if (!normA) continue;
             await client.query(
-              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+              `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
               [
                 subId, answerKeys[i],
-                sanitize(normA.en), sanitize(normA.cn),
+                sanitize(normA.vi), sanitize(normA.cn),
+                normA.en ? sanitize(normA.en) : null,
                 answerKeys[i] === q.correctAnswer,
                 q.answers[i]?.imageUrl ? sanitize(q.answers[i].imageUrl) : null,
               ]
@@ -3468,23 +3505,25 @@ const AdminExamController = {
           for (const q of validSubQs) {
             questionNumber++;
             const parsedPoints = clamp(parsePositiveNumber(q.points, 1), 0.1, MAX_POINTS_PER_QUESTION);
-            const normQ = normalizeBilingualText(q.questionText, q.questionTextCn);
+            const normQ = normalizeTrilingualText(q.questionText, q.questionTextCn, q.questionTextEn);
 
             const subResult = await client.query(
               `INSERT INTO questions (
                  exam_id, question_number, question_type,
-                 question_text, question_text_cn,
-                 points, explanation, explanation_cn, explanation_image_url,
+                 question_text, question_text_cn, question_text_en,
+                 points, explanation, explanation_cn, explanation_en, explanation_image_url,
                  question_group_type, difficulty,
                  sub_question_number, passage_group_id
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                RETURNING id`,
               [
                 examId, questionNumber, QUESTION_TYPES.READING_ITEM,
-                sanitize(normQ?.en || ''), sanitize(normQ?.cn || ''),
+                sanitize(normQ?.vi || ''), sanitize(normQ?.cn || ''),
+                normQ?.en ? sanitize(normQ.en) : null,
                 parsedPoints,
                 q.explanation ? sanitizeExplanation(q.explanation) : null,
                 q.explanationCn ? sanitizeExplanation(q.explanationCn) : null,
+                q.explanationEn ? sanitizeExplanation(q.explanationEn) : null,
                 q.explanationImageUrl ? sanitize(q.explanationImageUrl) : null,
                 QUESTION_TYPES.READING_ITEM,
                 q.difficulty || 'medium',
@@ -3495,14 +3534,15 @@ const AdminExamController = {
             const subId = subResult.rows[0].id;
 
             for (let i = 0; i < q.answers.length; i++) {
-              const normA = normalizeBilingualText(q.answers[i].text, q.answers[i].textCn);
+              const normA = normalizeTrilingualText(q.answers[i].text, q.answers[i].textCn, q.answers[i].textEn);
               if (!normA) continue;
               await client.query(
-                `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, is_correct, image_url)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                `INSERT INTO answers (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct, image_url)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                   subId, answerKeys[i],
-                  sanitize(normA.en), sanitize(normA.cn),
+                  sanitize(normA.vi), sanitize(normA.cn),
+                  normA.en ? sanitize(normA.en) : null,
                   answerKeys[i] === q.correctAnswer,
                   q.answers[i]?.imageUrl ? sanitize(q.answers[i].imageUrl) : null,
                 ]

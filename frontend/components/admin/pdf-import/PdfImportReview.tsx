@@ -1475,6 +1475,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                             cnLabel="Tiếng Trung"
                             cnValue={subQuestion.questionTextCn || ''}
                             onCnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { questionTextCn: value })}
+                            enLabel="English"
+                            enValue={subQuestion.questionTextEn || ''}
+                            onEnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { questionTextEn: value })}
                             placeholder="Nội dung câu hỏi. Phân số: \\frac{x+3}{x-2}"
                             cnPlaceholder="Nội dung tiếng Trung"
                           />
@@ -1499,6 +1502,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                                   cnLabel="Tiếng Trung"
                                   cnValue={answer.textCn || ''}
                                   onCnChange={(value) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { textCn: value })}
+                                  enLabel="English"
+                                  enValue={answer.textEn || ''}
+                                  onEnChange={(value) => updateReadingSubAnswer(itemIndex, subIndex, answerIndex, { textEn: value })}
                                   placeholder={`Đáp án ${IMPORT_ANSWER_KEYS[answerIndex]} (Việt/Anh)`}
                                   cnPlaceholder={`Đáp án ${IMPORT_ANSWER_KEYS[answerIndex]} (Tiếng Trung)`}
                                 />
@@ -1542,6 +1548,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               cnLabel="Tiếng Trung"
                               cnValue={subQuestion.explanationCn || ''}
                               onCnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { explanationCn: value })}
+                              enLabel="English"
+                              enValue={subQuestion.explanationEn || ''}
+                              onEnChange={(value) => updateReadingSubQuestion(itemIndex, subIndex, { explanationEn: value })}
                               placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
                               cnPlaceholder="Giải thích tiếng Trung"
                               defaultTab="cn"
@@ -1611,6 +1620,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               cnLabel="Tiếng Trung"
                               cnValue={option.textCn || ''}
                               onCnChange={(value) => updateFillBlankOption(itemIndex, optionIndex, { textCn: value })}
+                              enLabel="English"
+                              enValue={option.textEn || ''}
+                              onEnChange={(value) => updateFillBlankOption(itemIndex, optionIndex, { textEn: value })}
                               placeholder="Việt/Anh"
                               cnPlaceholder="Tiếng Trung"
                             />
@@ -1638,6 +1650,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               cnLabel="Tiếng Trung"
                               cnValue={subItem.questionTextCn || ''}
                               onCnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { questionTextCn: value })}
+                              enLabel="English"
+                              enValue={subItem.questionTextEn || ''}
+                              onEnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { questionTextEn: value })}
                               placeholder={`Chỗ trống ${subIndex + 1} (Việt/Anh)`}
                               cnPlaceholder={`Chỗ trống ${subIndex + 1} (Tiếng Trung)`}
                             />
@@ -1671,6 +1686,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                               cnLabel="Tiếng Trung"
                               cnValue={subItem.explanationCn || ''}
                               onCnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { explanationCn: value })}
+                              enLabel="English"
+                              enValue={subItem.explanationEn || ''}
+                              onEnChange={(value) => updateFillBlankSubItem(itemIndex, subIndex, { explanationEn: value })}
                               placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
                               cnPlaceholder="Giải thích tiếng Trung"
                               defaultTab="cn"
@@ -1709,6 +1727,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                 cnLabel="Tiếng Trung"
                 cnValue={item.questionTextCn || ''}
                 onCnChange={(value) => updateSingle(itemIndex, { questionTextCn: value })}
+                enLabel="English"
+                enValue={item.questionTextEn || ''}
+                onEnChange={(value) => updateSingle(itemIndex, { questionTextEn: value })}
                 placeholder="Nội dung (Việt/Anh). Phân số: \\frac{2x+3}{x-1}"
                 cnPlaceholder="Nội dung tiếng Trung"
               />
@@ -1733,6 +1754,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                       cnLabel="Tiếng Trung"
                       cnValue={answer.textCn || ''}
                       onCnChange={(value) => updateSingleAnswer(itemIndex, answerIndex, { textCn: value })}
+                      enLabel="English"
+                      enValue={answer.textEn || ''}
+                      onEnChange={(value) => updateSingleAnswer(itemIndex, answerIndex, { textEn: value })}
                       placeholder="Việt/Anh"
                       cnPlaceholder="Tiếng Trung"
                     />
@@ -1776,6 +1800,9 @@ export default function PdfImportReview({ preview, items: sourceItems, saving, o
                   cnLabel="Tiếng Trung"
                   cnValue={item.explanationCn || ''}
                   onCnChange={(value) => updateSingle(itemIndex, { explanationCn: value })}
+                  enLabel="English"
+                  enValue={item.explanationEn || ''}
+                  onEnChange={(value) => updateSingle(itemIndex, { explanationEn: value })}
                   placeholder="Giải thích (Việt/Anh). Phân số: \\frac{10}{\\sqrt{5}}=2\\sqrt{5}"
                   cnPlaceholder="Giải thích tiếng Trung"
                   defaultTab="cn"

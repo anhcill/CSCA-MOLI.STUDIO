@@ -30,7 +30,7 @@ const PDF_IMPORT_PRESETS = {
     ruleParser: false,
     instruction: [
       "Prioritize Chinese, English, Vietnamese language-learning questions, reading passages, grammar, vocabulary, translation, pinyin, and bilingual text.",
-      "Keep long reading passages intact. Put Chinese text in questionTextCn/textCn when available.",
+      "Keep long reading passages intact. Put Vietnamese text in questionText/text, Chinese text in questionTextCn/textCn, and English text in questionTextEn/textEn when available.",
     ],
   },
   chinese_natural: {
@@ -113,6 +113,7 @@ Task:
   2. reading_group: one reading passage with multiple single-choice subQuestions.
   3. fill_blank_group: word-bank/cloze questions with linkedOptions and blank subItems.
 - Add short Vietnamese explanations for each correct answer if possible. Vietnamese explanations must use full Vietnamese diacritics, not no-accent text.
+- Keep languages in separate fields: Vietnamese in questionText/text/explanation, Chinese in questionTextCn/textCn/explanationCn, English in questionTextEn/textEn/explanationEn. Never merge English into the Vietnamese field when an English field exists.
 - If a question references an image, table, chart, diagram, map, figure, experiment setup, or missing visual, set needsImage=true and write imageHint.
 - Preserve math as KaTeX-compatible LaTeX inside \\(...\\). Convert OCR/plain fractions like 2x+3/x-1, (2x+3)/(x-1), or stacked numerator/denominator text into \\frac{2x+3}{x-1}.
 - Preserve inequality and set/interval meaning exactly. Never change strict/non-strict signs: < stays <, > stays >, <= or ≤ becomes \\le, >= or ≥ becomes \\ge. Do not change \\le to < or \\ge to >.
@@ -120,7 +121,7 @@ Task:
 - Convert math symbols to LaTeX: != or ≠ -> \\ne, <= or ≤ -> \\le, >= or ≥ -> \\ge, sqrt/√ -> \\sqrt{}, superscripts like f-1(x) or f^-1(x) -> f^{-1}(x).
 - For Chinese math questions, keep Chinese words in questionTextCn but wrap only formulas, e.g. 求函数 \\(y=\\frac{2x+3}{x-1}(x\\ne1)\\) 的反函数。
 - For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).
-- If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn and do not keep it in questionText/questionTextCn or answers.
+- If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn/explanationEn and do not keep it in questionText/questionTextCn/questionTextEn or answers.
 - Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.
 - If the file has an explicit total question count, compare it with the returned structure. If the returned count is lower, add a warning naming the likely missing range.
 - Put unsupported items such as essay/listening-only tasks into warnings, not items.
@@ -139,12 +140,14 @@ Required JSON schema:
       "questionType": "single_choice",
       "questionText": "",
       "questionTextCn": "",
+      "questionTextEn": "",
       "answers": [
-        { "text": "", "textCn": "" }
+        { "text": "", "textCn": "", "textEn": "" }
       ],
       "correctAnswer": "A",
       "explanation": "",
       "explanationCn": "",
+      "explanationEn": "",
       "points": 1,
       "difficulty": "medium",
       "needsImage": false,
@@ -160,12 +163,14 @@ Required JSON schema:
           "questionType": "single_choice",
           "questionText": "",
           "questionTextCn": "",
+          "questionTextEn": "",
           "answers": [
-            { "text": "", "textCn": "" }
+            { "text": "", "textCn": "", "textEn": "" }
           ],
           "correctAnswer": "A",
           "explanation": "",
           "explanationCn": "",
+          "explanationEn": "",
           "points": 1,
           "difficulty": "medium",
           "needsImage": false,
@@ -183,16 +188,18 @@ Required JSON schema:
       "passageText": "",
       "passageImageUrl": "",
       "linkedOptions": [
-        { "key": "A", "text": "", "textCn": "" },
-        { "key": "B", "text": "", "textCn": "" }
+        { "key": "A", "text": "", "textCn": "", "textEn": "" },
+        { "key": "B", "text": "", "textCn": "", "textEn": "" }
       ],
       "subItems": [
         {
           "questionText": "",
           "questionTextCn": "",
+          "questionTextEn": "",
           "correctAnswerKey": "A",
           "explanation": "",
           "explanationCn": "",
+          "explanationEn": "",
           "points": 1,
           "difficulty": "medium"
         }
@@ -206,7 +213,7 @@ Required JSON schema:
 }
 
 Rules:
-- questionText is Vietnamese/English text. questionTextCn is Chinese text if available.
+- questionText is Vietnamese text, questionTextCn is Chinese text, and questionTextEn is English text if available.
 - answers must contain 2 to 8 options.
 - correctAnswer must be A-H or empty if not clear.
 - reading_group must have passageText and at least 1 valid subQuestion.

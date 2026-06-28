@@ -21,7 +21,11 @@ interface MathInputProps {
   cnValue?: string;
   onCnChange?: (value: string) => void;
   cnPlaceholder?: string;
-  defaultTab?: 'vi' | 'cn';
+  enLabel?: string;
+  enValue?: string;
+  onEnChange?: (value: string) => void;
+  enPlaceholder?: string;
+  defaultTab?: 'vi' | 'cn' | 'en';
   showInlinePreview?: boolean;
   commitDelayMs?: number;
 }
@@ -137,6 +141,10 @@ export default function MathInput({
   cnValue,
   onCnChange,
   cnPlaceholder,
+  enLabel,
+  enValue,
+  onEnChange,
+  enPlaceholder,
   defaultTab = 'vi',
   showInlinePreview = true,
   commitDelayMs = 0,
@@ -144,19 +152,21 @@ export default function MathInput({
   const [showMath, setShowMath] = useState(false);
   const [mathInput, setMathInput] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
-  const [tab, setTab] = useState<'vi' | 'cn'>(defaultTab);
+  const [tab, setTab] = useState<'vi' | 'cn' | 'en'>(defaultTab);
   const [showPreview, setShowPreview] = useState(true);
   const [draftValue, setDraftValue] = useState(value || '');
   const [draftCnValue, setDraftCnValue] = useState(cnValue || '');
+  const [draftEnValue, setDraftEnValue] = useState(enValue || '');
   const mathRef = useRef<HTMLTextAreaElement>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestDraftRef = useRef({ vi: value || '', cn: cnValue || '' });
-  const lastCommittedRef = useRef({ vi: value || '', cn: cnValue || '' });
-  const dirtyDraftRef = useRef({ vi: false, cn: false });
+  const latestDraftRef = useRef({ vi: value || '', cn: cnValue || '', en: enValue || '' });
+  const lastCommittedRef = useRef({ vi: value || '', cn: cnValue || '', en: enValue || '' });
+  const dirtyDraftRef = useRef({ vi: false, cn: false, en: false });
   const onChangeRef = useRef(onChange);
   const onCnChangeRef = useRef(onCnChange);
+  const onEnChangeRef = useRef(onEnChange);
 
-  const currentValue = tab === 'vi' ? draftValue : draftCnValue;
+  const currentValue = tab === 'vi' ? draftValue : tab === 'cn' ? draftCnValue : draftEnValue;
   const deferredCurrentValue = useDeferredValue(currentValue);
   const deferredMathInput = useDeferredValue(mathInput);
   const currentRepairCandidate = useMemo(
@@ -172,7 +182,8 @@ export default function MathInput({
   useEffect(() => {
     onChangeRef.current = onChange;
     onCnChangeRef.current = onCnChange;
-  }, [onChange, onCnChange]);
+    onEnChangeRef.current = onEnChange;
+  }, [onChange, onCnChange, onEnChange]);
 
   useEffect(() => {
     const nextValue = value || '';
@@ -194,6 +205,16 @@ export default function MathInput({
     }
   }, [cnValue]);
 
+  useEffect(() => {
+    const nextValue = enValue || '';
+    lastCommittedRef.current.en = nextValue;
+    if (!dirtyDraftRef.current.en || latestDraftRef.current.en === nextValue) {
+      dirtyDraftRef.current.en = false;
+      latestDraftRef.current.en = nextValue;
+      setDraftEnValue(nextValue);
+    }
+  }, [enValue]);
+
   const clearCommitTimer = () => {
     if (commitTimerRef.current) {
       clearTimeout(commitTimerRef.current);
@@ -201,7 +222,7 @@ export default function MathInput({
     }
   };
 
-  const commitDraftValue = (targetTab: 'vi' | 'cn', nextValue = latestDraftRef.current[targetTab]) => {
+  const commitDraftValue = (targetTab: 'vi' | 'cn' | 'en', nextValue = latestDraftRef.current[targetTab]) => {
     if (lastCommittedRef.current[targetTab] === nextValue) {
       dirtyDraftRef.current[targetTab] = false;
       return;
@@ -210,12 +231,14 @@ export default function MathInput({
     dirtyDraftRef.current[targetTab] = false;
     if (targetTab === 'vi') {
       onChangeRef.current(nextValue);
-    } else {
+    } else if (targetTab === 'cn') {
       onCnChangeRef.current?.(nextValue);
+    } else {
+      onEnChangeRef.current?.(nextValue);
     }
   };
 
-  const scheduleCommit = (targetTab: 'vi' | 'cn', nextValue: string) => {
+  const scheduleCommit = (targetTab: 'vi' | 'cn' | 'en', nextValue: string) => {
     latestDraftRef.current[targetTab] = nextValue;
     dirtyDraftRef.current[targetTab] = true;
     clearCommitTimer();
@@ -244,14 +267,19 @@ export default function MathInput({
       if (lastCommittedRef.current.cn !== latestDraft.cn) {
         onCnChangeRef.current?.(latestDraft.cn);
       }
+      if (lastCommittedRef.current.en !== latestDraft.en) {
+        onEnChangeRef.current?.(latestDraft.en);
+      }
     };
   }, []);
 
   useEffect(() => {
     if (cnLabel && defaultTab === 'cn') {
       setTab('cn');
+    } else if (enLabel && defaultTab === 'en') {
+      setTab('en');
     }
-  }, [cnLabel, cnValue, defaultTab]);
+  }, [cnLabel, cnValue, enLabel, enValue, defaultTab]);
 
   useEffect(() => {
     if (showMath && mathRef.current) {
@@ -277,8 +305,10 @@ export default function MathInput({
     const newVal = currentValue ? `${currentValue} ${wrapped}` : wrapped;
     if (tab === 'vi') {
       setDraftValue(newVal);
-    } else {
+    } else if (tab === 'cn') {
       setDraftCnValue(newVal);
+    } else {
+      setDraftEnValue(newVal);
     }
     scheduleCommit(tab, newVal);
   };
@@ -288,8 +318,10 @@ export default function MathInput({
     const newVal = insertMathIntoText(currentValue, mathInput);
     if (tab === 'vi') {
       setDraftValue(newVal);
-    } else {
+    } else if (tab === 'cn') {
       setDraftCnValue(newVal);
+    } else {
+      setDraftEnValue(newVal);
     }
     scheduleCommit(tab, newVal);
     startTransition(() => {
@@ -302,8 +334,10 @@ export default function MathInput({
   const handleCurrentValueChange = (nextValue: string) => {
     if (tab === 'vi') {
       setDraftValue(nextValue);
-    } else {
+    } else if (tab === 'cn') {
       setDraftCnValue(nextValue);
+    } else {
+      setDraftEnValue(nextValue);
     }
     scheduleCommit(tab, nextValue);
   };
@@ -327,13 +361,13 @@ export default function MathInput({
         }
       }}
     >
-      {(label || (tab === 'cn' && cnLabel)) && (
+      {(label || (tab === 'cn' && cnLabel) || (tab === 'en' && enLabel)) && (
         <label className="block text-sm font-medium text-gray-700">
-          {tab === 'cn' && cnLabel ? cnLabel : label}
+          {tab === 'cn' && cnLabel ? cnLabel : tab === 'en' && enLabel ? enLabel : label}
         </label>
       )}
 
-      {cnLabel && (
+      {(cnLabel || enLabel) && (
         <div className="flex gap-2 mb-1">
           <button
             type="button"
@@ -363,6 +397,22 @@ export default function MathInput({
           >
             🇨🇳 中文
           </button>
+          {enLabel && (
+            <button
+              type="button"
+              onClick={() => {
+                flushCurrentDraft();
+                setTab('en');
+              }}
+              className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${
+                tab === 'en'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              English
+            </button>
+          )}
         </div>
       )}
 
@@ -370,7 +420,7 @@ export default function MathInput({
         <textarea
           value={currentValue}
           onChange={handleRawInput}
-          placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : placeholder}
+          placeholder={tab === 'cn' ? (cnPlaceholder || placeholder) : tab === 'en' ? (enPlaceholder || placeholder) : placeholder}
           rows={4}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base leading-relaxed resize-y font-mono"
         />
