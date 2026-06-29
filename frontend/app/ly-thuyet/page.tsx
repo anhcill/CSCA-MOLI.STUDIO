@@ -27,9 +27,13 @@ interface Material {
   content_text?: string;
   content_source?: string;
   content_meta?: {
-    images?: Array<{ url: string; caption?: string; order?: number }>;
+    cover_image?: MaterialImageMeta | string | null;
+    coverImage?: MaterialImageMeta | string | null;
+    images?: MaterialImageMeta[];
   };
 }
+
+type MaterialImageMeta = { url: string; caption?: string; order?: number };
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
   '': 'common.all',
@@ -45,7 +49,18 @@ function hasWebContent(material?: Material | null) {
 }
 
 function getMaterialCoverUrl(material: Material) {
+  const cover = normalizeMaterialImage(material.content_meta?.cover_image || material.content_meta?.coverImage);
+  if (cover?.url) return cover.url;
   return getMaterialImages(material)[0]?.url || '';
+}
+
+function normalizeMaterialImage(image?: MaterialImageMeta | string | null) {
+  if (!image) return null;
+  if (typeof image === 'string') {
+    const url = image.trim();
+    return url ? { url } : null;
+  }
+  return image.url ? image : null;
 }
 
 function getMaterialImages(material: Material) {

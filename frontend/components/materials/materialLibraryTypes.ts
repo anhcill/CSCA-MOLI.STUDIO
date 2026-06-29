@@ -15,6 +15,8 @@ export interface Material {
   content_source?: string;
   content_meta?: {
     importMode?: string;
+    cover_image?: MaterialImageMeta | string | null;
+    coverImage?: MaterialImageMeta | string | null;
     images?: Array<{
       url: string;
       caption?: string;
@@ -25,6 +27,15 @@ export interface Material {
     [key: string]: any;
   };
 }
+
+export type MaterialImageMeta = {
+  url: string;
+  publicId?: string;
+  caption?: string;
+  order?: number;
+  width?: number | null;
+  height?: number | null;
+};
 
 export interface MaterialTypeOption {
   value: string;
@@ -73,7 +84,17 @@ export function getMaterialImages(material: Material) {
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
+function normalizeMaterialImage(image?: MaterialImageMeta | string | null) {
+  if (!image) return null;
+  if (typeof image === 'string') {
+    return image.trim() ? { url: image.trim() } : null;
+  }
+  return image.url ? image : null;
+}
+
 export function getMaterialCoverImage(material: Material) {
+  const coverImage = normalizeMaterialImage(material.content_meta?.cover_image || material.content_meta?.coverImage);
+  if (coverImage) return coverImage;
   return getMaterialImages(material)[0] || null;
 }
 

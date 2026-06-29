@@ -67,6 +67,22 @@ const DEFAULT_FORM_DATA = {
   content_meta: {} as Record<string, any>,
 };
 
+const getMetaImage = (image: any): MaterialImageItem | null => {
+  if (!image) return null;
+  if (typeof image === 'string') {
+    const url = image.trim();
+    return url ? { url, order: 0 } : null;
+  }
+  return image.url ? image : null;
+};
+
+const getMaterialCoverUrl = (meta?: Record<string, any>) => {
+  const cover = getMetaImage(meta?.cover_image || meta?.coverImage);
+  if (cover?.url) return cover.url;
+  const images = Array.isArray(meta?.images) ? meta.images : [];
+  return images.find((image: any) => image?.url)?.url || '';
+};
+
 type MaterialImportMode = 'pdf' | 'web' | 'images';
 
 export default function AdminMaterialsPage() {
@@ -96,6 +112,7 @@ export default function AdminMaterialsPage() {
   const materialImages = ((formData.content_meta?.images || []) as MaterialImageItem[])
     .slice()
     .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const coverImage = getMetaImage(formData.content_meta?.cover_image || formData.content_meta?.coverImage);
 
   // Wait for auth to hydrate before checking
   useEffect(() => { setMounted(true); }, []);
@@ -169,6 +186,7 @@ export default function AdminMaterialsPage() {
         content_text: importMode === 'web' ? (res.data.data.content_text || prev.content_text) : '',
         content_html: '',
         content_meta: {
+          ...prev.content_meta,
           ...(res.data.data.content_meta || {}),
           importMode,
         },
@@ -249,17 +267,11 @@ export default function AdminMaterialsPage() {
     }
   };
 
-  const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    try {
-      await uploadImageFiles(files, 'ảnh');
-    } finally {
-      e.target.value = '';
-    }
-    return;
+  const uploadCoverImage = async (files: File[], sourceLabel = 'bìa') => {
     if (!files.length) return;
 
-    if (files.some(file => !file.type.startsWith('image/'))) {
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
       alert('Chỉ chấp nhận file ảnh');
       return;
     }
@@ -267,52 +279,91 @@ export default function AdminMaterialsPage() {
     try {
       setUploading(true);
       setUploadProgress(0);
-      setUploadFileName(`${files.length} ảnh`);
-      setUploadStatus('Đang gửi ảnh lên Cloudinary...');
+      setPasteStatus('');
+      setUploadFileName(file.name || sourceLabel);
+      setUploadStatus('Đang gửi ảnh bìa lên Cloudinary...');
       const payload = new FormData();
-      files.forEach(file => payload.append('files', file));
+      payload.append('files', file);
 
       const res = await axios.post('/materials/upload-images', payload, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 900000,
         onUploadProgress: (event) => {
-          const total = event.total || files.reduce((sum, file) => sum + file.size, 0);
+          const total = event.total || file.size;
           if (!total) return;
           const percent = Math.min(100, Math.round((event.loaded / total) * 100));
           setUploadProgress(percent);
-          setUploadStatus(percent >= 100 ? 'Đã gửi ảnh, đang lưu Cloudinary...' : `Đang upload ${percent}%`);
+          setUploadStatus(percent >= 100 ? 'Đã gửi bìa, đang lưu Cloudinary...' : `Đang upload bìa ${percent}%`);
         },
       });
 
-      const currentImages = materialImages;
-      const nextImages = [
-        ...currentImages,
-        ...(res.data?.data?.images || []).map((image: MaterialImageItem, index: number) => ({
-          ...image,
-          order: currentImages.length + index + 1,
-        })),
-      ];
+      const uploadedCover = (res.data?.data?.images || [])[0];
+      if (!uploadedCover?.url) {
+        throw new Error('Không nhận được URL ảnh bìa');
+      }
 
       setFormData(prev => ({
         ...prev,
-        file_url: prev.file_url || nextImages[0]?.url || '',
-        content_text: '',
-        content_html: '',
         content_meta: {
           ...prev.content_meta,
-          importMode: 'images',
-          images: nextImages,
+          cover_image: { ...uploadedCover, order: 0 },
         },
       }));
       setUploadProgress(100);
-      setUploadStatus('Upload ảnh xong');
+      setUploadStatus('Upload bìa xong');
+      setPasteStatus(`Đã thêm ${sourceLabel}`);
     } catch (error: any) {
-      console.error('Images upload error:', error);
-      const message = error.response?.data?.message || error.message || 'Lỗi upload ảnh';
+      console.error('Cover upload error:', error);
+      const message = error.response?.data?.message || error.message || 'Lỗi upload ảnh bìa';
       setUploadStatus(message);
       alert(message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    try {
+      await uploadCoverImage(files, 'bìa');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handlePasteCoverImage = async (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const file = Array.from(event.clipboardData.items || [])
+      .find(item => item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile();
+
+    if (!file) {
+      setPasteStatus('Clipboard chưa có ảnh bìa');
+      return;
+    }
+
+    event.preventDefault();
+    const extension = file.type.split('/')[1] || 'png';
+    await uploadCoverImage([
+      new File([file], file.name || `pasted-cover-${Date.now()}.${extension}`, {
+        type: file.type || 'image/png',
+      }),
+    ], 'bìa dán');
+  };
+
+  const removeCoverImage = () => {
+    setFormData(prev => {
+      const nextMeta = { ...prev.content_meta };
+      delete nextMeta.cover_image;
+      delete nextMeta.coverImage;
+      return { ...prev, content_meta: nextMeta };
+    });
+  };
+
+  const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    try {
+      await uploadImageFiles(files, 'ảnh');
+    } finally {
       e.target.value = '';
     }
   };
@@ -548,9 +599,17 @@ export default function AdminMaterialsPage() {
                     <tr key={material.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded flex items-center justify-center text-xs ${Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'bg-sky-50 text-sky-600' : material.content_html ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
-                            {Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'IMG' : material.content_html ? 'WEB' : 'PDF'}
-                          </div>
+                          {getMaterialCoverUrl(material.content_meta) ? (
+                            <img
+                              src={getMaterialCoverUrl(material.content_meta)}
+                              alt={material.title}
+                              className="h-11 w-9 rounded-md border border-slate-200 object-cover shadow-sm"
+                            />
+                          ) : (
+                            <div className={`w-8 h-8 rounded flex items-center justify-center text-xs ${Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'bg-sky-50 text-sky-600' : material.content_html ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
+                              {Array.isArray(material.content_meta?.images) && material.content_meta.images.length ? 'IMG' : material.content_html ? 'WEB' : 'PDF'}
+                            </div>
+                          )}
                           <div>
                             <p className="text-sm font-medium text-gray-900">{material.title}</p>
                             {material.description && (
@@ -675,6 +734,85 @@ export default function AdminMaterialsPage() {
                       <span className="block text-xs">{option.desc}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-800">Bìa tài liệu</label>
+                    <p className="text-xs text-gray-500">Ảnh này hiển thị làm bìa sách ở trang tài liệu.</p>
+                  </div>
+                  {coverImage?.url && (
+                    <button
+                      type="button"
+                      onClick={removeCoverImage}
+                      className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100"
+                    >
+                      Xóa bìa
+                    </button>
+                  )}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-[132px_1fr]">
+                  <div className="aspect-[3/4] overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                    {coverImage?.url ? (
+                      <img
+                        src={coverImage.url}
+                        alt="Bìa tài liệu"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-teal-900 to-fuchsia-900 px-4 text-center text-white">
+                        <FiBookOpen size={28} />
+                        <span className="mt-2 text-xs font-black uppercase">CSCA</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverUpload}
+                      disabled={uploading}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-purple-700 hover:file:bg-purple-100"
+                    />
+                    <div
+                      tabIndex={0}
+                      onPaste={handlePasteCoverImage}
+                      className="rounded-xl border-2 border-dashed border-purple-200 bg-slate-50 px-4 py-4 text-center text-sm text-slate-600 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                    >
+                      <p className="font-bold text-purple-700">Dán ảnh bìa vào đây</p>
+                      <p className="mt-1 text-xs text-slate-500">Cắt ảnh xong nhấn Ctrl+V, hệ thống tự lấy ảnh đầu làm bìa.</p>
+                    </div>
+                    {coverImage?.url && (
+                      <input
+                        type="text"
+                        value={coverImage.caption || ''}
+                        onChange={(event) => setFormData(prev => ({
+                          ...prev,
+                          content_meta: {
+                            ...prev.content_meta,
+                            cover_image: { ...coverImage, caption: event.target.value },
+                          },
+                        }))}
+                        placeholder="Chú thích bìa (không bắt buộc)"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    )}
+                    {uploading && uploadFileName && (
+                      <div className="text-left">
+                        <div className="flex items-center justify-between gap-3 text-xs text-purple-700">
+                          <span className="truncate">{uploadFileName}</span>
+                          <span className="font-semibold">{uploadProgress}%</span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-purple-100">
+                          <div className="h-full rounded-full bg-purple-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+                        </div>
+                        <p className="mt-2 text-xs text-purple-600">{uploadStatus || 'Đang upload...'}</p>
+                      </div>
+                    )}
+                    {pasteStatus && <p className="text-xs font-bold text-emerald-600">{pasteStatus}</p>}
+                  </div>
                 </div>
               </div>
 

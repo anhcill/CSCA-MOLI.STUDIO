@@ -664,46 +664,47 @@ export default function ExamPage() {
     const canStartOfficialExam = !isOfficialExam || (isApproved && hasAssignedRoom);
 
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-8">
-        <div className="mx-auto max-w-4xl">
+      <div className="min-h-screen bg-slate-50 px-4 py-4 sm:py-6">
+        <div className="mx-auto max-w-6xl">
           <button
             onClick={() => router.back()}
-            className="mb-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
+            className="mb-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
           >
             <FiChevronLeft size={18} /> Quay lại
           </button>
 
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-start">
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-6 sm:p-8">
+            <div className="border-b border-slate-100 p-5 sm:p-6">
               <p className="mb-2 text-xs font-black uppercase tracking-widest text-indigo-600">
                 {preflight.subject_name || 'CSCA'}
               </p>
-              <h1 className="text-2xl font-black leading-tight text-slate-950 sm:text-4xl">
+              <h1 className="text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
                 {preflight.title}
               </h1>
               {preflight.description && (
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-slate-500">
                   {preflight.description}
                 </p>
               )}
             </div>
 
-            <div className="grid gap-3 p-6 sm:grid-cols-4 sm:p-8">
+            <div className="grid grid-cols-2 gap-3 p-4 sm:p-5">
               {[
                 { label: 'Số câu', value: totalQuestions || '-' },
                 { label: 'Thời gian', value: `${preflight.duration || 0} phút` },
                 { label: 'Mức khó', value: preflight.difficulty_level || preflight.overall_difficulty || '-' },
                 { label: 'Đã làm', value: `${preflight.user_attempt_count || 0} lượt` },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-bold uppercase text-slate-400">{item.label}</p>
                   <p className="mt-1 text-lg font-black text-slate-900">{item.value}</p>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-slate-100 p-6 sm:p-8">
-              <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50">
+            <div className="border-t border-slate-100 p-4 sm:p-5">
+              <label className="mb-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3 text-left transition hover:border-indigo-200 hover:bg-indigo-50">
                 <input
                   type="checkbox"
                   checked={showVietnameseTranslations}
@@ -718,7 +719,7 @@ export default function ExamPage() {
                 </span>
               </label>
 
-              <div className="mb-5 rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-900">
+              <div className="mb-3 rounded-2xl bg-indigo-50 p-3 text-sm text-indigo-900">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
                 {inProgress && (
                   <span className="ml-0 mt-2 block sm:ml-3 sm:mt-0 sm:inline">
@@ -728,7 +729,7 @@ export default function ExamPage() {
               </div>
 
               {isOfficialExam && (
-                <div className={`mb-5 rounded-2xl border p-4 text-sm ${
+                <div className={`mb-3 rounded-2xl border p-3 text-sm ${
                   isApproved
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                     : registrationStatus === 'registered'
@@ -791,20 +792,20 @@ export default function ExamPage() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
                 {inProgress ? (
                   <>
                     <button
                       onClick={() => startExam()}
                       disabled={loading || !canStartOfficialExam}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
                     <button
                       onClick={() => startExam({ restart: true })}
                       disabled={loading || !canStartOfficialExam}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                     >
                       <FiRotateCcw size={18} /> Làm lại từ đầu
                     </button>
@@ -813,7 +814,7 @@ export default function ExamPage() {
                   <button
                     onClick={() => startExam()}
                     disabled={loading || !canStartOfficialExam}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Bắt đầu làm bài
                   </button>
@@ -822,7 +823,7 @@ export default function ExamPage() {
                 <button
                   onClick={() => startExam({ practice: true })}
                   disabled={loading}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60"
                 >
                   <FiBookOpen size={18} /> Luyện tập không tính giờ
                 </button>
@@ -835,7 +836,8 @@ export default function ExamPage() {
             entries={preflightLeaderboard}
             examTitle={preflight.title}
             loading={preflightLeaderboardLoading}
-            className="mt-6"
+            compact
+            className="lg:sticky lg:top-4"
             badgeLabel="Bảng xếp hạng đề thi"
             scopeLabel="Riêng đề này"
             noRoomLabel="Luyện đề tự do"
@@ -843,6 +845,7 @@ export default function ExamPage() {
             emptyDescription="Khi có người nộp bài, 10 kết quả tốt nhất của đề này sẽ hiện ở đây."
             description={`Chỉ tính kết quả đã nộp của ${preflight.title}. Mỗi người lấy bài tốt nhất; nếu bằng điểm thì người làm nhanh hơn xếp trên.`}
           />
+          </div>
         </div>
       </div>
     );
