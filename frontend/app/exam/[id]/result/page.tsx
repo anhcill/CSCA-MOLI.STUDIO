@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -18,8 +18,8 @@ import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import BilingualMathText from '@/components/exam/result/BilingualMathText';
 import QuestionExplanationBlock from '@/components/exam/result/QuestionExplanationBlock';
 import ReviewAIButtons from '@/components/exam/result/ReviewAIButtons';
-import ReviewAIModal from '@/components/exam/result/ReviewAIModal';
-import type { ReviewAIMode, ReviewAITask } from '@/components/exam/result/types';
+import ReviewAIHost, { type ReviewAIHostHandle } from '@/components/exam/result/ReviewAIHost';
+import type { ReviewAIMode } from '@/components/exam/result/types';
 import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
 
 const AI_ANALYSIS_COST = 50;
@@ -100,7 +100,7 @@ function ExamResultContent() {
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
-  const [reviewAITask, setReviewAITask] = useState<ReviewAITask | null>(null);
+  const reviewAIHostRef = useRef<ReviewAIHostHandle>(null);
   const [showGradeModal, setShowGradeModal] = useState<QuestionResult | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -241,13 +241,9 @@ function ExamResultContent() {
     }
   };
 
-  const openReviewAI = (question: QuestionResult, mode: ReviewAIMode) => {
-    if (reviewAITask) {
-      alert('AI đang xử lý câu khác. Mở lại ô AI ở góc hoặc đóng kết quả hiện tại rồi hỏi tiếp.');
-      return;
-    }
-    setReviewAITask({ question, mode });
-  };
+  const openReviewAI = useCallback((question: QuestionResult, mode: ReviewAIMode) => {
+    reviewAIHostRef.current?.open(question, mode);
+  }, []);
 
   const handleSubmitQuestionReport = async (question: QuestionResult, reportType: QuestionReportType, description: string) => {
     const questionId = question.question_id || question.id;
@@ -801,7 +797,6 @@ function ExamResultContent() {
                       <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
                         <ReviewAIButtons
                           status={status}
-                          disabled={Boolean(reviewAITask)}
                           onOpen={(mode) => openReviewAI(q, mode)}
                         />
                         {status === 'incorrect' && (
@@ -843,19 +838,12 @@ function ExamResultContent() {
         )}
       </main>
 
-      {reviewAITask && (
-        <ReviewAIModal
-          question={reviewAITask.question}
-          mode={reviewAITask.mode}
-          attemptId={result.id}
-          languageMode={languageMode}
-          onClose={() => setReviewAITask(null)}
-          onOpenChat={() => {
-            setReviewAITask(null);
-            setActiveTab('chat');
-          }}
-        />
-      )}
+      <ReviewAIHost
+        ref={reviewAIHostRef}
+        attemptId={result.id}
+        languageMode={languageMode}
+        onOpenChat={() => setActiveTab('chat')}
+      />
 
       {reportQuestion && (
         <QuestionReportModal

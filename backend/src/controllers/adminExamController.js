@@ -22,6 +22,7 @@ const {
   applyImportedReviewFixesWithAI,
   reviewImportedItemsWithAI,
   reviewStoredExamWithAI,
+  reviewStoredQuestionWithAI,
 } = require("../services/examQualityService");
 const {
   deleteExamSourceFile: deleteExamSourceFileRecord,
@@ -114,6 +115,7 @@ const EXAM_AI_LOCK_WAIT_MS = Number.parseInt(process.env.EXAM_AI_LOCK_WAIT_MS ||
 const EXAM_AI_LOCK_RETRY_MS = Number.parseInt(process.env.EXAM_AI_LOCK_RETRY_MS || "250", 10);
 const EXAM_AI_ACTIONS = {
   REVIEW: "review_quality",
+  REVIEW_QUESTION: "review_question_quality",
   FIX: "apply_fixes",
   FORMAT: "display_format_fixes",
   EXPLAIN: "missing_explanations",
@@ -141,6 +143,19 @@ function parsePositiveNumber(value, fallback) {
 function parsePositiveInteger(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+const DEFAULT_EXAM_DURATION_MINUTES = 90;
+const SIXTY_MINUTE_SUBJECT_CODES = new Set(["MATH", "PHYSICS", "CHEMISTRY"]);
+
+function getDefaultExamDurationMinutes(subject) {
+  const code = String(subject?.code || "").toUpperCase();
+  if (SIXTY_MINUTE_SUBJECT_CODES.has(code)) return 60;
+  return DEFAULT_EXAM_DURATION_MINUTES;
+}
+
+function resolveExamDurationMinutes(duration, subject) {
+  return parsePositiveInteger(duration) || getDefaultExamDurationMinutes(subject);
 }
 
 function clamp(val, min, max) {
@@ -976,6 +991,85 @@ const AdminExamController = {
     }
   },
 
+  async reviewQuestionQuality(req, res) {
+    const { examId, questionId } = req.params;
+    const client = await pool.connect();
+    try {
+      const signal = createRequestAbortSignal(req, res);
+      await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const modeOptions = getAdminExamAiMode(req);
+      const baseContext = {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+        signal,
+        ...modeOptions.fast,
+      };
+      let result = await reviewStoredQuestionWithAI(client, examId, questionId, baseContext);
+      if (isDeepMode(modeOptions.qualityMode)) {
+        const fastSummary = result.summary;
+        result = await reviewStoredQuestionWithAI(client, examId, questionId, {
+          ...baseContext,
+          ...modeOptions.deep,
+        });
+        result.fastReviewSummary = fastSummary;
+      }
+      result.qualityMode = modeOptions.qualityMode;
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW_QUESTION, req.user.id, {
+        questionId: Number(questionId),
+        total: result.summary?.total || 0,
+        issues: result.summary?.issues || 0,
+        ok: result.summary?.ok || 0,
+        model: result.summary?.model,
+        sourceFileId: result.sourceFile?.id,
+        sourceFileName: result.sourceFile?.fileName,
+      });
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.review_saved_question_quality", {
+        examId,
+        questionId,
+        status: result.reviews?.[0]?.status,
+        issues: result.summary?.issues || 0,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      if (sendAiAbortResponse(req, res, error)) return;
+      console.error("Review saved question quality error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI soát câu hỏi quá thời gian." });
+      }
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
+      if (error.message === "EXAM_NOT_FOUND") {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      if (error.message === "QUESTION_NOT_FOUND") {
+        return res.status(404).json({ message: "Khong tim thay cau hoi de AI soat." });
+      }
+      res.status(500).json({ message: "AI soát câu hỏi thất bại." });
+    } finally {
+      await releaseExamAiLock(client, examId);
+      client.release();
+    }
+  },
+
   async applyExamReviewFixes(req, res) {
     const { examId } = req.params;
     const reviews = Array.isArray(req.body?.reviews) ? req.body.reviews : [];
@@ -1387,12 +1481,13 @@ const AdminExamController = {
       }
 
       // P1: validate subjectId exists
-      const subjectCheck = await pool.query("SELECT id FROM subjects WHERE id = $1", [subjectId]);
+      const subjectCheck = await pool.query("SELECT id, code FROM subjects WHERE id = $1", [subjectId]);
       if (subjectCheck.rows.length === 0) {
         return res.status(400).json({ message: "Subject not found" });
       }
 
       const parsedTotalPoints = parsePositiveNumber(totalPoints, 100);
+      const parsedDuration = resolveExamDurationMinutes(duration, subjectCheck.rows[0]);
 
       // P1: sanitize all text inputs to prevent XSS
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
@@ -1410,7 +1505,7 @@ const AdminExamController = {
           safeTitle,
           safeTitleCn,
           subjectId,
-          duration || 90,
+          parsedDuration,
           parsedTotalPoints,
           safeDescription,
           difficulty_level || 'medium',

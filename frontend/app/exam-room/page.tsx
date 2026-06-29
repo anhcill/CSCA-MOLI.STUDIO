@@ -198,7 +198,7 @@ export default function ExamRoomPage() {
             {approved ? <FiCheckCircle size={14} /> : status === 'cancelled' ? <FiXCircle size={14} /> : <FiCalendar size={14} />}
             {status ? registrationLabel[status] || status : 'Chưa đăng ký'}
           </span>
-          {approved && (
+          {approved && registration?.room_id && (
             <Link href={`/exam/${exam.id}/ticket`} className="inline-flex items-center gap-1 text-xs font-black text-emerald-700 hover:text-emerald-900">
               <FiPrinter size={13} /> Vé dự thi
             </Link>
@@ -212,6 +212,12 @@ export default function ExamRoomPage() {
             </span>
             {registration.seat_number ? <span>Ghế: {registration.seat_number}</span> : null}
           </div>
+        )}
+
+        {approved && !registration?.room_id && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+            Dang cho admin phan phong thi.
+          </p>
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -378,8 +384,8 @@ export default function ExamRoomPage() {
                         <FiSettings size={14} /> Lịch thi
                       </Link>
                     )}
-                    <Link href={`/exam/${exam.id}`} className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-rose-600 hover:shadow-lg transition-all duration-300">
-                      Vào Thi <FiChevronRight />
+                    <Link href={`/exam-room/${exam.id}`} className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-rose-600 hover:shadow-lg transition-all duration-300">
+                      Chi tiết phòng thi <FiChevronRight />
                     </Link>
                   </div>
                 </div>
@@ -453,10 +459,13 @@ export default function ExamRoomPage() {
                 <div className="p-2.5 rounded-xl bg-yellow-100 text-yellow-600">
                   <FiAward className="text-xl" />
                 </div>
-                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Bảng Xếp Hạng</h2>
+                <div>
+                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Bảng xếp hạng toàn hệ thống</h2>
+                  <p className="text-sm font-semibold text-gray-500">Bảng thường, tính mọi bài thi đã hoàn thành.</p>
+                </div>
               </div>
               <Link href="/bang-xep-hang" className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:text-violet-800 transition-colors">
-                Xem đầy đủ <FiArrowRight />
+                Xem bảng thường <FiArrowRight />
               </Link>
             </div>
 

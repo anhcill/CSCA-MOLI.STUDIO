@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import examApi from '@/lib/api/exams';
@@ -17,8 +17,8 @@ import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import BilingualMathText from '@/components/exam/result/BilingualMathText';
 import QuestionExplanationBlock from '@/components/exam/result/QuestionExplanationBlock';
 import ReviewAIButtons from '@/components/exam/result/ReviewAIButtons';
-import ReviewAIModal from '@/components/exam/result/ReviewAIModal';
-import type { ReviewAIMode, ReviewAITask } from '@/components/exam/result/types';
+import ReviewAIHost, { type ReviewAIHostHandle } from '@/components/exam/result/ReviewAIHost';
+import type { ReviewAIMode } from '@/components/exam/result/types';
 import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
 
 const AI_ANALYSIS_COST = 50;
@@ -87,7 +87,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const [result, setResult] = useState<AttemptResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
-    const [reviewAITask, setReviewAITask] = useState<ReviewAITask | null>(null);
+    const reviewAIHostRef = useRef<ReviewAIHostHandle>(null);
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [aiLoading, setAiLoading] = useState(false);
     const [reviewStarted, setReviewStarted] = useState(false);
@@ -158,13 +158,9 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
         }
     };
 
-    const openReviewAI = (question: QuestionResult, mode: ReviewAIMode) => {
-        if (reviewAITask) {
-            alert('AI đang xử lý câu khác. Mở lại ô AI ở góc hoặc đóng kết quả hiện tại rồi hỏi tiếp.');
-            return;
-        }
-        setReviewAITask({ question, mode });
-    };
+    const openReviewAI = useCallback((question: QuestionResult, mode: ReviewAIMode) => {
+        reviewAIHostRef.current?.open(question, mode);
+    }, []);
 
     if (loading) {
         return (
@@ -566,7 +562,6 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                             <div className="mt-3 flex flex-wrap items-center gap-3 sm:ml-8">
                                                 <ReviewAIButtons
                                                     status={status}
-                                                    disabled={Boolean(reviewAITask)}
                                                     onOpen={(mode) => openReviewAI(q, mode)}
                                                 />
                                             </div>
@@ -607,19 +602,12 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 )}
             </main>
 
-            {reviewAITask && (
-                <ReviewAIModal
-                    question={reviewAITask.question}
-                    mode={reviewAITask.mode}
-                    attemptId={result.id}
-                    languageMode={languageMode}
-                    onClose={() => setReviewAITask(null)}
-                    onOpenChat={() => {
-                        setReviewAITask(null);
-                        setActiveTab('chat');
-                    }}
-                />
-            )}
+            <ReviewAIHost
+                ref={reviewAIHostRef}
+                attemptId={result.id}
+                languageMode={languageMode}
+                onOpenChat={() => setActiveTab('chat')}
+            />
         </div>
     );
 }

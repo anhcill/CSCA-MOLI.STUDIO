@@ -583,6 +583,13 @@ export const examAdminApi = {
         return response.data;
     },
 
+    reviewQuestionQuality: async (examId: number, questionId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<StoredExamReviewResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/questions/${questionId}/ai-review`, data, {
+            timeout: data.qualityMode === 'deep' ? 900000 : 300000,
+        });
+        return response.data;
+    },
+
     applyExamReviewFixes: async (
         examId: number,
         data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean; qualityMode?: 'fast' | 'deep' },

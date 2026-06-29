@@ -84,9 +84,9 @@ export default function LeaderboardPage() {
                 <div className="max-w-3xl mx-auto px-6 py-6 text-center">
                     <h1 className="text-3xl font-black text-gray-900 flex items-center justify-center gap-3">
                         <FiAward className="text-yellow-500" size={32} />
-                        Bảng Xếp Hạng
+                        Bảng xếp hạng toàn hệ thống
                     </h1>
-                    <p className="text-gray-500 mt-2 text-sm">Top học viên CSCA theo điểm cao nhất, cùng điểm thì thời gian thấp hơn xếp cao hơn</p>
+                    <p className="text-gray-500 mt-2 text-sm">Bảng thường của toàn hệ thống. Bảng phòng thi riêng chỉ hiện trong từng kỳ thi/phòng thi.</p>
                     <div className="mt-4 inline-flex rounded-xl border border-violet-100 bg-violet-50 p-1">
                         {([
                             { value: 'week', label: 'Tuần này' },

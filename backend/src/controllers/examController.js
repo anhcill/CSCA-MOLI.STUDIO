@@ -281,7 +281,7 @@ const examController = {
       if (exam.start_time) {
         const db = require("../config/database");
         const registrationResult = await db.query(
-          `SELECT er.status, room.room_name, room.location, ers.seat_number
+          `SELECT er.status, room.id AS room_id, room.room_name, room.location, ers.seat_number
            FROM exam_registrations er
            LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
            LEFT JOIN exam_rooms room ON room.id = ers.room_id
@@ -296,6 +296,14 @@ const examController = {
             success: false,
             message: "Bạn cần đăng ký và được duyệt trước khi vào kỳ thi chính thức",
             code: "OFFICIAL_REGISTRATION_REQUIRED",
+            registration,
+          });
+        }
+        if (!registration.room_id) {
+          return res.status(403).json({
+            success: false,
+            message: "Dang ky da duoc duyet nhung chua duoc phan phong thi",
+            code: "ROOM_ASSIGNMENT_REQUIRED",
             registration,
           });
         }

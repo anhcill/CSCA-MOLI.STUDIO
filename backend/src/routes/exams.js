@@ -11,6 +11,7 @@ const {
 // Public routes
 router.get("/exams/lobby", examController.getExamLobby);
 router.get("/subjects/:subjectCode/exams", examController.getExamsBySubject);
+router.get("/exams/:examId/official-leaderboard", officialExamController.getLeaderboard);
 router.get("/exams/:examId", examController.getExamDetail);
 
 // Protected routes - Require authentication

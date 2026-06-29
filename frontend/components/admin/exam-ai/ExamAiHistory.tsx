@@ -10,6 +10,7 @@ export interface ExamAiRun {
 }
 
 export function getExamAiRunLabel(action: string) {
+  if (action === 'review_question_quality') return 'AI soát riêng câu';
   if (action === 'review_quality') return 'AI soát đề';
   if (action === 'apply_fixes') return 'AI sửa log';
   if (action === 'display_format_fixes') return 'AI sửa format hiển thị';

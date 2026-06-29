@@ -88,6 +88,38 @@ export interface AdmissionTicket {
   check_in_code: string;
 }
 
+export interface OfficialExamLeaderboardEntry {
+  rank: number;
+  user_id: number;
+  full_name: string;
+  avatar_url?: string | null;
+  room_id?: number | null;
+  room_name?: string | null;
+  location?: string | null;
+  seat_number?: number | null;
+  total_attempts: number;
+  avg_score: number;
+  total_score: number;
+  total_correct?: number | null;
+  total_incorrect?: number | null;
+  duration_seconds?: number | null;
+  submit_time?: string | null;
+}
+
+export interface OfficialExamLeaderboardResponse {
+  exam: {
+    id: number;
+    title: string;
+    start_time?: string | null;
+    end_time?: string | null;
+    subject_name?: string | null;
+    subject_code?: string | null;
+  };
+  scope: 'exam' | 'room';
+  room_id?: number | null;
+  leaderboard: OfficialExamLeaderboardEntry[];
+}
+
 export const officialExamApi = {
   getMyRegistration: async (examId: number): Promise<ExamRegistration | null> => {
     const response = await axios.get(`/exams/${examId}/registration`);
@@ -106,6 +138,13 @@ export const officialExamApi = {
 
   getAdmissionTicket: async (examId: number): Promise<AdmissionTicket> => {
     const response = await axios.get(`/exams/${examId}/admission-ticket`);
+    return response.data.data;
+  },
+
+  getLeaderboard: async (examId: number, roomId?: number): Promise<OfficialExamLeaderboardResponse> => {
+    const response = await axios.get(`/exams/${examId}/official-leaderboard`, {
+      params: roomId ? { room_id: roomId } : undefined,
+    });
     return response.data.data;
   },
 

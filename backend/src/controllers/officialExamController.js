@@ -51,7 +51,7 @@ async function findFirstAvailableSeat(client, roomId, capacity, registrationId =
 async function getRegistrationForUser(client, examId, userId) {
   const result = await client.query(
     `SELECT er.*, e.title AS exam_title, e.start_time, e.end_time,
-            room.room_name, room.location, ers.seat_number
+            room.id AS room_id, room.room_name, room.location, ers.seat_number
      FROM exam_registrations er
      JOIN exams e ON e.id = er.exam_id
      LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
@@ -264,6 +264,13 @@ const officialExamController = {
           success: false,
           message: "Dang ky chua duoc duyet nen chua co ve du thi",
           code: "REGISTRATION_NOT_APPROVED",
+        });
+      }
+      if (!ticket.room_id) {
+        return res.status(403).json({
+          success: false,
+          message: "Dang ky da duoc duyet nhung chua duoc phan phong thi",
+          code: "ROOM_ASSIGNMENT_REQUIRED",
         });
       }
 
@@ -930,6 +937,108 @@ const officialExamController = {
     } catch (error) {
       console.error("Get monitor error:", error);
       return res.status(500).json({ success: false, message: "Loi lay du lieu giam sat" });
+    }
+  },
+
+  async getLeaderboard(req, res) {
+    try {
+      const examId = parsePositiveInt(req.params.examId);
+      const roomId = parsePositiveInt(req.query.room_id || req.query.roomId);
+      const limit = Math.min(parsePositiveInt(req.query.limit) || 50, 100);
+      if (!examId) return res.status(400).json({ success: false, message: "ID ky thi khong hop le" });
+
+      const examResult = await pool.query(
+        `SELECT e.id, e.title, e.start_time, e.end_time,
+                s.name AS subject_name, s.code AS subject_code
+         FROM exams e
+         LEFT JOIN subjects s ON s.id = e.subject_id
+         WHERE e.id = $1 AND e.deleted_at IS NULL
+         LIMIT 1`,
+        [examId],
+      );
+
+      const exam = examResult.rows[0];
+      if (!exam) {
+        return res.status(404).json({ success: false, message: "Khong tim thay ky thi" });
+      }
+
+      const params = [examId];
+      let roomFilter = "";
+      if (roomId) {
+        params.push(roomId);
+        roomFilter = `AND room.id = $${params.length}`;
+      }
+      params.push(limit);
+
+      const result = await pool.query(
+        `WITH completed_attempts AS (
+           SELECT ea.*,
+                  COALESCE(NULLIF(ea.duration_seconds, 0), 999999999)::int AS rank_time_seconds
+           FROM exam_attempts ea
+           WHERE ea.exam_id = $1
+             AND ea.status = 'completed'
+             AND ea.total_score IS NOT NULL
+         ),
+         ranked_attempts AS (
+           SELECT ca.*,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY ca.user_id
+                    ORDER BY ca.total_score DESC, ca.rank_time_seconds ASC, ca.submit_time ASC NULLS LAST
+                  ) AS best_rank
+           FROM completed_attempts ca
+         ),
+         user_exam_stats AS (
+           SELECT user_id,
+                  COUNT(id)::int AS total_attempts,
+                  ROUND(AVG(total_score)::numeric, 1)::float AS avg_score
+           FROM completed_attempts
+           GROUP BY user_id
+         )
+         SELECT
+           u.id AS user_id,
+           COALESCE(NULLIF(u.full_name, ''), u.username, u.email, 'User #' || u.id) AS full_name,
+           COALESCE(u.avatar_url, u.avatar) AS avatar_url,
+           room.id AS room_id,
+           room.room_name,
+           room.location,
+           ers.seat_number,
+           ues.total_attempts,
+           ues.avg_score,
+           ROUND(ra.total_score::numeric, 1)::float AS total_score,
+           ra.total_correct,
+           ra.total_incorrect,
+           NULLIF(ra.rank_time_seconds, 999999999)::int AS duration_seconds,
+           ra.submit_time
+         FROM ranked_attempts ra
+         JOIN users u ON u.id = ra.user_id
+         JOIN user_exam_stats ues ON ues.user_id = ra.user_id
+         LEFT JOIN exam_registrations er ON er.exam_id = ra.exam_id AND er.user_id = ra.user_id
+         LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
+         LEFT JOIN exam_rooms room ON room.id = ers.room_id
+         WHERE ra.best_rank = 1
+           ${roomFilter}
+         ORDER BY ra.total_score DESC, ra.rank_time_seconds ASC, ra.submit_time ASC NULLS LAST, u.id ASC
+         LIMIT $${params.length}`,
+        params,
+      );
+
+      const leaderboard = result.rows.map((row, index) => ({
+        rank: index + 1,
+        ...row,
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          exam,
+          scope: roomId ? "room" : "exam",
+          room_id: roomId || null,
+          leaderboard,
+        },
+      });
+    } catch (error) {
+      console.error("Official exam leaderboard error:", error);
+      return res.status(500).json({ success: false, message: "Loi lay bang xep hang phong thi" });
     }
   },
 

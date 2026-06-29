@@ -92,9 +92,10 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
       }
     }
 
-    loadAnswer();
+    const frameId = window.requestAnimationFrame(loadAnswer);
     return () => {
       alive = false;
+      window.cancelAnimationFrame(frameId);
     };
   }, [attemptId, mode, question, questionText, taskKey]);
 

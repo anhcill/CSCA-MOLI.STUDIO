@@ -4,26 +4,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
+import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { adminApi, AdminUser } from '@/lib/api/admin';
 import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import {
+  officialExamApi,
   officialExamAdminApi,
   ExamRegistration,
   ExamRoom,
   ExamViolation,
   ExamCertificate,
+  OfficialExamLeaderboardEntry,
 } from '@/lib/api/officialExams';
 import { initSocket, getSocket } from '@/lib/socket';
 import {
   FiActivity, FiAward, FiCalendar, FiCheck, FiChevronLeft, FiClock,
   FiFileText, FiMonitor, FiRefreshCw, FiShield, FiTrash2, FiUserCheck,
-  FiUsers, FiX,
+  FiTrendingUp, FiUsers, FiX,
 } from 'react-icons/fi';
 
-type TabId = 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'violations' | 'certificates';
+type TabId = 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'leaderboard' | 'violations' | 'certificates';
 
 interface ExamMeta {
   id: number;
@@ -63,6 +66,7 @@ interface MonitorData {
 }
 
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
+  { id: 'leaderboard', label: 'Xếp hạng phòng thi', icon: FiTrendingUp },
   { id: 'registrations', label: 'Đăng ký', icon: FiUsers },
   { id: 'rooms', label: 'Phòng thi', icon: FiMonitor },
   { id: 'proctors', label: 'Giám thị', icon: FiUserCheck },
@@ -118,6 +122,7 @@ export default function OfficialExamAdminPage() {
   const [rooms, setRooms] = useState<ExamRoom[]>([]);
   const [violations, setViolations] = useState<ExamViolation[]>([]);
   const [certificates, setCertificates] = useState<ExamCertificate[]>([]);
+  const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [monitor, setMonitor] = useState<MonitorData>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
 
@@ -170,18 +175,20 @@ export default function OfficialExamAdminPage() {
   const loadOperationalData = async (showSpinner = true) => {
     try {
       if (showSpinner) setRefreshing(true);
-      const [regs, roomList, monitorData, violationList, certList] = await Promise.all([
+      const [regs, roomList, monitorData, violationList, certList, leaderboardData] = await Promise.all([
         officialExamAdminApi.getRegistrations(examId),
         officialExamAdminApi.getRooms(examId),
         officialExamAdminApi.getMonitor(examId),
         officialExamAdminApi.getViolations(examId),
         officialExamAdminApi.getCertificates(examId),
+        officialExamApi.getLeaderboard(examId).catch(() => ({ leaderboard: [] })),
       ]);
       setRegistrations(regs || []);
       setRooms(roomList || []);
       setMonitor(monitorData || {});
       setViolations(violationList || []);
       setCertificates(certList || []);
+      setLeaderboard(leaderboardData.leaderboard || []);
     } finally {
       setRefreshing(false);
     }
@@ -517,6 +524,14 @@ export default function OfficialExamAdminPage() {
               </div>
             </div>
           </section>
+        )}
+
+        {activeTab === 'leaderboard' && (
+          <OfficialExamLeaderboard
+            entries={leaderboard}
+            examTitle={exam?.title}
+            loading={refreshing}
+          />
         )}
 
         {activeTab === 'violations' && (

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
+import { examAdminApi, AdminExamSourceFile, ApplyExamReviewFixesResult, GenerateMissingExplanationsResult, ImportedExamItem, ImportedQuestionAiReview, ImportedQuestionData, NormalizeFormulaResult, PdfImportPreview, StoredExamReviewResult } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import axios from '@/lib/utils/axios';
@@ -180,6 +180,128 @@ function findQuestionItemIndex(items: QuestionListItem[], questionId: number) {
         }
         return item.id === questionId;
     });
+}
+
+function getSingleQuestionAiReview(result: StoredExamReviewResult | null): ImportedQuestionAiReview | null {
+    return result?.reviews?.[0] || null;
+}
+
+function getSingleQuestionAiLabel(status?: string) {
+    if (status === 'ok') return 'AI thấy ổn';
+    if (status === 'question_issue') return 'Nghi lỗi câu hỏi/OCR';
+    if (status === 'formula_issue') return 'Nghi lỗi công thức';
+    if (status === 'answer_issue') return 'Nghi sai đáp án';
+    if (status === 'explanation_issue') return 'Nghi lỗi lời giải';
+    if (status === 'missing_from_db') return 'DB thiếu câu';
+    if (status === 'missing_answer_from_source') return 'Thiếu đáp án';
+    if (status === 'source_mismatch') return 'Khác file gốc';
+    if (status === 'needs_source_review') return 'Cần so file gốc';
+    return 'Cần kiểm tra';
+}
+
+function getSingleQuestionAiTone(status?: string) {
+    if (status === 'ok') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/60 dark:bg-emerald-950/70 dark:text-emerald-100';
+    }
+    return 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-400/70 dark:bg-amber-950/75 dark:text-amber-50';
+}
+
+function getSingleQuestionAiLines(review: ImportedQuestionAiReview) {
+    const lines = [
+        review.suggestedCorrectAnswer ? `Gợi ý đáp án: ${review.suggestedCorrectAnswer}` : '',
+        review.note || '',
+        ...(review.questionIssues || []).map(issue => `Câu hỏi/OCR: ${issue}`),
+        ...(review.formulaIssues || []).map(issue => `Công thức: ${issue}`),
+        ...(review.explanationIssues || []).map(issue => `Lời giải: ${issue}`),
+    ].filter(Boolean);
+    return lines.slice(0, 8);
+}
+
+function QuestionAiReviewInline({
+    result,
+    error,
+    reviewing,
+    onEdit,
+}: {
+    result: StoredExamReviewResult | null;
+    error: string;
+    reviewing: boolean;
+    onEdit: () => void;
+}) {
+    const review = getSingleQuestionAiReview(result);
+    if (!reviewing && !error && !review) return null;
+
+    if (reviewing) {
+        return (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 dark:border-indigo-400/70 dark:bg-indigo-950/70 dark:text-indigo-100">
+                <FiRefreshCw className="animate-spin shrink-0" size={15} />
+                AI đang soát riêng câu này...
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 dark:border-rose-400/70 dark:bg-rose-950/70 dark:text-rose-100">
+                <FiAlertCircle className="mt-0.5 shrink-0" size={15} />
+                <span>{error}</span>
+            </div>
+        );
+    }
+
+    if (!review) return null;
+
+    const lines = getSingleQuestionAiLines(review);
+    const ok = review.status === 'ok';
+    const sourceFileName = result?.sourceFile?.fileName || result?.summary?.sourceFileName;
+    const diagnostic = result?.diagnostics?.[0];
+
+    return (
+        <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${getSingleQuestionAiTone(review.status)}`}>
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 font-black">
+                        {ok ? <FiCheckCircle className="shrink-0" size={15} /> : <FiAlertCircle className="shrink-0" size={15} />}
+                        <span>AI riêng:</span>
+                        <span>{getSingleQuestionAiLabel(review.status)}</span>
+                        {Number.isFinite(review.confidence) && <span>{Math.round((review.confidence || 0) * 100)}%</span>}
+                    </div>
+                    {sourceFileName && (
+                        <p className="mt-1 text-xs font-bold opacity-80">Đối chiếu file gốc: {sourceFileName}</p>
+                    )}
+                </div>
+                {!ok && (
+                    <button
+                        type="button"
+                        onClick={onEdit}
+                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-300/70 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-950"
+                    >
+                        <FiEdit2 size={12} /> Sửa câu
+                    </button>
+                )}
+            </div>
+
+            {lines.length > 0 ? (
+                <div className="mt-2 grid gap-1 text-xs leading-5 md:grid-cols-2">
+                    {lines.map((line, index) => (
+                        <p key={`${review.path}-${index}`} className="rounded-md bg-white/70 px-2 py-1 dark:bg-slate-950/50">
+                            {line}
+                        </p>
+                    ))}
+                </div>
+            ) : (
+                <p className="mt-2 text-xs font-semibold opacity-80">Không thấy lỗi rõ trong câu này.</p>
+            )}
+
+            {diagnostic && (
+                <p className="mt-2 text-xs opacity-75">
+                    Model: {diagnostic.model || result?.summary?.model || 'chưa rõ'}
+                    {diagnostic.durationMs ? ` - ${Math.round(diagnostic.durationMs / 1000)}s` : ''}
+                    {diagnostic.tokenEstimate ? ` - ${Math.round(diagnostic.tokenEstimate)} token` : ''}
+                </p>
+            )}
+        </div>
+    );
 }
 
 function ExamAiBlockingOverlay({ task, startedAt }: { task: AiBlockingTask; startedAt: number | null }) {
@@ -533,6 +655,9 @@ export default function AdminExamDetailPage() {
     const [polishingExplanations, setPolishingExplanations] = useState(false);
     const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [aiQualityMode, setAiQualityMode] = useState<'fast' | 'deep'>('deep');
+    const [reviewingQuestionId, setReviewingQuestionId] = useState<number | null>(null);
+    const [questionReviewById, setQuestionReviewById] = useState<Record<number, StoredExamReviewResult | null>>({});
+    const [questionReviewErrorById, setQuestionReviewErrorById] = useState<Record<number, string>>({});
     const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
     const [aiBlockingStartedAt, setAiBlockingStartedAt] = useState<number | null>(null);
 
@@ -947,6 +1072,28 @@ export default function AdminExamDetailPage() {
             setReviewingExam(false);
             setAiBlockingTask(null);
             setAiBlockingStartedAt(null);
+        }
+    };
+
+    const handleReviewSingleQuestion = async (question: SavedQuestion) => {
+        if (!exam?.id || reviewingQuestionId || aiBlockingTask) return;
+        try {
+            setReviewingQuestionId(question.id);
+            setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
+            setQuestionReviewById(prev => ({ ...prev, [question.id]: null }));
+            const result = await examAdminApi.reviewQuestionQuality(exam.id, question.id, { qualityMode: aiQualityMode });
+            setQuestionReviewById(prev => ({ ...prev, [question.id]: result }));
+            await loadExam({ silent: true });
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            setQuestionReviewErrorById(prev => ({
+                ...prev,
+                [question.id]: (error?.response?.data?.message || 'AI soát riêng câu thất bại.') + retryText,
+            }));
+        } finally {
+            setReviewingQuestionId(null);
         }
     };
 
@@ -2656,6 +2803,12 @@ export default function AdminExamDetailPage() {
 
                             const isEditing = editingQuestionId === q.id;
                             const formData = dbToFormData(q);
+                            const questionReviewResult = questionReviewById[q.id] || null;
+                            const questionReviewError = questionReviewErrorById[q.id] || '';
+                            const isReviewingThisQuestion = reviewingQuestionId === q.id;
+                            const questionAiReview = getSingleQuestionAiReview(questionReviewResult);
+                            const questionAiHasIssue = Boolean(questionAiReview && questionAiReview.status !== 'ok');
+                            const questionAiDone = Boolean(questionAiReview && questionAiReview.status === 'ok');
 
                             return (
                                 <div id={`question-${q.id}`} key={q.id} className={`bg-white rounded-xl border ${isEditing ? 'border-blue-400 ring-2 ring-blue-100' : 'border-gray-200'} p-6`}>
@@ -2686,6 +2839,29 @@ export default function AdminExamDetailPage() {
                                                     <span className="text-xs text-gray-400">{q.points} điểm</span>
                                                     {isEditingExam && (
                                                         <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleReviewSingleQuestion(q)}
+                                                                disabled={isReviewingThisQuestion || reviewingQuestionId !== null || !!aiBlockingTask}
+                                                                className={`inline-flex min-w-[58px] items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-black transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                                                    questionAiHasIssue
+                                                                        ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                                                        : questionAiDone
+                                                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                                                            : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                                                                }`}
+                                                                title="AI soát riêng câu này"
+                                                            >
+                                                                {isReviewingThisQuestion
+                                                                    ? <FiRefreshCw className="animate-spin" size={13} />
+                                                                    : questionAiHasIssue
+                                                                        ? <FiAlertCircle size={13} />
+                                                                        : questionAiDone
+                                                                            ? <FiCheckCircle size={13} />
+                                                                            : <FiRefreshCw size={13} />
+                                                                }
+                                                                {isReviewingThisQuestion ? 'AI...' : 'AI'}
+                                                            </button>
                                                             <button
                                                                 onClick={() => setEditingQuestionId(q.id)}
                                                                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors text-sm font-medium"
@@ -2752,6 +2928,15 @@ export default function AdminExamDetailPage() {
                                                         />
                                                     )}
                                                 </div>
+                                                    )}
+
+                                            {isEditingExam && (
+                                                <QuestionAiReviewInline
+                                                    result={questionReviewResult}
+                                                    error={questionReviewError}
+                                                    reviewing={isReviewingThisQuestion}
+                                                    onEdit={() => setEditingQuestionId(q.id)}
+                                                />
                                             )}
 
                                             {isEditingExam && (

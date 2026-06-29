@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
+import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import examApi from '@/lib/api/exams';
-import { officialExamApi, ExamRegistration } from '@/lib/api/officialExams';
+import { officialExamApi, ExamRegistration, OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 import { FiArrowLeft, FiCalendar, FiCheckCircle, FiClock, FiMapPin, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
 
 type ExamDetail = {
@@ -64,6 +65,8 @@ export default function ExamRoomDetailPage() {
 
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [registration, setRegistration] = useState<ExamRegistration | null>(null);
+  const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -72,12 +75,16 @@ export default function ExamRoomDetailPage() {
   const endMs = exam?.end_time ? new Date(exam.end_time).getTime() : null;
   const hasStarted = !!startMs && now >= startMs;
   const hasEnded = !!endMs && now > endMs;
-  const canEnter = !!registration && ['approved', 'checked_in'].includes(registration.status) && hasStarted && !hasEnded;
+  const hasAssignedRoom = !!registration?.room_id;
+  const canEnter = !!registration && ['approved', 'checked_in'].includes(registration.status) && hasAssignedRoom && hasStarted && !hasEnded;
   const canRegister = !!exam?.start_time && !hasStarted && (!registration || registration.status === 'cancelled');
   const canCancel = !!registration && ['registered', 'approved'].includes(registration.status) && !hasStarted;
 
   const loadData = async () => {
-    if (!examId) return;
+    if (!examId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await examApi.getExamDetail(examId);
@@ -95,8 +102,23 @@ export default function ExamRoomDetailPage() {
     }
   };
 
+  const loadLeaderboard = async () => {
+    if (!examId) return;
+    setLeaderboardLoading(true);
+    try {
+      const data = await officialExamApi.getLeaderboard(examId);
+      setLeaderboard(data.leaderboard || []);
+    } catch (error) {
+      console.error('Official exam leaderboard error:', error);
+      setLeaderboard([]);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadLeaderboard();
   }, [examId]);
 
   useEffect(() => {
@@ -142,7 +164,7 @@ export default function ExamRoomDetailPage() {
     return (
       <div className="min-h-screen bg-slate-50">
         <Header />
-        <main className="mx-auto max-w-5xl px-4 py-10">
+        <main className="mx-auto max-w-6xl px-4 py-10">
           <div className="h-72 animate-pulse rounded-3xl bg-white border border-slate-100" />
         </main>
       </div>
@@ -154,7 +176,7 @@ export default function ExamRoomDetailPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+      <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
         <button
           onClick={() => router.push('/exam-room')}
           className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-900"
@@ -198,6 +220,11 @@ export default function ExamRoomDetailPage() {
                     {registration.location && <p>Địa điểm: {registration.location}</p>}
                     {registration.seat_number && <p>Số ghế: {registration.seat_number}</p>}
                   </div>
+                )}
+                {registration && ['approved', 'checked_in'].includes(registration.status) && !hasAssignedRoom && (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                    Dang ky da duoc duyet, dang cho admin phan phong thi.
+                  </p>
                 )}
               </div>
 
@@ -247,6 +274,12 @@ export default function ExamRoomDetailPage() {
             </div>
           </div>
         </section>
+
+        <OfficialExamLeaderboard
+          entries={leaderboard}
+          examTitle={exam.title}
+          loading={leaderboardLoading}
+        />
       </main>
     </div>
   );

@@ -46,6 +46,20 @@ const getImportPreviewItems = (preview: PdfImportPreview | null): ImportedExamIt
 const getImportItemsQuestionCount = (items: ImportedExamItem[]) =>
     items.reduce((sum, item) => sum + getImportItemQuestionCount(item), 0);
 
+const DEFAULT_EXAM_DURATION_MINUTES = 90;
+const SUBJECT_DEFAULT_DURATIONS: Record<string, number> = {
+    MATH: 60,
+    PHYSICS: 60,
+    CHEMISTRY: 60,
+    CHINESE_SOC: 90,
+    CHINESE_SCI: 90,
+};
+
+const getDefaultExamDurationMinutes = (subject?: Subject | null) => {
+    const code = subject?.code?.toUpperCase() || '';
+    return SUBJECT_DEFAULT_DURATIONS[code] || DEFAULT_EXAM_DURATION_MINUTES;
+};
+
 const validateImportedSingleChoice = (item: ImportedQuestionData, label: string) => {
     if (!hasImportText(item.questionText, item.questionTextCn)) {
         return `${label} cần nội dung câu hỏi`;
@@ -226,6 +240,7 @@ export default function CreateExamPage() {
     const [savingMetadata, setSavingMetadata] = useState(false);
     const [metadataSaved, setMetadataSaved] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [durationManuallyEdited, setDurationManuallyEdited] = useState(false);
 
     const isMissingExamError = (error: any) => error?.response?.status === 404;
     const handleMissingCurrentExam = () => {
@@ -335,6 +350,26 @@ export default function CreateExamPage() {
         } finally {
             setSavingMetadata(false);
         }
+    };
+
+    const handleSubjectChange = (subjectId: number) => {
+        const selectedSubject = subjects.find(subject => subject.id === subjectId);
+        setExamData(prev => ({
+            ...prev,
+            subjectId,
+            duration: durationManuallyEdited ? prev.duration : getDefaultExamDurationMinutes(selectedSubject),
+        }));
+        setExamMetadataDirty(true);
+    };
+
+    const handleDurationChange = (rawValue: string) => {
+        const parsed = Number.parseInt(rawValue, 10);
+        setDurationManuallyEdited(true);
+        setExamData(prev => ({
+            ...prev,
+            duration: Number.isFinite(parsed) ? parsed : 0,
+        }));
+        setExamMetadataDirty(true);
     };
 
     const handleQuickAddSave = async (data: QuestionFormData) => {
@@ -640,7 +675,15 @@ export default function CreateExamPage() {
             setExamData(prev => ({
                 ...prev,
                 title: prev.title || preview.exam?.title || '',
-                duration: preview.exam?.duration || prev.duration,
+                duration: (() => {
+                    const subjectDefaultDuration = getDefaultExamDurationMinutes(subjects.find(subject => subject.id === prev.subjectId));
+                    const previewDuration = preview.exam?.duration;
+                    if (!previewDuration) return subjectDefaultDuration;
+                    if (previewDuration === DEFAULT_EXAM_DURATION_MINUTES && subjectDefaultDuration !== DEFAULT_EXAM_DURATION_MINUTES) {
+                        return subjectDefaultDuration;
+                    }
+                    return previewDuration;
+                })(),
                 totalPoints: preview.exam?.totalPoints || prev.totalPoints,
             }));
             setExamMetadataDirty(true);
@@ -864,7 +907,7 @@ export default function CreateExamPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Môn học *</label>
                             <select
                                 value={examData.subjectId}
-                                onChange={(e) => { setExamData({ ...examData, subjectId: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
+                                onChange={(e) => handleSubjectChange(parseInt(e.target.value))}
                                 className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
                                 <option value={0}>Chọn môn học...</option>
@@ -879,7 +922,7 @@ export default function CreateExamPage() {
                             <input
                                 type="number"
                                 value={examData.duration}
-                                onChange={(e) => { setExamData({ ...examData, duration: parseInt(e.target.value) }); setExamMetadataDirty(true); }}
+                                onChange={(e) => handleDurationChange(e.target.value)}
                                 className="w-full px-4 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>

@@ -2471,9 +2471,11 @@ async function loadStoredExamReviewEntries(client, examId) {
        q.question_type,
        q.question_text,
        q.question_text_cn,
+       q.question_text_en,
        q.image_url,
        q.explanation,
        q.explanation_cn,
+       q.explanation_en,
        q.explanation_image_url,
        q.passage_text,
        q.passage_image_url,
@@ -3267,9 +3269,11 @@ async function reviewStoredExamWithAI(client, examId, context = {}) {
        q.question_type,
        q.question_text,
        q.question_text_cn,
+       q.question_text_en,
        q.image_url,
        q.explanation,
        q.explanation_cn,
+       q.explanation_en,
        q.explanation_image_url,
        q.passage_text,
        q.passage_image_url,
@@ -3373,6 +3377,49 @@ async function reviewStoredExamWithAI(client, examId, context = {}) {
   };
 }
 
+async function reviewStoredQuestionWithAI(client, examId, questionId, context = {}) {
+  const parsedQuestionId = Number.parseInt(questionId, 10);
+  if (!Number.isInteger(parsedQuestionId) || parsedQuestionId <= 0) {
+    const error = new Error("QUESTION_NOT_FOUND");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const entry = entries.find((item) => Number(item.questionId) === parsedQuestionId);
+  if (!entry) {
+    const error = new Error("QUESTION_NOT_FOUND");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const { reviewContext, sourceFile } = await buildStoredExamReviewContext(client, examId, {
+    ...context,
+    subject: context.subject || exam.subject_name || exam.subject_code || "CSCA",
+  });
+  const result = await reviewQuestionEntriesWithAI([entry], {
+    ...reviewContext,
+  });
+  if (sourceFile && result.summary) {
+    result.summary.sourceFileId = sourceFile.id;
+    result.summary.sourceFileName = sourceFile.fileName;
+    result.summary.sourceTextLength = sourceFile.textLength;
+  }
+
+  return {
+    examId: Number(examId),
+    questionId: parsedQuestionId,
+    exam: {
+      id: exam.id,
+      title: exam.title,
+      subjectName: exam.subject_name,
+      subjectCode: exam.subject_code,
+    },
+    ...result,
+    sourceFile,
+  };
+}
+
 module.exports = {
   normalizeExamFormulas,
   normalizeField,
@@ -3383,6 +3430,7 @@ module.exports = {
   applyExamReviewFixes,
   applyImportedReviewFixesWithAI,
   reviewStoredExamWithAI,
+  reviewStoredQuestionWithAI,
   reviewImportedItemsWithAI,
 };
 

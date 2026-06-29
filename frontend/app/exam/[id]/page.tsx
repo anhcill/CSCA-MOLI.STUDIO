@@ -647,6 +647,8 @@ export default function ExamPage() {
     const isOfficialExam = Boolean(preflight.start_time);
     const registrationStatus = registration?.status;
     const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
+    const hasAssignedRoom = !isOfficialExam || Boolean(registration?.room_id);
+    const canStartOfficialExam = !isOfficialExam || (isApproved && hasAssignedRoom);
 
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -739,6 +741,11 @@ export default function ExamPage() {
                         </p>
                       )}
                     </div>
+                    {isApproved && !hasAssignedRoom && (
+                      <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                        Dang ky da duoc duyet, dang cho admin phan phong thi.
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       {(!registrationStatus || registrationStatus === 'cancelled') && (
                         <button
@@ -758,7 +765,7 @@ export default function ExamPage() {
                           {registrationLoading ? 'Đang xử lý...' : 'Hủy đăng ký'}
                         </button>
                       )}
-                      {isApproved && (
+                      {isApproved && hasAssignedRoom && (
                         <button
                           onClick={() => router.push(`/exam/${examId}/ticket`)}
                           className="rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100"
@@ -776,14 +783,14 @@ export default function ExamPage() {
                   <>
                     <button
                       onClick={() => startExam()}
-                      disabled={loading || (isOfficialExam && !isApproved)}
+                      disabled={loading || !canStartOfficialExam}
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
                     <button
                       onClick={() => startExam({ restart: true })}
-                      disabled={loading || (isOfficialExam && !isApproved)}
+                      disabled={loading || !canStartOfficialExam}
                       className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                     >
                       <FiRotateCcw size={18} /> Làm lại từ đầu
@@ -792,7 +799,7 @@ export default function ExamPage() {
                 ) : (
                   <button
                     onClick={() => startExam()}
-                    disabled={loading || (isOfficialExam && !isApproved)}
+                    disabled={loading || !canStartOfficialExam}
                     className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Bắt đầu làm bài
