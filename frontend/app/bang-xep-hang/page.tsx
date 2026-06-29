@@ -86,7 +86,6 @@ export default function LeaderboardPage() {
                         <FiAward className="text-yellow-500" size={32} />
                         Bảng xếp hạng toàn hệ thống
                     </h1>
-                    <p className="text-gray-500 mt-2 text-sm">Bảng thường của toàn hệ thống. Bảng phòng thi riêng chỉ hiện trong từng kỳ thi/phòng thi.</p>
                     <div className="mt-4 inline-flex rounded-xl border border-violet-100 bg-violet-50 p-1">
                         {([
                             { value: 'week', label: 'Tuần này' },
