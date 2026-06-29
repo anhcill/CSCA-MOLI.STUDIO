@@ -330,6 +330,24 @@ async function runOptimizations() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_subject ON materials(subject)`,
     );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS material_pdf_blobs (
+        id SERIAL PRIMARY KEY,
+        token VARCHAR(96) UNIQUE NOT NULL,
+        original_name TEXT,
+        mime_type VARCHAR(120) DEFAULT 'application/pdf',
+        file_size BIGINT NOT NULL,
+        data BYTEA NOT NULL,
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_material_pdf_blobs_token ON material_pdf_blobs(token)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_material_pdf_blobs_created_at ON material_pdf_blobs(created_at DESC)`,
+    );
     const theorySeed = await seedLaunchTheoryMaterials(pool);
     if (!theorySeed.skipped && theorySeed.inserted > 0) {
       console.log(`✅ Seeded ${theorySeed.inserted} launch theory materials`);

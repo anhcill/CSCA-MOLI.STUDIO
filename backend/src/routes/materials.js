@@ -11,9 +11,17 @@ const materialsController = require("../controllers/materialsController");
 const { extractPdfWebContent } = require("../services/materialContentService");
 const { getMaterialPdfUploadError, uploadPdfToCloudinary } = require("../services/materialPdfUploadService");
 const {
+  ensureMaterialPdfBlobTable,
+  findMaterialByStoredPdfToken,
+  getStoredPdfByToken,
+  getStoredPdfTokenFromUrl,
+  storePdfFileInDatabase,
+} = require("../services/materialStoredPdfService");
+const {
   authenticate,
   authorizePermission,
   checkVipAccess,
+  optionalAuth,
 } = require("../middleware/authMiddleware");
 const db = require("../config/database");
 
@@ -41,6 +49,7 @@ const db = require("../config/database");
     await db.query(
       `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb`,
     );
+    await ensureMaterialPdfBlobTable();
     // silent init
   } catch (e) {
     console.error("[materials] Migration error:", e.message);
@@ -107,6 +116,83 @@ function removeTempFile(filePath) {
   fs.promises.unlink(filePath).catch(() => {});
 }
 
+function getPdfDownloadName(title, originalName) {
+  const source = String(title || originalName || "document").replace(/\.pdf$/i, "").trim() || "document";
+  return `${encodeURIComponent(source)}.pdf`;
+}
+
+function sendStoredPdf(res, storedPdf, disposition, title) {
+  const data = storedPdf?.data;
+  if (!data) {
+    return res.status(404).json({ success: false, message: "Không tìm thấy file PDF" });
+  }
+
+  res.setHeader("Content-Type", storedPdf.mime_type || "application/pdf");
+  res.setHeader("Content-Disposition", `${disposition}; filename="${getPdfDownloadName(title, storedPdf.original_name)}"`);
+  res.setHeader("Cache-Control", "private, max-age=1800");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
+  res.setHeader("Content-Length", String(storedPdf.file_size || data.length));
+  return res.end(data);
+}
+
+async function streamStoredPdfByToken(res, token, disposition, title) {
+  const storedPdf = await getStoredPdfByToken(token);
+  if (!storedPdf) {
+    return res.status(404).json({ success: false, message: "Không tìm thấy file PDF" });
+  }
+  return sendStoredPdf(res, storedPdf, disposition, title);
+}
+
+function canUseDatabasePdfFallback(uploadError) {
+  return [
+    "PDF_TOO_LARGE_FOR_STORAGE",
+    "CLOUDINARY_CONFIG_MISSING",
+    "CLOUDINARY_AUTH_FAILED",
+    "PDF_STORAGE_UPLOAD_FAILED",
+    "PDF_UPLOAD_REJECTED",
+  ].includes(uploadError.code);
+}
+
+async function uploadPdfWithStorageFallback(req) {
+  try {
+    const result = await uploadPdfToCloudinary(req.file.path, { fileSize: req.file.size });
+    return {
+      url: result.secure_url,
+      publicId: result.public_id,
+      storage: "cloudinary",
+      bytes: result.bytes || req.file.size,
+      warning: null,
+    };
+  } catch (error) {
+    const uploadError = getMaterialPdfUploadError(error);
+    if (!canUseDatabasePdfFallback(uploadError)) throw error;
+
+    console.warn("[materials] Cloudinary PDF upload fallback:", {
+      code: uploadError.code,
+      message: error?.message,
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+    });
+
+    const stored = await storePdfFileInDatabase({
+      filePath: req.file.path,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+      uploadedBy: req.user?.id,
+    });
+
+    return {
+      url: stored.url,
+      publicId: stored.token,
+      storage: "database",
+      bytes: stored.fileSize,
+      warning: "Cloudinary giới hạn dung lượng PDF, file đã được lưu bằng kho nội bộ.",
+    };
+  }
+}
+
 router.get("/", materialsController.getMaterials);
 
 // Helper: stream PDF from Cloudinary signed URL with given disposition
@@ -131,6 +217,11 @@ async function streamPdf(res, id, disposition, user) {
   }
 
   const { file_url: fileUrl, title } = material;
+  const storedPdfToken = getStoredPdfTokenFromUrl(fileUrl);
+  if (storedPdfToken) {
+    return streamStoredPdfByToken(res, storedPdfToken, disposition, title);
+  }
+
   const urlParts = fileUrl.match(/\/upload\/v(\d+)\/(.+)$/);
   if (!urlParts)
     return res.status(400).json({ success: false, message: "URL file không hợp lệ" });
@@ -162,6 +253,38 @@ async function streamPdf(res, id, disposition, user) {
   streamFromUrl(downloadUrl);
 }
 
+async function streamStoredPdfBlobRoute(req, res, disposition) {
+  const token = getStoredPdfTokenFromUrl(`/api/materials/blob/${req.params.token}`);
+  if (!token) {
+    return res.status(400).json({ success: false, message: "Token PDF không hợp lệ" });
+  }
+
+  const material = await findMaterialByStoredPdfToken(token);
+  if (material && material.is_active === false) {
+    return res.status(404).json({ success: false, message: "Không tìm thấy tài liệu" });
+  }
+  if (material?.is_premium && !checkVipAccess(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: "Tài liệu này chỉ dành cho thành viên VIP",
+      code: "VIP_REQUIRED",
+      is_vip_required: true,
+    });
+  }
+
+  return streamStoredPdfByToken(res, token, disposition, material?.title);
+}
+
+router.get("/blob/:token", optionalAuth, async (req, res) => {
+  try { await streamStoredPdfBlobRoute(req, res, "inline"); }
+  catch (error) { console.error("[PDF Blob] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
+});
+
+router.get("/blob/:token/download", optionalAuth, async (req, res) => {
+  try { await streamStoredPdfBlobRoute(req, res, "attachment"); }
+  catch (error) { console.error("[PDF Blob Download] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
+});
+
 // GET /api/materials/pdf/:id — Xem PDF inline (yêu cầu đăng nhập)
 router.get("/pdf/:id", authenticate, async (req, res) => {
   try { await streamPdf(res, req.params.id, "inline", req.user); }
@@ -188,7 +311,7 @@ router.post(
           .status(400)
           .json({ success: false, message: "Không có file" });
 
-      const result = await uploadPdfToCloudinary(req.file.path, { fileSize: req.file.size });
+      const uploadResult = await uploadPdfWithStorageFallback(req);
 
       let webContent = null;
       let parseWarning = null;
@@ -210,18 +333,29 @@ router.post(
         parseWarning = `File ${fileSizeMb.toFixed(1)}MB đã upload xong; bỏ qua chuyển PDF sang web để tránh timeout.`;
       }
 
+      const warnings = [uploadResult.warning, parseWarning].filter(Boolean);
+      const contentMeta = {
+        ...(webContent?.meta || {}),
+        uploadBytes: uploadResult.bytes || req.file.size,
+        storage: uploadResult.storage,
+        storagePublicId: uploadResult.publicId,
+        skippedSyncParse: shouldExtractWebContent && fileSizeMb > MAX_SYNC_PDF_PARSE_MB,
+        importMode: shouldExtractWebContent ? "web" : "pdf",
+      };
+
       removeTempFile(req.file?.path);
       res.json({
         success: true,
         data: {
-          url: result.secure_url,
-          publicId: result.public_id,
+          url: uploadResult.url,
+          publicId: uploadResult.publicId,
+          storage: uploadResult.storage,
           content_text: webContent?.contentText || "",
           content_html: webContent?.contentHtml || "",
-          content_meta: webContent?.meta || { uploadBytes: req.file.size, skippedSyncParse: shouldExtractWebContent && fileSizeMb > MAX_SYNC_PDF_PARSE_MB, importMode: shouldExtractWebContent ? "web" : "pdf" },
+          content_meta: contentMeta,
           content_source: webContent?.contentHtml ? "pdf_extract" : "file",
         },
-        warnings: parseWarning ? [parseWarning] : [],
+        warnings,
         message: webContent?.contentHtml ? "Upload PDF và chuyển sang bài web thành công" : "Upload PDF thành công",
       });
     } catch (error) {

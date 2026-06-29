@@ -22,6 +22,14 @@ function assertCloudinaryConfigured() {
   }
 }
 
+function configureCloudinaryFromEnv() {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+
 function getPdfUploadOptions(options = {}) {
   return {
     folder: options.folder || DEFAULT_UPLOAD_FOLDER,
@@ -62,6 +70,7 @@ function shouldTryFallback(error) {
 
 async function uploadPdfToCloudinary(filePath, options = {}) {
   assertCloudinaryConfigured();
+  configureCloudinaryFromEnv();
 
   const uploadOptions = getPdfUploadOptions(options);
   const fileSizeMb = Number(options.fileSize || 0) / (1024 * 1024);
@@ -86,6 +95,14 @@ async function uploadPdfToCloudinary(filePath, options = {}) {
 }
 
 function getMaterialPdfUploadError(error) {
+  if (error?.message === "MATERIAL_DB_PDF_TOO_LARGE") {
+    return {
+      status: error.statusCode || 413,
+      code: "MATERIAL_DB_PDF_TOO_LARGE",
+      message: error.publicMessage || "File PDF quá lớn so với giới hạn kho nội bộ.",
+    };
+  }
+
   if (error?.statusCode && error?.publicMessage) {
     return {
       status: error.statusCode,
