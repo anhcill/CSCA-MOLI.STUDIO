@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Header from '@/components/layout/Header';
+import BackButton from '@/components/layout/BackButton';
 import axios from '@/lib/utils/axios';
 import { MaterialSearchBar } from '@/components/materials/MaterialSearchBar';
 import { MaterialSection } from '@/components/materials/MaterialSection';
@@ -106,6 +107,7 @@ export default function TaiLieuPage() {
         <div className="mb-8 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center sm:p-8">
             <div>
+              <BackButton fallbackHref="/" className="mb-4" />
               <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-pink-500 text-3xl text-white shadow-sm">
                 📚
               </div>

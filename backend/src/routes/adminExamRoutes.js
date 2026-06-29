@@ -57,6 +57,7 @@ router.use(authorizePermission("exams.manage"));
 // Counts (place before /:examId to avoid route conflict) — no rate limit needed
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
+router.get("/analytics", AdminExamController.getAnalytics);
 router.get("/import/pdf/review-ledger", AdminExamController.getImportReviewLedger);
 router.post("/import/pdf/review-ledger", examWriteLimiter, AdminExamController.saveImportReviewLedger);
 router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);

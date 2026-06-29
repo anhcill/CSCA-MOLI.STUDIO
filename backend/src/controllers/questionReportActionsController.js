@@ -179,7 +179,13 @@ const QuestionReportActions = {
         SELECT
           qr.*,
           q.question_number, q.question_text, q.question_text_cn,
-          q.question_type, q.correct_answer, q.explanation, q.explanation_cn,
+          q.question_type,
+          (
+            SELECT STRING_AGG(a.answer_key, ',' ORDER BY a.answer_key)
+            FROM answers a
+            WHERE a.question_id = q.id AND a.is_correct = TRUE
+          ) AS correct_answer,
+          q.explanation, q.explanation_cn,
           q.image_url AS question_image, q.points, q.is_hidden AS question_is_hidden,
           e.title AS exam_title, e.code AS exam_code, e.is_hidden AS exam_is_hidden,
           reporter.full_name AS reporter_name, reporter.email AS reporter_email,

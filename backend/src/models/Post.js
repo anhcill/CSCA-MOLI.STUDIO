@@ -9,8 +9,8 @@ class Post {
         u.full_name as author_name,
         u.avatar as author_avatar,
         u.email as author_email,
-        COUNT(DISTINCT pl.id) as like_count,
-        COUNT(DISTINCT pc.id) as comment_count,
+        COUNT(DISTINCT pl.id)::int as like_count,
+        COUNT(DISTINCT pc.id)::int as comment_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $3) as is_liked` : 'false as is_liked'}
       FROM posts p
       INNER JOIN users u ON p.user_id = u.id
@@ -47,8 +47,8 @@ class Post {
         u.full_name as author_name,
         u.avatar as author_avatar,
         u.email as author_email,
-        COUNT(DISTINCT pl.id) as like_count,
-        COUNT(DISTINCT pc.id) as comment_count,
+        COUNT(DISTINCT pl.id)::int as like_count,
+        COUNT(DISTINCT pc.id)::int as comment_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $2) as is_liked` : 'false as is_liked'}
       FROM posts p
       INNER JOIN users u ON p.user_id = u.id
@@ -81,33 +81,30 @@ class Post {
     return result.rows[0];
   }
 
-  // Like post — returns like count in same query (no extra round-trip)
+  // Like post — insert then count (sequential to avoid CTE snapshot issue)
   static async like(postId, userId) {
-    try {
-      const query = `
-                WITH inserted AS (
-                    INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)
-                    ON CONFLICT (post_id, user_id) DO NOTHING
-                )
-                SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = $1
-            `;
-      const result = await pool.query(query, [postId, userId]);
-      return parseInt(result.rows[0].like_count);
-    } catch (error) {
-      throw error;
-    }
+    await pool.query(
+      `INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT (post_id, user_id) DO NOTHING`,
+      [postId, userId]
+    );
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS like_count FROM post_likes WHERE post_id = $1`,
+      [postId]
+    );
+    return result.rows[0].like_count;
   }
 
-  // Unlike post — returns like count in same query (no extra round-trip)
+  // Unlike post — delete then count (sequential to avoid CTE snapshot issue)
   static async unlike(postId, userId) {
-    const query = `
-            WITH deleted AS (
-                DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2
-            )
-            SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = $1
-        `;
-    const result = await pool.query(query, [postId, userId]);
-    return parseInt(result.rows[0].like_count);
+    await pool.query(
+      `DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2`,
+      [postId, userId]
+    );
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS like_count FROM post_likes WHERE post_id = $1`,
+      [postId]
+    );
+    return result.rows[0].like_count;
   }
 
   // Get like count (kept for backward compatibility)
@@ -125,7 +122,7 @@ class Post {
         u.full_name as author_name,
         u.avatar as author_avatar,
         ru.full_name as reply_to_user_name,
-        COUNT(DISTINCT cl.id) as like_count,
+        COUNT(DISTINCT cl.id)::int as like_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM comment_likes WHERE comment_id = pc.id AND user_id = $2) as is_liked` : 'false as is_liked'}
       FROM post_comments pc
       INNER JOIN users u ON pc.user_id = u.id
@@ -153,31 +150,28 @@ class Post {
 
   // Like comment
   static async likeComment(commentId, userId) {
-    try {
-      const query = `
-          WITH inserted AS (
-              INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2)
-              ON CONFLICT (comment_id, user_id) DO NOTHING
-          )
-          SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = $1
-      `;
-      const result = await pool.query(query, [commentId, userId]);
-      return parseInt(result.rows[0].like_count);
-    } catch (error) {
-      throw error;
-    }
+    await pool.query(
+      `INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2) ON CONFLICT (comment_id, user_id) DO NOTHING`,
+      [commentId, userId]
+    );
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS like_count FROM comment_likes WHERE comment_id = $1`,
+      [commentId]
+    );
+    return result.rows[0].like_count;
   }
 
   // Unlike comment
   static async unlikeComment(commentId, userId) {
-    const query = `
-        WITH deleted AS (
-            DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2
-        )
-        SELECT COUNT(*) AS like_count FROM comment_likes WHERE comment_id = $1
-    `;
-    const result = await pool.query(query, [commentId, userId]);
-    return parseInt(result.rows[0].like_count);
+    await pool.query(
+      `DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2`,
+      [commentId, userId]
+    );
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS like_count FROM comment_likes WHERE comment_id = $1`,
+      [commentId]
+    );
+    return result.rows[0].like_count;
   }
 
   // Get comment count

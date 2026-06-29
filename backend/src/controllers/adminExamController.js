@@ -30,6 +30,10 @@ const {
   saveExamSourceFile: saveExamSourceFileRecord,
 } = require("../services/exam-ai/examSourceService");
 const { buildAiModeOptions, isDeepMode } = require("../services/adminExamAiModeService");
+const {
+  DEFAULT_SETTINGS,
+  getSettings: getSiteSettings,
+} = require("../services/siteSettingsService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -122,9 +126,38 @@ const EXAM_AI_ACTIONS = {
   POLISH_EXPLANATIONS: "polish_explanations",
   NORMALIZE: "normalize_formulas",
 };
+const QUESTION_REVIEW_SETTING_KEYS = [
+  "admin_question_review_model",
+  "admin_question_review_fallback_model",
+];
+
+function normalizeAiModel(value, fallback) {
+  return String(value || "").trim() || fallback;
+}
+
+function getUniqueAiModels(models) {
+  return [...new Set(models.map(model => String(model || "").trim()).filter(Boolean))];
+}
 
 function getAdminExamAiMode(req) {
   return buildAiModeOptions(req.body?.qualityMode || req.query?.qualityMode);
+}
+
+async function getQuestionReviewModelContext() {
+  const settings = await getSiteSettings(QUESTION_REVIEW_SETTING_KEYS);
+  const primaryModel = normalizeAiModel(
+    settings.admin_question_review_model,
+    DEFAULT_SETTINGS.admin_question_review_model,
+  );
+  const fallbackModel = normalizeAiModel(
+    settings.admin_question_review_fallback_model,
+    DEFAULT_SETTINGS.admin_question_review_fallback_model,
+  );
+  const reviewModels = getUniqueAiModels([primaryModel, fallbackModel]);
+  return {
+    reviewModel: reviewModels[0] || DEFAULT_SETTINGS.admin_question_review_model,
+    reviewModels: reviewModels.length ? reviewModels : [DEFAULT_SETTINGS.admin_question_review_model],
+  };
 }
 
 async function runDeepExamReviewIfNeeded(client, examId, modeOptions, baseContext = {}) {
@@ -1005,10 +1038,12 @@ const AdminExamController = {
       }
 
       const modeOptions = getAdminExamAiMode(req);
+      const questionReviewModelContext = await getQuestionReviewModelContext();
       const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
         ...modeOptions.fast,
+        ...questionReviewModelContext,
       };
       let result = await reviewStoredQuestionWithAI(client, examId, questionId, baseContext);
       if (isDeepMode(modeOptions.qualityMode)) {
@@ -1016,10 +1051,20 @@ const AdminExamController = {
         result = await reviewStoredQuestionWithAI(client, examId, questionId, {
           ...baseContext,
           ...modeOptions.deep,
+          ...questionReviewModelContext,
         });
         result.fastReviewSummary = fastSummary;
       }
       result.qualityMode = modeOptions.qualityMode;
+      if (Array.isArray(result.diagnostics)) {
+        const modelLabel = questionReviewModelContext.reviewModels.join(" -> ");
+        result.summary = { ...(result.summary || {}), model: modelLabel };
+        result.diagnostics = result.diagnostics.map(item => ({
+          ...item,
+          model: modelLabel,
+          modelChain: questionReviewModelContext.reviewModels,
+        }));
+      }
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW_QUESTION, req.user.id, {
         questionId: Number(questionId),
         total: result.summary?.total || 0,
@@ -3049,6 +3094,202 @@ const AdminExamController = {
     } catch (error) {
       console.error("Get exam stats error:", error);
       res.status(500).json({ message: "Failed to get exam stats" });
+    }
+  },
+
+  // GET /api/admin/exams/analytics - Deep exam attempt analytics for exam admins
+  async getAnalytics(req, res) {
+    try {
+      const baseExamWhere = "e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'";
+
+      const overviewQuery = `
+        SELECT
+          COUNT(DISTINCT e.id)::int AS total_exams,
+          COUNT(DISTINCT CASE WHEN ea.id IS NOT NULL THEN e.id END)::int AS exams_with_attempts,
+          COUNT(DISTINCT ea.id)::int AS total_attempts,
+          COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END)::int AS completed_attempts,
+          COUNT(DISTINCT ea.user_id)::int AS unique_users,
+          COALESCE(ROUND(AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS avg_score_percentage,
+          COALESCE(ROUND(MAX(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS best_score_percentage,
+          MAX(ea.submit_time) AS last_submit_at
+        FROM exams e
+        LEFT JOIN exam_attempts ea ON ea.exam_id = e.id
+        WHERE ${baseExamWhere}
+      `;
+
+      const popularExamsQuery = `
+        WITH best_attempts AS (
+          SELECT DISTINCT ON (ea.exam_id)
+            ea.exam_id,
+            ea.user_id,
+            COALESCE(u.full_name, u.username, u.email, 'User #' || u.id) AS user_name,
+            u.email AS user_email,
+            ea.total_score,
+            ROUND(ea.total_score::numeric / NULLIF(e.total_points, 0) * 100, 1)::numeric AS score_percentage,
+            ea.duration_seconds,
+            ea.submit_time
+          FROM exam_attempts ea
+          JOIN exams e ON e.id = ea.exam_id
+          LEFT JOIN users u ON u.id = ea.user_id
+          WHERE ea.status = 'completed' AND ${baseExamWhere}
+          ORDER BY ea.exam_id, ea.total_score DESC NULLS LAST, ea.duration_seconds ASC NULLS LAST, ea.submit_time ASC NULLS LAST
+        )
+        SELECT
+          e.id,
+          e.title,
+          e.status,
+          e.is_premium,
+          e.vip_tier,
+          s.name AS subject_name,
+          s.code AS subject_code,
+          COUNT(ea.id)::int AS total_attempts,
+          COUNT(CASE WHEN ea.status = 'completed' THEN 1 END)::int AS completed_attempts,
+          COUNT(DISTINCT ea.user_id)::int AS unique_users,
+          COALESCE(ROUND(AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS avg_score_percentage,
+          COALESCE(ROUND(MAX(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS best_score_percentage,
+          MAX(ea.submit_time) AS last_attempt_at,
+          ba.user_id AS top_user_id,
+          ba.user_name AS top_user_name,
+          ba.user_email AS top_user_email,
+          ba.total_score AS top_score,
+          ba.score_percentage AS top_score_percentage,
+          ba.duration_seconds AS top_duration_seconds,
+          ba.submit_time AS top_submit_time
+        FROM exams e
+        LEFT JOIN subjects s ON s.id = e.subject_id
+        LEFT JOIN exam_attempts ea ON ea.exam_id = e.id
+        LEFT JOIN best_attempts ba ON ba.exam_id = e.id
+        WHERE ${baseExamWhere}
+        GROUP BY e.id, e.title, e.status, e.is_premium, e.vip_tier, s.name, s.code,
+                 ba.user_id, ba.user_name, ba.user_email, ba.total_score, ba.score_percentage, ba.duration_seconds, ba.submit_time
+        HAVING COUNT(ea.id) > 0
+        ORDER BY total_attempts DESC, unique_users DESC, last_attempt_at DESC NULLS LAST
+        LIMIT 20
+      `;
+
+      const topUsersQuery = `
+        SELECT
+          u.id AS user_id,
+          COALESCE(u.full_name, u.username, u.email, 'User #' || u.id) AS user_name,
+          u.email AS user_email,
+          COUNT(ea.id)::int AS total_attempts,
+          COUNT(CASE WHEN ea.status = 'completed' THEN 1 END)::int AS completed_attempts,
+          COUNT(DISTINCT ea.exam_id)::int AS distinct_exams,
+          COALESCE(ROUND(AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS avg_score_percentage,
+          COALESCE(ROUND(MAX(CASE WHEN ea.status = 'completed' THEN ea.total_score::numeric / NULLIF(e.total_points, 0) * 100 END), 1), 0)::numeric AS best_score_percentage,
+          MAX(ea.submit_time) AS last_submit_at
+        FROM exam_attempts ea
+        JOIN exams e ON e.id = ea.exam_id
+        LEFT JOIN users u ON u.id = ea.user_id
+        WHERE ${baseExamWhere}
+        GROUP BY u.id, u.full_name, u.username, u.email
+        ORDER BY completed_attempts DESC, avg_score_percentage DESC, last_submit_at DESC NULLS LAST
+        LIMIT 20
+      `;
+
+      const recentAttemptsQuery = `
+        SELECT
+          ea.id,
+          ea.exam_id,
+          e.title AS exam_title,
+          s.name AS subject_name,
+          s.code AS subject_code,
+          ea.user_id,
+          COALESCE(u.full_name, u.username, u.email, 'User #' || u.id) AS user_name,
+          u.email AS user_email,
+          ea.status,
+          ea.total_score,
+          ROUND(ea.total_score::numeric / NULLIF(e.total_points, 0) * 100, 1)::numeric AS score_percentage,
+          ea.duration_seconds,
+          ea.start_time,
+          ea.submit_time,
+          ea.created_at
+        FROM exam_attempts ea
+        JOIN exams e ON e.id = ea.exam_id
+        LEFT JOIN subjects s ON s.id = e.subject_id
+        LEFT JOIN users u ON u.id = ea.user_id
+        WHERE ${baseExamWhere}
+        ORDER BY COALESCE(ea.submit_time, ea.created_at) DESC
+        LIMIT 30
+      `;
+
+      const [overviewResult, popularExamsResult, topUsersResult, recentAttemptsResult] = await Promise.all([
+        pool.query(overviewQuery),
+        pool.query(popularExamsQuery),
+        pool.query(topUsersQuery),
+        pool.query(recentAttemptsQuery),
+      ]);
+
+      const overview = overviewResult.rows[0] || {};
+      res.json({
+        success: true,
+        data: {
+          overview: {
+            totalExams: Number(overview.total_exams || 0),
+            examsWithAttempts: Number(overview.exams_with_attempts || 0),
+            totalAttempts: Number(overview.total_attempts || 0),
+            completedAttempts: Number(overview.completed_attempts || 0),
+            uniqueUsers: Number(overview.unique_users || 0),
+            avgScorePercentage: parseFloat(overview.avg_score_percentage) || 0,
+            bestScorePercentage: parseFloat(overview.best_score_percentage) || 0,
+            lastSubmitAt: overview.last_submit_at || null,
+          },
+          popularExams: popularExamsResult.rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            status: row.status,
+            isPremium: row.is_premium === true,
+            vipTier: row.vip_tier || "basic",
+            subjectName: row.subject_name,
+            subjectCode: row.subject_code,
+            totalAttempts: Number(row.total_attempts || 0),
+            completedAttempts: Number(row.completed_attempts || 0),
+            uniqueUsers: Number(row.unique_users || 0),
+            avgScorePercentage: parseFloat(row.avg_score_percentage) || 0,
+            bestScorePercentage: parseFloat(row.best_score_percentage) || 0,
+            lastAttemptAt: row.last_attempt_at || null,
+            topUser: row.top_user_id ? {
+              id: row.top_user_id,
+              name: row.top_user_name,
+              email: row.top_user_email,
+              score: parseFloat(row.top_score) || 0,
+              scorePercentage: parseFloat(row.top_score_percentage) || 0,
+              durationSeconds: Number(row.top_duration_seconds || 0),
+              submittedAt: row.top_submit_time || null,
+            } : null,
+          })),
+          topUsers: topUsersResult.rows.map((row) => ({
+            userId: row.user_id,
+            userName: row.user_name,
+            userEmail: row.user_email,
+            totalAttempts: Number(row.total_attempts || 0),
+            completedAttempts: Number(row.completed_attempts || 0),
+            distinctExams: Number(row.distinct_exams || 0),
+            avgScorePercentage: parseFloat(row.avg_score_percentage) || 0,
+            bestScorePercentage: parseFloat(row.best_score_percentage) || 0,
+            lastSubmitAt: row.last_submit_at || null,
+          })),
+          recentAttempts: recentAttemptsResult.rows.map((row) => ({
+            id: row.id,
+            examId: row.exam_id,
+            examTitle: row.exam_title,
+            subjectName: row.subject_name,
+            subjectCode: row.subject_code,
+            userId: row.user_id,
+            userName: row.user_name,
+            userEmail: row.user_email,
+            status: row.status,
+            totalScore: parseFloat(row.total_score) || 0,
+            scorePercentage: parseFloat(row.score_percentage) || 0,
+            durationSeconds: Number(row.duration_seconds || 0),
+            startedAt: row.start_time || row.created_at || null,
+            submittedAt: row.submit_time || null,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Get exam analytics error:", error);
+      res.status(500).json({ message: "Failed to get exam analytics" });
     }
   },
 

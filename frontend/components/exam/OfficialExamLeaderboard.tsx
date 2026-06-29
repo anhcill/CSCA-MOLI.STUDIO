@@ -8,6 +8,12 @@ type OfficialExamLeaderboardProps = {
   examTitle?: string;
   loading?: boolean;
   className?: string;
+  badgeLabel?: string;
+  scopeLabel?: string;
+  description?: string;
+  noRoomLabel?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
 function formatScore(value?: number | null) {
@@ -46,7 +52,13 @@ function Avatar({ entry, size = 48 }: { entry: OfficialExamLeaderboardEntry; siz
   );
 }
 
-function PodiumCard({ entry }: { entry: OfficialExamLeaderboardEntry }) {
+function getEntryMeta(entry: OfficialExamLeaderboardEntry, noRoomLabel: string) {
+  return entry.room_name
+    ? `${entry.room_name}${entry.seat_number ? ` - ghế ${entry.seat_number}` : ''}`
+    : noRoomLabel;
+}
+
+function PodiumCard({ entry, noRoomLabel }: { entry: OfficialExamLeaderboardEntry; noRoomLabel: string }) {
   const isFirst = entry.rank === 1;
   const tone =
     entry.rank === 1
@@ -64,7 +76,7 @@ function PodiumCard({ entry }: { entry: OfficialExamLeaderboardEntry }) {
       <Avatar entry={entry} size={isFirst ? 72 : 60} />
       <h3 className="mt-3 line-clamp-2 min-h-[44px] text-base font-black text-slate-950">{entry.full_name}</h3>
       <p className="mt-1 text-xs font-bold text-slate-500">
-        {entry.room_name ? `${entry.room_name}${entry.seat_number ? ` - ghế ${entry.seat_number}` : ''}` : 'Chưa phân phòng'}
+        {getEntryMeta(entry, noRoomLabel)}
       </p>
       <div className="mt-4 rounded-2xl bg-slate-950 px-5 py-3 text-white">
         <p className="text-2xl font-black">{formatScore(entry.total_score)}</p>
@@ -77,7 +89,7 @@ function PodiumCard({ entry }: { entry: OfficialExamLeaderboardEntry }) {
   );
 }
 
-function RankingRow({ entry }: { entry: OfficialExamLeaderboardEntry }) {
+function RankingRow({ entry, noRoomLabel }: { entry: OfficialExamLeaderboardEntry; noRoomLabel: string }) {
   return (
     <div className="grid grid-cols-[44px_1fr_auto] items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-sm font-black text-slate-500">
@@ -88,7 +100,7 @@ function RankingRow({ entry }: { entry: OfficialExamLeaderboardEntry }) {
         <div className="min-w-0">
           <p className="truncate font-black text-slate-950">{entry.full_name}</p>
           <p className="truncate text-xs font-bold text-slate-500">
-            {entry.room_name ? `${entry.room_name}${entry.seat_number ? ` - ghế ${entry.seat_number}` : ''}` : 'Chưa phân phòng'} · {formatDuration(entry.duration_seconds)}
+            {getEntryMeta(entry, noRoomLabel)} · {formatDuration(entry.duration_seconds)}
           </p>
         </div>
       </div>
@@ -105,6 +117,12 @@ export default function OfficialExamLeaderboard({
   examTitle,
   loading,
   className = '',
+  badgeLabel = 'Bảng xếp hạng phòng thi',
+  scopeLabel = 'Đề/phòng thi',
+  description,
+  noRoomLabel = 'Chưa phân phòng',
+  emptyTitle = 'Chưa có dữ liệu phòng thi',
+  emptyDescription = 'Khi có thí sinh nộp bài của đề này, bảng xếp hạng riêng sẽ hiện ở đây.',
 }: OfficialExamLeaderboardProps) {
   const podiumEntries = [entries[1], entries[0], entries[2]].filter(Boolean);
   const restEntries = entries.slice(3);
@@ -115,11 +133,11 @@ export default function OfficialExamLeaderboard({
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-700">
-              <FiMonitor size={14} /> Bảng xếp hạng phòng thi
+              <FiMonitor size={14} /> {badgeLabel}
             </div>
             <h2 className="text-2xl font-black text-slate-950 md:text-3xl">Top kết quả của đề này</h2>
             <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-600">
-              Chỉ tính lượt nộp bài của {examTitle || 'kỳ thi/phòng thi hiện tại'}. Không lấy dữ liệu từ bảng xếp hạng toàn hệ thống.
+              {description || `Chỉ tính lượt nộp bài của ${examTitle || 'đề hiện tại'}. Xếp hạng theo điểm cao nhất, nếu bằng điểm thì ưu tiên thời gian làm nhanh hơn.`}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
@@ -129,7 +147,7 @@ export default function OfficialExamLeaderboard({
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
               <p className="flex items-center gap-2 text-xs font-bold text-slate-500"><FiHash /> Phạm vi</p>
-              <p className="mt-1 text-sm font-black text-slate-950">Đề/phòng thi</p>
+              <p className="mt-1 text-sm font-black text-slate-950">{scopeLabel}</p>
             </div>
           </div>
         </div>
@@ -142,16 +160,16 @@ export default function OfficialExamLeaderboard({
       ) : entries.length === 0 ? (
         <div className="flex min-h-[260px] flex-col items-center justify-center p-8 text-center">
           <FiTrendingUp size={44} className="mb-3 text-slate-300" />
-          <p className="text-lg font-black text-slate-600">Chưa có dữ liệu phòng thi</p>
+          <p className="text-lg font-black text-slate-600">{emptyTitle}</p>
           <p className="mt-1 max-w-md text-sm font-semibold text-slate-400">
-            Khi có thí sinh nộp bài của đề này, bảng xếp hạng riêng sẽ hiện ở đây.
+  emptyDescription = 'Khi có thí sinh nộp bài của đề này, bảng xếp hạng riêng sẽ hiện ở đây.',
           </p>
         </div>
       ) : (
         <div className="space-y-5 p-5 md:p-6">
           <div className="grid gap-4 md:grid-cols-3 md:items-end">
             {podiumEntries.map((entry) => (
-              <PodiumCard key={entry.user_id} entry={entry} />
+              <PodiumCard key={entry.user_id} entry={entry} noRoomLabel={noRoomLabel} />
             ))}
           </div>
 
@@ -162,7 +180,7 @@ export default function OfficialExamLeaderboard({
                 <span className="text-xs font-bold text-slate-400">{restEntries.length} thí sinh</span>
               </div>
               {restEntries.map((entry) => (
-                <RankingRow key={entry.user_id} entry={entry} />
+                <RankingRow key={entry.user_id} entry={entry} noRoomLabel={noRoomLabel} />
               ))}
             </div>
           )}

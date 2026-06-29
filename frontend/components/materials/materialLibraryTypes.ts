@@ -73,6 +73,10 @@ export function getMaterialImages(material: Material) {
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
+export function getMaterialCoverImage(material: Material) {
+  return getMaterialImages(material)[0] || null;
+}
+
 export function canUsePdfProxy(fileUrl?: string) {
   return Boolean(fileUrl && /\/upload\/v\d+\//.test(fileUrl));
 }

@@ -12,6 +12,8 @@ const ADMIN_KEYS = [
   "public_ai_9router_model",
   "public_ai_beeknoee_model",
   "public_ai_fallback_provider",
+  "admin_question_review_model",
+  "admin_question_review_fallback_model",
 ];
 
 ensureSettingsTable().catch((error) => {
@@ -76,6 +78,18 @@ async function updateSettings(req, res) {
       next.public_ai_beeknoee_model = normalizeModel(
         req.body.public_ai_beeknoee_model,
         DEFAULT_SETTINGS.public_ai_beeknoee_model,
+      );
+    }
+    if (req.body.admin_question_review_model !== undefined) {
+      next.admin_question_review_model = normalizeModel(
+        req.body.admin_question_review_model,
+        DEFAULT_SETTINGS.admin_question_review_model,
+      );
+    }
+    if (req.body.admin_question_review_fallback_model !== undefined) {
+      next.admin_question_review_fallback_model = normalizeModel(
+        req.body.admin_question_review_fallback_model,
+        DEFAULT_SETTINGS.admin_question_review_fallback_model,
       );
     }
 

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/store/authStore';
-import { examAdminApi } from '@/lib/api/examAdmin';
+import { examAdminApi, type AdminExamAnalytics } from '@/lib/api/examAdmin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { buildAdminExamListQuery, parseAdminExamAccessFilter, parseAdminExamFilter, withAdminExamListState, saveAdminExamListState, loadAdminExamListState, type AdminExamAccessFilter, type AdminExamFilter } from '@/lib/utils/adminExamListState';
 import { FiFileText, FiPlus, FiTrash2, FiEye, FiChevronLeft, FiChevronRight, FiCalendar, FiShuffle, FiSearch, FiUsers, FiTrendingUp, FiTarget, FiAward, FiMonitor, FiCheck, FiX, FiRotateCcw, FiRefreshCw } from 'react-icons/fi';
@@ -130,6 +130,9 @@ export default function ExamsPage() {
     const [stats, setStats] = useState<ExamStats | null>(null);
     const [topExams, setTopExams] = useState<TopExam[]>([]);
     const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
+    const [activeView, setActiveView] = useState<'list' | 'analytics'>('list');
+    const [analytics, setAnalytics] = useState<AdminExamAnalytics | null>(null);
+    const [analyticsLoading, setAnalyticsLoading] = useState(false);
     const [examAction, setExamAction] = useState<{ type: 'delete' | 'approve' | 'reject'; exam: Exam } | null>(null);
     const [examActionReason, setExamActionReason] = useState('');
     const [examActionError, setExamActionError] = useState('');
@@ -233,6 +236,20 @@ export default function ExamsPage() {
         }
     };
 
+    const loadAnalytics = async () => {
+        try {
+            setAnalyticsLoading(true);
+            const result = await examAdminApi.getAnalytics();
+            if (result.success && result.data) {
+                setAnalytics(result.data);
+            }
+        } catch (error) {
+            console.error('Error loading exam analytics:', error);
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    };
+
     useEffect(() => {
         const _token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
         if (!_token) {
@@ -246,6 +263,7 @@ export default function ExamsPage() {
 
         loadExamCounts();
         loadStats();
+        loadAnalytics();
         loadExams();
     }, [isAuthenticated, user, router, pagination.currentPage, filterType, subjectFilter, accessFilter]);
 
@@ -267,6 +285,7 @@ export default function ExamsPage() {
     const refreshExamData = () => {
         loadExamCounts();
         loadStats();
+        loadAnalytics();
         loadExams();
     };
 
@@ -422,6 +441,30 @@ export default function ExamsPage() {
         }
     };
 
+    const formatDateTime = (value?: string | null) => {
+        if (!value) return '--';
+        return new Date(value).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    const formatDuration = (seconds?: number | null) => {
+        const totalSeconds = Number(seconds || 0);
+        if (!totalSeconds) return '--';
+        const minutes = Math.floor(totalSeconds / 60);
+        const restSeconds = totalSeconds % 60;
+        if (minutes >= 60) {
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            return `${hours}h ${remainingMinutes}m`;
+        }
+        return `${minutes}m ${restSeconds}s`;
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -504,6 +547,211 @@ export default function ExamsPage() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
+                    {([
+                        { id: 'list', label: 'Danh sách đề', icon: FiFileText },
+                        { id: 'analytics', label: 'Thống kê làm đề', icon: FiTrendingUp },
+                    ] as { id: 'list' | 'analytics'; label: string; icon: typeof FiFileText }[]).map(item => {
+                        const Icon = item.icon;
+                        const active = activeView === item.id;
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setActiveView(item.id)}
+                                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all ${
+                                    active
+                                        ? 'bg-violet-600 text-white shadow-sm'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-violet-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                                }`}
+                            >
+                                <Icon size={16} />
+                                {item.label}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {activeView === 'analytics' && (
+                    <div className="space-y-4 rounded-2xl border border-violet-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-black text-gray-900 dark:text-white">Thống kê làm đề</h2>
+                                <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Ai làm đề nào, đề nào hot, ai đạt điểm cao nhất.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={loadAnalytics}
+                                disabled={analyticsLoading}
+                                className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-3 py-2 text-sm font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-60"
+                            >
+                                <FiRefreshCw size={15} className={analyticsLoading ? 'animate-spin' : ''} />
+                                Làm mới
+                            </button>
+                        </div>
+
+                        {analyticsLoading && !analytics ? (
+                            <div className="rounded-xl border border-dashed border-violet-200 p-8 text-center text-sm font-semibold text-violet-700">
+                                Đang tải thống kê...
+                            </div>
+                        ) : analytics ? (
+                            <>
+                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div className="rounded-xl bg-violet-50 p-4 text-violet-900 dark:bg-violet-500/10 dark:text-violet-100">
+                                        <p className="text-xs font-bold uppercase opacity-70">Người đã làm</p>
+                                        <p className="mt-1 text-3xl font-black">{analytics.overview.uniqueUsers.toLocaleString()}</p>
+                                        <p className="text-xs font-semibold opacity-70">{analytics.overview.totalAttempts.toLocaleString()} lượt làm</p>
+                                    </div>
+                                    <div className="rounded-xl bg-emerald-50 p-4 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-100">
+                                        <p className="text-xs font-bold uppercase opacity-70">Hoàn thành</p>
+                                        <p className="mt-1 text-3xl font-black">{analytics.overview.completedAttempts.toLocaleString()}</p>
+                                        <p className="text-xs font-semibold opacity-70">{analytics.overview.examsWithAttempts.toLocaleString()} đề có lượt làm</p>
+                                    </div>
+                                    <div className="rounded-xl bg-amber-50 p-4 text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">
+                                        <p className="text-xs font-bold uppercase opacity-70">Điểm TB</p>
+                                        <p className="mt-1 text-3xl font-black">{Math.round(analytics.overview.avgScorePercentage)}%</p>
+                                        <p className="text-xs font-semibold opacity-70">Cao nhất {Math.round(analytics.overview.bestScorePercentage)}%</p>
+                                    </div>
+                                    <div className="rounded-xl bg-sky-50 p-4 text-sky-900 dark:bg-sky-500/10 dark:text-sky-100">
+                                        <p className="text-xs font-bold uppercase opacity-70">Gần nhất</p>
+                                        <p className="mt-1 text-lg font-black">{formatDateTime(analytics.overview.lastSubmitAt)}</p>
+                                        <p className="text-xs font-semibold opacity-70">lượt nộp mới nhất</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-4 xl:grid-cols-2">
+                                    <div className="overflow-hidden rounded-xl border border-gray-100 dark:border-slate-800">
+                                        <div className="border-b bg-gray-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800">
+                                            <h3 className="text-sm font-black text-gray-900 dark:text-white">Đề được làm nhiều nhất</h3>
+                                        </div>
+                                        <div className="max-h-[460px] overflow-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="sticky top-0 bg-white text-xs uppercase text-gray-500 dark:bg-slate-900 dark:text-slate-400">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left">Đề</th>
+                                                        <th className="px-4 py-3 text-right">Lượt</th>
+                                                        <th className="px-4 py-3 text-right">User</th>
+                                                        <th className="px-4 py-3 text-left">Top điểm</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                                    {analytics.popularExams.map(exam => (
+                                                        <tr key={exam.id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
+                                                            <td className="px-4 py-3">
+                                                                <button onClick={() => router.push(withCurrentExamListState(`/admin/exams/${exam.id}`))} className="text-left font-bold text-gray-900 hover:text-violet-700 dark:text-white">
+                                                                    {exam.title}
+                                                                </button>
+                                                                <div className="text-xs text-gray-500">{exam.subjectName} {exam.isPremium ? '• VIP' : ''}</div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-black text-violet-700">{exam.totalAttempts}</td>
+                                                            <td className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-slate-200">{exam.uniqueUsers}</td>
+                                                            <td className="px-4 py-3">
+                                                                {exam.topUser ? (
+                                                                    <div>
+                                                                        <p className="font-bold text-gray-900 dark:text-white">{exam.topUser.name}</p>
+                                                                        <p className="text-xs text-emerald-600">{Math.round(exam.topUser.scorePercentage)}% • {formatDuration(exam.topUser.durationSeconds)}</p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-400">Chưa có</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-hidden rounded-xl border border-gray-100 dark:border-slate-800">
+                                        <div className="border-b bg-gray-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800">
+                                            <h3 className="text-sm font-black text-gray-900 dark:text-white">User nổi bật</h3>
+                                        </div>
+                                        <div className="max-h-[460px] overflow-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="sticky top-0 bg-white text-xs uppercase text-gray-500 dark:bg-slate-900 dark:text-slate-400">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left">Người dùng</th>
+                                                        <th className="px-4 py-3 text-right">Đề</th>
+                                                        <th className="px-4 py-3 text-right">Lượt</th>
+                                                        <th className="px-4 py-3 text-right">TB/Cao</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                                    {analytics.topUsers.map(user => (
+                                                        <tr key={user.userId} className="hover:bg-gray-50 dark:hover:bg-slate-800">
+                                                            <td className="px-4 py-3">
+                                                                <p className="font-bold text-gray-900 dark:text-white">{user.userName}</p>
+                                                                <p className="text-xs text-gray-500">{user.userEmail}</p>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-semibold">{user.distinctExams}</td>
+                                                            <td className="px-4 py-3 text-right font-black text-violet-700">{user.completedAttempts}</td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <p className="font-bold text-gray-900 dark:text-white">{Math.round(user.avgScorePercentage)}%</p>
+                                                                <p className="text-xs text-emerald-600">{Math.round(user.bestScorePercentage)}%</p>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-hidden rounded-xl border border-gray-100 dark:border-slate-800">
+                                    <div className="border-b bg-gray-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800">
+                                        <h3 className="text-sm font-black text-gray-900 dark:text-white">Lượt làm gần đây</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-white text-xs uppercase text-gray-500 dark:bg-slate-900 dark:text-slate-400">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left">Người làm</th>
+                                                    <th className="px-4 py-3 text-left">Đề</th>
+                                                    <th className="px-4 py-3 text-right">Điểm</th>
+                                                    <th className="px-4 py-3 text-right">Thời gian</th>
+                                                    <th className="px-4 py-3 text-left">Nộp lúc</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                                {analytics.recentAttempts.map(attempt => (
+                                                    <tr key={attempt.id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
+                                                        <td className="px-4 py-3">
+                                                            <p className="font-bold text-gray-900 dark:text-white">{attempt.userName}</p>
+                                                            <p className="text-xs text-gray-500">{attempt.userEmail}</p>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <button onClick={() => router.push(withCurrentExamListState(`/admin/exams/${attempt.examId}`))} className="text-left font-bold text-gray-900 hover:text-violet-700 dark:text-white">
+                                                                {attempt.examTitle}
+                                                            </button>
+                                                            <div className="text-xs text-gray-500">{attempt.subjectName}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            {attempt.status === 'completed' ? (
+                                                                <>
+                                                                    <p className="font-black text-gray-900 dark:text-white">{Math.round(attempt.scorePercentage)}%</p>
+                                                                    <p className="text-xs text-gray-500">{attempt.totalScore} điểm</p>
+                                                                </>
+                                                            ) : (
+                                                                <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">Đang làm</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-slate-200">{formatDuration(attempt.durationSeconds)}</td>
+                                                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{formatDateTime(attempt.submittedAt || attempt.startedAt)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm font-semibold text-gray-500">
+                                Chưa có dữ liệu thống kê.
+                            </div>
+                        )}
                     </div>
                 )}
 

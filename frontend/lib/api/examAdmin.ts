@@ -349,6 +349,70 @@ export interface SingleQuestionImageOcrResult {
     };
 }
 
+export interface AdminExamAnalytics {
+    overview: {
+        totalExams: number;
+        examsWithAttempts: number;
+        totalAttempts: number;
+        completedAttempts: number;
+        uniqueUsers: number;
+        avgScorePercentage: number;
+        bestScorePercentage: number;
+        lastSubmitAt: string | null;
+    };
+    popularExams: Array<{
+        id: number;
+        title: string;
+        status: string;
+        isPremium: boolean;
+        vipTier: string;
+        subjectName: string;
+        subjectCode: string;
+        totalAttempts: number;
+        completedAttempts: number;
+        uniqueUsers: number;
+        avgScorePercentage: number;
+        bestScorePercentage: number;
+        lastAttemptAt: string | null;
+        topUser: {
+            id: number;
+            name: string;
+            email: string;
+            score: number;
+            scorePercentage: number;
+            durationSeconds: number;
+            submittedAt: string | null;
+        } | null;
+    }>;
+    topUsers: Array<{
+        userId: number;
+        userName: string;
+        userEmail: string;
+        totalAttempts: number;
+        completedAttempts: number;
+        distinctExams: number;
+        avgScorePercentage: number;
+        bestScorePercentage: number;
+        lastSubmitAt: string | null;
+    }>;
+    recentAttempts: Array<{
+        id: number;
+        examId: number;
+        examTitle: string;
+        subjectName: string;
+        subjectCode: string;
+        userId: number;
+        userName: string;
+        userEmail: string;
+        status: string;
+        totalScore: number;
+        scorePercentage: number;
+        durationSeconds: number;
+        startedAt: string | null;
+        submittedAt: string | null;
+    }>;
+}
+
 // LinkedOption cho fill_blank_pool (A-F)
 export interface LinkedOption {
     key: string;      // 'A', 'B', 'C', 'D', 'E', 'F'
@@ -562,6 +626,11 @@ export const examAdminApi = {
     // Get overall exam statistics
     getStats: async () => {
         const response = await axios.get('/admin/exams/stats');
+        return response.data;
+    },
+
+    getAnalytics: async (): Promise<{ success: boolean; data: AdminExamAnalytics }> => {
+        const response = await axios.get('/admin/exams/analytics');
         return response.data;
     },
 

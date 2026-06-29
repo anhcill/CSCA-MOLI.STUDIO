@@ -13,6 +13,8 @@ interface SettingsData {
     public_ai_9router_model?: string;
     public_ai_beeknoee_model?: string;
     public_ai_fallback_provider?: Provider;
+    admin_question_review_model?: string;
+    admin_question_review_fallback_model?: string;
 }
 
 const DEFAULT_SETTINGS: Required<SettingsData> = {
@@ -21,7 +23,25 @@ const DEFAULT_SETTINGS: Required<SettingsData> = {
     public_ai_9router_model: 'ag/claude-sonnet-4-6',
     public_ai_beeknoee_model: 'gpt-5.4-mini',
     public_ai_fallback_provider: 'beeknoee',
+    admin_question_review_model: 'cx/gpt-5.5',
+    admin_question_review_fallback_model: 'ag/claude-opus-4-6-thinking',
 };
+
+const QUESTION_REVIEW_MODEL_OPTIONS = [
+    { value: 'cx/gpt-5.5', label: 'cx/gpt-5.5' },
+    { value: 'ag/claude-opus-4-6-thinking', label: 'ag/claude-opus-4-6-thinking' },
+];
+
+const renderQuestionReviewModelOptions = (currentValue: string) => (
+    <>
+        {currentValue && !QUESTION_REVIEW_MODEL_OPTIONS.some(option => option.value === currentValue) && (
+            <option value={currentValue}>{currentValue}</option>
+        )}
+        {QUESTION_REVIEW_MODEL_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+    </>
+);
 
 export default function AdminSettingsPage() {
     const [settings, setSettings] = useState<Required<SettingsData>>(DEFAULT_SETTINGS);
@@ -198,6 +218,42 @@ export default function AdminSettingsPage() {
                                 <option value="gpt-5.4-mini">gpt-5.4-mini</option>
                                 <option value="google/gemini-3.1-pro-preview">google/gemini-3.1-pro-preview</option>
                                 <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center gap-3 border-b border-gray-200 px-6 py-4 dark:border-slate-800">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                            <FiCpu size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI soát riêng câu</h2>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">Model cho nút AI riêng trong từng câu hỏi</p>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-5 p-6 md:grid-cols-2">
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Model chính</span>
+                            <select
+                                value={settings.admin_question_review_model}
+                                onChange={(event) => patchSettings({ admin_question_review_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                {renderQuestionReviewModelOptions(settings.admin_question_review_model)}
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Model dự phòng</span>
+                            <select
+                                value={settings.admin_question_review_fallback_model}
+                                onChange={(event) => patchSettings({ admin_question_review_fallback_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                {renderQuestionReviewModelOptions(settings.admin_question_review_fallback_model)}
                             </select>
                         </label>
                     </div>

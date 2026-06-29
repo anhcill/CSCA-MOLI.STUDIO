@@ -21,6 +21,9 @@ interface Material {
   subject: string;
   topic: string;
   created_at: string;
+  content_meta?: {
+    images?: Array<{ url: string; caption?: string; order?: number }>;
+  };
 }
 
 const materialsCache = new Map<string, Material[]>();
@@ -39,6 +42,18 @@ const extractMaterials = (payload: unknown): Material[] => {
   const rows = (payload as { data?: Material[] } | undefined)?.data;
   return Array.isArray(rows) ? rows : [];
 };
+
+function getMaterialCoverUrl(material: Material) {
+  return getMaterialImages(material)[0]?.url || '';
+}
+
+function getMaterialImages(material: Material) {
+  const images = Array.isArray(material.content_meta?.images) ? material.content_meta.images : [];
+  return images
+    .filter((image) => image?.url)
+    .slice()
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
 
 const fetchCauTrucDeMaterials = async (subject = ''): Promise<Material[]> => {
   const normalizedSubject = normalizeContentSubject(subject);
@@ -77,6 +92,7 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(material.file_url)}&embedded=true`;
+  const materialImages = getMaterialImages(material);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -108,6 +124,22 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
           </button>
         </div>
       </div>
+      {materialImages.length > 0 ? (
+        <div className="flex-1 overflow-y-auto bg-slate-100 p-4 sm:p-6">
+          <div className="mx-auto max-w-4xl space-y-4">
+            {materialImages.map((image, index) => (
+              <figure key={image.url} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <a href={image.url} target="_blank" rel="noreferrer">
+                  <img src={image.url} alt={image.caption || `${material.title} - ảnh ${index + 1}`} className="w-full bg-white object-contain" loading="lazy" />
+                </a>
+                {image.caption && (
+                  <figcaption className="border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-600">{image.caption}</figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 relative bg-gray-800">
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3">
@@ -117,6 +149,7 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
         )}
         <iframe src={viewerUrl} className="w-full h-full border-0" title={material.title} onLoad={() => setLoading(false)} />
       </div>
+      )}
     </div>
   );
 }
@@ -125,25 +158,40 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
 function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) {
   const { t, language } = useLanguage();
   const dateLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN';
+  const coverUrl = getMaterialCoverUrl(m);
 
   return (
-    <div className="group bg-white border border-gray-200 rounded-xl p-4 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer" onClick={() => onView(m)}>
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-red-100 transition-colors">
-          <FiFileText className="text-red-500" size={18} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-purple-700 transition-colors">{m.title}</h3>
-          {m.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{m.description}</p>}
-          <p className="text-xs text-gray-400 mt-2">{new Date(m.created_at).toLocaleDateString(dateLocale)}</p>
-        </div>
-        <div className="shrink-0 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
+    <div className="group cursor-pointer rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md" onClick={() => onView(m)}>
+      <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-purple-100 bg-slate-950">
+        {coverUrl ? (
+          <img src={coverUrl} alt={m.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" loading="lazy" />
+        ) : (
+          <div className="flex h-full flex-col justify-between bg-gradient-to-br from-slate-950 via-purple-900 to-rose-900 p-4 text-white">
+            <div className="flex items-center justify-between text-xs font-black uppercase text-white/70">
+              <span>CSCA</span>
+              <FiFileText size={18} />
+            </div>
+            <div className="space-y-3 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/15">
+                <FiFileText size={28} />
+              </div>
+              <p className="line-clamp-4 text-base font-black leading-tight">{m.title}</p>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/35" />
+          </div>
+        )}
+      </div>
+      <div className="pt-3 text-center">
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-black leading-5 text-gray-900 transition-colors group-hover:text-purple-700">{m.title}</h3>
+        {m.description && <p className="mt-1 line-clamp-2 text-xs text-gray-500">{m.description}</p>}
+        <p className="mt-2 text-[11px] font-semibold text-gray-400">{new Date(m.created_at).toLocaleDateString(dateLocale)}</p>
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <button className="flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-purple-700"
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
             <FiFileText size={11} /> {t('common.view')}
           </button>
           <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200">
             <FiDownload size={11} /> {t('materials.download')}
           </a>
         </div>

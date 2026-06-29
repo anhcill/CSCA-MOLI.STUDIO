@@ -9,6 +9,8 @@ import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
+import type { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
+import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import { useExamOffline } from '@/hooks/useExamOffline';
@@ -66,6 +68,8 @@ export default function ExamPage() {
   const [preflight, setPreflight] = useState<Exam | null>(null);
   const [registration, setRegistration] = useState<ExamRegistration | null>(null);
   const [registrationLoading, setRegistrationLoading] = useState(false);
+  const [preflightLeaderboard, setPreflightLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
+  const [preflightLeaderboardLoading, setPreflightLeaderboardLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [started, setStarted] = useState(false);
@@ -313,6 +317,7 @@ export default function ExamPage() {
 
     try {
       setLoading(true);
+      setPreflightLeaderboard([]);
 
       const token = sessionStorage.getItem('token');
       if (!token) {
@@ -323,6 +328,14 @@ export default function ExamPage() {
 
       const response = await examApi.getExamPreflight(examId);
       setPreflight(response);
+      setPreflightLeaderboardLoading(true);
+      officialExamApi.getLeaderboard(examId)
+        .then((data) => setPreflightLeaderboard((data.leaderboard || []).slice(0, 10)))
+        .catch((error) => {
+          console.error('Exam leaderboard error:', error);
+          setPreflightLeaderboard([]);
+        })
+        .finally(() => setPreflightLeaderboardLoading(false));
       if (response.start_time) {
         officialExamApi.getMyRegistration(examId)
           .then(setRegistration)
@@ -817,6 +830,19 @@ export default function ExamPage() {
               </div>
             </div>
           </div>
+
+          <OfficialExamLeaderboard
+            entries={preflightLeaderboard}
+            examTitle={preflight.title}
+            loading={preflightLeaderboardLoading}
+            className="mt-6"
+            badgeLabel="Bảng xếp hạng đề thi"
+            scopeLabel="Riêng đề này"
+            noRoomLabel="Luyện đề tự do"
+            emptyTitle="Chưa có xếp hạng"
+            emptyDescription="Khi có người nộp bài, 10 kết quả tốt nhất của đề này sẽ hiện ở đây."
+            description={`Chỉ tính kết quả đã nộp của ${preflight.title}. Mỗi người lấy bài tốt nhất; nếu bằng điểm thì người làm nhanh hơn xếp trên.`}
+          />
         </div>
       </div>
     );

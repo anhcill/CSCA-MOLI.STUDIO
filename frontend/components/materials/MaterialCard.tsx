@@ -10,6 +10,7 @@ import { isVipActive } from '@/lib/utils/permissions';
 import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
 import {
   canUsePdfProxy,
+  getMaterialCoverImage,
   getMaterialImages,
   getMaterialSubject,
   getMaterialType,
@@ -26,6 +27,7 @@ export function MaterialCard({ material }: { material: Material }) {
   const hasFile = Boolean(material.file_url);
   const hasContent = hasWebContent(material);
   const materialImages = getMaterialImages(material);
+  const coverImage = getMaterialCoverImage(material);
   const hasImages = materialImages.length > 0;
   const hasPdfProxy = !hasImages && canUsePdfProxy(material.file_url);
   const pdfUrl = hasPdfProxy
@@ -35,6 +37,20 @@ export function MaterialCard({ material }: { material: Material }) {
   const typeData = getMaterialType(material.category);
   const subjectData = getMaterialSubject(material.subject);
   const locked = material.is_premium && !isVip;
+
+  const openMaterial = () => {
+    if (locked) {
+      setShowVipModal(true);
+      return;
+    }
+    if (hasContent || hasImages || (hasFile && !hasPdfProxy)) {
+      setExpanded((value) => !value);
+      return;
+    }
+    if (hasFile) {
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const getAuthToken = () => {
     const sessionToken = sessionStorage.getItem('token');
@@ -125,16 +141,58 @@ export function MaterialCard({ material }: { material: Material }) {
   };
 
   return (
-    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${locked ? 'border-amber-200/80 hover:shadow-amber-500/10' : 'border-slate-200 hover:shadow-violet-100/70'}`}>
-      <div className="p-4 sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${typeData.color} text-2xl text-white shadow-sm`}>
-            <span>{typeData.icon}</span>
+    <article className={`group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${locked ? 'border-amber-200/80 hover:shadow-amber-500/10' : 'border-slate-200 hover:shadow-violet-100/70'}`}>
+      <div className="p-3">
+        <div className="flex flex-col gap-3">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={openMaterial}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openMaterial();
+              }
+            }}
+            className="relative aspect-[3/4] w-full cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm outline-none"
+          >
+            {coverImage?.url ? (
+              <img
+                src={coverImage.url}
+                alt={coverImage.caption || material.title}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-full flex-col justify-between bg-gradient-to-br from-slate-950 via-teal-900 to-fuchsia-900 p-4 text-white">
+                <div className="flex items-center justify-between text-xs font-black uppercase tracking-wide text-white/70">
+                  <span>CSCA</span>
+                  <span>{typeData.icon}</span>
+                </div>
+                <div className="space-y-3 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/15 text-3xl shadow-inner">
+                    {typeData.icon}
+                  </div>
+                  <p className="line-clamp-4 text-base font-black leading-tight">{material.title}</p>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/35" />
+              </div>
+            )}
+            <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+              {material.is_premium && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-300 px-2 py-0.5 text-[10px] font-black text-amber-950 shadow-sm">
+                  <FaCrown /> PRO
+                </span>
+              )}
+              <span className={`rounded-full border bg-white/90 px-2 py-0.5 text-[10px] font-black ${typeData.softClass}`}>
+                {typeData.label}
+              </span>
+            </div>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="min-w-0 text-base font-black leading-snug text-slate-950 sm:text-lg">{material.title}</h3>
+          <div className="min-w-0 text-center">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-black leading-5 text-slate-950 transition group-hover:text-violet-700">{material.title}</h3>
               {material.is_premium && (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-amber-200 to-orange-400 px-2 py-0.5 text-[11px] font-black text-orange-950">
                   <FaCrown /> PRO
@@ -142,9 +200,9 @@ export function MaterialCard({ material }: { material: Material }) {
               )}
             </div>
             {material.description && (
-              <p className="mt-1 line-clamp-2 text-sm font-medium leading-6 text-slate-600">{material.description}</p>
+              <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-slate-500">{material.description}</p>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
               <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-bold ${typeData.softClass}`}>
                 {typeData.icon} {typeData.label}
               </span>
@@ -153,13 +211,13 @@ export function MaterialCard({ material }: { material: Material }) {
                   {subjectData.emoji} {subjectData.label}
                 </span>
               )}
-              <span className="text-xs font-semibold text-slate-400">
+              <span className="text-[11px] font-semibold text-slate-400">
                 {new Date(material.created_at).toLocaleDateString('vi-VN')}
               </span>
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+          <div className="flex shrink-0 items-center justify-center gap-2">
             <button
               onClick={toggleBookmark}
               className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${bookmarked ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}

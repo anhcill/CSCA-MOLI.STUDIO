@@ -136,7 +136,16 @@ export default function ForumPage() {
   const [commentLoading, setCommentLoading] = useState<Set<number>>(new Set());
   const [replyingTo, setReplyingTo] = useState<{ postId: number; commentId: number; userId: number; userName: string } | null>(null);
 
-  useEffect(() => { setMounted(true); }, []);
+    // Ensure auth token is in sessionStorage before first API call.
+  // Zustand persist rehydrates from localStorage and onRehydrateStorage
+  // writes token to sessionStorage, but timing can race with first render.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    // Give zustand persist one tick to finish hydration + sessionStorage write
+    const raf = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const loadPosts = useCallback(async (offset = 0) => {
     try {
@@ -156,7 +165,10 @@ export default function ForumPage() {
     likeOverridesRef.current = next;
   }, []);
 
-  useEffect(() => { loadPosts(0); }, [loadPosts]);
+    useEffect(() => {
+    if (!ready) return;
+    loadPosts(0);
+  }, [ready, loadPosts]);
 
   /* Actions */
   const handleCreate = async () => {

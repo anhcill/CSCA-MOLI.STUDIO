@@ -7,6 +7,7 @@ import { hasPermission } from '@/lib/utils/permissions';
 import axios from '@/lib/utils/axios';
 import { FiPlus, FiTrash2, FiEdit2, FiUpload, FiX, FiExternalLink, FiCheck, FiBookOpen } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
+import BackButton from '@/components/layout/BackButton';
 
 interface Material {
   id: number;
@@ -83,6 +84,7 @@ export default function AdminMaterialsPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
+  const [pasteStatus, setPasteStatus] = useState('');
 
   // Filter
   const [filterCategory, setFilterCategory] = useState('');
@@ -185,8 +187,76 @@ export default function AdminMaterialsPage() {
     }
   };
 
+  const uploadImageFiles = async (files: File[], sourceLabel = 'ảnh') => {
+    if (!files.length) return;
+
+    if (files.some(file => !file.type.startsWith('image/'))) {
+      alert('Chỉ chấp nhận file ảnh');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      setPasteStatus('');
+      setUploadFileName(`${files.length} ${sourceLabel}`);
+      setUploadStatus('Đang gửi ảnh lên Cloudinary...');
+      const payload = new FormData();
+      files.forEach(file => payload.append('files', file));
+
+      const res = await axios.post('/materials/upload-images', payload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 900000,
+        onUploadProgress: (event) => {
+          const total = event.total || files.reduce((sum, file) => sum + file.size, 0);
+          if (!total) return;
+          const percent = Math.min(100, Math.round((event.loaded / total) * 100));
+          setUploadProgress(percent);
+          setUploadStatus(percent >= 100 ? 'Đã gửi ảnh, đang lưu Cloudinary...' : `Đang upload ${percent}%`);
+        },
+      });
+
+      const currentImages = materialImages;
+      const nextImages = [
+        ...currentImages,
+        ...(res.data?.data?.images || []).map((image: MaterialImageItem, index: number) => ({
+          ...image,
+          order: currentImages.length + index + 1,
+        })),
+      ];
+
+      setFormData(prev => ({
+        ...prev,
+        file_url: prev.file_url || nextImages[0]?.url || '',
+        content_text: '',
+        content_html: '',
+        content_meta: {
+          ...prev.content_meta,
+          importMode: 'images',
+          images: nextImages,
+        },
+      }));
+      setUploadProgress(100);
+      setUploadStatus('Upload ảnh xong');
+      setPasteStatus(`Đã thêm ${files.length} ảnh`);
+    } catch (error: any) {
+      console.error('Images upload error:', error);
+      const message = error.response?.data?.message || error.message || 'Lỗi upload ảnh';
+      setUploadStatus(message);
+      alert(message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleImagesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    try {
+      await uploadImageFiles(files, 'ảnh');
+    } finally {
+      e.target.value = '';
+    }
+    return;
     if (!files.length) return;
 
     if (files.some(file => !file.type.startsWith('image/'))) {
@@ -245,6 +315,28 @@ export default function AdminMaterialsPage() {
       setUploading(false);
       e.target.value = '';
     }
+  };
+
+  const handlePasteImages = async (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const files = Array.from(event.clipboardData.items || [])
+      .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item, index) => {
+        const file = item.getAsFile();
+        if (!file) return null;
+        const extension = file.type.split('/')[1] || 'png';
+        return new File([file], file.name || `pasted-material-${Date.now()}-${index}.${extension}`, {
+          type: file.type || 'image/png',
+        });
+      })
+      .filter((file): file is File => Boolean(file));
+
+    if (!files.length) {
+      setPasteStatus('Clipboard chưa có ảnh');
+      return;
+    }
+
+    event.preventDefault();
+    await uploadImageFiles(files, 'ảnh dán');
   };
 
   const updateMaterialImage = (index: number, patch: Partial<MaterialImageItem>) => {
@@ -387,6 +479,7 @@ export default function AdminMaterialsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
+            <BackButton fallbackHref="/admin" className="mb-3" />
             <h1 className="text-2xl font-bold text-gray-900">Quản Lý Tài Liệu</h1>
             <p className="text-sm text-gray-500 mt-1">Upload và quản lý PDF tài liệu</p>
           </div>
@@ -663,6 +756,15 @@ export default function AdminMaterialsPage() {
                     disabled={uploading}
                     className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-purple-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-purple-700 hover:file:bg-purple-100"
                   />
+                  <div
+                    tabIndex={0}
+                    onPaste={handlePasteImages}
+                    className="mt-3 rounded-xl border-2 border-dashed border-purple-200 bg-white px-4 py-5 text-center text-sm text-slate-600 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+                  >
+                    <p className="font-bold text-purple-700">Dán ảnh vào đây</p>
+                    <p className="mt-1 text-xs text-slate-500">Cắt ảnh xong nhấn Ctrl+V. Có thể dán nhiều ảnh, ảnh mới sẽ thêm vào cuối danh sách.</p>
+                    {pasteStatus && <p className="mt-2 text-xs font-bold text-emerald-600">{pasteStatus}</p>}
+                  </div>
                   {uploading && (
                     <div className="mt-3 text-left">
                       <div className="flex items-center justify-between gap-3 text-xs text-purple-700">

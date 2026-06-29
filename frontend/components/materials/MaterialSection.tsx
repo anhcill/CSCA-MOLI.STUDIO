@@ -15,7 +15,7 @@ export function MaterialSection({ subject, materials }: MaterialSectionProps) {
     .filter((item) => item.count > 0);
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm sm:p-5">
+    <section className="space-y-4">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${subject.accent} text-2xl text-white shadow-sm`}>
@@ -36,7 +36,7 @@ export function MaterialSection({ subject, materials }: MaterialSectionProps) {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {materials.map((material) => (
           <MaterialCard key={material.id} material={material} />
         ))}

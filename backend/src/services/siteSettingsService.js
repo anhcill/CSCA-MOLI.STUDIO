@@ -6,6 +6,8 @@ const DEFAULT_SETTINGS = {
   public_ai_9router_model: "ag/claude-sonnet-4-6",
   public_ai_beeknoee_model: "gpt-5.4-mini",
   public_ai_fallback_provider: "beeknoee",
+  admin_question_review_model: "cx/gpt-5.5",
+  admin_question_review_fallback_model: "ag/claude-opus-4-6-thinking",
 };
 
 let initPromise = null;

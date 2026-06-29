@@ -26,6 +26,9 @@ interface Material {
   content_html?: string;
   content_text?: string;
   content_source?: string;
+  content_meta?: {
+    images?: Array<{ url: string; caption?: string; order?: number }>;
+  };
 }
 
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
@@ -39,6 +42,18 @@ const SUBJECT_LABEL_KEYS: Record<string, string> = {
 
 function hasWebContent(material?: Material | null) {
   return Boolean(material?.content_html || material?.content_text);
+}
+
+function getMaterialCoverUrl(material: Material) {
+  return getMaterialImages(material)[0]?.url || '';
+}
+
+function getMaterialImages(material: Material) {
+  const images = Array.isArray(material.content_meta?.images) ? material.content_meta.images : [];
+  return images
+    .filter((image) => image?.url)
+    .slice()
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
@@ -95,29 +110,42 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
 function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) {
   const { t, language } = useLanguage();
   const dateLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN';
+  const coverUrl = getMaterialCoverUrl(m);
 
   return (
-    <div className="group bg-white border border-gray-200 rounded-xl p-4 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer" onClick={() => onView(m)}>
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-emerald-100 transition-colors">
-          <FiBook className="text-emerald-600" size={18} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm leading-snug group-hover:text-emerald-700 transition-colors">{m.title}</h3>
-          {m.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{m.description}</p>}
-          <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-            <span>{new Date(m.created_at).toLocaleDateString(dateLocale)}</span>
-            {hasWebContent(m) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">Web</span>}
+    <div className="group cursor-pointer rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md" onClick={() => onView(m)}>
+      <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-emerald-100 bg-emerald-950">
+        {coverUrl ? (
+          <img src={coverUrl} alt={m.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" loading="lazy" />
+        ) : (
+          <div className="flex h-full flex-col justify-between bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 p-4 text-white">
+            <div className="flex items-center justify-between text-xs font-black uppercase text-white/70">
+              <span>CSCA</span>
+              <FiBook size={18} />
+            </div>
+            <div className="space-y-3 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/15">
+                <FiBook size={28} />
+              </div>
+              <p className="line-clamp-4 text-base font-black leading-tight">{m.title}</p>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/35" />
           </div>
-        </div>
-        <div className="shrink-0 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="flex items-center gap-1 px-3 py-1.5 bg-emerald-700 text-white text-xs font-medium rounded-lg hover:bg-emerald-800 transition-colors"
+        )}
+        {hasWebContent(m) && <span className="absolute left-2 top-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Web</span>}
+      </div>
+      <div className="pt-3 text-center">
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-black leading-5 text-gray-900 transition-colors group-hover:text-emerald-700">{m.title}</h3>
+        {m.description && <p className="mt-1 line-clamp-2 text-xs text-gray-500">{m.description}</p>}
+        <p className="mt-2 text-[11px] font-semibold text-gray-400">{new Date(m.created_at).toLocaleDateString(dateLocale)}</p>
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <button className="flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-800"
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
             <FiBook size={11} /> {t('common.view')}
           </button>
           {m.file_url && (
             <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+              className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200">
               <FiDownload size={11} /> {t('materials.download')}
             </a>
           )}
@@ -131,6 +159,7 @@ function InlineMaterialViewer({ material, onClose }: { material: Material; onClo
   const { t } = useLanguage();
   const [viewerLoaded, setViewerLoaded] = useState(false);
   const [useGoogleViewer, setUseGoogleViewer] = useState(false);
+  const materialImages = getMaterialImages(material);
 
   useEffect(() => {
     setViewerLoaded(false);
@@ -163,6 +192,21 @@ function InlineMaterialViewer({ material, onClose }: { material: Material; onClo
           contentText={material.content_text}
           className="max-h-[72vh] overflow-y-auto"
         />
+      ) : materialImages.length > 0 ? (
+        <div className="max-h-[72vh] overflow-y-auto bg-slate-100 p-4 sm:p-6">
+          <div className="mx-auto max-w-4xl space-y-4">
+            {materialImages.map((image, index) => (
+              <figure key={image.url} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <a href={image.url} target="_blank" rel="noreferrer">
+                  <img src={image.url} alt={image.caption || `${material.title} - ảnh ${index + 1}`} className="w-full bg-white object-contain" loading="lazy" />
+                </a>
+                {image.caption && (
+                  <figcaption className="border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-600">{image.caption}</figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        </div>
       ) : material.file_url ? (
         <div className="relative h-[72vh] bg-gray-800">
           {!viewerLoaded && (

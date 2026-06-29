@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
+const fs = require("fs");
 const https = require("https");
 const http = require("http");
+const os = require("os");
+const path = require("path");
 const { v2: cloudinary } = require("cloudinary");
 const materialsController = require("../controllers/materialsController");
 const { extractPdfWebContent } = require("../services/materialContentService");
@@ -52,9 +55,27 @@ cloudinary.config({
 
 const MAX_MATERIAL_UPLOAD_MB = Number(process.env.MATERIAL_UPLOAD_MAX_MB || 500);
 const MAX_SYNC_PDF_PARSE_MB = Number(process.env.MATERIAL_SYNC_PARSE_MAX_MB || 12);
+const MATERIAL_UPLOAD_TMP_DIR = path.join(os.tmpdir(), "csca-material-uploads");
+fs.mkdirSync(MATERIAL_UPLOAD_TMP_DIR, { recursive: true });
 
-// Multer: memory storage for PDF upload
-const upload = multer({
+const pdfUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, MATERIAL_UPLOAD_TMP_DIR),
+    filename: (req, file, cb) => {
+      const safeName = String(file.originalname || "material.pdf").replace(/[^\w.-]+/g, "_");
+      cb(null, `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`);
+    },
+  }),
+  limits: { fileSize: MAX_MATERIAL_UPLOAD_MB * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ["application/pdf", "application/x-pdf", "application/octet-stream"];
+    if (allowed.includes(file.mimetype) || /\.pdf$/i.test(file.originalname || "")) cb(null, true);
+    else cb(new Error("Chi chap nhan file PDF"));
+  },
+});
+
+// Multer: memory storage for image upload
+const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_MATERIAL_UPLOAD_MB * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -65,6 +86,36 @@ const upload = multer({
 });
 
 // ── Public routes ─────────────────────────────────────────────────────────────
+function runUpload(middleware) {
+  return (req, res, next) => {
+    middleware(req, res, (error) => {
+      if (!error) return next();
+      const isSizeLimit = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE";
+      return res.status(isSizeLimit ? 413 : 400).json({
+        success: false,
+        message: isSizeLimit
+          ? `File khong duoc lon hon ${MAX_MATERIAL_UPLOAD_MB}MB`
+          : error.message || "File upload khong hop le",
+      });
+    });
+  };
+}
+
+function removeTempFile(filePath) {
+  if (!filePath) return;
+  fs.promises.unlink(filePath).catch(() => {});
+}
+
+function uploadLargePdf(filePath, options) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_large(
+      filePath,
+      { ...options, chunk_size: 20 * 1024 * 1024 },
+      (err, result) => (err ? reject(err) : resolve(result)),
+    );
+  });
+}
+
 router.get("/", materialsController.getMaterials);
 
 // Helper: stream PDF from Cloudinary signed URL with given disposition
@@ -138,7 +189,7 @@ router.post(
   "/upload-pdf",
   authenticate,
   authorizePermission("content.manage"),
-  upload.single("file"),
+  runUpload(pdfUpload.single("file")),
   async (req, res) => {
     try {
       if (!req.file)
@@ -153,16 +204,7 @@ router.post(
         access_mode: "public",
         type: "upload",
       };
-      const result = await new Promise((resolve, reject) => {
-        const useLargeStream = req.file.size > 20 * 1024 * 1024 && typeof cloudinary.uploader.upload_large_stream === "function";
-        const uploadFn = useLargeStream ? cloudinary.uploader.upload_large_stream : cloudinary.uploader.upload_stream;
-        const stream = uploadFn.call(
-          cloudinary.uploader,
-          useLargeStream ? { ...uploadOptions, chunk_size: 6 * 1024 * 1024 } : uploadOptions,
-          (err, r) => (err ? reject(err) : resolve(r)),
-        );
-        stream.end(req.file.buffer);
-      });
+      const result = await uploadLargePdf(req.file.path, uploadOptions);
 
       let webContent = null;
       let parseWarning = null;
@@ -174,7 +216,8 @@ router.post(
         parseWarning = null;
       } else if (fileSizeMb <= MAX_SYNC_PDF_PARSE_MB) {
         try {
-          webContent = await extractPdfWebContent(req.file.buffer);
+          const pdfBuffer = await fs.promises.readFile(req.file.path);
+          webContent = await extractPdfWebContent(pdfBuffer);
         } catch (parseError) {
           parseWarning = "Không chuyển được PDF sang nội dung web, vẫn giữ file PDF.";
           console.warn("[materials] PDF content extraction failed:", parseError.message);
@@ -183,6 +226,7 @@ router.post(
         parseWarning = `File ${fileSizeMb.toFixed(1)}MB đã upload xong; bỏ qua chuyển PDF sang web để tránh timeout.`;
       }
 
+      removeTempFile(req.file?.path);
       res.json({
         success: true,
         data: {
@@ -198,6 +242,7 @@ router.post(
       });
     } catch (error) {
       console.error("PDF upload error:", error);
+      removeTempFile(req.file?.path);
       res.status(500).json({ success: false, message: "Lỗi upload PDF" });
     }
   },
@@ -207,7 +252,7 @@ router.post(
   "/upload-images",
   authenticate,
   authorizePermission("content.manage"),
-  upload.array("files", 40),
+  runUpload(imageUpload.array("files", 40)),
   async (req, res) => {
     try {
       const files = Array.isArray(req.files) ? req.files : [];
