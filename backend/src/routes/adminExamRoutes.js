@@ -82,6 +82,7 @@ router.delete("/:examId/source-file/:sourceFileId", examDeleteLimiter, AdminExam
 router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController.normalizeExamFormulas);
 router.post("/:examId/review-quality", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewExamQuality);
 router.post("/:examId/questions/:questionId/ai-review", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewQuestionQuality);
+router.post("/:examId/questions/:questionId/fix-explanation", examWriteLimiter, examAiReviewCooldown, AdminExamController.fixQuestionExplanation);
 router.post("/:examId/apply-ai-review-fixes", examWriteLimiter, examAiReviewCooldown, AdminExamController.applyExamReviewFixes);
 router.post("/:examId/apply-display-format-fixes", examWriteLimiter, examAiReviewCooldown, AdminExamController.applyExamDisplayFormatFixes);
 router.post("/:examId/generate-missing-explanations", examWriteLimiter, AdminExamController.generateMissingExplanations);

@@ -1622,6 +1622,75 @@ Dữ liệu:
 ${JSON.stringify(payload)}`;
 }
 
+function buildQuestionExplanationFixPrompt(entry, context = {}) {
+  const q = entry.question || {};
+  const payload = {
+    path: entry.path,
+    label: entry.label,
+    questionId: entry.questionId,
+    questionNumber: entry.questionNumber,
+    questionType: entry.questionType,
+    contextText: entry.contextText || "",
+    contextImageUrl: entry.contextImageUrl || "",
+    questionText: q.questionText || "",
+    questionTextCn: q.questionTextCn || "",
+    questionTextEn: q.questionTextEn || "",
+    questionImageUrl: q.imageUrl || q.image_url || "",
+    answers: (q.answers || []).map((answer, answerIndex) => ({
+      key: answer.key || answer.answer_key || ANSWER_KEYS[answerIndex],
+      text: answer.text || answer.answer_text || "",
+      textCn: answer.textCn || answer.answer_text_cn || "",
+      textEn: answer.textEn || answer.answer_text_en || "",
+      imageUrl: answer.imageUrl || answer.image_url || "",
+      isCorrect: Boolean(answer.isCorrect || answer.is_correct),
+    })),
+    correctAnswer: q.correctAnswer || q.correctAnswerKey || "",
+    currentExplanation: q.explanation || "",
+    currentExplanationCn: q.explanationCn || "",
+    currentExplanationEn: q.explanationEn || "",
+    reviewNote: context.reviewNote || "",
+    explanationIssues: Array.isArray(context.explanationIssues) ? context.explanationIssues : [],
+  };
+  const sourceRules = buildSourceFixRules(context.sourceFile);
+  const sourceContext = buildSourceReviewPromptSection(context.sourceFile);
+
+  return `Bạn là giáo viên CSCA rất kỹ tính. Hãy SỬA TRIỆT ĐỂ lời giải sai/format lỗi cho đúng 1 câu dưới đây.
+
+Yêu cầu bắt buộc:
+- Chỉ trả JSON hợp lệ, không markdown.
+- Chỉ sửa các field lời giải: explanation, explanationCn, explanationEn. Không sửa đề, không sửa đáp án, không gửi correctAnswer mới.
+- Dựa vào đáp án đúng hiện tại (correctAnswer + option isCorrect) làm mốc. Nếu đáp án đúng trong DB có vẻ sai, không tự đổi; trả needsManualReview=true và ghi note rõ.
+- Lời giải mới phải tự giải lại từ đề và lựa chọn, không chỉ vá ký tự hỏng.
+- explanation bắt buộc là tiếng Việt có dấu, rõ bước: Phân tích/Công thức, Thay tính, Kết luận/Chọn.
+- explanationCn là tiếng Trung tự nhiên tương đương nếu câu có tiếng Trung hoặc lời giải Trung hiện tại đang có. Không đặt tiếng Việt vào explanationCn.
+- explanationEn chỉ dùng tiếng Anh nếu câu có textEn/answers textEn hoặc explanationEn hiện tại có dữ liệu.
+- Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\frac, \\sqrt phải nằm trong \\(...\\) hoặc \\[...\\].
+- Không dùng $ hoặc $$.
+- Không output stacked OCR/ruby fragments. Không tách một công thức thành nhiều dòng 1 ký tự.
+- Never output escaped group braces like \\frac\\{a\\}\\{b\\} or \\sqrt\\{x\\}; use \\frac{a}{b}, \\sqrt{x}.
+- Nếu currentExplanation/currentExplanationCn có lỗi công thức, OCR, kết luận thiếu/sai, hãy viết lại toàn bộ field đó.
+- Nếu không đủ dữ kiện để sửa chắc, giữ field rỗng và trả needsManualReview=true, note lý do.
+${sourceRules}
+
+Môn/ngữ cảnh: ${context.subject || "CSCA đa môn"}.
+
+Trả dạng:
+{
+  "questionId": 1,
+  "confidence": 0.94,
+  "needsManualReview": false,
+  "explanation": "Lời giải tiếng Việt có dấu...",
+  "explanationCn": "中文解析...",
+  "explanationEn": "English explanation if needed",
+  "note": "đã sửa lỗi gì"
+}
+
+${sourceContext}
+
+Dữ liệu câu:
+${JSON.stringify(payload)}`;
+}
+
 function buildPolishExplanationsPrompt(batch, context = {}) {
   const payload = batch.map((entry, index) => {
     const q = entry.question || {};
@@ -2150,6 +2219,133 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
       invalidBatches: diagnostics.filter(item => item.status === "invalid_response").length,
       model: getContextFixModel(context),
     },
+  };
+}
+
+async function fixStoredQuestionExplanationWithAI(client, examId, questionId, options = {}) {
+  const { exam, entries } = await loadStoredExamReviewEntries(client, examId);
+  const parsedQuestionId = Number.parseInt(questionId, 10);
+  const entry = entries.find(item => Number(item.questionId) === parsedQuestionId);
+
+  if (!entry) {
+    const error = new Error("QUESTION_NOT_FOUND");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const { reviewContext, sourceFile } = await buildStoredExamReviewContext(client, examId, {
+    subject: options.subject || exam.subject_name || exam.subject_code || "CSCA",
+    signal: options.signal,
+    fixModel: options.fixModel,
+    fixModels: options.fixModels,
+    aiTimeoutMs: options.aiTimeoutMs,
+  });
+  const context = {
+    ...reviewContext,
+    reviewNote: options.reviewNote,
+    explanationIssues: options.explanationIssues,
+  };
+  const model = getContextFixModel(context);
+  const startedAt = Date.now();
+  const raw = await aiService.callAdminExamAI(buildQuestionExplanationFixPrompt(entry, context), {
+    model,
+    models: getContextFixModels(context),
+    temperature: 0.04,
+    maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1800", 10),
+    timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10)),
+    fallbackOnTimeout: false,
+    signal: options.signal,
+  });
+  const parsed = parseAiJson(raw);
+  const item = getAiItems(
+    parsed,
+    ["explanations", "items", "results"],
+    ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "note"],
+  )[0] || parsed || {};
+  const normalized = normalizeGeneratedExplanationItem(item, entry);
+  const confidence = Math.max(0, Math.min(1, Number(item?.confidence) || normalized.confidence || 0));
+  const needsManualReview = Boolean(item?.needsManualReview || item?.needs_manual_review || item?.manualReview);
+  const changes = [];
+
+  const questionResult = await client.query(
+    `SELECT id, question_number, explanation, explanation_cn, explanation_en
+     FROM questions
+     WHERE id = $1 AND exam_id = $2 AND deleted_at IS NULL
+     LIMIT 1`,
+    [parsedQuestionId, examId],
+  );
+  const question = questionResult.rows[0];
+  if (!question) {
+    const error = new Error("QUESTION_NOT_FOUND");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const fields = [];
+  const params = [];
+  const addField = (column, value) => {
+    const next = normalizeFixValue(value, { explanation: true }).trim();
+    if (!next) return;
+    const before = stringValue(question[column]).trim();
+    if (before === next) return;
+    params.push(next);
+    fields.push(`${column} = $${params.length}`);
+    changes.push({
+      path: entry.path,
+      questionId: parsedQuestionId,
+      questionNumber: question.question_number,
+      field: column,
+      before,
+      after: next,
+    });
+  };
+
+  if (!needsManualReview && confidence >= Number.parseFloat(process.env.AI_EXAM_EXPLANATION_FIX_MIN_CONFIDENCE || "0.72")) {
+    addField("explanation", normalized.explanation);
+    addField("explanation_cn", normalized.explanationCn);
+    addField("explanation_en", normalized.explanationEn);
+  }
+
+  if (fields.length) {
+    params.push(parsedQuestionId);
+    await client.query(
+      `UPDATE questions SET ${fields.join(", ")} WHERE id = $${params.length}`,
+      params,
+    );
+    await client.query("UPDATE exams SET updated_at = NOW() WHERE id = $1", [examId]);
+  }
+
+  return {
+    examId: Number(examId),
+    questionId: parsedQuestionId,
+    questionNumber: question.question_number,
+    message: changes.length
+      ? `AI đã sửa lời giải câu ${question.question_number}.`
+      : needsManualReview
+        ? `AI chưa đủ chắc để tự sửa câu ${question.question_number}, cần xem tay.`
+        : `AI không tạo thay đổi mới cho câu ${question.question_number}.`,
+    changedCount: changes.length,
+    changes,
+    confidence,
+    needsManualReview,
+    note: stringValue(item?.note || normalized.note).slice(0, 800),
+    proposed: {
+      explanation: normalized.explanation,
+      explanationCn: normalized.explanationCn,
+      explanationEn: normalized.explanationEn,
+    },
+    diagnostics: [{
+      batch: entry.label,
+      range: entry.label,
+      paths: [entry.path],
+      labels: [entry.label],
+      model,
+      status: changes.length ? "ok" : needsManualReview ? "needs_manual_review" : "no_change",
+      durationMs: Date.now() - startedAt,
+      message: stringValue(item?.note || normalized.note).slice(0, 500),
+      rawPreview: changes.length ? undefined : stringValue(raw).slice(0, 500),
+    }],
+    sourceFile,
   };
 }
 
@@ -3425,6 +3621,7 @@ module.exports = {
   normalizeField,
   normalizeStoredFormulaText,
   generateMissingExamExplanations,
+  fixStoredQuestionExplanationWithAI,
   polishExamExplanations,
   applyExamDisplayFormatFixes,
   applyExamReviewFixes,

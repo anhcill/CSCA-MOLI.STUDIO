@@ -221,12 +221,16 @@ function QuestionAiReviewInline({
     result,
     error,
     reviewing,
+    fixingExplanation,
     onEdit,
+    onFixExplanation,
 }: {
     result: StoredExamReviewResult | null;
     error: string;
     reviewing: boolean;
+    fixingExplanation: boolean;
     onEdit: () => void;
+    onFixExplanation: () => void;
 }) {
     const review = getSingleQuestionAiReview(result);
     if (!reviewing && !error && !review) return null;
@@ -271,13 +275,24 @@ function QuestionAiReviewInline({
                     )}
                 </div>
                 {!ok && (
-                    <button
-                        type="button"
-                        onClick={onEdit}
-                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-300/70 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-950"
-                    >
-                        <FiEdit2 size={12} /> Sửa câu
-                    </button>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={onFixExplanation}
+                            disabled={fixingExplanation}
+                            className="inline-flex items-center justify-center gap-1 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-300/70 dark:bg-slate-950 dark:text-emerald-100 dark:hover:bg-emerald-950"
+                        >
+                            {fixingExplanation ? <FiRefreshCw className="animate-spin" size={12} /> : <FiCheckCircle size={12} />}
+                            {fixingExplanation ? 'Đang sửa...' : 'AI sửa lời giải'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="inline-flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-300/70 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-950"
+                        >
+                            <FiEdit2 size={12} /> Sửa câu
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -656,6 +671,7 @@ export default function AdminExamDetailPage() {
     const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [aiQualityMode, setAiQualityMode] = useState<'fast' | 'deep'>('deep');
     const [reviewingQuestionId, setReviewingQuestionId] = useState<number | null>(null);
+    const [fixingExplanationQuestionId, setFixingExplanationQuestionId] = useState<number | null>(null);
     const [questionReviewById, setQuestionReviewById] = useState<Record<number, StoredExamReviewResult | null>>({});
     const [questionReviewErrorById, setQuestionReviewErrorById] = useState<Record<number, string>>({});
     const [aiBlockingTask, setAiBlockingTask] = useState<AiBlockingTask>(null);
@@ -1094,6 +1110,42 @@ export default function AdminExamDetailPage() {
             }));
         } finally {
             setReviewingQuestionId(null);
+        }
+    };
+
+    const handleFixQuestionExplanation = async (question: SavedQuestion) => {
+        if (!exam?.id || fixingExplanationQuestionId || reviewingQuestionId || aiBlockingTask) return;
+        const review = getSingleQuestionAiReview(questionReviewById[question.id] || null);
+        if (!confirm(`Cho AI sửa riêng lời giải câu ${question.question_number}? Hệ thống chỉ ghi lại ô lời giải, không đổi đề và đáp án.`)) return;
+
+        try {
+            setFixingExplanationQuestionId(question.id);
+            setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
+            const result = await examAdminApi.fixQuestionExplanation(exam.id, question.id, {
+                qualityMode: aiQualityMode,
+                reviewNote: review?.note || '',
+                explanationIssues: review?.explanationIssues || [],
+            });
+            await loadExam({ silent: true });
+            markEditSessionSavedWork(result.message || `AI đã sửa lời giải câu ${question.question_number}. Bấm Lưu thay đổi để chốt phiên sửa.`);
+            if (result.needsManualReview || !result.changedCount) {
+                setQuestionReviewErrorById(prev => ({
+                    ...prev,
+                    [question.id]: result.note || result.message || 'AI chưa đủ chắc để tự sửa lời giải này.',
+                }));
+            } else {
+                setQuestionReviewById(prev => ({ ...prev, [question.id]: null }));
+            }
+        } catch (error: any) {
+            const retryText = error?.response?.data?.retryAfter
+                ? ` Thử lại sau ${error.response.data.retryAfter}s.`
+                : '';
+            setQuestionReviewErrorById(prev => ({
+                ...prev,
+                [question.id]: (error?.response?.data?.message || 'AI sửa lời giải riêng câu thất bại.') + retryText,
+            }));
+        } finally {
+            setFixingExplanationQuestionId(null);
         }
     };
 
@@ -2806,6 +2858,7 @@ export default function AdminExamDetailPage() {
                             const questionReviewResult = questionReviewById[q.id] || null;
                             const questionReviewError = questionReviewErrorById[q.id] || '';
                             const isReviewingThisQuestion = reviewingQuestionId === q.id;
+                            const isFixingExplanationThisQuestion = fixingExplanationQuestionId === q.id;
                             const questionAiReview = getSingleQuestionAiReview(questionReviewResult);
                             const questionAiHasIssue = Boolean(questionAiReview && questionAiReview.status !== 'ok');
                             const questionAiDone = Boolean(questionAiReview && questionAiReview.status === 'ok');
@@ -2842,7 +2895,7 @@ export default function AdminExamDetailPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleReviewSingleQuestion(q)}
-                                                                disabled={isReviewingThisQuestion || reviewingQuestionId !== null || !!aiBlockingTask}
+                                                                disabled={isReviewingThisQuestion || reviewingQuestionId !== null || fixingExplanationQuestionId !== null || !!aiBlockingTask}
                                                                 className={`inline-flex min-w-[58px] items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-black transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                                                     questionAiHasIssue
                                                                         ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
@@ -2913,7 +2966,21 @@ export default function AdminExamDetailPage() {
 
                                             {(q.explanation || q.explanation_cn || q.explanation_image_url) && (
                                                 <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
-                                                    <p className="mb-2 text-sm font-bold uppercase tracking-wide text-blue-900">Giải thích:</p>
+                                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                                        <p className="text-sm font-bold uppercase tracking-wide text-blue-900">Giải thích:</p>
+                                                        {isEditingExam && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleFixQuestionExplanation(q)}
+                                                                disabled={isFixingExplanationThisQuestion || fixingExplanationQuestionId !== null || reviewingQuestionId !== null || !!aiBlockingTask}
+                                                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                title="AI chỉ sửa phần lời giải của câu này, không đổi đề và đáp án"
+                                                            >
+                                                                {isFixingExplanationThisQuestion ? <FiRefreshCw className="animate-spin" size={12} /> : <FiCheckCircle size={12} />}
+                                                                {isFixingExplanationThisQuestion ? 'Đang sửa...' : 'AI sửa lời giải'}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                     {(q.explanation || q.explanation_cn) && (
                                                         <RichMathText value={q.explanation || q.explanation_cn || ''} readableBreaks className="text-base leading-7 text-blue-950" />
                                                     )}
@@ -2935,7 +3002,9 @@ export default function AdminExamDetailPage() {
                                                     result={questionReviewResult}
                                                     error={questionReviewError}
                                                     reviewing={isReviewingThisQuestion}
+                                                    fixingExplanation={isFixingExplanationThisQuestion}
                                                     onEdit={() => setEditingQuestionId(q.id)}
+                                                    onFixExplanation={() => handleFixQuestionExplanation(q)}
                                                 />
                                             )}
 

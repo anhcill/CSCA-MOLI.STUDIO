@@ -3,6 +3,7 @@ import {
   normalizeOcrMathSyntax,
   repairOcrMathArtifacts,
 } from './ocrMathArtifacts';
+import { applyDisplayLatexInputRules, applyDisplayLatexOutputRules } from './displayLatexRules';
 
 const MATH_RANGES: Array<[number, number, number]> = [
   [0x1d400, 65, 26],
@@ -1044,7 +1045,8 @@ function stripStackedOcrMathFragments(input: string): string {
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(input))))
+  const displayRuleInput = applyDisplayLatexInputRules(input);
+  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(displayRuleInput))))
     .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
@@ -1087,7 +1089,7 @@ export function normalizeRichMathText(input: string): string {
     .replace(/(^|\n)([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)\$(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`)
     .replace(/(^|\n)\$([^\n$]*\\(?:sin|cos|tan|cot|sec|csc|log|ln|lg|sqrt|frac|left|right|pi|cap|cup|setminus)[^\n$]*)(?=\n|$)/g, (_, prefix, formula) => `${prefix}\\(${String(formula).trim()}\\)`);
 
-  return mergeAdjacentInlineMath(repairedUnmatchedDollars);
+  return applyDisplayLatexOutputRules(mergeAdjacentInlineMath(repairedUnmatchedDollars));
 }
 
 export function normalizeAdminMathInputText(input: string): string {

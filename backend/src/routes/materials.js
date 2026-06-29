@@ -9,6 +9,7 @@ const path = require("path");
 const { v2: cloudinary } = require("cloudinary");
 const materialsController = require("../controllers/materialsController");
 const { extractPdfWebContent } = require("../services/materialContentService");
+const { getMaterialPdfUploadError, uploadPdfToCloudinary } = require("../services/materialPdfUploadService");
 const {
   authenticate,
   authorizePermission,
@@ -106,16 +107,6 @@ function removeTempFile(filePath) {
   fs.promises.unlink(filePath).catch(() => {});
 }
 
-function uploadLargePdf(filePath, options) {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_large(
-      filePath,
-      { ...options, chunk_size: 20 * 1024 * 1024 },
-      (err, result) => (err ? reject(err) : resolve(result)),
-    );
-  });
-}
-
 router.get("/", materialsController.getMaterials);
 
 // Helper: stream PDF from Cloudinary signed URL with given disposition
@@ -197,14 +188,7 @@ router.post(
           .status(400)
           .json({ success: false, message: "Không có file" });
 
-      const uploadOptions = {
-        folder: "csca/materials",
-        resource_type: "raw",
-        format: "pdf",
-        access_mode: "public",
-        type: "upload",
-      };
-      const result = await uploadLargePdf(req.file.path, uploadOptions);
+      const result = await uploadPdfToCloudinary(req.file.path, { fileSize: req.file.size });
 
       let webContent = null;
       let parseWarning = null;
@@ -241,9 +225,22 @@ router.post(
         message: webContent?.contentHtml ? "Upload PDF và chuyển sang bài web thành công" : "Upload PDF thành công",
       });
     } catch (error) {
-      console.error("PDF upload error:", error);
+      const uploadError = getMaterialPdfUploadError(error);
+      console.error("PDF upload error:", {
+        code: uploadError.code,
+        status: uploadError.status,
+        message: error?.message,
+        httpCode: error?.http_code,
+        primaryMessage: error?.primaryUploadError?.message,
+        fileName: req.file?.originalname,
+        fileSize: req.file?.size,
+      });
       removeTempFile(req.file?.path);
-      res.status(500).json({ success: false, message: "Lỗi upload PDF" });
+      res.status(uploadError.status).json({
+        success: false,
+        code: uploadError.code,
+        message: uploadError.message,
+      });
     }
   },
 );

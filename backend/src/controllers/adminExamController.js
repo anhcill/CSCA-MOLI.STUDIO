@@ -17,6 +17,7 @@ const {
   normalizeExamFormulas: normalizeStoredExamFormulas,
   applyExamReviewFixes: applyStoredExamReviewFixes,
   applyExamDisplayFormatFixes,
+  fixStoredQuestionExplanationWithAI,
   generateMissingExamExplanations,
   polishExamExplanations,
   applyImportedReviewFixesWithAI,
@@ -123,6 +124,7 @@ const EXAM_AI_ACTIONS = {
   FIX: "apply_fixes",
   FORMAT: "display_format_fixes",
   EXPLAIN: "missing_explanations",
+  FIX_QUESTION_EXPLANATION: "fix_question_explanation",
   POLISH_EXPLANATIONS: "polish_explanations",
   NORMALIZE: "normalize_formulas",
 };
@@ -1109,6 +1111,81 @@ const AdminExamController = {
         return res.status(404).json({ message: "Khong tim thay cau hoi de AI soat." });
       }
       res.status(500).json({ message: "AI soát câu hỏi thất bại." });
+    } finally {
+      await releaseExamAiLock(client, examId);
+      client.release();
+    }
+  },
+
+  async fixQuestionExplanation(req, res) {
+    const { examId, questionId } = req.params;
+    const client = await pool.connect();
+    try {
+      const signal = createRequestAbortSignal(req, res);
+      await client.query("BEGIN");
+      await acquireExamAiLock(client, examId, { signal });
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const modeOptions = getAdminExamAiMode(req);
+      const questionReviewModelContext = await getQuestionReviewModelContext();
+      const result = await fixStoredQuestionExplanationWithAI(client, examId, questionId, {
+        subject: req.body?.subject || req.body?.subjectName || undefined,
+        reviewNote: req.body?.reviewNote || req.body?.note || "",
+        explanationIssues: Array.isArray(req.body?.explanationIssues) ? req.body.explanationIssues : [],
+        signal,
+        ...modeOptions.fast,
+        fixModel: questionReviewModelContext.reviewModel,
+        fixModels: questionReviewModelContext.reviewModels,
+      });
+      result.qualityMode = modeOptions.qualityMode;
+      await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.FIX_QUESTION_EXPLANATION, req.user.id, {
+        questionId: Number(questionId),
+        changedCount: result.changedCount || 0,
+        confidence: result.confidence,
+        needsManualReview: result.needsManualReview,
+        model: result.diagnostics?.[0]?.model,
+        sourceFileId: result.sourceFile?.id,
+        sourceFileName: result.sourceFile?.fileName,
+      });
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.fix_question_explanation", {
+        examId,
+        questionId,
+        changedCount: result.changedCount || 0,
+        needsManualReview: result.needsManualReview,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      res.json(result);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      if (sendAiAbortResponse(req, res, error)) return;
+      console.error("Fix question explanation error:", getSafeErrorLog(error));
+      if (error.message === "RATE_LIMITED") {
+        return res.status(429).json({
+          message: "AI đang bị giới hạn tạm thời. Thử lại sau.",
+          retryAfter: error.retryAfter,
+        });
+      }
+      if (error.message === "AI_TIMEOUT") {
+        return res.status(504).json({ message: "AI sửa lời giải quá thời gian." });
+      }
+      if (error.message === "EXAM_AI_BUSY") {
+        return getExamAiBusyResponse(res);
+      }
+      if (error.message === "EXAM_NOT_FOUND") {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      if (error.message === "QUESTION_NOT_FOUND") {
+        return res.status(404).json({ message: "Không tìm thấy câu hỏi để AI sửa lời giải." });
+      }
+      res.status(500).json({ message: "AI sửa lời giải thất bại." });
     } finally {
       await releaseExamAiLock(client, examId);
       client.release();

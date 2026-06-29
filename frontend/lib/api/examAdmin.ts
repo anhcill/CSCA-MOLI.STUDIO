@@ -93,6 +93,31 @@ export interface ImportedItemsReviewDiagnostic {
     maxTokenBudget?: number;
 }
 
+export interface FixQuestionExplanationResult {
+    examId: number;
+    questionId: number;
+    questionNumber?: number;
+    message: string;
+    changedCount: number;
+    confidence?: number;
+    needsManualReview?: boolean;
+    note?: string;
+    proposed?: {
+        explanation?: string;
+        explanationCn?: string;
+        explanationEn?: string;
+    };
+    changes?: Array<{
+        path?: string;
+        questionId?: number;
+        questionNumber?: number;
+        field: string;
+        before?: string;
+        after?: string;
+    }>;
+    diagnostics?: ImportedItemsReviewDiagnostic[];
+}
+
 export interface ImportedReadingGroupData {
     itemType: 'reading_group';
     passageText: string;
@@ -654,6 +679,17 @@ export const examAdminApi = {
 
     reviewQuestionQuality: async (examId: number, questionId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<StoredExamReviewResult> => {
         const response = await axios.post(`/admin/exams/${examId}/questions/${questionId}/ai-review`, data, {
+            timeout: data.qualityMode === 'deep' ? 900000 : 300000,
+        });
+        return response.data;
+    },
+
+    fixQuestionExplanation: async (
+        examId: number,
+        questionId: number,
+        data: { qualityMode?: 'fast' | 'deep'; reviewNote?: string; explanationIssues?: string[] } = {},
+    ): Promise<FixQuestionExplanationResult> => {
+        const response = await axios.post(`/admin/exams/${examId}/questions/${questionId}/fix-explanation`, data, {
             timeout: data.qualityMode === 'deep' ? 900000 : 300000,
         });
         return response.data;
