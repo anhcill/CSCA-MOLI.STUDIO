@@ -9,6 +9,13 @@ const RiskCenterController = {
   //  GET /api/admin/risk-center/summary
   async getSummary(req, res) {
     try {
+      const permissions = new Set(req.user?.permissions || []);
+      const roles = new Set(req.user?.rbacRoles || []);
+      const canViewPaymentRisk =
+        roles.has('super_admin') ||
+        permissions.has('*') ||
+        permissions.has('users.manage') ||
+        permissions.has('risk_center.manage');
       const [critical, paymentPending, examReports, todayViolations, questionReports] = await Promise.all([
         // Critical open cases
         pool.query(
@@ -41,7 +48,7 @@ const RiskCenterController = {
         success: true,
         data: {
           criticalOpen: critical.rows[0].count,
-          paymentPending: paymentPending.rows[0].count,
+          paymentPending: canViewPaymentRisk ? paymentPending.rows[0].count : 0,
           examReports: examReports.rows[0].count,
           questionReports: questionReports.rows[0].count,
           todayViolations: todayViolations.rows[0].count,

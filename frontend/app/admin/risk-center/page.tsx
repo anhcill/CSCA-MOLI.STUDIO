@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { riskCenterApi, RiskSummary, ExamRiskCase, PaymentRisk, QuestionReport, QuestionReportDetail, AdminNotification, AuditLogEntry, Pagination, ExamRiskDetail } from '@/lib/api/riskCenter';
+import { useAuthStore } from '@/lib/store/authStore';
+import { hasAnyPermission, hasPermission } from '@/lib/utils/permissions';
 import {
   FiAlertTriangle, FiShield, FiCreditCard, FiFileText, FiBell, FiList,
   FiRefreshCw, FiChevronLeft, FiChevronRight, FiEye, FiCheck, FiX,
@@ -466,6 +468,10 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
 //  Main Page
 
 export default function RiskCenterPage() {
+  const user = useAuthStore((state) => state.user);
+  const canViewRiskCenter = hasAnyPermission(user, ['risk_center.view', 'exams.manage']);
+  const canViewPaymentRisk = canViewRiskCenter && (hasPermission(user, 'users.manage') || hasPermission(user, 'risk_center.manage'));
+  const canManageRiskCenter = hasPermission(user, 'risk_center.manage');
   const [summary, setSummary] = useState<RiskSummary | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('exam');
   const [loading, setLoading] = useState(true);
@@ -491,6 +497,13 @@ export default function RiskCenterPage() {
   const [selectedCase, setSelectedCase] = useState<ExamRiskDetail | null>(null);
   const [selectedQuestionReport, setSelectedQuestionReport] = useState<QuestionReportDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const visibleTabs = canViewRiskCenter ? TABS.filter(tab => canViewPaymentRisk || tab.id !== 'payment') : [];
+
+  useEffect(() => {
+    if (!canViewPaymentRisk && activeTab === 'payment') {
+      setActiveTab('exam');
+    }
+  }, [activeTab, canViewPaymentRisk]);
 
   // Socket.io realtime
   useEffect(() => {
@@ -530,12 +543,13 @@ export default function RiskCenterPage() {
   }, [statusFilter, severityFilter]);
 
   const loadPaymentRisks = useCallback(async (page = 1) => {
+    if (!canViewPaymentRisk) return;
     try {
       const r = await riskCenterApi.getPaymentRisks({ page });
       setPaymentRisks(r.data);
       setPaymentPagination(r.pagination);
     } catch { /* ignore */ }
-  }, []);
+  }, [canViewPaymentRisk]);
 
   const loadQuestionReports = useCallback(async (page = 1) => {
     try {
@@ -566,12 +580,12 @@ export default function RiskCenterPage() {
   const loadTabData = useCallback(async () => {
     switch (activeTab) {
       case 'exam': return loadExamRisks(1);
-      case 'payment': return loadPaymentRisks(1);
+      case 'payment': return canViewPaymentRisk ? loadPaymentRisks(1) : loadExamRisks(1);
       case 'question': return loadQuestionReports(1);
       case 'notification': return loadNotifications(1);
       case 'audit': return loadAuditLogs(1);
     }
-  }, [activeTab, loadExamRisks, loadPaymentRisks, loadQuestionReports, loadNotifications, loadAuditLogs]);
+  }, [activeTab, canViewPaymentRisk, loadExamRisks, loadPaymentRisks, loadQuestionReports, loadNotifications, loadAuditLogs]);
 
   useEffect(() => {
     (async () => {
@@ -633,7 +647,7 @@ export default function RiskCenterPage() {
   // Summary cards data
   const summaryCards = summary ? [
     { label: 'Critical Open', value: summary.criticalOpen, icon: FiAlertOctagon, color: 'from-red-500 to-rose-600', textColor: 'text-red-600' },
-    { label: 'Payment Pending', value: summary.paymentPending, icon: FiCreditCard, color: 'from-amber-500 to-orange-600', textColor: 'text-amber-600' },
+    ...(canViewPaymentRisk ? [{ label: 'Payment Pending', value: summary.paymentPending, icon: FiCreditCard, color: 'from-amber-500 to-orange-600', textColor: 'text-amber-600' }] : []),
     { label: 'Exam Reports', value: summary.examReports, icon: FiShield, color: 'from-blue-500 to-indigo-600', textColor: 'text-blue-600' },
     { label: 'Báo lỗi đề', value: summary.questionReports, icon: FiFileText, color: 'from-purple-500 to-violet-600', textColor: 'text-purple-600' },
     { label: 'Vi phạm hôm nay', value: summary.todayViolations, icon: FiAlertTriangle, color: 'from-orange-500 to-red-500', textColor: 'text-orange-600' },
@@ -643,9 +657,9 @@ export default function RiskCenterPage() {
   return (
     <AdminLayout title="Risk Center" description="Trung tâm quản lý rủi ro hệ thống">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className={`grid grid-cols-2 sm:grid-cols-3 ${canViewPaymentRisk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-3 mb-6`}>
         {loading ? (
-          [...Array(6)].map((_, i) => <div key={i} className="h-24 bg-white dark:bg-slate-900 rounded-2xl animate-pulse border border-gray-100" />)
+          [...Array(canViewPaymentRisk ? 6 : 5)].map((_, i) => <div key={i} className="h-24 bg-white dark:bg-slate-900 rounded-2xl animate-pulse border border-gray-100" />)
         ) : summaryCards.map(card => (
           <div key={card.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-4 shadow-sm hover:shadow-md transition-shadow">
             <div className={`inline-flex p-2 rounded-xl bg-gradient-to-br ${card.color} text-white mb-2`}>
@@ -663,7 +677,7 @@ export default function RiskCenterPage() {
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
           <FiRefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
         </button>
-        {activeTab === 'exam' && (
+        {activeTab === 'exam' && canManageRiskCenter && (
           <button onClick={handleScan} disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl disabled:opacity-50">
             <FiZap size={13} /> Quét vi phạm
@@ -704,7 +718,7 @@ export default function RiskCenterPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-        {TABS.map(tab => (
+        {visibleTabs.map(tab => (
           <button key={tab.id} onClick={() => { setActiveTab(tab.id); setStatusFilter(''); setSeverityFilter(''); }}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors ${
               activeTab === tab.id
@@ -761,7 +775,7 @@ export default function RiskCenterPage() {
         )}
 
         {/* PAYMENT RISKS TAB */}
-        {activeTab === 'payment' && (
+        {activeTab === 'payment' && canViewPaymentRisk && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

@@ -1,6 +1,6 @@
 'use client';
 
-import { FiAward, FiClock, FiHash, FiMonitor, FiTrendingUp, FiUsers } from 'react-icons/fi';
+import { FiAward, FiClock, FiHash, FiMonitor, FiStar, FiTrendingUp, FiUsers } from 'react-icons/fi';
 import { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 
 type OfficialExamLeaderboardProps = {
@@ -68,9 +68,11 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
         ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
         : 'border-rose-200 bg-rose-50 text-rose-700';
   const heightClass = compact
-    ? isFirst ? 'md:min-h-[190px]' : 'md:min-h-[170px]'
-    : isFirst ? 'md:min-h-[250px]' : 'md:min-h-[210px]';
-  const avatarSize = compact ? (isFirst ? 56 : 48) : (isFirst ? 72 : 60);
+    ? entry.rank === 1 ? 'md:min-h-[220px]' : entry.rank === 2 ? 'md:min-h-[190px]' : 'md:min-h-[172px]'
+    : entry.rank === 1 ? 'md:min-h-[270px]' : entry.rank === 2 ? 'md:min-h-[236px]' : 'md:min-h-[214px]';
+  const avatarSize = compact
+    ? entry.rank === 1 ? 60 : entry.rank === 2 ? 52 : 46
+    : entry.rank === 1 ? 76 : entry.rank === 2 ? 66 : 58;
 
   return (
     <div className={`flex flex-col items-center justify-end rounded-3xl border bg-white text-center shadow-sm ${compact ? 'p-3' : 'p-5'} ${heightClass}`}>
@@ -140,9 +142,14 @@ export default function OfficialExamLeaderboard({
             <div className={`${compact ? 'mb-2' : 'mb-3'} inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-700`}>
               <FiMonitor size={14} /> {badgeLabel}
             </div>
-            <h2 className={`${compact ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl'} font-black text-slate-950`}>Top kết quả của đề này</h2>
+            <h2 className={`${compact ? 'text-xl md:text-2xl' : 'text-2xl md:text-3xl'} flex items-center gap-2 font-black text-slate-950`}>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                <FiStar size={18} />
+              </span>
+              Bảng vàng thành tích
+            </h2>
             <p className={`${compact ? 'mt-1 line-clamp-2' : 'mt-2'} max-w-2xl text-sm font-semibold text-slate-600`}>
-              {description || `Chỉ tính lượt nộp bài của ${examTitle || 'đề hiện tại'}. Xếp hạng theo điểm cao nhất, nếu bằng điểm thì ưu tiên thời gian làm nhanh hơn.`}
+              {description || `Vinh danh những bài làm nổi bật nhất của ${examTitle || 'đề hiện tại'}.`}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">

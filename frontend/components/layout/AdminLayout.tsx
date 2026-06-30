@@ -171,6 +171,7 @@ const NAV_SECTIONS = [
         icon: FiAlertTriangle,
         href: '/admin/risk-center',
         permission: 'risk_center.view',
+        anyPermissions: ['risk_center.view', 'exams.manage'],
         roles: [],
       },
     ],
@@ -217,7 +218,10 @@ export default function AdminLayout({ children, title, description }: AdminLayou
   const visibleSections = NAV_SECTIONS
     .map(section => ({
       ...section,
-      items: section.items.filter(item => hasPermission(user, item.permission)),
+      items: section.items.filter(item =>
+        hasPermission(user, item.permission) ||
+        ('anyPermissions' in item && item.anyPermissions?.some(permission => hasPermission(user, permission))),
+      ),
     }))
     .filter(section => section.items.length > 0);
 

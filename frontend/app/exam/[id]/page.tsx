@@ -843,7 +843,6 @@ export default function ExamPage() {
             noRoomLabel="Luyện đề tự do"
             emptyTitle="Chưa có xếp hạng"
             emptyDescription="Khi có người nộp bài, 10 kết quả tốt nhất của đề này sẽ hiện ở đây."
-            description={`Chỉ tính kết quả đã nộp của ${preflight.title}. Mỗi người lấy bài tốt nhất; nếu bằng điểm thì người làm nhanh hơn xếp trên.`}
           />
           </div>
         </div>

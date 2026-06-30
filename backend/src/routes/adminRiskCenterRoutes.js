@@ -6,65 +6,70 @@ const paymentRiskActions = require('../controllers/paymentRiskActionsController'
 const questionReportActions = require('../controllers/questionReportActionsController');
 const {
   authenticate,
+  authorizeAnyPermission,
   authorizePermission,
 } = require('../middleware/authMiddleware');
 
 // All risk center routes require auth
 router.use(authenticate);
 
+const viewRiskCenter = authorizeAnyPermission('risk_center.view', 'exams.manage');
+const manageRiskCenter = authorizePermission('risk_center.manage');
+const viewPaymentRisk = authorizePermission('risk_center.view');
+
 //  Read-only routes (risk_center.view)
 router.get(
   '/summary',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.getSummary
 );
 
 router.get(
   '/exam-risks',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.getExamRisks
 );
 
 router.get(
   '/payment-risks',
-  authorizePermission('risk_center.view'),
+  viewPaymentRisk,
   riskCenterController.getPaymentRisks
 );
 
 router.get(
   '/question-reports',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   questionReportActions.getQuestionReports
 );
 
 router.get(
   '/notifications',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.getNotifications
 );
 
 router.get(
   '/notifications/unread-count',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.getUnreadCount
 );
 
 router.get(
   '/audit-logs',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.getAuditLogs
 );
 
 //  Notification actions
 router.post(
   '/notifications/:id/read',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.markNotificationRead
 );
 
 router.post(
   '/notifications/read-all',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   riskCenterController.markAllNotificationsRead
 );
 
@@ -73,94 +78,94 @@ router.post(
 // Scan violations  create/update risk cases (manage permission)
 router.post(
   '/exam-risks/scan',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.scanViolations
 );
 
 // Get single risk case detail
 router.get(
   '/exam-risks/:id',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   examRiskActions.getExamRiskDetail
 );
 
 // Light actions (view permission)
 router.post(
   '/exam-risks/:id/note',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   examRiskActions.addNote
 );
 
 router.post(
   '/exam-risks/:id/resolve',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.resolve
 );
 
 router.post(
   '/exam-risks/:id/ignore',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.ignore
 );
 
 router.post(
   '/exam-risks/:id/escalate',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   examRiskActions.escalate
 );
 
 router.post(
   '/exam-risks/:id/warn-user',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.warnUser
 );
 
 // Strong actions (manage permission)
 router.post(
   '/exam-risks/:id/lock-attempt',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.lockAttempt
 );
 
 router.post(
   '/exam-risks/:id/force-submit',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.forceSubmit
 );
 
 router.post(
   '/exam-risks/:id/invalidate-attempt',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.invalidateAttempt
 );
 
 router.post(
   '/exam-risks/:id/restore-attempt',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.restoreAttempt
 );
 
 router.post(
   '/exam-risks/:id/ban-exam-access',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.banExamAccess
 );
 
 router.post(
   '/exam-risks/:id/suspend-user',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.suspendUser
 );
 
 router.post(
   '/exam-risks/:id/ban-user',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.banUser
 );
 
 router.post(
   '/exam-risks/:id/mark-clean',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   examRiskActions.markClean
 );
 
@@ -169,49 +174,49 @@ router.post(
 // Get single payment risk detail
 router.get(
   '/payment-risks/:id',
-  authorizePermission('risk_center.view'),
+  viewPaymentRisk,
   paymentRiskActions.getPaymentRiskDetail
 );
 
 router.post(
   '/payment-risks/:id/sync',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.syncPayment
 );
 
 router.post(
   '/payment-risks/:id/resolve',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.resolvePayment
 );
 
 router.post(
   '/payment-risks/:id/mark-suspicious',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.markSuspicious
 );
 
 router.post(
   '/payment-risks/:id/manual-credit-coins',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.manualCreditCoins
 );
 
 router.post(
   '/payment-risks/:id/manual-grant-vip',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.manualGrantVip
 );
 
 router.post(
   '/payment-risks/:id/revoke-coins',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.revokeCoins
 );
 
 router.post(
   '/payment-risks/:id/revoke-vip',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   paymentRiskActions.revokeVip
 );
 
@@ -220,37 +225,37 @@ router.post(
 // Get single report detail
 router.get(
   '/question-reports/:id',
-  authorizePermission('risk_center.view'),
+  viewRiskCenter,
   questionReportActions.getReportDetail
 );
 
 router.post(
   '/question-reports/:id/resolve',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   questionReportActions.resolveReport
 );
 
 router.post(
   '/question-reports/:id/ignore',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   questionReportActions.ignoreReport
 );
 
 router.post(
   '/question-reports/:id/hide-question',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   questionReportActions.hideQuestion
 );
 
 router.post(
   '/question-reports/:id/hide-exam',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   questionReportActions.hideExam
 );
 
 router.post(
   '/question-reports/:id/regrade-affected-attempts',
-  authorizePermission('risk_center.manage'),
+  manageRiskCenter,
   questionReportActions.regradeAffectedAttempts
 );
 
