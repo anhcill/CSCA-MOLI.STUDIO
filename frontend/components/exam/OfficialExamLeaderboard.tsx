@@ -67,30 +67,44 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
       : entry.rank === 2
         ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
         : 'border-rose-200 bg-rose-50 text-rose-700';
+  const shellClass =
+    entry.rank === 1
+      ? 'order-1 border-amber-200 shadow-2xl shadow-amber-200/70 ring-2 ring-amber-100 md:order-2 md:w-full'
+      : entry.rank === 2
+        ? 'order-2 border-cyan-200 shadow-xl shadow-cyan-200/60 md:order-1 md:mx-auto md:w-[94%]'
+        : 'order-3 border-rose-200 shadow-lg shadow-rose-200/60 md:order-3 md:mx-auto md:w-[88%]';
   const heightClass = compact
-    ? entry.rank === 1 ? 'md:min-h-[220px]' : entry.rank === 2 ? 'md:min-h-[190px]' : 'md:min-h-[172px]'
-    : entry.rank === 1 ? 'md:min-h-[270px]' : entry.rank === 2 ? 'md:min-h-[236px]' : 'md:min-h-[214px]';
+    ? entry.rank === 1 ? 'min-h-[360px] md:min-h-[380px]' : entry.rank === 2 ? 'min-h-[312px] md:min-h-[328px]' : 'min-h-[280px] md:min-h-[292px]'
+    : entry.rank === 1 ? 'min-h-[440px] md:min-h-[470px]' : entry.rank === 2 ? 'min-h-[390px] md:min-h-[410px]' : 'min-h-[350px] md:min-h-[365px]';
+  const pedestalClass = compact
+    ? entry.rank === 1 ? 'h-16 md:h-20 from-amber-300 via-amber-400 to-amber-500' : entry.rank === 2 ? 'h-11 md:h-14 from-cyan-300 via-cyan-400 to-cyan-500' : 'h-8 md:h-10 from-rose-300 via-rose-400 to-rose-500'
+    : entry.rank === 1 ? 'h-20 md:h-24 from-amber-300 via-amber-400 to-amber-500' : entry.rank === 2 ? 'h-14 md:h-16 from-cyan-300 via-cyan-400 to-cyan-500' : 'h-10 md:h-12 from-rose-300 via-rose-400 to-rose-500';
   const avatarSize = compact
     ? entry.rank === 1 ? 60 : entry.rank === 2 ? 52 : 46
     : entry.rank === 1 ? 76 : entry.rank === 2 ? 66 : 58;
 
   return (
-    <div className={`flex flex-col items-center justify-end rounded-3xl border bg-white text-center shadow-sm ${compact ? 'p-3' : 'p-5'} ${heightClass}`}>
-      <div className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-black ${compact ? 'mb-2' : 'mb-3'} ${tone}`}>
-        <FiAward size={14} /> #{entry.rank}
+    <div className={`relative flex flex-col items-center overflow-hidden rounded-3xl border bg-white text-center transition-all ${heightClass} ${shellClass}`}>
+      <div className={`relative z-10 flex flex-1 flex-col items-center justify-end ${compact ? 'px-3 pb-12 pt-3' : 'px-5 pb-16 pt-5'}`}>
+        <div className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-black ${compact ? 'mb-2' : 'mb-3'} ${tone}`}>
+          <FiAward size={14} /> #{entry.rank}
+        </div>
+        <Avatar entry={entry} size={avatarSize} />
+        <h3 className={`${compact ? 'mt-2 min-h-[36px] text-sm' : 'mt-3 min-h-[44px] text-base'} line-clamp-2 font-black text-slate-950`}>{entry.full_name}</h3>
+        <p className="mt-1 text-xs font-bold text-slate-500">
+          {getEntryMeta(entry, noRoomLabel)}
+        </p>
+        <div className={`${compact ? 'mt-3 px-4 py-2' : 'mt-4 px-5 py-3'} rounded-2xl bg-slate-950 text-white`}>
+          <p className={`${compact ? 'text-xl' : 'text-2xl'} font-black`}>{formatScore(entry.total_score)}</p>
+          <p className="text-[11px] font-bold text-slate-300">điểm</p>
+        </div>
+        <p className={`${compact ? 'mt-2' : 'mt-3'} inline-flex items-center gap-1 text-xs font-bold text-slate-500`}>
+          <FiClock size={13} /> {formatDuration(entry.duration_seconds)}
+        </p>
       </div>
-      <Avatar entry={entry} size={avatarSize} />
-      <h3 className={`${compact ? 'mt-2 min-h-[36px] text-sm' : 'mt-3 min-h-[44px] text-base'} line-clamp-2 font-black text-slate-950`}>{entry.full_name}</h3>
-      <p className="mt-1 text-xs font-bold text-slate-500">
-        {getEntryMeta(entry, noRoomLabel)}
-      </p>
-      <div className={`${compact ? 'mt-3 px-4 py-2' : 'mt-4 px-5 py-3'} rounded-2xl bg-slate-950 text-white`}>
-        <p className={`${compact ? 'text-xl' : 'text-2xl'} font-black`}>{formatScore(entry.total_score)}</p>
-        <p className="text-[11px] font-bold text-slate-300">điểm</p>
+      <div className={`absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t ${pedestalClass}`}>
+        <span className="text-xs font-black tracking-[0.24em] text-white drop-shadow">TOP {entry.rank}</span>
       </div>
-      <p className={`${compact ? 'mt-2' : 'mt-3'} inline-flex items-center gap-1 text-xs font-bold text-slate-500`}>
-        <FiClock size={13} /> {formatDuration(entry.duration_seconds)}
-      </p>
     </div>
   );
 }
