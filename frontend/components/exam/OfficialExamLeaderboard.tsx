@@ -60,7 +60,6 @@ function getEntryMeta(entry: OfficialExamLeaderboardEntry, noRoomLabel: string) 
 }
 
 function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialExamLeaderboardEntry; noRoomLabel: string; compact?: boolean }) {
-  const isFirst = entry.rank === 1;
   const tone =
     entry.rank === 1
       ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -69,23 +68,34 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
         : 'border-rose-200 bg-rose-50 text-rose-700';
   const shellClass =
     entry.rank === 1
-      ? 'order-1 border-amber-200 shadow-2xl shadow-amber-200/70 ring-2 ring-amber-100 md:order-2 md:w-full'
+      ? 'order-1 border-amber-200 shadow-xl shadow-amber-100/80 ring-1 ring-amber-100 md:order-2 md:w-full'
       : entry.rank === 2
-        ? 'order-2 border-cyan-200 shadow-xl shadow-cyan-200/60 md:order-1 md:mx-auto md:w-[94%]'
-        : 'order-3 border-rose-200 shadow-lg shadow-rose-200/60 md:order-3 md:mx-auto md:w-[88%]';
+        ? 'order-2 border-cyan-200 shadow-lg shadow-cyan-100/80 md:order-1 md:mx-auto md:w-[96%]'
+        : 'order-3 border-rose-200 shadow-md shadow-rose-100/80 md:order-3 md:mx-auto md:w-[92%]';
   const heightClass = compact
-    ? entry.rank === 1 ? 'min-h-[360px] md:min-h-[380px]' : entry.rank === 2 ? 'min-h-[312px] md:min-h-[328px]' : 'min-h-[280px] md:min-h-[292px]'
-    : entry.rank === 1 ? 'min-h-[440px] md:min-h-[470px]' : entry.rank === 2 ? 'min-h-[390px] md:min-h-[410px]' : 'min-h-[350px] md:min-h-[365px]';
-  const pedestalClass = compact
-    ? entry.rank === 1 ? 'h-16 md:h-20 from-amber-300 via-amber-400 to-amber-500' : entry.rank === 2 ? 'h-11 md:h-14 from-cyan-300 via-cyan-400 to-cyan-500' : 'h-8 md:h-10 from-rose-300 via-rose-400 to-rose-500'
-    : entry.rank === 1 ? 'h-20 md:h-24 from-amber-300 via-amber-400 to-amber-500' : entry.rank === 2 ? 'h-14 md:h-16 from-cyan-300 via-cyan-400 to-cyan-500' : 'h-10 md:h-12 from-rose-300 via-rose-400 to-rose-500';
+    ? entry.rank === 1 ? 'min-h-[292px] md:min-h-[310px]' : entry.rank === 2 ? 'min-h-[252px] md:min-h-[266px]' : 'min-h-[232px] md:min-h-[244px]'
+    : entry.rank === 1 ? 'min-h-[350px] md:min-h-[370px]' : entry.rank === 2 ? 'min-h-[306px] md:min-h-[324px]' : 'min-h-[282px] md:min-h-[298px]';
+  const accentClass =
+    entry.rank === 1
+      ? 'from-amber-300 via-amber-400 to-orange-400'
+      : entry.rank === 2
+        ? 'from-cyan-300 via-sky-400 to-teal-400'
+        : 'from-rose-300 via-pink-400 to-red-400';
+  const scoreClass =
+    entry.rank === 1
+      ? 'bg-slate-950 shadow-lg shadow-amber-200/70'
+      : entry.rank === 2
+        ? 'bg-slate-900 shadow-md shadow-cyan-100/80'
+        : 'bg-slate-900 shadow-sm shadow-rose-100/80';
   const avatarSize = compact
     ? entry.rank === 1 ? 60 : entry.rank === 2 ? 52 : 46
     : entry.rank === 1 ? 76 : entry.rank === 2 ? 66 : 58;
 
   return (
-    <div className={`relative flex flex-col items-center overflow-hidden rounded-3xl border bg-white text-center transition-all ${heightClass} ${shellClass}`}>
-      <div className={`relative z-10 flex flex-1 flex-col items-center justify-end ${compact ? 'px-3 pb-12 pt-3' : 'px-5 pb-16 pt-5'}`}>
+    <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-3xl border bg-gradient-to-b from-white via-white to-slate-50/80 text-center transition-all ${compact ? 'p-3' : 'p-5'} ${heightClass} ${shellClass}`}>
+      <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${accentClass}`} />
+      <div className="absolute inset-x-5 top-6 h-px bg-gradient-to-r from-transparent via-slate-100 to-transparent" />
+      <div className="relative z-10 flex flex-col items-center">
         <div className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-black ${compact ? 'mb-2' : 'mb-3'} ${tone}`}>
           <FiAward size={14} /> #{entry.rank}
         </div>
@@ -94,16 +104,13 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
         <p className="mt-1 text-xs font-bold text-slate-500">
           {getEntryMeta(entry, noRoomLabel)}
         </p>
-        <div className={`${compact ? 'mt-3 px-4 py-2' : 'mt-4 px-5 py-3'} rounded-2xl bg-slate-950 text-white`}>
+        <div className={`${compact ? 'mt-3 px-4 py-2' : 'mt-4 px-5 py-3'} rounded-2xl text-white ${scoreClass}`}>
           <p className={`${compact ? 'text-xl' : 'text-2xl'} font-black`}>{formatScore(entry.total_score)}</p>
           <p className="text-[11px] font-bold text-slate-300">điểm</p>
         </div>
         <p className={`${compact ? 'mt-2' : 'mt-3'} inline-flex items-center gap-1 text-xs font-bold text-slate-500`}>
           <FiClock size={13} /> {formatDuration(entry.duration_seconds)}
         </p>
-      </div>
-      <div className={`absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t ${pedestalClass}`}>
-        <span className="text-xs font-black tracking-[0.24em] text-white drop-shadow">TOP {entry.rank}</span>
       </div>
     </div>
   );
