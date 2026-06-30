@@ -2,6 +2,8 @@ import axios from '../utils/axios';
 import { normalizeImportedItemsMath, normalizePdfImportPreviewMath } from '@/lib/pdf-import/normalizeImportedMath';
 import type { PdfImportPreset } from '@/lib/pdf-import/presets';
 
+export type PdfImportLanguageMode = 'auto' | 'vi' | 'en' | 'zh' | 'vi_en' | 'vi_zh' | 'zh_en';
+
 export interface ExamCreateData {
     title: string;
     titleCn?: string;          // P0: hỗ trợ title tiếng Trung
@@ -174,6 +176,7 @@ export interface PdfImportPreview {
         textLength?: number;
         truncated?: boolean;
         importPreset?: PdfImportPreset;
+        importLanguageMode?: PdfImportLanguageMode;
         fileType?: 'pdf' | 'doc' | 'docx' | string;
     };
 }
@@ -511,12 +514,14 @@ export const examAdminApi = {
     previewPdfImport: async (
         file: File,
         importPreset: PdfImportPreset = 'auto',
+        importLanguageMode: PdfImportLanguageMode = 'auto',
         signal?: AbortSignal,
         subject?: { subjectCode?: string; subjectName?: string },
     ): Promise<PdfImportPreview> => {
         const formData = new FormData();
         formData.append('pdf', file);
         formData.append('importPreset', importPreset);
+        formData.append('importLanguageMode', importLanguageMode);
         if (subject?.subjectCode) formData.append('subjectCode', subject.subjectCode);
         if (subject?.subjectName) formData.append('subjectName', subject.subjectName);
         const response = await axios.post('/admin/exams/import/pdf/preview', formData, {

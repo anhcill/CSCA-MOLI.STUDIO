@@ -7,6 +7,7 @@ const WordExtractor = require("word-extractor");
 const aiService = require("./aiService");
 const {
   buildPdfImportPrompt,
+  normalizePdfImportLanguageMode,
   normalizePdfImportPreset,
   shouldUseRuleBasedPdfParser,
 } = require("./pdfImportPromptService");
@@ -337,11 +338,19 @@ function renderDocxInline(node) {
     return math ? ` \\(${math}\\) ` : "";
   }
 
+  if (localName === "object") return " [Equation] ";
   if (localName === "t") return node.textContent || "";
   if (localName === "tab") return "\t";
   if (localName === "br" || localName === "cr") return "\n";
   if (localName === "drawing" || localName === "pict") return " [Hình] ";
   if (localName === "instrText") return "";
+  if (localName === "r") {
+    const text = Array.from(node.childNodes || []).map(renderDocxInline).join("");
+    const runProps = getFirstXmlChild(node, "rPr");
+    const isBold = Boolean(getFirstXmlChild(runProps, "b") || getFirstXmlChild(runProps, "bCs"));
+    if (isBold && /^\s*[A-H][.)]/i.test(text)) return ` [correct] ${text}`;
+    return text;
+  }
 
   return Array.from(node.childNodes || []).map(renderDocxInline).join("");
 }
@@ -413,7 +422,12 @@ async function extractImportFileText(file) {
       return "";
     });
     const mammothText = docxData.value || "";
-    const text = docxXmlText && (docxXmlText.includes("\\(") || docxXmlText.length >= mammothText.length * 0.8)
+    const text = docxXmlText && (
+      docxXmlText.includes("\\(") ||
+      docxXmlText.includes("[Equation]") ||
+      docxXmlText.includes("[correct]") ||
+      docxXmlText.length >= mammothText.length * 0.8
+    )
       ? docxXmlText
       : mammothText;
 
@@ -692,6 +706,7 @@ function normalizeImportedQuestion(rawQuestion, index) {
   const questionTextCn = repairPdfImportTextArtifacts(cnQuestion.explanation ? cnQuestion.text : rawQuestionTextCn);
   const questionTextEn = repairPdfImportTextArtifacts(enQuestion.explanation ? enQuestion.text : rawQuestionTextEn);
   const normalizedQuestion = normalizeTrilingualText(questionText, questionTextCn, questionTextEn);
+  const forceEnglishFields = rawQuestion?._importLanguageMode === "en";
 
   if (!normalizedQuestion || answers.length < 2) return null;
 
@@ -712,21 +727,28 @@ function normalizeImportedQuestion(rawQuestion, index) {
 
   return {
     questionType: QUESTION_TYPES.SINGLE_CHOICE,
-    questionText: normalizedQuestion.vi,
-    questionTextCn: normalizedQuestion.cn,
-    questionTextEn: normalizedQuestion.en,
+    questionText: forceEnglishFields ? (questionText || questionTextEn || questionTextCn) : normalizedQuestion.vi,
+    questionTextCn: forceEnglishFields ? questionTextCn : normalizedQuestion.cn,
+    questionTextEn: forceEnglishFields ? (questionTextEn || questionText) : normalizedQuestion.en,
     imageUrl: stringValue(rawQuestion?.imageUrl),
     explanationImageUrl: stringValue(rawQuestion?.explanationImageUrl || rawQuestion?.explanation_image_url),
     points: clamp(parsePositiveNumber(rawQuestion?.points, 1), 0.1, MAX_POINTS_PER_QUESTION),
     explanation: restoreImportedExplanationBreaks(rawQuestion?.explanation || viQuestion.explanation),
     explanationCn: restoreImportedExplanationBreaks(rawQuestion?.explanationCn || rawQuestion?.explanation_cn || cnQuestion.explanation),
     explanationEn: restoreImportedExplanationBreaks(rawQuestion?.explanationEn || rawQuestion?.explanation_en || enQuestion.explanation),
-    answers: answers.map((answer) => ({
-      text: answer.text || answer.textEn || answer.textCn,
-      textCn: answer.textCn || answer.text || answer.textEn,
-      textEn: answer.textEn || "",
-      imageUrl: answer.imageUrl || "",
-    })),
+    answers: answers.map((answer) => forceEnglishFields
+      ? {
+          text: answer.text || answer.textEn || answer.textCn,
+          textCn: answer.textCn || "",
+          textEn: answer.textEn || answer.text || "",
+          imageUrl: answer.imageUrl || "",
+        }
+      : {
+          text: answer.text || answer.textEn || answer.textCn,
+          textCn: answer.textCn || answer.text || answer.textEn,
+          textEn: answer.textEn || "",
+          imageUrl: answer.imageUrl || "",
+        }),
     correctAnswer,
     difficulty,
     needsImage,
@@ -877,6 +899,71 @@ function flattenImportSourceItems(aiResult) {
   }
 
   return items;
+}
+
+function routeQuestionLanguageFields(rawQuestion, importLanguageMode) {
+  if (!rawQuestion || typeof rawQuestion !== "object") return rawQuestion;
+  const mode = normalizePdfImportLanguageMode(importLanguageMode);
+  if (mode !== "en" && mode !== "zh") return rawQuestion;
+
+  const suffix = mode === "en" ? "En" : "Cn";
+  const routed = { ...rawQuestion, _importLanguageMode: mode };
+  const routePair = (baseName) => {
+    const targetName = `${baseName}${suffix}`;
+    if (!stringValue(routed[targetName]) && stringValue(routed[baseName])) {
+      routed[targetName] = routed[baseName];
+    }
+  };
+
+  routePair("questionText");
+  routePair("explanation");
+
+  if (Array.isArray(routed.answers)) {
+    routed.answers = routed.answers.map((answer) => {
+      if (!answer || typeof answer !== "object") return answer;
+      const next = { ...answer };
+      const targetName = `text${suffix}`;
+      if (!stringValue(next[targetName]) && stringValue(next.text)) next[targetName] = next.text;
+      return next;
+    });
+  }
+
+  if (Array.isArray(routed.options)) {
+    routed.options = routed.options.map((option) => {
+      if (!option || typeof option !== "object") return option;
+      const next = { ...option };
+      const targetName = `text${suffix}`;
+      if (!stringValue(next[targetName]) && stringValue(next.text)) next[targetName] = next.text;
+      return next;
+    });
+  }
+
+  return routed;
+}
+
+function routeImportItemLanguageFields(rawItem, importLanguageMode) {
+  if (!rawItem || typeof rawItem !== "object") return rawItem;
+  const itemType = getImportItemType(rawItem);
+  if (itemType === "reading_group") {
+    return {
+      ...rawItem,
+      subQuestions: Array.isArray(rawItem.subQuestions)
+        ? rawItem.subQuestions.map((question) => routeQuestionLanguageFields(question, importLanguageMode))
+        : rawItem.subQuestions,
+    };
+  }
+  if (itemType === "fill_blank_group") {
+    return {
+      ...rawItem,
+      linkedOptions: Array.isArray(rawItem.linkedOptions)
+        ? rawItem.linkedOptions.map((option) => routeQuestionLanguageFields({ answers: [option] }, importLanguageMode).answers[0])
+        : rawItem.linkedOptions,
+      subItems: Array.isArray(rawItem.subItems)
+        ? rawItem.subItems.map((item) => routeQuestionLanguageFields(item, importLanguageMode))
+        : rawItem.subItems,
+    };
+  }
+  return routeQuestionLanguageFields(rawItem, importLanguageMode);
 }
 
 function countImportedItemQuestions(item) {
@@ -1097,6 +1184,10 @@ const VIETNAMESE_EXPLANATION_RE = /(?:^|\n)\s*(?:Gi\u1ea3i|L\u1eddi\s*gi\u1ea3i|
 const VIETNAMESE_ANSWER_RE = /\u0110\u00e1p\s*\u00e1n(?:\s*\u0111\u00fang)?\s*:\s*\(?([A-H])\)?/i;
 const VIETNAMESE_OPTION_LABEL_RE = /^(?:\(([A-H])\)|([A-H])[\.)])\s*(.*)$/i;
 const VIETNAMESE_TRAILING_ANSWER_KEY_RE = /(?:^|\n)\s*(\d{1,3})\s*[\.)]\s*([A-H])\s*(?=\n|$)/gi;
+const ENGLISH_QUESTION_RE = /Question\s*(\d{1,3})(?:\s*\(([^)]*)\))?\s*:?\s*/gi;
+const ENGLISH_EXPLANATION_RE = /(?:^|\n)\s*(?:Solution(?:\s*\([^)]*\))?|Explanation|Analysis|Answer)\s*:/i;
+const ENGLISH_ANSWER_RE = /(?:Answer|Correct\s*answer)\s*:\s*\(?([A-H])\)?/i;
+const ENGLISH_OPTION_LABEL_RE = /^(?:\[correct\]\s*)?(?:\(([A-H])\)|([A-H])[\.)])\s*(.*)$/i;
 const RULE_IMPORT_ANSWER_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const RULE_IMPORT_MISSING_OPTION_TEXT = "Chưa trích được nội dung đáp án từ Word/PDF. Hãy sửa đáp án này trong bản xem trước.";
 const CHINESE_SOCIAL_ANSWER_RE = /Answer\s*:\s*([A-H])/i;
@@ -1124,6 +1215,21 @@ function getSequentialVietnameseQuestionMatches(text) {
   let lastQuestionNumber = 0;
 
   for (const match of text.matchAll(VIETNAMESE_QUESTION_RE)) {
+    const questionNumber = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(questionNumber) || questionNumber <= lastQuestionNumber) continue;
+    if (questionNumber > PDF_IMPORT_MAX_QUESTIONS) continue;
+    matches.push(match);
+    lastQuestionNumber = questionNumber;
+  }
+
+  return matches;
+}
+
+function getSequentialEnglishQuestionMatches(text) {
+  const matches = [];
+  let lastQuestionNumber = 0;
+
+  for (const match of text.matchAll(ENGLISH_QUESTION_RE)) {
     const questionNumber = Number.parseInt(match[1], 10);
     if (!Number.isFinite(questionNumber) || questionNumber <= lastQuestionNumber) continue;
     if (questionNumber > PDF_IMPORT_MAX_QUESTIONS) continue;
@@ -1229,6 +1335,41 @@ function buildMissingVietnameseAnswers() {
     text: getMissingOptionText(key),
     textCn: "",
   }));
+}
+
+function buildEnglishAnswersFromLines(lines) {
+  const labeled = [];
+
+  lines.forEach((line, index) => {
+    const match = line.match(ENGLISH_OPTION_LABEL_RE);
+    if (!match) return;
+    const key = (match[1] || match[2] || "").toUpperCase();
+    if (!key) return;
+    labeled.push({
+      index,
+      key,
+      text: cleanRuleBasedTextFragment(match[3]),
+      isCorrect: /^\s*\[correct\]/i.test(line),
+    });
+  });
+
+  const answers = [];
+  let correctAnswer = "";
+  const questionEndIndex = labeled[0]?.index ?? lines.length;
+
+  for (let i = 0; i < labeled.length; i++) {
+    const current = labeled[i];
+    const next = labeled[i + 1];
+    const segmentLines = [current.text];
+    for (let lineIndex = current.index + 1; lineIndex < (next?.index ?? lines.length); lineIndex++) {
+      if (lines[lineIndex]) segmentLines.push(lines[lineIndex]);
+    }
+    const optionText = splitRuleBasedOptionText(segmentLines.join(" ")) || getMissingOptionText(current.key);
+    answers.push({ text: "", textCn: "", textEn: optionText });
+    if (current.isCorrect && !correctAnswer) correctAnswer = current.key;
+  }
+
+  return { answers, correctAnswer, questionEndIndex };
 }
 
 function normalizeChineseSocialText(rawText) {
@@ -2267,6 +2408,83 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
   }, sourceMeta);
 }
 
+function parseEnglishChoiceTextWithRules(rawText, sourceMeta) {
+  const text = normalizeRuleBasedMathLayout(rawText)
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n");
+  const questionMatches = getSequentialEnglishQuestionMatches(text);
+  if (!questionMatches.length) return null;
+
+  const items = [];
+  for (let i = 0; i < questionMatches.length; i++) {
+    const match = questionMatches[i];
+    const questionNumber = Number.parseInt(match[1], 10);
+    const start = match.index + match[0].length;
+    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : text.length;
+    const body = text.slice(start, end).trim();
+    if (!body) continue;
+
+    const explanationIndex = body.search(ENGLISH_EXPLANATION_RE);
+    const questionAndOptions = (explanationIndex >= 0 ? body.slice(0, explanationIndex) : body).trim();
+    const explanation = explanationIndex >= 0
+      ? cleanRuleBasedTextFragment(body.slice(explanationIndex).replace(ENGLISH_EXPLANATION_RE, ""))
+      : "";
+    const answerMatch = body.match(ENGLISH_ANSWER_RE);
+    const lines = questionAndOptions.split("\n").map(cleanRuleBasedTextFragment).filter(Boolean);
+    const { answers, correctAnswer: boldCorrectAnswer, questionEndIndex } = buildEnglishAnswersFromLines(lines);
+    const questionText = cleanRuleBasedTextFragment(lines.slice(0, questionEndIndex).join(" "));
+
+    if (!questionText || answers.length < 2) continue;
+
+    const correctAnswer = answerMatch?.[1]?.toUpperCase() ||
+      boldCorrectAnswer ||
+      inferCorrectAnswerFromExplanation(answers, explanation);
+    const hasEquationPlaceholder = /\[(?:Equation|H[^\]]*)\]/i.test(`${questionText} ${answers.map(answer => answer.textEn).join(" ")} ${explanation}`);
+    const hasMissingAnswerText = answers.some((answer) => stringValue(answer.textEn).includes(RULE_IMPORT_MISSING_OPTION_TEXT));
+    const reviewNotes = [
+      correctAnswer ? "" : "Correct answer is not clear. Choose it before saving.",
+      hasEquationPlaceholder ? "Some formulas were embedded as Word equation images/OLE objects, so they are shown as [Equation]. Review or replace them before publishing." : "",
+      hasMissingAnswerText ? "Some answer text was not extractable from Word/PDF. Edit placeholders in the preview." : "",
+    ].filter(Boolean).join(" ");
+
+    items.push({
+      itemType: "single_choice",
+      questionType: "single_choice",
+      questionText: "",
+      questionTextCn: "",
+      questionTextEn: questionText,
+      answers,
+      correctAnswer,
+      explanation: "",
+      explanationCn: "",
+      explanationEn: explanation,
+      points: 1,
+      difficulty: /VDC|VDT|advanced|hard/i.test(match[0]) ? "hard" : "medium",
+      needsImage: hasEquationPlaceholder || PDF_IMPORT_IMAGE_HINT_RE.test(questionText),
+      imageHint: hasEquationPlaceholder
+        ? "This item contains formulas stored as Word equation images/OLE objects. Check the original DOCX and replace [Equation] if needed."
+        : (PDF_IMPORT_IMAGE_HINT_RE.test(questionText) ? "This item may need an image/table/chart from the source file." : ""),
+      reviewNotes,
+      subQuestionNumber: questionNumber,
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return normalizePdfImportResult({
+    exam: {
+      title: sourceMeta?.fileName ? String(sourceMeta.fileName).replace(/\.(pdf|docx?|doc)$/i, "") : "Imported English exam",
+      duration: 90,
+      totalPoints: Math.max(items.length, 1),
+    },
+    items,
+    warnings: [
+      "English rule parser used. Review formulas shown as [Equation] because this DOCX stores many equations as embedded objects.",
+    ],
+  }, sourceMeta);
+}
+
 function parsePdfTextWithRules(pdfText, sourceMeta) {
   if (isChineseCscaImportPreset(sourceMeta?.importPreset)) {
     const chineseCscaPreview = parseChineseCscaLanguageTextWithRules(pdfText, sourceMeta);
@@ -2277,6 +2495,9 @@ function parsePdfTextWithRules(pdfText, sourceMeta) {
       : parseChineseScienceTextWithRules(pdfText, sourceMeta);
     if (fallbackChinesePreview?.items?.length) return fallbackChinesePreview;
   }
+
+  const englishPreview = parseEnglishChoiceTextWithRules(pdfText, sourceMeta);
+  if (englishPreview?.items?.length) return englishPreview;
 
   const vietnamesePreview = parseVietnameseChoiceTextWithRules(pdfText, sourceMeta);
   if (vietnamesePreview?.items?.length) return vietnamesePreview;
@@ -2367,7 +2588,8 @@ function normalizePdfImportResult(aiResult, sourceMeta) {
     ? aiResult.warnings.map((warning) => stringValue(warning)).filter(Boolean)
     : [];
 
-  const rawItems = flattenImportSourceItems(aiResult);
+  const rawItems = flattenImportSourceItems(aiResult)
+    .map((item) => routeImportItemLanguageFields(item, sourceMeta?.importLanguageMode));
   const items = rawItems
     .slice(0, PDF_IMPORT_MAX_QUESTIONS)
     .map((item, index) => normalizeImportedItem(item, index))
@@ -2691,6 +2913,7 @@ function normalizePreviewImportOptions(importPresetInput) {
   const subjectPreset = getChineseCscaPresetFromSubject(rawOptions.subjectCode, rawOptions.subjectName);
   return {
     importPreset: subjectPreset || normalizePdfImportPreset(rawOptions.importPreset),
+    importLanguageMode: normalizePdfImportLanguageMode(rawOptions.importLanguageMode),
     subjectCode: stringValue(rawOptions.subjectCode),
     subjectName: stringValue(rawOptions.subjectName),
     signal: rawOptions.signal,
@@ -2726,6 +2949,7 @@ async function previewImportFile(file, importPresetInput) {
       textLength: extractedText.length,
       truncated: extractedText.length > PDF_IMPORT_TEXT_LIMIT,
       importPreset,
+      importLanguageMode: previewOptions.importLanguageMode,
       subjectCode: previewOptions.subjectCode,
       subjectName: previewOptions.subjectName,
       expectedQuestionCount: expectedQuestionCount || null,
@@ -2750,7 +2974,7 @@ async function previewImportFile(file, importPresetInput) {
       return withRuleBasedOnlyWarning(ruleBasedPreview);
     }
 
-    const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset), {
+    const rawAi = await callPdfImportAI(buildPdfImportPrompt(truncatedText, importPreset, previewOptions.importLanguageMode), {
       temperature: 0.15,
       maxTokens: 6500,
       timeout: 90000,

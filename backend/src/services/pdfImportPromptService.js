@@ -1,4 +1,36 @@
 const DEFAULT_IMPORT_PRESET = "auto";
+const DEFAULT_IMPORT_LANGUAGE_MODE = "auto";
+
+const PDF_IMPORT_LANGUAGE_MODES = {
+  auto: {
+    label: "Auto",
+    instruction: "Detect the source language and fill Vietnamese, Chinese, and English fields separately.",
+  },
+  vi: {
+    label: "Vietnamese",
+    instruction: "The source exam is Vietnamese. Put main question, answer, and explanation text in questionText/text/explanation.",
+  },
+  en: {
+    label: "English",
+    instruction: "The source exam is English. Put main question, answer, and explanation text in questionTextEn/textEn/explanationEn. Do not leave English only in Vietnamese fields.",
+  },
+  zh: {
+    label: "Chinese",
+    instruction: "The source exam is Chinese. Put main question, answer, and explanation text in questionTextCn/textCn/explanationCn.",
+  },
+  vi_en: {
+    label: "Vietnamese + English",
+    instruction: "The source exam is Vietnamese and English. Keep Vietnamese in questionText/text/explanation and English in questionTextEn/textEn/explanationEn.",
+  },
+  vi_zh: {
+    label: "Vietnamese + Chinese",
+    instruction: "The source exam is Vietnamese and Chinese. Keep Vietnamese in questionText/text/explanation and Chinese in questionTextCn/textCn/explanationCn.",
+  },
+  zh_en: {
+    label: "Chinese + English",
+    instruction: "The source exam is Chinese and English. Keep Chinese in questionTextCn/textCn/explanationCn and English in questionTextEn/textEn/explanationEn.",
+  },
+};
 
 const PDF_IMPORT_PRESETS = {
   auto: {
@@ -76,6 +108,13 @@ function normalizePdfImportPreset(value) {
     : DEFAULT_IMPORT_PRESET;
 }
 
+function normalizePdfImportLanguageMode(value) {
+  const key = String(value || "").trim().toLowerCase().replace("-", "_");
+  return Object.prototype.hasOwnProperty.call(PDF_IMPORT_LANGUAGE_MODES, key)
+    ? key
+    : DEFAULT_IMPORT_LANGUAGE_MODE;
+}
+
 function shouldUseRuleBasedPdfParser(value) {
   const preset = PDF_IMPORT_PRESETS[normalizePdfImportPreset(value)];
   return preset.ruleParser === true;
@@ -86,15 +125,24 @@ function buildPresetInstructions(value) {
   return preset.instruction.map((line) => `- ${line}`).join("\n");
 }
 
-function buildPdfImportPrompt(pdfText, importPreset = DEFAULT_IMPORT_PRESET) {
+function buildPdfImportPrompt(pdfText, importPreset = DEFAULT_IMPORT_PRESET, importLanguageMode = DEFAULT_IMPORT_LANGUAGE_MODE) {
   const preset = normalizePdfImportPreset(importPreset);
+  const languageMode = normalizePdfImportLanguageMode(importLanguageMode);
 
   return `You are an exam data parser for a Vietnamese learning platform.
 
 Import preset: ${preset} (${PDF_IMPORT_PRESETS[preset].label})
+Import language mode: ${languageMode} (${PDF_IMPORT_LANGUAGE_MODES[languageMode].label})
 
 Preset-specific rules:
 ${buildPresetInstructions(preset)}
+
+Language field routing:
+- ${PDF_IMPORT_LANGUAGE_MODES[languageMode].instruction}
+- If the selected language mode is English, English text must appear in questionTextEn/textEn/explanationEn even if duplicate fallback text is also needed elsewhere.
+- If the selected language mode is Chinese, Chinese text must appear in questionTextCn/textCn/explanationCn.
+- If the selected language mode is Vietnamese, Vietnamese text must appear in questionText/text/explanation.
+- If the source DOCX marks an answer option as bold/correct (for example "[correct] B. ..."), use that option as correctAnswer.
 
 Task:
 - Think like a strict exam import auditor, but output JSON only. Preserve every question number and return the full exam structure whenever possible.
@@ -229,8 +277,11 @@ ${pdfText}`;
 
 module.exports = {
   DEFAULT_IMPORT_PRESET,
+  DEFAULT_IMPORT_LANGUAGE_MODE,
   PDF_IMPORT_PRESETS,
+  PDF_IMPORT_LANGUAGE_MODES,
   buildPdfImportPrompt,
+  normalizePdfImportLanguageMode,
   normalizePdfImportPreset,
   shouldUseRuleBasedPdfParser,
 };

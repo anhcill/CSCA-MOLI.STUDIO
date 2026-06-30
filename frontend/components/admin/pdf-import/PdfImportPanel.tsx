@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FiAlertCircle, FiCheckCircle, FiClock, FiFileText, FiUpload } from 'react-icons/fi';
-import { examAdminApi, ImportedExamItem, PdfImportPreview } from '@/lib/api/examAdmin';
+import { examAdminApi, ImportedExamItem, PdfImportLanguageMode, PdfImportPreview } from '@/lib/api/examAdmin';
 import { PDF_IMPORT_PRESETS, PdfImportPreset } from '@/lib/pdf-import/presets';
 import PdfImportReview from './PdfImportReview';
 
@@ -26,6 +26,16 @@ const PROGRESS_STEPS = [
   'Tách câu',
   'Chuẩn hóa',
   'Xem trước',
+];
+
+const IMPORT_LANGUAGE_OPTIONS: { key: PdfImportLanguageMode; label: string; description: string }[] = [
+  { key: 'auto', label: 'Auto', description: 'Tu nhan dien ngon ngu trong de.' },
+  { key: 'vi', label: 'Tieng Viet', description: 'Do vao field Viet.' },
+  { key: 'en', label: 'Tieng Anh', description: 'Do vao field English.' },
+  { key: 'zh', label: 'Tieng Trung', description: 'Do vao field Chinese.' },
+  { key: 'vi_en', label: 'Viet + Anh', description: 'Tach Viet va English.' },
+  { key: 'vi_zh', label: 'Viet + Trung', description: 'Tach Viet va Chinese.' },
+  { key: 'zh_en', label: 'Trung + Anh', description: 'Tach Chinese va English.' },
 ];
 
 function formatFileSize(bytes?: number) {
@@ -119,6 +129,7 @@ export default function PdfImportPanel({
 }: PdfImportPanelProps) {
   const [file, setFile] = useState<File | null>(null);
   const [preset, setPreset] = useState<PdfImportPreset>('auto');
+  const [importLanguageMode, setImportLanguageMode] = useState<PdfImportLanguageMode>('auto');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [progress, setProgress] = useState(0);
@@ -218,7 +229,7 @@ export default function PdfImportPanel({
       setLoading(true);
       setErrorMessage('');
       const activePreset = autoChinesePreset || preset;
-      const nextPreview = await examAdminApi.previewPdfImport(file, activePreset, controller.signal, {
+      const nextPreview = await examAdminApi.previewPdfImport(file, activePreset, importLanguageMode, controller.signal, {
         subjectCode,
         subjectName,
       });
@@ -284,6 +295,27 @@ export default function PdfImportPanel({
               <span className="mt-1 block text-xs leading-snug text-gray-500">{option.description}</span>
             </button>
           ))}
+        </div>
+
+        <div>
+          <div className="mb-2 text-sm font-bold text-gray-800">Ngon ngu de import</div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-7">
+            {IMPORT_LANGUAGE_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setImportLanguageMode(option.key)}
+                className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                  importLanguageMode === option.key
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="mt-1 block text-xs leading-snug text-gray-500">{option.description}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {autoChinesePreset && (

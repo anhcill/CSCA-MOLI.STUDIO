@@ -570,6 +570,7 @@ const AdminExamController = {
 
       const preview = await previewImportFile(req.file, {
         importPreset: req.body?.importPreset,
+        importLanguageMode: req.body?.importLanguageMode,
         subjectCode: req.body?.subjectCode,
         subjectName: req.body?.subjectName,
         signal: createRequestAbortSignal(req, res),
