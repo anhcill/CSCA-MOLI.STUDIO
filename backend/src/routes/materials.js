@@ -11,11 +11,16 @@ const materialsController = require("../controllers/materialsController");
 const { extractPdfWebContent } = require("../services/materialContentService");
 const { getMaterialPdfUploadError, uploadPdfToCloudinary } = require("../services/materialPdfUploadService");
 const {
+  getR2KeyFromUrl,
+  getR2ObjectStream,
+  getR2PdfUrl,
+  uploadPdfToR2,
+} = require("../services/materialR2StorageService");
+const {
   ensureMaterialPdfBlobTable,
   findMaterialByStoredPdfToken,
   getStoredPdfByToken,
   getStoredPdfTokenFromUrl,
-  storePdfFileInDatabase,
 } = require("../services/materialStoredPdfService");
 const {
   authenticate,
@@ -144,7 +149,31 @@ async function streamStoredPdfByToken(res, token, disposition, title) {
   return sendStoredPdf(res, storedPdf, disposition, title);
 }
 
-function canUseDatabasePdfFallback(uploadError) {
+async function findMaterialByR2Key(key) {
+  const r2Url = getR2PdfUrl(key);
+  const result = await db.query(
+    `SELECT id, title, is_premium, is_active
+     FROM materials
+     WHERE file_url = $1 OR file_url LIKE $2
+     ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+     LIMIT 1`,
+    [r2Url, `%${r2Url}`],
+  );
+  return result.rows[0] || null;
+}
+
+async function streamR2PdfByKey(res, key, disposition, title) {
+  const upstream = await getR2ObjectStream(key);
+  res.setHeader("Content-Type", upstream.headers["content-type"] || "application/pdf");
+  res.setHeader("Content-Disposition", `${disposition}; filename="${getPdfDownloadName(title, path.basename(key))}"`);
+  res.setHeader("Cache-Control", "private, max-age=1800");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
+  if (upstream.headers["content-length"]) res.setHeader("Content-Length", upstream.headers["content-length"]);
+  upstream.pipe(res);
+}
+
+function canUseR2PdfFallback(uploadError) {
   return [
     "PDF_TOO_LARGE_FOR_STORAGE",
     "CLOUDINARY_CONFIG_MISSING",
@@ -155,6 +184,23 @@ function canUseDatabasePdfFallback(uploadError) {
 }
 
 async function uploadPdfWithStorageFallback(req) {
+  const r2ThresholdBytes = Number(process.env.MATERIAL_R2_MIN_MB || 10) * 1024 * 1024;
+  if (Number(req.file?.size || 0) > r2ThresholdBytes) {
+    const stored = await uploadPdfToR2({
+      filePath: req.file.path,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
+    });
+    return {
+      url: stored.url,
+      publicId: stored.publicId,
+      storage: "r2",
+      bytes: stored.fileSize,
+      warning: "File lớn hơn 10MB nên đã lưu vào Cloudflare R2.",
+    };
+  }
+
   try {
     const result = await uploadPdfToCloudinary(req.file.path, { fileSize: req.file.size });
     return {
@@ -166,29 +212,28 @@ async function uploadPdfWithStorageFallback(req) {
     };
   } catch (error) {
     const uploadError = getMaterialPdfUploadError(error);
-    if (!canUseDatabasePdfFallback(uploadError)) throw error;
+    if (!canUseR2PdfFallback(uploadError)) throw error;
 
-    console.warn("[materials] Cloudinary PDF upload fallback:", {
+    console.warn("[materials] Cloudinary PDF upload R2 fallback:", {
       code: uploadError.code,
       message: error?.message,
       fileName: req.file?.originalname,
       fileSize: req.file?.size,
     });
 
-    const stored = await storePdfFileInDatabase({
+    const stored = await uploadPdfToR2({
       filePath: req.file.path,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
-      uploadedBy: req.user?.id,
     });
 
     return {
       url: stored.url,
-      publicId: stored.token,
-      storage: "database",
+      publicId: stored.publicId,
+      storage: "r2",
       bytes: stored.fileSize,
-      warning: "Cloudinary giới hạn dung lượng PDF, file đã được lưu bằng kho nội bộ.",
+      warning: "Cloudinary giới hạn dung lượng PDF, file đã lưu vào Cloudflare R2.",
     };
   }
 }
@@ -220,6 +265,11 @@ async function streamPdf(res, id, disposition, user) {
   const storedPdfToken = getStoredPdfTokenFromUrl(fileUrl);
   if (storedPdfToken) {
     return streamStoredPdfByToken(res, storedPdfToken, disposition, title);
+  }
+
+  const r2Key = getR2KeyFromUrl(fileUrl);
+  if (r2Key) {
+    return streamR2PdfByKey(res, r2Key, disposition, title);
   }
 
   const urlParts = fileUrl.match(/\/upload\/v(\d+)\/(.+)$/);
@@ -283,6 +333,38 @@ router.get("/blob/:token", optionalAuth, async (req, res) => {
 router.get("/blob/:token/download", optionalAuth, async (req, res) => {
   try { await streamStoredPdfBlobRoute(req, res, "attachment"); }
   catch (error) { console.error("[PDF Blob Download] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
+});
+
+async function streamR2PdfRoute(req, res, disposition) {
+  const key = getR2KeyFromUrl(`/api/materials/r2/${req.params.token}`);
+  if (!key) {
+    return res.status(400).json({ success: false, message: "Token R2 không hợp lệ" });
+  }
+
+  const material = await findMaterialByR2Key(key);
+  if (material && material.is_active === false) {
+    return res.status(404).json({ success: false, message: "Không tìm thấy tài liệu" });
+  }
+  if (material?.is_premium && !checkVipAccess(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: "Tài liệu này chỉ dành cho thành viên VIP",
+      code: "VIP_REQUIRED",
+      is_vip_required: true,
+    });
+  }
+
+  return streamR2PdfByKey(res, key, disposition, material?.title);
+}
+
+router.get("/r2/:token", optionalAuth, async (req, res) => {
+  try { await streamR2PdfRoute(req, res, "inline"); }
+  catch (error) { console.error("[PDF R2] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
+});
+
+router.get("/r2/:token/download", optionalAuth, async (req, res) => {
+  try { await streamR2PdfRoute(req, res, "attachment"); }
+  catch (error) { console.error("[PDF R2 Download] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
 });
 
 // GET /api/materials/pdf/:id — Xem PDF inline (yêu cầu đăng nhập)

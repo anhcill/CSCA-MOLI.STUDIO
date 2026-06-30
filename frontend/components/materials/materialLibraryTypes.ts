@@ -99,7 +99,7 @@ export function getMaterialCoverImage(material: Material) {
 }
 
 export function canUsePdfProxy(fileUrl?: string) {
-  return Boolean(fileUrl && (/\/upload\/v\d+\//.test(fileUrl) || /\/api\/materials\/blob\/[a-f0-9]{32,96}/i.test(fileUrl)));
+  return Boolean(fileUrl && (/\/upload\/v\d+\//.test(fileUrl) || /\/api\/materials\/(?:blob|r2)\//i.test(fileUrl)));
 }
 
 export function getMaterialType(category: string) {
