@@ -25,6 +25,8 @@ export interface Comment {
     created_at: string;
     author_name: string;
     author_avatar?: string;
+    author_role?: string;
+    author_is_vip?: boolean;
     parent_id?: number;
     reply_to_user_name?: string;
     like_count: number;

@@ -9,6 +9,17 @@ import { getConversations, Conversation } from '@/lib/api/messages';
 
 const LIMIT = 20;
 
+const isAdminRole = (role?: string | null) =>
+  ['admin', 'super_admin', 'forum_admin', 'exam_admin', 'content_admin', 'user_admin', 'roadmap_admin'].includes(String(role || '').toLowerCase());
+
+function AminBadge() {
+  return (
+    <span className="shrink-0 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">
+      Amin
+    </span>
+  );
+}
+
 export default function HoTroMessagesPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
@@ -163,8 +174,11 @@ export default function HoTroMessagesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-sm font-bold truncate ${!conv.is_read && conv.sender_id !== user?.id ? 'text-gray-900' : 'text-gray-700'}`}>
-                          {conv.full_name}
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className={`truncate text-sm font-bold ${!conv.is_read && conv.sender_id !== user?.id ? 'text-gray-900' : 'text-gray-700'}`}>
+                            {conv.full_name}
+                          </span>
+                          {isAdminRole(conv.role) && <AminBadge />}
                         </span>
                         <span className="text-[10px] text-gray-400 shrink-0">{formatTime(conv.last_message_at)}</span>
                       </div>
@@ -199,6 +213,7 @@ export default function HoTroMessagesPage() {
               partnerId={selectedPartner}
               partnerName={selectedConv?.full_name || ''}
               partnerAvatar={selectedConv ? getAvatar(selectedConv) : ''}
+              partnerRole={selectedConv?.role}
               onBack={() => setSelectedPartner(null)}
             />
           ) : (

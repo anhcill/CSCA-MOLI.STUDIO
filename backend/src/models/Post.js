@@ -9,6 +9,8 @@ class Post {
         u.full_name as author_name,
         u.avatar as author_avatar,
         u.email as author_email,
+        u.role as author_role,
+        u.is_vip as author_is_vip,
         COUNT(DISTINCT pl.id)::int as like_count,
         COUNT(DISTINCT pc.id)::int as comment_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $3) as is_liked` : 'false as is_liked'}
@@ -47,6 +49,8 @@ class Post {
         u.full_name as author_name,
         u.avatar as author_avatar,
         u.email as author_email,
+        u.role as author_role,
+        u.is_vip as author_is_vip,
         COUNT(DISTINCT pl.id)::int as like_count,
         COUNT(DISTINCT pc.id)::int as comment_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $2) as is_liked` : 'false as is_liked'}
@@ -121,6 +125,8 @@ class Post {
         pc.*,
         u.full_name as author_name,
         u.avatar as author_avatar,
+        u.role as author_role,
+        u.is_vip as author_is_vip,
         ru.full_name as reply_to_user_name,
         COUNT(DISTINCT cl.id)::int as like_count,
         ${currentUserId ? `EXISTS(SELECT 1 FROM comment_likes WHERE comment_id = pc.id AND user_id = $2) as is_liked` : 'false as is_liked'}
@@ -140,9 +146,23 @@ class Post {
   // Add comment
   static async addComment(postId, userId, content, parentId = null, replyToUserId = null) {
     const query = `
-      INSERT INTO post_comments (post_id, user_id, content, parent_id, reply_to_user_id)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
+      WITH inserted AS (
+        INSERT INTO post_comments (post_id, user_id, content, parent_id, reply_to_user_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      )
+      SELECT
+        inserted.*,
+        u.full_name as author_name,
+        u.avatar as author_avatar,
+        u.role as author_role,
+        u.is_vip as author_is_vip,
+        ru.full_name as reply_to_user_name,
+        0::int as like_count,
+        false as is_liked
+      FROM inserted
+      INNER JOIN users u ON inserted.user_id = u.id
+      LEFT JOIN users ru ON inserted.reply_to_user_id = ru.id
     `;
     const result = await pool.query(query, [postId, userId, content, parentId, replyToUserId]);
     return result.rows[0];

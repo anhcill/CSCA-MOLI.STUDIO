@@ -25,11 +25,23 @@ interface Props {
   partnerId: number;
   partnerName: string;
   partnerAvatar: string;
+  partnerRole?: string | null;
   onBack: () => void;
   onNewMessageReceived?: (message?: ForumMessage) => void;
 }
 
-export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBack, onNewMessageReceived }: Props) {
+const isAdminRole = (role?: string | null) =>
+  ['admin', 'super_admin', 'forum_admin', 'exam_admin', 'content_admin', 'user_admin', 'roadmap_admin'].includes(String(role || '').toLowerCase());
+
+function AminBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className={`${compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'} shrink-0 rounded-md bg-emerald-100 font-black text-emerald-700`}>
+      Amin
+    </span>
+  );
+}
+
+export default function ChatPanel({ partnerId, partnerName, partnerAvatar, partnerRole, onBack, onNewMessageReceived }: Props) {
   const { user } = useAuthStore();
   const { bgType, bgPresetId, bgValue, setBgPreset, setBgCustom, resetBg } = useChatBgStore();
   const [messages, setMessages] = useState<ForumMessage[]>([]);
@@ -567,7 +579,10 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-extrabold text-gray-900 truncate">{partnerName}</p>
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-extrabold text-gray-900">
+            <span className="truncate">{partnerName}</span>
+            {isAdminRole(partnerRole) && <AminBadge compact />}
+          </p>
           <p className={`text-[11px] font-medium ${partnerTyping ? 'text-violet-500' : isOnline ? 'text-green-500' : 'text-gray-400'}`}>
             {partnerTyping ? 'Đang soạn tin nhắn...' : isOnline ? 'Đang hoạt động' : 'Offline'}
           </p>
@@ -742,8 +757,11 @@ export default function ChatPanel({ partnerId, partnerName, partnerAvatar, onBac
                               <div className={`text-xs opacity-75 mb-1 px-3 py-1.5 rounded-xl border-l-2 ${
                                 isOwn(msg) ? 'bg-white/10 border-white/40' : 'bg-black/5 border-violet-300/40'
                               }`}>
-                                <p className="font-bold text-[10px] mb-0.5">
-                                  {msg.reply_sender_name || 'Người dùng'}
+                                <p className="mb-0.5 font-bold text-[10px]">
+                                  <span className="inline-flex max-w-full items-center gap-1">
+                                    <span className="truncate">{msg.reply_sender_name || 'Người dùng'}</span>
+                                    {isAdminRole(msg.reply_sender_role) && <AminBadge compact />}
+                                  </span>
                                 </p>
                                 <p className="truncate max-w-[200px]">
                                   {msg.reply_is_deleted ? 'Tin nhắn đã bị thu hồi' : (msg.reply_content || 'Hình ảnh / File')}

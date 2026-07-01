@@ -14,6 +14,9 @@ interface Props {
   badge?: string;
 }
 
+const isAdminRole = (role?: string | null) =>
+  ['admin', 'super_admin', 'forum_admin', 'exam_admin', 'content_admin', 'user_admin', 'roadmap_admin'].includes(String(role || '').toLowerCase());
+
 export default function PostAuthor({
   userId, name, avatar, avatarUrl, time, role, isVip, size = 'md', badge
 }: Props) {
@@ -53,8 +56,8 @@ export default function PostAuthor({
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className={`font-bold text-gray-900 dark:text-white ${textSize} truncate`}>{name}</span>
-          {role === 'admin' && (
-            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700">Admin</span>
+          {isAdminRole(role) && (
+            <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700">Amin</span>
           )}
           {role === 'moderator' && (
             <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-700">Mod</span>

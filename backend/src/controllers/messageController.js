@@ -137,7 +137,8 @@ exports.getMessages = async (req, res) => {
         m.reply_to_id,
         rm.content as reply_content,
         rm.is_deleted as reply_is_deleted,
-        ru.full_name as reply_sender_name
+        ru.full_name as reply_sender_name,
+        ru.role as reply_sender_role
       FROM forum_messages m
       LEFT JOIN forum_messages rm ON m.reply_to_id = rm.id
       LEFT JOIN users ru ON rm.sender_id = ru.id
@@ -276,7 +277,7 @@ exports.sendMessage = async (req, res) => {
     // Fetch reply info explicitly if present
     if (msg.reply_to_id) {
       const replyRes = await db.query(`
-        SELECT rm.content as reply_content, rm.is_deleted as reply_is_deleted, ru.full_name as reply_sender_name 
+        SELECT rm.content as reply_content, rm.is_deleted as reply_is_deleted, ru.full_name as reply_sender_name, ru.role as reply_sender_role
         FROM forum_messages rm
         LEFT JOIN users ru ON rm.sender_id = ru.id
         WHERE rm.id = $1
@@ -285,6 +286,7 @@ exports.sendMessage = async (req, res) => {
         msg.reply_content = replyRes.rows[0].reply_content;
         msg.reply_is_deleted = replyRes.rows[0].reply_is_deleted;
         msg.reply_sender_name = replyRes.rows[0].reply_sender_name;
+        msg.reply_sender_role = replyRes.rows[0].reply_sender_role;
       }
     }
 

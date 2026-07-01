@@ -14,6 +14,7 @@ export interface ForumMessage {
   reply_content?: string | null;
   reply_is_deleted?: boolean;
   reply_sender_name?: string | null;
+  reply_sender_role?: string | null;
 }
 
 export interface Conversation {

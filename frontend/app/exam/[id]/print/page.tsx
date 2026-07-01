@@ -110,10 +110,29 @@ function ExamPrintContent({ examId }: { examId: string }) {
           .no-print { display: none !important; }
           body { font-size: 11pt; color: #000; }
           .question-block { page-break-inside: avoid; }
+          .pdf-watermark { opacity: 0.08; }
         }
         @page { size: A4; margin: 15mm 12mm; }
         body { font-family: Arial, sans-serif; }
+        .pdf-watermark {
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          color: #4c1d95;
+          font-size: 64px;
+          font-weight: 900;
+          letter-spacing: 0.08em;
+          opacity: 0.06;
+          transform: rotate(-28deg);
+          user-select: none;
+        }
       `}</style>
+
+      <div className="pdf-watermark" aria-hidden="true">Moly.CSCA</div>
 
       <div className="no-print flex items-center justify-between bg-purple-700 px-6 py-3 text-white">
         <span className="font-semibold">{pick({ vi: 'Xem trước đề thi', en: 'Exam preview', zh: '试卷预览' })} - {exam.questions?.length || 0}</span>
@@ -121,7 +140,7 @@ function ExamPrintContent({ examId }: { examId: string }) {
           <LanguageSwitcher compact />
           <button onClick={() => window.history.back()} className="rounded-lg bg-white/20 px-4 py-1.5 text-sm transition hover:bg-white/30">{t('common.back')}</button>
           <button onClick={() => window.print()} className="rounded-lg bg-white px-4 py-1.5 text-sm font-bold text-purple-700 transition hover:bg-purple-50">
-            {pick({ vi: 'In / Lưu PDF', en: 'Print / Save PDF', zh: '打印 / 保存PDF' })}
+            {pick({ vi: 'Tải xuống PDF', en: 'Download PDF', zh: '下载PDF' })}
           </button>
         </div>
       </div>

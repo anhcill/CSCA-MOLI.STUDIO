@@ -14,6 +14,17 @@ import PostCard from '@/components/forum/PostCard';
 import Header from '@/components/layout/Header';
 import Link from 'next/link';
 
+const isAdminRole = (role?: string | null) =>
+  ['admin', 'super_admin', 'forum_admin', 'exam_admin', 'content_admin', 'user_admin', 'roadmap_admin'].includes(String(role || '').toLowerCase());
+
+function AminBadge() {
+  return (
+    <span className="shrink-0 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">
+      Amin
+    </span>
+  );
+}
+
 const TAGS = ['Tất cả', 'HSK', 'Toán', 'Vật Lý', 'Hóa Học', 'Tiếng Anh', 'Kinh nghiệm', 'Học bổng', 'Chia sẻ'];
 
 const TAG_COLORS: Record<string, string> = {
@@ -357,7 +368,10 @@ export default function ForumPage() {
                     <div className="flex gap-4 items-center">
                       <Avatar src={user?.avatar} name={user?.full_name} size={48} />
                       <div>
-                        <p className="text-sm font-black text-gray-900 dark:text-white tracking-tight">{user?.full_name}</p>
+                        <p className="flex min-w-0 items-center gap-1.5 text-sm font-black tracking-tight text-gray-900 dark:text-white">
+                          <span className="truncate">{user?.full_name}</span>
+                          {isAdminRole(user?.role) && <AminBadge />}
+                        </p>
                         <div className="flex items-center gap-1.5 mt-1 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-md w-fit">
                           <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                           <p className="text-[10px] uppercase font-bold text-green-700 dark:text-green-300 tracking-wider">Đang kết nối viễn thông</p>

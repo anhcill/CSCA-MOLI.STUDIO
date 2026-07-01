@@ -11,6 +11,17 @@ import * as postsApi from '@/lib/api/posts';
 import type { Post } from '@/lib/api/posts';
 import PostAuthor from './PostAuthor';
 
+const isAdminRole = (role?: string | null) =>
+  ['admin', 'super_admin', 'forum_admin', 'exam_admin', 'content_admin', 'user_admin', 'roadmap_admin'].includes(String(role || '').toLowerCase());
+
+function AminBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className={`${compact ? 'px-1.5 py-0.5 text-[8px]' : 'px-1.5 py-0.5 text-[9px]'} shrink-0 rounded-md bg-emerald-100 font-black text-emerald-700`}>
+      Amin
+    </span>
+  );
+}
+
 function timeAgo(ts: string) {
   const s = (Date.now() - new Date(ts).getTime()) / 1000;
   if (s < 60) return 'vừa xong';
@@ -409,7 +420,10 @@ function CommentThread({
         </div>
         <div className="flex-1">
           <div className="inline-block max-w-full rounded-[1.15rem] bg-slate-100 px-4 py-2.5 text-left shadow-sm dark:bg-slate-800">
-            <p className="text-[13px] font-black text-gray-900 dark:text-white mb-0.5">{comment.author_name}</p>
+            <p className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[13px] font-black text-gray-900 dark:text-white">
+              <span className="truncate">{comment.author_name}</span>
+              {isAdminRole(comment.author_role) && <AminBadge compact />}
+            </p>
             <p className="text-[14px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
               {comment.reply_to_user_name && (
                 <span className="font-bold text-violet-600 mr-1.5">@{comment.reply_to_user_name}</span>
@@ -457,7 +471,10 @@ function CommentThread({
               </div>
               <div className="flex-1">
                 <div className="inline-block max-w-full rounded-[1.05rem] bg-white px-3 py-1.5 shadow-sm dark:bg-slate-800">
-                  <p className="text-[12px] font-black text-gray-900 dark:text-white mb-0.5">{r.author_name}</p>
+                  <p className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[12px] font-black text-gray-900 dark:text-white">
+                    <span className="truncate">{r.author_name}</span>
+                    {isAdminRole(r.author_role) && <AminBadge compact />}
+                  </p>
                   <p className="text-[13px] text-gray-700 dark:text-slate-200 leading-snug font-medium">
                     {r.reply_to_user_name && (
                       <span className="font-bold text-violet-600 mr-1">@{r.reply_to_user_name}</span>
