@@ -16,8 +16,6 @@ interface ReviewAIHostProps {
   onOpenChat?: () => void;
 }
 
-const BUSY_MESSAGE = 'AI đang xử lý câu khác. Mở lại ô AI ở góc hoặc đóng kết quả hiện tại rồi hỏi tiếp.';
-
 const ReviewAIHost = forwardRef<ReviewAIHostHandle, ReviewAIHostProps>(function ReviewAIHost(
   { attemptId, languageMode, onOpenChat },
   ref,
@@ -36,14 +34,10 @@ const ReviewAIHost = forwardRef<ReviewAIHostHandle, ReviewAIHostProps>(function 
 
   useImperativeHandle(ref, () => ({
     open(question, mode) {
-      if (taskRef.current) {
-        alert(BUSY_MESSAGE);
-        return;
-      }
-
+      // Replace current task instead of blocking with alert()
       const nextTask = { question, mode };
       taskRef.current = nextTask;
-      window.requestAnimationFrame(() => setTask(nextTask));
+      setTask(nextTask);
     },
     close,
     isOpen() {

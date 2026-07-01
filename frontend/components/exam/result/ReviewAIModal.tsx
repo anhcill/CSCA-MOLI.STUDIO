@@ -73,14 +73,12 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
       setCuteMessage(pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
 
       try {
+        const prompt = mode === 'theory'
+          ? buildQuestionTheoryPrompt(question, questionText, languageMode)
+          : buildQuestionExplanationPrompt(question, questionText, languageMode);
         const res = await authFetch('/api/ai/ask', {
           method: 'POST',
-          body: JSON.stringify({
-            question: mode === 'theory'
-              ? buildQuestionTheoryPrompt(question, questionText, languageMode)
-              : buildQuestionExplanationPrompt(question, questionText, languageMode),
-            attemptId,
-          }),
+          body: JSON.stringify({ question: prompt, attemptId }),
         });
         const data = await res.json();
         if (alive) setAnswer(data);
@@ -92,12 +90,10 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
       }
     }
 
-    const frameId = window.requestAnimationFrame(loadAnswer);
-    return () => {
-      alive = false;
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [attemptId, mode, question, questionText, taskKey]);
+    loadAnswer();
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskKey]);
 
   useEffect(() => {
     if (minimized) return;
