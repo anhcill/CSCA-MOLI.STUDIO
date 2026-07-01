@@ -6,6 +6,25 @@ function createAttemptError(message, statusCode) {
   return error;
 }
 
+function normalizeScore(rawScore, possibleScore) {
+  const raw = Number(rawScore) || 0;
+  const possible = Number(possibleScore) || 0;
+  if (possible <= 0) {
+    return {
+      score_scale_10: 0,
+      score_scale_100: 0,
+      total_possible_score: 0,
+    };
+  }
+
+  const ratio = Math.max(0, Math.min(1, raw / possible));
+  return {
+    score_scale_10: Number((ratio * 10).toFixed(2)),
+    score_scale_100: Number((ratio * 100).toFixed(1)),
+    total_possible_score: Number(possible.toFixed(2)),
+  };
+}
+
 const ExamAttempt = {
   async getInProgress(userId, examId) {
     const result = await pool.query(
@@ -238,6 +257,12 @@ const ExamAttempt = {
 
       const examQuery = `
         SELECT ea.*, e.total_questions,
+               COALESCE((
+                 SELECT SUM(q.points)
+                 FROM questions q
+                 WHERE q.exam_id = e.id
+                   AND q.deleted_at IS NULL
+               ), 0) as total_possible_score,
                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ea.start_time))::INTEGER as duration
         FROM exam_attempts ea
         INNER JOIN exams e ON ea.exam_id = e.id
@@ -254,7 +279,11 @@ const ExamAttempt = {
       }
       if (examInfo.status === "completed") {
         await client.query("COMMIT");
-        return { ...examInfo, already_completed: true };
+        return {
+          ...examInfo,
+          ...normalizeScore(examInfo.total_score, examInfo.total_possible_score),
+          already_completed: true,
+        };
       }
       if (!["in_progress", "practice"].includes(examInfo.status)) {
         throw createAttemptError("Attempt cannot be submitted", 409);
@@ -266,13 +295,20 @@ const ExamAttempt = {
           COALESCE(COUNT(*), 0) as total_answered,
           COALESCE(SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END), 0) as total_correct,
           COALESCE(SUM(CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END), 0) as total_incorrect,
-          COALESCE(SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END), 0) as total_score
+          COALESCE(SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END), 0) as total_score,
+          COALESCE((
+            SELECT SUM(q2.points)
+            FROM questions q2
+            WHERE q2.exam_id = $2
+              AND q2.deleted_at IS NULL
+          ), 0) as total_possible_score
         FROM user_answers ua
         INNER JOIN questions q ON ua.question_id = q.id
         WHERE ua.attempt_id = $1
       `;
-      const statsResult = await client.query(statsQuery, [attemptId]);
+      const statsResult = await client.query(statsQuery, [attemptId, examInfo.exam_id]);
       const stats = statsResult.rows[0];
+      const normalizedScore = normalizeScore(stats.total_score, stats.total_possible_score);
 
       const totalUnanswered =
         examInfo.total_questions - parseInt(stats.total_answered);
@@ -306,7 +342,7 @@ const ExamAttempt = {
       await this.updateTopicStats(client, attemptId);
 
       await client.query("COMMIT");
-      return { ...result.rows[0], already_completed: false };
+      return { ...result.rows[0], ...normalizedScore, already_completed: false };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -558,6 +594,13 @@ const ExamAttempt = {
     }
 
     attempt.answers = formattedAnswers;
+    Object.assign(
+      attempt,
+      normalizeScore(
+        attempt.total_score,
+        formattedAnswers.reduce((sum, answer) => sum + (Number(answer.points) || 0), 0),
+      ),
+    );
 
     // Attach video solution if exists
     attempt.solution_video_url = attempt.solution_video_url || null;

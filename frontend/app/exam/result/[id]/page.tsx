@@ -70,6 +70,9 @@ interface AttemptResult {
     title_cn?: string;
     subject_name: string;
     total_score: number;
+    total_possible_score?: number;
+    score_scale_10?: number;
+    score_scale_100?: number;
     total_correct: number;
     total_incorrect?: number;
     total_unanswered?: number;
@@ -194,7 +197,17 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && !a.is_correct).length;
     const totalUnanswered = result.total_unanswered ?? Math.max(0, total - totalCorrect - totalIncorrect);
     const accuracy = Math.round((totalCorrect / total) * 100);
-    const displayScore = Math.round((totalCorrect / total) * 100) / 10;
+    const rawScore = Number(result.total_score) || 0;
+    const fallbackPossibleScore = answers.reduce((sum, answer) => sum + (Number(answer.points) || 0), 0) || total;
+    const possibleScore = Number(result.total_possible_score) || fallbackPossibleScore;
+    const displayScore = Number.isFinite(Number(result.score_scale_10))
+        ? Number(result.score_scale_10)
+        : possibleScore > 0
+            ? Math.max(0, Math.min(10, (rawScore / possibleScore) * 10))
+            : Math.round((totalCorrect / total) * 100) / 10;
+    const score100 = Number.isFinite(Number(result.score_scale_100))
+        ? Number(result.score_scale_100)
+        : Math.max(0, Math.min(100, displayScore * 10));
 
     const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
     const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
@@ -279,10 +292,17 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         {/* Outer soft glowing circle */}
                                         <div className={`absolute inset-0 rounded-full blur-xl opacity-20 bg-gradient-to-br ${gradeColors.progress}`} />
                                         <span className={`relative text-6xl font-black bg-gradient-to-br ${gradeColors.progress} bg-clip-text text-transparent leading-none py-2 px-1`}>
-                                            {displayScore.toFixed(1)}
+                                            {score100.toFixed(1)}
                                         </span>
                                     </div>
-                                    <p className="text-gray-400 dark:text-gray-500 text-xs font-semibold">/ 10 điểm</p>
+                                    <p className="text-gray-400 dark:text-gray-500 text-xs font-semibold">/ 100 điểm</p>
+                                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                                        <span>Thang 10</span>
+                                        <span className={gradeColors.text}>{displayScore.toFixed(2)}/10</span>
+                                    </div>
+                                    <p className="mt-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                                        Điểm thô: {rawScore.toFixed(1)}/{possibleScore.toFixed(1)}
+                                    </p>
                                 </div>
                                 <div className="w-full bg-gray-100 dark:bg-gray-850 rounded-full h-3 overflow-hidden mb-3">
                                     <div className={`h-full bg-gradient-to-r ${gradeColors.progress} rounded-full transition-all duration-700`}
