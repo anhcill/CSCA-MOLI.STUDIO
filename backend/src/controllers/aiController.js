@@ -821,7 +821,7 @@ async function askAI(req, res) {
       return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
     }
 
-    const { question, attemptId, conversationHistory, imageDataUrl } = req.body;
+    const { question, attemptId, conversationHistory, imageDataUrl, cacheContext } = req.body;
     const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
     if (!imageCheck.ok) {
       return res.status(400).json({ success: false, message: imageCheck.message, answer: imageCheck.message });
@@ -848,7 +848,7 @@ async function askAI(req, res) {
     });
     if (useAskCache) {
       try {
-        const cached = await aiAskCacheService.getCachedAskAnswer({ question, context });
+        const cached = await aiAskCacheService.getCachedAskAnswer({ question, context, cacheContext });
         if (cached) {
           const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
           return res.json({
@@ -899,6 +899,7 @@ async function askAI(req, res) {
       await aiAskCacheService.saveAskAnswer({
         question,
         context,
+        cacheContext,
         answer: result.answer,
         userId,
         attemptId,
@@ -1584,7 +1585,32 @@ async function teachGrammar(req, res) {
       return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
     }
 
-    const { question, topic, wrongAnswer, correctAnswer, userLevel } = req.body;
+    const { question, topic, wrongAnswer, correctAnswer, userLevel, cacheContext } = req.body;
+
+    try {
+      const cached = await aiAskCacheService.getCachedAskAnswer({
+        question,
+        context: { subjectName: topic || '', examTitle: '' },
+        cacheContext: {
+          ...(cacheContext || {}),
+          mode: 'theory',
+          topic,
+        },
+      });
+      if (cached) {
+        const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
+        const parsed = JSON.parse(cached.answer);
+        return res.json({
+          success: true,
+          cached: true,
+          cacheSource: 'db',
+          cacheAge: age,
+          ...aiService.sanitizePublicAIValue(parsed),
+        });
+      }
+    } catch (error) {
+      console.error('AI theory cache lookup failed:', error.message);
+    }
 
     if (aiService.isRateLimited()) {
       return res.json({
@@ -1602,7 +1628,22 @@ async function teachGrammar(req, res) {
       userLevel,
     });
 
-    res.json({ success: true, ...result });
+    if (result?.success !== false) {
+      await aiAskCacheService.saveAskAnswer({
+        question,
+        context: { subjectName: topic || '', examTitle: '' },
+        cacheContext: {
+          ...(cacheContext || {}),
+          mode: 'theory',
+          topic,
+        },
+        answer: result,
+        userId,
+        attemptId: cacheContext?.attemptId || cacheContext?.attempt_id || null,
+      }).catch((error) => console.error('Failed to save AI theory cache:', error.message));
+    }
+
+    res.json({ success: true, cached: false, ...result });
   } catch (error) {
     console.error('teachGrammar error:', error);
     res.status(500).json({ success: false, message: 'Lỗi tạo bài giảng' });

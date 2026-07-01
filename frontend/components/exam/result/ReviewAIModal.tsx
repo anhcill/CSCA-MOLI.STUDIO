@@ -36,6 +36,21 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
   const answerStatus = getQuestionReviewStatus(question);
   const taskKey = `${attemptId}:${mode}:${question.question_id || question.id || question.question_number}:${question.sub_question_number || 0}`;
   const title = mode === 'theory' ? 'Giảng lại lý thuyết' : `Phân tích câu ${questionNo}`;
+  const cacheContext = useMemo(() => ({
+    attemptId,
+    mode,
+    questionId: question.question_id || question.id || null,
+    questionNumber: question.question_number,
+    subQuestionNumber: question.sub_question_number || null,
+    questionText,
+    languageMode,
+    topic: question.topic_name || question.question_category || languageMode || 'CSCA',
+    status: answerStatus,
+    selectedAnswerKey: question.selected_answer_key || '',
+    selectedAnswerText: question.selected_answer_text || '',
+    correctAnswerKey: question.correct_answer_key || '',
+    correctAnswerText: question.correct_answer_text || '',
+  }), [answerStatus, attemptId, languageMode, mode, question, questionNo, questionText]);
 
   const minimizeModal = useCallback(() => setMinimized(true), []);
   const restoreModal = useCallback(() => setMinimized(false), []);
@@ -81,11 +96,16 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
               wrongAnswer: formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua'),
               correctAnswer: formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng'),
               userLevel: 'intermediate',
+              cacheContext,
             }),
           })
           : await authFetch('/api/ai/ask', {
             method: 'POST',
-            body: JSON.stringify({ question: buildQuestionExplanationPrompt(question, questionText, languageMode), attemptId }),
+            body: JSON.stringify({
+              question: buildQuestionExplanationPrompt(question, questionText, languageMode),
+              attemptId,
+              cacheContext,
+            }),
           });
         const data = await res.json();
         if (alive) setAnswer(data);
