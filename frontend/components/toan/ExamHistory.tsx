@@ -17,6 +17,15 @@ function getAttemptResultHref(item: { id: number | string; exam_id?: number | st
     : `/exam/result/${item.id}`;
 }
 
+function getNormalizedScore(item: any): number {
+  const percentage = Number(item.score_percentage);
+  if (Number.isFinite(percentage)) return Math.max(0, Math.min(10, percentage / 10));
+  const possible = Number(item.total_possible_score) || 0;
+  if (possible > 0) return Math.max(0, Math.min(10, (Number(item.total_score) || 0) / possible * 10));
+  const total = Number(item.total_questions) || 0;
+  return total > 0 ? Math.max(0, Math.min(10, (Number(item.total_correct) || 0) / total * 10)) : 0;
+}
+
 export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
   const router = useRouter();
   const [history, setHistory] = useState<any[]>([]);
@@ -59,7 +68,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
   // Chart data: last 10 attempts
   const chartData = [...history].reverse().map((item, i) => ({
     name: `Lần ${history.length - i}`,
-    diem: Number(item.total_score) || 0,
+    diem: getNormalizedScore(item),
     dung: item.total_correct,
   }));
 
@@ -91,7 +100,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
             <p className="text-xs text-gray-600">Điểm trung bình</p>
             <p className="text-lg font-bold text-gray-900">
               {history.length > 0
-                ? (history.reduce((sum, item) => sum + (Number(item.total_score) || 0), 0) / history.length).toFixed(1)
+                ? (history.reduce((sum, item) => sum + getNormalizedScore(item), 0) / history.length).toFixed(1)
                 : '0'}/10
             </p>
           </div>
@@ -165,8 +174,8 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
               <div className="flex-1">
                 <div className="flex items-center space-x-3 mb-2">
                   <h4 className="text-base font-bold text-gray-900">{item.exam_title}</h4>
-                  <span className={`px-2 py-1 ${getStatusColor(Number(item.total_score) >= 8 ? 'excellent' : Number(item.total_score) >= 7 ? 'good' : Number(item.total_score) >= 5 ? 'average' : 'poor')} text-white text-xs font-semibold rounded-full`}>
-                    {getStatusText(Number(item.total_score) || 0)}
+                  <span className={`px-2 py-1 ${getStatusColor(getNormalizedScore(item) >= 8 ? 'excellent' : getNormalizedScore(item) >= 7 ? 'good' : getNormalizedScore(item) >= 5 ? 'average' : 'poor')} text-white text-xs font-semibold rounded-full`}>
+                    {getStatusText(getNormalizedScore(item))}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -175,7 +184,7 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-blue-600">{(Number(item.total_score) || 0).toFixed(1)}</p>
+                <p className="text-3xl font-bold text-blue-600">{getNormalizedScore(item).toFixed(1)}</p>
                 <p className="text-xs text-gray-500">/ 10</p>
               </div>
             </div>
@@ -197,8 +206,8 @@ export default function ExamHistory({ subjectCode }: ExamHistoryProps) {
             {/* Progress Bar */}
             <div className="mt-3 w-full bg-gray-100 rounded-full h-2 overflow-hidden">
               <div
-                className={`h-full ${item.total_score >= 8 ? 'bg-green-500' : item.total_score >= 7 ? 'bg-blue-500' : item.total_score >= 5 ? 'bg-yellow-500' : 'bg-red-500'} transition-all duration-500`}
-                style={{ width: `${(item.total_correct / item.total_questions) * 100}%` }}
+                className={`h-full ${getNormalizedScore(item) >= 8 ? 'bg-green-500' : getNormalizedScore(item) >= 7 ? 'bg-blue-500' : getNormalizedScore(item) >= 5 ? 'bg-yellow-500' : 'bg-red-500'} transition-all duration-500`}
+                style={{ width: `${getNormalizedScore(item) * 10}%` }}
               ></div>
             </div>
           </button>

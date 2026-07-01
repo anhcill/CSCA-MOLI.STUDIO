@@ -878,6 +878,33 @@ function normalizeEssayGrade(ai) {
   };
 }
 
+function sanitizeStudyHelperText(value) {
+  return asPublicString(value)
+    .replace(/\\([*_#])/g, '$1')
+    .replace(/\*{2,3}([^*\n]+)\*{2,3}/g, '$1')
+    .replace(/_{2,3}([^_\n]+)_{2,3}/g, '$1')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\\{2,}(?=(?:frac|sqrt|log|sum|int|left|right|pi|infty|mathbb|leq?|geq?|neq?|to|in)\b)/g, '\\')
+    .trim();
+}
+
+function normalizeLessonExample(item) {
+  let vietnamese = sanitizeStudyHelperText(item?.vietnamese);
+  let usage = sanitizeStudyHelperText(item?.usage);
+  const embeddedUsage = vietnamese.match(/(?:^|\s)Ứng dụng\s*[:：]\s*([\s\S]+)$/i);
+  if (embeddedUsage) {
+    if (!usage) usage = embeddedUsage[1].trim();
+    vietnamese = vietnamese.slice(0, embeddedUsage.index).trim();
+  }
+
+  return {
+    chinese: sanitizeStudyHelperText(item?.chinese),
+    pinyin: asString(item?.pinyin),
+    vietnamese,
+    usage,
+  };
+}
+
 function formatGrammarLessonAnswer(lesson) {
   const lines = [
     lesson.title && `Bài học: ${lesson.title}`,
@@ -907,17 +934,12 @@ function formatGrammarLessonAnswer(lesson) {
 function normalizeGrammarLesson(ai) {
   const lesson = {
     success: true,
-    title: asPublicString(ai?.title, 'Bài học ngữ pháp'),
-    grammarRule: asPublicString(ai?.grammarRule),
-    examples: asArray(ai?.examples).map(item => ({
-      chinese: asPublicString(item?.chinese),
-      pinyin: asString(item?.pinyin),
-      vietnamese: asPublicString(item?.vietnamese),
-      usage: asPublicString(item?.usage),
-    })).filter(item => item.chinese || item.vietnamese),
-    memoryTips: asArray(ai?.memoryTips).map(v => asPublicString(v)).filter(Boolean),
-    commonMistakes: asArray(ai?.commonMistakes).map(v => asPublicString(v)).filter(Boolean),
-    relatedTopics: asArray(ai?.relatedTopics).map(v => asPublicString(v)).filter(Boolean),
+    title: sanitizeStudyHelperText(ai?.title) || 'Bài học ngữ pháp',
+    grammarRule: sanitizeStudyHelperText(ai?.grammarRule),
+    examples: asArray(ai?.examples).map(normalizeLessonExample).filter(item => item.chinese || item.vietnamese),
+    memoryTips: asArray(ai?.memoryTips).map(sanitizeStudyHelperText).filter(Boolean),
+    commonMistakes: asArray(ai?.commonMistakes).map(sanitizeStudyHelperText).filter(Boolean),
+    relatedTopics: asArray(ai?.relatedTopics).map(sanitizeStudyHelperText).filter(Boolean),
   };
   return {
     ...lesson,
@@ -928,7 +950,11 @@ function normalizeGrammarLesson(ai) {
 // ─── Fallback rule-based analysis ─────────────────────────────────────────────
 function ruleBasedExamAnalysis(attemptData) {
   const { totalScore, totalQuestions, correctCount, subjectName, questions } = attemptData;
-  const percentage = Math.round((correctCount / totalQuestions) * 100);
+  const percentage = Math.round(
+    Number.isFinite(Number(attemptData.scorePercentage))
+      ? Number(attemptData.scorePercentage)
+      : ((correctCount / Math.max(1, totalQuestions)) * 100),
+  );
 
   const isPassing = percentage >= 60;
   const isExcellent = percentage >= 85;
@@ -1247,9 +1273,11 @@ async function analyzeTopics(examAttempts) {
   const subjectStats = {};
   examAttempts.forEach(attempt => {
     const subject = attempt.subject_name || attempt.subject || 'Tổng hợp';
-    const percentage = attempt.total_questions > 0
-      ? (attempt.total_correct / attempt.total_questions) * 100
-      : parseFloat(attempt.total_score) || 0;
+    const percentage = Number.isFinite(Number(attempt.score_percentage))
+      ? Number(attempt.score_percentage)
+      : (attempt.total_questions > 0
+        ? (attempt.total_correct / attempt.total_questions) * 100
+        : parseFloat(attempt.total_score) || 0);
     if (!subjectStats[subject]) subjectStats[subject] = { scores: [], count: 0 };
     subjectStats[subject].scores.push(percentage);
     subjectStats[subject].count += 1;
@@ -1764,9 +1792,11 @@ async function analyzeProgress(examAttempts) {
     examId: a.exam_id,
     examTitle: a.exam_title || a.title || 'Đề thi',
     date: a.submit_time,
-    score: a.total_questions > 0
-      ? Math.round((a.total_correct / a.total_questions) * 100)
-      : parseFloat(a.total_score) || 0,
+    score: Number.isFinite(Number(a.score_percentage))
+      ? Math.round(Number(a.score_percentage))
+      : (a.total_questions > 0
+        ? Math.round((a.total_correct / a.total_questions) * 100)
+        : parseFloat(a.total_score) || 0),
     correct: a.total_correct,
     total: a.total_questions,
   }));
@@ -1974,9 +2004,11 @@ async function generateFullAnalysis(examAttempts, allExams = []) {
     progress,
     recommendations: recs,
     nextExam: await recommendNextExam({
-      userScore: latestAttempt?.total_questions > 0
-        ? Math.round((latestAttempt.total_correct / latestAttempt.total_questions) * 100)
-        : parseFloat(latestAttempt?.total_score) || 60,
+      userScore: Number.isFinite(Number(latestAttempt?.score_percentage))
+        ? Math.round(Number(latestAttempt.score_percentage))
+        : (latestAttempt?.total_questions > 0
+          ? Math.round((latestAttempt.total_correct / latestAttempt.total_questions) * 100)
+          : parseFloat(latestAttempt?.total_score) || 60),
       subjectName: latestAttempt?.subject_name,
       allExams,
     }).catch(() => ({
@@ -2106,6 +2138,9 @@ Nhiệm vụ:
 - Nếu không phải tiếng Trung: giải thích kiến thức môn đó, không ép thành ngữ pháp tiếng Trung.
 - Trong "grammarRule", nêu vì sao đáp án đúng đúng và vì sao đáp án học sinh chọn sai.
 - Viết ngắn, chính xác, đủ ý; không lan man; không dùng markdown.
+- Mỗi field JSON chỉ chứa nội dung thuần: tuyệt đối không dùng **, __, ###, dấu gạch phân cách hoặc tự chèn nhãn "Ứng dụng:" vào field khác.
+- Với công thức Toán/Khoa học: ưu tiên ký hiệu Unicode →, ≤, ≥, ≠, ∈ trong câu văn. Công thức phức tạp phải nằm trọn trong \\( ... \\), không để lệnh như \\ge, \\le, \\frac đứng ngoài vùng công thức.
+- Tách kết luận khỏi phép biến đổi; không ghép "Kết luận" hoặc "Ứng dụng" vào cuối dòng công thức.
 - Trả về JSON hợp lệ duy nhất, không thêm chữ ngoài JSON.
 
 Độ dài bắt buộc:

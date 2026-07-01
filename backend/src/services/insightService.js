@@ -92,7 +92,7 @@ async function getOverview(userId) {
         COALESCE(AVG(ea.total_score), 0)::DECIMAL as avg_score,
         COALESCE(MAX(ea.total_score), 0)::DECIMAL as highest_score,
         COALESCE(
-          AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100), 0
+          AVG(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)), 0
         )::DECIMAL as avg_percentage,
         COALESCE(
           AVG(CASE WHEN ea.total_score IS NOT NULL THEN ea.total_score END), 0
@@ -1332,12 +1332,12 @@ async function analyzeByExamType(userId) {
         COUNT(DISTINCT ea.user_id)::INTEGER as unique_users,
         COALESCE(
           AVG(CASE WHEN ea.status = 'completed'
-            THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
           END), 0
         )::DECIMAL as avg_percentage,
         COALESCE(
           MAX(CASE WHEN ea.status = 'completed'
-            THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
           END), 0
         )::DECIMAL as max_percentage,
         COALESCE(
@@ -1347,7 +1347,7 @@ async function analyzeByExamType(userId) {
           ROUND(
             COUNT(DISTINCT CASE WHEN
               ea.status = 'completed' AND
-              ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
             THEN ea.id END)::DECIMAL /
             NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
           ), 0
@@ -1426,7 +1426,7 @@ async function analyzeWeekdayPattern(userId) {
         TO_CHAR(submit_time, 'YYYY-MM-DD') as date_str,
         COUNT(DISTINCT ea.id)::INTEGER as attempt_count,
         AVG(CASE WHEN ea.status = 'completed'
-          THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+          THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
         END)::DECIMAL as avg_percentage,
         AVG(CASE WHEN ea.status = 'completed' THEN ea.total_score END)::DECIMAL as avg_score,
         COALESCE(SUM(ea.duration_seconds), 0)::INTEGER as total_duration
@@ -1530,12 +1530,12 @@ async function getHardestExams(userId) {
         COUNT(ea.id)::INTEGER as total_attempts,
         COALESCE(
           AVG(CASE WHEN ea.status = 'completed'
-            THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
           END), 0
         )::DECIMAL as user_avg_percentage,
         COALESCE(
           MAX(CASE WHEN ea.status = 'completed'
-            THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+            THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
           END), 0
         )::DECIMAL as user_best_percentage,
         COALESCE(
@@ -1545,7 +1545,7 @@ async function getHardestExams(userId) {
           ROUND(
             COUNT(DISTINCT CASE WHEN
               ea.status = 'completed' AND
-              ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
             THEN ea.id END)::DECIMAL /
             NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
           ), 0
@@ -1553,14 +1553,14 @@ async function getHardestExams(userId) {
         COALESCE(
           AVG(CASE WHEN ea.status = 'completed'
             THEN ROUND(
-              ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100, 1
+              COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100), 1
             ) END), 0
         )::DECIMAL as overall_avg_percentage,
         COALESCE(
           ROUND(
             COUNT(DISTINCT CASE WHEN
               ea_all.status = 'completed' AND
-              ea_all.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+              COALESCE(ea_all.score_percentage, ea_all.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
             THEN ea_all.id END)::DECIMAL /
             NULLIF(COUNT(DISTINCT CASE WHEN ea_all.status = 'completed' THEN ea_all.id END), 0) * 100, 1
           ), 0

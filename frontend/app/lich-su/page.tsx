@@ -21,6 +21,8 @@ interface HistoryItem {
   subject_name: string;
   subject_code: string;
   total_score: number;
+  total_possible_score?: number | string;
+  score_percentage?: number | string;
   total_correct: number;
   total_questions: number;
   time_spent: number;
@@ -37,7 +39,15 @@ const SUBJECT_META: Record<string, { color: string; bg: string; emoji: string }>
   CHINESE: { color: 'text-red-700', bg: 'bg-red-100', emoji: '🈶' },
 };
 
-function attemptAccuracy(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): number {
+function attemptAccuracy(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score' | 'total_possible_score' | 'score_percentage'>): number {
+  const storedPercentage = Number(item.score_percentage);
+  if (Number.isFinite(storedPercentage)) {
+    return Math.max(0, Math.min(100, storedPercentage));
+  }
+  const possibleScore = Number(item.total_possible_score) || 0;
+  if (possibleScore > 0) {
+    return Math.max(0, Math.min(100, ((Number(item.total_score) || 0) / possibleScore) * 100));
+  }
   const totalQuestions = Number(item.total_questions) || 0;
   if (totalQuestions > 0) {
     return Math.max(0, Math.min(100, ((Number(item.total_correct) || 0) / totalQuestions) * 100));
@@ -45,15 +55,15 @@ function attemptAccuracy(item: Pick<HistoryItem, 'total_correct' | 'total_questi
   return Math.max(0, Math.min(100, (Number(item.total_score) || 0) * 10));
 }
 
-function attemptPassed(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): boolean {
+function attemptPassed(item: HistoryItem): boolean {
   return attemptAccuracy(item) >= 50;
 }
 
-function attemptScore(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>): number {
+function attemptScore(item: HistoryItem): number {
   return attemptAccuracy(item) / 10;
 }
 
-function scoreBadge(item: Pick<HistoryItem, 'total_correct' | 'total_questions' | 'total_score'>, t: (key: string) => string): { label: string; cls: string } {
+function scoreBadge(item: HistoryItem, t: (key: string) => string): { label: string; cls: string } {
   const accuracy = attemptAccuracy(item);
   if (accuracy >= 80) return { label: t('history.excellent'), cls: 'bg-emerald-100 text-emerald-700' };
   if (accuracy >= 65) return { label: t('history.good'), cls: 'bg-blue-100 text-blue-700' };

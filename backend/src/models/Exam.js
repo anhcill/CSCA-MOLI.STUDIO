@@ -96,7 +96,7 @@ const Exam = {
             ROUND(
               COUNT(DISTINCT CASE WHEN
                 ea.status = 'completed' AND
-                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+                COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
               THEN ea.id END)::DECIMAL /
               NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
             ), 0
@@ -153,7 +153,7 @@ const Exam = {
             ROUND(
               COUNT(DISTINCT CASE WHEN
                 ea.status = 'completed' AND
-                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+                COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
               THEN ea.id END)::DECIMAL /
               NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
             ), 0

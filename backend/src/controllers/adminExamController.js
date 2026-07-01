@@ -1,6 +1,7 @@
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
+const { syncExamTotals } = require("../utils/examScoring");
 const {
   previewImportFile,
   normalizeImportedItem,
@@ -761,10 +762,7 @@ const AdminExamController = {
         insertedItems.push(insertedItem);
       }
 
-      await client.query(
-        "UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2",
-        [totalImportQuestions, examId],
-      );
+      await syncExamTotals(client, examId);
 
       await client.query("COMMIT");
 
@@ -2349,10 +2347,7 @@ const AdminExamController = {
         }
 
         // ── UPDATE exam total_questions ──
-        await client.query(
-          "UPDATE exams SET total_questions = total_questions + 1, updated_at = NOW() WHERE id = $1",
-          [examId],
-        );
+        await syncExamTotals(client, examId);
 
         await client.query("COMMIT");
 
@@ -2525,13 +2520,13 @@ const AdminExamController = {
           }
         }
 
-        await client.query(
-          `UPDATE exams e
-           SET updated_at = NOW()
-           FROM questions q
-           WHERE q.id = $1 AND q.exam_id = e.id`,
+        const examSyncResult = await client.query(
+          "SELECT exam_id FROM questions WHERE id = $1",
           [questionId],
         );
+        if (examSyncResult.rows[0]) {
+          await syncExamTotals(client, examSyncResult.rows[0].exam_id);
+        }
 
         await client.query("COMMIT");
         cache.delByPrefix("exams:");
@@ -2608,10 +2603,7 @@ const AdminExamController = {
         if (isAnswerableQuestion) {
           await shiftQuestionNumbers(client, examId, deletedQuestionNumber + 1, -1);
         }
-        await client.query(
-          "UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2",
-          [isAnswerableQuestion ? 1 : 0, examId],
-        );
+        await syncExamTotals(client, examId);
 
         await client.query("COMMIT");
         cache.delByPrefix("exams:");
@@ -2823,10 +2815,7 @@ const AdminExamController = {
                 }
 
                 // ── Update exam total_questions ──
-                await client.query(
-                    "UPDATE exams SET total_questions = total_questions + 1, updated_at = NOW() WHERE id = $1",
-                    [examId],
-                );
+                await syncExamTotals(client, examId);
 
                 await client.query("COMMIT");
 
@@ -3061,7 +3050,7 @@ const AdminExamController = {
           )::DECIMAL as completion_rate,
           COALESCE(
             AVG(CASE WHEN ea.status = 'completed'
-              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+              THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
             END), 0
           )::DECIMAL as avg_score_percentage,
           COALESCE(
@@ -3086,14 +3075,14 @@ const AdminExamController = {
             ROUND(
               COUNT(DISTINCT CASE WHEN
                 ea.status = 'completed' AND
-                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+                COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
               THEN ea.id END)::DECIMAL /
               NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
             ), 0
           )::DECIMAL as pass_rate,
           COALESCE(
             AVG(CASE WHEN ea.status = 'completed'
-              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+              THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
             END), 0
           )::DECIMAL as avg_percentage,
           COALESCE(
@@ -3122,14 +3111,14 @@ const AdminExamController = {
             ROUND(
               COUNT(DISTINCT CASE WHEN
                 ea.status = 'completed' AND
-                ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+                COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
               THEN ea.id END)::DECIMAL /
               NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
             ), 0
           )::DECIMAL as pass_rate,
           COALESCE(
             AVG(CASE WHEN ea.status = 'completed'
-              THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+              THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
             END), 0
           )::DECIMAL as avg_percentage
         FROM subjects s
@@ -3815,10 +3804,7 @@ const AdminExamController = {
           insertedSubs.push({ id: subId, questionNumber, correctAnswer: q.correctAnswer });
         }
 
-        await client.query(
-          'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-          [insertedSubs.length, examId]
-        );
+        await syncExamTotals(client, examId);
 
         await client.query('COMMIT');
         cache.delByPrefix('exams:');
@@ -3986,10 +3972,7 @@ const AdminExamController = {
             insertedSubs.push({ id: subId, questionNumber });
           }
 
-          await client.query(
-            'UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2',
-            [delta, examId]
-          );
+          await syncExamTotals(client, examId);
         }
 
         await client.query('COMMIT');
@@ -4044,10 +4027,7 @@ const AdminExamController = {
           await shiftQuestionNumbers(client, examId, oldEnd + 1, -totalCount);
         }
 
-        await client.query(
-          'UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2',
-          [totalCount, examId]
-        );
+        await syncExamTotals(client, examId);
 
         await client.query('COMMIT');
         cache.delByPrefix('exams:');

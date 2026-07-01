@@ -214,6 +214,12 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS grading_result JSONB,
       ADD COLUMN IF NOT EXISTS graded_at TIMESTAMP
     `);
+    await pool.query(`
+      ALTER TABLE exam_attempts
+      ADD COLUMN IF NOT EXISTS total_possible_score NUMERIC(8,2),
+      ADD COLUMN IF NOT EXISTS score_percentage NUMERIC(7,3),
+      ADD COLUMN IF NOT EXISTS total_pending_grading INTEGER NOT NULL DEFAULT 0
+    `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_vocab_subject_topic ON vocabulary_items(subject, topic) WHERE is_active = TRUE`,
     );

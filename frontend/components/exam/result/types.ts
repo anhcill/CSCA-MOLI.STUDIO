@@ -24,7 +24,7 @@ export interface QuestionResult {
   correct_answer_text: string;
   correct_answer_text_cn?: string | null;
   correct_answer_text_en?: string | null;
-  is_correct: boolean;
+  is_correct: boolean | null;
   points: number;
   score_awarded?: number | string | null;
   max_score?: number | string | null;

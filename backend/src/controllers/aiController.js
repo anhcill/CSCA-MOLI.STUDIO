@@ -5,6 +5,7 @@ const { canUseAIFeatures } = require('../middleware/authMiddleware');
 const coinService = require('../services/coinService');
 const dailyGiftLetterService = require('../services/dailyGiftLetterService');
 const aiAskCacheService = require('../services/aiAskCacheService');
+const ExamAttempt = require('../models/ExamAttempt');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
 const userCooldowns = new Map();
@@ -81,6 +82,7 @@ function buildExamAttemptPayload(attempt, duration) {
     examTitle: attempt.exam_title,
     subjectName: attempt.subject_name,
     totalScore: attempt.total_score,
+    scorePercentage: Number(attempt.score_percentage) || 0,
     totalQuestions: attempt.total_questions,
     correctCount: attempt.total_correct,
     duration,
@@ -92,6 +94,7 @@ async function getPreviousAttemptSummary(userId, attemptId, attempt) {
   try {
     const prevResult = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
               ea.submit_time, e.title as exam_title, e.total_questions
        FROM exam_attempts ea
        JOIN exams e ON ea.exam_id = e.id
@@ -103,12 +106,8 @@ async function getPreviousAttemptSummary(userId, attemptId, attempt) {
     if (!prevResult.rows[0]) return null;
 
     const p = prevResult.rows[0];
-    const prevPct = p.total_questions > 0
-      ? Math.round((p.total_correct / p.total_questions) * 100)
-      : parseFloat(p.total_score) || 0;
-    const currPct = attempt.total_questions > 0
-      ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
-      : parseFloat(attempt.total_score) || 0;
+    const prevPct = Math.round(Number(p.score_percentage) || 0);
+    const currPct = Math.round(Number(attempt.score_percentage) || 0);
 
     return {
       examTitle: p.exam_title,
@@ -274,7 +273,9 @@ function normalizeMoliPetHistory(history) {
 async function getAttemptAIContext(userId, attemptId) {
   const attemptResult = await db.query(
     `SELECT e.title as exam_title, s.name as subject_name,
-            ea.total_score, ea.total_correct, ea.total_incorrect, e.total_questions
+            ea.total_score, ea.total_correct, ea.total_incorrect,
+            COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
+            e.total_questions
      FROM exam_attempts ea
      JOIN exams e ON ea.exam_id = e.id
      LEFT JOIN subjects s ON e.subject_id = s.id
@@ -314,6 +315,7 @@ async function getAttemptAIContext(userId, attemptId) {
      ) ca ON true
      LEFT JOIN answers sa ON sa.question_id = q.id AND sa.answer_key = ua.selected_answer_key
      WHERE ea.id = $1 AND ea.user_id = $2
+       AND q.question_type NOT IN ('reading_passage', 'fill_blank_pool')
      ORDER BY q.question_number
      LIMIT 80`,
     [attemptId, userId],
@@ -334,9 +336,7 @@ async function getAttemptAIContext(userId, attemptId) {
   return {
     examTitle: a.exam_title,
     subjectName: a.subject_name,
-    userScore: a.total_questions > 0
-      ? Math.round((a.total_correct / a.total_questions) * 100)
-      : parseFloat(a.total_score) || 0,
+    userScore: Math.round(Number(a.score_percentage) || 0),
     questions,
     questionStats: {
       correct: questions.filter((q) => q.status === 'correct').length,
@@ -367,6 +367,7 @@ async function analyzeExamResult(req, res) {
     const attemptResult = await db.query(
       `SELECT
          ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+         COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
          ea.start_time, ea.submit_time,
          e.id as exam_id, e.title as exam_title, e.title_cn,
          e.subject_id, e.total_questions, e.duration,
@@ -458,9 +459,7 @@ async function analyzeExamResult(req, res) {
         attempt: attemptPayload,
         previousAttempt,
         aiAnalysis: {
-          score: attempt.total_questions > 0
-            ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
-            : parseFloat(attempt.total_score) || 0,
+          score: Math.round(Number(attempt.score_percentage) || 0),
         },
         message: 'AI đang bận, hiển thị kết quả cơ bản.',
       });
@@ -480,6 +479,7 @@ async function analyzeExamResult(req, res) {
          FROM questions q
          LEFT JOIN user_answers ua ON ua.question_id = q.id AND ua.attempt_id = $1
          WHERE q.exam_id = $2
+           AND q.question_type NOT IN ('reading_passage', 'fill_blank_pool')
          ORDER BY q.question_number`,
         [attemptId, attempt.exam_id],
       );
@@ -533,6 +533,7 @@ async function analyzeExamResult(req, res) {
       examTitle: attempt.exam_title,
       subjectName: attempt.subject_name,
       totalScore: parseFloat(attempt.total_score) || 0,
+      scorePercentage: Number(attempt.score_percentage) || 0,
       totalQuestions: attempt.total_questions,
       correctCount: attempt.total_correct,
       duration,
@@ -734,6 +735,7 @@ async function analyzeTopics(req, res) {
 
     const attempts = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
               ea.submit_time, e.title as exam_title, e.total_questions,
               s.name as subject_name, s.name_cn
        FROM exam_attempts ea
@@ -1098,6 +1100,7 @@ async function analyzeProgress(req, res) {
 
     const attempts = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
               ea.submit_time, e.title as exam_title, e.total_questions
        FROM exam_attempts ea
        JOIN exams e ON ea.exam_id = e.id
@@ -1115,9 +1118,7 @@ async function analyzeProgress(req, res) {
         history: attempts.rows.map(a => ({
           examTitle: a.exam_title,
           date: a.submit_time,
-          score: a.total_questions > 0
-            ? Math.round((a.total_correct / a.total_questions) * 100)
-            : parseFloat(a.total_score) || 0,
+          score: Math.round(Number(a.score_percentage) || 0),
         })),
       });
     }
@@ -1155,6 +1156,7 @@ async function recommendNextExam(req, res) {
     // Lấy điểm mới nhất
     const latestAttempt = await db.query(
       `SELECT ea.total_correct, ea.total_score, ea.total_incorrect, e.total_questions,
+              COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
               e.subject_id, s.name as subject_name
        FROM exam_attempts ea
        JOIN exams e ON ea.exam_id = e.id
@@ -1165,9 +1167,7 @@ async function recommendNextExam(req, res) {
     );
 
     const last = latestAttempt.rows[0];
-    const userScore = last?.total_questions > 0
-      ? Math.round((last.total_correct / last.total_questions) * 100)
-      : parseFloat(last?.total_score) || 60;
+    const userScore = last ? Math.round(Number(last.score_percentage) || 0) : 60;
 
     // Lấy danh sách đề thi
     const exams = await db.query(
@@ -1279,6 +1279,7 @@ async function analyzeUserPerformance(req, res) {
 
     const attempts = await db.query(
       `SELECT ea.id, ea.total_score, ea.total_correct, ea.total_incorrect,
+              COALESCE(ea.score_percentage, ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100, 0) AS score_percentage,
               ea.submit_time, e.title as exam_title, e.total_questions,
               s.name as subject_name, s.name_cn
        FROM exam_attempts ea
@@ -1303,9 +1304,7 @@ async function analyzeUserPerformance(req, res) {
       const subjects = new Map();
       attempts.rows.forEach((attempt) => {
         const name = attempt.subject_name || 'Tổng hợp';
-        const score = attempt.total_questions > 0
-          ? Math.round((attempt.total_correct / attempt.total_questions) * 100)
-          : Math.round(Number(attempt.total_score || 0) * 10);
+        const score = Math.round(Number(attempt.score_percentage) || 0);
         const current = subjects.get(name) || { subject: name, scores: [], count: 0 };
         current.scores.push(score);
         current.count += 1;
@@ -1542,9 +1541,31 @@ async function gradeEssay(req, res) {
       return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
     }
 
-    const { questionText, questionTextCn, userAnswer, correctAnswer, questionType } = req.body;
+    const attemptId = Number.parseInt(req.body?.attemptId, 10);
+    const questionId = Number.parseInt(req.body?.questionId, 10);
+    if (!Number.isFinite(attemptId) || attemptId <= 0 || !Number.isFinite(questionId) || questionId <= 0) {
+      return res.status(400).json({ success: false, message: 'Lượt thi hoặc câu hỏi không hợp lệ' });
+    }
 
-    if (!userAnswer || userAnswer.trim().length < 3) {
+    const contextResult = await db.query(
+      `SELECT q.question_text, q.question_text_cn, q.question_type,
+              ua.essay_answer,
+              (SELECT a.answer_text FROM answers a
+               WHERE a.question_id = q.id AND a.is_correct = TRUE LIMIT 1) AS correct_answer
+       FROM exam_attempts ea
+       JOIN questions q ON q.exam_id = ea.exam_id AND q.id = $2
+       JOIN user_answers ua ON ua.attempt_id = ea.id AND ua.question_id = q.id
+       WHERE ea.id = $1 AND ea.user_id = $3
+         AND q.question_type IN ('essay', 'translation')
+       LIMIT 1`,
+      [attemptId, questionId, userId],
+    );
+    const context = contextResult.rows[0];
+    if (!context) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy câu trả lời tự luận' });
+    }
+
+    if (!context.essay_answer || context.essay_answer.trim().length < 3) {
       return res.status(400).json({ success: false, message: 'Câu trả lời quá ngắn' });
     }
 
@@ -1558,17 +1579,23 @@ async function gradeEssay(req, res) {
     }
 
     const result = await aiService.gradeEssay({
-      questionText,
-      questionTextCn,
-      userAnswer,
-      correctAnswer,
-      questionType,
+      questionText: context.question_text,
+      questionTextCn: context.question_text_cn,
+      userAnswer: context.essay_answer,
+      correctAnswer: context.correct_answer,
+      questionType: context.question_type,
     });
 
-    res.json({ success: true, ...result });
+    const persisted = await ExamAttempt.applySubjectiveGrade(
+      attemptId,
+      questionId,
+      userId,
+      result,
+    );
+    res.json({ success: true, ...persisted });
   } catch (error) {
     console.error('gradeEssay error:', error);
-    res.status(500).json({ success: false, message: 'Lỗi chấm bài tự luận' });
+    res.status(error.statusCode || 500).json({ success: false, message: 'Lỗi chấm bài tự luận' });
   }
 }
 

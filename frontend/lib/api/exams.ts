@@ -58,7 +58,7 @@ export interface Answer {
   answer_text_cn?: string;
   answer_text_en?: string;
   image_url?: string;
-  is_correct?: boolean;
+  is_correct?: boolean | null;
 }
 
 export interface ExamAttempt {

@@ -28,9 +28,9 @@ function getGranularity(value) {
 function getBucketExpression() {
   return `
     CASE
-      WHEN (ea.total_score / NULLIF(e.total_questions, 0) * 100) < 40 THEN '0-39'
-      WHEN (ea.total_score / NULLIF(e.total_questions, 0) * 100) < 60 THEN '40-59'
-      WHEN (ea.total_score / NULLIF(e.total_questions, 0) * 100) < 80 THEN '60-79'
+      WHEN COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100) < 40 THEN '0-39'
+      WHEN COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100) < 60 THEN '40-59'
+      WHEN COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100) < 80 THEN '60-79'
       ELSE '80-100'
     END
   `;
@@ -294,9 +294,9 @@ async function getExamReports(query) {
         COUNT(ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
         COUNT(DISTINCT ea.user_id)::int AS participants,
         ROUND(COUNT(ea.id) FILTER (WHERE ea.status = 'completed')::decimal / NULLIF(COUNT(ea.id), 0) * 100, 2) AS completion_rate,
-        ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage,
-        ROUND(MAX(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS max_percentage,
-        ROUND(MIN(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS min_percentage
+        ROUND(AVG(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage,
+        ROUND(MAX(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS max_percentage,
+        ROUND(MIN(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS min_percentage
       FROM exams e
       JOIN subjects s ON s.id = e.subject_id
       LEFT JOIN exam_attempts ea ON ea.exam_id = e.id AND ${dateFilter}
@@ -388,7 +388,7 @@ async function getAdminPerformance(query = {}) {
             COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
             COUNT(DISTINCT ea.user_id)::int AS unique_students,
             ROUND(COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::decimal / NULLIF(COUNT(DISTINCT ea.id), 0) * 100, 2) AS completion_rate,
-            ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
+            ROUND(AVG(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
           FROM exams e
           JOIN exam_admin_map eam ON eam.exam_id = e.id
           JOIN exam_attempts ea ON ea.exam_id = e.id
@@ -519,7 +519,7 @@ async function getAdminPerformance(query = {}) {
           COUNT(DISTINCT ea.id)::int AS total_attempts,
           COUNT(DISTINCT ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
           COUNT(DISTINCT ea.user_id)::int AS unique_students,
-          ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
+          ROUND(AVG(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
         FROM exams e
         JOIN exam_admin_map eam ON eam.exam_id = e.id
         JOIN users u ON u.id = eam.admin_id
@@ -696,7 +696,7 @@ async function getExamReport(examId, query) {
         COUNT(ea.id) FILTER (WHERE ea.status = 'completed')::int AS completed_attempts,
         COUNT(DISTINCT ea.user_id)::int AS participants,
         ROUND(COUNT(ea.id) FILTER (WHERE ea.status = 'completed')::decimal / NULLIF(COUNT(ea.id), 0) * 100, 2) AS completion_rate,
-        ROUND(AVG(ea.total_score / NULLIF(e.total_questions, 0) * 100) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
+        ROUND(AVG(COALESCE(ea.score_percentage, ea.total_score / NULLIF(e.total_points, 0) * 100)) FILTER (WHERE ea.status = 'completed'), 2) AS avg_percentage
       FROM exams e
       JOIN subjects s ON s.id = e.subject_id
       LEFT JOIN exam_attempts ea ON ea.exam_id = e.id

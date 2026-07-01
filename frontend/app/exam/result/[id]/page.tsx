@@ -47,7 +47,7 @@ interface QuestionResult {
     correct_answer_text: string;
     correct_answer_text_cn?: string | null;
     correct_answer_text_en?: string | null;
-    is_correct: boolean;
+    is_correct: boolean | null;
     points: number;
     score_awarded?: number | string | null;
     max_score?: number | string | null;
@@ -70,9 +70,11 @@ interface AttemptResult {
     title_cn?: string;
     subject_name: string;
     total_score: number;
-    total_possible_score?: number;
+    total_possible_score?: number | string;
     score_scale_10?: number;
     score_scale_100?: number;
+    score_percentage?: number | string;
+    total_pending_grading?: number;
     total_correct: number;
     total_incorrect?: number;
     total_unanswered?: number;
@@ -196,18 +198,23 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
     const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && !a.is_correct).length;
     const totalUnanswered = result.total_unanswered ?? Math.max(0, total - totalCorrect - totalIncorrect);
-    const accuracy = Math.round((totalCorrect / total) * 100);
     const rawScore = Number(result.total_score) || 0;
     const fallbackPossibleScore = answers.reduce((sum, answer) => sum + (Number(answer.points) || 0), 0) || total;
     const possibleScore = Number(result.total_possible_score) || fallbackPossibleScore;
+    const storedPercentage = Number(result.score_percentage);
+    const score100 = Number.isFinite(storedPercentage)
+        ? Math.max(0, Math.min(100, storedPercentage))
+        : Number.isFinite(Number(result.score_scale_100))
+            ? Number(result.score_scale_100)
+            : possibleScore > 0
+                ? Math.max(0, Math.min(100, (rawScore / possibleScore) * 100))
+                : (totalCorrect / total) * 100;
+    const accuracy = Math.round(
+        score100,
+    );
     const displayScore = Number.isFinite(Number(result.score_scale_10))
         ? Number(result.score_scale_10)
-        : possibleScore > 0
-            ? Math.max(0, Math.min(10, (rawScore / possibleScore) * 10))
-            : Math.round((totalCorrect / total) * 100) / 10;
-    const score100 = Number.isFinite(Number(result.score_scale_100))
-        ? Number(result.score_scale_100)
-        : Math.max(0, Math.min(100, displayScore * 10));
+        : score100 / 10;
 
     const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
     const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
@@ -628,4 +635,3 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
         </div>
     );
 }
-

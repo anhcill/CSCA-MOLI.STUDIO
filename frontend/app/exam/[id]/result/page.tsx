@@ -60,8 +60,12 @@ interface QuestionResult {
   correct_answer_text: string;
   correct_answer_text_cn?: string | null;
   correct_answer_text_en?: string | null;
-  is_correct: boolean;
+  is_correct: boolean | null;
   points: number;
+  score_awarded?: number | string | null;
+  max_score?: number | string | null;
+  grading_status?: string | null;
+  grading_feedback?: string | null;
   explanation?: string;
   explanation_cn?: string;
   explanation_en?: string;
@@ -80,10 +84,14 @@ interface ExamResult {
   title_cn?: string;
   subject_name: string;
   total_score: number;
-  total_possible_score?: number;
+  total_possible_score?: number | string;
   score_scale_10?: number;
   score_scale_100?: number;
   total_correct: number;
+  total_incorrect?: number;
+  total_unanswered?: number;
+  score_percentage?: number | string;
+  total_pending_grading?: number;
   submit_time: string;
   total_questions: number;
   answers: QuestionResult[];
@@ -308,21 +316,25 @@ function ExamResultContent() {
   const answers = result.answers ?? [];
   const languageMode = result.language_mode || 'zh';
   const totalCorrect = result.total_correct ?? answers.filter(a => a.is_correct).length;
-  const totalIncorrect = answers.filter(a => a.selected_answer_key && !a.is_correct).length;
-  const totalUnanswered = answers.filter(a => !a.selected_answer_key).length;
-  const total = answers.length || result.total_questions || 1;
-  const accuracy = Math.round((totalCorrect / total) * 100);
+  const totalIncorrect = result.total_incorrect ?? answers.filter(a => a.selected_answer_key && a.is_correct === false).length;
+  const totalUnanswered = result.total_unanswered ?? answers.filter(a => !a.selected_answer_key).length;
+  const totalPending = Number(result.total_pending_grading) || 0;
+  const total = result.total_questions || answers.length || 1;
   const rawScore = Number(result.total_score) || 0;
   const fallbackPossibleScore = answers.reduce((sum, answer) => sum + (Number(answer.points) || 0), 0) || total;
   const possibleScore = Number(result.total_possible_score) || fallbackPossibleScore;
+  const storedPercentage = Number(result.score_percentage);
+  const score100 = Number.isFinite(storedPercentage)
+    ? Math.max(0, Math.min(100, storedPercentage))
+    : Number.isFinite(Number(result.score_scale_100))
+      ? Number(result.score_scale_100)
+      : possibleScore > 0
+        ? Math.max(0, Math.min(100, (rawScore / possibleScore) * 100))
+        : (totalCorrect / total) * 100;
   const score10 = Number.isFinite(Number(result.score_scale_10))
     ? Number(result.score_scale_10)
-    : possibleScore > 0
-      ? Math.max(0, Math.min(10, (rawScore / possibleScore) * 10))
-      : accuracy / 10;
-  const score100 = Number.isFinite(Number(result.score_scale_100))
-    ? Number(result.score_scale_100)
-    : Math.max(0, Math.min(100, score10 * 10));
+    : score100 / 10;
+  const accuracy = Math.round(score100);
 
   const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
   const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
@@ -341,6 +353,7 @@ function ExamResultContent() {
     { name: 'Đúng', value: totalCorrect, color: '#22c55e' },
     { name: 'Sai', value: totalIncorrect, color: '#ef4444' },
     { name: 'Bỏ qua', value: totalUnanswered, color: '#9ca3af' },
+    { name: 'Chờ chấm', value: totalPending, color: '#f59e0b' },
   ].filter(d => d.value > 0);
   const topicBreakdown = Object.values(
     answers.reduce<Record<string, { name: string; total: number; incorrect: number; correct: number }>>((acc, answer) => {
@@ -877,7 +890,10 @@ function ExamResultContent() {
         <GradeEssayModal
           question={showGradeModal}
           attemptId={result.id}
-          onClose={() => setShowGradeModal(null)}
+          onClose={() => {
+            setShowGradeModal(null);
+            fetchResult();
+          }}
         />
       )}
     </div>
@@ -983,14 +999,8 @@ function GradeEssayModal({ question, attemptId, onClose }: {
       const res = await authFetch('/api/ai/grade-essay', {
         method: 'POST',
         body: JSON.stringify({
-          questionText: question.question_text,
-          questionTextCn: question.question_text_cn,
-          questionTextEn: question.question_text_en,
-          userAnswer: question.selected_answer_text,
-          correctAnswer: question.correct_answer_text,
-          correctAnswerCn: question.correct_answer_text_cn,
-          correctAnswerEn: question.correct_answer_text_en,
-          questionType: question.question_type,
+          attemptId,
+          questionId: question.question_id || question.id,
         }),
       });
       const data = await res.json();

@@ -1,6 +1,7 @@
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
+const { syncExamTotals } = require("../utils/examScoring");
 
 const QUESTION_TYPES = {
   FILL_BLANK_POOL: "fill_blank_pool",
@@ -364,10 +365,7 @@ const AdminFillBlankGroupController = {
           clozeMode: validation.normalizedClozeMode,
         });
 
-        await client.query(
-          "UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2",
-          [insertedSubQuestions.length, examId],
-        );
+        await syncExamTotals(client, examId);
 
         await client.query("COMMIT");
         cache.delByPrefix("exams:");
@@ -543,10 +541,7 @@ const AdminFillBlankGroupController = {
           await shiftQuestionNumbers(client, examId, oldEnd + 1, delta);
         }
 
-        await client.query(
-          "UPDATE exams SET total_questions = total_questions + $1, updated_at = NOW() WHERE id = $2",
-          [delta, examId],
-        );
+        await syncExamTotals(client, examId);
 
         await client.query("COMMIT");
         cache.delByPrefix("exams:");
@@ -629,10 +624,7 @@ const AdminFillBlankGroupController = {
         if (totalDelete > 0) {
           await shiftQuestionNumbers(client, examId, oldEnd + 1, -totalDelete);
         }
-        await client.query(
-          "UPDATE exams SET total_questions = GREATEST(0, total_questions - $1), updated_at = NOW() WHERE id = $2",
-          [totalDelete, examId],
-        );
+        await syncExamTotals(client, examId);
 
         await client.query("COMMIT");
         cache.delByPrefix("exams:");

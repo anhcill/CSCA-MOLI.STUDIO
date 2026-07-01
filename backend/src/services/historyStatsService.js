@@ -94,7 +94,7 @@ async function getOverviewStats(client, userId, subjectCode = null) {
       COALESCE(MAX(ea.total_score), 0)::DECIMAL as max_score,
       COALESCE(MIN(ea.total_score), 0)::DECIMAL as min_score,
       COALESCE(
-        AVG(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
+        AVG(COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)), 0
       )::DECIMAL as avg_percentage,
       COALESCE(SUM(ea.total_correct), 0)::INTEGER as total_correct,
       COALESCE(SUM(ea.total_incorrect), 0)::INTEGER as total_incorrect,
@@ -204,7 +204,7 @@ async function getSubjectStats(client, userId, subjectCode = null) {
       COALESCE(AVG(ea.total_score), 0)::DECIMAL as avg_score,
       COALESCE(MAX(ea.total_score), 0)::DECIMAL as max_score,
       COALESCE(
-        AVG(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
+        AVG(COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)), 0
       )::DECIMAL as avg_percentage,
       COALESCE(SUM(ea.total_correct), 0)::INTEGER as total_correct,
       COALESCE(SUM(ea.total_incorrect), 0)::INTEGER as total_incorrect,
@@ -212,7 +212,7 @@ async function getSubjectStats(client, userId, subjectCode = null) {
         ROUND(
           COUNT(DISTINCT CASE WHEN
             ea.status = 'completed' AND
-            ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+            COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
           THEN ea.id END)::DECIMAL /
           NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
         ), 0
@@ -273,19 +273,19 @@ async function getDifficultyStats(client, userId, subjectCode = null) {
       COUNT(DISTINCT ea.id)::INTEGER as attempt_count,
       COALESCE(
         AVG(CASE WHEN ea.status = 'completed'
-          THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+          THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
         END), 0
       )::DECIMAL as avg_percentage,
       COALESCE(
         MAX(CASE WHEN ea.status = 'completed'
-          THEN ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100
+          THEN COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)
         END), 0
       )::DECIMAL as max_percentage,
       COALESCE(
         ROUND(
           COUNT(DISTINCT CASE WHEN
             ea.status = 'completed' AND
-            ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+            COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
           THEN ea.id END)::DECIMAL /
           NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
         ), 0
@@ -333,7 +333,7 @@ async function getMonthlyTrend(client, userId, subjectCode = null) {
       COUNT(*)::INTEGER as attempt_count,
       COALESCE(AVG(ea.total_score), 0)::DECIMAL as avg_score,
       COALESCE(
-        AVG(ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100), 0
+        AVG(COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100)), 0
       )::DECIMAL as avg_percentage,
       COALESCE(MAX(ea.total_score), 0)::DECIMAL as max_score,
       COALESCE(SUM(ea.total_correct), 0)::INTEGER as total_correct,
@@ -342,7 +342,7 @@ async function getMonthlyTrend(client, userId, subjectCode = null) {
         ROUND(
           COUNT(DISTINCT CASE WHEN
             ea.status = 'completed' AND
-            ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+            COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
           THEN ea.id END)::DECIMAL /
           NULLIF(COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END), 0) * 100, 1
         ), 0
@@ -433,20 +433,20 @@ async function getPassFailStats(client, userId, subjectCode = null) {
   const query = `
     SELECT
       COUNT(CASE WHEN
-        ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+        COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
       THEN 1 END)::INTEGER as pass_count,
       COUNT(CASE WHEN
-        ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 < 60
+        COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) < 60
       THEN 1 END)::INTEGER as fail_count,
       COUNT(*)::INTEGER as total_count,
       ROUND(
         COUNT(CASE WHEN
-          ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 60
+          COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 60
         THEN 1 END)::DECIMAL / NULLIF(COUNT(*), 0) * 100, 1
       )::DECIMAL as pass_rate,
       ROUND(
         COUNT(CASE WHEN
-          ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100 >= 80
+          COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100) >= 80
         THEN 1 END)::DECIMAL / NULLIF(COUNT(*), 0) * 100, 1
       )::DECIMAL as excellent_rate
     FROM exam_attempts ea
@@ -488,7 +488,7 @@ async function getRecentAttempts(client, userId, limit, subjectCode = null) {
       s.code as subject_code,
       e.total_questions,
       COALESCE(
-        ea.total_score::DECIMAL / NULLIF(e.total_questions, 0) * 100, 0
+        COALESCE(ea.score_percentage, ea.total_score::DECIMAL / NULLIF(e.total_points, 0) * 100), 0
       )::DECIMAL as percentage
     FROM exam_attempts ea
     JOIN exams e ON ea.exam_id = e.id
