@@ -288,21 +288,18 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                             <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 transition-all hover:shadow-2xl">
                                 <div className="text-center mb-4">
                                     <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{result.exam_title}</p>
-                                    <div className="relative inline-flex items-center justify-center my-2">
+                                    <div className="relative inline-flex items-center justify-center my-3">
                                         {/* Outer soft glowing circle */}
                                         <div className={`absolute inset-0 rounded-full blur-xl opacity-20 bg-gradient-to-br ${gradeColors.progress}`} />
-                                        <span className={`relative text-6xl font-black bg-gradient-to-br ${gradeColors.progress} bg-clip-text text-transparent leading-none py-2 px-1`}>
+                                        <span className={`relative text-7xl font-black bg-gradient-to-br ${gradeColors.progress} bg-clip-text text-transparent leading-none py-3 px-1 sm:text-8xl`}>
                                             {score100.toFixed(1)}
                                         </span>
                                     </div>
-                                    <p className="text-gray-400 dark:text-gray-500 text-xs font-semibold">/ 100 điểm</p>
-                                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                                    <p className={`text-base font-black ${gradeColors.text}`}>/100 điểm</p>
+                                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-100 bg-slate-50 px-4 py-2 text-sm font-black text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                                         <span>Thang 10</span>
                                         <span className={gradeColors.text}>{displayScore.toFixed(2)}/10</span>
                                     </div>
-                                    <p className="mt-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
-                                        Điểm thô: {rawScore.toFixed(1)}/{possibleScore.toFixed(1)}
-                                    </p>
                                 </div>
                                 <div className="w-full bg-gray-100 dark:bg-gray-850 rounded-full h-3 overflow-hidden mb-3">
                                     <div className={`h-full bg-gradient-to-r ${gradeColors.progress} rounded-full transition-all duration-700`}
