@@ -219,10 +219,66 @@ async function createWrongQuestionPractice(userId, limit = 20, subjectCode = nul
   return result.rows[0];
 }
 
+async function createPracticeSet({
+  userId,
+  setType,
+  title,
+  description,
+  questionIds,
+  subjectId = null,
+  sourceTopicId = null,
+}) {
+  const result = await db.query(
+    `
+      INSERT INTO user_practice_sets (
+        user_id, set_type, title, description, subject_id, source_topic_id, question_ids
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7::int[])
+      RETURNING *
+    `,
+    [userId, setType, title, description, subjectId, sourceTopicId, questionIds],
+  );
+  return result.rows[0];
+}
+
+async function getSubjectPracticeQuestionIds(userId, subjectId, limit = 20) {
+  if (!subjectId) return [];
+  const result = await db.query(
+    `
+      SELECT q.id
+      FROM questions q
+      JOIN exams e ON e.id = q.exam_id
+      LEFT JOIN user_answers ua ON ua.question_id = q.id
+      LEFT JOIN exam_attempts ea ON ea.id = ua.attempt_id AND ea.user_id = $1
+      WHERE e.subject_id = $2
+        AND q.deleted_at IS NULL
+      GROUP BY q.id
+      ORDER BY
+        COUNT(*) FILTER (WHERE ua.is_correct = FALSE) DESC,
+        MAX(ea.submit_time) DESC NULLS LAST,
+        random()
+      LIMIT $3
+    `,
+    [userId, subjectId, toLimit(limit)],
+  );
+  return result.rows.map((row) => Number(row.id));
+}
+
 async function createWeakTopicPractice(userId, topicId, limit = 20, subjectCode = null) {
   const weakTopics = await getWeakTopics(userId, 20, subjectCode);
   const target = weakTopics.find((topic) => Number(topic.topic_id) === Number(topicId)) || weakTopics[0];
   if (!target) {
+    const fallbackIds = await getWrongQuestionIds(userId, toLimit(limit), subjectCode);
+    if (fallbackIds.length) {
+      return createPracticeSet({
+        userId,
+        setType: "weak_topic",
+        title: `De luyen chu de can on`,
+        description: "Chua du du lieu chu de yeu, he thong tam lay cac cau ban hay sai gan day.",
+        questionIds: fallbackIds,
+      });
+    }
+
     const error = new Error("No weak topic found");
     error.statusCode = 404;
     throw error;
@@ -245,31 +301,28 @@ async function createWeakTopicPractice(userId, topicId, limit = 20, subjectCode 
     `,
     [userId, target.topic_id, toLimit(limit)],
   );
-  const ids = questions.rows.map((row) => Number(row.id));
+  let ids = questions.rows.map((row) => Number(row.id));
+  if (!ids.length) {
+    ids = await getWrongQuestionIds(userId, toLimit(limit), target.subject_code);
+  }
+  if (!ids.length) {
+    ids = await getSubjectPracticeQuestionIds(userId, target.subject_id, limit);
+  }
   if (!ids.length) {
     const error = new Error("No questions for weak topic");
     error.statusCode = 404;
     throw error;
   }
 
-  const result = await db.query(
-    `
-      INSERT INTO user_practice_sets (
-        user_id, set_type, title, description, subject_id, source_topic_id, question_ids
-      )
-      VALUES ($1, 'weak_topic', $2, $3, $4, $5, $6::int[])
-      RETURNING *
-    `,
-    [
-      userId,
-      `De luyen chu de yeu: ${target.topic_name}`,
-      `Tap trung chu de ${target.topic_name} (${Number(target.error_percentage).toFixed(1)}% ti le sai).`,
-      target.subject_id,
-      target.topic_id,
-      ids,
-    ],
-  );
-  return result.rows[0];
+  return createPracticeSet({
+    userId,
+    setType: "weak_topic",
+    title: `De luyen chu de yeu: ${target.topic_name}`,
+    description: `Tap trung chu de ${target.topic_name} (${Number(target.error_percentage).toFixed(1)}% ti le sai).`,
+    subjectId: target.subject_id,
+    sourceTopicId: target.topic_id,
+    questionIds: ids,
+  });
 }
 
 async function getPracticeSet(userId, setId) {

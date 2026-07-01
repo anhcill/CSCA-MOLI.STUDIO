@@ -214,7 +214,8 @@ function ExamResultContent() {
       router.push(`/practice-sets/${practiceSet.id}`);
     } catch (error) {
       console.error('Create weak topic practice error:', error);
-      alert('Không thể tạo bộ luyện chủ đề yếu lúc này.');
+      const message = (error as any)?.response?.data?.message || 'Không thể tạo bộ luyện chủ đề yếu lúc này.';
+      alert(message);
     } finally {
       setActionLoading(null);
     }
