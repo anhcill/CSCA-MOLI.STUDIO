@@ -2077,7 +2077,29 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
 
   const explanations = [];
   const diagnostics = [];
-  const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_BATCH_SIZE || "8", 10)));
+  const batchSize = Math.max(1, Math.min(12, Number.parseInt(process.env.AI_EXAM_EXPLANATION_BATCH_SIZE || "4", 10)));
+
+  async function callMissingExplanationAI(prompt, options) {
+    if (aiService.isDeepSeekConfigured?.() && String(process.env.AI_EXAM_EXPLANATION_PROVIDER || "deepseek").toLowerCase() === "deepseek") {
+      try {
+        const raw = await aiService.callDeepSeekAI(prompt, {
+          model: process.env.DEEPSEEK_EXPLANATION_MODEL || "deepseek-v4-pro",
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          timeout: Number.parseInt(process.env.DEEPSEEK_EXPLANATION_TIMEOUT_MS || process.env.DEEPSEEK_TIMEOUT_MS || "50000", 10),
+          thinking: process.env.DEEPSEEK_EXPLANATION_THINKING || "disabled",
+          signal: options.signal,
+        });
+        return { raw, model: process.env.DEEPSEEK_EXPLANATION_MODEL || "deepseek-v4-pro" };
+      } catch (error) {
+        if (error.message === "AI_REQUEST_ABORTED") throw error;
+        console.warn("DeepSeek missing explanation failed, falling back to admin AI:", getReviewErrorDiagnostic(error));
+      }
+    }
+
+    const raw = await aiService.callAdminExamAI(prompt, options);
+    return { raw, model: options.model };
+  }
 
   for (let i = 0; i < targets.length; i += batchSize) {
     throwIfAiRequestAborted(context);
@@ -2085,14 +2107,15 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
     const model = getContextFixModel(context);
     const startedAt = Date.now();
     try {
-      const raw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt(batch, context), {
+      const aiResponse = await callMissingExplanationAI(buildMissingExplanationsPrompt(batch, context), {
         model,
         models: getContextFixModels(context),
         temperature: 0.1,
-        maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || "5000", 10),
+        maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_MAX_TOKENS || process.env.DEEPSEEK_EXPLANATION_MAX_TOKENS || "5000", 10),
         timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10)),
         signal: context.signal,
       });
+      const raw = aiResponse.raw;
       const parsed = parseAiJson(raw);
       const batchItems = getAiItems(parsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "explanationVi", "explanation_vi", "vietnameseExplanation", "englishExplanation", "chineseExplanation", "zhExplanation"]);
       diagnostics.push({
@@ -2100,7 +2123,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
         range: getBatchLabelRange(batch),
         paths: batch.map(entry => entry.path),
         labels: batch.map(entry => entry.label),
-        model,
+        model: aiResponse.model || model,
         status: batchItems.length ? "ok" : "invalid_response",
         durationMs: Date.now() - startedAt,
         returnedExplanations: batchItems.length,
@@ -2129,14 +2152,15 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
           throwIfAiRequestAborted(context);
           const retryStartedAt = Date.now();
           try {
-            const retryRaw = await aiService.callAdminExamAI(buildMissingExplanationsPrompt([entry], context), {
+            const retryResponse = await callMissingExplanationAI(buildMissingExplanationsPrompt([entry], context), {
               model,
               models: getContextFixModels(context),
               temperature: 0.1,
-              maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || "1200", 10),
+              maxTokens: Number.parseInt(process.env.AI_EXAM_EXPLANATION_SINGLE_MAX_TOKENS || process.env.DEEPSEEK_EXPLANATION_SINGLE_MAX_TOKENS || "1400", 10),
               timeout: getContextTimeoutMs(context, Number.parseInt(process.env.AI_EXAM_EXPLANATION_TIMEOUT_MS || "120000", 10)),
               signal: context.signal,
             });
+            const retryRaw = retryResponse.raw;
             const retryParsed = parseAiJson(retryRaw);
             const retryItems = getAiItems(retryParsed, ["explanations", "items", "results"], ["explanation", "explanationCn", "explanationEn", "explanation_cn", "explanation_en", "explanationVi", "explanation_vi", "vietnameseExplanation", "englishExplanation", "chineseExplanation", "zhExplanation"]);
             const retryItem = findAiItemForEntry(retryItems, entry, 0) || (retryItems.length === 1 ? retryItems[0] : null);
@@ -2145,7 +2169,7 @@ async function generateMissingExplanationsWithAI(entries, context = {}) {
               range: entry.label,
               paths: [entry.path],
               labels: [entry.label],
-              model,
+              model: retryResponse.model || model,
               status: retryItem ? "retry_ok" : "retry_invalid_response",
               durationMs: Date.now() - retryStartedAt,
               returnedExplanations: retryItems.length,

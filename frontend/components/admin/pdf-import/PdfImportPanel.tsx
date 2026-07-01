@@ -29,13 +29,13 @@ const PROGRESS_STEPS = [
 ];
 
 const IMPORT_LANGUAGE_OPTIONS: { key: PdfImportLanguageMode; label: string; description: string }[] = [
-  { key: 'auto', label: 'Auto', description: 'Tu nhan dien ngon ngu trong de.' },
-  { key: 'vi', label: 'Tieng Viet', description: 'Do vao field Viet.' },
-  { key: 'en', label: 'Tieng Anh', description: 'Do vao field English.' },
-  { key: 'zh', label: 'Tieng Trung', description: 'Do vao field Chinese.' },
-  { key: 'vi_en', label: 'Viet + Anh', description: 'Tach Viet va English.' },
-  { key: 'vi_zh', label: 'Viet + Trung', description: 'Tach Viet va Chinese.' },
-  { key: 'zh_en', label: 'Trung + Anh', description: 'Tach Chinese va English.' },
+  { key: 'auto', label: 'Auto', description: 'Tự nhận diện ngôn ngữ trong đề.' },
+  { key: 'vi', label: 'Tiếng Việt', description: 'Đổ vào field Việt.' },
+  { key: 'en', label: 'Tiếng Anh', description: 'Đổ vào field English.' },
+  { key: 'zh', label: 'Tiếng Trung', description: 'Đổ vào field Chinese.' },
+  { key: 'vi_en', label: 'Việt + Anh', description: 'Tách Việt và English.' },
+  { key: 'vi_zh', label: 'Việt + Trung', description: 'Tách Việt và Chinese.' },
+  { key: 'zh_en', label: 'Trung + Anh', description: 'Tách Chinese và English.' },
 ];
 
 function formatFileSize(bytes?: number) {
@@ -298,7 +298,7 @@ export default function PdfImportPanel({
         </div>
 
         <div>
-          <div className="mb-2 text-sm font-bold text-gray-800">Ngon ngu de import</div>
+          <div className="mb-2 text-sm font-bold text-gray-800">Ngôn ngữ đề import</div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-7">
             {IMPORT_LANGUAGE_OPTIONS.map((option) => (
               <button

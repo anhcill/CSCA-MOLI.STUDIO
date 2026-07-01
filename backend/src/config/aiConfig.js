@@ -51,6 +51,17 @@ function parseAdminExamApiKeys() {
   return [...new Set([...fromCombined, ...legacy])];
 }
 
+function parseDeepSeekApiKeys() {
+  const combined = process.env.DEEPSEEK_API_KEYS || '';
+  const fromCombined = combined
+    .split(',')
+    .map(key => key.trim())
+    .filter(Boolean);
+  const indexed = parseIndexedKeys('DEEPSEEK_API_KEY');
+
+  return [...new Set([...fromCombined, ...indexed])];
+}
+
 function normalizeBeeknoeeModel(model) {
   const value = String(model || '').trim();
   if (!value) return value;
@@ -147,6 +158,23 @@ const config = {
     temperature: floatEnv('ADMIN_EXAM_AI_TEMPERATURE', floatEnv('BEEKNOEE_TEMPERATURE', 0.3)),
     delayBetweenRequests: intEnv('ADMIN_EXAM_AI_REQUEST_SPACING_MS', intEnv('AI_REQUEST_SPACING_MS', 300)),
     backoffMs: intEnv('ADMIN_EXAM_AI_BACKOFF_MS', intEnv('AI_GLOBAL_BACKOFF_MS', 90000)),
+  },
+
+  deepseek: {
+    apiKeys: parseDeepSeekApiKeys(),
+    baseUrl: (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, ''),
+    chatModel: process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-v4-pro',
+    lessonModel: process.env.DEEPSEEK_LESSON_MODEL || 'deepseek-v4-flash',
+    explanationModel: process.env.DEEPSEEK_EXPLANATION_MODEL || 'deepseek-v4-pro',
+    chatMaxTokens: intEnv('DEEPSEEK_CHAT_MAX_TOKENS', 2200),
+    lessonMaxTokens: intEnv('DEEPSEEK_LESSON_MAX_TOKENS', 1400),
+    explanationMaxTokens: intEnv('DEEPSEEK_EXPLANATION_MAX_TOKENS', 5000),
+    explanationSingleMaxTokens: intEnv('DEEPSEEK_EXPLANATION_SINGLE_MAX_TOKENS', 1400),
+    timeout: intEnv('DEEPSEEK_TIMEOUT_MS', 50000),
+    chatThinking: process.env.DEEPSEEK_CHAT_THINKING || 'disabled',
+    lessonThinking: process.env.DEEPSEEK_LESSON_THINKING || 'disabled',
+    explanationThinking: process.env.DEEPSEEK_EXPLANATION_THINKING || 'disabled',
+    reasoningEffort: process.env.DEEPSEEK_REASONING_EFFORT || 'low',
   },
 
   general: {

@@ -34,6 +34,7 @@ function getRateLimitRemaining() { return Math.max(0, Math.ceil((rateLimitedUnti
 // ─── Round-robin API key pool ────────────────────────────────────────────────
 const BEE = aiConfig.beeknoee;
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
+const DEEPSEEK = aiConfig.deepseek || {};
 const getMoliPetAIService = () => require('./moliPetAIService');
 const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
 const PUBLIC_AI_BUSY_MESSAGE = 'AI đang bận lúc này. Bạn thử lại sau nhé.';
@@ -64,6 +65,7 @@ const PRIVATE_AI_OUTPUT_PATTERNS = [
 ];
 let currentKeyIndex = 0;
 let adminExamKeyIndex = 0;
+let deepSeekKeyIndex = 0;
 let adminExamRateLimitedUntil = 0;
 let adminExamLastRequestTime = 0;
 
@@ -93,6 +95,20 @@ function getNextAdminExamKey() {
   adminExamKeyIndex++;
   console.log(`Admin exam AI request using ${ADMIN_EXAM_AI.provider || 'custom'} key #${keyNumber}/${keys.length}`);
   return { key, keyNumber, total: keys.length };
+}
+
+function getNextDeepSeekKey() {
+  const keys = (DEEPSEEK.apiKeys || []).filter(Boolean);
+  if (keys.length === 0) return null;
+  const keyNumber = (deepSeekKeyIndex % keys.length) + 1;
+  const key = keys[deepSeekKeyIndex % keys.length];
+  deepSeekKeyIndex++;
+  console.log(`DeepSeek request using key #${keyNumber}/${keys.length}`);
+  return { key, keyNumber, total: keys.length };
+}
+
+function isDeepSeekConfigured() {
+  return Boolean(DEEPSEEK.baseUrl && (DEEPSEEK.apiKeys || []).filter(Boolean).length);
 }
 
 function isAdminExamProviderEnabled() {
@@ -514,6 +530,79 @@ async function callAdminExamAI(prompt, options = {}) {
   return callAdminExamAIMessages([{ role: 'user', content: prompt }], options);
 }
 
+function getDeepSeekThinkingPayload(thinking = 'disabled') {
+  const value = String(thinking || 'disabled').toLowerCase();
+  if (value === 'enabled') {
+    return { thinking: { type: 'enabled' }, reasoning_effort: DEEPSEEK.reasoningEffort || 'low' };
+  }
+  return { thinking: { type: 'disabled' } };
+}
+
+async function callDeepSeekMessages(messages, options = {}) {
+  const keys = (DEEPSEEK.apiKeys || []).filter(Boolean);
+  if (!DEEPSEEK.baseUrl || !keys.length) {
+    const error = new Error('DEEPSEEK_NOT_CONFIGURED');
+    error.provider = 'deepseek';
+    throw error;
+  }
+
+  const {
+    model = DEEPSEEK.lessonModel || 'deepseek-v4-flash',
+    maxTokens = DEEPSEEK.lessonMaxTokens || 1400,
+    temperature = 0.2,
+    timeout = DEEPSEEK.timeout || 50000,
+    thinking = 'disabled',
+    keyAttempts = 1,
+    signal,
+  } = options;
+  let lastError = null;
+  const attempts = Math.max(1, Math.min(keys.length, Number.parseInt(keyAttempts, 10) || 1));
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    throwIfAborted(signal);
+    const keyInfo = getNextDeepSeekKey();
+    const payload = {
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+      ...getDeepSeekThinkingPayload(thinking),
+    };
+
+    try {
+      return await withConcurrency(async () => {
+        const response = await axios.post(
+          getChatCompletionsUrl(DEEPSEEK.baseUrl),
+          payload,
+          {
+            timeout,
+            signal,
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${keyInfo.key}`,
+            },
+          },
+        );
+        const text = extractOpenAICompatibleText(response.data);
+        return text || JSON.stringify(response.data);
+      });
+    } catch (err) {
+      lastError = err;
+      if (isAbortError(err, signal)) throwIfAborted(signal);
+      const message = getProviderResponseMessage(err);
+      console.warn(`DeepSeek key #${keyInfo.keyNumber}/${keyInfo.total} model ${model} failed:`, message);
+    }
+  }
+
+  const error = createPublicAIProviderError('deepseek', lastError, 'DEEPSEEK_EXHAUSTED');
+  error.provider = 'deepseek';
+  throw error;
+}
+
+async function callDeepSeekAI(prompt, options = {}) {
+  return callDeepSeekMessages([{ role: 'user', content: prompt }], options);
+}
+
 const PUBLIC_AI_SETTING_KEYS = [
   'public_ai_provider',
   'public_ai_9router_model',
@@ -755,8 +844,34 @@ function normalizeEssayGrade(ai) {
   };
 }
 
+function formatGrammarLessonAnswer(lesson) {
+  const lines = [
+    lesson.title && `Bài học: ${lesson.title}`,
+    lesson.grammarRule,
+  ].filter(Boolean);
+
+  if (lesson.examples.length) {
+    lines.push('Ví dụ:');
+    lesson.examples.forEach((item, index) => {
+      const sample = [item.chinese, item.pinyin && `(${item.pinyin})`, item.vietnamese].filter(Boolean).join(' ');
+      lines.push(`${index + 1}. ${sample}${item.usage ? `\nỨng dụng: ${item.usage}` : ''}`);
+    });
+  }
+  if (lesson.memoryTips.length) {
+    lines.push(`Mẹo nhớ:\n${lesson.memoryTips.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
+  }
+  if (lesson.commonMistakes.length) {
+    lines.push(`Lỗi hay gặp:\n${lesson.commonMistakes.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
+  }
+  if (lesson.relatedTopics.length) {
+    lines.push(`Nên ôn thêm:\n${lesson.relatedTopics.map((item, index) => `${index + 1}. ${item}`).join('\n')}`);
+  }
+
+  return lines.join('\n\n');
+}
+
 function normalizeGrammarLesson(ai) {
-  return {
+  const lesson = {
     success: true,
     title: asPublicString(ai?.title, 'Bài học ngữ pháp'),
     grammarRule: asPublicString(ai?.grammarRule),
@@ -769,6 +884,10 @@ function normalizeGrammarLesson(ai) {
     memoryTips: asArray(ai?.memoryTips).map(v => asPublicString(v)).filter(Boolean),
     commonMistakes: asArray(ai?.commonMistakes).map(v => asPublicString(v)).filter(Boolean),
     relatedTopics: asArray(ai?.relatedTopics).map(v => asPublicString(v)).filter(Boolean),
+  };
+  return {
+    ...lesson,
+    answer: formatGrammarLessonAnswer(lesson),
   };
 }
 
@@ -1372,18 +1491,37 @@ Câu hỏi: ${question}`;
 
 async function askAI(question, context = {}) {
   const prompt = buildAIChatPrompt(question, context);
+  const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
+  const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;
 
   try {
-    const response = await callPublicAIMessages(
-      [buildVisionUserMessage(prompt, context.imageDataUrl)],
-      { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
-    );
+    const response = useDeepSeekChat
+      ? await callDeepSeekMessages(messages, {
+        model: DEEPSEEK.chatModel || 'deepseek-v4-pro',
+        temperature: 0.35,
+        maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
+        timeout: DEEPSEEK.timeout || 50000,
+        thinking: DEEPSEEK.chatThinking || 'disabled',
+      })
+      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
     return {
       answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
       timestamp: new Date().toISOString(),
     };
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
+    if (useDeepSeekChat) {
+      console.warn('DeepSeek askAI failed, falling back to public AI:', getProviderResponseMessage(err));
+      try {
+        const response = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+        return {
+          answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
+          timestamp: new Date().toISOString(),
+        };
+      } catch (fallbackError) {
+        console.warn('Public AI askAI fallback failed:', getProviderResponseMessage(fallbackError));
+      }
+    }
     return {
       answer: getPublicAIErrorMessage(err),
       timestamp: new Date().toISOString(),
@@ -1396,17 +1534,36 @@ async function askAI(question, context = {}) {
 
 async function askAIStream(question, context = {}, res) {
   const prompt = buildAIChatPrompt(question, context);
+  const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
+  const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;
 
   try {
-    const answer = await callPublicAIMessages(
-      [buildVisionUserMessage(prompt, context.imageDataUrl)],
-      { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 },
-    );
+    const answer = useDeepSeekChat
+      ? await callDeepSeekMessages(messages, {
+        model: DEEPSEEK.chatModel || 'deepseek-v4-pro',
+        temperature: 0.35,
+        maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
+        timeout: DEEPSEEK.timeout || 50000,
+        thinking: DEEPSEEK.chatThinking || 'disabled',
+      })
+      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
     return;
   } catch (err) {
+    if (useDeepSeekChat) {
+      console.warn('DeepSeek stream failed, falling back to public AI:', getProviderResponseMessage(err));
+      try {
+        const answer = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      } catch (fallbackError) {
+        console.error('Public AI stream fallback failed:', fallbackError.message);
+      }
+    }
     console.error('Public AI stream failed:', err.message);
     writeAIStreamPublicError(res, getPublicAIErrorMessage(err));
     return;
@@ -1873,7 +2030,7 @@ TRẢ VỀ JSON:
 async function teachGrammar({ question, topic, wrongAnswer, correctAnswer, userLevel = 'beginner' }) {
   const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
   const levelText = levelMap[userLevel] || 'sơ cấp';
-  const lessonMaxTokens = Math.min(BEE.lessonMaxTokens || 1600, 1800);
+  const lessonMaxTokens = DEEPSEEK.lessonMaxTokens || Math.min(BEE.lessonMaxTokens || 1600, 1800);
 
   const prompt = `Bạn là gia sư giỏi, giải thích bằng TIẾNG VIỆT cho học sinh trình độ ${levelText}.
 ${USER_AI_PRIVACY_PROMPT_RULES}
@@ -1913,7 +2070,15 @@ JSON schema:
 }`;
 
   try {
-    const raw = await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
+    const raw = isDeepSeekConfigured()
+      ? await callDeepSeekAI(prompt, {
+        model: DEEPSEEK.lessonModel || 'deepseek-v4-flash',
+        temperature: 0.25,
+        maxTokens: lessonMaxTokens,
+        timeout: DEEPSEEK.timeout || 50000,
+        thinking: DEEPSEEK.lessonThinking || 'disabled',
+      })
+      : await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
@@ -1921,10 +2086,21 @@ JSON schema:
     return normalizeGrammarLesson(ai);
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
+    if (isDeepSeekConfigured()) {
+      console.warn('DeepSeek teachGrammar failed, falling back to public AI:', getProviderResponseMessage(err));
+      try {
+        const raw = await callPublicAI(prompt, { temperature: 0.25, maxTokens: Math.min(BEE.lessonMaxTokens || 1800, 2200) });
+        const ai = parseAIMaybeJSON(raw);
+        if (ai) return normalizeGrammarLesson(ai);
+      } catch (fallbackError) {
+        console.warn('Public AI teachGrammar fallback failed:', getProviderResponseMessage(fallbackError));
+      }
+    }
     return {
       success: false,
       title: 'Bài học ngữ pháp',
       grammarRule: 'Không thể tải bài giảng lúc này. Bạn hãy thử lại sau nhé!',
+      answer: 'Không thể tải bài giảng lúc này. Bạn hãy thử lại sau nhé!',
       examples: [],
       memoryTips: [],
       commonMistakes: [],
@@ -1946,6 +2122,9 @@ module.exports = {
   callBeeknoeeMessages,
   callAdminExamAI,
   callAdminExamAIMessages,
+  callDeepSeekAI,
+  callDeepSeekMessages,
+  isDeepSeekConfigured,
   isRateLimited,
   getRateLimitRemaining,
   // Features

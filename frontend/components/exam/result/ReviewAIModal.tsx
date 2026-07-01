@@ -11,7 +11,6 @@ import QuestionExplanationBlock from './QuestionExplanationBlock';
 import type { QuestionResult, ReviewAIMode } from './types';
 import {
   buildQuestionExplanationPrompt,
-  buildQuestionTheoryPrompt,
   formatReviewAnswer,
   getQuestionDisplayText,
   getQuestionReviewStatus,
@@ -73,13 +72,21 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
       setCuteMessage(pickCuteAILoadingMessage(Date.now() + Math.random() * 1000));
 
       try {
-        const prompt = mode === 'theory'
-          ? buildQuestionTheoryPrompt(question, questionText, languageMode)
-          : buildQuestionExplanationPrompt(question, questionText, languageMode);
-        const res = await authFetch('/api/ai/ask', {
-          method: 'POST',
-          body: JSON.stringify({ question: prompt, attemptId }),
-        });
+        const res = mode === 'theory'
+          ? await authFetch('/api/ai/teach-grammar', {
+            method: 'POST',
+            body: JSON.stringify({
+              question: questionText,
+              topic: question.topic_name || question.question_category || languageMode || 'CSCA',
+              wrongAnswer: formatReviewAnswer(question.selected_answer_key, question.selected_answer_text, 'Bạn đã bỏ qua'),
+              correctAnswer: formatReviewAnswer(question.correct_answer_key, question.correct_answer_text, 'Chưa có đáp án đúng'),
+              userLevel: 'intermediate',
+            }),
+          })
+          : await authFetch('/api/ai/ask', {
+            method: 'POST',
+            body: JSON.stringify({ question: buildQuestionExplanationPrompt(question, questionText, languageMode), attemptId }),
+          });
         const data = await res.json();
         if (alive) setAnswer(data);
       } catch (error) {
