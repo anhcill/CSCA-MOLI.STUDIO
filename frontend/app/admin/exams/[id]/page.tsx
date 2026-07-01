@@ -15,7 +15,7 @@ import FillBlankGroup, { FillBlankGroupData } from '@/components/admin/FillBlank
 import RichMathText from '@/components/common/RichMathText';
 import PdfImportPanel from '@/components/admin/pdf-import/PdfImportPanel';
 import ExamAiPanel from '@/components/admin/exam-ai/ExamAiPanel';
-import ExamAiActions from '@/components/admin/exam-ai/ExamAiActions';
+import ExamAiActions, { ExamAiFastModel, ExamAiQualityMode } from '@/components/admin/exam-ai/ExamAiActions';
 import ExamAiHistory, { ExamAiRun, formatAiRunTime, getExamAiRunDetail, getExamAiRunLabel } from '@/components/admin/exam-ai/ExamAiHistory';
 import ExamReviewResultPanel, { getExamReviewIssues } from '@/components/admin/exam-ai/ExamReviewResultPanel';
 import ExamSourceFilePanel from '@/components/admin/exam-ai/ExamSourceFilePanel';
@@ -669,7 +669,8 @@ export default function AdminExamDetailPage() {
     const [missingExplanationResult, setMissingExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
     const [polishingExplanations, setPolishingExplanations] = useState(false);
     const [polishExplanationResult, setPolishExplanationResult] = useState<GenerateMissingExplanationsResult | null>(null);
-    const [aiQualityMode, setAiQualityMode] = useState<'fast' | 'deep'>('deep');
+    const [aiQualityMode, setAiQualityMode] = useState<ExamAiQualityMode>('deep');
+    const [aiFastModel, setAiFastModel] = useState<ExamAiFastModel>('cx/gpt-5.5');
     const [reviewingQuestionId, setReviewingQuestionId] = useState<number | null>(null);
     const [fixingExplanationQuestionId, setFixingExplanationQuestionId] = useState<number | null>(null);
     const [questionReviewById, setQuestionReviewById] = useState<Record<number, StoredExamReviewResult | null>>({});
@@ -1076,7 +1077,7 @@ export default function AdminExamDetailPage() {
             setExamReviewError('');
             setExamReviewResult(null);
             setExamReviewApplyResult(null);
-            const result = await examAdminApi.reviewExamQuality(exam.id, { qualityMode: aiQualityMode });
+            const result = await examAdminApi.reviewExamQuality(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
             setExamReviewResult(result);
             await loadExam({ silent: true });
         } catch (error: any) {
@@ -1097,7 +1098,7 @@ export default function AdminExamDetailPage() {
             setReviewingQuestionId(question.id);
             setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
             setQuestionReviewById(prev => ({ ...prev, [question.id]: null }));
-            const result = await examAdminApi.reviewQuestionQuality(exam.id, question.id, { qualityMode: aiQualityMode });
+            const result = await examAdminApi.reviewQuestionQuality(exam.id, question.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
             setQuestionReviewById(prev => ({ ...prev, [question.id]: result }));
             await loadExam({ silent: true });
         } catch (error: any) {
@@ -1123,6 +1124,7 @@ export default function AdminExamDetailPage() {
             setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
             const result = await examAdminApi.fixQuestionExplanation(exam.id, question.id, {
                 qualityMode: aiQualityMode,
+                fastModel: aiFastModel,
                 reviewNote: review?.note || '',
                 explanationIssues: review?.explanationIssues || [],
             });
@@ -1209,6 +1211,7 @@ export default function AdminExamDetailPage() {
                         applySafeFormulas: true,
                         applySuggestedAnswers: true,
                         qualityMode: aiQualityMode,
+                        fastModel: aiFastModel,
                     });
                     results.push(result);
                     setExamReviewApplyResult(mergeApplyReviewFixResults(results, reviews.length));
@@ -1263,7 +1266,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setDisplayFormatApplyResult(null);
-            const result = await examAdminApi.applyDisplayFormatFixes(exam.id, { qualityMode: aiQualityMode });
+            const result = await examAdminApi.applyDisplayFormatFixes(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
             setDisplayFormatApplyResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã sửa format hiển thị và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1288,7 +1291,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('explain');
             setAiBlockingStartedAt(Date.now());
             setMissingExplanationResult(null);
-            const result = await examAdminApi.generateMissingExplanations(exam.id, { qualityMode: aiQualityMode });
+            const result = await examAdminApi.generateMissingExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
             setMissingExplanationResult(result);
             await loadExam();
             markEditSessionSavedWork('AI đã thêm giải thích và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1314,7 +1317,7 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('polish');
             setAiBlockingStartedAt(Date.now());
             setPolishExplanationResult(null);
-            const result = await examAdminApi.polishExplanations(exam.id, { qualityMode: aiQualityMode });
+            const result = await examAdminApi.polishExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
             setPolishExplanationResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã chuẩn hóa lời giải và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -2404,6 +2407,7 @@ export default function AdminExamDetailPage() {
                             <>
                                 <ExamAiActions
                                 qualityMode={aiQualityMode}
+                                fastModel={aiFastModel}
                                 disabled={!!aiBlockingTask}
                                 reviewingExam={reviewingExam}
                                 applyingDisplayFormatFixes={applyingDisplayFormatFixes}
@@ -2411,6 +2415,7 @@ export default function AdminExamDetailPage() {
                                 polishingExplanations={polishingExplanations}
                                 normalizingFormulas={normalizingFormulas}
                                 onQualityModeChange={setAiQualityMode}
+                                onFastModelChange={setAiFastModel}
                                 onReview={handleReviewCurrentExam}
                                 onApplyDisplayFormatFixes={handleApplyDisplayFormatFixes}
                                 onGenerateMissingExplanations={handleGenerateMissingExplanations}

@@ -9,8 +9,8 @@ const UserActivity = require('../models/UserActivity');
 
 //  Risk score calculation rules from plan
 const RISK_RULES = {
-  tab_switch:           { thresholdHigh: 3, severity: 'high',     scorePerEvent: 10 },
-  window_blur:          { thresholdHigh: 5, severity: 'critical', scorePerEvent: 8 },
+  tab_switch:           { thresholdHigh: 15, severity: 'medium',   scorePerEvent: 2 },
+  window_blur:          { thresholdHigh: 25, severity: 'medium',   scorePerEvent: 2 },
   copy:                 { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
   copy_attempt:         { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
   print:                { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
@@ -18,12 +18,12 @@ const RISK_RULES = {
   print_shortcut:       { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
   screenshot_suspected: { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
   screenshot_key:       { thresholdHigh: 1, severity: 'critical', scorePerEvent: 30 },
-  fullscreen_exit:      { thresholdHigh: 3, severity: 'medium',   scorePerEvent: 5 },
+  fullscreen_exit:      { thresholdHigh: 15, severity: 'medium',   scorePerEvent: 2 },
   multi_tab_conflict:   { thresholdHigh: 1, severity: 'high',     scorePerEvent: 20 },
-  right_click:          { thresholdHigh: 5, severity: 'low',      scorePerEvent: 2 },
+  right_click:          { thresholdHigh: 25, severity: 'low',      scorePerEvent: 1 },
   devtools:             { thresholdHigh: 1, severity: 'critical', scorePerEvent: 40 },
-  resize_suspicious:    { thresholdHigh: 3, severity: 'medium',   scorePerEvent: 5 },
-  multi_touch:          { thresholdHigh: 3, severity: 'low',      scorePerEvent: 3 },
+  resize_suspicious:    { thresholdHigh: 15, severity: 'low',      scorePerEvent: 1 },
+  multi_touch:          { thresholdHigh: 15, severity: 'low',      scorePerEvent: 1 },
 };
 
 function calcSeverity(riskScore) {
@@ -74,8 +74,8 @@ const ExamRiskActions = {
         const severity = calcSeverity(riskScore);
         const typeCount = Object.keys(types).length;
         // Multiple violation types bonus
-        if (typeCount >= 3) riskScore += 15;
-        if (typeCount >= 5) riskScore += 25;
+        if (typeCount >= 3) riskScore += 5;
+        if (typeCount >= 5) riskScore += 10;
 
         const summary = Object.entries(types)
           .map(([t, c]) => `${t}: ${c}`)
@@ -89,11 +89,8 @@ const ExamRiskActions = {
           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
           ON CONFLICT (attempt_id) WHERE attempt_id IS NOT NULL
           DO UPDATE SET
-            severity = CASE
-              WHEN EXCLUDED.risk_score > exam_risk_cases.risk_score THEN EXCLUDED.severity
-              ELSE exam_risk_cases.severity
-            END,
-            risk_score = GREATEST(EXCLUDED.risk_score, exam_risk_cases.risk_score),
+            severity = EXCLUDED.severity,
+            risk_score = EXCLUDED.risk_score,
             violation_count = EXCLUDED.violation_count,
             violation_types = EXCLUDED.violation_types,
             last_violation_at = EXCLUDED.last_violation_at,

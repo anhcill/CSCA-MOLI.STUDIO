@@ -433,7 +433,7 @@ export default function GamesPage() {
             <section className="mt-8">
               <div className="mb-3">
                 <h2 className="text-xl font-black text-slate-950">Game thư giãn</h2>
-                <p className="mt-1 text-sm text-slate-500">Game ngoài nhẹ, phổ biến và ưu tiên nguồn cho phép nhúng để hạn chế lỗi từ chối kết nối.</p>
+                <p className="mt-1 text-sm text-slate-500">Mấy game nhỏ xinh để đổi gió, bấm vào là chơi cho vui một chút.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-56 animate-pulse rounded-2xl bg-white" />) : relaxingModes.map(renderModeCard)}

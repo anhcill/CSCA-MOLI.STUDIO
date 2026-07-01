@@ -8,6 +8,7 @@ const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 const db = require("./config/database");
 const { runOptimizations } = require("./config/migrations");
+const { aiRequestContextMiddleware } = require("./services/aiRequestContext");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -124,6 +125,7 @@ const urlEncodedBodyLimit = process.env.URLENCODED_BODY_LIMIT || "200kb";
 app.use(express.json({ limit: jsonBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: urlEncodedBodyLimit }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(aiRequestContextMiddleware);
 
 // ====================================
 // RATE LIMITING

@@ -16,7 +16,7 @@ interface UseExamProtectionOptions {
  */
 export function useExamProtection({
   onViolation,
-  maxViolations = 3,
+  maxViolations = 15,
   enabled = true,
 }: UseExamProtectionOptions = {}) {
   const violations = useRef(0);

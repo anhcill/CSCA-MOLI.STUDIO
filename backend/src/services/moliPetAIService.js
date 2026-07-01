@@ -1,5 +1,6 @@
 const axios = require('axios');
 const aiConfig = require('../config/aiConfig');
+const aiUsageService = require('./aiUsageService');
 
 const BEE = aiConfig.beeknoee;
 const ADMIN_EXAM_AI = aiConfig.adminExam || {};
@@ -102,11 +103,13 @@ function buildVisionUserMessage(prompt, imageDataUrl, imageText = 'Read the imag
 async function callProvider(provider, messages, options = {}) {
   const config = getProviderConfig(provider);
   if (!config.baseUrl || !config.apiKey) throw new Error(`${provider.toUpperCase()}_NOT_CONFIGURED`);
+  const startedAt = Date.now();
+  const model = options.model || config.model;
 
   const response = await axios.post(
     getChatCompletionsUrl(config.baseUrl),
     {
-      model: options.model || config.model,
+      model,
       messages,
       max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 700,
       temperature: options.temperature ?? 0.35,
@@ -122,7 +125,13 @@ async function callProvider(provider, messages, options = {}) {
 
   const text = extractOpenAICompatibleText(response.data);
   if (!text) throw new Error(`${provider.toUpperCase()}_EMPTY_RESPONSE`);
-  return { text, model: options.model || config.model, provider };
+  aiUsageService.logUsageFromResponse(response.data, {
+    provider,
+    model,
+    feature: options.feature || 'moli_pet',
+    durationMs: Date.now() - startedAt,
+  });
+  return { text, model, provider };
 }
 
 async function callMoliMessages(messages, options = {}) {

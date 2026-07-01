@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const aiConfig = require('../config/aiConfig');
 const { DEFAULT_SETTINGS, getSettings } = require('./siteSettingsService');
+const aiUsageService = require('./aiUsageService');
+const aiChatIntentService = require('./aiChatIntentService');
 
 // ─── Rate limiting (global, file-based) ─────────────────────────────────────────
 const RATE_LIMIT_FILE = path.join(__dirname, '../../.ai_ratelimit');
@@ -398,6 +400,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
 
   return withConcurrency(async () => {
     try {
+      const beeknoeeStartTime = options._startTime || Date.now();
       const response = await axios.post(
         `${BEE.baseUrl}/chat/completions`,
         payload,
@@ -413,6 +416,13 @@ async function callBeeknoeeMessages(messages, options = {}) {
 
       // OpenAI-compatible response, including SSE text from local routers.
       const text = extractOpenAICompatibleText(response.data);
+      aiUsageService.logUsageFromResponse(response.data, {
+        userId: options._userId,
+        provider: 'beeknoee',
+        model,
+        feature: options._feature || options.feature || 'beeknoee',
+        durationMs: Date.now() - beeknoeeStartTime,
+      });
       return text || JSON.stringify(response.data);
     } catch (err) {
       if (isAbortError(err, signal)) {
@@ -438,7 +448,7 @@ async function callBeeknoeeMessages(messages, options = {}) {
 }
 
 async function callBeeknoee(prompt, options = {}) {
-  return callBeeknoeeMessages([{ role: 'user', content: prompt }], options);
+  return callBeeknoeeMessages([{ role: 'user', content: prompt }], { ...options, _startTime: Date.now() });
 }
 
 async function callAdminExamAIMessages(messages, options = {}) {
@@ -489,12 +499,20 @@ async function callAdminExamAIMessages(messages, options = {}) {
 
       try {
         return await withConcurrency(async () => {
+          const adminStartTime = Date.now();
           const response = await axios.post(
             getChatCompletionsUrl(ADMIN_EXAM_AI.baseUrl),
             payload,
             { timeout, signal, headers },
           );
           const text = extractOpenAICompatibleText(response.data);
+          aiUsageService.logUsageFromResponse(response.data, {
+            userId: options._userId,
+            provider: String(ADMIN_EXAM_AI.provider || '9router').toLowerCase(),
+            model,
+            feature: options._feature || options.feature || 'admin_exam_ai',
+            durationMs: Date.now() - adminStartTime,
+          });
           return text || JSON.stringify(response.data);
         });
       } catch (err) {
@@ -571,6 +589,7 @@ async function callDeepSeekMessages(messages, options = {}) {
 
     try {
       return await withConcurrency(async () => {
+        const dsStartTime = options._startTime || Date.now();
         const response = await axios.post(
           getChatCompletionsUrl(DEEPSEEK.baseUrl),
           payload,
@@ -584,6 +603,13 @@ async function callDeepSeekMessages(messages, options = {}) {
           },
         );
         const text = extractOpenAICompatibleText(response.data);
+        aiUsageService.logUsageFromResponse(response.data, {
+          userId: options._userId,
+          provider: 'deepseek',
+          model,
+          feature: options._feature || options.feature || 'deepseek',
+          durationMs: Date.now() - dsStartTime,
+        });
         return text || JSON.stringify(response.data);
       });
     } catch (err) {
@@ -678,6 +704,7 @@ async function callOpenAICompatibleMessages(provider, messages, options, setting
   if (!baseUrl || !apiKey) throw createPublicAIProviderError(provider, null, 'PUBLIC_AI_NOT_CONFIGURED');
 
   throwIfAborted(signal);
+  const publicStartTime = Date.now();
   const response = await axios.post(
     getChatCompletionsUrl(baseUrl),
     { model, messages, max_tokens: maxTokens, temperature },
@@ -691,6 +718,13 @@ async function callOpenAICompatibleMessages(provider, messages, options, setting
     },
   );
   const text = extractOpenAICompatibleText(response.data);
+  aiUsageService.logUsageFromResponse(response.data, {
+    userId: options?._userId,
+    provider,
+    model,
+    feature: options?._feature || options?.feature || 'public_ai',
+    durationMs: Date.now() - publicStartTime,
+  });
   return text || JSON.stringify(response.data);
 }
 
@@ -1090,6 +1124,7 @@ TRẢ VỀ JSON. Mỗi trường text dùng \\n để tách ý.
       model: examAnalysisModel,
       temperature: 0.2,
       maxTokens: examAnalysisMaxTokens,
+      feature: 'exam_analysis',
     });
     const ai = parseAIMaybeJSON(raw);
 
@@ -1176,7 +1211,7 @@ TRẢ VỀ JSON:
   ]
 }`;
 
-    const raw = await callPublicAI(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800 });
+    const raw = await callPublicAI(prompt, { temperature: 0.35, maxTokens: BEE.explanationMaxTokens || 1800, feature: 'wrong_answer_explain' });
     const ai = parseAIMaybeJSON(raw);
     return normalizeExplanationResult(ai, batch).explanations;
   }
@@ -1253,6 +1288,7 @@ TRẢ VỀ JSON:
       model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
       temperature: 0.3,
       maxTokens: 1800,
+      feature: 'learning_insight',
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
@@ -1336,6 +1372,7 @@ TRẢ VỀ JSON:
       model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
       temperature: 0.4,
       maxTokens: 1600,
+      feature: 'learning_recommendation',
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
@@ -1445,6 +1482,8 @@ const AI_CHAT_FORMAT_RULES = `FORMAT BẮT BUỘC:
 
 function buildAIChatPrompt(question, context = {}) {
   const { examTitle, subjectName, questions = [], userScore, questionStats, conversationHistory = [] } = context;
+  const focused = aiChatIntentService.focusQuestionsForPrompt(question, questions);
+  const promptQuestions = focused.questions;
 
   const contextText = [
     examTitle && `Đề thi: ${examTitle}`,
@@ -1454,7 +1493,7 @@ function buildAIChatPrompt(question, context = {}) {
     questionStats && `Tổng quan: đúng ${questionStats.correct || 0}, sai ${questionStats.incorrect || 0}, bỏ qua ${questionStats.unanswered || 0}`,
   ].filter(Boolean).join('\n');
 
-  const reviewQuestionContext = buildReviewQuestionContext(questions);
+  const reviewQuestionContext = buildReviewQuestionContext(promptQuestions);
   const conversationContext = buildConversationHistoryContext(conversationHistory);
 
   return `Bạn là trợ lý học tập của MOLI.STUDIO. Trả lời bằng TIẾNG VIỆT CÓ DẤU.
@@ -1502,8 +1541,9 @@ async function askAI(question, context = {}) {
         maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
         thinking: DEEPSEEK.chatThinking || 'disabled',
+        feature: 'chat',
       })
-      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
     return {
       answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
       timestamp: new Date().toISOString(),
@@ -1513,7 +1553,7 @@ async function askAI(question, context = {}) {
     if (useDeepSeekChat) {
       console.warn('DeepSeek askAI failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
-        const response = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+        const response = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
         return {
           answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
           timestamp: new Date().toISOString(),
@@ -1545,8 +1585,9 @@ async function askAIStream(question, context = {}, res) {
         maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
         thinking: DEEPSEEK.chatThinking || 'disabled',
+        feature: 'chat',
       })
-      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
@@ -1555,7 +1596,7 @@ async function askAIStream(question, context = {}, res) {
     if (useDeepSeekChat) {
       console.warn('DeepSeek stream failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
-        const answer = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200 });
+        const answer = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -1741,6 +1782,7 @@ TRẢ VỀ JSON:
       model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
       temperature: 0.3,
       maxTokens: 1400,
+      feature: 'progress_insight',
     });
     const ai = parseAIMaybeJSON(raw);
     if (!ai) throw new Error('Parse failed');
@@ -1826,6 +1868,7 @@ TRẢ VỀ JSON:
       model: BEE.insightModel || BEE.ocrModel || BEE.importModel || BEE.model,
       temperature: 0.35,
       maxTokens: 900,
+      feature: 'exam_recommendation',
     });
     const ai = parseAIMaybeJSON(raw);
 
@@ -2000,7 +2043,7 @@ TRẢ VỀ JSON:
 }`;
 
   try {
-    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: BEE.essayMaxTokens || 3000 });
+    const raw = await callBeeknoee(prompt, { temperature: 0.25, maxTokens: BEE.essayMaxTokens || 3000, feature: 'essay_grading' });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
@@ -2077,8 +2120,9 @@ JSON schema:
         maxTokens: lessonMaxTokens,
         timeout: DEEPSEEK.timeout || 50000,
         thinking: DEEPSEEK.lessonThinking || 'disabled',
+        feature: 'lesson',
       })
-      : await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens });
+      : await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens, feature: 'lesson' });
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');

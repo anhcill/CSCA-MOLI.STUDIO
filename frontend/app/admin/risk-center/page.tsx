@@ -36,6 +36,35 @@ const STATUS_COLORS: Record<string, string> = {
   suspicious: 'bg-orange-50 text-orange-700',
 };
 
+const VIOLATION_LABELS: Record<string, string> = {
+  tab_switch: 'Chuyển tab / rời khỏi trang thi',
+  window_blur: 'Mất focus cửa sổ thi',
+  right_click: 'Click chuột phải',
+  copy: 'Copy nội dung',
+  copy_attempt: 'Cố gắng copy nội dung',
+  print: 'In đề thi',
+  print_attempt: 'Cố gắng in đề thi',
+  print_shortcut: 'Dùng phím tắt in / lưu',
+  screenshot_suspected: 'Nghi vấn chụp màn hình',
+  screenshot_key: 'Bấm phím chụp màn hình',
+  fullscreen_exit: 'Thoát toàn màn hình',
+  multi_tab_conflict: 'Mở cùng lượt thi ở tab khác',
+  devtools: 'Mở công cụ lập trình',
+  resize_suspicious: 'Thay đổi kích thước cửa sổ bất thường',
+  multi_touch: 'Cử chỉ nhiều ngón bất thường',
+};
+
+function violationLabel(type: string) {
+  return VIOLATION_LABELS[type] || type.replace(/_/g, ' ');
+}
+
+function violationSummary(types?: Record<string, number>) {
+  if (!types || Object.keys(types).length === 0) return 'Không có chi tiết lỗi';
+  return Object.entries(types)
+    .map(([type, count]) => `${violationLabel(type)}: ${count}`)
+    .join(', ');
+}
+
 function Badge({ text, colorClass }: { text: string; colorClass?: string }) {
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${colorClass || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
@@ -180,7 +209,7 @@ function ExamRiskDrawer({ detail, onClose, onAction }: {
               <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Risk Score</span>
               <span className="text-3xl font-black text-red-600">{detail.risk_score}</span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">{detail.violation_count} vi phạm - {detail.summary}</p>
+            <p className="text-xs text-gray-500 mt-1">{detail.violation_count} vi phạm - {violationSummary(detail.violation_types)}</p>
           </div>
 
           {/* Violation Types Breakdown */}
@@ -190,7 +219,8 @@ function ExamRiskDrawer({ detail, onClose, onAction }: {
               <div className="flex flex-wrap gap-2">
                 {Object.entries(detail.violation_types).map(([type, count]) => (
                   <span key={type} className="px-2.5 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-xs font-semibold">
-                    {type}: {String(count)}
+                    {violationLabel(type)}: {String(count)}
+                    <span className="ml-1 text-[10px] font-medium opacity-60">({type})</span>
                   </span>
                 ))}
               </div>
@@ -205,7 +235,10 @@ function ExamRiskDrawer({ detail, onClose, onAction }: {
                 {detail.violations.map(v => (
                   <div key={v.id} className="flex items-center gap-3 px-3 py-2 bg-gray-50 dark:bg-slate-800 rounded-lg">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${v.severity === 'critical' ? 'bg-red-500' : v.severity === 'high' ? 'bg-orange-500' : 'bg-yellow-400'}`} />
-                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex-1">{v.violation_type}</span>
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex-1">
+                      {violationLabel(v.violation_type)}
+                      <span className="ml-1 text-[10px] font-medium text-gray-400">({v.violation_type})</span>
+                    </span>
                     <span className="text-[10px] text-gray-400">{timeAgo(v.created_at)}</span>
                   </div>
                 ))}

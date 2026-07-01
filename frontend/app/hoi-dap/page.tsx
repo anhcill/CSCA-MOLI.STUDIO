@@ -198,8 +198,7 @@ export default function StudentQAPage() {
                 </div>
                 <h1 className="text-2xl font-black text-gray-900">Hỏi giảng viên 1:1</h1>
                 <p className="mt-3 text-sm leading-6 text-gray-600">
-                  Gửi câu hỏi bằng chữ hoặc ảnh đề bài, giảng viên sẽ trả lời trực tiếp trong một hội thoại riêng.
-                  VIP và Pre dùng chung đề, riêng Pre có thêm video giải đề và hỏi giảng viên.
+                  Góc hỏi bài riêng cho gói Pre: gửi câu hỏi hoặc ảnh đề, giảng viên sẽ trả lời trong một hội thoại riêng.
                 </p>
                 {isVip && (
                   <p className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">

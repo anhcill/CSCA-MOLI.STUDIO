@@ -234,7 +234,7 @@ export default function StudentQAPage() {
         <div className="mb-5 flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
           <FiAlertCircle className="mt-0.5 shrink-0" size={17} />
           <p>
-            Admin sẽ đọc nội dung tại đây để biết người dùng đang vướng gì, muốn thêm gì hoặc cần nâng cấp phần nào.
+            Thả vài dòng ở đây nha, admin sẽ đọc để biết bạn đang kẹt chỗ nào và muốn Moli xịn hơn ra sao.
           </p>
         </div>
 

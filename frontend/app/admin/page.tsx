@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
-import { adminApi } from '@/lib/api/admin';
+import { AIUsageStats, adminApi } from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
-import { FiUsers, FiFileText, FiTrendingUp, FiMessageSquare, FiActivity, FiMonitor, FiAward, FiCalendar, FiWifi } from 'react-icons/fi';
+import { FiUsers, FiFileText, FiTrendingUp, FiActivity, FiAward, FiCalendar, FiWifi, FiCpu, FiDollarSign } from 'react-icons/fi';
 import Link from 'next/link';
 
 interface DashboardStats {
@@ -31,6 +31,41 @@ interface OnlineUsers {
 }
 
 type DatePreset = 'all' | 'today' | 'week' | 'month' | '3months' | 'custom';
+type DashboardTab = 'overview' | 'ai';
+
+const emptyAIUsage: AIUsageStats = {
+    overview: {
+        total_requests: 0,
+        total_prompt_tokens: 0,
+        total_cache_hit_tokens: 0,
+        total_cache_miss_tokens: 0,
+        total_completion_tokens: 0,
+        total_tokens: 0,
+        total_cost_usd: 0,
+        unique_users: 0,
+    },
+    perUser: [],
+    perModel: [],
+    perFeature: [],
+    daily: [],
+    pricing: {},
+};
+
+function num(value: number | string | null | undefined) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatTokens(value: number | string | null | undefined) {
+    const tokens = num(value);
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`;
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+    return Math.round(tokens).toLocaleString('vi-VN');
+}
+
+function formatUsd(value: number | string | null | undefined) {
+    return `$${num(value).toFixed(4)}`;
+}
 
 export default function AdminDashboard() {
     const { user, isAuthenticated } = useAuthStore();
@@ -44,6 +79,9 @@ export default function AdminDashboard() {
     const [datePreset, setDatePreset] = useState<DatePreset>('all');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
+    const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+    const [aiUsage, setAiUsage] = useState<AIUsageStats>(emptyAIUsage);
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
         loadStats({});
@@ -108,10 +146,26 @@ export default function AdminDashboard() {
         }
     };
 
+    const loadAIUsage = async (overrideRange?: { from?: string; to?: string }) => {
+        try {
+            setAiLoading(true);
+            const range = Object.keys(overrideRange || {}).length > 0
+                ? overrideRange!
+                : getDateRange(datePreset);
+            const response = await adminApi.getAIUsageStats({ ...range, limit: 100 });
+            setAiUsage(response.data || emptyAIUsage);
+        } catch {
+            setAiUsage(emptyAIUsage);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     const handleDatePreset = (preset: DatePreset) => {
         setDatePreset(preset);
         if (preset !== 'custom') {
             loadStats(getDateRange(preset));
+            if (activeTab === 'ai') loadAIUsage(getDateRange(preset));
         }
     };
 
@@ -120,6 +174,12 @@ export default function AdminDashboard() {
     const canManageContent = hasPermission(user, 'content.manage');
     const canManageForum = hasPermission(user, 'forum.manage');
     const isSuperAdmin = hasPermission(user, 'admin.super');
+
+    useEffect(() => {
+        if (activeTab === 'ai' && isSuperAdmin) {
+            loadAIUsage();
+        }
+    }, [activeTab, isSuperAdmin]);
 
     const statCards = [
         { title: 'Tổng Users', value: stats.totalUsers, icon: FiUsers, tone: 'blue' },
@@ -182,7 +242,11 @@ export default function AdminDashboard() {
                         <span className="text-xs text-gray-400">—</span>
                         <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
                             className="px-2 py-1 text-xs border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-violet-500" />
-                        <button onClick={() => loadStats(getDateRange('custom'))}
+                        <button onClick={() => {
+                            const range = getDateRange('custom');
+                            loadStats(range);
+                            if (activeTab === 'ai') loadAIUsage(range);
+                        }}
                             className="px-3 py-1.5 text-xs font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700">
                             Áp dụng
                         </button>
@@ -190,6 +254,30 @@ export default function AdminDashboard() {
                 )}
             </div>
 
+            {isSuperAdmin && (
+                <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    {([
+                        { key: 'overview', label: 'Tổng quan' },
+                        { key: 'ai', label: 'AI chi tiết' },
+                    ] as { key: DashboardTab; label: string }[]).map(tab => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                                activeTab === tab.key
+                                    ? 'bg-violet-600 text-white'
+                                    : 'text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {activeTab === 'overview' && (
+                <>
             {/* Stats */}
             <div className="grid grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
                 {statCards.map(card => {
@@ -270,6 +358,118 @@ export default function AdminDashboard() {
                     )}
                 </div>
             </div>
+                </>
+            )}
+            {activeTab === 'ai' && isSuperAdmin && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+                        {[
+                            { title: 'AI requests', value: num(aiUsage.overview.total_requests).toLocaleString('vi-VN'), icon: FiCpu, tone: 'violet' },
+                            { title: 'Người dùng AI', value: num(aiUsage.overview.unique_users).toLocaleString('vi-VN'), icon: FiUsers, tone: 'blue' },
+                            { title: 'Tổng token', value: formatTokens(aiUsage.overview.total_tokens), icon: FiActivity, tone: 'emerald' },
+                            { title: 'Output token', value: formatTokens(aiUsage.overview.total_completion_tokens), icon: FiTrendingUp, tone: 'orange' },
+                            { title: 'Chi phí ước tính', value: formatUsd(aiUsage.overview.total_cost_usd), icon: FiDollarSign, tone: 'pink' },
+                        ].map(card => {
+                            const Icon = card.icon;
+                            return (
+                                <div key={card.title} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-5 shadow-sm">
+                                    <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${colorMap[card.tone]} text-white mb-3`}>
+                                        <Icon size={18} />
+                                    </div>
+                                    <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{card.title}</p>
+                                    <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{aiLoading ? '...' : card.value}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h3 className="mb-4 text-base font-bold text-gray-900 dark:text-white">Người dùng tốn AI nhiều nhất</h3>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                    <thead className="text-xs uppercase text-gray-400">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left">User</th>
+                                            <th className="px-3 py-2 text-right">Token</th>
+                                            <th className="px-3 py-2 text-right">Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                                        {aiUsage.perUser.slice(0, 12).map(row => (
+                                            <tr key={`${row.user_id || 'unknown'}-${row.email || ''}`}>
+                                                <td className="px-3 py-3">
+                                                    <p className="font-bold text-gray-900 dark:text-white">{row.full_name || 'Không rõ user'}</p>
+                                                    <p className="text-xs text-gray-400">{row.email || `user_id: ${row.user_id || 'N/A'}`}</p>
+                                                </td>
+                                                <td className="px-3 py-3 text-right font-semibold">{formatTokens(row.total_tokens)}</td>
+                                                <td className="px-3 py-3 text-right font-black text-rose-600">{formatUsd(row.cost_usd)}</td>
+                                            </tr>
+                                        ))}
+                                        {!aiLoading && aiUsage.perUser.length === 0 && (
+                                            <tr><td colSpan={3} className="px-3 py-8 text-center text-gray-400">Chưa có log AI trong khoảng này.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h3 className="mb-4 text-base font-bold text-gray-900 dark:text-white">Model đang được dùng</h3>
+                            <div className="space-y-3">
+                                {aiUsage.perModel.map(row => (
+                                    <div key={`${row.provider}-${row.model}`} className="rounded-xl border border-gray-100 p-3 dark:border-slate-800">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-black text-gray-900 dark:text-white">{row.model}</p>
+                                                <p className="text-xs text-gray-400">{row.provider} · {num(row.requests).toLocaleString('vi-VN')} requests</p>
+                                            </div>
+                                            <p className="font-black text-rose-600">{formatUsd(row.cost_usd)}</p>
+                                        </div>
+                                        <p className="mt-2 text-xs text-gray-500">
+                                            Input {formatTokens(row.prompt_tokens)} · cache hit {formatTokens(row.cache_hit_tokens)} · output {formatTokens(row.completion_tokens)}
+                                        </p>
+                                    </div>
+                                ))}
+                                {!aiLoading && aiUsage.perModel.length === 0 && (
+                                    <div className="py-8 text-center text-sm text-gray-400">Chưa có model nào được ghi nhận.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h3 className="mb-4 text-base font-bold text-gray-900 dark:text-white">Tính năng dùng AI</h3>
+                            <div className="space-y-2">
+                                {aiUsage.perFeature.map(row => (
+                                    <div key={row.feature} className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 dark:bg-slate-800">
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800 dark:text-slate-100">{row.feature}</p>
+                                            <p className="text-xs text-gray-400">{num(row.requests).toLocaleString('vi-VN')} requests · {formatTokens(row.total_tokens)} token</p>
+                                        </div>
+                                        <p className="font-black text-rose-600">{formatUsd(row.cost_usd)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h3 className="mb-4 text-base font-bold text-gray-900 dark:text-white">30 ngày gần đây</h3>
+                            <div className="space-y-2">
+                                {aiUsage.daily.map(row => (
+                                    <div key={row.date} className="grid grid-cols-4 gap-2 rounded-xl bg-gray-50 px-3 py-2 text-sm dark:bg-slate-800">
+                                        <span className="font-bold text-gray-700 dark:text-slate-200">{new Date(row.date).toLocaleDateString('vi-VN')}</span>
+                                        <span className="text-right">{num(row.requests).toLocaleString('vi-VN')} req</span>
+                                        <span className="text-right">{formatTokens(row.total_tokens)}</span>
+                                        <span className="text-right font-black text-rose-600">{formatUsd(row.cost_usd)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminLayout>
     );
 }

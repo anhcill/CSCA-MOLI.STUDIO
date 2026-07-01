@@ -6,6 +6,7 @@ import { authFetch } from '@/lib/utils/authFetch';
 import AIFormattedText from '@/components/ai/AIFormattedText';
 import { pickCuteAILoadingMessage } from '@/components/ai/cuteLoadingMessages';
 import CuteLoadingText from '@/components/ai/CuteLoadingText';
+import { AI_CHAT_GREETING_REPLY, AI_CHAT_RESET_MESSAGE, AI_CHAT_WELCOME_MESSAGE, QUICK_QUESTIONS, isGreetingOnly } from '@/components/ai/aiChatbotConfig';
 import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 
 interface Message {
@@ -20,13 +21,6 @@ interface AIChatbotProps {
     attemptId?: number;
     examTitle?: string;
 }
-
-const QUICK_QUESTIONS = [
-    { label: 'Câu sai', prompt: 'Hãy xem lại các câu tôi làm sai trong bài này và giải thích vì sao sai, vì sao đáp án đúng hợp lý.', emoji: '❓' },
-    { label: 'Câu bỏ qua', prompt: 'Hãy giúp tôi xem lại các câu tôi bỏ qua, hướng dẫn cách suy luận và mẹo nhận biết lần sau.', emoji: '⏳' },
-    { label: 'Câu đúng', prompt: 'Hãy chọn vài câu tôi làm đúng trong bài này và giải thích dấu hiệu nhận biết để tôi nhớ lâu hơn.', emoji: '✅' },
-    { label: 'Học gì tiếp?', prompt: 'Tôi nên học gì tiếp theo để cải thiện sau bài này?', emoji: '🎯' },
-];
 
 const PUBLIC_AI_UNAVAILABLE_MESSAGE = 'Xin lỗi, AI đang gặp sự cố tạm thời. Bên mình sẽ kiểm tra và khắc phục sớm, bạn thử lại sau nhé.';
 const PRIVATE_AI_ERROR_PATTERNS = [
@@ -71,7 +65,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         {
             id: 'welcome',
             role: 'ai',
-            content: 'Chào bạn! Tôi là trợ lý AI học tập. Bạn có thể hỏi tôi về câu đúng, câu sai, câu bỏ qua, từ vựng và mẹo làm bài. Hãy đặt câu hỏi nhé!',
+            content: AI_CHAT_WELCOME_MESSAGE,
             timestamp: new Date().toISOString(),
         },
     ]);
@@ -131,11 +125,6 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         const questionText = trimmedText || (imageSnapshot ? 'Mình gửi ảnh này, bạn xem và giải thích giúp mình.' : '');
         if ((!questionText && !imageSnapshot) || loading || processingImage) return;
 
-        const conversationHistory = messages
-            .filter(msg => msg.id !== 'welcome' && msg.content.trim() && (msg.role === 'user' || msg.role === 'ai'))
-            .slice(-8)
-            .map(msg => ({ role: msg.role, content: msg.content }));
-
         const userMsg: Message = {
             id: Date.now().toString(),
             role: 'user',
@@ -147,6 +136,23 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setInput('');
         if (isMobileViewport()) inputRef.current?.blur();
         setPastedImage(null);
+
+        if (!imageSnapshot && isGreetingOnly(questionText)) {
+            setMessages(prev => [...prev, {
+                id: (Date.now() + 1).toString(),
+                role: 'ai',
+                content: AI_CHAT_GREETING_REPLY,
+                timestamp: new Date().toISOString(),
+            }]);
+            focusInputSafely();
+            return;
+        }
+
+        const conversationHistory = messages
+            .filter(msg => msg.id !== 'welcome' && msg.content.trim() && (msg.role === 'user' || msg.role === 'ai'))
+            .slice(-8)
+            .map(msg => ({ role: msg.role, content: msg.content }));
+
         setLoading(true);
         setIsStreaming(true);
 
@@ -244,7 +250,7 @@ export default function AIChatbot({ attemptId, examTitle }: AIChatbotProps) {
         setMessages([{
             id: 'welcome',
             role: 'ai',
-            content: 'Đã xóa cuộc trò chuyện. Hãy đặt câu hỏi mới nhé!',
+            content: AI_CHAT_RESET_MESSAGE,
             timestamp: new Date().toISOString(),
         }]);
     };

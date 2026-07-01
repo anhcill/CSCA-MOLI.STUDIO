@@ -977,6 +977,23 @@ const AdminController = {
             console.error('Error getting online users:', error);
             res.status(500).json({ message: 'Server error' });
         }
+        },
+
+    async getAIUsageStats(req, res) {
+        try {
+            const aiUsageService = require('../services/aiUsageService');
+            const { from, to, userId, limit } = req.query;
+            const stats = await aiUsageService.getUsageStats({
+                from: from || undefined,
+                to: to || undefined,
+                userId: userId ? parseInt(userId, 10) : undefined,
+                limit: limit ? parseInt(limit, 10) : 50,
+            });
+            res.json({ success: true, data: stats });
+        } catch (error) {
+            console.error('Error getting AI usage stats:', error);
+            res.status(500).json({ success: false, message: 'Lỗi lấy thống kê AI' });
+        }
     }
 };
 

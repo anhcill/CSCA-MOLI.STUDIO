@@ -142,7 +142,10 @@ function getUniqueAiModels(models) {
 }
 
 function getAdminExamAiMode(req) {
-  return buildAiModeOptions(req.body?.qualityMode || req.query?.qualityMode);
+  return buildAiModeOptions(
+    req.body?.qualityMode || req.query?.qualityMode,
+    req.body?.fastModel || req.query?.fastModel,
+  );
 }
 
 async function getQuestionReviewModelContext() {
@@ -1042,11 +1045,13 @@ const AdminExamController = {
 
       const modeOptions = getAdminExamAiMode(req);
       const questionReviewModelContext = await getQuestionReviewModelContext();
+      const hasRequestedFastModel = Boolean(req.body?.fastModel || req.query?.fastModel);
       const baseContext = {
         subject: req.body?.subject || req.body?.subjectName || undefined,
         signal,
         ...modeOptions.fast,
         ...questionReviewModelContext,
+        ...(hasRequestedFastModel ? modeOptions.fast : {}),
       };
       let result = await reviewStoredQuestionWithAI(client, examId, questionId, baseContext);
       if (isDeepMode(modeOptions.qualityMode)) {
@@ -1054,18 +1059,20 @@ const AdminExamController = {
         result = await reviewStoredQuestionWithAI(client, examId, questionId, {
           ...baseContext,
           ...modeOptions.deep,
-          ...questionReviewModelContext,
         });
         result.fastReviewSummary = fastSummary;
       }
       result.qualityMode = modeOptions.qualityMode;
       if (Array.isArray(result.diagnostics)) {
-        const modelLabel = questionReviewModelContext.reviewModels.join(" -> ");
+        const modelChain = isDeepMode(modeOptions.qualityMode)
+          ? getUniqueAiModels([baseContext.reviewModel, modeOptions.deep?.reviewModel])
+          : getUniqueAiModels(baseContext.reviewModels || [baseContext.reviewModel]);
+        const modelLabel = modelChain.join(" -> ");
         result.summary = { ...(result.summary || {}), model: modelLabel };
         result.diagnostics = result.diagnostics.map(item => ({
           ...item,
           model: modelLabel,
-          modelChain: questionReviewModelContext.reviewModels,
+          modelChain,
         }));
       }
       await recordExamAiRun(client, examId, EXAM_AI_ACTIONS.REVIEW_QUESTION, req.user.id, {

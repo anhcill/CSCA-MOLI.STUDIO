@@ -45,6 +45,60 @@ export interface AdminActivityFilters {
     limit?: number;
 }
 
+export interface AIUsageStats {
+    overview: {
+        total_requests: number | string;
+        total_prompt_tokens: number | string;
+        total_cache_hit_tokens: number | string;
+        total_cache_miss_tokens: number | string;
+        total_completion_tokens: number | string;
+        total_tokens: number | string;
+        total_cost_usd: number | string;
+        unique_users: number | string;
+    };
+    perUser: Array<{
+        user_id: number | null;
+        full_name: string | null;
+        email: string | null;
+        role: string | null;
+        requests: number | string;
+        prompt_tokens: number | string;
+        cache_hit_tokens: number | string;
+        cache_miss_tokens: number | string;
+        completion_tokens: number | string;
+        total_tokens: number | string;
+        cost_usd: number | string;
+        last_used_at: string | null;
+    }>;
+    perModel: Array<{
+        provider: string;
+        model: string;
+        requests: number | string;
+        prompt_tokens: number | string;
+        cache_hit_tokens: number | string;
+        cache_miss_tokens: number | string;
+        completion_tokens: number | string;
+        total_tokens: number | string;
+        cost_usd: number | string;
+    }>;
+    perFeature: Array<{
+        feature: string;
+        requests: number | string;
+        prompt_tokens: number | string;
+        completion_tokens: number | string;
+        total_tokens: number | string;
+        cost_usd: number | string;
+    }>;
+    daily: Array<{
+        date: string;
+        requests: number | string;
+        total_tokens: number | string;
+        cost_usd: number | string;
+        unique_users: number | string;
+    }>;
+    pricing: Record<string, { input: number; inputCached: number; output: number }>;
+}
+
 export const adminApi = {
     // Get dashboard statistics
     async getDashboardStats(query = '') {
@@ -107,6 +161,11 @@ export const adminApi = {
     async getOnlineUsers() {
         const response = await axios.get('/admin/online-users');
         return response.data as { online: number; users: { id: number; email: string; role: string }[] };
+    },
+
+    async getAIUsageStats(params?: { from?: string; to?: string; userId?: number; limit?: number }) {
+        const response = await axios.get('/admin/ai-usage', { params });
+        return response.data as { success: boolean; data: AIUsageStats };
     }
 };
 

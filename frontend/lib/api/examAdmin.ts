@@ -3,6 +3,12 @@ import { normalizeImportedItemsMath, normalizePdfImportPreviewMath } from '@/lib
 import type { PdfImportPreset } from '@/lib/pdf-import/presets';
 
 export type PdfImportLanguageMode = 'auto' | 'vi' | 'en' | 'zh' | 'vi_en' | 'vi_zh' | 'zh_en';
+export type AdminExamAiQualityMode = 'fast' | 'deep';
+export type AdminExamAiFastModel = 'cx/gpt-5.5' | 'ag/claude-opus-4-6-thinking';
+export type AdminExamAiModePayload = {
+    qualityMode?: AdminExamAiQualityMode;
+    fastModel?: AdminExamAiFastModel;
+};
 
 export interface ExamCreateData {
     title: string;
@@ -675,14 +681,14 @@ export const examAdminApi = {
         return response.data;
     },
 
-    reviewExamQuality: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<StoredExamReviewResult> => {
+    reviewExamQuality: async (examId: number, data: AdminExamAiModePayload = {}): Promise<StoredExamReviewResult> => {
         const response = await axios.post(`/admin/exams/${examId}/review-quality`, data, {
             timeout: data.qualityMode === 'deep' ? 1800000 : 900000,
         });
         return response.data;
     },
 
-    reviewQuestionQuality: async (examId: number, questionId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<StoredExamReviewResult> => {
+    reviewQuestionQuality: async (examId: number, questionId: number, data: AdminExamAiModePayload = {}): Promise<StoredExamReviewResult> => {
         const response = await axios.post(`/admin/exams/${examId}/questions/${questionId}/ai-review`, data, {
             timeout: data.qualityMode === 'deep' ? 900000 : 300000,
         });
@@ -692,7 +698,7 @@ export const examAdminApi = {
     fixQuestionExplanation: async (
         examId: number,
         questionId: number,
-        data: { qualityMode?: 'fast' | 'deep'; reviewNote?: string; explanationIssues?: string[] } = {},
+        data: AdminExamAiModePayload & { reviewNote?: string; explanationIssues?: string[] } = {},
     ): Promise<FixQuestionExplanationResult> => {
         const response = await axios.post(`/admin/exams/${examId}/questions/${questionId}/fix-explanation`, data, {
             timeout: data.qualityMode === 'deep' ? 900000 : 300000,
@@ -702,7 +708,7 @@ export const examAdminApi = {
 
     applyExamReviewFixes: async (
         examId: number,
-        data: { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean; qualityMode?: 'fast' | 'deep' },
+        data: AdminExamAiModePayload & { reviews: ImportedQuestionAiReview[]; applySafeFormulas?: boolean; applySuggestedAnswers?: boolean },
     ): Promise<ApplyExamReviewFixesResult> => {
         const response = await axios.post(`/admin/exams/${examId}/apply-ai-review-fixes`, data, {
             timeout: data.qualityMode === 'deep' ? 1800000 : 900000,
@@ -710,21 +716,21 @@ export const examAdminApi = {
         return response.data;
     },
 
-    applyDisplayFormatFixes: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<ApplyExamReviewFixesResult> => {
+    applyDisplayFormatFixes: async (examId: number, data: AdminExamAiModePayload = {}): Promise<ApplyExamReviewFixesResult> => {
         const response = await axios.post(`/admin/exams/${examId}/apply-display-format-fixes`, data, {
             timeout: data.qualityMode === 'deep' ? 1800000 : 600000,
         });
         return response.data;
     },
 
-    generateMissingExplanations: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<GenerateMissingExplanationsResult> => {
+    generateMissingExplanations: async (examId: number, data: AdminExamAiModePayload = {}): Promise<GenerateMissingExplanationsResult> => {
         const response = await axios.post(`/admin/exams/${examId}/generate-missing-explanations`, data, {
             timeout: data.qualityMode === 'deep' ? 1800000 : 1200000,
         });
         return response.data;
     },
 
-    polishExplanations: async (examId: number, data: { qualityMode?: 'fast' | 'deep' } = {}): Promise<GenerateMissingExplanationsResult> => {
+    polishExplanations: async (examId: number, data: AdminExamAiModePayload = {}): Promise<GenerateMissingExplanationsResult> => {
         const response = await axios.post(`/admin/exams/${examId}/polish-explanations`, data, {
             timeout: data.qualityMode === 'deep' ? 1800000 : 600000,
         });

@@ -129,7 +129,7 @@ export default function ExamPage() {
           officialExamApi.logViolation(attemptId, {
             type,
             count: next,
-            severity: next >= 3 ? 'critical' : 'warning',
+            severity: next >= 15 ? 'critical' : next >= 10 ? 'high' : 'warning',
             metadata: {
               questionIndex: currentQuestionIndex,
               timeLeft,

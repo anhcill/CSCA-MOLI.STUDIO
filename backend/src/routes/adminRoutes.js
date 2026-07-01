@@ -102,5 +102,12 @@ router.post(
 	adminController.resetAdminMfa,
 );
 
+// ── AI Token Usage Stats ────────────────────────────────────────────────────
+router.get(
+	"/ai-usage",
+	authorizePermission("admin.super"),
+	adminController.getAIUsageStats,
+);
+
 module.exports = router;
 
