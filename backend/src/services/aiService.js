@@ -1529,6 +1529,14 @@ Câu hỏi: ${question}`;
 }
 
 async function askAI(question, context = {}) {
+  const directReply = aiChatIntentService.getDirectReply(question, context);
+  if (directReply) {
+    return {
+      answer: directReply,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
   const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;
@@ -1573,6 +1581,14 @@ async function askAI(question, context = {}) {
 // Moli pet chat and daily gift generation live in ./moliPetAIService.
 
 async function askAIStream(question, context = {}, res) {
+  const directReply = aiChatIntentService.getDirectReply(question, context);
+  if (directReply) {
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: directReply } }] })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+    return;
+  }
+
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
   const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;

@@ -67,6 +67,10 @@ function getDirectReply(question, context = {}) {
   if (isGreetingOnly(question)) {
     return 'Hello nè. Bạn muốn hỏi mình câu nào trong bài này? Ví dụ: "giải câu 12" hoặc gửi ảnh đề cũng được.';
   }
+  const questionNumber = extractQuestionNumber(question);
+  if (!context.imageDataUrl && questions.length && questionNumber && !getQuestionByNumber(questions, questionNumber)) {
+    return `Mình chưa thấy câu ${questionNumber} trong dữ liệu bài này. Bạn kiểm tra lại số câu hoặc gửi ảnh câu đó cho mình nha.`;
+  }
   if (!context.imageDataUrl && questions.length && isVagueQuestionReview(question)) {
     const status = detectRequestedStatus(question);
     const choices = buildQuestionChoices(questions, status);
@@ -80,6 +84,7 @@ function getDirectReply(question, context = {}) {
 function focusQuestionsForPrompt(question, questions = []) {
   const questionNumber = extractQuestionNumber(question);
   const focusedQuestion = getQuestionByNumber(questions, questionNumber);
+  if (questionNumber && !focusedQuestion) return { questions: [], focusedQuestion: null, questionNumber };
   if (!focusedQuestion) return { questions, focusedQuestion: null, questionNumber };
   return { questions: [focusedQuestion], focusedQuestion, questionNumber };
 }
