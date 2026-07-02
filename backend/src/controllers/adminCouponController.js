@@ -226,6 +226,11 @@ const AdminCouponController = {
       const values = [];
       let idx = 1;
 
+      const addField = (field, value) => {
+        fields.push(`${field} = $${idx++}`);
+        values.push(value);
+      };
+
       // Normalize array fields before use
       const normalizedPackages = Array.isArray(applicable_packages)
         ? (applicable_packages.length > 0 ? applicable_packages.map(Number) : null)
@@ -234,27 +239,20 @@ const AdminCouponController = {
         ? (applicable_tiers.length > 0 ? applicable_tiers.map(String) : ['all'])
         : ['all'];
 
-      const map = {
-        code: { sql: `code = $${idx++}`, val: code ? code.trim().toUpperCase() : undefined },
-        description: { sql: `description = $${idx++}`, val: description },
-        discount_type: { sql: `discount_type = $${idx++}`, val: discount_type },
-        discount_value: { sql: `discount_value = $${idx++}`, val: discount_value != null ? Number(discount_value) : null },
-        min_order_amount: { sql: `min_order_amount = $${idx++}`, val: min_order_amount != null ? Number(min_order_amount) : null },
-        max_uses: { sql: `max_uses = $${idx++}`, val: max_uses != null ? Number(max_uses) : null },
-        user_limit: { sql: `user_limit = $${idx++}`, val: user_limit != null ? Number(user_limit) : null },
-        valid_from: { sql: `valid_from = $${idx++}`, val: normalizeOptionalDate(valid_from) },
-        valid_until: { sql: `valid_until = $${idx++}`, val: normalizeOptionalDate(valid_until) },
-        is_active: { sql: `is_active = $${idx++}`, val: typeof is_active === 'boolean' ? is_active : undefined },
-        applicable_packages: { sql: `applicable_packages = $${idx++}`, val: normalizedPackages },
-        applicable_tiers: { sql: `applicable_tiers = $${idx++}`, val: normalizedTiers },
-      };
-
-      for (const [, v] of Object.entries(map)) {
-        if (v.val != null) {
-          fields.push(v.sql);
-          values.push(v.val);
-        }
-      }
+      // Only assign a placeholder when the field is actually part of this update.
+      // Eagerly incrementing idx creates gaps ($2, $8, ...) that PostgreSQL cannot type.
+      if (code) addField('code', code.trim().toUpperCase());
+      if ('description' in req.body) addField('description', description || null);
+      if (discount_type != null) addField('discount_type', discount_type);
+      if (discount_value != null) addField('discount_value', Number(discount_value));
+      if (min_order_amount != null) addField('min_order_amount', Number(min_order_amount));
+      if ('max_uses' in req.body) addField('max_uses', max_uses != null ? Number(max_uses) : null);
+      if (user_limit != null) addField('user_limit', Number(user_limit));
+      if ('valid_from' in req.body) addField('valid_from', normalizeOptionalDate(valid_from));
+      if ('valid_until' in req.body) addField('valid_until', normalizeOptionalDate(valid_until));
+      if (typeof is_active === 'boolean') addField('is_active', is_active);
+      if ('applicable_packages' in req.body) addField('applicable_packages', normalizedPackages);
+      if ('applicable_tiers' in req.body) addField('applicable_tiers', normalizedTiers);
 
       if (fields.length === 0) {
         return res.status(400).json({ success: false, message: 'Không có trường nào được cập nhật' });
