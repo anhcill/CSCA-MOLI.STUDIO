@@ -330,6 +330,109 @@ function renderOmmlChildren(node) {
   return getXmlChildElements(node).map(renderOmml).join("");
 }
 
+const { spawn } = require("child_process");
+const path = require("path");
+
+function parseMtefToLatex(buffer) {
+  return new Promise((resolve, reject) => {
+    const pythonPath = process.env.PYTHON_PATH || "python3";
+    const scriptPath = path.join(__dirname, "../utils/mtef_py/parse_ole.py");
+    
+    const py = spawn(pythonPath, [scriptPath]);
+    
+    let stdoutData = "";
+    let stderrData = "";
+    
+    py.stdout.on("data", (data) => {
+      stdoutData += data.toString();
+    });
+    
+    py.stderr.on("data", (data) => {
+      stderrData += data.toString();
+    });
+    
+    py.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`Python process exited with code ${code}. Stderr: ${stderrData}`));
+        return;
+      }
+      resolve(stdoutData.trim());
+    });
+    
+    py.on("error", (err) => {
+      reject(err);
+    });
+    
+    py.stdin.write(buffer);
+    py.stdin.end();
+  });
+}
+
+async function parseMtefToLatexGraceful(buffer) {
+  try {
+    return await parseMtefToLatex(buffer);
+  } catch (err) {
+    console.warn("Failed to parse MTEF with Python, falling back to empty string:", err.message);
+    return " [Equation] ";
+  }
+}
+
+async function renderDocxInlineAsync(node, zip, relsMap) {
+  const localName = getXmlLocalName(node);
+
+  if (localName === "oMath" || localName === "oMathPara") {
+    const math = normalizeDocxMathText(renderOmml(node));
+    return math ? ` \\(${math}\\) ` : "";
+  }
+
+  if (localName === "object") {
+    const oleObj = getFirstXmlDescendant(node, "OLEObject");
+    if (oleObj) {
+      const rId = getXmlAttr(oleObj, "id");
+      if (rId && relsMap[rId]) {
+        const target = relsMap[rId];
+        const zipPath = target.startsWith("word/") ? target : `word/${target}`;
+        const file = zip.file(zipPath);
+        if (file) {
+          const oleBuffer = await file.async("nodebuffer");
+          const latex = await parseMtefToLatexGraceful(oleBuffer);
+          return latex;
+        }
+      }
+    }
+    // Fallback if no OLE object found
+    const childTexts = [];
+    for (const child of Array.from(node.childNodes || [])) {
+      childTexts.push(await renderDocxInlineAsync(child, zip, relsMap));
+    }
+    return childTexts.join("");
+  }
+
+  if (localName === "t") return node.textContent || "";
+  if (localName === "tab") return "\t";
+  if (localName === "br" || localName === "cr") return "\n";
+  if (localName === "drawing" || localName === "pict") return " [Hình] ";
+  if (localName === "instrText") return "";
+
+  if (localName === "r") {
+    const childTexts = [];
+    for (const child of Array.from(node.childNodes || [])) {
+      childTexts.push(await renderDocxInlineAsync(child, zip, relsMap));
+    }
+    const text = childTexts.join("");
+    const runProps = getFirstXmlChild(node, "rPr");
+    const isBold = Boolean(getFirstXmlChild(runProps, "b") || getFirstXmlChild(runProps, "bCs"));
+    if (isBold && /^\s*[A-H][.)]/i.test(text)) return ` [correct] ${text}`;
+    return text;
+  }
+
+  const childTexts = [];
+  for (const child of Array.from(node.childNodes || [])) {
+    childTexts.push(await renderDocxInlineAsync(child, zip, relsMap));
+  }
+  return childTexts.join("");
+}
+
 function renderDocxInline(node) {
   const localName = getXmlLocalName(node);
 
@@ -366,6 +469,30 @@ function normalizeDocxParagraphText(text) {
 
 async function extractDocxXmlTextWithMath(buffer) {
   const zip = await JSZip.loadAsync(buffer);
+  
+  // Parse relationships to map rId to embeddings path
+  const relsMap = {};
+  const relsFile = zip.file("word/_rels/document.xml.rels");
+  if (relsFile) {
+    try {
+      const relsXml = await relsFile.async("string");
+      const relsDoc = new DOMParser({
+        errorHandler: { warning: () => {}, error: () => {}, fatalError: () => {} }
+      }).parseFromString(relsXml, "text/xml");
+      const relationships = relsDoc.getElementsByTagName("Relationship");
+      for (let i = 0; i < relationships.length; i++) {
+        const rel = relationships[i];
+        const id = rel.getAttribute("Id");
+        const target = rel.getAttribute("Target");
+        if (id && target) {
+          relsMap[id] = target;
+        }
+      }
+    } catch (e) {
+      console.warn("Warning parsing relationships inside docx:", e.message);
+    }
+  }
+
   const documentFile = zip.file("word/document.xml");
   if (!documentFile) return "";
 
@@ -381,25 +508,40 @@ async function extractDocxXmlTextWithMath(buffer) {
   if (!body) return "";
 
   const blocks = [];
-  const walkBlocks = (node) => {
+  const walkBlocks = async (node) => {
     if (isXmlElement(node, "p")) {
-      const text = normalizeDocxParagraphText(renderDocxInline(node));
+      const text = normalizeDocxParagraphText(await renderDocxInlineAsync(node, zip, relsMap));
       if (text) blocks.push(text);
       return;
     }
     if (isXmlElement(node, "tbl")) {
-      getXmlChildElements(node, "tr").forEach((row) => {
-        const cells = getXmlChildElements(row, "tc")
-          .map((cell) => normalizeDocxParagraphText(renderDocxInline(cell)))
-          .filter(Boolean);
+      const trs = getXmlChildElements(node, "tr");
+      for (const row of trs) {
+        const tcs = getXmlChildElements(row, "tc");
+        const cells = [];
+        for (const cell of tcs) {
+          const paragraphs = getXmlChildElements(cell, "p");
+          const cellTexts = [];
+          for (const p of paragraphs) {
+            cellTexts.push(normalizeDocxParagraphText(await renderDocxInlineAsync(p, zip, relsMap)));
+          }
+          const cellText = cellTexts.filter(Boolean).join(" ");
+          if (cellText) cells.push(cellText);
+        }
         if (cells.length) blocks.push(cells.join(" | "));
-      });
+      }
       return;
     }
-    getXmlChildElements(node).forEach(walkBlocks);
+    for (const child of getXmlChildElements(node)) {
+      await walkBlocks(child);
+    }
   };
 
-  getXmlChildElements(body).forEach(walkBlocks);
+  const bodyChildren = getXmlChildElements(body);
+  for (const child of bodyChildren) {
+    await walkBlocks(child);
+  }
+  
   return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -1243,11 +1385,24 @@ function getSequentialEnglishQuestionMatches(text) {
 function getVietnameseAnswerKeyMap(text) {
   const answerKeyMap = new Map();
 
+  // Try standard list matches
   for (const match of text.matchAll(VIETNAMESE_TRAILING_ANSWER_KEY_RE)) {
     const questionNumber = Number.parseInt(match[1], 10);
     const answerKey = stringValue(match[2]).toUpperCase();
     if (Number.isFinite(questionNumber) && /^[A-H]$/.test(answerKey)) {
       answerKeyMap.set(questionNumber, answerKey);
+    }
+  }
+
+  // If map is empty or very small, try matching table/grid layout patterns like "1 | A", "1-A", "1.A"
+  if (answerKeyMap.size < 5) {
+    const gridRegex = /(?:^|[\s|])(\d{1,3})\s*[-.:|\s_]\s*([A-H])(?=[\s|]|$)/gi;
+    for (const match of text.matchAll(gridRegex)) {
+      const questionNumber = Number.parseInt(match[1], 10);
+      const answerKey = stringValue(match[2]).toUpperCase();
+      if (Number.isFinite(questionNumber) && questionNumber <= 100 && /^[A-H]$/.test(answerKey)) {
+        answerKeyMap.set(questionNumber, answerKey);
+      }
     }
   }
 
@@ -2343,24 +2498,86 @@ function parseVietnameseChoiceTextWithRules(rawText, sourceMeta) {
     .replace(/\r/g, "\n")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n");
-  const questionMatches = getSequentialVietnameseQuestionMatches(text);
+
+  // Detect separate solutions section at the end of the file
+  const VIETNAMESE_SOLUTION_SECTION_RE = /(?:^|\n)\s*(?:L\u1eccI\s*GI\u1ea2I\s*CHI\s*TI\u1ebeT|L\u1eccI\s*GI\u1ea2I|H\u01af\u1edaNG\s*D\u1eaaN\s*GI\u1ea2I\s*CHI\s*TI\u1ebeT|H\u01af\u1edaNG\s*D\u1eaaN\s*GI\u1ea2I|H\u01af\u1edaNG\s*D\u1eaaN\s*T\u1ef0\s*H\u1eccC|B\u1ea2NG\s*C\u00c2U\s*H\u1eccI\s*V\u00c0\s*L\u1eccI\s*GI\u1ea2I|B\u1ea2NG\s*\u0110\u00c1P\s*\u00c1N\s*V\u00c0\s*L\u1eccI\s*GI\u1ea2I\s*CHI\s*TI\u1ebeT|\u0110\u00c1P\s*\u00c1N\s*CHI\s*TI\u1ebeT)/i;
+  const solIndex = text.search(VIETNAMESE_SOLUTION_SECTION_RE);
+  
+  let questionsText = text;
+  let solutionsText = "";
+  if (solIndex >= 0) {
+    questionsText = text.slice(0, solIndex);
+    solutionsText = text.slice(solIndex);
+  }
+
+  const questionMatches = getSequentialVietnameseQuestionMatches(questionsText);
   if (!questionMatches.length) return null;
   const answerKeyMap = getVietnameseAnswerKeyMap(text);
+
+  // Parse solutions part if present
+  const solutionsMap = new Map();
+  if (solutionsText) {
+    const solQuestionMatches = [];
+    const regex = /C\u00e2u\s*(\d{1,3})/gi;
+    let match;
+    while ((match = regex.exec(solutionsText)) !== null) {
+      solQuestionMatches.push({
+        number: Number.parseInt(match[1], 10),
+        index: match.index,
+        matchText: match[0]
+      });
+    }
+
+    for (let i = 0; i < solQuestionMatches.length; i++) {
+      const current = solQuestionMatches[i];
+      const next = solQuestionMatches[i + 1];
+      const start = current.index + current.matchText.length;
+      const end = next ? next.index : solutionsText.length;
+      const body = solutionsText.slice(start, end).trim();
+
+      let explanation = body;
+      let correctAnswer = "";
+
+      // Try to find correct answer key in the solution body, e.g. "Chọn A", "Đáp án A", "Chọn đáp án A", "=> A"
+      const ansMatch = body.match(/(?:Ch\u1ecdn|Gi\u1ea3i|\\Rightarrow|=>|\u0110\u00e1p\s*\u00e1n)\s*(?:\u0111\u00fang)?\s*(?:l\u00e0)?\s*[:\s-]*([A-H])\b/i);
+      if (ansMatch) {
+        correctAnswer = ansMatch[1].toUpperCase();
+      }
+
+      explanation = cleanRuleBasedTextFragment(explanation);
+      solutionsMap.set(current.number, { explanation, correctAnswer });
+    }
+  }
 
   const items = [];
   for (let i = 0; i < questionMatches.length; i++) {
     const match = questionMatches[i];
     const questionNumber = Number.parseInt(match[1], 10);
     const start = match.index + match[0].length;
-    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : text.length;
-    const body = stripVietnameseTrailingAnswerKeyList(text.slice(start, end).trim());
+    const end = i + 1 < questionMatches.length ? questionMatches[i + 1].index : questionsText.length;
+    const body = stripVietnameseTrailingAnswerKeyList(questionsText.slice(start, end).trim());
     if (!body) continue;
+
+    let explanation = "";
+    let correctAnswer = answerKeyMap.get(questionNumber) || "";
 
     const explanationIndex = body.search(VIETNAMESE_EXPLANATION_RE);
     const questionAndOptions = (explanationIndex >= 0 ? body.slice(0, explanationIndex) : body).trim();
-    const explanation = explanationIndex >= 0 ? cleanRuleBasedTextFragment(body.slice(explanationIndex)) : "";
+    if (explanationIndex >= 0) {
+      explanation = cleanRuleBasedTextFragment(body.slice(explanationIndex));
+    }
     const answerMatch = body.match(VIETNAMESE_ANSWER_RE);
-    const correctAnswer = answerMatch?.[1]?.toUpperCase() || answerKeyMap.get(questionNumber) || "";
+    if (answerMatch?.[1]) {
+      correctAnswer = answerMatch[1].toUpperCase();
+    }
+
+    // Merge separate solution if found
+    if (solutionsMap.has(questionNumber)) {
+      const sol = solutionsMap.get(questionNumber);
+      if (sol.explanation) explanation = sol.explanation;
+      if (sol.correctAnswer && !correctAnswer) correctAnswer = sol.correctAnswer;
+    }
+
     const lines = questionAndOptions.split("\n").map(cleanRuleBasedTextFragment).filter(Boolean);
     let { answers, questionEndIndex } = buildVietnameseAnswersFromLines(lines);
     const questionText = cleanRuleBasedTextFragment(lines.slice(0, questionEndIndex).join(" "));

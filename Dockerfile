@@ -1,5 +1,8 @@
 FROM node:20-alpine
 
+# Install Python for MathType formula parsing utility
+RUN apk add --no-cache python3
+
 WORKDIR /app/backend
 
 COPY backend/package*.json ./
