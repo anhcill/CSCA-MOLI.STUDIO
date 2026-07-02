@@ -131,6 +131,7 @@ export default function LichSuPage() {
   const [filtered, setFiltered] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingAttemptId, setDeletingAttemptId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null);
   const [page, setPage] = useState(1);
   const PER_PAGE = 10;
 
@@ -175,16 +176,15 @@ export default function LichSuPage() {
 
   const handleDeleteAttempt = async (item: HistoryItem) => {
     if (deletingAttemptId) return;
-    const ok = window.confirm(`Xóa lịch sử thi "${item.exam_title || `Đề #${item.exam_id}`}"? Dữ liệu bài làm, AI phân tích và thống kê liên quan sẽ được xóa.`);
-    if (!ok) return;
 
     try {
       setDeletingAttemptId(item.id);
       await examApi.deleteHistoryAttempt(item.id);
       setHistory((current) => current.filter((attempt) => attempt.id !== item.id));
+      setDeleteTarget(null);
     } catch (error) {
       console.error('Delete attempt history error:', error);
-      alert((error as any)?.response?.data?.message || 'Không thể xóa lịch sử thi lúc này.');
+      alert((error as any)?.response?.data?.message || 'Khong the xoa lich su thi luc nay.');
     } finally {
       setDeletingAttemptId(null);
     }
@@ -396,7 +396,7 @@ export default function LichSuPage() {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        handleDeleteAttempt(item);
+                        setDeleteTarget(item);
                       }}
                       disabled={deletingAttemptId === item.id}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -456,6 +456,59 @@ export default function LichSuPage() {
           </>
         )}
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-history-title"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-2xl shadow-rose-950/20"
+          >
+            <div className="bg-gradient-to-br from-rose-50 via-white to-indigo-50 px-6 pt-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+                  <FiTrash2 size={22} />
+                </div>
+                <div className="min-w-0">
+                  <h2 id="delete-history-title" className="text-lg font-black text-slate-950">
+                    Xóa lịch sử thi này nhé?
+                  </h2>
+                  <p className="mt-1 line-clamp-2 text-sm font-semibold text-slate-600">
+                    {deleteTarget.exam_title || `Đề #${deleteTarget.exam_id}`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-rose-100 bg-white/85 p-4 text-sm leading-6 text-slate-600">
+                Mình sẽ xóa bài làm, phân tích AI và thống kê liên quan. Hành động này không thể hoàn tác.
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 bg-white px-6 py-5 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingAttemptId === deleteTarget.id}
+                className="rounded-2xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Giữ lại
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteAttempt(deleteTarget)}
+                disabled={deletingAttemptId === deleteTarget.id}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-rose-200 transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {deletingAttemptId === deleteTarget.id && (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                )}
+                Xóa luôn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
