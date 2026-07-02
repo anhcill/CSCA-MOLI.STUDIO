@@ -1031,6 +1031,7 @@ const officialExamController = {
          LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
          LEFT JOIN exam_rooms room ON room.id = ers.room_id
          WHERE ra.best_rank = 1
+           AND u.role = 'student'
            ${roomFilter}
          ORDER BY ra.score_100 DESC, ra.rank_time_seconds ASC, ra.submit_time ASC NULLS LAST, u.id ASC
          LIMIT $${params.length}`,
