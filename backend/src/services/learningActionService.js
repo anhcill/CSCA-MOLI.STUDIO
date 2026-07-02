@@ -33,6 +33,49 @@ const getContentSubjectSlug = (subjectCode) => {
   return SUBJECT_CONTENT_SLUG_BY_CODE[normalized] || String(subjectCode || "").trim();
 };
 
+const normalizePracticeScope = (scope) => {
+  if (typeof scope === "string") {
+    return { subjectCode: normalizeSubjectCode(scope), examId: null };
+  }
+
+  return {
+    subjectCode: normalizeSubjectCode(scope?.subjectCode || scope?.subject),
+    examId: Number(scope?.examId || scope?.exam_id) || null,
+  };
+};
+
+async function resolvePracticeSubject(userId, scope = null) {
+  const { subjectCode, examId } = normalizePracticeScope(scope);
+
+  if (examId) {
+    const result = await db.query(
+      `
+        SELECT s.id, s.code, s.name
+        FROM exams e
+        JOIN subjects s ON s.id = e.subject_id
+        JOIN exam_attempts ea ON ea.exam_id = e.id
+          AND ea.user_id = $2
+          AND ea.status = 'completed'
+        WHERE e.id = $1
+        ORDER BY ea.submit_time DESC NULLS LAST
+        LIMIT 1
+      `,
+      [examId, userId],
+    );
+    return result.rows[0] || null;
+  }
+
+  if (subjectCode) {
+    const result = await db.query(
+      `SELECT id, code, name FROM subjects WHERE code = $1 LIMIT 1`,
+      [subjectCode],
+    );
+    return result.rows[0] || { id: null, code: subjectCode, name: subjectCode };
+  }
+
+  return null;
+}
+
 async function getWeakTopics(userId, limit = 5, subjectCode = null) {
   const params = [userId, limit];
   const subjectFilter = subjectCode ? "AND s.code = $3" : "";
@@ -67,27 +110,34 @@ async function getWeakTopics(userId, limit = 5, subjectCode = null) {
 }
 
 async function getWrongQuestionIds(userId, limit = 20, subjectCode = null) {
-  const params = [userId, limit];
-  const subjectJoin = subjectCode ? "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id" : "";
-  const subjectFilter = subjectCode ? "AND s.code = $3" : "";
-  if (subjectCode) params.push(subjectCode);
+  const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
+  const params = [userId];
+  const subjectJoin = normalizedSubjectCode ? "JOIN exams e ON e.id = ea.exam_id JOIN subjects s ON s.id = e.subject_id" : "";
+  const subjectFilter = normalizedSubjectCode ? `AND s.code = $${params.length + 1}` : "";
+  if (normalizedSubjectCode) params.push(normalizedSubjectCode);
+  params.push(toLimit(limit));
 
   const result = await db.query(
     `
-      SELECT DISTINCT ON (q.id)
-        q.id,
-        MAX(ea.submit_time) OVER (PARTITION BY q.id) AS last_seen_at
-      FROM user_answers ua
-      JOIN exam_attempts ea ON ea.id = ua.attempt_id
-      ${subjectJoin}
-      JOIN questions q ON q.id = ua.question_id
-      WHERE ea.user_id = $1
-        AND ea.status = 'completed'
-        AND ua.is_correct = FALSE
-        AND q.deleted_at IS NULL
-        ${subjectFilter}
-      ORDER BY q.id, last_seen_at DESC
-      LIMIT $2
+      WITH latest_wrong AS (
+        SELECT
+          q.id,
+          MAX(ea.submit_time) AS last_seen_at
+        FROM user_answers ua
+        JOIN exam_attempts ea ON ea.id = ua.attempt_id
+        ${subjectJoin}
+        JOIN questions q ON q.id = ua.question_id
+        WHERE ea.user_id = $1
+          AND ea.status = 'completed'
+          AND ua.is_correct = FALSE
+          AND q.deleted_at IS NULL
+          ${subjectFilter}
+        GROUP BY q.id
+      )
+      SELECT id
+      FROM latest_wrong
+      ORDER BY last_seen_at DESC NULLS LAST
+      LIMIT $${params.length}
     `,
     params,
   );
@@ -195,7 +245,9 @@ async function getQuestionDetails(userId, questionIds) {
   return result.rows;
 }
 
-async function createWrongQuestionPractice(userId, limit = 20, subjectCode = null) {
+async function createWrongQuestionPractice(userId, limit = 20, scope = null) {
+  const subject = await resolvePracticeSubject(userId, scope);
+  const subjectCode = subject?.code || normalizePracticeScope(scope).subjectCode;
   const ids = await getWrongQuestionIds(userId, toLimit(limit), subjectCode);
   if (!ids.length) {
     const error = new Error("No wrong questions found");
@@ -203,16 +255,25 @@ async function createWrongQuestionPractice(userId, limit = 20, subjectCode = nul
     throw error;
   }
 
+  const subjectName = subject?.name || null;
+  const title = subjectName
+    ? `Luyện lại ${ids.length} câu sai môn ${subjectName}`
+    : `Luyện lại ${ids.length} câu sai`;
+  const description = subjectName
+    ? `Gom những câu bạn từng làm sai trong các đề ${subjectName}. Luyện lại cho chắc tay nhé.`
+    : "Gom những câu bạn từng làm sai gần đây. Luyện lại cho chắc tay nhé.";
+
   const result = await db.query(
     `
-      INSERT INTO user_practice_sets (user_id, set_type, title, description, question_ids)
-      VALUES ($1, 'wrong_questions', $2, $3, $4::int[])
+      INSERT INTO user_practice_sets (user_id, set_type, title, description, subject_id, question_ids)
+      VALUES ($1, 'wrong_questions', $2, $3, $4, $5::int[])
       RETURNING *
     `,
     [
       userId,
-      `Luyen lai ${ids.length} cau sai`,
-      "Bo luyen tap gom cac cau ban tung tra loi sai gan day.",
+      title,
+      description,
+      subject?.id || null,
       ids,
     ],
   );

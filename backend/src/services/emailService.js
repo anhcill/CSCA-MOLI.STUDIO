@@ -7,7 +7,7 @@ class EmailService {
   constructor() {
     this.apiKey = process.env.BREVO_API_KEY;
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
-    this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLI.STUDIO';
+    this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
     this.baseUrl = 'https://api.brevo.com/v3';
 
     this.client = axios.create({
@@ -176,7 +176,7 @@ class EmailService {
           <tr>
             <td style="padding:0 8px 14px;text-align:center">
               <div style="display:inline-block;padding:9px 14px;border-radius:999px;background:#fff;border:1px solid #dbeafe;color:#1d4ed8;font-size:12px;font-weight:900;letter-spacing:.3px">
-                ${emoji} MOLI.STUDIO
+                ${emoji} MOLY.STUDIO
               </div>
             </td>
           </tr>
@@ -191,8 +191,8 @@ class EmailService {
                 ${content}
               </div>
               <div style="padding:22px 34px;background:#f8fafc;border-top:1px solid #e5e7eb;text-align:center">
-                <p style="margin:0 0 8px;color:#64748b;font-size:12px;line-height:1.5">Email tự động từ MOLI.STUDIO. Nếu có gì lạ lạ, đừng reply mã OTP hay mật khẩu cho bất kỳ ai.</p>
-                <p style="margin:0;color:#94a3b8;font-size:12px">© 2026 MOLI.STUDIO. Made for CSCA learners.</p>
+                <p style="margin:0 0 8px;color:#64748b;font-size:12px;line-height:1.5">Email tự động từ MOLY.STUDIO. Nếu có gì lạ lạ, đừng reply mã OTP hay mật khẩu cho bất kỳ ai.</p>
+                <p style="margin:0;color:#94a3b8;font-size:12px">© 2026 MOLY.STUDIO. Made for CSCA learners.</p>
               </div>
             </td>
           </tr>
@@ -216,9 +216,9 @@ class EmailService {
       title: 'Có tin nhắn mới nè',
       emoji: '📩',
       tone: 'cyan',
-      preheader: 'Một bạn vừa gửi liên hệ từ website MOLI.STUDIO.',
+      preheader: 'Một bạn vừa gửi liên hệ từ website MOLY.STUDIO.',
       content: `
-        ${this.heroCard({ emoji: '📩', title: 'Tin nhắn mới từ website', subtitle: 'Có người đang cần MOLI.STUDIO hỗ trợ đó.', tone: 'cyan' })}
+        ${this.heroCard({ emoji: '📩', title: 'Tin nhắn mới từ website', subtitle: 'Có người đang cần MOLY.STUDIO hỗ trợ đó.', tone: 'cyan' })}
         ${this.infoRows([
           { label: 'Họ tên', value: name },
           { label: 'Email', valueHtml: `<a href="mailto:${safeEmail}" style="color:#2563eb;text-decoration:none;font-weight:900">${safeEmail}</a>` },
@@ -232,7 +232,7 @@ class EmailService {
       sender: { email: this.senderEmail, name: this.senderName },
       to: [{ email: to }],
       replyTo: { email, name },
-      subject: `[MOLI.STUDIO] ${subject || 'Tin nhắn liên hệ mới'}`,
+      subject: `[MOLY.STUDIO] ${subject || 'Tin nhắn liên hệ mới'}`,
       htmlContent: html,
       textContent: [
         `Họ tên: ${name}`,
@@ -250,7 +250,7 @@ class EmailService {
   async sendWelcomeEmail(email, name) {
     const safeName = this.escapeHtml(name || 'bạn');
     const content = `
-      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#0f172a">Chào ${safeName}, welcome lên thuyền MOLI nha 👋</h2>
+      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.3;color:#0f172a">Chào ${safeName}, welcome lên thuyền MOLY nha 👋</h2>
       <p style="margin:0 0 22px;color:#475569">Tài khoản đã sẵn sàng. Từ giờ bạn có thể luyện đề, lưu lịch sử, gom xu và bật mode học nghiêm túc mà vẫn dễ thở.</p>
       ${this.checklist([
         'Làm đề mô phỏng CSCA và xem lại lỗi sai sau mỗi bài.',
@@ -258,17 +258,17 @@ class EmailService {
         'Theo dõi tiến độ, lịch sử làm bài và bảng xếp hạng.',
         'Dùng xu để giảm một phần đơn hàng hoặc mở lượt AI nếu gói chưa nâng.',
       ], 'violet')}
-      ${this.callout('<strong>Tip nhỏ:</strong> làm một đề ngắn trước để MOLI hiểu trình độ của bạn. Có dữ liệu rồi học mới đúng trọng tâm.', 'cyan')}
+      ${this.callout('<strong>Tip nhỏ:</strong> làm một đề ngắn trước để MOLY hiểu trình độ của bạn. Có dữ liệu rồi học mới đúng trọng tâm.', 'cyan')}
       ${this.button('Vào học ngay', this.frontendUrl(), 'violet')}`;
 
     await this._send({
       to: email,
-      subject: '🎉 Welcome to MOLI.STUDIO, bắt đầu học thôi!',
+      subject: '🎉 Welcome to MOLY.STUDIO, bắt đầu học thôi!',
       html: this._wrapper({
-        title: 'Tài khoản MOLI đã mở khóa',
+        title: 'Tài khoản MOLY đã mở khóa',
         emoji: '🎓',
         tone: 'violet',
-        preheader: 'Chào mừng bạn đến với MOLI.STUDIO.',
+        preheader: 'Chào mừng bạn đến với MOLY.STUDIO.',
         content,
       }),
     });
@@ -285,12 +285,12 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: '📧 Xác nhận email MOLI.STUDIO',
+      subject: '📧 Xác nhận email MOLY.STUDIO',
       html: this._wrapper({
         title: 'Xác nhận email',
         emoji: '📧',
         tone: 'cyan',
-        preheader: 'Xác nhận email để hoàn tất tài khoản MOLI.STUDIO.',
+        preheader: 'Xác nhận email để hoàn tất tài khoản MOLY.STUDIO.',
         content,
       }),
     });
@@ -315,7 +315,7 @@ class EmailService {
         { label: 'Số tiền', valueHtml: `<span style="font-size:20px;color:#059669">${this.formatMoney(amount)}</span>` },
       ])}
       ${this.callout('<strong>Done!</strong> Gói đã được kích hoạt. Vào học liền cho nóng, đừng để mood học rơi mất.', 'emerald')}
-      ${this.button('Mở MOLI và học ngay', this.frontendUrl(), 'emerald')}`;
+      ${this.button('Mở MOLY và học ngay', this.frontendUrl(), 'emerald')}`;
 
     await this._send({
       to: email,
@@ -336,19 +336,19 @@ class EmailService {
     const reasonLabel = reason === 'login' ? 'đăng nhập' : reason === 'password_change' ? 'đổi mật khẩu' : 'xác thực';
     const content = `
       <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a">Mã OTP của ${safeName}</h2>
-      <p style="margin:0 0 22px;color:#475569">MOLI nhận được yêu cầu ${reasonLabel}. Nhập mã bên dưới để tiếp tục nha.</p>
+      <p style="margin:0 0 22px;color:#475569">MOLY nhận được yêu cầu ${reasonLabel}. Nhập mã bên dưới để tiếp tục nha.</p>
       <div style="background:${this.toneGradient('slate')};border-radius:24px;padding:30px;text-align:center;margin:0 0 24px;color:#fff">
         <p style="margin:0 0 10px;color:rgba(255,255,255,.72);font-size:12px;font-weight:900;letter-spacing:1.8px;text-transform:uppercase">Mã xác thực</p>
         <p style="margin:0;font-size:44px;line-height:1;font-weight:900;letter-spacing:10px;font-family:Consolas,Monaco,monospace">${safeOtp}</p>
         <p style="margin:16px 0 0;color:rgba(255,255,255,.72);font-size:13px">Hiệu lực 5 phút.</p>
       </div>
-      ${this.callout('<strong>Đừng share mã này nha.</strong> MOLI không bao giờ hỏi OTP qua chat, inbox hay điện thoại.', 'rose')}`;
+      ${this.callout('<strong>Đừng share mã này nha.</strong> MOLY không bao giờ hỏi OTP qua chat, inbox hay điện thoại.', 'rose')}`;
 
     await this._send({
       to: email,
-      subject: `🔐 Mã OTP MOLI - ${otp}`,
+      subject: `🔐 Mã OTP MOLY - ${otp}`,
       html: this._wrapper({
-        title: 'Mã xác thực MOLI',
+        title: 'Mã xác thực MOLY',
         emoji: '🔐',
         tone: 'slate',
         preheader: `Mã OTP của bạn là ${otp}.`,
@@ -360,14 +360,14 @@ class EmailService {
   async sendPasswordResetEmail(email, resetUrl) {
     const content = `
       <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a">Reset mật khẩu nè</h2>
-      <p style="margin:0 0 22px;color:#475569">Bạn vừa yêu cầu tạo mật khẩu mới cho tài khoản MOLI.STUDIO. Bấm nút dưới đây để đặt lại.</p>
+      <p style="margin:0 0 22px;color:#475569">Bạn vừa yêu cầu tạo mật khẩu mới cho tài khoản MOLY.STUDIO. Bấm nút dưới đây để đặt lại.</p>
       ${this.button('Đặt lại mật khẩu', resetUrl, 'slate')}
       ${this.linkBox(resetUrl)}
       ${this.callout('Link chỉ sống trong <strong>15 phút</strong>. Nếu không phải bạn yêu cầu, bỏ qua email này và đổi mật khẩu nếu thấy tài khoản có dấu hiệu lạ.', 'amber')}`;
 
     await this._send({
       to: email,
-      subject: '🔐 Đặt lại mật khẩu MOLI.STUDIO',
+      subject: '🔐 Đặt lại mật khẩu MOLY.STUDIO',
       html: this._wrapper({
         title: 'Đặt lại mật khẩu',
         emoji: '🔐',
@@ -394,7 +394,7 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: `⏰ Gói MOLI sắp hết hạn - còn ${daysLeft} ngày`,
+      subject: `⏰ Gói MOLY sắp hết hạn - còn ${daysLeft} ngày`,
       html: this._wrapper({
         title: 'Gói sắp hết hạn',
         emoji: '⏰',
@@ -418,7 +418,7 @@ class EmailService {
         'Truy cập nội dung, đề, tài liệu theo phạm vi gói đã mua.',
         'AI phân tích kết quả và gợi ý ôn tập khi đủ dữ liệu.',
         'Xem lại lịch sử làm bài, lời giải và tiến độ học.',
-        'Dùng MOLI theo cách chill hơn nhưng vẫn rất có mục tiêu.',
+        'Dùng MOLY theo cách chill hơn nhưng vẫn rất có mục tiêu.',
       ], 'violet')}
       ${this.button('Vào khu học của mình', this.frontendUrl(), 'violet')}`;
 
@@ -451,7 +451,7 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: '📅 Gói MOLI đã hết hạn',
+      subject: '📅 Gói MOLY đã hết hạn',
       html: this._wrapper({
         title: 'Gói đã hết hạn',
         emoji: '📅',
@@ -473,7 +473,7 @@ class EmailService {
 
     const content = `
       ${this.heroCard({ emoji: event === 'suspicious' ? '🚨' : '🔐', title: eventLabel, subtitle: 'Bảo mật tài khoản là ưu tiên số 1.', tone })}
-      <p style="margin:0 0 18px;color:#475569">Chào ${safeName}, MOLI ghi nhận hoạt động sau trên tài khoản của bạn:</p>
+      <p style="margin:0 0 18px;color:#475569">Chào ${safeName}, MOLY ghi nhận hoạt động sau trên tài khoản của bạn:</p>
       ${this.infoRows([
         { label: 'Thời gian', value: time || 'Không xác định' },
         { label: 'IP', value: ip || 'Không xác định' },
@@ -487,7 +487,7 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: `🔐 [MOLI] ${eventLabel}`,
+      subject: `🔐 [MOLY] ${eventLabel}`,
       html: this._wrapper({
         title: 'Thông báo bảo mật',
         emoji: '🔐',
@@ -499,7 +499,7 @@ class EmailService {
   }
 
   async sendQaReplyEmail({ email, name, ticketId, preview, advisorName, ticketUrl: customTicketUrl }) {
-    const safeAdvisor = this.escapeHtml(advisorName || 'cố vấn MOLI');
+    const safeAdvisor = this.escapeHtml(advisorName || 'cố vấn MOLY');
     const ticketUrl = customTicketUrl || this.frontendUrl(`/hoi-dap/${ticketId}`);
     const previewText = preview
       ? this.escapeHtml(`${preview.substring(0, 150)}${preview.length > 150 ? '...' : ''}`)
@@ -516,7 +516,7 @@ class EmailService {
 
     await this._send({
       to: email,
-      subject: '💬 Cố vấn MOLI đã phản hồi câu hỏi của bạn',
+      subject: '💬 Cố vấn MOLY đã phản hồi câu hỏi của bạn',
       html: this._wrapper({
         title: 'Cố vấn đã phản hồi',
         emoji: '💬',

@@ -203,9 +203,10 @@ function ExamResultContent() {
   };
 
   const handleCreateWrongPractice = async () => {
+    if (!result) return;
     try {
       setActionLoading('wrong');
-      const practiceSet = await createWrongQuestionPractice(20);
+      const practiceSet = await createWrongQuestionPractice(20, { examId: result.exam_id });
       router.push(`/practice-sets/${practiceSet.id}`);
     } catch (error) {
       console.error('Create wrong practice error:', error);

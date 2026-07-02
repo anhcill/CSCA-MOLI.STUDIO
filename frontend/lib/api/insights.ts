@@ -577,6 +577,11 @@ export interface PracticeSetDetail extends PracticeSetSummary {
   questions: PracticeQuestion[];
 }
 
+export type WrongQuestionPracticeOptions = string | {
+  subject?: string;
+  examId?: number;
+};
+
 export interface UserBookmark {
   id: number;
   entity_type: 'question' | 'material' | 'vocabulary' | 'exam';
@@ -593,8 +598,11 @@ export async function getLearningActionSummary(subject?: string): Promise<Learni
   return res.data.data;
 }
 
-export async function createWrongQuestionPractice(limit = 20, subject?: string): Promise<PracticeSetSummary> {
-  const res = await axios.post(`${BASE}/actions/practice/wrong`, { limit, subject });
+export async function createWrongQuestionPractice(limit = 20, options?: WrongQuestionPracticeOptions): Promise<PracticeSetSummary> {
+  const payload = typeof options === 'string'
+    ? { limit, subject: options }
+    : { limit, subject: options?.subject, examId: options?.examId };
+  const res = await axios.post(`${BASE}/actions/practice/wrong`, payload);
   return res.data.data;
 }
 

@@ -28,7 +28,10 @@ exports.getWrongQuestions = async (req, res) => {
 
 exports.createWrongPractice = async (req, res) => {
   try {
-    const data = await learningActionService.createWrongQuestionPractice(req.user.id, req.body.limit, req.body.subject || null);
+    const data = await learningActionService.createWrongQuestionPractice(req.user.id, req.body.limit, {
+      subject: req.body.subject || null,
+      examId: req.body.examId || req.body.exam_id || null,
+    });
     res.status(201).json({ success: true, data });
   } catch (error) {
     handleError(res, error, "Create wrong practice");
