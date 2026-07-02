@@ -28,7 +28,7 @@ function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; s
                 alt={name}
                 width={size}
                 height={size}
-                className="shrink-0 rounded-full object-cover border-2 border-white shadow-sm"
+                className="shrink-0 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm"
                 style={{ width: size, height: size }}
             />
         );
@@ -43,7 +43,7 @@ function Avatar({ name, url, size = 40 }: { name: string; url?: string | null; s
 
     return (
         <div
-            className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 font-extrabold text-white border-2 border-white shadow-sm"
+            className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 font-extrabold text-white border-2 border-white dark:border-slate-800 shadow-sm"
             style={{ width: size, height: size, fontSize: size * 0.4 }}
         >
             {initials}
@@ -112,30 +112,30 @@ function getRankTone(rank: number) {
     if (rank === 1) {
         return {
             badgeColor: 'bg-[#FFC524]',
-            shell: 'border-[#FFE899] bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] shadow-md shadow-amber-100/50',
+            shell: 'border-[#FFE899] dark:border-amber-700/30 bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] dark:from-[#3a2f15]/20 dark:via-slate-900 dark:to-slate-900 shadow-md shadow-amber-100/50 dark:shadow-none',
             score: 'bg-[#FFB800] text-white',
             avatar: 72,
             height: 'h-[330px]',
-            wreathColor: 'text-[#F5D06E]',
+            wreathColor: 'text-[#F5D06E] dark:text-[#d4af37]',
         };
     }
     if (rank === 2) {
         return {
             badgeColor: 'bg-[#4FA2FF]',
-            shell: 'border-[#D0E7FF] bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] shadow-sm shadow-blue-100/40',
+            shell: 'border-[#D0E7FF] dark:border-blue-700/30 bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] dark:from-[#1b2b48]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-blue-100/40 dark:shadow-none',
             score: 'bg-[#3B82F6] text-white',
             avatar: 64,
             height: 'h-[295px]',
-            wreathColor: 'text-[#9ECBFF]',
+            wreathColor: 'text-[#9ECBFF] dark:text-[#4a90e2]',
         };
     }
     return {
         badgeColor: 'bg-[#FF7894]',
-        shell: 'border-[#FFE4E6] bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] shadow-sm shadow-rose-100/40',
+        shell: 'border-[#FFE4E6] dark:border-rose-700/30 bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] dark:from-[#3b1c24]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-rose-100/40 dark:shadow-none',
         score: 'bg-[#EC4899] text-white',
         avatar: 58,
         height: 'h-[270px]',
-        wreathColor: 'text-[#FFA1B5]',
+        wreathColor: 'text-[#FFA1B5] dark:text-[#d04a6b]',
     };
 }
 
@@ -179,11 +179,11 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
                     <Avatar name={entry.full_name} url={entry.avatar_url} size={tone.avatar} />
                 </div>
 
-                <h3 className="font-extrabold text-slate-800 text-[15px] text-center line-clamp-1 max-w-[90%] mt-2.5">
+                <h3 className="font-extrabold text-slate-850 dark:text-slate-200 text-[15px] text-center line-clamp-1 max-w-[90%] mt-2.5">
                     {entry.full_name}{isMe ? ' (Bạn)' : ''}
                 </h3>
                 
-                <p className="mt-1 text-[11px] font-bold text-slate-400 text-center">
+                <p className="mt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center">
                     {entry.total_attempts} lần thi · ĐTB: {formatScore(entry.avg_score)}/100
                 </p>
             </div>
@@ -195,8 +195,8 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
                     <p className="text-[10px] font-bold opacity-90 mt-0.5">điểm</p>
                 </div>
 
-                <p className="mt-3.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                    <FiClock size={12} className="text-slate-400" /> {formatDuration(entry.best_time_spent)}
+                <p className="mt-3.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                    <FiClock size={12} className="text-slate-400 dark:text-slate-500" /> {formatDuration(entry.best_time_spent)}
                 </p>
             </div>
         </div>
@@ -250,24 +250,24 @@ export default function LeaderboardPage() {
     const restEntries = entries.slice(3);
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC]">
+        <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 transition-colors duration-300">
             <Header />
 
             <div className="mx-auto max-w-5xl px-4 py-8">
                 {/* Header section */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                             🏆 BẢNG XẾP HẠNG
                         </h1>
-                        <p className="text-xs font-bold text-slate-400 mt-1">Cập nhật theo thời gian thực</p>
+                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-1">Cập nhật theo thời gian thực</p>
                     </div>
                     
                     <div className="flex items-center gap-2 self-end sm:self-auto" ref={dropdownRef}>
                         <button
                             onClick={loadLeaderboard}
                             disabled={loading}
-                            className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
+                            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-355 shadow-sm hover:bg-slate-55 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                             title="Làm mới"
                         >
                             <FiRefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -276,23 +276,23 @@ export default function LeaderboardPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border border-slate-200 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                             >
                                 <FiCalendar className="text-slate-400" size={16} />
                                 <span>{period === 'week' ? 'Tuần này' : 'Toàn hệ thống'}</span>
                                 <FiChevronDown className="text-slate-400" size={16} />
                             </button>
                             {dropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-100 rounded-xl shadow-lg z-30 overflow-hidden">
+                                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-lg z-30 overflow-hidden">
                                     <button
                                         onClick={() => { setPeriod('week'); setDropdownOpen(false); }}
-                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 transition-colors ${period === 'week' ? 'text-violet-600 bg-violet-50/50' : 'text-slate-700'}`}
+                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${period === 'week' ? 'text-violet-600 bg-violet-50/50 dark:bg-violet-950/20' : 'text-slate-700 dark:text-slate-300'}`}
                                     >
                                         Tuần này
                                     </button>
                                     <button
                                         onClick={() => { setPeriod('all'); setDropdownOpen(false); }}
-                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 transition-colors ${period === 'all' ? 'text-violet-600 bg-violet-50/50' : 'text-slate-700'}`}
+                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${period === 'all' ? 'text-violet-600 bg-violet-50/50 dark:bg-violet-950/20' : 'text-slate-700 dark:text-slate-300'}`}
                                     >
                                         Toàn hệ thống
                                     </button>
@@ -304,13 +304,13 @@ export default function LeaderboardPage() {
 
                 {loading ? (
                     <div className="flex min-h-[400px] items-center justify-center">
-                        <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-violet-600" />
+                        <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-violet-600" />
                     </div>
                 ) : entries.length === 0 ? (
-                    <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center bg-white rounded-[24px] border border-slate-100 shadow-sm">
-                        <FiTrendingUp size={44} className="mb-3 text-slate-300" />
-                        <p className="text-lg font-black text-slate-600">Chưa có dữ liệu</p>
-                        <p className="mt-1 max-w-md text-sm font-semibold text-slate-400">
+                    <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center bg-white dark:bg-slate-900 rounded-[24px] border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <FiTrendingUp size={44} className="mb-3 text-slate-300 dark:text-slate-700" />
+                        <p className="text-lg font-black text-slate-600 dark:text-slate-300">Chưa có dữ liệu</p>
+                        <p className="mt-1 max-w-md text-sm font-semibold text-slate-400 dark:text-slate-550">
                             Hãy hoàn thành ít nhất 1 bài thi để xuất hiện trên bảng xếp hạng.
                         </p>
                         <Link href="/exam-room" className="mt-4 inline-block rounded-full bg-violet-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
@@ -328,10 +328,10 @@ export default function LeaderboardPage() {
 
                         {/* Table (Ranks 4+) */}
                         {restEntries.length > 0 && (
-                            <div className="overflow-x-auto rounded-[24px] border border-slate-100 bg-white shadow-sm">
+                            <div className="overflow-x-auto rounded-[24px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
                                 <table className="w-full text-left border-collapse min-w-[700px]">
                                     <thead>
-                                        <tr className="border-b border-slate-50 text-[11px] font-black text-slate-400 uppercase tracking-wider bg-slate-50/40">
+                                        <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
                                             <th className="py-4 px-6 text-center w-20">HANG</th>
                                             <th className="py-4 px-6">THÍ SINH</th>
                                             <th className="py-4 px-6 text-center">SỐ LẦN THI</th>
@@ -340,7 +340,7 @@ export default function LeaderboardPage() {
                                             <th className="py-4 px-6 text-center">THỜI GIAN GẦN NHẤT</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 text-sm">
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                                         {restEntries.map((entry) => {
                                             const isMe = isAuthenticated && entry.id === user?.id;
                                             const initials = String(entry.full_name || '?')
@@ -363,9 +363,9 @@ export default function LeaderboardPage() {
                                             };
 
                                             return (
-                                                <tr key={entry.id} className={`hover:bg-slate-50/40 transition-colors ${isMe ? 'bg-violet-50/30' : ''}`}>
+                                                <tr key={entry.id} className={`hover:bg-slate-50/40 dark:hover:bg-slate-800/40 transition-colors ${isMe ? 'bg-violet-50/30 dark:bg-violet-950/20' : ''}`}>
                                                     {/* Rank */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-800">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-850 dark:text-slate-350">
                                                         {entry.rank}
                                                     </td>
                                                     
@@ -376,38 +376,38 @@ export default function LeaderboardPage() {
                                                                 <img
                                                                     src={entry.avatar_url}
                                                                     alt={entry.full_name}
-                                                                    className="w-9 h-9 rounded-full object-cover border border-slate-100 shadow-sm"
+                                                                    className="w-9 h-9 rounded-full object-cover border border-slate-100 dark:border-slate-800 shadow-sm"
                                                                 />
                                                             ) : (
-                                                                <div className={`w-9 h-9 rounded-full ${getAvatarBg(entry.full_name)} text-white font-extrabold flex items-center justify-center text-xs border border-white shadow-sm`}>
+                                                                <div className={`w-9 h-9 rounded-full ${getAvatarBg(entry.full_name)} text-white font-extrabold flex items-center justify-center text-xs border border-white dark:border-slate-800 shadow-sm`}>
                                                                     {initials}
                                                                 </div>
                                                             )}
-                                                            <span className="font-extrabold text-slate-900">
-                                                                {entry.full_name} {isMe && <span className="text-violet-600 font-bold text-xs">(Bạn)</span>}
+                                                            <span className="font-extrabold text-slate-900 dark:text-slate-100">
+                                                                {entry.full_name} {isMe && <span className="text-violet-600 dark:text-violet-400 font-bold text-xs">(Bạn)</span>}
                                                             </span>
                                                         </div>
                                                     </td>
                                                     
                                                     {/* Attempts */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-600">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
                                                         {entry.total_attempts}
                                                     </td>
                                                     
                                                     {/* Average Score */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-600">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
                                                         {formatScore(entry.avg_score)}/100
                                                     </td>
                                                     
                                                     {/* Highest Score */}
-                                                    <td className="py-4 px-6 text-center font-black text-emerald-600">
+                                                    <td className="py-4 px-6 text-center font-black text-emerald-600 dark:text-emerald-500">
                                                         {formatScore(entry.best_score)}/100
                                                     </td>
                                                     
                                                     {/* Latest Time */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-500">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-500 dark:text-slate-400">
                                                         <div className="inline-flex items-center gap-1.5">
-                                                            <FiClock className="text-slate-400" size={13} />
+                                                            <FiClock className="text-slate-400 dark:text-slate-500" size={13} />
                                                             <span>{formatRelativeTime(entry.last_attempt_at)}</span>
                                                         </div>
                                                     </td>
@@ -420,7 +420,7 @@ export default function LeaderboardPage() {
                         )}
                         
                         {/* Footer notice */}
-                        <div className="text-center text-xs font-bold text-slate-400 mt-6 flex items-center justify-center gap-1">
+                        <div className="text-center text-xs font-bold text-slate-400 dark:text-slate-500 mt-6 flex items-center justify-center gap-1">
                             <span>ⓘ</span>
                             <span>Bảng xếp hạng được cập nhật liên tục sau mỗi lượt thi</span>
                         </div>
@@ -428,10 +428,10 @@ export default function LeaderboardPage() {
                 )}
 
                 {isAuthenticated && !myEntry && !loading && (
-                    <div className="mt-8 rounded-2xl border border-dashed border-violet-300 bg-white p-6 text-center shadow-sm">
+                    <div className="mt-8 rounded-2xl border border-dashed border-violet-300 dark:border-violet-800 bg-white dark:bg-slate-900 p-6 text-center shadow-sm">
                         <FiTarget size={32} className="mx-auto mb-3 text-violet-400" />
-                        <p className="font-bold text-gray-600">Bạn chưa có trên bảng xếp hạng</p>
-                        <p className="mt-1 text-sm text-gray-400">Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
+                        <p className="font-bold text-gray-650 dark:text-slate-350">Bạn chưa có trên bảng xếp hạng</p>
+                        <p className="mt-1 text-sm text-gray-400 dark:text-slate-500">Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
                         <Link href="/exam-room" className="mt-4 inline-block rounded-full bg-violet-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
                             Thi ngay
                         </Link>
@@ -439,8 +439,8 @@ export default function LeaderboardPage() {
                 )}
 
                 {!isAuthenticated && !loading && entries.length > 0 && (
-                    <div className="mt-6 text-center text-sm font-bold text-gray-500">
-                        <Link href="/login" className="font-extrabold text-violet-600 hover:underline">Đăng nhập</Link>{' '}
+                    <div className="mt-6 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
+                        <Link href="/login" className="font-extrabold text-violet-600 dark:text-violet-400 hover:underline">Đăng nhập</Link>{' '}
                         để xem thứ hạng của bạn
                     </div>
                 )}

@@ -37,7 +37,7 @@ function Avatar({ entry, size = 48 }: { entry: OfficialExamLeaderboardEntry; siz
       <img
         src={entry.avatar_url}
         alt={entry.full_name}
-        className="shrink-0 rounded-full object-cover border-2 border-white shadow-sm"
+        className="shrink-0 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm"
         style={{ width: size, height: size }}
       />
     );
@@ -52,7 +52,7 @@ function Avatar({ entry, size = 48 }: { entry: OfficialExamLeaderboardEntry; siz
 
   return (
     <div
-      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 font-extrabold text-white border-2 border-white shadow-sm"
+      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 font-extrabold text-white border-2 border-white dark:border-slate-800 shadow-sm"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
       {initials}
@@ -95,24 +95,24 @@ function getRankTone(rank: number) {
   if (rank === 1) {
     return {
       badgeColor: 'bg-[#FFC524]',
-      shell: 'border-[#FFE899] bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] shadow-md shadow-amber-100/50',
+      shell: 'border-[#FFE899] dark:border-amber-700/30 bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] dark:from-[#3a2f15]/20 dark:via-slate-900 dark:to-slate-900 shadow-md shadow-amber-100/50 dark:shadow-none',
       score: 'bg-[#FFB800] text-white',
-      wreathColor: 'text-[#F5D06E]',
+      wreathColor: 'text-[#F5D06E] dark:text-[#d4af37]',
     };
   }
   if (rank === 2) {
     return {
       badgeColor: 'bg-[#4FA2FF]',
-      shell: 'border-[#D0E7FF] bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] shadow-sm shadow-blue-100/40',
+      shell: 'border-[#D0E7FF] dark:border-blue-700/30 bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] dark:from-[#1b2b48]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-blue-100/40 dark:shadow-none',
       score: 'bg-[#3B82F6] text-white',
-      wreathColor: 'text-[#9ECBFF]',
+      wreathColor: 'text-[#9ECBFF] dark:text-[#4a90e2]',
     };
   }
   return {
     badgeColor: 'bg-[#FF7894]',
-    shell: 'border-[#FFE4E6] bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] shadow-sm shadow-rose-100/40',
+    shell: 'border-[#FFE4E6] dark:border-rose-700/30 bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] dark:from-[#3b1c24]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-rose-100/40 dark:shadow-none',
     score: 'bg-[#EC4899] text-white',
-    wreathColor: 'text-[#FFA1B5]',
+    wreathColor: 'text-[#FFA1B5] dark:text-[#d04a6b]',
   };
 }
 
@@ -162,11 +162,11 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
           <Avatar entry={entry} size={avatarSize} />
         </div>
 
-        <h3 className={`font-extrabold text-slate-800 text-center line-clamp-1 max-w-[90%] mt-2.5 ${compact ? 'text-sm' : 'text-[15px]'}`}>
+        <h3 className={`font-extrabold text-slate-800 dark:text-slate-200 text-center line-clamp-1 max-w-[90%] mt-2.5 ${compact ? 'text-sm' : 'text-[15px]'}`}>
           {entry.full_name}
         </h3>
         
-        <p className="mt-1 text-[11px] font-bold text-slate-400 text-center truncate max-w-full px-2">
+        <p className="mt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center truncate max-w-full px-2">
           {getEntryMeta(entry, noRoomLabel)}
         </p>
       </div>
@@ -178,8 +178,8 @@ function PodiumCard({ entry, noRoomLabel, compact = false }: { entry: OfficialEx
           <p className="text-[10px] font-bold opacity-90 mt-0.5">điểm</p>
         </div>
 
-        <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-          <FiClock size={12} className="text-slate-400" /> {formatDuration(entry.duration_seconds)}
+        <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+          <FiClock size={12} className="text-slate-400 dark:text-slate-505" /> {formatDuration(entry.duration_seconds)}
         </p>
       </div>
     </div>
@@ -203,32 +203,32 @@ export default function OfficialExamLeaderboard({
   const restEntries = entries.slice(3);
 
   return (
-    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} border border-slate-100 bg-[#F8FAFC] shadow-sm ${className}`}>
-      <div className={`border-b border-slate-100 bg-white ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
+    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 shadow-sm ${className} transition-colors duration-300`}>
+      <div className={`border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-[11px] font-extrabold uppercase text-violet-700">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-100 dark:border-violet-900/30 bg-violet-50 dark:bg-violet-950/20 px-3 py-1 text-[11px] font-extrabold uppercase text-violet-700 dark:text-violet-400">
               <FiMonitor size={14} /> {badgeLabel}
             </div>
-            <h2 className={`${compact ? 'text-xl' : 'text-2xl'} flex items-center gap-2 font-black text-slate-900`}>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+            <h2 className={`${compact ? 'text-xl' : 'text-2xl'} flex items-center gap-2 font-black text-slate-900 dark:text-white`}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-500">
                 <FiStar size={16} />
               </span>
               Bảng vàng thành tích
             </h2>
-            <p className="mt-1 max-w-2xl text-xs font-bold text-slate-400">
+            <p className="mt-1 max-w-2xl text-xs font-bold text-slate-400 dark:text-slate-500">
               {description || `Vinh danh những bài làm nổi bật nhất của ${examTitle || 'đề hiện tại'}.`}
             </p>
           </div>
           
           <div className="flex gap-2 self-start md:self-auto">
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center min-w-[90px]">
-              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 uppercase"><FiUsers size={10} /> Thí sinh</p>
-              <p className="text-lg font-black text-slate-800 mt-0.5">{entries.length}</p>
+            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
+              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase"><FiUsers size={10} /> Thí sinh</p>
+              <p className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5">{entries.length}</p>
             </div>
-            <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center min-w-[90px]">
-              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 uppercase"><FiAward size={10} /> Phạm vi</p>
-              <p className="text-xs font-black text-slate-700 mt-1.5 truncate max-w-[80px]" title={scopeLabel}>{scopeLabel}</p>
+            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
+              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase"><FiAward size={10} /> Phạm vi</p>
+              <p className="text-xs font-black text-slate-700 dark:text-slate-300 mt-1.5 truncate max-w-[80px]" title={scopeLabel}>{scopeLabel}</p>
             </div>
           </div>
         </div>
@@ -236,13 +236,13 @@ export default function OfficialExamLeaderboard({
 
       {loading ? (
         <div className={`flex items-center justify-center ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-violet-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-violet-600" />
         </div>
       ) : entries.length === 0 ? (
-        <div className={`flex flex-col items-center justify-center text-center bg-white ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
-          <FiTrendingUp size={36} className="mb-2 text-slate-300" />
-          <p className="text-base font-black text-slate-600">{emptyTitle}</p>
-          <p className="mt-1 max-w-md text-xs font-bold text-slate-400">
+        <div className={`flex flex-col items-center justify-center text-center bg-white dark:bg-slate-900 ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
+          <FiTrendingUp size={36} className="mb-2 text-slate-300 dark:text-slate-700" />
+          <p className="text-base font-black text-slate-600 dark:text-slate-300">{emptyTitle}</p>
+          <p className="mt-1 max-w-md text-xs font-bold text-slate-400 dark:text-slate-500">
             {emptyDescription}
           </p>
         </div>
@@ -257,10 +257,10 @@ export default function OfficialExamLeaderboard({
 
           {/* Table list for 4+ */}
           {restEntries.length > 0 && (
-            <div className="overflow-x-auto rounded-[24px] border border-slate-100 bg-white shadow-sm">
+            <div className="overflow-x-auto rounded-[24px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
-                  <tr className="border-b border-slate-50 text-[11px] font-black text-slate-400 uppercase tracking-wider bg-slate-50/40">
+                  <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
                     <th className="py-4 px-6 text-center w-20">HANG</th>
                     <th className="py-4 px-6">THÍ SINH</th>
                     <th className="py-4 px-6">PHÒNG THI</th>
@@ -269,7 +269,7 @@ export default function OfficialExamLeaderboard({
                     <th className="py-4 px-6 text-center">THỜI GIAN</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                   {restEntries.map((entry) => {
                     const initials = String(entry.full_name || '?')
                       .trim()
@@ -291,8 +291,8 @@ export default function OfficialExamLeaderboard({
                     };
 
                     return (
-                      <tr key={entry.user_id} className="hover:bg-slate-50/40 transition-colors">
-                        <td className="py-4 px-6 text-center font-bold text-slate-800">
+                      <tr key={entry.user_id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-4 px-6 text-center font-bold text-slate-850 dark:text-slate-350">
                           {entry.rank}
                         </td>
                         <td className="py-4 px-6">
@@ -301,28 +301,28 @@ export default function OfficialExamLeaderboard({
                               <img
                                 src={entry.avatar_url}
                                 alt={entry.full_name}
-                                className="w-9 h-9 rounded-full object-cover border border-slate-100 shadow-sm"
+                                className="w-9 h-9 rounded-full object-cover border border-slate-100 dark:border-slate-800 shadow-sm"
                               />
                             ) : (
-                              <div className={`w-9 h-9 rounded-full ${getAvatarBg(entry.full_name)} text-white font-extrabold flex items-center justify-center text-xs border border-white shadow-sm`}>
+                              <div className={`w-9 h-9 rounded-full ${getAvatarBg(entry.full_name)} text-white font-extrabold flex items-center justify-center text-xs border border-white dark:border-slate-800 shadow-sm`}>
                                 {initials}
                               </div>
                             )}
-                            <span className="font-extrabold text-slate-900">{entry.full_name}</span>
+                            <span className="font-extrabold text-slate-900 dark:text-slate-100">{entry.full_name}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-6 font-bold text-slate-600">
+                        <td className="py-4 px-6 font-bold text-slate-650 dark:text-slate-450">
                           {getEntryMeta(entry, noRoomLabel)}
                         </td>
-                        <td className="py-4 px-6 text-center font-bold text-slate-600">
+                        <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
                           {entry.total_attempts}
                         </td>
-                        <td className="py-4 px-6 text-center font-black text-emerald-600">
+                        <td className="py-4 px-6 text-center font-black text-emerald-600 dark:text-emerald-500">
                           {formatScore(entry.total_score)}/100
                         </td>
-                        <td className="py-4 px-6 text-center font-bold text-slate-500">
+                        <td className="py-4 px-6 text-center font-bold text-slate-500 dark:text-slate-400">
                           <div className="inline-flex items-center gap-1.5 justify-center">
-                            <FiClock className="text-slate-400" size={13} />
+                            <FiClock className="text-slate-400 dark:text-slate-500" size={13} />
                             <span>{formatDuration(entry.duration_seconds)}</span>
                           </div>
                         </td>
@@ -334,7 +334,7 @@ export default function OfficialExamLeaderboard({
             </div>
           )}
           
-          <div className="text-center text-xs font-bold text-slate-400 mt-4 flex items-center justify-center gap-1">
+          <div className="text-center text-xs font-bold text-slate-400 dark:text-slate-505 mt-4 flex items-center justify-center gap-1">
             <span>ⓘ</span>
             <span>Bảng xếp hạng được cập nhật liên tục sau mỗi lượt thi</span>
           </div>
