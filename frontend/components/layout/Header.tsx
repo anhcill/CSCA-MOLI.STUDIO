@@ -65,14 +65,30 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileCourseOpen, setMobileCourseOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [mounted, setMounted] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
+  const lastScrollY = useRef(0);
 
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4);
+    const onScroll = () => {
+      const currentScrollY = window.scrollY;
+      setScrolled(currentScrollY > 4);
+      
+      // Auto-hide header when scrolling down past 80px, show when scrolling up
+      if (currentScrollY <= 10) {
+        setVisible(true);
+      } else if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
+        setVisible(false);
+      } else if (currentScrollY < lastScrollY.current) {
+        setVisible(true);
+      }
+      
+      lastScrollY.current = currentScrollY;
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -105,7 +121,7 @@ export default function Header() {
 
   return (
     <>
-    <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'}`}>
+    <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'} ${visible ? 'translate-y-0' : '-translate-y-full shadow-none'}`}>
       <div className="mx-auto w-full max-w-[1600px] overflow-visible px-3 sm:px-4 2xl:px-6">
         {/* Top Row: Logo, Nav, Search, Actions */}
         <div className="flex items-center justify-between gap-4 overflow-visible">
