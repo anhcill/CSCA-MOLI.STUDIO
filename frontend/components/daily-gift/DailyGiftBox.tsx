@@ -32,7 +32,7 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
   return (
     <>
-      <div className="fixed bottom-[max(6rem,calc(env(safe-area-inset-bottom)+5.5rem))] right-2 z-[90] sm:bottom-28 sm:right-6">
+      <div className="fixed bottom-[max(5.25rem,calc(env(safe-area-inset-bottom)+4.75rem))] right-3 z-[9996] sm:bottom-28 sm:right-6">
         <div className="relative h-20 w-20 sm:h-28 sm:w-28">
           {FLOATING_DECOR.map(({ Icon, className, delay }) => (
             <motion.span

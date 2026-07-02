@@ -93,10 +93,18 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
     const reviewAIHostRef = useRef<ReviewAIHostHandle>(null);
+    const chatAnchorRef = useRef<HTMLDivElement>(null);
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [aiLoading, setAiLoading] = useState(false);
     const [reviewStarted, setReviewStarted] = useState(false);
     const [aiLoaded, setAiLoaded] = useState(false);
+
+    const openChatTab = useCallback(() => {
+        setActiveTab('chat');
+        window.setTimeout(() => {
+            chatAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
+    }, []);
 
     useEffect(() => {
         loadResult();
@@ -270,7 +278,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                     ].map(tab => (
                         <button key={tab.key}
                             onClick={() => {
-                                setActiveTab(tab.key as any);
+                                if (tab.key === 'chat') openChatTab();
+                                else setActiveTab(tab.key as any);
                                 if (tab.key === 'review') setReviewStarted(false);
                             }}
                             className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
@@ -416,7 +425,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                 </button>
 
                                 <button
-                                    onClick={() => setActiveTab('chat')}
+                                    onClick={openChatTab}
                                     className="w-full bg-gradient-to-r from-purple-50/50 to-pink-50/30 dark:from-purple-950/10 dark:to-pink-950/5 border border-purple-105 dark:border-purple-900/30 rounded-2xl p-4 text-left hover:border-purple-300 dark:hover:border-purple-805 hover:shadow-md transition-all duration-200 group">
                                     <div className="flex items-center gap-3.5">
                                         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20 group-hover:scale-105 transition-transform duration-205">
@@ -620,7 +629,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                 {/* ── TAB: CHATBOT AI ── */}
                 {activeTab === 'chat' && (
-                    <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl">
+                    <div ref={chatAnchorRef} className="scroll-mt-24 min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl">
                         <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
                     </div>
                 )}
@@ -630,7 +639,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 ref={reviewAIHostRef}
                 attemptId={result.id}
                 languageMode={languageMode}
-                onOpenChat={() => setActiveTab('chat')}
+                onOpenChat={openChatTab}
             />
         </div>
     );

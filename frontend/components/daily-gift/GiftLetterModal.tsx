@@ -63,7 +63,7 @@ export default function GiftLetterModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="daily-gift-letter-title"
-        className="relative max-h-[calc(100dvh-24px)] w-full max-w-[540px] overflow-visible rounded-[24px] border border-rose-100 bg-[#fffaf0] p-2.5 shadow-[0_28px_80px_rgba(15,23,42,0.22)] sm:max-h-[92dvh] sm:rounded-[32px] sm:p-4"
+        className="relative flex max-h-[calc(100dvh-24px)] w-full max-w-[540px] flex-col overflow-visible rounded-[24px] border border-rose-100 bg-[#fffaf0] p-2.5 shadow-[0_28px_80px_rgba(15,23,42,0.22)] sm:max-h-[92dvh] sm:rounded-[32px] sm:p-4"
         initial={{ y: 36, scale: 0.96, opacity: 0 }}
         animate={{ y: 0, scale: 1, opacity: 1 }}
         exit={{ y: 28, scale: 0.96, opacity: 0 }}
@@ -83,7 +83,7 @@ export default function GiftLetterModal({
           </motion.span>
         ))}
 
-        <div className="max-h-[calc(100dvh-44px)] overflow-y-auto overscroll-contain rounded-[20px] border border-white/80 bg-[linear-gradient(180deg,#fffdf7_0%,#fff7ed_100%)] px-4 pb-4 pt-7 shadow-inner sm:max-h-[calc(92dvh-24px)] sm:rounded-[26px] sm:px-8 sm:pb-7 sm:pt-9">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-t-[20px] border border-b-0 border-white/80 bg-[linear-gradient(180deg,#fffdf7_0%,#fff7ed_100%)] px-4 pb-5 pt-7 shadow-inner sm:rounded-t-[26px] sm:px-8 sm:pb-7 sm:pt-9">
           <button
             type="button"
             aria-label="Đóng thư quà hôm nay"
@@ -124,15 +124,17 @@ export default function GiftLetterModal({
               {letter.blessing}
             </p>
           </div>
+        </div>
 
+        <div className="shrink-0 rounded-b-[20px] border border-t-0 border-white/80 bg-[#fff7ed]/95 px-4 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-3 shadow-inner backdrop-blur sm:rounded-b-[26px] sm:px-8 sm:pb-5">
           <button
             type="button"
             onClick={onAccept}
             disabled={accepting}
-            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-500 to-sky-500 px-4 py-3 text-center text-sm font-extrabold text-white shadow-lg shadow-rose-200 transition-transform hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
+            className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-500 to-sky-500 px-4 py-3 text-center text-sm font-extrabold text-white shadow-lg shadow-rose-200 transition-transform hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
           >
             <FaCheck size={14} />
-            {accepting ? 'Đang nhận...' : 'Nhận năng lượng hôm nay 💖'}
+            {accepting ? 'Đang nhận...' : 'Nhận năng lượng hôm nay'}
           </button>
         </div>
       </motion.div>
