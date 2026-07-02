@@ -12,7 +12,7 @@ async function getLeaderboard(req, res) {
   try {
     const period = req.query.period === "week" ? "week" : "all";
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
-    const cacheKey = `leaderboard:v4:${period}:${limit}`;
+    const cacheKey = `leaderboard:v5:min50:${period}:${limit}`;
     const cached = cache.get(cacheKey);
     if (cached) return res.json({ success: true, data: cached, fromCache: true });
 
@@ -80,6 +80,7 @@ async function getLeaderboard(req, res) {
       JOIN users u ON u.id = us.user_id
       JOIN ranked_attempts ra ON ra.user_id = us.user_id AND ra.best_rank = 1
       WHERE u.role = 'student'
+        AND ra.score_100 > 50
       ORDER BY ra.score_100 DESC, ra.rank_time_seconds ASC, us.avg_score DESC, us.total_attempts DESC
       LIMIT $1`,
       [limit],

@@ -71,8 +71,10 @@ function getRankTone(rank: number) {
             shell: 'order-1 border-amber-200 shadow-xl shadow-amber-100/80 ring-1 ring-amber-100 md:order-2 md:w-full',
             accent: 'from-amber-300 via-amber-400 to-orange-400',
             score: 'bg-slate-950 shadow-lg shadow-amber-200/70',
+            column: 'border-amber-200 bg-amber-50/55 shadow-amber-100/70',
             avatar: 64,
-            height: 'min-h-[310px]',
+            height: 'min-h-[344px]',
+            lift: 'md:-translate-y-4',
         };
     }
     if (rank === 2) {
@@ -81,8 +83,10 @@ function getRankTone(rank: number) {
             shell: 'order-2 border-cyan-200 shadow-lg shadow-cyan-100/80 md:order-1 md:mx-auto md:w-[96%]',
             accent: 'from-cyan-300 via-sky-400 to-teal-400',
             score: 'bg-slate-900 shadow-md shadow-cyan-100/80',
+            column: 'border-cyan-200 bg-cyan-50/60 shadow-cyan-100/70',
             avatar: 56,
-            height: 'min-h-[268px]',
+            height: 'min-h-[292px]',
+            lift: 'md:translate-y-5',
         };
     }
     return {
@@ -90,8 +94,10 @@ function getRankTone(rank: number) {
         shell: 'order-3 border-rose-200 shadow-md shadow-rose-100/80 md:order-3 md:mx-auto md:w-[92%]',
         accent: 'from-rose-300 via-pink-400 to-red-400',
         score: 'bg-slate-900 shadow-sm shadow-rose-100/80',
+        column: 'border-rose-200 bg-rose-50/60 shadow-rose-100/70',
         avatar: 50,
-        height: 'min-h-[248px]',
+        height: 'min-h-[264px]',
+        lift: 'md:translate-y-10',
     };
 }
 
@@ -99,8 +105,9 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
     const tone = getRankTone(entry.rank);
 
     return (
-        <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-3xl border bg-gradient-to-b from-white via-white to-slate-50/80 p-4 text-center transition-all ${tone.height} ${tone.shell}`}>
-            <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${tone.accent}`} />
+        <div className={`rounded-[2rem] border-2 p-2 shadow-lg transition-transform ${tone.column} ${tone.shell} ${tone.lift}`}>
+          <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-[1.6rem] border-2 bg-gradient-to-b from-white via-white to-slate-50/80 p-4 text-center transition-all ${tone.height}`}>
+            <div className={`absolute inset-x-0 top-0 h-2 bg-gradient-to-r ${tone.accent}`} />
             <div className="absolute inset-x-5 top-6 h-px bg-gradient-to-r from-transparent via-slate-100 to-transparent" />
             <div className="relative z-10 flex flex-col items-center">
                 <div className={`mb-3 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-black ${tone.badge}`}>
@@ -121,6 +128,7 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
                     <FiClock size={13} /> {formatDuration(entry.best_time_spent)}
                 </p>
             </div>
+          </div>
         </div>
     );
 }
