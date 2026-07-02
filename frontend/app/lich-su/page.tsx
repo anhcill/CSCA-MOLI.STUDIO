@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -10,7 +10,7 @@ import Link from 'next/link';
 import {
   FiCalendar, FiCheckCircle, FiXCircle, FiClock,
   FiTrendingUp, FiAward, FiBarChart2, FiRefreshCw,
-  FiArrowRight,
+  FiArrowRight, FiTrash2,
 } from 'react-icons/fi';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -117,6 +117,7 @@ function StatCard({ icon: Icon, label, value, sub, color }: {
 }
 
 export default function LichSuPage() {
+  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const { t, format } = useLanguage();
   const searchParams = useSearchParams();
@@ -124,6 +125,7 @@ export default function LichSuPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [filtered, setFiltered] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingAttemptId, setDeletingAttemptId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const PER_PAGE = 10;
 
@@ -165,6 +167,23 @@ export default function LichSuPage() {
   const totalPages = Math.ceil(displayFiltered.length / PER_PAGE);
   const paged = displayFiltered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const subjects = ['ALL', ...Array.from(new Set(history.map(h => h.subject_code).filter(Boolean)))];
+
+  const handleDeleteAttempt = async (item: HistoryItem) => {
+    if (deletingAttemptId) return;
+    const ok = window.confirm(`Xóa lịch sử thi "${item.exam_title || `Đề #${item.exam_id}`}"? Dữ liệu bài làm, AI phân tích và thống kê liên quan sẽ được xóa.`);
+    if (!ok) return;
+
+    try {
+      setDeletingAttemptId(item.id);
+      await examApi.deleteHistoryAttempt(item.id);
+      setHistory((current) => current.filter((attempt) => attempt.id !== item.id));
+    } catch (error) {
+      console.error('Delete attempt history error:', error);
+      alert((error as any)?.response?.data?.message || 'Không thể xóa lịch sử thi lúc này.');
+    } finally {
+      setDeletingAttemptId(null);
+    }
+  };
 
   if (!isAuthenticated && !loading) {
     const loginPrompt = (
@@ -301,11 +320,12 @@ export default function LichSuPage() {
         ) : (
           <>
             <div className="grid grid-cols-12 gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              <div className="col-span-5">{t('history.exam')}</div>
+              <div className="col-span-4">{t('history.exam')}</div>
               <div className="col-span-2 text-center">{t('history.score')}</div>
               <div className="col-span-2 text-center">{t('history.correct')}</div>
               <div className="col-span-2 text-center">{t('history.time')}</div>
               <div className="col-span-1 text-center">{t('history.result')}</div>
+              <div className="col-span-1 text-center">Xóa</div>
             </div>
 
             {paged.map((item) => {
@@ -314,12 +334,20 @@ export default function LichSuPage() {
               const pct = Math.round(attemptAccuracy(item));
 
               return (
-                <Link
+                <div
                   key={item.id}
-                  href={getAttemptResultHref(item)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(getAttemptResultHref(item))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      router.push(getAttemptResultHref(item));
+                    }
+                  }}
                   className="grid cursor-pointer grid-cols-12 items-center gap-2 border-b border-gray-50 px-5 py-4 transition-colors hover:bg-indigo-50/60"
                 >
-                  <div className="col-span-5 min-w-0">
+                  <div className="col-span-4 min-w-0">
                     <p className="truncate text-sm font-semibold leading-snug text-gray-900">{item.exam_title || `Đề #${item.exam_id}`}</p>
                     <div className="mt-1 flex items-center gap-2">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.bg} ${meta.color}`}>
@@ -356,7 +384,28 @@ export default function LichSuPage() {
                       {badge.label}
                     </span>
                   </div>
-                </Link>
+
+                  <div className="col-span-1 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        handleDeleteAttempt(item);
+                      }}
+                      disabled={deletingAttemptId === item.id}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-rose-500 transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Xóa lịch sử thi"
+                      title="Xóa lịch sử thi"
+                    >
+                      {deletingAttemptId === item.id ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+                      ) : (
+                        <FiTrash2 size={16} />
+                      )}
+                    </button>
+                  </div>
+                </div>
               );
             })}
 

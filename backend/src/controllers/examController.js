@@ -629,6 +629,35 @@ const examController = {
   },
 
   // Lấy thống kê theo chủ đề
+  async deleteHistoryAttempt(req, res) {
+    try {
+      const userId = req.user.id;
+      const attemptId = parseInt(req.params.attemptId, 10);
+
+      if (!Number.isFinite(attemptId) || attemptId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID lan thi khong hop le",
+        });
+      }
+
+      const deleted = await ExamAttempt.deleteHistoryAttempt(attemptId, userId);
+
+      res.json({
+        success: true,
+        message: "Da xoa lich su thi",
+        data: deleted,
+      });
+    } catch (error) {
+      console.error("Delete history attempt error:", error);
+      res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.statusCode === 404 ? "Khong tim thay lich su thi" : "Loi khi xoa lich su thi",
+        error: error.message,
+      });
+    }
+  },
+
   async getTopicStats(req, res) {
     try {
       const userId = req.user.id;

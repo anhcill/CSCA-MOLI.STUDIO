@@ -215,6 +215,11 @@ const examApi = {
   },
 
   // Lấy thống kê theo topic
+  async deleteHistoryAttempt(attemptId: number) {
+    const response = await axios.delete(`/attempts/${attemptId}/history`);
+    return response.data.data;
+  },
+
   async getTopicStats(subjectCode: string): Promise<TopicStats[]> {
     const response = await axios.get(`/subjects/${subjectCode}/stats`);
     return response.data.data;

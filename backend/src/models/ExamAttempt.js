@@ -509,6 +509,90 @@ const ExamAttempt = {
   },
 
   // Lấy lịch sử làm bài của user
+  async rebuildUserTopicStats(client, userId) {
+    await client.query(`DELETE FROM user_topic_stats WHERE user_id = $1`, [userId]);
+
+    await client.query(
+      `INSERT INTO user_topic_stats (user_id, subject_id, topic_id, total_questions, correct_answers, incorrect_answers, error_percentage)
+       SELECT
+         ea.user_id,
+         e.subject_id,
+         qtm.topic_id,
+         COUNT(*)::int AS total_questions,
+         SUM(CASE WHEN COALESCE(ua.is_correct, ua.score_awarded >= q.points * 0.5) THEN 1 ELSE 0 END)::int AS correct_answers,
+         SUM(CASE WHEN NOT COALESCE(ua.is_correct, ua.score_awarded >= q.points * 0.5) THEN 1 ELSE 0 END)::int AS incorrect_answers,
+         ROUND(
+           SUM(CASE WHEN NOT COALESCE(ua.is_correct, ua.score_awarded >= q.points * 0.5) THEN 1 ELSE 0 END)::decimal
+           / NULLIF(COUNT(*), 0) * 100,
+           2
+         ) AS error_percentage
+       FROM user_answers ua
+       JOIN exam_attempts ea ON ua.attempt_id = ea.id
+       JOIN questions q ON ua.question_id = q.id
+       JOIN exams e ON q.exam_id = e.id
+       JOIN question_topic_mapping qtm ON q.id = qtm.question_id
+       WHERE ea.user_id = $1
+         AND ea.status = 'completed'
+         AND (q.question_type NOT IN ('essay', 'translation') OR ua.score_awarded IS NOT NULL)
+       GROUP BY ea.user_id, e.subject_id, qtm.topic_id`,
+      [userId],
+    );
+  },
+
+  async deleteHistoryAttempt(attemptId, userId) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const attemptResult = await client.query(
+        `SELECT id, exam_id, user_id
+         FROM exam_attempts
+         WHERE id = $1 AND user_id = $2
+         FOR UPDATE`,
+        [attemptId, userId],
+      );
+
+      const attempt = attemptResult.rows[0];
+      if (!attempt) {
+        throw createAttemptError("Attempt not found", 404);
+      }
+
+      await client.query(`DELETE FROM ai_insights WHERE attempt_id = $1 AND user_id = $2`, [attemptId, userId]);
+
+      const optionalTables = await client.query(
+        `SELECT table_name
+         FROM information_schema.tables
+         WHERE table_schema = 'public'
+           AND table_name = ANY($1::text[])`,
+        [["ai_ask_cache", "exam_risk_cases"]],
+      );
+      const existingTables = new Set(optionalTables.rows.map((row) => row.table_name));
+
+      if (existingTables.has("ai_ask_cache")) {
+        await client.query(
+          `DELETE FROM ai_ask_cache WHERE attempt_id = $1 AND (user_id = $2 OR user_id IS NULL)`,
+          [String(attemptId), userId],
+        );
+      }
+      if (existingTables.has("exam_risk_cases")) {
+        await client.query(`DELETE FROM exam_risk_cases WHERE attempt_id = $1 AND user_id = $2`, [attemptId, userId]);
+      }
+      await client.query(`UPDATE user_question_notes SET source_attempt_id = NULL WHERE source_attempt_id = $1 AND user_id = $2`, [attemptId, userId]);
+      await client.query(`DELETE FROM exam_attempts WHERE id = $1 AND user_id = $2`, [attemptId, userId]);
+
+      await this.rebuildUserTopicStats(client, userId);
+
+      await client.query("COMMIT");
+      return { id: Number(attemptId), exam_id: attempt.exam_id };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   async getUserHistory(userId, subjectCode = null, limit = 10) {
     let query = `
       SELECT

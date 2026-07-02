@@ -58,6 +58,11 @@ router.post(
   examController.submitExam
 );
 router.get("/history", authenticate, examController.getHistory);
+router.delete(
+  "/attempts/:attemptId/history",
+  authenticate,
+  examController.deleteHistoryAttempt
+);
 router.get(
   "/attempts/:attemptId",
   authenticate,
