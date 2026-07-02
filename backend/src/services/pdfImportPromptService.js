@@ -168,6 +168,7 @@ Task:
 - Do not change negative signs, decimal points, exponents, subscripts, answer labels, option text, domain conditions, or set membership when cleaning OCR artifacts.
 - Convert math symbols to LaTeX: != or ≠ -> \\ne, <= or ≤ -> \\le, >= or ≥ -> \\ge, sqrt/√ -> \\sqrt{}, superscripts like f-1(x) or f^-1(x) -> f^{-1}(x).
 - For Chinese math questions, keep Chinese words in questionTextCn but wrap only formulas, e.g. 求函数 \\(y=\\frac{2x+3}{x-1}(x\\ne1)\\) 的反函数。
+- Crucial LaTeX Spacing & Word Rules: Never add backslashes to regular English/Vietnamese words that happen to contain math terms (e.g., "since" must remain "since" or "\\(since\\)" and MUST NOT become "\\sin ce" or "\\since"; "cost" must not become "\\cos t"; "contact" must not become "\\con tact"). Ensure clean, normal spaces between words and math equations (e.g., "Consider option A: We have" instead of "ConsideroptionA : Wehave").
 - For answer options, store only the option content, not the A/B/C/D prefix. Example answer textCn: \\(f^{-1}(x)=\\frac{x+3}{x-2}\\).
 - If OCR text contains solution/explanation markers such as 解析, 答案解析, 解答, 说明, 解:, Explanation, Analysis, Lời giải, or Giải thích, put the following text into explanation/explanationCn/explanationEn and do not keep it in questionText/questionTextCn/questionTextEn or answers.
 - Do not invent missing answer keys. If the correct answer is not clear, set correctAnswer="" and write reviewNotes.

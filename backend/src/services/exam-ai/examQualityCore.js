@@ -1,6 +1,6 @@
 const aiConfig = require("../../config/aiConfig");
 const aiService = require("../aiService");
-const { repairOcrMathArtifacts } = require("../ocrMathRepairService");
+const { repairOcrMathArtifacts, cleanAiGeneratedMathArtifacts } = require("../ocrMathRepairService");
 const { REVIEW_STATUSES } = require("./types");
 const {
   buildSourceFixRules,
@@ -392,7 +392,7 @@ function escapeSetLiteralBraces(input) {
 }
 
 function normalizeLooseMathSyntax(value) {
-  return escapeSetLiteralBraces(normalizeMathUnicode(normalizeEscapedLatexGroupBraces(normalizeEscapedLatexBackslashes(value)))
+  const repaired = escapeSetLiteralBraces(normalizeMathUnicode(normalizeEscapedLatexGroupBraces(normalizeEscapedLatexBackslashes(value)))
     .replace(/(^|\n)-(?=\s*[A-Z]\s*(?:\\cap|\\cup|\\setminus)\b)/g, "$1")
     .replace(/(^|[^\\A-Za-z])(sin|cos|tan|cot|sec|csc|ln|lg|log)\b\s*/gi, (_, prefix, fn) => `${prefix}\\${fn.toLowerCase()} `)
     .replace(/\\(sin|cos|tan|cot|sec|csc)\s*-\s*1\b/g, (_, fn) => `\\${fn}^{-1}`)
@@ -414,6 +414,8 @@ function normalizeLooseMathSyntax(value) {
     .replace(/\^\s*([+\-]?\d+|[A-Za-z]|\\[A-Za-z]+)(?![A-Za-z])/g, "^{$1}")
     .replace(/\b([A-Za-z])\s*(?:\\in)\s*([NZQR])\b/g, "$1\\in \\mathbb{$2}")
     .replace(/\bU\b(?=\s*[\[(])/g, "\\cup "));
+
+  return cleanAiGeneratedMathArtifacts(repaired);
 }
 
 function isMostlyMath(value) {
@@ -994,6 +996,7 @@ Yêu cầu:
 - Nếu đáp án hiện tại đúng, status="ok".
 - Nếu công thức/LaTeX/OCR làm câu khó hiểu hoặc sai, status="formula_issue".
 - Soát kỹ lỗi format toán: thiếu dấu \\, thiếu ngoặc {}, thiếu delimiter, tập hợp {1;2}, sin/cos/log/sqrt/int/frac viết sai, dấu ≤ ≥ ≠ ∈ ∩ ∪ bị OCR sai.
+- Crucial LaTeX Spacing & Word Rules: Never add backslashes to regular English/Vietnamese words that happen to contain math terms (e.g., "since" must remain "since" or "\\(since\\)" and MUST NOT become "\\sin ce" or "\\since"; "cost" must not become "\\cos t"; "contact" must not become "\\con tact"). Ensure clean, normal spaces between words and math equations (e.g., "Consider option A: We have" instead of "ConsideroptionA : Wehave").
 - Chỉ báo formula_issue khi lỗi format có thể làm hiển thị/sai nghĩa; không bắt lỗi style nhỏ.
 - Nếu đáp án hiện tại có vẻ sai, status="answer_issue" và đưa suggestedCorrectAnswer.
 - Nếu lời giải sai, thiếu, hoặc trình bày không khớp đáp án, status="explanation_issue".
@@ -1346,6 +1349,7 @@ Yêu cầu:
 - If currentCorrectAnswer is empty and the correct key is clear from the question/options/context, set correctAnswer. If not clear, do not guess; explain in note.
 - Nếu sửa công thức/lời giải, trả lại nguyên field đã sửa hoàn chỉnh, giữ đúng ngôn ngữ gốc.
 - Công thức toán phải dùng LaTeX chuẩn, bọc inline bằng \\(...\\) khi field có cả chữ và công thức. Tập hợp dùng \\{...\\}; giao/hợp dùng \\cap/\\cup; hàm dùng \\sin, \\cos, \\log, \\sqrt{...}, \\frac{...}{...}.
+- Crucial LaTeX Spacing & Word Rules: Never add backslashes to regular English/Vietnamese words that happen to contain math terms (e.g., "since" must remain "since" or "\\(since\\)" and MUST NOT become "\\sin ce" or "\\since"; "cost" must not become "\\cos t"; "contact" must not become "\\con tact"). Ensure clean, normal spaces between words and math equations (e.g., "Consider option A: We have" instead of "ConsideroptionA : Wehave").
 - Lời giải dài phải xuống dòng theo bước: Công thức, Thay, Suy ra/Kết luận, Chọn.
 - Nếu không đủ dữ kiện hoặc cần hình ảnh không đọc được, không sửa bừa; đưa note ngắn.
 - Phải trả một object fix cho từng mục trong dữ liệu. Nếu không sửa được mục nào, vẫn trả path/index của mục đó kèm note lý do, không gửi field sửa.
@@ -1594,6 +1598,7 @@ Yêu cầu:
 - Nếu có questionImageUrl/contextImageUrl nhưng text, đáp án và đáp án đúng đã đủ để giải, vẫn phải tạo explanation. Chỉ để trống khi hình là dữ kiện bắt buộc không thể suy ra từ text.
 - Công thức dùng LaTeX chuẩn: inline \\(...\\), phân số \\frac{...}{...}, căn \\sqrt{...}, tập hợp \\{...\\}, giao/hợp \\cap/\\cup.
 - Không để công thức thô trong câu. Mọi biểu thức có =, ^, /, \\sin, \\cos, \\theta, \\mu, \\frac, \\sqrt phải nằm trong \\(...\\). Ví dụ: "FA=BIL=(B^2L^2v\\cos\\theta)/R" phải viết "\\(F_A=BIL=\\frac{B^2L^2v\\cos\\theta}{R}\\)".
+- Crucial LaTeX Spacing & Word Rules: Never add backslashes to regular English/Vietnamese words that happen to contain math terms (e.g., "since" must remain "since" or "\\(since\\)" and MUST NOT become "\\sin ce" or "\\since"; "cost" must not become "\\cos t"; "contact" must not become "\\con tact"). Ensure clean, normal spaces between words and math equations (e.g., "Consider option A: We have" instead of "ConsideroptionA : Wehave").
 - Không dùng dấu $ hoặc $$ trong explanation/explanationCn/explanationEn. Chỉ dùng \\(...\\) cho inline math và \\[...\\] cho công thức dài đứng riêng.
 - Nếu lời giải dùng tiếng Trung trong explanationCn, phần chữ có thể là tiếng Trung nhưng công thức vẫn phải theo LaTeX chuẩn như trên.
 - Lời giải nên xuống dòng theo ý: Công thức/Phân tích, Thay tính, Kết luận/Chọn.

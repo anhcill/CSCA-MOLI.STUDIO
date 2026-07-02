@@ -11,7 +11,7 @@ const {
   normalizePdfImportPreset,
   shouldUseRuleBasedPdfParser,
 } = require("./pdfImportPromptService");
-const { repairOcrMathArtifacts } = require("./ocrMathRepairService");
+const { repairOcrMathArtifacts, cleanAiGeneratedMathArtifacts } = require("./ocrMathRepairService");
 
 const MAX_POINTS_PER_QUESTION = 100;
 const QUESTION_TYPES = {
@@ -688,7 +688,7 @@ function repairPdfImportTextArtifacts(value) {
   const text = stringValue(value);
   if (!text) return "";
 
-  return repairOcrMathArtifacts(text)
+  const repaired = repairOcrMathArtifacts(text)
     .replace(/\$\$+/g, "")
     .replace(/([A-Za-z\u00C0-\u1EF9])\s+n\s+([\u00C0-\u1EF9])/g, "$1 n$2")
     .replace(/([A-Za-z\u00C0-\u1EF9])_\{n\}([A-Za-z\u00C0-\u1EF9])/g, "$1 n$2")
@@ -705,6 +705,8 @@ function repairPdfImportTextArtifacts(value) {
     .replace(/\s+([,.;:ï¼Œă€‚ï¼›ï¼ï¼‰\)Â°])/g, "$1")
     .replace(/([ï¼ˆ\(])\s+/g, "$1")
     .trim();
+
+  return cleanAiGeneratedMathArtifacts(repaired);
 }
 
 function tidyImportedExplanationBreaks(value) {
