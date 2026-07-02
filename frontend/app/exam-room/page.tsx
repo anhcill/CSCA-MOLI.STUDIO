@@ -262,48 +262,48 @@ export default function ExamRoomPage() {
       <main className="flex-1 container mx-auto px-4 md:px-6 py-6 md:py-10 max-w-[1400px] relative z-10 space-y-12">
         
         {/* ── HERO BANNER ────────────────────────────────────────── */}
-        <div className="bg-gradient-to-br from-rose-600 via-red-500 to-orange-500 rounded-[2.5rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
+        <div className="bg-gradient-to-br from-rose-600 via-red-500 to-orange-500 rounded-3xl p-6 md:p-8 md:py-10 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[60px] pointer-events-none" />
+          <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-[50px] pointer-events-none" />
           
           <div className="relative z-10 w-full max-w-2xl">
-             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-full shadow-sm text-xs font-bold uppercase tracking-widest border border-white/30 mb-5">
+             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full shadow-sm text-[10px] font-bold uppercase tracking-widest border border-white/30 mb-4">
                <div className="w-2 h-2 rounded-full bg-green-400 animate-ping absolute" />
                <div className="w-2 h-2 rounded-full bg-green-400 relative" />
                SERVER ĐANG HOẠT ĐỘNG
              </div>
              
-             <h1 className="text-4xl lg:text-6xl font-black tracking-tight mb-4 drop-shadow-md">
+             <h1 className="text-3xl lg:text-4xl font-black tracking-tight mb-2 drop-shadow-md">
                Sảnh Thi Đấu <span className="text-orange-200">Trung Tâm</span>
              </h1>
-             <p className="text-rose-100 text-lg leading-relaxed mb-8 max-w-xl">
+             <p className="text-rose-100 text-sm md:text-base leading-relaxed mb-6 max-w-xl">
                Nơi diễn ra các kỳ thi sát hạch thời gian thực. Đăng ký tham gia các kỳ thi sắp tới hoặc rèn luyện kỹ năng qua kho đề thi tự do.
              </p>
              
-             <div className="flex flex-wrap gap-4">
+             <div className="flex flex-wrap gap-3">
                <button 
                  onClick={scrollToPublicExams}
-                 className="px-8 py-3.5 bg-white text-rose-600 font-bold rounded-2xl shadow-xl hover:bg-rose-50 hover:scale-105 transition-all duration-300"
+                 className="px-6 py-2.5 bg-white text-rose-600 text-sm font-bold rounded-xl shadow-md hover:bg-rose-50 hover:scale-105 transition-all duration-300"
                >
                  Tìm kỳ thi ngay
                </button>
                <Link 
                  href="/bang-xep-hang"
-                 className="px-8 py-3.5 bg-rose-700/50 backdrop-blur-md border border-rose-400/50 text-white font-bold rounded-2xl shadow-lg hover:bg-rose-700 transition-all duration-300 flex items-center gap-2"
+                 className="px-6 py-2.5 bg-rose-700/50 backdrop-blur-md border border-rose-400/50 text-white text-sm font-bold rounded-xl shadow-md hover:bg-rose-700 transition-all duration-300 flex items-center gap-2"
                >
                  <FiAward /> Xem bảng xếp hạng
                </Link>
              </div>
           </div>
 
-          <div className="hidden lg:flex relative z-10 shrink-0 right-10">
-            <div className="w-48 h-48 bg-gradient-to-tr from-orange-400 to-rose-400 rounded-full flex items-center justify-center border-4 border-white/20 shadow-[-20px_20px_40px_rgba(0,0,0,0.2)]">
-               <FiMonitor className="text-7xl text-white drop-shadow-md" />
+          <div className="hidden lg:flex relative z-10 shrink-0 right-4">
+            <div className="w-36 h-36 bg-gradient-to-tr from-orange-400 to-rose-400 rounded-full flex items-center justify-center border-4 border-white/20 shadow-[-15px_15px_30px_rgba(0,0,0,0.15)]">
+               <FiMonitor className="text-5xl text-white drop-shadow-md" />
             </div>
             {/* Decorative orbit elements */}
-            <div className="absolute top-0 left-0 w-8 h-8 rounded-full bg-white/80 backdrop-blur animate-bounce shadow-lg" style={{ animationDelay: '0.2s' }} />
-            <div className="absolute bottom-4 right-4 w-12 h-12 rounded-xl bg-orange-200/90 backdrop-blur rotate-12 shadow-lg flex items-center justify-center">
-              <span className="text-2xl">🏆</span>
+            <div className="absolute top-0 left-0 w-6 h-6 rounded-full bg-white/80 backdrop-blur animate-bounce shadow-md" style={{ animationDelay: '0.2s' }} />
+            <div className="absolute bottom-2 right-2 w-10 h-10 rounded-xl bg-orange-200/90 backdrop-blur rotate-12 shadow-md flex items-center justify-center">
+              <span className="text-xl">🏆</span>
             </div>
           </div>
         </div>
