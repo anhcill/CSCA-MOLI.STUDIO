@@ -85,51 +85,20 @@ function formatRelativeTime(dateString?: string | null) {
 
 function Crown() {
     return (
-        <svg className="w-8 h-8 absolute -top-[21px] left-1/2 -translate-x-1/2 z-10 drop-shadow-md" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 5L6 14L12 7L18 14L22 5L17 20H7L2 5Z" fill="#FBBF24" />
-            <path d="M17 20H7V22H17V20Z" fill="#F59E0B" />
-            <circle cx="2" cy="4" r="1.5" fill="#FBBF24" />
-            <circle cx="12" cy="5" r="1.5" fill="#FBBF24" />
-            <circle cx="22" cy="4" r="1.5" fill="#FBBF24" />
+        <svg className="w-8 h-8 absolute -top-[23px] left-1/2 -translate-x-1/2 z-20 drop-shadow-sm" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 6L6 14L12 8L18 14L22 6L17 19H7L2 6Z" fill="#FFC72C" />
+            <path d="M17 19H7V21H17V19Z" fill="#E0A300" />
+            <circle cx="2" cy="5" r="1.2" fill="#FFD97D" />
+            <circle cx="12" cy="7" r="1.2" fill="#FFD97D" />
+            <circle cx="22" cy="5" r="1.2" fill="#FFD97D" />
         </svg>
-    );
-}
-
-function LaurelWreath({ color }: { color: 'gold' | 'blue' | 'pink' }) {
-    const colorMap = {
-        gold: 'text-amber-400/20',
-        blue: 'text-blue-400/20',
-        pink: 'text-rose-400/20',
-    };
-    const activeColor = colorMap[color];
-    return (
-        <div className="absolute inset-x-2 top-20 bottom-16 pointer-events-none flex items-center justify-between z-0">
-            {/* Left Wreath */}
-            <svg className={`w-10 h-24 ${activeColor}`} viewBox="0 0 24 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M22 42C14 38 6 28 6 16C6 10 8 4 8 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                <path d="M7 6C5 7.5 3 10 3 13C3 15 4.5 16 7 14C9.5 12 10 8 7 6Z" fill="currentColor"/>
-                <path d="M6 15C4 17 2 20 2 23C2 25 3.5 26 6 24C8.5 22 9 18 6 15Z" fill="currentColor"/>
-                <path d="M7 25C5 27 3 30 3 33C3 35 4.5 36 7 34C9.5 32 9 28 7 25Z" fill="currentColor"/>
-                <path d="M10 33C8 35 7 37 7 40C7 42 8.5 43 11 41C13.5 39 13 35 10 33Z" fill="currentColor"/>
-                <path d="M15 39C13 41 12 43 12 45C12 46.5 13.5 47 16 45C18.5 43 18 39 15 39Z" fill="currentColor"/>
-            </svg>
-            {/* Right Wreath */}
-            <svg className={`w-10 h-24 ${activeColor}`} viewBox="0 0 24 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 42C10 38 18 28 18 16C18 10 16 4 16 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                <path d="M17 6C19 7.5 21 10 21 13C21 15 19.5 16 17 14C14.5 12 14 8 17 6Z" fill="currentColor"/>
-                <path d="M18 15C20 17 22 20 22 23C22 25 20.5 26 18 24C15.5 22 15 18 18 15Z" fill="currentColor"/>
-                <path d="M17 25C19 27 21 30 21 33C21 35 19.5 36 17 34C14.5 32 15 28 17 25Z" fill="currentColor"/>
-                <path d="M14 33C16 35 17 37 17 40C17 42 15.5 43 13 41C10.5 39 11 35 14 33Z" fill="currentColor"/>
-                <path d="M9 39C11 41 12 43 12 45C12 46.5 10.5 47 8 45C5.5 43 6 39 9 39Z" fill="currentColor"/>
-            </svg>
-        </div>
     );
 }
 
 function Ribbon({ rank, colorClass }: { rank: number; colorClass: string }) {
     return (
         <div
-            className={`absolute top-0 left-4 w-8 h-12 ${colorClass} flex items-center justify-center font-extrabold text-white shadow-sm z-10`}
+            className={`absolute top-0 left-4 w-7 h-11 ${colorClass} flex items-center justify-center font-extrabold text-white shadow-sm z-10`}
             style={{
                 clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 50% 85%, 0% 100%)',
             }}
@@ -146,8 +115,8 @@ function getRankTone(rank: number) {
             shell: 'border-[#FFE899] bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] shadow-md shadow-amber-100/50',
             score: 'bg-[#FFB800] text-white',
             avatar: 72,
-            height: 'h-[350px]',
-            wreathColor: 'gold' as const,
+            height: 'h-[330px]',
+            wreathColor: 'text-[#F5D06E]',
         };
     }
     if (rank === 2) {
@@ -156,8 +125,8 @@ function getRankTone(rank: number) {
             shell: 'border-[#D0E7FF] bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] shadow-sm shadow-blue-100/40',
             score: 'bg-[#3B82F6] text-white',
             avatar: 64,
-            height: 'h-[310px]',
-            wreathColor: 'blue' as const,
+            height: 'h-[295px]',
+            wreathColor: 'text-[#9ECBFF]',
         };
     }
     return {
@@ -165,8 +134,8 @@ function getRankTone(rank: number) {
         shell: 'border-[#FFE4E6] bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] shadow-sm shadow-rose-100/40',
         score: 'bg-[#EC4899] text-white',
         avatar: 58,
-        height: 'h-[280px]',
-        wreathColor: 'pink' as const,
+        height: 'h-[270px]',
+        wreathColor: 'text-[#FFA1B5]',
     };
 }
 
@@ -174,39 +143,59 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
     const tone = getRankTone(entry.rank);
 
     return (
-        <div className={`relative flex flex-col items-center justify-between rounded-[24px] border px-4 pb-6 pt-8 ${tone.shell} ${tone.height} ${
+        <div className={`relative flex flex-col items-center justify-between rounded-[24px] border px-4 pb-5 pt-8 ${tone.shell} ${tone.height} ${
             entry.rank === 1 ? 'order-1 md:order-2' : entry.rank === 2 ? 'order-2 md:order-1' : 'order-3 md:order-3'
         }`}>
-            {/* Wreaths background */}
-            <LaurelWreath color={tone.wreathColor} />
-
             {/* Ribbon Badge */}
             <Ribbon rank={entry.rank} colorClass={tone.badgeColor} />
 
-            {/* Avatar & Crown */}
+            {/* Avatar, Crown & Laurel Wreaths */}
             <div className="relative flex flex-col items-center z-10 w-full">
-                <div className="relative mb-2 mt-2">
+                <div className="relative mb-2 mt-1">
                     {entry.rank === 1 && <Crown />}
+                    
+                    {/* Left Laurel Branch */}
+                    <div className="absolute top-1/2 -left-7 -translate-y-1/2 pointer-events-none z-0">
+                        <svg className={`w-5 h-14 ${tone.wreathColor}`} viewBox="0 0 24 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 54C12 48 8 36 8 22C8 14 10 4 10 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity="0.6"/>
+                            <path d="M10 6C7 8 4 11 4 15C4 17 6 18 9 16C12 14 12 9 10 6Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M9 17C6 19 3 23 3 27C3 29 5 30 8 28C11 26 11 21 9 17Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M10 29C7 31 4 35 4 39C4 41 6 42 9 40C12 38 12 33 10 29Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M12 41C9 43 7 47 7 51C7 53 9 54 12 52C15 50 15 45 12 41Z" fill="currentColor" opacity="0.8"/>
+                        </svg>
+                    </div>
+                    
+                    {/* Right Laurel Branch */}
+                    <div className="absolute top-1/2 -right-7 -translate-y-1/2 pointer-events-none z-0">
+                        <svg className={`w-5 h-14 ${tone.wreathColor}`} viewBox="0 0 24 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 54C12 48 16 36 16 22C16 14 14 4 14 4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity="0.6"/>
+                            <path d="M14 6C17 8 20 11 20 15C20 17 18 18 15 16C12 14 12 9 14 6Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M15 17C18 19 21 23 21 27C21 29 19 30 16 28C13 26 13 21 15 17Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M14 29C17 31 20 35 20 39C20 41 18 42 15 40C12 38 12 33 14 29Z" fill="currentColor" opacity="0.8"/>
+                            <path d="M12 41C15 43 17 47 17 51C17 53 15 54 12 52C9 50 9 45 12 41Z" fill="currentColor" opacity="0.8"/>
+                        </svg>
+                    </div>
+
                     <Avatar name={entry.full_name} url={entry.avatar_url} size={tone.avatar} />
                 </div>
 
-                <h3 className="font-extrabold text-slate-900 text-base text-center line-clamp-1 max-w-[90%] mt-2">
+                <h3 className="font-extrabold text-slate-800 text-[15px] text-center line-clamp-1 max-w-[90%] mt-2.5">
                     {entry.full_name}{isMe ? ' (Bạn)' : ''}
                 </h3>
                 
-                <p className="mt-1 text-[11px] font-bold text-slate-500 text-center">
+                <p className="mt-1 text-[11px] font-bold text-slate-400 text-center">
                     {entry.total_attempts} lần thi · ĐTB: {formatScore(entry.avg_score)}/100
                 </p>
             </div>
 
             {/* Score box & Time */}
-            <div className="relative flex flex-col items-center w-full z-10">
-                <div className={`w-32 py-2 rounded-xl text-center shadow-sm font-black ${tone.score}`}>
+            <div className="relative flex flex-col items-center w-full z-10 mt-3">
+                <div className={`w-32 py-2.5 rounded-2xl text-center shadow-sm font-black ${tone.score}`}>
                     <p className="text-2xl leading-none">{formatScore(entry.best_score)}</p>
                     <p className="text-[10px] font-bold opacity-90 mt-0.5">điểm</p>
                 </div>
 
-                <p className="mt-3.5 inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                <p className="mt-3.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
                     <FiClock size={12} className="text-slate-400" /> {formatDuration(entry.best_time_spent)}
                 </p>
             </div>
@@ -246,7 +235,6 @@ export default function LeaderboardPage() {
         loadLeaderboard();
     }, [period]);
 
-    // Handle clicks outside of dropdown to close it
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -266,7 +254,7 @@ export default function LeaderboardPage() {
             <Header />
 
             <div className="mx-auto max-w-5xl px-4 py-8">
-                {/* Header section matching the reference image */}
+                {/* Header section */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -431,7 +419,7 @@ export default function LeaderboardPage() {
                             </div>
                         )}
                         
-                        {/* Footer notice matching reference image */}
+                        {/* Footer notice */}
                         <div className="text-center text-xs font-bold text-slate-400 mt-6 flex items-center justify-center gap-1">
                             <span>ⓘ</span>
                             <span>Bảng xếp hạng được cập nhật liên tục sau mỗi lượt thi</span>
