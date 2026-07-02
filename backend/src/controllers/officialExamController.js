@@ -973,8 +973,23 @@ const officialExamController = {
       const result = await pool.query(
         `WITH completed_attempts AS (
            SELECT ea.*,
+                  LEAST(100, GREATEST(0, ROUND((
+                    CASE
+                      WHEN qp.possible_points > 0 THEN ea.total_score::numeric / qp.possible_points * 100
+                      WHEN e.total_questions > 0 THEN ea.total_correct::numeric / e.total_questions * 100
+                      WHEN ea.total_score <= 10 THEN ea.total_score::numeric * 10
+                      ELSE ea.total_score::numeric
+                    END
+                  ), 1))) AS score_100,
                   COALESCE(NULLIF(ea.duration_seconds, 0), 999999999)::int AS rank_time_seconds
            FROM exam_attempts ea
+           JOIN exams e ON e.id = ea.exam_id
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(q.points), 0)::numeric AS possible_points
+             FROM questions q
+             WHERE q.exam_id = e.id
+               AND q.deleted_at IS NULL
+           ) qp ON true
            WHERE ea.exam_id = $1
              AND ea.status = 'completed'
              AND ea.total_score IS NOT NULL
@@ -983,14 +998,14 @@ const officialExamController = {
            SELECT ca.*,
                   ROW_NUMBER() OVER (
                     PARTITION BY ca.user_id
-                    ORDER BY ca.total_score DESC, ca.rank_time_seconds ASC, ca.submit_time ASC NULLS LAST
+                    ORDER BY ca.score_100 DESC, ca.rank_time_seconds ASC, ca.submit_time ASC NULLS LAST
                   ) AS best_rank
            FROM completed_attempts ca
          ),
          user_exam_stats AS (
            SELECT user_id,
                   COUNT(id)::int AS total_attempts,
-                  ROUND(AVG(total_score)::numeric, 1)::float AS avg_score
+                  ROUND(AVG(score_100)::numeric, 1)::float AS avg_score
            FROM completed_attempts
            GROUP BY user_id
          )
@@ -1004,7 +1019,7 @@ const officialExamController = {
            ers.seat_number,
            ues.total_attempts,
            ues.avg_score,
-           ROUND(ra.total_score::numeric, 1)::float AS total_score,
+           ROUND(ra.score_100::numeric, 1)::float AS total_score,
            ra.total_correct,
            ra.total_incorrect,
            NULLIF(ra.rank_time_seconds, 999999999)::int AS duration_seconds,
@@ -1017,7 +1032,7 @@ const officialExamController = {
          LEFT JOIN exam_rooms room ON room.id = ers.room_id
          WHERE ra.best_rank = 1
            ${roomFilter}
-         ORDER BY ra.total_score DESC, ra.rank_time_seconds ASC, ra.submit_time ASC NULLS LAST, u.id ASC
+         ORDER BY ra.score_100 DESC, ra.rank_time_seconds ASC, ra.submit_time ASC NULLS LAST, u.id ASC
          LIMIT $${params.length}`,
         params,
       );

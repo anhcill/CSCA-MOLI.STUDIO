@@ -44,6 +44,11 @@ function formatDuration(seconds?: number | null) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+function formatScore(score: number) {
+    const value = Number(score) || 0;
+    return value.toFixed(1);
+}
+
 export default function LeaderboardPage() {
     const { user, isAuthenticated } = useAuthStore();
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -129,7 +134,7 @@ export default function LeaderboardPage() {
                         <div className="flex-1 min-w-0">
                             <p className="font-bold text-lg truncate">Bạn đang ở hạng {myEntry.rank}</p>
                             <p className="text-violet-200 text-sm">
-                                Điểm cao: <strong className="text-white">{myEntry.best_score}</strong> ·{' '}
+                                Điểm cao: <strong className="text-white">{formatScore(myEntry.best_score)}/100</strong> ·{' '}
                                 Thời gian: {formatDuration(myEntry.best_time_spent)} · {myEntry.total_attempts} lần thi
                             </p>
                         </div>
@@ -186,16 +191,16 @@ export default function LeaderboardPage() {
                                             {isMe && <span className="ml-2 text-xs font-normal text-violet-500">(Bạn)</span>}
                                         </p>
                                         <p className="text-xs text-gray-400 mt-0.5">
-                                            {entry.total_attempts} lần thi · Thời gian tốt nhất: {formatDuration(entry.best_time_spent)} · ĐTB: {entry.avg_score}
+                                            {entry.total_attempts} lần thi · Thời gian tốt nhất: {formatDuration(entry.best_time_spent)} · ĐTB: {formatScore(entry.avg_score)}/100
                                         </p>
                                     </div>
 
                                     {/* Score */}
                                     <div className="text-right shrink-0">
                                         <div className={`text-xl font-black ${isTop3 ? 'text-yellow-500' : isMe ? 'text-violet-600' : 'text-gray-700'}`}>
-                                            {entry.best_score}
+                                            {formatScore(entry.best_score)}
                                         </div>
-                                        <div className="text-xs text-gray-400">Điểm cao</div>
+                                        <div className="text-xs text-gray-400">Điểm cao /100</div>
                                     </div>
                                 </div>
                             );
