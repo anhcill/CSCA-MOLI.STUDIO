@@ -668,23 +668,41 @@ export default function ProfilePage() {
           <div className="lg:col-span-8 space-y-6">
             
             {/* Tabs Selector Navigation */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-2 overflow-hidden">
-              <div className="flex gap-1.5 overflow-x-auto hide-scrollbar scroll-smooth">
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+              <div
+                role="tablist"
+                aria-label="Điều hướng hồ sơ"
+                className="flex gap-1 overflow-x-auto hide-scrollbar scroll-smooth"
+              >
                 {profileTabs.map(tab => {
                   const I = tab.icon;
                   const isActive = activeTab === tab.key;
+                  const isVipTab = tab.key === 'vip';
                   return (
                     <button
                       key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
                       onClick={() => setActiveTab(tab.key)}
-                      className={`flex items-center gap-2 px-4.5 py-3 rounded-2xl text-sm font-extrabold transition-all duration-200 shrink-0 select-none ${
+                      className={`group flex min-h-10 shrink-0 select-none items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-bold tracking-[-0.01em] outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-blue-500/40 ${
                         isActive
-                          ? 'bg-gray-900 text-white shadow-md'
-                          : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50/50'
+                          ? 'bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.10)] ring-1 ring-slate-900/[0.04]'
+                          : 'text-slate-500 hover:bg-white/60 hover:text-slate-800'
                       }`}
                     >
-                      <I size={15} />
-                      <span>{tab.label}</span>
+                      <I
+                        size={15}
+                        strokeWidth={isActive ? 2.25 : 2}
+                        className={`transition-colors ${
+                          isVipTab
+                            ? 'text-amber-500'
+                            : isActive
+                              ? 'text-blue-600'
+                              : 'text-slate-400 group-hover:text-slate-600'
+                        }`}
+                      />
+                      <span className="whitespace-nowrap">{tab.label}</span>
                     </button>
                   );
                 })}
