@@ -60,7 +60,12 @@ function attemptPassed(item: HistoryItem): boolean {
 }
 
 function attemptScore(item: HistoryItem): number {
-  return attemptAccuracy(item) / 10;
+  return attemptAccuracy(item);
+}
+
+function formatScore100(score: number): string {
+  const value = Math.max(0, Math.min(100, Number(score) || 0));
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
 
 function scoreBadge(item: HistoryItem, t: (key: string) => string): { label: string; cls: string } {
@@ -261,8 +266,8 @@ export default function LichSuPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard icon={FiBarChart2} label={t('history.totalAttempts')} value={displayFiltered.length} color="bg-indigo-500" />
-        <StatCard icon={FiTrendingUp} label={t('history.avgScore')} value={`${displayFiltered.length ? (displayFiltered.reduce((s, h) => s + attemptScore(h), 0) / displayFiltered.length).toFixed(1) : '0'}/10`} color="bg-blue-500" />
-        <StatCard icon={FiAward} label={t('history.bestScore')} value={`${displayFiltered.length ? Math.max(...displayFiltered.map(attemptScore)).toFixed(1) : '0'}/10`} color="bg-green-500" />
+        <StatCard icon={FiTrendingUp} label={t('history.avgScore')} value={`${displayFiltered.length ? formatScore100(displayFiltered.reduce((s, h) => s + attemptScore(h), 0) / displayFiltered.length) : '0'}/100`} color="bg-blue-500" />
+        <StatCard icon={FiAward} label={t('history.bestScore')} value={`${displayFiltered.length ? formatScore100(Math.max(...displayFiltered.map(attemptScore))) : '0'}/100`} color="bg-green-500" />
         <StatCard icon={FiCheckCircle} label={t('history.passedAttempts')} value={displayFiltered.filter(attemptPassed).length} color="bg-emerald-500" />
       </div>
 
@@ -360,8 +365,8 @@ export default function LichSuPage() {
                   </div>
 
                   <div className="col-span-2 text-center">
-                    <span className="text-lg font-black text-gray-900">{attemptScore(item).toFixed(1)}</span>
-                    <span className="text-xs text-gray-400">/10</span>
+                    <span className="text-lg font-black text-gray-900">{formatScore100(attemptScore(item))}</span>
+                    <span className="text-xs text-gray-400">/100</span>
                   </div>
 
                   <div className="col-span-2 text-center text-sm text-gray-600">
