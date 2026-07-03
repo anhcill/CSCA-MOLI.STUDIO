@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import RichMathText from '@/components/common/RichMathText';
+import { getExamLanguageText } from '@/lib/exam/languageMode';
 
 interface ExamAnswer {
   id: number;
@@ -39,6 +40,7 @@ interface ExamData {
   duration?: number;
   total_points: number;
   allow_download: boolean;
+  language_mode?: string;
   questions: ExamQuestion[];
 }
 
@@ -163,17 +165,22 @@ function ExamPrintContent({ examId }: { examId: string }) {
         </div>
 
         {(exam.questions || []).map((question, questionIndex) => {
-          const questionText = pick({
+          const questionText = getExamLanguageText({
             vi: question.content || question.question_text,
             en: question.question_text_en,
             zh: question.question_text_cn,
-          });
+          }, exam.language_mode);
 
           return (
             <div key={question.id} className="question-block mb-5">
               <div className="mb-2 flex items-start gap-2 font-semibold text-gray-900">
                 <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-purple-600 text-xs font-bold text-white">{questionIndex + 1}</span>
-                <RichMathText value={questionText || ''} className="min-w-0 flex-1 text-gray-900" />
+                <div className="min-w-0 flex-1">
+                  <RichMathText value={questionText.primary || ''} className="text-gray-900" />
+                  {questionText.secondary && (
+                    <RichMathText value={questionText.secondary} className="mt-1 border-t border-gray-200 pt-1 text-gray-600" />
+                  )}
+                </div>
                 <span className="ml-2 text-xs text-gray-400">({question.points} {t('common.points')})</span>
               </div>
               {question.answers && question.answers.length > 0 && (
@@ -181,15 +188,20 @@ function ExamPrintContent({ examId }: { examId: string }) {
                   {question.answers.map((answer, answerIndex) => {
                     const letter = answer.answer_key || String.fromCharCode(65 + answerIndex);
                     const isCorrect = !!answer.is_correct && showAnswers;
-                    const answerText = pick({
+                    const answerText = getExamLanguageText({
                       vi: answer.content || answer.answer_text,
                       en: answer.answer_text_en,
                       zh: answer.answer_text_cn,
-                    });
+                    }, exam.language_mode);
                     return (
                       <div key={answer.id} className={`flex items-start gap-2 rounded px-2 py-1 text-sm ${isCorrect ? 'border border-green-300 bg-green-50' : ''}`}>
                         <span className={`font-bold ${isCorrect ? 'text-green-600' : 'text-gray-500'}`}>{letter}.</span>
-                        <RichMathText value={answerText || ''} className={isCorrect ? 'font-medium text-green-700' : 'text-gray-700'} />
+                        <div className="min-w-0">
+                          <RichMathText value={answerText.primary || ''} className={isCorrect ? 'font-medium text-green-700' : 'text-gray-700'} />
+                          {answerText.secondary && (
+                            <RichMathText value={answerText.secondary} className={isCorrect ? 'mt-1 text-green-600' : 'mt-1 text-gray-500'} />
+                          )}
+                        </div>
                         {isCorrect && <span className="ml-auto text-green-500">✓</span>}
                       </div>
                     );

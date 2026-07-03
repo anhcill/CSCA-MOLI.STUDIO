@@ -546,7 +546,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                     <span className="ml-auto text-xs text-gray-400">{q.points} điểm</span>
                                                 </div>
                                                 <BilingualMathText
-                                                    primary={q.question_text || q.question_text_en}
+                                                    primary={q.question_text}
                                                     secondary={q.question_text_cn}
                                                     tertiary={q.question_text_en}
                                                     languageMode={languageMode}
@@ -567,7 +567,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                         <span className={`font-bold text-sm shrink-0 ${tone.text}`}>{opt.key}.</span>
                                                         <div className="min-w-0 flex-1">
                                                             <BilingualMathText
-                                                                primary={opt.text || opt.text_en}
+                                                                primary={opt.text}
                                                                 secondary={opt.text_cn}
                                                                 tertiary={opt.text_en}
                                                                 languageMode={languageMode}

@@ -1319,7 +1319,7 @@ export default function ExamPage() {
                       )}
                    </p>
                   )}
-                  {(currentFeedback.explanation || currentFeedback.explanation_cn || currentFeedback.explanation_image_url) && (
+                  {(currentFeedback.explanation || currentFeedback.explanation_cn || currentFeedback.explanation_en || currentFeedback.explanation_image_url) && (
                     <div className="mt-3 rounded-xl border border-white/70 bg-white/90 p-4 shadow-sm">
                       <p className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-800">Giải thích:</p>
                       {feedbackExplanationText.primary && (

@@ -19,6 +19,7 @@ import ExamAiActions, { ExamAiFastModel, ExamAiQualityMode } from '@/components/
 import ExamAiHistory, { ExamAiRun, formatAiRunTime, getExamAiRunDetail, getExamAiRunLabel } from '@/components/admin/exam-ai/ExamAiHistory';
 import ExamReviewResultPanel, { getExamReviewIssues } from '@/components/admin/exam-ai/ExamReviewResultPanel';
 import ExamSourceFilePanel from '@/components/admin/exam-ai/ExamSourceFilePanel';
+import { getExamLanguageText } from '@/lib/exam/languageMode';
 import {
     getImportItemsQuestionCount,
     getImportPreviewItems,
@@ -2882,7 +2883,10 @@ export default function AdminExamDetailPage() {
                                                     <div key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
                                                         <span className="font-semibold">Câu {child.question_number}:</span>
                                                         <RichMathText
-                                                            value={child.question_text_cn || child.question_text}
+                                                            value={[
+                                                                getExamLanguageText({ vi: child.question_text, zh: child.question_text_cn, en: child.question_text_en }, exam.language_mode).primary,
+                                                                getExamLanguageText({ vi: child.question_text, zh: child.question_text_cn, en: child.question_text_en }, exam.language_mode).secondary,
+                                                            ].filter(Boolean).join('\n')}
                                                             className="mt-1 text-gray-700"
                                                         />
                                                     </div>
@@ -2948,7 +2952,13 @@ export default function AdminExamDetailPage() {
                                                         {q.question_number}
                                                     </span>
                                                     <div className="flex-1">
-                                                        <RichMathText value={q.question_text_cn || q.question_text} className="font-medium text-gray-900" />
+                                                        <RichMathText
+                                                            value={[
+                                                                getExamLanguageText({ vi: q.question_text, zh: q.question_text_cn, en: q.question_text_en }, exam.language_mode).primary,
+                                                                getExamLanguageText({ vi: q.question_text, zh: q.question_text_cn, en: q.question_text_en }, exam.language_mode).secondary,
+                                                            ].filter(Boolean).join('\n')}
+                                                            className="font-medium text-gray-900"
+                                                        />
                                                         {q.image_url && (
                                                             <img src={q.image_url} alt="question" className="mt-2 max-h-32 rounded-lg border border-gray-200" />
                                                         )}
@@ -3018,7 +3028,10 @@ export default function AdminExamDetailPage() {
                                                         </span>
                                                         <div className="flex-1 text-base leading-7">
                                                             <RichMathText
-                                                                value={a.answer_text || a.answer_text_cn}
+                                                                value={[
+                                                                    getExamLanguageText({ vi: a.answer_text, zh: a.answer_text_cn, en: a.answer_text_en }, exam.language_mode).primary,
+                                                                    getExamLanguageText({ vi: a.answer_text, zh: a.answer_text_cn, en: a.answer_text_en }, exam.language_mode).secondary,
+                                                                ].filter(Boolean).join('\n')}
                                                                 className={a.is_correct ? 'text-base font-medium leading-7 text-green-800' : 'text-base leading-7 text-gray-700'}
                                                             />
                                                             {a.image_url && (
@@ -3030,7 +3043,7 @@ export default function AdminExamDetailPage() {
                                                 ))}
                                             </div>
 
-                                            {(q.explanation || q.explanation_cn || q.explanation_image_url) && (
+                                            {(q.explanation || q.explanation_cn || q.explanation_en || q.explanation_image_url) && (
                                                 <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                                                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                                         <p className="text-sm font-bold uppercase tracking-wide text-blue-900">Giải thích:</p>
@@ -3047,11 +3060,15 @@ export default function AdminExamDetailPage() {
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {(q.explanation || q.explanation_cn) && (
-                                                        <RichMathText value={q.explanation || q.explanation_cn || ''} readableBreaks className="text-base leading-7 text-blue-950" />
-                                                    )}
-                                                    {q.explanation && q.explanation_cn && q.explanation_cn !== q.explanation && (
-                                                        <RichMathText value={q.explanation_cn} readableBreaks className="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800" />
+                                                    {(q.explanation || q.explanation_cn || q.explanation_en) && (
+                                                        <RichMathText
+                                                            value={[
+                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.language_mode).primary,
+                                                                getExamLanguageText({ vi: q.explanation, zh: q.explanation_cn, en: q.explanation_en }, exam.language_mode).secondary,
+                                                            ].filter(Boolean).join('\n')}
+                                                            readableBreaks
+                                                            className="text-base leading-7 text-blue-950"
+                                                        />
                                                     )}
                                                     {q.explanation_image_url && (
                                                         <img

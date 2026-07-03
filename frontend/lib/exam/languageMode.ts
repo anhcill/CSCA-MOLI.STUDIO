@@ -38,6 +38,7 @@ export function getExamLanguageOrder(mode?: string | null): ExamLanguage[] {
 export function getExamLanguageText(
   values: { vi?: string | null; zh?: string | null; en?: string | null },
   mode?: string | null,
+  options?: { fallback?: boolean },
 ) {
   const order = getExamLanguageOrder(mode);
   const seen = new Set<ExamLanguage>();
@@ -50,9 +51,11 @@ export function getExamLanguageText(
     .map((lang) => ({ lang, text: (values[lang] || '').trim() }))
     .filter((item) => item.text);
 
-  const fallback = (['zh', 'vi', 'en'] as ExamLanguage[])
-    .map((lang) => ({ lang, text: (values[lang] || '').trim() }))
-    .find((item) => item.text);
+  const fallback = options?.fallback
+    ? (['zh', 'vi', 'en'] as ExamLanguage[])
+      .map((lang) => ({ lang, text: (values[lang] || '').trim() }))
+      .find((item) => item.text)
+    : null;
 
   const primary = selected[0] || fallback || { lang: order[0] || 'zh', text: '' };
   const secondary = selected.find((item) => item.text !== primary.text);
