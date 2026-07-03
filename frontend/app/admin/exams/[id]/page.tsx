@@ -116,6 +116,32 @@ type AiBlockingTask = 'review' | 'fix' | 'format' | 'normalize' | 'explain' | 'p
 
 const EDIT_QUESTION_BATCH_SIZE = 20;
 const AI_REVIEW_FIX_CHUNK_SIZE = 2;
+const AI_COOLDOWN_RETRY_BUFFER_MS = 750;
+
+function wait(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getAiCooldownRetryMs(error: any) {
+    if (error?.response?.status !== 429) return 0;
+    const retryAfter = Number(error?.response?.data?.retryAfter || 0);
+    if (!Number.isFinite(retryAfter) || retryAfter <= 0) return 0;
+    return retryAfter * 1000 + AI_COOLDOWN_RETRY_BUFFER_MS;
+}
+
+async function runWithAiCooldownRetry<T>(request: () => Promise<T>, maxRetries = 2): Promise<T> {
+    let attempt = 0;
+    while (true) {
+        try {
+            return await request();
+        } catch (error: any) {
+            const retryMs = getAiCooldownRetryMs(error);
+            if (!retryMs || attempt >= maxRetries) throw error;
+            attempt += 1;
+            await wait(retryMs);
+        }
+    }
+}
 
 function mergeApplyReviewFixResults(results: ApplyExamReviewFixesResult[], totalIssues: number): ApplyExamReviewFixesResult {
     const last = results[results.length - 1];
@@ -1077,7 +1103,9 @@ export default function AdminExamDetailPage() {
             setExamReviewError('');
             setExamReviewResult(null);
             setExamReviewApplyResult(null);
-            const result = await examAdminApi.reviewExamQuality(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.reviewExamQuality(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel })
+            ));
             setExamReviewResult(result);
             await loadExam({ silent: true });
         } catch (error: any) {
@@ -1098,7 +1126,9 @@ export default function AdminExamDetailPage() {
             setReviewingQuestionId(question.id);
             setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
             setQuestionReviewById(prev => ({ ...prev, [question.id]: null }));
-            const result = await examAdminApi.reviewQuestionQuality(exam.id, question.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.reviewQuestionQuality(exam.id, question.id, { qualityMode: aiQualityMode, fastModel: aiFastModel })
+            ));
             setQuestionReviewById(prev => ({ ...prev, [question.id]: result }));
             await loadExam({ silent: true });
         } catch (error: any) {
@@ -1122,12 +1152,14 @@ export default function AdminExamDetailPage() {
         try {
             setFixingExplanationQuestionId(question.id);
             setQuestionReviewErrorById(prev => ({ ...prev, [question.id]: '' }));
-            const result = await examAdminApi.fixQuestionExplanation(exam.id, question.id, {
-                qualityMode: aiQualityMode,
-                fastModel: aiFastModel,
-                reviewNote: review?.note || '',
-                explanationIssues: review?.explanationIssues || [],
-            });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.fixQuestionExplanation(exam.id, question.id, {
+                    qualityMode: aiQualityMode,
+                    fastModel: aiFastModel,
+                    reviewNote: review?.note || '',
+                    explanationIssues: review?.explanationIssues || [],
+                })
+            ));
             await loadExam({ silent: true });
             markEditSessionSavedWork(result.message || `AI đã sửa lời giải câu ${question.question_number}. Bấm Lưu thay đổi để chốt phiên sửa.`);
             if (result.needsManualReview || !result.changedCount) {
@@ -1206,13 +1238,15 @@ export default function AdminExamDetailPage() {
 
             for (let index = 0; index < chunks.length; index += 1) {
                 try {
-                    const result = await examAdminApi.applyExamReviewFixes(exam.id, {
-                        reviews: chunks[index],
-                        applySafeFormulas: true,
-                        applySuggestedAnswers: true,
-                        qualityMode: aiQualityMode,
-                        fastModel: aiFastModel,
-                    });
+                    const result = await runWithAiCooldownRetry(() => (
+                        examAdminApi.applyExamReviewFixes(exam.id, {
+                            reviews: chunks[index],
+                            applySafeFormulas: true,
+                            applySuggestedAnswers: true,
+                            qualityMode: aiQualityMode,
+                            fastModel: aiFastModel,
+                        })
+                    ));
                     results.push(result);
                     setExamReviewApplyResult(mergeApplyReviewFixResults(results, reviews.length));
                 } catch (chunkError: any) {
@@ -1266,7 +1300,9 @@ export default function AdminExamDetailPage() {
             setAiBlockingStartedAt(Date.now());
             setExamReviewError('');
             setDisplayFormatApplyResult(null);
-            const result = await examAdminApi.applyDisplayFormatFixes(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.applyDisplayFormatFixes(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel })
+            ));
             setDisplayFormatApplyResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã sửa format hiển thị và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1291,7 +1327,9 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('explain');
             setAiBlockingStartedAt(Date.now());
             setMissingExplanationResult(null);
-            const result = await examAdminApi.generateMissingExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.generateMissingExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel })
+            ));
             setMissingExplanationResult(result);
             await loadExam();
             markEditSessionSavedWork('AI đã thêm giải thích và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
@@ -1317,7 +1355,9 @@ export default function AdminExamDetailPage() {
             setAiBlockingTask('polish');
             setAiBlockingStartedAt(Date.now());
             setPolishExplanationResult(null);
-            const result = await examAdminApi.polishExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel });
+            const result = await runWithAiCooldownRetry(() => (
+                examAdminApi.polishExplanations(exam.id, { qualityMode: aiQualityMode, fastModel: aiFastModel })
+            ));
             setPolishExplanationResult(result);
             await loadExam({ silent: true });
             markEditSessionSavedWork('AI đã chuẩn hóa lời giải và ghi vào hệ thống. Bấm Lưu thay đổi để chốt phiên sửa.');
