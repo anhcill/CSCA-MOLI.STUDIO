@@ -553,6 +553,7 @@ export function normalizeMathText(input: string): string {
 export function normalizeLatexMath(input: string): string {
   return repairSetBuilderAbsoluteValues(escapeSetLiteralBraces(normalizeSuperscriptSyntax(
     normalizeLostSuperscripts(normalizeMathText(input)
+      .replace(/\\d(?=\s*(?:\(|_))/g, 'd')
       .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
       .replace(/[ \t]*\n[ \t]*/g, ' ')
       .replace(/\s{2,}/g, ' ')
@@ -912,7 +913,7 @@ function mergeAdjacentInlineMath(input: string): string {
   return input
     .replace(/(^|[^\w\\])-\s*\\\((\\frac[\s\S]*?)\\\)/g, '$1\\(-$2\\)')
     .replace(/\\\)\\\(,\s*/g, ', ')
-    .replace(/\\\)\s+\\\(/g, ' ');
+    .replace(/\\\)[ \t]+\\\(/g, ' ');
 }
 
 function repairMalformedInlineDollarDelimiters(input: string): string {
@@ -1042,12 +1043,23 @@ function stripStackedOcrMathFragments(input: string): string {
   return kept.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
+function repairEscapedMathWordsInProse(input: string): string {
+  return String(input || '')
+    .replace(/(^|[\s([{"'“‘:;,.!?-])U\\sin\s+g\b/g, '$1Using')
+    .replace(/(^|[\s([{"'“‘:;,.!?-])u\\sin\s+g\b/g, '$1using')
+    .replace(/(^|[\s([{"'“‘:;,.!?-])\\sin\s+ce\b/g, (match, prefix: string) => {
+      return /(?:^|[\n.!?]\s*|:\s*)$/.test(prefix) ? `${prefix}Since` : `${prefix}since`;
+    })
+    .replace(/(^|[\s([{"'“‘:;,.!?-])\\tan\s+gent\b/g, '$1tangent')
+    .replace(/(^|[\s([{"'“‘:;,.!?-])\\sec\s+ond\b/g, '$1second');
+}
+
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const displayRuleInput = applyDisplayLatexInputRules(input);
-  const normalized = normalizeMathText(repairMathFormatArtifacts(repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(displayRuleInput))))
-    .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
+  const displayRuleInput = applyDisplayLatexInputRules(repairEscapedMathWordsInProse(input));
+  const repairedInput = repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(displayRuleInput));
+  const normalized = repairedInput
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)
     .map((part) => {
       if (!part || part.startsWith('`')) return part;
@@ -1068,7 +1080,9 @@ export function normalizeRichMathText(input: string): string {
         return `$${normalizeLatexMath(part.slice(1, -1))}$`;
       }
 
-      const withEqualMath = wrapEqualMathInPlainText(wrapRawFormulaRuns(part));
+      const normalizedText = repairEscapedMathWordsInProse(repairMathFormatArtifacts(part))
+        .replace(/(^|[^\\])\\[ \t]+/g, '$1 ');
+      const withEqualMath = wrapEqualMathInPlainText(wrapRawFormulaRuns(normalizedText));
       return withEqualMath
         .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$)/g)
         .map((segment) => {

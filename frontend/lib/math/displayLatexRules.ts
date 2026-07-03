@@ -215,7 +215,10 @@ function looksMathOnly(value: string) {
   const text = value.trim();
   if (!text || text.length > 320) return false;
   if (TEXT_LETTER_RE.test(text)) return false;
-  if (!LATEX_COMMAND_RE.test(text) && !RELATION_RE.test(text) && !/[()[\]{}_^]/.test(text)) return false;
+  const hasLatexCommand = LATEX_COMMAND_RE.test(text);
+  const hasRelation = RELATION_RE.test(text);
+  if (!hasLatexCommand && !hasRelation && /[A-Za-z]{2,}/.test(text)) return false;
+  if (!hasLatexCommand && !hasRelation && !/[()[\]{}_^]/.test(text)) return false;
   if (!/[=+\-*/^_<>]|\\(?:frac|sqrt|ln|log|lg|sin|cos|tan|cdot|Rightarrow|Leftrightarrow|to|cup|cap|infty)\b/.test(text)) return false;
   return /^[A-Za-z0-9\\{}()[\]\s_^+\-*/=<>.,;:|'"!]+$/.test(text);
 }
