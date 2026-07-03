@@ -180,6 +180,9 @@ function ExamPrintContent({ examId }: { examId: string }) {
                   {questionText.secondary && (
                     <RichMathText value={questionText.secondary} className="mt-1 border-t border-gray-200 pt-1 text-gray-600" />
                   )}
+                  {questionText.tertiary && (
+                    <RichMathText value={questionText.tertiary} className="mt-1 border-t border-gray-200 pt-1 text-gray-500" />
+                  )}
                 </div>
                 <span className="ml-2 text-xs text-gray-400">({question.points} {t('common.points')})</span>
               </div>

@@ -737,13 +737,13 @@ export default function ExamPage() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { lang: 'vi', label: '🇻🇳 Tiếng Việt' },
-                    { lang: 'en', label: '🇬🇧 Tiếng Anh' },
-                    { lang: 'zh', label: '🇨🇳 Tiếng Trung' },
-                    { lang: 'vi_en', label: '🇻🇳🇬🇧 Việt - Anh' },
-                    { lang: 'vi_zh', label: '🇻🇳🇨🇳 Việt - Trung' },
-                    { lang: 'en_zh', label: '🇬🇧🇨🇳 Anh - Trung' },
-                    { lang: 'vi_en_zh', label: '🌐 Tất cả kết hợp' },
+                    { lang: 'vi', label: '🇻🇳 Tiếng Việt thui' },
+                    { lang: 'en', label: '🇬🇧 Tiếng Anh nè' },
+                    { lang: 'zh', label: '🇨🇳 Tiếng Trung nha' },
+                    { lang: 'vi_en', label: '🇻🇳🇬🇧 Song ngữ Việt Anh' },
+                    { lang: 'vi_zh', label: '🇻🇳🇨🇳 Song ngữ Việt Trung' },
+                    { lang: 'en_zh', label: '🇬🇧🇨🇳 Song ngữ Anh Trung' },
+                    { lang: 'vi_en_zh', label: '🌐 Full 3 thứ tiếng lun!' },
                   ].map((opt) => (
                     <button
                       key={opt.lang}
@@ -839,15 +839,15 @@ export default function ExamPage() {
                   <>
                     <button
                       onClick={() => startExam()}
-                      disabled={loading || !canStartOfficialExam}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                      disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
                     <button
                       onClick={() => startExam({ restart: true })}
-                      disabled={loading || !canStartOfficialExam}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                     >
                       <FiRotateCcw size={18} /> Làm lại từ đầu
                     </button>
@@ -855,8 +855,8 @@ export default function ExamPage() {
                 ) : (
                   <button
                     onClick={() => startExam()}
-                    disabled={loading || !canStartOfficialExam}
-                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                    disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Bắt đầu làm bài
                   </button>
@@ -864,13 +864,18 @@ export default function ExamPage() {
                 {!isOfficialExam && (
                 <button
                   onClick={() => startExam({ practice: true })}
-                  disabled={loading}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60"
+                  disabled={loading || !examLanguage || !explanationLanguage}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <FiBookOpen size={18} /> Luyện tập không tính giờ
                 </button>
                 )}
               </div>
+              {(!examLanguage || !explanationLanguage) && (
+                <p className="mt-4 text-center text-sm font-bold text-rose-500 flex items-center justify-center gap-1.5 animate-pulse">
+                  <FiAlertCircle size={16} /> Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!
+                </p>
+              )}
             </div>
           </div>
 
@@ -1174,6 +1179,12 @@ export default function ExamPage() {
                     <RichMathText value={questionText.secondary} className="text-inherit" />
                   </div>
                 )}
+
+                {questionText.tertiary && (
+                  <div className="text-lg md:text-xl font-medium text-slate-400 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
+                    <RichMathText value={questionText.tertiary} className="text-inherit" />
+                  </div>
+                )}
              </div>
 
              {/* Question Attachments */}
@@ -1377,6 +1388,15 @@ export default function ExamPage() {
                                 value={feedbackExplanationText.secondary}
                                 readableBreaks
                                 className="text-base leading-7 text-slate-500"
+                              />
+                            </div>
+                          )}
+                          {feedbackExplanationText.tertiary && (
+                            <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
+                              <RichMathText
+                                value={feedbackExplanationText.tertiary}
+                                readableBreaks
+                                className="text-base leading-7 text-slate-400"
                               />
                             </div>
                           )}

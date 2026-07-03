@@ -43,11 +43,14 @@ export function getExamLanguageText(
 
   const primary = selected[0] || fallback || { lang: order[0] || 'zh', text: '' };
   const secondary = selected.find((item) => item.text !== primary.text);
+  const tertiary = selected.find((item) => item.text !== primary.text && (!secondary || item.text !== secondary.text));
 
   return {
     primary: primary.text,
     secondary: secondary?.text || '',
+    tertiary: tertiary?.text || '',
     primaryLanguage: primary.lang,
     secondaryLanguage: secondary?.lang || null,
+    tertiaryLanguage: tertiary?.lang || null,
   };
 }
