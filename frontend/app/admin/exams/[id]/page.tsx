@@ -25,6 +25,18 @@ import {
     validateImportedItems,
 } from '@/components/admin/pdf-import/pdfImportUtils';
 
+const LANGUAGE_LABELS: Record<string, string> = {
+    zh: 'Chỉ tiếng Trung',
+    vi: 'Chỉ tiếng Việt',
+    en: 'Chỉ tiếng Anh',
+    vi_zh: 'Việt + Trung',
+    vi_en: 'Việt + Anh',
+    zh_en: 'Trung + Anh',
+    zh_vi: 'Trung + Việt',
+    en_vi: 'Anh + Việt',
+    en_zh: 'Anh + Trung',
+};
+
 interface Answer {
     id: number;
     answer_key: string;
@@ -2273,11 +2285,12 @@ export default function AdminExamDetailPage() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                                 <div><span className="font-semibold text-gray-500">Tên:</span> {exam.title}</div>
                                 <div><span className="font-semibold text-gray-500">TG:</span> {exam.duration} phút</div>
                                 <div><span className="font-semibold text-gray-500">Điểm:</span> {exam.total_points}</div>
                                 <div><span className="font-semibold text-gray-500">VIP:</span> {exam.vip_tier || 'basic'}</div>
+                                <div><span className="font-semibold text-gray-500">Ngôn ngữ:</span> {LANGUAGE_LABELS[exam.language_mode || 'zh'] || exam.language_mode}</div>
                             </div>
                         )}
                     </div>
@@ -2286,7 +2299,7 @@ export default function AdminExamDetailPage() {
                 {/* ── VIEW MODE: Exam Info ── */}
                 {!isEditingExam && (
                     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                             <div>
                                 <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Môn học</p>
                                 <p className="font-bold text-gray-900">{exam.subject_name || '—'}</p>
@@ -2302,6 +2315,10 @@ export default function AdminExamDetailPage() {
                             <div>
                                 <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Số câu</p>
                                 <p className="font-bold text-gray-900">{exam.total_questions} câu</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Ngôn ngữ</p>
+                                <p className="font-bold text-gray-900">{LANGUAGE_LABELS[exam.language_mode || 'zh'] || exam.language_mode}</p>
                             </div>
                         </div>
                         {exam.description && (
