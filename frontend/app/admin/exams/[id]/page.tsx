@@ -1066,6 +1066,10 @@ export default function AdminExamDetailPage() {
                 handleMissingExam();
                 return;
             }
+            if (error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
+                alert('Lưu câu hỏi import quá lâu. Hệ thống có thể vẫn đang ghi vào DB, đợi một lát rồi tải lại trang để kiểm tra trước khi bấm lưu lại.');
+                return;
+            }
             alert(error?.response?.data?.message || 'Luu cau hoi import that bai');
         } finally {
             setPdfImportSaving(false);

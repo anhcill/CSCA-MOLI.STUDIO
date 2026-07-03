@@ -593,7 +593,11 @@ export const examAdminApi = {
 
     // Save reviewed imported questions to an exam
     bulkImportQuestions: async (examId: number, items: ImportedExamItem[]) => {
-        const response = await axios.post(`/admin/exams/${examId}/questions/bulk-import`, { items: normalizeImportedItemsMath(items) });
+        const response = await axios.post(
+            `/admin/exams/${examId}/questions/bulk-import`,
+            { items: normalizeImportedItemsMath(items) },
+            { timeout: 600000 },
+        );
         return response.data;
     },
 
