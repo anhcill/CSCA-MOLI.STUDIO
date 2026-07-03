@@ -551,14 +551,14 @@ export function normalizeMathText(input: string): string {
 }
 
 export function normalizeLatexMath(input: string): string {
-  return repairSetBuilderAbsoluteValues(escapeSetLiteralBraces(normalizeSuperscriptSyntax(
+  return repairEscapedMathWordsInProse(repairSetBuilderAbsoluteValues(escapeSetLiteralBraces(normalizeSuperscriptSyntax(
     normalizeLostSuperscripts(normalizeMathText(input)
       .replace(/\\d(?=\s*(?:\(|_))/g, 'd')
       .replace(/(^|[^\\])\\[ \t]+/g, '$1 ')
       .replace(/[ \t]*\n[ \t]*/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim()),
-  )));
+  ))));
 }
 
 export function isLikelyLooseMathLine(input: string): boolean {
@@ -732,10 +732,20 @@ function wrapEqualMathInPlainText(input: string): string {
     }
 
     let start = relationIndex;
-    while (start > cursor && isMathishChar(input[start - 1]) && !isBoundaryAfterVietnameseWord(input, start)) start--;
+    while (
+      start > cursor &&
+      isMathishChar(input[start - 1]) &&
+      !isBoundaryAfterVietnameseWord(input, start) &&
+      !/[.!?]\s*$/.test(input.slice(Math.max(cursor, start - 3), start))
+    ) start--;
 
     let end = relationIndex + relation[0].length;
-    while (end < input.length && isMathishChar(input[end]) && !isAsciiLetterBeforeVietnamese(input, end)) end++;
+    while (
+      end < input.length &&
+      isMathishChar(input[end]) &&
+      !isAsciiLetterBeforeVietnamese(input, end) &&
+      !/^[.!?]\s+[A-Z]/.test(input.slice(end, end + 4))
+    ) end++;
 
     const rawCandidate = input.slice(start, end);
     const leadingWhitespace = rawCandidate.match(/^\s*/)?.[0] || '';
