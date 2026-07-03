@@ -78,7 +78,7 @@ export default function ExamPage() {
   const [practiceMode, setPracticeMode] = useState(false);
   const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
   const [examLanguage, setExamLanguage] = useState<string>('');
-  const [explanationLanguage, setExplanationLanguage] = useState<string>('vi');
+  const [explanationLanguage, setExplanationLanguage] = useState<string>('');
   const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
@@ -249,13 +249,6 @@ export default function ExamPage() {
     const timer = setTimeout(() => persistDraft(), 250);
     return () => clearTimeout(timer);
   }, [started, attemptId, selectedAnswers, persistDraft]);
-
-  useEffect(() => {
-    if (preflight) {
-      const mode = normalizeExamLanguageMode(preflight.language_mode);
-      setExamLanguage(mode);
-    }
-  }, [preflight]);
 
   useEffect(() => {
     if (!started) return;
