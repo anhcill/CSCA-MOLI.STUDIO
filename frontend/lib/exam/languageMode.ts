@@ -1,30 +1,14 @@
 export type ExamLanguage = 'vi' | 'zh' | 'en';
 
-export type ExamLanguageMode =
-  | ExamLanguage
-  | 'vi_zh'
-  | 'vi_en'
-  | 'zh_vi'
-  | 'zh_en'
-  | 'en_vi'
-  | 'en_zh';
+export type ExamLanguageMode = string;
 
 const DEFAULT_LANGUAGE_MODE: ExamLanguageMode = 'zh';
 
 export function normalizeExamLanguageMode(value?: string | null): ExamLanguageMode {
-  const mode = String(value || '').trim().toLowerCase().replace('-', '_');
-  if (
-    mode === 'vi' ||
-    mode === 'zh' ||
-    mode === 'en' ||
-    mode === 'vi_zh' ||
-    mode === 'vi_en' ||
-    mode === 'zh_vi' ||
-    mode === 'zh_en' ||
-    mode === 'en_vi' ||
-    mode === 'en_zh'
-  ) {
-    return mode;
+  const mode = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const parts = mode.split('_').filter((p) => p === 'vi' || p === 'zh' || p === 'en');
+  if (parts.length > 0) {
+    return parts.join('_');
   }
   return DEFAULT_LANGUAGE_MODE;
 }

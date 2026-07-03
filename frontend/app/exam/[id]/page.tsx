@@ -744,10 +744,13 @@ export default function ExamPage() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { lang: 'vi', label: '🇻🇳 Tiếng Việt (Khuyên dùng)' },
+                    { lang: 'vi', label: '🇻🇳 Tiếng Việt' },
                     { lang: 'en', label: '🇬🇧 Tiếng Anh' },
                     { lang: 'zh', label: '🇨🇳 Tiếng Trung' },
-                    { lang: 'all', label: '🌐 Hiển thị tất cả kết hợp' },
+                    { lang: 'vi_en', label: '🇻🇳🇬🇧 Việt - Anh' },
+                    { lang: 'vi_zh', label: '🇻🇳🇨🇳 Việt - Trung' },
+                    { lang: 'en_zh', label: '🇬🇧🇨🇳 Anh - Trung' },
+                    { lang: 'vi_en_zh', label: '🌐 Tất cả kết hợp' },
                   ].map((opt) => (
                     <button
                       key={opt.lang}
@@ -931,7 +934,7 @@ export default function ExamPage() {
     vi: currentFeedback?.explanation,
     zh: currentFeedback?.explanation_cn,
     en: currentFeedback?.explanation_en,
-  }, explanationLanguage === 'all' ? baseLanguageMode : explanationLanguage);
+  }, explanationLanguage === 'all' ? baseLanguageMode : (explanationLanguage || baseLanguageMode));
   const answeredCount = questions.reduce(
     (count, question) => count + (hasAnsweredValue(selectedAnswers[question.id]) ? 1 : 0),
     0,
