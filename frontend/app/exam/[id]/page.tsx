@@ -77,6 +77,8 @@ export default function ExamPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number | string>>({});
   const [practiceMode, setPracticeMode] = useState(false);
   const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
+  const [examLanguage, setExamLanguage] = useState<string>('');
+  const [explanationLanguage, setExplanationLanguage] = useState<string>('vi');
   const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
@@ -247,6 +249,13 @@ export default function ExamPage() {
     const timer = setTimeout(() => persistDraft(), 250);
     return () => clearTimeout(timer);
   }, [started, attemptId, selectedAnswers, persistDraft]);
+
+  useEffect(() => {
+    if (preflight) {
+      const mode = normalizeExamLanguageMode(preflight.language_mode);
+      setExamLanguage(mode);
+    }
+  }, [preflight]);
 
   useEffect(() => {
     if (!started) return;
@@ -704,20 +713,57 @@ export default function ExamPage() {
             </div>
 
             <div className="border-t border-slate-100 p-4 sm:p-5">
-              <label className="mb-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3 text-left transition hover:border-indigo-200 hover:bg-indigo-50">
-                <input
-                  type="checkbox"
-                  checked={showVietnameseTranslations}
-                  onChange={(event) => setShowVietnameseTranslations(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span>
-                  <span className="block text-sm font-black text-slate-900">Hiện thêm tiếng Việt trong lúc làm bài</span>
-                  <span className="mt-1 block text-xs font-semibold leading-5 text-slate-500">
-                    Mặc định đề chỉ hiện tiếng Trung. Bật mục này nếu muốn xem thêm bản tiếng Việt dưới câu hỏi và đáp án.
-                  </span>
-                </span>
-              </label>
+              <div className="mb-4 rounded-3xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
+                <p className="mb-3 text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <span>🎨</span> Chọn ngôn ngữ hiển thị đề thi:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { mode: 'zh', label: '🇨🇳 Tiếng Trung' },
+                    { mode: 'en', label: '🇬🇧 Tiếng Anh' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.mode}
+                      type="button"
+                      onClick={() => setExamLanguage(opt.mode)}
+                      className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
+                        examLanguage === opt.mode
+                          ? 'border-indigo-600 bg-indigo-600 text-white scale-105 shadow-[0_4px_12px_rgba(79,70,229,0.2)]'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-3xl border border-purple-100 bg-purple-50/40 p-4 sm:p-5">
+                <p className="mb-3 text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <span>💡</span> Chọn ngôn ngữ hiển thị lời giải:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { lang: 'vi', label: '🇻🇳 Tiếng Việt (Khuyên dùng)' },
+                    { lang: 'en', label: '🇬🇧 Tiếng Anh' },
+                    { lang: 'zh', label: '🇨🇳 Tiếng Trung' },
+                    { lang: 'all', label: '🌐 Hiển thị tất cả kết hợp' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.lang}
+                      type="button"
+                      onClick={() => setExplanationLanguage(opt.lang)}
+                      className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
+                        explanationLanguage === opt.lang
+                          ? 'border-purple-600 bg-purple-600 text-white scale-105 shadow-[0_4px_12px_rgba(147,51,234,0.2)]'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="mb-3 rounded-2xl bg-indigo-50 p-3 text-sm text-indigo-900">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
@@ -867,7 +913,7 @@ export default function ExamPage() {
   }
 
   const baseLanguageMode = normalizeExamLanguageMode(exam?.language_mode);
-  const activeLanguageMode = baseLanguageMode === 'zh' && showVietnameseTranslations ? 'zh_vi' : baseLanguageMode;
+  const activeLanguageMode = examLanguage || baseLanguageMode;
   const currentQuestion = processedQuestions[currentQuestionIndex] as any;
   const currentQuestionAnswer = selectedAnswers[currentQuestion?.id];
   const questionText = getExamText({
@@ -885,7 +931,7 @@ export default function ExamPage() {
     vi: currentFeedback?.explanation,
     zh: currentFeedback?.explanation_cn,
     en: currentFeedback?.explanation_en,
-  }, activeLanguageMode);
+  }, explanationLanguage === 'all' ? baseLanguageMode : explanationLanguage);
   const answeredCount = questions.reduce(
     (count, question) => count + (hasAnsweredValue(selectedAnswers[question.id]) ? 1 : 0),
     0,
