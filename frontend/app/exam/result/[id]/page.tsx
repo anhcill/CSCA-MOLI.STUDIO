@@ -20,6 +20,15 @@ import ReviewAIButtons from '@/components/exam/result/ReviewAIButtons';
 import ReviewAIHost, { type ReviewAIHostHandle } from '@/components/exam/result/ReviewAIHost';
 import type { ReviewAIMode } from '@/components/exam/result/types';
 import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
+import InkResultBackground, {
+    InkScoreMark,
+    inkResultButtonPanel,
+    inkResultMuted,
+    inkResultPanel,
+    inkResultScore,
+    inkResultSoftPanel,
+    inkResultTitle,
+} from '@/components/layout/InkResultBackground';
 
 const AI_ANALYSIS_COST = 50;
 
@@ -177,26 +186,26 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
+            <InkResultBackground className="flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600" />
-                    <p className="text-gray-500">Đang tải kết quả...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#ead9bd] border-t-[#d52a1e]" />
+                    <p className={inkResultMuted}>Đang tải kết quả...</p>
                 </div>
-            </div>
+            </InkResultBackground>
         );
     }
 
     if (!result) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 flex items-center justify-center">
-                <div className="text-center">
-                    <p className="text-gray-600 mb-4">Không tìm thấy kết quả bài thi</p>
+            <InkResultBackground className="flex items-center justify-center">
+                <div className={`rounded-3xl p-8 text-center ${inkResultPanel}`}>
+                    <p className={`mb-4 font-bold ${inkResultTitle}`}>Không tìm thấy kết quả bài thi</p>
                     <button onClick={() => router.back()}
-                        className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        className="px-6 py-2 bg-[#d52a1e] text-white rounded-lg hover:bg-[#b91f16]">
                         Quay lại
                     </button>
                 </div>
-            </div>
+            </InkResultBackground>
         );
     }
 
@@ -224,17 +233,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
         ? Number(result.score_scale_10)
         : score100 / 10;
 
-    const gradeColor = accuracy >= 85 ? 'emerald' : accuracy >= 60 ? 'blue' : accuracy >= 40 ? 'amber' : 'red';
     const gradeLabel = accuracy >= 85 ? 'Xuất sắc!' : accuracy >= 60 ? 'Đạt yêu cầu' : accuracy >= 40 ? 'Cần cố gắng' : 'Chưa đạt';
-
-    const getGradeColors = (color: string) => {
-        if (color === 'emerald') return { text: 'text-emerald-600 dark:text-emerald-400', progress: 'from-emerald-400 to-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800' };
-        if (color === 'blue') return { text: 'text-blue-600 dark:text-blue-400', progress: 'from-blue-400 to-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/20', border: 'border-blue-200 dark:border-blue-800' };
-        if (color === 'amber') return { text: 'text-amber-600 dark:text-amber-400', progress: 'from-amber-400 to-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/20', border: 'border-amber-200 dark:border-amber-800' };
-        return { text: 'text-rose-600 dark:text-rose-400', progress: 'from-rose-400 to-rose-600', bg: 'bg-rose-50 dark:bg-rose-950/20', border: 'border-rose-200 dark:border-rose-800' };
-    };
-
-    const gradeColors = getGradeColors(gradeColor);
 
     // Pie chart data
     const pieData = [
@@ -244,7 +243,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     ].filter(d => d.value > 0);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+        <InkResultBackground>
             <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
 
             <style>{`
@@ -255,7 +254,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
         }
       `}</style>
             {/* Minimal Header - chỉ nút quay lại */}
-            <div className="sticky top-0 z-[60] bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 no-print dark:bg-gray-900/95 dark:border-gray-800">
+            <div className="sticky top-0 z-[60] bg-[#fffaf2]/90 backdrop-blur-md border-b border-[#ead9bd]/80 px-4 py-3 flex items-center gap-3 no-print dark:bg-gray-900/95 dark:border-gray-800">
                 <button onClick={() => router.back()}
                     className="flex items-center gap-2 text-gray-600 hover:text-purple-650 dark:text-gray-300 dark:hover:text-purple-400 transition-colors font-medium text-sm">
                     <FiArrowLeft size={18} /> Quay lại
@@ -263,7 +262,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 <div className="flex-1" />
                 <LanguageSwitcher compact />
                 <button onClick={() => window.print()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-655 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print">
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print">
                     <FiPrinter size={14} /> Xuất PDF
                 </button>
             </div>
@@ -285,7 +284,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                             className={`flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
                                 activeTab === tab.key
                                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-purple-50 hover:text-purple-650 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-800 dark:hover:text-purple-400'
+                                    : 'bg-[#fffaf2]/75 text-[#6f563f] border border-[#ead9bd]/80 hover:bg-[#fff8ec] hover:text-[#d52a1e] dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 dark:hover:bg-gray-800 dark:hover:text-purple-400'
                             }`}>
                             <tab.icon size={16} />
                             {tab.label}
@@ -301,38 +300,32 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
                             {/* Left: Score Card */}
-                            <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 transition-all hover:shadow-2xl">
+                            <div className={`rounded-[28px] p-6 transition-all hover:shadow-[0_28px_80px_rgba(129,77,33,0.18)] ${inkResultPanel}`}>
                                 <div className="text-center mb-4">
-                                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{result.exam_title}</p>
-                                    <div className="relative inline-flex items-center justify-center my-3">
-                                        {/* Outer soft glowing circle */}
-                                        <div className={`absolute inset-0 rounded-full blur-xl opacity-20 bg-gradient-to-br ${gradeColors.progress}`} />
-                                        <span className={`relative text-7xl font-black bg-gradient-to-br ${gradeColors.progress} bg-clip-text text-transparent leading-none py-3 px-1 sm:text-8xl`}>
-                                            {score100.toFixed(1)}
-                                        </span>
-                                    </div>
-                                    <p className={`text-base font-black ${gradeColors.text}`}>/100 điểm</p>
-                                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-100 bg-slate-50 px-4 py-2 text-sm font-black text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                                    <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${inkResultMuted}`}>{result.exam_title}</p>
+                                    <InkScoreMark value={score100.toFixed(1)} />
+                                    <p className={`text-lg font-black sm:text-xl ${inkResultScore}`}>/100 điểm</p>
+                                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#ead9bd]/80 bg-[#f7efe4]/75 px-4 py-2 text-sm font-black text-[#6f563f]">
                                         <span>Thang 10</span>
-                                        <span className={gradeColors.text}>{displayScore.toFixed(2)}/10</span>
+                                        <span className={inkResultScore}>{displayScore.toFixed(2)}/10</span>
                                     </div>
                                 </div>
-                                <div className="w-full bg-gray-100 dark:bg-gray-850 rounded-full h-3 overflow-hidden mb-3">
-                                    <div className={`h-full bg-gradient-to-r ${gradeColors.progress} rounded-full transition-all duration-700`}
+                                <div className="w-full bg-[#e8ddd1]/85 rounded-full h-3 overflow-hidden mb-3">
+                                    <div className="h-full bg-[#d52a1e] rounded-full transition-all duration-700"
                                         style={{ width: `${accuracy}%` }} />
                                 </div>
-                                <p className={`text-center text-sm font-bold ${gradeColors.text}`}>
+                                <p className={`text-center text-sm font-bold ${inkResultScore}`}>
                                     {accuracy}% {gradeLabel}
                                 </p>
-                                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+                                <div className={`mt-4 flex items-center justify-center gap-2 text-xs ${inkResultMuted}`}>
                                     <FiClock size={12} />
                                     <span>{new Date(result.submit_time).toLocaleString('vi-VN')}</span>
                                 </div>
                                 <div className="mt-5 grid grid-cols-3 gap-2">
                                     {[
-                                        { label: 'Đúng', value: totalCorrect, tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-                                        { label: 'Sai', value: totalIncorrect, tone: 'bg-rose-50 text-rose-700 border-rose-100' },
-                                        { label: 'Bỏ qua', value: totalUnanswered, tone: 'bg-slate-50 text-slate-700 border-slate-100' },
+                                        { label: 'Đúng', value: totalCorrect, tone: 'bg-emerald-50/70 text-emerald-700 border-emerald-200/70' },
+                                        { label: 'Sai', value: totalIncorrect, tone: 'bg-rose-50/72 text-rose-700 border-rose-200/70' },
+                                        { label: 'Bỏ qua', value: totalUnanswered, tone: 'bg-stone-100/70 text-stone-700 border-stone-200/75' },
                                     ].map((item) => (
                                         <div key={item.label} className={`rounded-2xl border px-3 py-2 text-center ${item.tone}`}>
                                             <p className="text-lg font-black leading-none">{item.value}</p>
@@ -340,9 +333,9 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         </div>
                                     ))}
                                 </div>
-                                <div className={`mt-4 rounded-2xl border px-4 py-3 ${gradeColors.bg} ${gradeColors.border}`}>
-                                    <p className={`text-xs font-black uppercase tracking-wide ${gradeColors.text}`}>Gợi ý nhanh</p>
-                                    <p className="mt-1 text-xs font-medium leading-5 text-slate-600 dark:text-slate-300">
+                                <div className="mt-4 rounded-2xl border border-[#ead9bd]/85 bg-[#fff8ec]/78 px-4 py-3">
+                                    <p className={`text-xs font-black uppercase tracking-wide ${inkResultScore}`}>Gợi ý nhanh</p>
+                                    <p className={`mt-1 text-xs font-medium leading-5 ${inkResultTitle}`}>
                                         {totalIncorrect > 0
                                             ? `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
                                             : totalUnanswered > 0
@@ -353,8 +346,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                             </div>
 
                             {/* Middle: Pie Chart */}
-                            <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 p-6 flex flex-col items-center justify-start transition-all hover:shadow-2xl">
-                                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Phân bố đáp án</p>
+                            <div className={`rounded-[28px] p-6 flex flex-col items-center justify-start transition-all hover:shadow-[0_20px_60px_rgba(129,77,33,0.14)] ${inkResultSoftPanel}`}>
+                                <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${inkResultMuted}`}>Phân bố đáp án</p>
                                 <div className="relative" style={{ width: '160px', height: '160px' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
@@ -370,8 +363,8 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         </PieChart>
                                     </ResponsiveContainer>
                                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                        <p className="text-2xl font-black text-gray-800 dark:text-white">{total}</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500">câu</p>
+                                        <p className={`text-2xl font-black ${inkResultTitle}`}>{total}</p>
+                                        <p className={`text-xs ${inkResultMuted}`}>câu</p>
                                     </div>
                                 </div>
                                 {/* Legend */}
@@ -379,7 +372,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                     {pieData.map((d) => (
                                         <div key={d.name} className="flex items-center gap-1.5">
                                             <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                                            <span className="text-xs text-gray-600 dark:text-gray-400">{d.name}: {d.value}</span>
+                                            <span className={`text-xs ${inkResultMuted}`}>{d.name}: {d.value}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -392,11 +385,11 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                         const percent = Math.round((item.value / total) * 100);
                                         return (
                                             <div key={item.label}>
-                                                <div className="mb-1 flex items-center justify-between text-xs font-bold text-slate-500">
+                                                <div className={`mb-1 flex items-center justify-between text-xs font-bold ${inkResultMuted}`}>
                                                     <span>{item.label}</span>
                                                     <span>{percent}%</span>
                                                 </div>
-                                                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                                                <div className="h-2 overflow-hidden rounded-full bg-[#e8ddd1]/85">
                                                     <div className={`h-full rounded-full ${item.color}`} style={{ width: `${percent}%` }} />
                                                 </div>
                                             </div>
@@ -407,11 +400,11 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                             {/* Right: Guidance Cards */}
                             <div className="space-y-3">
-                                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-1">Bạn muốn làm gì tiếp?</p>
+                                <p className={`text-xs font-bold uppercase tracking-wider px-1 ${inkResultMuted}`}>Bạn muốn làm gì tiếp?</p>
 
                                 <button
                                     onClick={() => setActiveTab('review')}
-                                    className="w-full bg-gradient-to-r from-blue-50/50 to-sky-50/30 dark:from-blue-950/10 dark:to-sky-950/5 border border-blue-105 dark:border-blue-900/30 rounded-2xl p-4 text-left hover:border-blue-300 dark:hover:border-blue-800 hover:shadow-md transition-all duration-200 group">
+                                    className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
                                     <div className="flex items-center gap-3.5">
                                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-sky-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-205">
                                             <FiBookOpen className="text-white" size={16} />
@@ -426,7 +419,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                                 <button
                                     onClick={openChatTab}
-                                    className="w-full bg-gradient-to-r from-purple-50/50 to-pink-50/30 dark:from-purple-950/10 dark:to-pink-950/5 border border-purple-105 dark:border-purple-900/30 rounded-2xl p-4 text-left hover:border-purple-300 dark:hover:border-purple-805 hover:shadow-md transition-all duration-200 group">
+                                    className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
                                     <div className="flex items-center gap-3.5">
                                         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20 group-hover:scale-105 transition-transform duration-205">
                                             <FiCpu className="text-white" size={16} />
@@ -441,7 +434,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                                 <button
                                     onClick={() => router.push('/')}
-                                    className="w-full bg-gradient-to-r from-emerald-50/50 to-teal-50/30 dark:from-emerald-950/10 dark:to-teal-950/5 border border-emerald-105 dark:border-emerald-900/30 rounded-2xl p-4 text-left hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-md transition-all duration-200 group">
+                                    className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
                                     <div className="flex items-center gap-3.5">
                                         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-605 rounded-xl flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform duration-205">
                                             <FiCheckCircle className="text-white" size={16} />
@@ -480,7 +473,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 {activeTab === 'review' && (
                     <div className="space-y-4">
                         {!reviewStarted ? (
-                            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-purple-200 rounded-2xl p-6 mb-4 text-center">
+                            <div className={`rounded-2xl p-6 mb-4 text-center ${inkResultSoftPanel}`}>
                                 <div className="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <FiBookOpen className="text-purple-600" size={24} />
                                 </div>
@@ -497,7 +490,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                         ) : (
                             <>
                                 {answers.length === 0 ? (
-                                    <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
+                                    <div className={`rounded-2xl p-10 text-center ${inkResultMuted} ${inkResultSoftPanel}`}>
                                         <p className="text-lg">Không có dữ liệu câu hỏi chi tiết</p>
                                     </div>
                                 ) : (
@@ -629,7 +622,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
                 {/* ── TAB: CHATBOT AI ── */}
                 {activeTab === 'chat' && (
-                    <div ref={chatAnchorRef} className="scroll-mt-24 min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:rounded-2xl">
+                    <div ref={chatAnchorRef} className={`scroll-mt-24 min-w-0 overflow-hidden rounded-xl sm:rounded-2xl ${inkResultSoftPanel}`}>
                         <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
                     </div>
                 )}
@@ -641,6 +634,6 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 languageMode={languageMode}
                 onOpenChat={openChatTab}
             />
-        </div>
+        </InkResultBackground>
     );
 }

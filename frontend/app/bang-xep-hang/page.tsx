@@ -5,6 +5,12 @@ import Link from 'next/link';
 import { FiAward, FiClock, FiCalendar, FiChevronDown, FiRefreshCw, FiTrendingUp, FiTarget } from 'react-icons/fi';
 import Header from '@/components/layout/Header';
 import { useAuthStore } from '@/lib/store/authStore';
+import InkResultBackground, {
+    inkResultMuted,
+    inkResultPanel,
+    inkResultSoftPanel,
+    inkResultTitle,
+} from '@/components/layout/InkResultBackground';
 
 type LeaderboardPeriod = 'week' | 'all';
 
@@ -224,7 +230,7 @@ export default function LeaderboardPage() {
                 setLastUpdated(new Date());
             }
         } catch (err) {
-            console.error('Leaderboard error:', err);
+            console.warn('Leaderboard error:', err);
             setEntries([]);
         } finally {
             setLoading(false);
@@ -250,24 +256,24 @@ export default function LeaderboardPage() {
     const restEntries = entries.slice(3);
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 transition-colors duration-300">
+        <InkResultBackground className="transition-colors duration-300">
             <Header />
 
             <div className="mx-auto max-w-5xl px-4 py-8">
                 {/* Header section */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <h1 className={`text-2xl md:text-3xl font-black tracking-tight flex items-center gap-2 ${inkResultTitle}`}>
                             🏆 BẢNG XẾP HẠNG
                         </h1>
-                        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 mt-1">Cập nhật theo thời gian thực</p>
+                        <p className={`text-xs font-bold mt-1 ${inkResultMuted}`}>Cập nhật theo thời gian thực</p>
                     </div>
                     
                     <div className="flex items-center gap-2 self-end sm:self-auto" ref={dropdownRef}>
                         <button
                             onClick={loadLeaderboard}
                             disabled={loading}
-                            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-355 shadow-sm hover:bg-slate-55 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            className="p-2.5 bg-[#fffaf2]/75 dark:bg-slate-900 border border-[#ead9bd]/80 dark:border-slate-800 rounded-xl text-[#8b7866] dark:text-slate-500 hover:text-[#4f3521] dark:hover:text-slate-355 shadow-sm hover:bg-[#fff8ec] dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                             title="Làm mới"
                         >
                             <FiRefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -276,14 +282,14 @@ export default function LeaderboardPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-[#fffaf2]/75 dark:bg-slate-900 rounded-xl border border-[#ead9bd]/80 dark:border-slate-800 text-sm font-bold text-[#6f563f] dark:text-slate-300 shadow-sm hover:bg-[#fff8ec] dark:hover:bg-slate-800 transition-colors"
                             >
                                 <FiCalendar className="text-slate-400" size={16} />
                                 <span>{period === 'week' ? 'Tuần này' : 'Toàn hệ thống'}</span>
                                 <FiChevronDown className="text-slate-400" size={16} />
                             </button>
                             {dropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-lg z-30 overflow-hidden">
+                                <div className="absolute right-0 mt-2 w-48 bg-[#fffaf2]/95 dark:bg-slate-900 border border-[#ead9bd]/90 dark:border-slate-800 rounded-xl shadow-lg z-30 overflow-hidden backdrop-blur-md">
                                     <button
                                         onClick={() => { setPeriod('week'); setDropdownOpen(false); }}
                                         className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${period === 'week' ? 'text-violet-600 bg-violet-50/50 dark:bg-violet-950/20' : 'text-slate-700 dark:text-slate-300'}`}
@@ -307,10 +313,10 @@ export default function LeaderboardPage() {
                         <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-violet-600" />
                     </div>
                 ) : entries.length === 0 ? (
-                    <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center bg-white dark:bg-slate-900 rounded-[24px] border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className={`flex min-h-[300px] flex-col items-center justify-center p-8 text-center rounded-[24px] ${inkResultPanel}`}>
                         <FiTrendingUp size={44} className="mb-3 text-slate-300 dark:text-slate-700" />
-                        <p className="text-lg font-black text-slate-600 dark:text-slate-300">Chưa có dữ liệu</p>
-                        <p className="mt-1 max-w-md text-sm font-semibold text-slate-400 dark:text-slate-550">
+                        <p className={`text-lg font-black ${inkResultTitle}`}>Chưa có dữ liệu</p>
+                        <p className={`mt-1 max-w-md text-sm font-semibold ${inkResultMuted}`}>
                             Hãy hoàn thành ít nhất 1 bài thi để xuất hiện trên bảng xếp hạng.
                         </p>
                         <Link href="/exam-room" className="mt-4 inline-block rounded-full bg-violet-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
@@ -328,7 +334,7 @@ export default function LeaderboardPage() {
 
                         {/* Table (Ranks 4+) */}
                         {restEntries.length > 0 && (
-                            <div className="overflow-x-auto rounded-[24px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                            <div className={`overflow-x-auto rounded-[24px] ${inkResultSoftPanel}`}>
                                 <table className="w-full text-left border-collapse min-w-[700px]">
                                     <thead>
                                         <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
@@ -428,10 +434,10 @@ export default function LeaderboardPage() {
                 )}
 
                 {isAuthenticated && !myEntry && !loading && (
-                    <div className="mt-8 rounded-2xl border border-dashed border-violet-300 dark:border-violet-800 bg-white dark:bg-slate-900 p-6 text-center shadow-sm">
+                    <div className="mt-8 rounded-2xl border border-dashed border-[#d9b784] bg-[#fffaf2]/76 p-6 text-center shadow-sm backdrop-blur-md dark:border-violet-800 dark:bg-slate-900">
                         <FiTarget size={32} className="mx-auto mb-3 text-violet-400" />
-                        <p className="font-bold text-gray-650 dark:text-slate-350">Bạn chưa có trên bảng xếp hạng</p>
-                        <p className="mt-1 text-sm text-gray-400 dark:text-slate-500">Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
+                        <p className={`font-bold ${inkResultTitle}`}>Bạn chưa có trên bảng xếp hạng</p>
+                        <p className={`mt-1 text-sm ${inkResultMuted}`}>Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
                         <Link href="/exam-room" className="mt-4 inline-block rounded-full bg-violet-600 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700">
                             Thi ngay
                         </Link>
@@ -445,6 +451,6 @@ export default function LeaderboardPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </InkResultBackground>
     );
 }

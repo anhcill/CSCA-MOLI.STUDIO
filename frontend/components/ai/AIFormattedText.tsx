@@ -21,6 +21,9 @@ function stripInlineMarkdown(value: string) {
 
 function stripLooseMarkdown(value: string) {
   return value
+    .replace(/\\([*_#])/g, '$1')
+    .replace(/\*{3}([^*\n]+)\*{3}/g, '$1')
+    .replace(/_{3}([^_\n]+)_{3}/g, '$1')
     .replace(/\*\*([^*\n]+)\*\*/g, '$1')
     .replace(/__([^_\n]+)__/g, '$1')
     .replace(/\*\*+/g, '')
@@ -36,14 +39,15 @@ function isSeparatorLine(value: string) {
 
 function normalizeLooseLatexCommands(value: string) {
   return value
-    .replace(/\\to\b/g, '→')
-    .replace(/\\leq?\b/g, '≤')
-    .replace(/\\geq?\b/g, '≥')
-    .replace(/\\ne(q)?\b/g, '≠')
-    .replace(/\\in\b/g, '∈')
-    .replace(/\\mathbb\{Z\}/g, 'ℤ')
-    .replace(/\\mathbb\{R\}/g, 'ℝ')
-    .replace(/\\mathbb\{N\}/g, 'ℕ');
+    // JSON từ một số model có thể giữ lại hai dấu gạch chéo.
+    .replace(/\\{1,2}to\b/g, '→')
+    .replace(/\\{1,2}leq?\b/g, '≤')
+    .replace(/\\{1,2}geq?\b/g, '≥')
+    .replace(/\\{1,2}ne(q)?\b/g, '≠')
+    .replace(/\\{1,2}in\b/g, '∈')
+    .replace(/\\{1,2}mathbb\{Z\}/g, 'ℤ')
+    .replace(/\\{1,2}mathbb\{R\}/g, 'ℝ')
+    .replace(/\\{1,2}mathbb\{N\}/g, 'ℕ');
 }
 
 function cleanupAIMarkup(value: string) {
@@ -85,6 +89,13 @@ function formatLeadingLabel(value: string) {
   return `**${label}:** ${body}`;
 }
 
+function breakBeforeStudyLabels(value: string) {
+  return value.replace(
+    /\s+(?=(?:Ứng dụng|Kết luận|Mẹo nhớ|Lỗi hay gặp|Nên ôn thêm)\s*[:：])/gi,
+    '\n',
+  );
+}
+
 function normalizeCommonMathOcr(value: string) {
   return value
     .replace(/(^|[^A-Za-z\\])V\s*\{\s*(π|pi)\s*\}/gi, (_, prefix) => `${prefix}\\sqrt{\\pi}`)
@@ -113,7 +124,7 @@ export function normalizeAIFormattedText(value: string) {
   };
 
   for (const rawLine of lines) {
-    const line = cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trim()));
+    const line = breakBeforeStudyLabels(cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trim())));
     const fence = line.match(/^(```|~~~)/);
 
     if (fence) {
@@ -177,7 +188,7 @@ export function normalizeAIFormattedText(value: string) {
       continue;
     }
 
-    out.push(formatLeadingLabel(cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trimEnd()))));
+    out.push(formatLeadingLabel(breakBeforeStudyLabels(cleanupAIMarkup(normalizeCommonMathOcr(rawLine.trimEnd())))));
   }
 
   return out.join('\n')

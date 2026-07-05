@@ -2,6 +2,7 @@
 
 import { FiAward, FiClock, FiMonitor, FiStar, FiTrendingUp, FiUsers } from 'react-icons/fi';
 import { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
+import { inkResultMuted, inkResultSoftPanel, inkResultTitle } from '@/components/layout/InkResultBackground';
 
 type OfficialExamLeaderboardProps = {
   entries: OfficialExamLeaderboardEntry[];
@@ -203,32 +204,32 @@ export default function OfficialExamLeaderboard({
   const restEntries = entries.slice(3);
 
   return (
-    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} border border-slate-100 dark:border-slate-800 bg-[#f8fafc] dark:bg-slate-950 shadow-sm ${className} transition-colors duration-300`}>
-      <div className={`border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
+    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} ${inkResultSoftPanel} ${className} transition-colors duration-300`}>
+      <div className={`border-b border-[#ead9bd]/70 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-100 dark:border-violet-900/30 bg-violet-50 dark:bg-violet-950/20 px-3 py-1 text-[11px] font-extrabold uppercase text-violet-700 dark:text-violet-400">
               <FiMonitor size={14} /> {badgeLabel}
             </div>
-            <h2 className={`${compact ? 'text-xl' : 'text-2xl'} flex items-center gap-2 font-black text-slate-900 dark:text-white`}>
+            <h2 className={`${compact ? 'text-xl' : 'text-2xl'} flex items-center gap-2 font-black dark:text-white ${inkResultTitle}`}>
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/30 text-amber-600 dark:text-amber-500">
                 <FiStar size={16} />
               </span>
               Bảng vàng thành tích
             </h2>
-            <p className="mt-1 max-w-2xl text-xs font-bold text-slate-400 dark:text-slate-500">
+            <p className={`mt-1 max-w-2xl text-xs font-bold ${inkResultMuted}`}>
               {description || `Vinh danh những bài làm nổi bật nhất của ${examTitle || 'đề hiện tại'}.`}
             </p>
           </div>
           
           <div className="flex gap-2 self-start md:self-auto">
-            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
-              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase"><FiUsers size={10} /> Thí sinh</p>
-              <p className="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5">{entries.length}</p>
+            <div className="rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
+              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase ${inkResultMuted}`}><FiUsers size={10} /> Thí sinh</p>
+              <p className={`text-lg font-black mt-0.5 ${inkResultTitle}`}>{entries.length}</p>
             </div>
-            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
-              <p className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase"><FiAward size={10} /> Phạm vi</p>
-              <p className="text-xs font-black text-slate-700 dark:text-slate-300 mt-1.5 truncate max-w-[80px]" title={scopeLabel}>{scopeLabel}</p>
+            <div className="rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
+              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase ${inkResultMuted}`}><FiAward size={10} /> Phạm vi</p>
+              <p className={`text-xs font-black mt-1.5 truncate max-w-[80px] ${inkResultTitle}`} title={scopeLabel}>{scopeLabel}</p>
             </div>
           </div>
         </div>
@@ -239,10 +240,10 @@ export default function OfficialExamLeaderboard({
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-violet-600" />
         </div>
       ) : entries.length === 0 ? (
-        <div className={`flex flex-col items-center justify-center text-center bg-white dark:bg-slate-900 ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
+        <div className={`flex flex-col items-center justify-center text-center bg-[#fffaf2]/72 dark:bg-slate-900 ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
           <FiTrendingUp size={36} className="mb-2 text-slate-300 dark:text-slate-700" />
-          <p className="text-base font-black text-slate-600 dark:text-slate-300">{emptyTitle}</p>
-          <p className="mt-1 max-w-md text-xs font-bold text-slate-400 dark:text-slate-500">
+          <p className={`text-base font-black ${inkResultTitle}`}>{emptyTitle}</p>
+          <p className={`mt-1 max-w-md text-xs font-bold ${inkResultMuted}`}>
             {emptyDescription}
           </p>
         </div>
@@ -257,7 +258,7 @@ export default function OfficialExamLeaderboard({
 
           {/* Table list for 4+ */}
           {restEntries.length > 0 && (
-            <div className="overflow-x-auto rounded-[24px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+            <div className="overflow-x-auto rounded-[24px] border border-[#ead9bd]/80 bg-[#fffaf2]/78 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900">
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">

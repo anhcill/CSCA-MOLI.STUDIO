@@ -5,6 +5,13 @@ import Header from '@/components/layout/Header';
 import { useSearchParams, useRouter } from 'next/navigation';
 import examApi from '@/lib/api/exams';
 import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMinus, FiRefreshCw, FiHome } from 'react-icons/fi';
+import InkResultBackground, {
+    inkResultMuted,
+    inkResultPanel,
+    inkResultScore,
+    inkResultSoftPanel,
+    inkResultTitle,
+} from '@/components/layout/InkResultBackground';
 
 interface AnswerOption {
     key: string;
@@ -64,7 +71,7 @@ export default function ExamResultListPage() {
             const attemptList = Array.isArray(data) ? data : (data.attempts || []);
             setAttempts(attemptList.slice(0, 10)); // chỉ lấy 10 kết quả gần nhất
         } catch (error) {
-            console.error('Error loading results:', error);
+            console.warn('Error loading results:', error);
         } finally {
             setLoading(false);
         }
@@ -88,19 +95,19 @@ export default function ExamResultListPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-pink-50">
+            <InkResultBackground>
                 <Header />
                 <main className="container mx-auto px-6 py-8">
                     <div className="flex items-center justify-center h-64">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600" />
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#d52a1e]" />
                     </div>
                 </main>
-            </div>
+            </InkResultBackground>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+        <InkResultBackground>
             <Header />
             <main className="container mx-auto px-4 sm:px-6 py-8 max-w-[1360px]">
                 {/* Page Header */}
@@ -112,43 +119,43 @@ export default function ExamResultListPage() {
                         <FiArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                         <span>Quay lại</span>
                     </button>
-                    <h1 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">Kết quả thi gần đây</h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-1.5 font-medium">Xem lại và học tập từ các bài thi đã thực hiện</p>
+                    <h1 className={`text-3xl sm:text-4xl font-black ${inkResultTitle}`}>Kết quả thi gần đây</h1>
+                    <p className={`${inkResultMuted} mt-1.5 font-medium`}>Xem lại và học tập từ các bài thi đã thực hiện</p>
                 </div>
 
                 {/* Stats Summary */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-                    <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100/80 dark:border-gray-800/80 p-6 text-center transition-all hover:shadow-2xl hover:-translate-y-0.5 duration-350">
+                    <div className={`relative rounded-3xl p-6 text-center transition-all hover:-translate-y-0.5 duration-350 ${inkResultSoftPanel}`}>
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-purple-500 rounded-b-lg" />
-                        <p className="text-4xl font-black bg-gradient-to-br from-purple-500 to-indigo-650 bg-clip-text text-transparent">{attempts.length}</p>
-                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-2">Bài thi đã làm</p>
+                        <p className={`text-4xl font-black ${inkResultScore}`}>{attempts.length}</p>
+                        <p className={`text-xs font-bold uppercase tracking-wider mt-2 ${inkResultMuted}`}>Bài thi đã làm</p>
                     </div>
-                    <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100/80 dark:border-gray-800/80 p-6 text-center transition-all hover:shadow-2xl hover:-translate-y-0.5 duration-350">
+                    <div className={`relative rounded-3xl p-6 text-center transition-all hover:-translate-y-0.5 duration-350 ${inkResultSoftPanel}`}>
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-emerald-500 rounded-b-lg" />
-                        <p className="text-4xl font-black bg-gradient-to-br from-emerald-500 to-teal-650 bg-clip-text text-transparent">
+                        <p className="text-4xl font-black text-emerald-700">
                             {attempts.length > 0
                                 ? (attempts.reduce((s, a) => s + Number(a.total_score), 0) / attempts.length).toFixed(1)
                                 : '0'}
                         </p>
-                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-2">Điểm trung bình</p>
+                        <p className={`text-xs font-bold uppercase tracking-wider mt-2 ${inkResultMuted}`}>Điểm trung bình</p>
                     </div>
-                    <div className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100/80 dark:border-gray-800/80 p-6 text-center transition-all hover:shadow-2xl hover:-translate-y-0.5 duration-350">
+                    <div className={`relative rounded-3xl p-6 text-center transition-all hover:-translate-y-0.5 duration-350 ${inkResultSoftPanel}`}>
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-amber-500 rounded-b-lg" />
-                        <p className="text-4xl font-black bg-gradient-to-br from-amber-500 to-orange-650 bg-clip-text text-transparent">
+                        <p className="text-4xl font-black text-amber-700">
                             {attempts.length > 0 ? Math.max(...attempts.map(a => Number(a.total_score))).toFixed(1) : '0'}
                         </p>
-                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-2">Điểm cao nhất</p>
+                        <p className={`text-xs font-bold uppercase tracking-wider mt-2 ${inkResultMuted}`}>Điểm cao nhất</p>
                     </div>
                 </div>
 
                 {/* Results List */}
                 {attempts.length === 0 ? (
-                    <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 p-16 text-center shadow-lg">
+                    <div className={`rounded-3xl p-16 text-center ${inkResultPanel}`}>
                         <div className="w-20 h-20 bg-indigo-50 dark:bg-indigo-950/30 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-405 dark:text-indigo-400">
                             <FiClock size={36} />
                         </div>
-                        <p className="text-xl font-bold text-gray-805 dark:text-white mb-2">Chưa có kết quả thi nào</p>
-                        <p className="text-sm text-gray-400 dark:text-gray-500 mb-8 max-w-md mx-auto">Hãy bắt đầu làm các đề thi để theo dõi quá trình tiến bộ của bạn tại đây.</p>
+                        <p className={`text-xl font-bold mb-2 ${inkResultTitle}`}>Chưa có kết quả thi nào</p>
+                        <p className={`text-sm mb-8 max-w-md mx-auto ${inkResultMuted}`}>Hãy bắt đầu làm các đề thi để theo dõi quá trình tiến bộ của bạn tại đây.</p>
                         <button
                             onClick={() => router.push('/')}
                             className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-2xl font-bold transition-all shadow-md hover:shadow-lg shadow-purple-650/20 active:scale-[0.98]"
@@ -169,16 +176,16 @@ export default function ExamResultListPage() {
                             return (
                                 <div
                                     key={attempt.id || index}
-                                    className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100/80 dark:border-gray-800/80 hover:shadow-xl transition-all duration-300 p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 group"
+                                    className={`rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 group transition-all duration-300 hover:shadow-[0_20px_60px_rgba(129,77,33,0.14)] ${inkResultSoftPanel}`}
                                 >
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2.5 flex-wrap">
-                                            <h3 className="font-extrabold text-gray-900 dark:text-white text-lg group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors truncate">{attempt.exam_title}</h3>
+                                            <h3 className={`font-extrabold text-lg transition-colors truncate group-hover:text-[#d52a1e] ${inkResultTitle}`}>{attempt.exam_title}</h3>
                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${badgeColor}`}>
                                                 {attempt.subject_name || 'Đề thi'}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 font-medium flex items-center gap-1.5">
+                                        <p className={`text-xs mt-2 font-medium flex items-center gap-1.5 ${inkResultMuted}`}>
                                             <FiClock size={12} />
                                             {formatDate(attempt.submit_time)}
                                         </p>
@@ -192,11 +199,11 @@ export default function ExamResultListPage() {
                                         <div className="text-center md:text-right shrink-0">
                                             <div className="relative inline-flex items-center justify-center">
                                                 <div className={`absolute inset-0 rounded-full blur-md opacity-20 bg-gradient-to-br ${scoreGradient}`} />
-                                                <span className={`relative text-3xl font-black bg-gradient-to-br ${scoreGradient} bg-clip-text text-transparent`}>
+                                                <span className={`relative text-3xl font-black ${scoreVal >= 8.5 ? 'text-emerald-700' : isPass ? 'text-blue-700' : inkResultScore}`}>
                                                     {scoreVal.toFixed(1)}
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">Điểm số</p>
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${inkResultMuted}`}>Điểm số</p>
                                         </div>
                                         <div className="flex gap-2">
                                             <button
@@ -220,6 +227,6 @@ export default function ExamResultListPage() {
                     </div>
                 )}
             </main>
-        </div>
+        </InkResultBackground>
     );
 }

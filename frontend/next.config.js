@@ -90,11 +90,14 @@ const nextConfig = {
     return [
       {
         // Static assets của Next.js: cache 1 năm (immutable vì có content hash)
+        // Dev chunks cua Turbopack co ten on dinh, nen khong cache trong dev.
         source: "/_next/static/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            value: isDev
+              ? "no-store, max-age=0"
+              : "public, max-age=31536000, immutable",
           },
         ],
       },

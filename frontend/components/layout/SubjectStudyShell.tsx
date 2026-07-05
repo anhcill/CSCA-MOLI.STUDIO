@@ -144,12 +144,12 @@ export default function SubjectStudyShell({
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#fff8f4] text-slate-900">
+    <div className="relative min-h-screen overflow-x-hidden bg-[#fff8f4] text-slate-900 dark:bg-slate-950">
       <div
-        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat dark:hidden"
         style={{ backgroundImage: "url('/images/study-bg-20260705b.png')" }}
       />
-      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-white/10 to-white/45" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-white/10 to-white/45 dark:hidden" />
       <style>{`
         .subject-study-sidebar {
           width: 16rem;

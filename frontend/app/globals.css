@@ -2,10 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'ScarecrowInk';
+  src: url('/fonts/scarecrow-regular-20260705.ttf') format('truetype');
+  font-display: swap;
+}
+
 :root {
   --foreground-rgb: 15, 23, 42;
   --background-start-rgb: 248, 250, 252;
   --background-end-rgb: 241, 245, 249;
+  --font-scarecrow: 'ScarecrowInk', 'Segoe Print', 'Comic Sans MS', cursive;
 }
 
 .dark {
