@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Banner from '@/components/layout/Banner';
 import Header from '@/components/layout/Header';
 import HomeContent from '@/components/layout/HomeContent';
+import VipSuccessCelebration from '@/components/checkout/VipSuccessCelebration';
 
 export const metadata: Metadata = {
   title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
@@ -32,6 +33,7 @@ export default function Home() {
       <Banner />
       {/* All homepage sections */}
       <HomeContent />
+      <VipSuccessCelebration />
     </div>
   );
 }

@@ -6,7 +6,8 @@ import axios from '@/lib/utils/axios';
 import { getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canAccessSubject, getTierLevel, type TierLevel } from '@/lib/utils/permissions';
-import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy, FaCheckCircle } from 'react-icons/fa';
+import { queueVipCelebration, VIP_CELEBRATION_HOME_URL } from '@/lib/utils/paymentCelebration';
+import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy } from 'react-icons/fa';
 import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
 
 interface DbPackage {
@@ -431,63 +432,6 @@ function BankTransferScreen({
   );
 }
 
-// ── Success Screen ─────────────────────────────────────────────────────────────
-function SuccessScreen({ packageName, vipExpires }: { packageName?: string; vipExpires?: string }) {
-  const router = useRouter();
-  const { updateUser, setTokens, refreshToken } = useAuthStore();
-
-  useEffect(() => {
-    // Force refresh user data + update JWT token in sessionStorage
-    getCurrentUser()
-      .then((response) => {
-        if (response?.success && response?.data?.user) {
-          updateUser(response.data.user);
-          if ((response.data as any).token) {
-            setTokens((response.data as any).token, refreshToken || '');
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div className="text-center space-y-6 py-4">
-      <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-green-200">
-        <FaCheckCircle size={48} className="text-white" />
-      </div>
-      <div>
-        <h2 className="text-2xl font-black text-gray-900">Thanh toán thành công! 🎉</h2>
-        <p className="text-gray-500 mt-2">Tài khoản của bạn đã được nâng cấp</p>
-        {packageName && (
-          <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-amber-100 rounded-full text-amber-800 font-bold text-sm">
-            <FaCrown className="text-yellow-500" size={14} />
-            {packageName}
-          </div>
-        )}
-        {vipExpires && (
-          <p className="text-sm text-gray-400 mt-2">
-            Hết hạn: {new Date(vipExpires).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-          </p>
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <button
-          onClick={() => router.push('/hoi-dap')}
-          className="py-3 px-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors text-sm"
-        >
-          Hỏi đáp cố vấn →
-        </button>
-        <button
-          onClick={() => router.push('/exam-room')}
-          className="py-3 px-4 bg-gray-100 text-gray-800 rounded-xl font-bold hover:bg-gray-200 transition-colors text-sm"
-        >
-          Vào phòng thi →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Checkout ──────────────────────────────────────────────────────────────
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -505,9 +449,8 @@ function CheckoutContent() {
   const [loading, setLoading] = useState(false);
   const [pkgLoading, setPkgLoading] = useState(true);
   const [error, setError] = useState('');
-  const [step, setStep] = useState<'select' | 'qr' | 'success'>('select');
+  const [step, setStep] = useState<'select' | 'qr'>('select');
   const [qrData, setQrData] = useState<any>(null);
-  const [successData, setSuccessData] = useState<any>(null);
 
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
@@ -657,6 +600,16 @@ function CheckoutContent() {
     } catch (_) {}
   };
 
+  const redirectHomeWithCelebration = (data?: any) => {
+    queueVipCelebration({
+      packageName: data?.package_name || selectedPkg?.name,
+      vipExpiresAt: data?.vip_expires_at || data?.vipExpiresAt,
+      amount: data?.amount,
+      orderId: data?.orderId || qrData?.orderId,
+    });
+    router.replace(VIP_CELEBRATION_HOME_URL);
+  };
+
   const handleProceed = async () => {
     if (!selectedPkg) { setError('Vui lòng chọn một gói.'); return; }
     if (couponMismatchError) { setError(couponMismatchError); return; }
@@ -692,11 +645,10 @@ function CheckoutContent() {
         }
         if (res.data.status === 'completed' || res.data.payment_method === 'coupon_free') {
           await refreshAuthUser();
-          setSuccessData(res.data.data || {
+          redirectHomeWithCelebration(res.data.data || {
             package_name: selectedPkg.name,
             amount: 0,
           });
-          setStep('success');
         } else if (res.data.payment_method === 'bank_transfer') {
           setQrData({ orderId: res.data.orderId, bank: res.data.bank });
           setStep('qr');
@@ -715,16 +667,10 @@ function CheckoutContent() {
 
   const handlePaid = async (data: any) => {
     await refreshAuthUser();
-    setSuccessData(data);
-    setStep('success');
+    redirectHomeWithCelebration(data);
   };
 
   if (!isAuthenticated || !user) return null;
-
-  // ── SUCCESS ──
-  if (step === 'success') {
-    return <SuccessScreen packageName={successData?.package_name} vipExpires={successData?.vip_expires_at} />;
-  }
 
   // ── QR SCREEN ──
   if (step === 'qr' && qrData) {

@@ -10,6 +10,7 @@ import {
 import { FiArrowRight, FiLoader, FiZap } from 'react-icons/fi';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getCurrentUser } from '@/lib/api/auth';
+import { queueVipCelebration, VIP_CELEBRATION_HOME_URL } from '@/lib/utils/paymentCelebration';
 import axios from '@/lib/utils/axios';
 
 function SuccessContent() {
@@ -66,12 +67,14 @@ function SuccessContent() {
                 }
               } catch (_) {}
 
-              setResult({
-                success: true,
-                status: 'completed',
-                data: verifyRes.data.data,
+              queueVipCelebration({
+                packageName: verifyRes.data.data?.package_name,
+                vipExpiresAt: verifyRes.data.data?.vip_expires_at,
+                amount: verifyRes.data.data?.amount,
+                orderId,
               });
-              setVerifying(false);
+              router.replace(VIP_CELEBRATION_HOME_URL);
+              return;
             } else if (verifyRes.data.status === 'failed' || verifyRes.data.status === 'cancelled') {
               setResult({ success: false, status: verifyRes.data.status });
               setVerifying(false);
@@ -101,8 +104,8 @@ function SuccessContent() {
                 setTokens((userRes.data as any).token, refreshToken || '');
               }
               if (userRes.data.user.is_vip) {
-                setResult({ success: true, status: 'completed' });
-                setVerifying(false);
+                queueVipCelebration({ orderId });
+                router.replace(VIP_CELEBRATION_HOME_URL);
                 return;
               }
             }
