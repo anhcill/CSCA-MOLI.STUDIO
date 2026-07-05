@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { FaGraduationCap } from 'react-icons/fa';
 import { FiBarChart2, FiBookOpen, FiEdit3, FiHome, FiUsers } from 'react-icons/fi';
 
-const AUTH_BG_IMAGE = '/images/auth/csca-scholarship-bg.png';
+const AUTH_BG_IMAGE = '/images/auth/csca-scholarship-bg-20260705b.png';
 
 const featureBadges = [
   { icon: FaGraduationCap, label: 'CSC' },

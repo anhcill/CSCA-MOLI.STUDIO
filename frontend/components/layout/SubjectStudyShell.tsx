@@ -147,7 +147,7 @@ export default function SubjectStudyShell({
     <div className="relative min-h-screen overflow-x-hidden bg-[#fff8f4] text-slate-900">
       <div
         className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/images/study-bg.png')" }}
+        style={{ backgroundImage: "url('/images/study-bg-20260705b.png')" }}
       />
       <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-white/10 to-white/45" />
       <style>{`
