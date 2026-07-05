@@ -11,7 +11,13 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import type { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
-import InkResultBackground from '@/components/layout/InkResultBackground';
+import InkResultBackground, {
+  inkResultButtonPanel,
+  inkResultMuted,
+  inkResultPanel,
+  inkResultSoftPanel,
+  inkResultTitle,
+} from '@/components/layout/InkResultBackground';
 import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import { useExamOffline } from '@/hooks/useExamOffline';
@@ -672,22 +678,22 @@ export default function ExamPage() {
         <div className="mx-auto max-w-6xl">
           <button
             onClick={() => router.back()}
-            className="mb-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"
+            className={`mb-3 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${inkResultButtonPanel} text-[#6f563f] hover:bg-[#fff8ec] hover:text-[#d52a1e]`}
           >
             <FiChevronLeft size={18} /> Quay lại
           </button>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-start">
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5 sm:p-6">
+          <div className={`overflow-hidden rounded-3xl transition-all ${inkResultPanel}`}>
+            <div className="border-b border-[#ead9bd]/75 p-5 sm:p-6">
               <p className="mb-2 text-xs font-black uppercase tracking-widest text-indigo-600">
                 {preflight.subject_name || 'CSCA'}
               </p>
-              <h1 className="text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
+              <h1 className={`text-2xl font-black leading-tight sm:text-3xl ${inkResultTitle}`}>
                 {preflight.title}
               </h1>
               {preflight.description && (
-                <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-slate-500">
+                <p className={`mt-2 line-clamp-2 max-w-2xl text-sm leading-6 ${inkResultMuted}`}>
                   {preflight.description}
                 </p>
               )}
@@ -700,16 +706,16 @@ export default function ExamPage() {
                 { label: 'Mức khó', value: preflight.difficulty_level || preflight.overall_difficulty || '-' },
                 { label: 'Đã làm', value: `${preflight.user_attempt_count || 0} lượt` },
               ].map((item) => (
-                <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-bold uppercase text-slate-400">{item.label}</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">{item.value}</p>
+                <div key={item.label} className={`rounded-2xl p-3 ${inkResultSoftPanel}`}>
+                  <p className="text-xs font-bold uppercase text-[#9d8a77]">{item.label}</p>
+                  <p className={`mt-1 text-lg font-black ${inkResultTitle}`}>{item.value}</p>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-slate-100 p-4 sm:p-5">
-              <div className="mb-4 rounded-3xl border border-indigo-100 bg-indigo-50/40 p-4 sm:p-5">
-                <p className="mb-3 text-sm font-black text-slate-800 flex items-center gap-1.5">
+            <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
+              <div className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
+                <p className={`mb-3 flex items-center gap-1.5 text-sm font-black ${inkResultTitle}`}>
                   <span>🎨</span> Chọn ngôn ngữ hiển thị đề thi:
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -723,8 +729,8 @@ export default function ExamPage() {
                       onClick={() => setExamLanguage(opt.mode)}
                       className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
                         examLanguage === opt.mode
-                          ? 'border-indigo-600 bg-indigo-600 text-white scale-105 shadow-[0_4px_12px_rgba(79,70,229,0.2)]'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          ? 'scale-105 border-[#d52a1e] bg-[#d52a1e] text-white shadow-[0_4px_14px_rgba(213,42,30,0.18)]'
+                          : 'border-[#ead9bd]/85 bg-[#fffaf2]/92 text-[#6f563f] hover:border-[#d8bd94] hover:bg-[#fff8ec]'
                       }`}
                     >
                       {opt.label}
@@ -733,8 +739,8 @@ export default function ExamPage() {
                 </div>
               </div>
 
-              <div className="mb-4 rounded-3xl border border-purple-100 bg-purple-50/40 p-4 sm:p-5">
-                <p className="mb-3 text-sm font-black text-slate-800 flex items-center gap-1.5">
+              <div className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
+                <p className={`mb-3 flex items-center gap-1.5 text-sm font-black ${inkResultTitle}`}>
                   <span>💡</span> Chọn ngôn ngữ hiển thị lời giải:
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -753,8 +759,8 @@ export default function ExamPage() {
                       onClick={() => setExplanationLanguage(opt.lang)}
                       className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
                         explanationLanguage === opt.lang
-                          ? 'border-purple-600 bg-purple-600 text-white scale-105 shadow-[0_4px_12px_rgba(147,51,234,0.2)]'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                          ? 'scale-105 border-[#d52a1e] bg-[#d52a1e] text-white shadow-[0_4px_14px_rgba(213,42,30,0.18)]'
+                          : 'border-[#ead9bd]/85 bg-[#fffaf2]/92 text-[#6f563f] hover:border-[#d8bd94] hover:bg-[#fff8ec]'
                       }`}
                     >
                       {opt.label}
@@ -763,7 +769,7 @@ export default function ExamPage() {
                 </div>
               </div>
 
-              <div className="mb-3 rounded-2xl bg-indigo-50 p-3 text-sm text-indigo-900">
+              <div className="mb-3 rounded-2xl border border-[#ead9bd]/80 bg-[#fff7ec]/75 p-3 text-sm text-[#6f563f]">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
                 {inProgress && (
                   <span className="ml-0 mt-2 block sm:ml-3 sm:mt-0 sm:inline">
@@ -842,14 +848,14 @@ export default function ExamPage() {
                     <button
                       onClick={() => startExam()}
                       disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
-                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
                     <button
                       onClick={() => startExam({ restart: true })}
                       disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
-                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[#ead9bd]/85 bg-[#fffaf2]/92 px-5 py-2.5 text-sm font-black text-[#6f563f] hover:bg-[#fff8ec] disabled:opacity-60"
                     >
                       <FiRotateCcw size={18} /> Làm lại từ đầu
                     </button>
@@ -858,7 +864,7 @@ export default function ExamPage() {
                   <button
                     onClick={() => startExam()}
                     disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
-                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Bắt đầu làm bài
                   </button>
@@ -867,7 +873,7 @@ export default function ExamPage() {
                 <button
                   onClick={() => startExam({ practice: true })}
                   disabled={loading || !examLanguage || !explanationLanguage}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#c99722] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(201,151,34,0.18)] hover:bg-[#a97b17] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FiBookOpen size={18} /> Luyện tập không tính giờ
                 </button>
