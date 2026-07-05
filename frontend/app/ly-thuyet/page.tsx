@@ -35,6 +35,18 @@ interface Material {
 
 type MaterialImageMeta = { url: string; caption?: string; order?: number };
 
+type MaterialCoverVisual = {
+  badge: string;
+  gradient: string;
+  ring: string;
+  glow: string;
+  primary: string;
+  secondary: string;
+  accent: string;
+  marks: string[];
+  image: string;
+};
+
 const SUBJECT_LABEL_KEYS: Record<string, string> = {
   '': 'common.all',
   toan: 'subject.math',
@@ -69,6 +81,93 @@ function getMaterialImages(material: Material) {
     .filter((image) => image?.url)
     .slice()
     .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+function getMaterialCoverVisual(material: Material): MaterialCoverVisual {
+  const rawText = `${material.subject || ''} ${material.topic || ''} ${material.title || ''} ${material.description || ''}`.toLowerCase();
+  const text = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+
+  if (text.includes('hoa') || text.includes('chem') || text.includes('phuong trinh') || text.includes('phan ung')) {
+    return {
+      badge: 'HOA',
+      gradient: 'from-emerald-950 via-teal-900 to-sky-950',
+      ring: 'border-emerald-200/35 bg-emerald-200/10',
+      glow: 'bg-emerald-300/25',
+      primary: 'H2O',
+      secondary: 'Mol',
+      accent: 'bg-emerald-200/70',
+      marks: ['CO2', 'pH', 'NaCl'],
+      image: 'https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?auto=format&fit=crop&w=900&q=80',
+    };
+  }
+
+  if (text.includes('vat ly') || text.includes('vat-ly') || text.includes('physics') || text.includes('luc') || text.includes('dien') || text.includes('song')) {
+    return {
+      badge: 'VAT LY',
+      gradient: 'from-slate-950 via-indigo-950 to-cyan-950',
+      ring: 'border-cyan-200/35 bg-cyan-200/10',
+      glow: 'bg-cyan-300/25',
+      primary: 'F = ma',
+      secondary: 'E = mc2',
+      accent: 'bg-cyan-200/70',
+      marks: ['v = s/t', 'U = IR', 'lambda'],
+      image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=900&q=80',
+    };
+  }
+
+  if (text.includes('trung') || text.includes('hsk') || text.includes('tieng') || /[\u4e00-\u9fff]/.test(rawText)) {
+    return {
+      badge: 'TIENG TRUNG',
+      gradient: 'from-rose-950 via-red-900 to-amber-950',
+      ring: 'border-amber-200/35 bg-amber-200/10',
+      glow: 'bg-amber-300/25',
+      primary: '中文',
+      secondary: 'pin yin',
+      accent: 'bg-amber-200/75',
+      marks: ['词汇', '阅读', 'HSK'],
+      image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=80',
+    };
+  }
+
+  if (text.includes('cap so cong') || text.includes('cap so') || text.includes('day so')) {
+    return {
+      badge: 'TOAN',
+      gradient: 'from-emerald-950 via-teal-950 to-slate-950',
+      ring: 'border-white/35 bg-white/10',
+      glow: 'bg-teal-300/25',
+      primary: 'u_n = u_1 + (n-1)d',
+      secondary: 'S_n = n(u_1 + u_n)/2',
+      accent: 'bg-teal-200/75',
+      marks: ['1, 3, 5, ...', 'd', 'S_n'],
+      image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=900&q=80',
+    };
+  }
+
+  if (text.includes('ham') || text.includes('dao ham') || text.includes('do thi')) {
+    return {
+      badge: 'TOAN',
+      gradient: 'from-blue-950 via-sky-950 to-slate-950',
+      ring: 'border-sky-200/35 bg-sky-200/10',
+      glow: 'bg-sky-300/25',
+      primary: 'y = f(x)',
+      secondary: "f'(x)",
+      accent: 'bg-sky-200/75',
+      marks: ['lim', 'max', 'min'],
+      image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=900&q=80',
+    };
+  }
+
+  return {
+    badge: 'TOAN',
+    gradient: 'from-emerald-950 via-teal-900 to-slate-950',
+    ring: 'border-white/30 bg-white/10',
+    glow: 'bg-emerald-300/25',
+    primary: 'CSCA',
+    secondary: 'Theory',
+    accent: 'bg-emerald-200/75',
+    marks: ['A -> B', 'x + y', 'note'],
+    image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=900&q=80',
+  };
 }
 
 function PDFModal({ material, onClose }: { material: Material; onClose: () => void }) {
@@ -126,6 +225,7 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
   const { t, language } = useLanguage();
   const dateLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN';
   const coverUrl = getMaterialCoverUrl(m);
+  const coverVisual = getMaterialCoverVisual(m);
 
   return (
     <div className="group cursor-pointer rounded-2xl border border-gray-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md" onClick={() => onView(m)}>
@@ -133,18 +233,45 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
         {coverUrl ? (
           <img src={coverUrl} alt={m.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" loading="lazy" />
         ) : (
-          <div className="flex h-full flex-col justify-between bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 p-4 text-white">
-            <div className="flex items-center justify-between text-xs font-black uppercase text-white/70">
-              <span>CSCA</span>
-              <FiBook size={18} />
+          <div className={`relative flex h-full flex-col justify-between overflow-hidden bg-gradient-to-br ${coverVisual.gradient} p-4 text-white`}>
+            <img
+              src={coverVisual.image}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-screen transition duration-300 group-hover:scale-[1.03]"
+              loading="lazy"
+            />
+            <div className={`absolute inset-0 bg-gradient-to-br ${coverVisual.gradient} opacity-80`} />
+            <div className={`absolute -right-10 -top-10 h-32 w-32 rounded-full blur-2xl ${coverVisual.glow}`} />
+            <div className="absolute inset-x-0 top-16 h-px bg-white/15" />
+            <div className="absolute bottom-12 left-0 right-0 h-px bg-white/10" />
+            <div className="relative z-10 flex items-center justify-between text-[10px] font-black uppercase tracking-wide text-white/75">
+              <span className="rounded-full bg-white/15 px-2 py-1">{coverVisual.badge}</span>
+              <FiBook size={17} />
             </div>
-            <div className="space-y-3 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/30 bg-white/15">
-                <FiBook size={28} />
+
+            <div className="relative z-10 space-y-3 text-center">
+              <div className={`mx-auto flex min-h-20 w-full max-w-[12rem] flex-col items-center justify-center rounded-2xl border px-3 py-3 shadow-2xl shadow-black/15 ${coverVisual.ring}`}>
+                <p className="max-w-full truncate font-mono text-[clamp(0.95rem,2.8vw,1.35rem)] font-black leading-tight text-white">
+                  {coverVisual.primary}
+                </p>
+                <p className="mt-1 max-w-full truncate font-mono text-[11px] font-semibold text-white/65">
+                  {coverVisual.secondary}
+                </p>
               </div>
-              <p className="line-clamp-4 text-base font-black leading-tight">{m.title}</p>
+              <p className="mx-auto line-clamp-3 max-w-[13rem] text-base font-black leading-tight drop-shadow-sm">{m.title}</p>
             </div>
-            <div className="h-1.5 rounded-full bg-white/35" />
+
+            <div className="relative z-10 space-y-2">
+              <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] font-bold text-white/65">
+                {coverVisual.marks.map(mark => (
+                  <span key={mark} className="truncate rounded-lg bg-white/10 px-1.5 py-1">{mark}</span>
+                ))}
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
+                <div className={`h-full w-2/3 rounded-full ${coverVisual.accent}`} />
+              </div>
+            </div>
           </div>
         )}
         {hasWebContent(m) && <span className="absolute left-2 top-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Web</span>}
