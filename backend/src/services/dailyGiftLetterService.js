@@ -1,14 +1,8 @@
 const db = require('../config/database');
-const aiService = require('./aiService');
-
-const GENERATING_SOURCE = 'generating';
-const POLL_ATTEMPTS = 16;
-const POLL_INTERVAL_MS = 500;
-const STALE_GENERATION_MS = 2 * 60 * 1000;
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const {
+  CURATED_DAILY_GIFT_SOURCE,
+  getCuratedDailyGiftLetter,
+} = require('./dailyGiftLetterBank');
 
 function getVietnamDateKey(date = new Date()) {
   try {
@@ -60,57 +54,24 @@ async function findLetter(giftDate) {
   return result.rows[0] || null;
 }
 
-async function getRecentLetters(giftDate) {
-  const result = await db.query(
-    `SELECT title, encouragement, study_reminder, blessing
-     FROM daily_gift_letters
-     WHERE gift_date < $1
-       AND COALESCE(source_model, '') <> $2
-     ORDER BY gift_date DESC
-     LIMIT 7`,
-    [giftDate, GENERATING_SOURCE],
-  );
-  return result.rows;
-}
-
-async function insertPlaceholder(giftDate) {
-  const fallback = aiService.getDailyGiftFallback(giftDate);
+async function upsertCuratedLetter(giftDate) {
+  const letter = getCuratedDailyGiftLetter(giftDate);
   const result = await db.query(
     `INSERT INTO daily_gift_letters (
        gift_date, title, greeting, encouragement, study_reminder,
        blessing, mood, source_model, raw_payload
      )
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
-     ON CONFLICT (gift_date) DO NOTHING
-     RETURNING *`,
-    [
-      giftDate,
-      fallback.title,
-      fallback.greeting,
-      fallback.encouragement,
-      fallback.study_reminder,
-      fallback.blessing,
-      fallback.mood,
-      GENERATING_SOURCE,
-      JSON.stringify({ status: GENERATING_SOURCE, giftDate }),
-    ],
-  );
-  return result.rows[0] || null;
-}
-
-async function saveGeneratedLetter(giftDate, letter) {
-  const result = await db.query(
-    `UPDATE daily_gift_letters
-     SET title = $2,
-         greeting = $3,
-         encouragement = $4,
-         study_reminder = $5,
-         blessing = $6,
-         mood = $7,
-         source_model = $8,
-         raw_payload = $9::jsonb,
-         updated_at = NOW()
-     WHERE gift_date = $1
+     ON CONFLICT (gift_date) DO UPDATE
+       SET title = EXCLUDED.title,
+           greeting = EXCLUDED.greeting,
+           encouragement = EXCLUDED.encouragement,
+           study_reminder = EXCLUDED.study_reminder,
+           blessing = EXCLUDED.blessing,
+           mood = EXCLUDED.mood,
+           source_model = EXCLUDED.source_model,
+           raw_payload = EXCLUDED.raw_payload,
+           updated_at = NOW()
      RETURNING *`,
     [
       giftDate,
@@ -127,48 +88,11 @@ async function saveGeneratedLetter(giftDate, letter) {
   return result.rows[0] || null;
 }
 
-async function generateAndStore(giftDate) {
-  const recentLetters = await getRecentLetters(giftDate);
-  const generated = await aiService.generateDailyGiftLetter(giftDate, { recentLetters });
-  const saved = await saveGeneratedLetter(giftDate, generated);
-  return mapLetter(saved) || mapLetter(await findLetter(giftDate));
-}
-
-function isGenerating(row) {
-  return row?.source_model === GENERATING_SOURCE;
-}
-
-function isStaleGenerating(row) {
-  if (!isGenerating(row)) return false;
-  const updatedAt = new Date(row.updated_at || row.created_at || 0).getTime();
-  return Number.isFinite(updatedAt) && Date.now() - updatedAt > STALE_GENERATION_MS;
-}
-
-async function waitForGeneratedLetter(giftDate) {
-  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-    await wait(POLL_INTERVAL_MS);
-    const row = await findLetter(giftDate);
-    if (row && !isGenerating(row)) return mapLetter(row);
-  }
-  return null;
-}
-
 async function getOrCreateDailyGiftLetter(giftDate = getVietnamDateKey()) {
-  let existing = await findLetter(giftDate);
-  if (existing && !isGenerating(existing)) return mapLetter(existing);
+  const existing = await findLetter(giftDate);
+  if (existing?.source_model === CURATED_DAILY_GIFT_SOURCE) return mapLetter(existing);
 
-  if (!existing) {
-    const inserted = await insertPlaceholder(giftDate);
-    if (inserted) return generateAndStore(giftDate);
-    existing = await findLetter(giftDate);
-  }
-
-  if (isStaleGenerating(existing)) {
-    return generateAndStore(giftDate);
-  }
-
-  const generated = await waitForGeneratedLetter(giftDate);
-  return generated || mapLetter(existing);
+  return mapLetter(await upsertCuratedLetter(giftDate));
 }
 
 async function hasOpened(userId, giftDate = getVietnamDateKey()) {

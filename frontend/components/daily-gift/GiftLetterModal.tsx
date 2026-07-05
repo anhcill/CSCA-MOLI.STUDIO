@@ -29,6 +29,10 @@ const DOODLES = [
   { Icon: FaRegSmileBeam, className: 'right-5 top-28 text-violet-300', rotate: 14 },
 ];
 
+function normalizeDisplayText(value?: string | null) {
+  return String(value || '').normalize('NFC').trim();
+}
+
 function GiftPetBadge() {
   return (
     <div className="pointer-events-none absolute -right-1 -top-9 z-20 h-20 w-20 rounded-[28px] border border-white/80 bg-white/75 shadow-xl shadow-rose-200/60 ring-4 ring-white/70 backdrop-blur sm:-right-5 sm:-top-12 sm:h-24 sm:w-24">
@@ -47,9 +51,13 @@ export default function GiftLetterModal({
   onAccept,
   onClose,
 }: GiftLetterModalProps) {
-  const greeting = studentName
+  const greeting = normalizeDisplayText(studentName
     ? `Gửi ${studentName} thương mến,`
-    : letter.greeting || 'Gửi bạn học viên chăm chỉ,';
+    : letter.greeting || 'Gửi bạn học viên chăm chỉ,');
+  const title = normalizeDisplayText(letter.title);
+  const encouragement = normalizeDisplayText(letter.encouragement);
+  const studyReminder = normalizeDisplayText(letter.study_reminder);
+  const blessing = normalizeDisplayText(letter.blessing);
 
   return (
     <motion.div
@@ -99,7 +107,7 @@ export default function GiftLetterModal({
           </div>
 
           <div className="space-y-4">
-            <p className="font-serif text-base font-semibold text-rose-500 sm:text-lg">
+            <p className="text-base font-semibold text-rose-500 sm:text-lg">
               {greeting}
             </p>
 
@@ -107,22 +115,26 @@ export default function GiftLetterModal({
               id="daily-gift-letter-title"
               className="max-w-[390px] text-xl font-black leading-tight text-slate-800 sm:text-3xl"
             >
-              {letter.title}
+              {title}
             </h2>
 
             <div className="h-px bg-gradient-to-r from-transparent via-rose-200 to-transparent" />
 
             <p className="text-[15px] font-medium leading-7 text-slate-600 sm:text-base">
-              {letter.encouragement}
+              {encouragement}
             </p>
 
-            <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-sm font-semibold leading-6 text-sky-800 shadow-sm">
-              {letter.study_reminder}
-            </div>
+            {studyReminder && (
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-sm font-semibold leading-6 text-sky-800 shadow-sm">
+                {studyReminder}
+              </div>
+            )}
 
-            <p className="text-sm font-bold leading-6 text-emerald-700 sm:text-[15px]">
-              {letter.blessing}
-            </p>
+            {blessing && (
+              <p className="text-sm font-bold leading-6 text-emerald-700 sm:text-[15px]">
+                {blessing}
+              </p>
+            )}
           </div>
         </div>
 
