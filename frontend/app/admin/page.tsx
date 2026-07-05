@@ -392,26 +392,26 @@ export default function AdminDashboard() {
                         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <h3 className="mb-4 text-base font-bold text-gray-900 dark:text-white">Người dùng tốn AI nhiều nhất</h3>
                             <div className="overflow-x-auto">
-                                <table className="min-w-full text-sm">
+                                <table className="min-w-full border-separate border-spacing-0 text-sm">
                                     <thead className="text-xs uppercase text-gray-400">
                                         <tr>
-                                            <th className="px-3 py-2 text-left">User</th>
-                                            <th className="px-3 py-2 text-left">Model / giá</th>
-                                            <th className="px-3 py-2 text-right">Token</th>
-                                            <th className="px-3 py-2 text-right">Cost</th>
+                                            <th className="border-b border-r border-gray-200 px-3 py-2 text-left dark:border-slate-700">User</th>
+                                            <th className="border-b border-r border-gray-200 px-3 py-2 text-left dark:border-slate-700">Model / giá</th>
+                                            <th className="border-b border-r border-gray-200 px-3 py-2 text-right dark:border-slate-700">Token</th>
+                                            <th className="border-b border-gray-200 px-3 py-2 text-right dark:border-slate-700">Cost</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                                         {aiUsage.perUser.slice(0, 12).map(row => (
                                             <tr key={`${row.user_id || 'unknown'}-${row.email || ''}`}>
-                                                <td className="px-3 py-3">
+                                                <td className="border-b border-r border-gray-100 px-3 py-3 align-top dark:border-slate-800">
                                                     <p className="font-bold text-gray-900 dark:text-white">{row.full_name || 'Không rõ user'}</p>
                                                     <p className="text-xs text-gray-400">{row.email || `user_id: ${row.user_id || 'N/A'}`}</p>
                                                 </td>
-                                                <td className="px-3 py-3">
+                                                <td className="border-b border-r border-gray-100 px-3 py-3 align-top dark:border-slate-800">
                                                     <div className="space-y-2">
                                                         {(row.models || []).slice(0, 3).map(model => (
-                                                            <div key={`${row.user_id || 'unknown'}-${model.provider}-${model.model}`} className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-slate-800">
+                                                            <div key={`${row.user_id || 'unknown'}-${model.provider}-${model.model}`} className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
                                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                                     <span className="max-w-[220px] truncate text-xs font-black text-gray-800 dark:text-slate-100" title={model.model}>
                                                                         {model.model}
@@ -431,12 +431,12 @@ export default function AdminDashboard() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-3 text-right font-semibold">{formatTokens(row.total_tokens)}</td>
-                                                <td className="px-3 py-3 text-right font-black text-rose-600">{formatUsd(row.cost_usd)}</td>
+                                                <td className="border-b border-r border-gray-100 px-3 py-3 text-right align-top font-semibold dark:border-slate-800">{formatTokens(row.total_tokens)}</td>
+                                                <td className="border-b border-gray-100 px-3 py-3 text-right align-top font-black text-rose-600 dark:border-slate-800">{formatUsd(row.cost_usd)}</td>
                                             </tr>
                                         ))}
                                         {!aiLoading && aiUsage.perUser.length === 0 && (
-                                            <tr><td colSpan={4} className="px-3 py-8 text-center text-gray-400">Chưa có log AI trong khoảng này.</td></tr>
+                                            <tr><td colSpan={4} className="border-b border-gray-100 px-3 py-8 text-center text-gray-400 dark:border-slate-800">Chưa có log AI trong khoảng này.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
