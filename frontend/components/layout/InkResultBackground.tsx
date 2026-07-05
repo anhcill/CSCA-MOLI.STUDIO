@@ -22,31 +22,35 @@ type InkScoreMarkProps = {
 
 export function InkScoreMark({ value, className = '' }: InkScoreMarkProps) {
   const displayValue = typeof value === 'number' ? value.toFixed(1) : value;
-  const scoreChars = String(displayValue).split('');
-  const isLongScore = scoreChars.length >= 5;
+  const scoreText = String(displayValue);
+  const [wholeScore, decimalScore = ''] = scoreText.split('.');
+  const hasDecimal = scoreText.includes('.');
+  const isLongScore = scoreText.length >= 5;
+  const isMediumScore = scoreText.length >= 4;
   const scoreSizeClass =
     isLongScore
-      ? 'text-[4.8rem] sm:text-[5.8rem]'
-      : scoreChars.length >= 4
-        ? 'text-[5.8rem] sm:text-[6.8rem]'
-        : 'text-[6.6rem] sm:text-[7.6rem]';
-  const scoreCharClass = (char: string) => {
-    if (char === '.') {
-      return isLongScore
-        ? '-ml-2 mr-1 inline-block translate-y-1 sm:-ml-3 sm:mr-1.5'
-        : '-ml-5 mr-1.5 inline-block translate-y-1 sm:-ml-7 sm:mr-2';
-    }
-
-    return isLongScore ? '-mx-0.5 inline-block' : '-mx-1 inline-block sm:-mx-1.5';
-  };
+      ? 'text-[4.25rem] sm:text-[5.1rem]'
+      : isMediumScore
+        ? 'text-[5rem] sm:text-[6rem]'
+        : 'text-[6.15rem] sm:text-[7.25rem]';
+  const digitSpacingClass = isLongScore
+    ? 'tracking-[0.015em]'
+    : isMediumScore
+      ? 'tracking-[-0.015em]'
+      : 'tracking-[-0.035em]';
+  const dotClass = isLongScore
+    ? 'mx-1.5 mb-[0.22em] h-2.5 w-2.5 sm:h-3 sm:w-3'
+    : isMediumScore
+      ? 'mx-1.5 mb-[0.2em] h-3 w-3 sm:mx-2 sm:h-3.5 sm:w-3.5'
+      : 'mx-1 mb-[0.18em] h-3.5 w-3.5 sm:mx-1.5 sm:h-4 sm:w-4';
 
   return (
     <div
       className={`relative mx-auto my-2 flex h-[118px] w-[270px] max-w-full items-center justify-center sm:h-[136px] sm:w-[320px] ${className}`}
       aria-label={`${displayValue} diem`}
-      >
+    >
       <div
-        className={`relative z-10 flex items-end justify-center whitespace-nowrap ${scoreSizeClass} font-black italic leading-none text-[#d52a1e]`}
+        className={`relative z-10 flex items-end justify-center whitespace-nowrap ${scoreSizeClass} ${digitSpacingClass} font-black italic leading-none text-[#d52a1e]`}
         style={{
           fontFamily: 'var(--font-scarecrow)',
           textShadow: '1px 2px 0 rgba(161,25,19,0.24), 2px 3px 0 rgba(236,82,67,0.08)',
@@ -54,14 +58,13 @@ export function InkScoreMark({ value, className = '' }: InkScoreMarkProps) {
         }}
         aria-hidden="true"
       >
-        {scoreChars.map((char, index) => (
+        <span>{wholeScore}</span>
+        {hasDecimal && (
           <span
-            key={`${char}-${index}`}
-            className={scoreCharClass(char)}
-          >
-            {char}
-          </span>
-        ))}
+            className={`inline-block flex-none rounded-[45%] bg-[#d52a1e] shadow-[1px_2px_0_rgba(161,25,19,0.24),2px_3px_0_rgba(236,82,67,0.08)] ${dotClass}`}
+          />
+        )}
+        {decimalScore && <span>{decimalScore}</span>}
       </div>
 
       <div

@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import type { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
+import InkResultBackground from '@/components/layout/InkResultBackground';
 import RichMathText from '@/components/common/RichMathText';
 import AiAnalyzingOverlay from '@/components/common/AiAnalyzingOverlay';
 import { useExamOffline } from '@/hooks/useExamOffline';
@@ -666,7 +667,8 @@ export default function ExamPage() {
     const canStartOfficialExam = !isOfficialExam || (isApproved && hasAssignedRoom);
 
     return (
-      <div className="min-h-screen bg-slate-50 px-4 py-4 sm:py-6">
+      <InkResultBackground>
+      <div className="min-h-screen px-4 py-4 sm:py-6">
         <div className="mx-auto max-w-6xl">
           <button
             onClick={() => router.back()}
@@ -894,6 +896,7 @@ export default function ExamPage() {
           </div>
         </div>
       </div>
+      </InkResultBackground>
     );
   }
 

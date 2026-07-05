@@ -26,11 +26,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeState(stored);
       document.documentElement.classList.toggle('dark', stored === 'dark');
     } else {
-      // Respect system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const initial = prefersDark ? 'dark' : 'light';
-      setThemeState(initial);
-      document.documentElement.classList.toggle('dark', initial === 'dark');
+      setThemeState('light');
+      document.documentElement.classList.remove('dark');
     }
   }, []);
 
