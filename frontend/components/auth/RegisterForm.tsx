@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { FiArrowRight, FiLock, FiMail, FiUser } from 'react-icons/fi';
 import { register, googleAuth, getCurrentUser } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getDefaultAdminRoute } from '@/lib/utils/permissions';
@@ -32,7 +33,9 @@ export default function RegisterForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
-  const inputBaseClass = 'w-full px-4 py-2.5 border rounded-lg bg-white dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none';
+
+  const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const sanitized = sanitizeInput(value);
@@ -96,7 +99,9 @@ export default function RegisterForm() {
             effectiveUser = me.data.user;
             setAuth(effectiveUser, token, refreshToken);
           }
-        } catch { /* Keep fallback */ }
+        } catch {
+          /* Keep fallback */
+        }
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
@@ -127,7 +132,9 @@ export default function RegisterForm() {
             effectiveUser = me.data.user;
             setAuth(effectiveUser, token, refreshToken);
           }
-        } catch { /* Keep fallback */ }
+        } catch {
+          /* Keep fallback */
+        }
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
@@ -159,105 +166,125 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="w-full max-w-md">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.registerTitle')}</h1>
-        <p className="text-gray-600 dark:text-slate-300">{t('auth.registerSubtitle')}</p>
+    <div className="auth-login-form w-full max-w-md">
+      <div className="mb-7 text-center">
+        <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-gradient-to-r from-[#df1f24] to-[#f2a34a]" />
+        <h1 className="text-3xl font-black tracking-tight text-[#2d2926] sm:text-4xl">{t('auth.registerTitle')}</h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm font-semibold leading-relaxed text-[#3f352f]">
+          {t('auth.registerSubtitle')}
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {errors.general && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{errors.general}</div>
+          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">{errors.general}</div>
         )}
 
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.username')}</label>
-          <input
-            type="text"
-            id="username"
-            name="username"
-            autoComplete="username"
-            value={formData.username}
-            onChange={handleChange}
-            disabled={isSubmitting}
-            className={`${inputBaseClass} ${errors.username ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="username123"
-          />
+          <label htmlFor="username" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.username')}</label>
+          <div className="relative">
+            <FiUser className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="text"
+              id="username"
+              name="username"
+              autoComplete="username"
+              value={formData.username}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className={`${inputBaseClass} ${errors.username ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="username123"
+            />
+          </div>
           {errors.username && <p className="mt-1.5 text-sm text-red-600">{errors.username}</p>}
         </div>
 
         <div>
-          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.fullName')} <span className="text-gray-400 dark:text-slate-500">({t('auth.optional')})</span></label>
-          <input
-            type="text"
-            id="full_name"
-            name="full_name"
-            autoComplete="name"
-            value={formData.full_name}
-            onChange={handleChange}
-            disabled={isSubmitting}
-            className={`${inputBaseClass} border-gray-300 dark:border-slate-700 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder={t('auth.fullNamePlaceholder')}
-          />
+          <label htmlFor="full_name" className="mb-2 block text-sm font-black text-[#342a24]">
+            {t('auth.fullName')} <span className="font-bold text-[#6d5b4f]">({t('auth.optional')})</span>
+          </label>
+          <div className="relative">
+            <FiUser className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="text"
+              id="full_name"
+              name="full_name"
+              autoComplete="name"
+              value={formData.full_name}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className={`${inputBaseClass} border-white/80`}
+              placeholder={t('auth.fullNamePlaceholder')}
+            />
+          </div>
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.email')}</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            autoComplete="email"
-            value={formData.email}
-            onChange={handleChange}
-            disabled={isSubmitting}
-            className={`${inputBaseClass} ${errors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="example@email.com"
-          />
+          <label htmlFor="email" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.email')}</label>
+          <div className="relative">
+            <FiMail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="email"
+              id="email"
+              name="email"
+              autoComplete="email"
+              value={formData.email}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className={`${inputBaseClass} ${errors.email ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="example@email.com"
+            />
+          </div>
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.password')}</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            autoComplete="new-password"
-            value={formData.password}
-            onChange={handleChange}
-            disabled={isSubmitting}
-            className={`${inputBaseClass} ${errors.password ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="••••••••"
-          />
+          <label htmlFor="password" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.password')}</label>
+          <div className="relative">
+            <FiLock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autoComplete="new-password"
+              value={formData.password}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className={`${inputBaseClass} ${errors.password ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="••••••••"
+            />
+          </div>
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
           <PasswordStrengthIndicator password={formData.password} />
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.confirmPassword')}</label>
-          <input
-            type="password"
-            id="confirmPassword"
-            name="confirmPassword"
-            autoComplete="new-password"
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            disabled={isSubmitting}
-            className={`${inputBaseClass} ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="••••••••"
-          />
+          <label htmlFor="confirmPassword" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.confirmPassword')}</label>
+          <div className="relative">
+            <FiLock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="password"
+              id="confirmPassword"
+              name="confirmPassword"
+              autoComplete="new-password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className={`${inputBaseClass} ${errors.confirmPassword ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="••••••••"
+            />
+          </div>
           {errors.confirmPassword && <p className="mt-1.5 text-sm text-red-600">{errors.confirmPassword}</p>}
         </div>
 
-        <div className="flex items-start">
-          <input type="checkbox" id="terms" className="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
-          <label htmlFor="terms" className="ml-2 text-sm text-gray-600 dark:text-slate-300">
+        <div className="flex items-start rounded-2xl border border-white/60 bg-white/35 p-3">
+          <input type="checkbox" id="terms" className="mt-0.5 h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" required />
+          <label htmlFor="terms" className="ml-2 text-sm font-semibold leading-relaxed text-[#44372f]">
             {t('auth.registerConsentPrefix')}{' '}
             <button
               type="button"
               onClick={() => { setTermsModalType('terms'); setShowTermsModal(true); }}
-              className="text-indigo-600 hover:underline"
+              className="font-bold text-[#bd111c] hover:text-[#8d0d14] hover:underline"
             >
               {t('auth.terms')}
             </button>
@@ -265,7 +292,7 @@ export default function RegisterForm() {
             <button
               type="button"
               onClick={() => { setTermsModalType('privacy'); setShowTermsModal(true); }}
-              className="text-indigo-600 hover:underline"
+              className="font-bold text-[#bd111c] hover:text-[#8d0d14] hover:underline"
             >
               {t('auth.privacy')}
             </button>
@@ -283,17 +310,22 @@ export default function RegisterForm() {
         <button
           type="submit"
           disabled={isSubmitting || (isTurnstileEnabled && !turnstileToken)}
-          className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (
             <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               {t('auth.registering')}
             </span>
-          ) : t('auth.createAccount')}
+          ) : (
+            <>
+              {t('auth.createAccount')}
+              <FiArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+            </>
+          )}
         </button>
 
         <SocialAuthButtons
@@ -306,8 +338,8 @@ export default function RegisterForm() {
         />
       </form>
 
-      <p className="mt-6 text-center text-sm text-gray-600 dark:text-slate-300">
-        {t('auth.haveAccount')} <Link href="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.loginNow')}</Link>
+      <p className="mt-6 text-center text-sm font-semibold text-[#44372f]">
+        {t('auth.haveAccount')} <Link href="/login" className="font-black text-[#bd111c] hover:text-[#8d0d14]">{t('auth.loginNow')}</Link>
       </p>
 
       <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} type={termsModalType} />

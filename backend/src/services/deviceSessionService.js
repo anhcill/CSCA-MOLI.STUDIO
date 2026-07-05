@@ -388,6 +388,20 @@ class DeviceSessionService {
     return sessions.rows.length;
   }
 
+  static async removeAllSessions() {
+    const sessions = await db.query(
+      `DELETE FROM user_sessions
+       WHERE expires_at > NOW()
+       RETURNING jti, user_id, expires_at`,
+    );
+
+    if (sessions.rows.length > 0) {
+      await this.blacklistSessions(sessions.rows);
+    }
+
+    return sessions.rows.length;
+  }
+
   static async cleanupExpired() {
     await db.query(`DELETE FROM user_sessions WHERE expires_at < NOW()`);
   }

@@ -841,6 +841,52 @@ async function runOptimizations() {
       ON user_sessions(user_id, device_type, expires_at, last_active DESC)
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_maintenance_events (
+        event_key VARCHAR(120) PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    const forceLogoutEventKey = "force_logout_auth_ui_2026_07_05";
+    const forceLogoutApplied = await pool.query(
+      `SELECT 1
+       FROM app_maintenance_events
+       WHERE event_key = $1
+       LIMIT 1`,
+      [forceLogoutEventKey],
+    );
+
+    if (forceLogoutApplied.rows.length === 0) {
+      const revoked = await pool.query(`
+        WITH removed AS (
+          DELETE FROM user_sessions
+          WHERE expires_at > NOW()
+          RETURNING jti, user_id, expires_at
+        ),
+        blacklisted AS (
+          INSERT INTO token_blacklist (token_jti, user_id, expires_at)
+          SELECT jti, user_id, expires_at
+          FROM removed
+          ON CONFLICT (token_jti) DO NOTHING
+          RETURNING 1
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM removed) AS revoked_count,
+          (SELECT COUNT(*)::int FROM blacklisted) AS blacklisted_count
+      `);
+      const result = revoked.rows[0] || {};
+      console.log(
+        `Force logout event applied: revoked ${result.revoked_count || 0} active sessions, blacklisted ${result.blacklisted_count || 0} tokens.`,
+      );
+      await pool.query(
+        `INSERT INTO app_maintenance_events (event_key)
+         VALUES ($1)
+         ON CONFLICT (event_key) DO NOTHING`,
+        [forceLogoutEventKey],
+      );
+    }
+
     // Subscription tier device limits
     await pool.query(`
       ALTER TABLE users

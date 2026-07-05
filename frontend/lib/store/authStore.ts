@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '../api/auth';
-import axios, { clearTokenCache } from '../utils/axios';
+import axios, { clearStoredAuth } from '../utils/axios';
 
 // Decode JWT payload (base64url)
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -111,11 +111,7 @@ export const useAuthStore = create<AuthState>()(
           }).catch(() => {});
         }
 
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('token');
-          sessionStorage.removeItem('refreshToken');
-        }
-        clearTokenCache();
+        clearStoredAuth();
         set({
           user: null,
           token: null,

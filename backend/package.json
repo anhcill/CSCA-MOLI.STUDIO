@@ -15,6 +15,7 @@
     "db:forum:migrate": "node scripts/apply_migration.js ../../database/migrations/006_add_forum_moderation_fields.sql",
     "db:roadmap:migrate": "node scripts/apply_migration.js ../../database/migrations/007_create_roadmap_milestones.sql",
     "db:exam-schedule:migrate": "node scripts/apply_migration.js ../../database/migrations/008_create_exam_schedule_logs.sql",
+    "auth:force-logout": "node scripts/force_logout_all_sessions.js",
     "test:forum-rbac": "node test_forum_rbac.js",
     "test:roadmap-rbac": "node test_roadmap_rbac.js",
     "test:exam-schedule-logs": "node test_exam_schedule_logs.js"

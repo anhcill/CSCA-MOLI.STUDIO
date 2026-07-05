@@ -92,7 +92,7 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
         ref={containerRef}
         className={disabled ? 'pointer-events-none opacity-60' : undefined}
       />
-      <p className="text-xs text-gray-500">
+      <p className="text-xs font-semibold text-[#5a4538]">
         Xác nhận Cloudflare để bảo vệ tài khoản khỏi spam.
       </p>
     </div>

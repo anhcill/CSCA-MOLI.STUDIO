@@ -492,14 +492,14 @@ export default function LoginForm() {
     }
   };
 
-  const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-slate-400 focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
+  const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
   return (
     <div className="auth-login-form w-full max-w-md">
       <div className="mb-7 text-center">
         <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-gradient-to-r from-[#df1f24] to-[#f0b45a]" />
         <h1 className="text-3xl font-black tracking-tight text-[#2d2926] sm:text-4xl">Chào mừng trở lại!</h1>
-        <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#6a5c53]">
+        <p className="mx-auto mt-3 max-w-sm text-sm font-semibold leading-relaxed text-[#3f352f]">
           Đăng nhập để tiếp tục hành trình chinh phục học bổng Trung Quốc
         </p>
       </div>
@@ -826,7 +826,7 @@ export default function LoginForm() {
         )}
 
         <div>
-          <label htmlFor="email" className="mb-2 block text-sm font-bold text-[#493d35]">{t('auth.email')}</label>
+          <label htmlFor="email" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.email')}</label>
           <div className="relative">
             <FiMail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
             <input
@@ -845,7 +845,7 @@ export default function LoginForm() {
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-2 block text-sm font-bold text-[#493d35]">{t('auth.password')}</label>
+          <label htmlFor="password" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.password')}</label>
           <div className="relative">
             <FiLock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
             <input
@@ -873,7 +873,7 @@ export default function LoginForm() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" />
-            <span className="ml-2 text-sm text-[#675950]">{t('auth.remember')}</span>
+            <span className="ml-2 text-sm font-bold text-[#40352e]">{t('auth.remember')}</span>
           </label>
           <Link href="/forgot-password" className="text-sm font-semibold text-[#bd111c] hover:text-[#8d0d14]">{t('auth.forgot')}</Link>
         </div>
@@ -912,7 +912,7 @@ export default function LoginForm() {
 
       {/* Terms and Privacy Links */}
       <div className="mt-6 space-y-2 border-t border-white/70 pt-5">
-        <p className="text-center text-xs leading-relaxed text-[#6b5b51]">
+        <p className="text-center text-xs font-semibold leading-relaxed text-[#44372f]">
           {t('auth.loginConsentPrefix')}{' '}
           <button
             type="button"
@@ -933,7 +933,7 @@ export default function LoginForm() {
         </p>
       </div>
 
-      <p className="mt-6 text-center text-sm text-[#675950]">
+      <p className="mt-6 text-center text-sm font-semibold text-[#44372f]">
         Chưa có tài khoản? <Link href="/register" className="font-black text-[#bd111c] hover:text-[#8d0d14]">{t('auth.registerNow')}</Link>
       </p>
 

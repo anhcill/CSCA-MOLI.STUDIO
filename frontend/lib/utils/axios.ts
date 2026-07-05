@@ -7,6 +7,30 @@ let cachedToken: string | null = null;
 let tokenLastChecked = 0;
 const TOKEN_CACHE_DURATION = 5000; // 5 seconds
 let lastOfflineAuthToastAt = 0;
+const AUTH_REVOKED_CODES = new Set(['SESSION_REVOKED', 'TOKEN_REVOKED', 'ADMIN_MFA_REQUIRED']);
+
+export function clearTokenCache() {
+  cachedToken = null;
+  tokenLastChecked = 0;
+}
+
+export function clearStoredAuth() {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('user');
+    localStorage.removeItem('auth-storage');
+  }
+  clearTokenCache();
+}
+
+function redirectToLogin() {
+  if (typeof window === 'undefined') return;
+  clearStoredAuth();
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
 
 function isJwtExpired(token: string | null) {
   if (!token) return false;
@@ -64,6 +88,7 @@ axiosInstance.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const responseCode = error.response?.data?.code;
 
     // ── Offline guard: never logout when no network ──
     if (!error.response && typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -74,8 +99,13 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    if (error.response?.status === 401 && AUTH_REVOKED_CODES.has(responseCode)) {
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
     // If token expired
-    if (error.response?.status === 401 && error.response?.data?.code === 'TOKEN_EXPIRED' && !originalRequest._retry) {
+    if (error.response?.status === 401 && responseCode === 'TOKEN_EXPIRED' && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
@@ -103,12 +133,7 @@ axiosInstance.interceptors.response.use(
           return Promise.reject(refreshError);
         }
         // Online but refresh truly failed → logout
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('refreshToken');
-        sessionStorage.removeItem('user');
-        cachedToken = null;
-        tokenLastChecked = 0;
-        window.location.href = '/login';
+        redirectToLogin();
         return Promise.reject(refreshError);
       }
     }
@@ -116,11 +141,5 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Export function to clear token cache (call this on logout)
-export const clearTokenCache = () => {
-  cachedToken = null;
-  tokenLastChecked = 0;
-};
 
 export default axiosInstance;

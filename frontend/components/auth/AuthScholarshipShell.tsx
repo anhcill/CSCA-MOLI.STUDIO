@@ -1,9 +1,9 @@
-import LoginForm from '@/components/auth/LoginForm';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { FaGraduationCap } from 'react-icons/fa';
 import { FiBarChart2, FiBookOpen, FiEdit3, FiHome, FiUsers } from 'react-icons/fi';
 
-const LOGIN_BG_IMAGE = '/images/auth/csca-scholarship-bg.png?v=20260705';
+const AUTH_BG_IMAGE = '/images/auth/csca-scholarship-bg.png';
 
 const featureBadges = [
   { icon: FaGraduationCap, label: 'CSC' },
@@ -19,7 +19,13 @@ const stats = [
   { icon: FiEdit3, value: 'Thi thử', label: 'Luyện đề online', desc: 'Ôn thi thông minh' },
 ];
 
-export default function LoginPage() {
+interface AuthScholarshipShellProps {
+  children: ReactNode;
+  showQuote?: boolean;
+  wideCard?: boolean;
+}
+
+export default function AuthScholarshipShell({ children, showQuote = true, wideCard = false }: AuthScholarshipShellProps) {
   return (
     <main className="auth-login-page relative min-h-[100dvh] overflow-x-hidden overflow-y-auto bg-[#f8efe5] text-[#2f2926]">
       <style>{`
@@ -45,22 +51,6 @@ export default function LoginPage() {
           transition: background-color 9999s ease-out 0s;
         }
 
-	        @media (min-width: 1024px) {
-	          .auth-login-page {
-	            min-height: 100dvh;
-	            overflow-x: hidden;
-	            overflow-y: auto;
-	          }
-
-	          .auth-login-shell {
-	            width: 133.333333%;
-	            min-height: 133.333333dvh !important;
-	            transform: scale(0.75);
-	            transform-origin: top center;
-	          }
-	        }
-
-        /* ── Falling petal animation ── */
         @keyframes petalFall {
           0% { transform: translateY(-10vh) rotate(0deg) scale(1); opacity: 0; }
           10% { opacity: 1; }
@@ -111,18 +101,62 @@ export default function LoginPage() {
         .petal:nth-child(23) { left: 35%; animation: petalFall 11s linear 2s infinite; font-size: 1.3rem; z-index: 20; }
         .petal:nth-child(24) { left: 75%; animation: petalFall 12s linear 0.5s infinite; font-size: 1.25rem; z-index: 20; }
 
-        /* ── Lantern gentle swing ── */
-        @keyframes lanternSwing {
-          0%, 100% { transform: rotate(-3deg); }
-          50% { transform: rotate(3deg); }
+        @media (min-width: 1024px) {
+          .auth-login-page {
+            min-height: 100dvh;
+            overflow-x: hidden;
+            overflow-y: auto;
+          }
+
+          .auth-login-shell {
+            width: 133.333333% !important;
+            min-height: 133.333333dvh !important;
+            gap: 1.75rem !important;
+            padding-top: 1.5rem !important;
+            padding-bottom: 1.5rem !important;
+            transform: scale(0.75) !important;
+            transform-origin: top center !important;
+          }
+
+          .auth-login-hero {
+            min-height: 570px !important;
+          }
+
+          .auth-login-card {
+            max-width: 450px !important;
+            padding: 2rem 2.25rem !important;
+            border-radius: 1.75rem !important;
+          }
+
+          .auth-login-form > div:first-child {
+            margin-bottom: 1.75rem !important;
+          }
+
+          .auth-login-form > div:first-child h1 {
+            font-size: 2.25rem !important;
+            line-height: 1.1 !important;
+          }
+
+          .auth-login-form > div:first-child p {
+            margin-top: 0.75rem !important;
+            font-size: 0.875rem !important;
+          }
+
+          .auth-login-form form > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 1rem !important;
+          }
+
+          .auth-login-input {
+            padding-top: 0.875rem !important;
+            padding-bottom: 0.875rem !important;
+          }
+
+          .auth-login-form button[type="submit"] {
+            padding-top: 0.875rem !important;
+            padding-bottom: 0.875rem !important;
+          }
         }
 
-        .auth-lantern {
-          animation: lanternSwing 4s ease-in-out infinite;
-          transform-origin: top center;
-        }
-
-        /* ── Compact layout for shorter viewports ── */
         @media (min-width: 1024px) and (max-height: 820px) {
           .auth-login-shell {
             min-height: 100dvh !important;
@@ -133,97 +167,6 @@ export default function LoginPage() {
 
           .auth-login-hero {
             min-height: calc(100dvh - 1.5rem) !important;
-          }
-
-          .auth-login-logo {
-            margin-bottom: 1rem !important;
-          }
-
-          .auth-login-logo-mark {
-            width: 2.6rem !important;
-            height: 2.6rem !important;
-            border-radius: 0.9rem !important;
-            font-size: 1.25rem !important;
-          }
-
-          .auth-login-logo-text {
-            font-size: 1.65rem !important;
-          }
-
-          .auth-login-title {
-            font-size: clamp(2.45rem, 3.55vw, 4.05rem) !important;
-            line-height: 1.02 !important;
-          }
-
-          .auth-login-divider {
-            margin-top: 1rem !important;
-            margin-bottom: 1rem !important;
-          }
-
-          .auth-login-divider svg {
-            width: 1.55rem !important;
-            height: 1.55rem !important;
-          }
-
-          .auth-login-subtitle {
-            max-width: 35rem !important;
-            font-size: clamp(1.05rem, 1.35vw, 1.35rem) !important;
-          }
-
-	          .auth-feature-row {
-	            margin-top: 0.75rem !important;
-	            gap: 0.75rem !important;
-	          }
-
-          .auth-feature-badge {
-            min-height: 3.25rem !important;
-            min-width: 7.25rem !important;
-            border-radius: 1rem !important;
-            padding-left: 0.85rem !important;
-            padding-right: 0.85rem !important;
-            font-size: 0.95rem !important;
-          }
-
-          .auth-feature-badge svg {
-            width: 1.15rem !important;
-            height: 1.15rem !important;
-          }
-
-	          .auth-stat-panel {
-	            margin-top: 1.35rem !important;
-	            padding: 0.85rem !important;
-	            border-radius: 1.35rem !important;
-	            transform: translateY(0.35rem);
-	          }
-
-          .auth-stat-item {
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-          }
-
-          .auth-stat-icon {
-            width: 2.65rem !important;
-            height: 2.65rem !important;
-            margin-bottom: 0.35rem !important;
-          }
-
-          .auth-stat-icon svg {
-            width: 1.2rem !important;
-            height: 1.2rem !important;
-          }
-
-          .auth-stat-value {
-            font-size: 1.55rem !important;
-          }
-
-          .auth-stat-label {
-            margin-top: 0.2rem !important;
-            font-size: 0.95rem !important;
-          }
-
-          .auth-stat-desc {
-            margin-top: 0.1rem !important;
-            font-size: 0.75rem !important;
           }
 
           .auth-login-card {
@@ -259,56 +202,16 @@ export default function LoginPage() {
             padding-top: 0.82rem !important;
             padding-bottom: 0.82rem !important;
           }
-
-          .auth-login-quote {
-            display: none !important;
-          }
         }
 
         @media (min-width: 1024px) and (max-height: 700px) {
-          .auth-login-shell {
-            gap: 0.85rem !important;
-            padding-top: 0.5rem !important;
-            padding-bottom: 0.5rem !important;
-          }
-
-	          .auth-login-logo {
-	            margin-bottom: 0.5rem !important;
-	          }
-
-          .auth-login-title {
-            font-size: clamp(2rem, 3vw, 3.2rem) !important;
-          }
-
-          .auth-login-divider {
-            margin-top: 0.6rem !important;
-            margin-bottom: 0.6rem !important;
-          }
-
-          .auth-login-subtitle {
-            font-size: 0.95rem !important;
-          }
-
-          .auth-feature-row,
-          .auth-stat-panel {
-            display: none !important;
-          }
-
           .auth-login-card {
             max-width: 25rem !important;
             padding: 1.1rem 1.6rem !important;
           }
 
-          .auth-login-form > div:first-child {
-            margin-bottom: 0.8rem !important;
-          }
-
           .auth-login-form > div:first-child h1 {
             font-size: 1.65rem !important;
-          }
-
-          .auth-login-form > div:first-child p {
-            font-size: 0.75rem !important;
           }
 
           .auth-login-form form > :not([hidden]) ~ :not([hidden]) {
@@ -320,176 +223,36 @@ export default function LoginPage() {
             padding-bottom: 0.58rem !important;
           }
 
-	          .auth-login-form button[type="submit"] {
-	            padding-top: 0.66rem !important;
-	            padding-bottom: 0.66rem !important;
-	          }
-	        }
+          .auth-login-form button[type="submit"] {
+            padding-top: 0.66rem !important;
+            padding-bottom: 0.66rem !important;
+          }
+        }
 
-	        @media (min-width: 1024px) {
-	          .auth-login-shell {
-	            width: 133.333333% !important;
-	            min-height: 133.333333dvh !important;
-	            gap: 1.75rem !important;
-	            padding-top: 1.5rem !important;
-	            padding-bottom: 1.5rem !important;
-	            transform: scale(0.75) !important;
-	            transform-origin: top center !important;
-	          }
+        .auth-register-card {
+          max-width: 520px !important;
+        }
 
-	          .auth-login-hero {
-	            min-height: 570px !important;
-	          }
+        .auth-register-card .auth-login-form {
+          max-width: none !important;
+        }
+      `}</style>
 
-	          .auth-login-logo {
-	            margin-bottom: 2rem !important;
-	          }
-
-	          .auth-login-logo-mark {
-	            width: 3rem !important;
-	            height: 3rem !important;
-	            border-radius: 1rem !important;
-	            font-size: 1.5rem !important;
-	          }
-
-	          .auth-login-logo-text {
-	            font-size: 1.875rem !important;
-	          }
-
-	          .auth-login-title {
-	            font-size: clamp(2.8rem, 4vw, 4.9rem) !important;
-	            line-height: 1.08 !important;
-	          }
-
-	          .auth-login-divider {
-	            margin-top: 1.75rem !important;
-	            margin-bottom: 1.75rem !important;
-	          }
-
-	          .auth-login-divider svg {
-	            width: 2rem !important;
-	            height: 2rem !important;
-	          }
-
-	          .auth-login-subtitle {
-	            max-width: 42rem !important;
-	            font-size: clamp(1.35rem, 1.85vw, 2rem) !important;
-	          }
-
-	          .auth-feature-row {
-	            display: flex !important;
-	            margin-top: 1.25rem !important;
-	            gap: 1rem !important;
-	          }
-
-	          .auth-feature-badge {
-	            min-height: 4rem !important;
-	            min-width: 8rem !important;
-	            border-radius: 1rem !important;
-	            padding-left: 1rem !important;
-	            padding-right: 1rem !important;
-	            font-size: 1rem !important;
-	          }
-
-	          .auth-feature-badge svg {
-	            width: 1.5rem !important;
-	            height: 1.5rem !important;
-	          }
-
-	          .auth-stat-panel {
-	            display: block !important;
-	            margin-top: auto !important;
-	            padding: 1.25rem !important;
-	            border-radius: 1.75rem !important;
-	            transform: translateY(0.75rem) !important;
-	          }
-
-	          .auth-stat-item {
-	            padding-left: 1.5rem !important;
-	            padding-right: 1.5rem !important;
-	          }
-
-	          .auth-stat-icon {
-	            width: 3.5rem !important;
-	            height: 3.5rem !important;
-	            margin-bottom: 0.75rem !important;
-	          }
-
-	          .auth-stat-icon svg {
-	            width: 1.5rem !important;
-	            height: 1.5rem !important;
-	          }
-
-	          .auth-stat-value {
-	            font-size: 1.875rem !important;
-	          }
-
-	          .auth-stat-label {
-	            margin-top: 0.5rem !important;
-	            font-size: 1.125rem !important;
-	          }
-
-	          .auth-stat-desc {
-	            margin-top: 0.25rem !important;
-	            font-size: 0.875rem !important;
-	          }
-
-	          .auth-login-card {
-	            max-width: 450px !important;
-	            padding: 2rem 2.25rem !important;
-	            border-radius: 1.75rem !important;
-	          }
-
-	          .auth-login-form > div:first-child {
-	            margin-bottom: 1.75rem !important;
-	          }
-
-	          .auth-login-form > div:first-child h1 {
-	            font-size: 2.25rem !important;
-	            line-height: 1.1 !important;
-	          }
-
-	          .auth-login-form > div:first-child p {
-	            margin-top: 0.75rem !important;
-	            font-size: 0.875rem !important;
-	          }
-
-	          .auth-login-form form > :not([hidden]) ~ :not([hidden]) {
-	            margin-top: 1rem !important;
-	          }
-
-	          .auth-login-input {
-	            padding-top: 0.875rem !important;
-	            padding-bottom: 0.875rem !important;
-	          }
-
-	          .auth-login-form button[type="submit"] {
-	            padding-top: 0.875rem !important;
-	            padding-bottom: 0.875rem !important;
-	          }
-	        }
-	      `}</style>
-
-      {/* ── Background Layer ── */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${LOGIN_BG_IMAGE})` }}
+        style={{ backgroundImage: `url(${AUTH_BG_IMAGE})` }}
       />
-      {/* Softer gradient overlays to let the artwork shine through */}
       <div className="absolute inset-0 bg-gradient-to-r from-[#fff7ea]/72 via-[#fff2e5]/30 to-[#fff7ef]/55" />
       <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#fff6ed]/90 to-transparent" />
 
-      {/* ── Decorative: Vertical Chinese text ── */}
       <div className="absolute right-7 top-28 hidden text-6xl font-black leading-tight text-[#b88b60]/30 [writing-mode:vertical-rl] lg:block">
         中国留学
       </div>
 
-      {/* ── Decorative: Falling cherry blossom petals ── */}
       {Array.from({ length: 24 }).map((_, i) => (
         <div key={i} className="petal" aria-hidden="true" />
       ))}
 
-      {/* ── Main Layout ── */}
       <div className="auth-login-shell relative z-10 mx-auto grid min-h-[100dvh] w-full max-w-[1440px] grid-cols-1 items-center gap-7 px-5 py-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-12 xl:px-16">
         <section className="auth-login-hero flex min-h-[570px] flex-col justify-center">
           <Link href="/" className="auth-login-logo mb-8 inline-flex w-fit items-center gap-4">
@@ -529,7 +292,7 @@ export default function LoginPage() {
             ))}
           </div>
 
-          <div className="auth-stat-panel mt-auto hidden max-w-4xl translate-y-3 rounded-[28px] border border-white/80 bg-white/58 p-5 shadow-[0_18px_60px_rgba(118,75,45,0.18)] backdrop-blur-xl xl:block">
+          <div className="auth-stat-panel mt-auto hidden max-w-4xl translate-y-3 rounded-[28px] border border-white/80 bg-white/58 p-5 shadow-[0_18px_60px_rgba(118,75,45,0.18)] backdrop-blur-xl lg:block">
             <div className="grid grid-cols-4 divide-x divide-[#d9bfa3]/60">
               {stats.map(({ icon: Icon, value, label, desc }) => (
                 <div key={label} className="auth-stat-item px-6 text-center">
@@ -545,23 +308,21 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center lg:justify-end">
-          <div className="auth-login-card w-full max-w-[450px] rounded-[28px] border border-white/[0.85] bg-white/[0.82] px-7 py-8 text-[#2f2926] shadow-[0_28px_90px_rgba(88,58,34,0.22)] backdrop-blur-xl sm:px-9">
-            <LoginForm />
+        <section className="relative z-20 flex items-center justify-center lg:justify-end">
+          <div className={`auth-login-card ${wideCard ? 'auth-register-card' : ''} w-full max-w-[450px] rounded-[28px] border border-white/[0.85] bg-white/[0.82] px-7 py-8 text-[#2f2926] shadow-[0_28px_90px_rgba(88,58,34,0.22)] backdrop-blur-xl sm:px-9`}>
+            {children}
           </div>
         </section>
 
-        {/* ── Bottom quote + seal ── */}
-        <div className="auth-login-quote hidden lg:absolute lg:bottom-10 lg:right-40 lg:block lg:text-right">
+        {showQuote && <div className="auth-login-quote pointer-events-none hidden lg:absolute lg:bottom-10 lg:right-40 lg:z-0 lg:block lg:text-right">
           <p className="font-serif text-xl font-black leading-relaxed text-[#c21a22]" style={{ fontFamily: '"KaiTi", "STKaiti", "SimSun", serif' }}>
             每一次努力，都是通往梦想的一步。
           </p>
           <p className="mt-2 text-sm text-[#4d433d]">Every effort brings you one step closer to your dream.</p>
-          {/* Red seal stamp */}
-          <div className="mt-3 inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 border-[#c21a22] text-sm font-black text-[#c21a22] rotate-6" style={{ fontFamily: '"KaiTi", "STKaiti", "SimSun", serif' }}>
+          <div className="mt-3 inline-flex h-10 w-10 rotate-6 items-center justify-center rounded-sm border-2 border-[#c21a22] text-sm font-black text-[#c21a22]" style={{ fontFamily: '"KaiTi", "STKaiti", "SimSun", serif' }}>
             志
           </div>
-        </div>
+        </div>}
       </div>
     </main>
   );
