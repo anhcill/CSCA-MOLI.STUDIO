@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const AuditLog = require('../utils/auditLog');
+const { regradeQuestionAnswers } = require('../services/examRegradeService');
 
 /**
  * Risk Center  Phase D: Question Report Actions
@@ -430,42 +431,13 @@ const QuestionReportActions = {
         return res.status(400).json({ success: false, message: 'Answer key not found for this question' });
       }
 
-      // Re-evaluate all user_answers for this question
-      const affected = await client.query(`
-        UPDATE user_answers ua
-        SET is_correct = (ua.selected_answer_key = $2)
-        FROM exam_attempts ea
-        WHERE ua.question_id = $1
-          AND ua.attempt_id = ea.id
-          AND ea.exam_id = $3
-          AND ea.status = 'completed'
-        RETURNING ua.attempt_id, ua.is_correct
-      `, [question_id, new_correct_answer.trim().toUpperCase(), exam_id]);
-
-      // Recalculate scores for all affected attempts
-      const attemptIds = [...new Set(affected.rows.map(r => r.attempt_id))];
-      let regradeCount = 0;
-
-      for (const attemptId of attemptIds) {
-        const stats = await client.query(`
-          SELECT
-            COALESCE(SUM(CASE WHEN ua.is_correct THEN q.points ELSE 0 END), 0) AS total_score,
-            COALESCE(SUM(CASE WHEN ua.is_correct THEN 1 ELSE 0 END), 0)::int AS total_correct,
-            COALESCE(SUM(CASE WHEN NOT ua.is_correct THEN 1 ELSE 0 END), 0)::int AS total_incorrect
-          FROM user_answers ua
-          INNER JOIN questions q ON ua.question_id = q.id
-          WHERE ua.attempt_id = $1
-        `, [attemptId]);
-
-        const s = stats.rows[0];
-        await client.query(`
-          UPDATE exam_attempts
-          SET total_score = $2, total_correct = $3, total_incorrect = $4
-          WHERE id = $1
-        `, [attemptId, parseFloat(s.total_score) || 0, s.total_correct, s.total_incorrect]);
-
-        regradeCount++;
-      }
+      const regradeResult = await regradeQuestionAnswers(client, question_id, {
+        examId: exam_id,
+        forceRecalculate: true,
+        invalidateAiCache: true,
+      });
+      const attemptIds = regradeResult.recalculatedAttemptIds;
+      const regradeCount = attemptIds.length;
 
       // Log regrade
       await client.query(`
@@ -475,7 +447,12 @@ const QuestionReportActions = {
       `, [
         question_id, exam_id, oldKey, new_correct_answer.trim().toUpperCase(),
         regradeCount, req.user.id, parseInt(id),
-        JSON.stringify({ attemptIds, reason: reason.trim() }),
+        JSON.stringify({
+          attemptIds,
+          changedAnswerRows: regradeResult.changedAnswerRows,
+          aiCacheDeleted: regradeResult.aiCacheDeleted,
+          reason: reason.trim(),
+        }),
       ]);
 
       // Mark report as fixed

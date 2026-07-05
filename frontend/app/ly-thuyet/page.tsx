@@ -295,6 +295,7 @@ export default function LyThuyetPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeSubject, setActiveSubject] = useState(subjectParam);
+  const [activeTopic, setActiveTopic] = useState('');
   const [viewing, setViewing] = useState<Material | null>(null);
 
   useEffect(() => {
@@ -352,6 +353,25 @@ export default function LyThuyetPage() {
     return map;
   }, [filtered]);
 
+  const topicTabs = useMemo(() => Array.from(grouped.entries()).map(([topic, items]) => ({
+    topic,
+    label: topic || t('materials.commonTopic'),
+    count: items.length,
+  })), [grouped, t]);
+
+  useEffect(() => {
+    if (topicTabs.length === 0) {
+      setActiveTopic('');
+      return;
+    }
+    if (!topicTabs.some(tab => tab.topic === activeTopic)) {
+      setActiveTopic(topicTabs[0].topic);
+    }
+  }, [activeTopic, topicTabs]);
+
+  const activeTopicMaterials = activeTopic ? grouped.get(activeTopic) || [] : topicTabs[0] ? grouped.get(topicTabs[0].topic) || [] : [];
+  const activeTopicLabel = topicTabs.find(tab => tab.topic === activeTopic)?.label || topicTabs[0]?.label || '';
+
   const pageContent = (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
           <div className="mb-6">
@@ -395,16 +415,46 @@ export default function LyThuyetPage() {
               <p className="text-gray-500">{search ? t('materials.noMatch') : t('materials.none')}</p>
             </div>
           ) : (
-            Array.from(grouped.entries()).map(([topic, items]) => (
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-gray-200 bg-white/90 p-2 shadow-sm">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {topicTabs.map(tab => {
+                    const isActive = activeTopic === tab.topic || (!activeTopic && tab.topic === topicTabs[0]?.topic);
+                    return (
+                      <button
+                        key={tab.topic || 'common'}
+                        type="button"
+                        onClick={() => {
+                          setActiveTopic(tab.topic);
+                          setViewing(null);
+                        }}
+                        className={`flex min-w-max items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all ${
+                          isActive
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'bg-gray-50 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-white text-gray-500'
+                        }`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <TopicSection
-                key={topic}
-                topic={topic}
-                materials={items}
+                key={activeTopic || topicTabs[0]?.topic || 'topic'}
+                topic={activeTopicLabel}
+                materials={activeTopicMaterials}
                 viewing={viewing}
                 onView={handleViewMaterial}
                 onClose={() => setViewing(null)}
               />
-            ))
+            </div>
           )}
     </div>
   );

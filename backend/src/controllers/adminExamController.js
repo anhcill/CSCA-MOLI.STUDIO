@@ -36,6 +36,10 @@ const {
   DEFAULT_SETTINGS,
   getSettings: getSiteSettings,
 } = require("../services/siteSettingsService");
+const {
+  invalidateQuestionAiCache,
+  regradeQuestionAnswers,
+} = require("../services/examRegradeService");
 
 // ─── P1 Security: XSS sanitization (strip HTML tags, allow plain text only) ─────
 function sanitize(str) {
@@ -2507,6 +2511,8 @@ const AdminExamController = {
         }
 
         // Update answers — chỉ cho single_choice / reading_item
+        let didRegradeQuestion = false;
+
         if (answers && answers.length >= 2 && answers.length <= 8) {
           if (qType === 'fill_blank_pool' || qType === 'fill_blank_item') {
             // Điền từ: không dùng bảng answers
@@ -2517,6 +2523,22 @@ const AdminExamController = {
               return res.status(400).json({ message: "Mỗi đáp án phải có nội dung" });
             }
             await syncMultipleChoiceAnswers(client, questionId, answers, normalizedAnswers, correctAnswer);
+            await regradeQuestionAnswers(client, questionId, {
+              forceRecalculate: true,
+              invalidateAiCache: true,
+            });
+            didRegradeQuestion = true;
+          }
+        }
+
+        if (!didRegradeQuestion) {
+          if (parsedPoints !== undefined) {
+            await regradeQuestionAnswers(client, questionId, {
+              forceRecalculate: true,
+              invalidateAiCache: true,
+            });
+          } else {
+            await invalidateQuestionAiCache(client, questionId);
           }
         }
 
