@@ -233,45 +233,16 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
         {coverUrl ? (
           <img src={coverUrl} alt={m.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" loading="lazy" />
         ) : (
-          <div className={`relative flex h-full flex-col justify-between overflow-hidden bg-gradient-to-br ${coverVisual.gradient} p-4 text-white`}>
+          <div className={`relative h-full overflow-hidden bg-gradient-to-br ${coverVisual.gradient}`}>
             <img
               src={coverVisual.image}
               alt=""
               aria-hidden="true"
-              className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-screen transition duration-300 group-hover:scale-[1.03]"
+              className="absolute inset-0 h-full w-full object-cover opacity-95 transition duration-300 group-hover:scale-[1.03]"
               loading="lazy"
             />
-            <div className={`absolute inset-0 bg-gradient-to-br ${coverVisual.gradient} opacity-80`} />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-white/5" />
             <div className={`absolute -right-10 -top-10 h-32 w-32 rounded-full blur-2xl ${coverVisual.glow}`} />
-            <div className="absolute inset-x-0 top-16 h-px bg-white/15" />
-            <div className="absolute bottom-12 left-0 right-0 h-px bg-white/10" />
-            <div className="relative z-10 flex items-center justify-between text-[10px] font-black uppercase tracking-wide text-white/75">
-              <span className="rounded-full bg-white/15 px-2 py-1">{coverVisual.badge}</span>
-              <FiBook size={17} />
-            </div>
-
-            <div className="relative z-10 space-y-3 text-center">
-              <div className={`mx-auto flex min-h-20 w-full max-w-[12rem] flex-col items-center justify-center rounded-2xl border px-3 py-3 shadow-2xl shadow-black/15 ${coverVisual.ring}`}>
-                <p className="max-w-full truncate font-mono text-[clamp(0.95rem,2.8vw,1.35rem)] font-black leading-tight text-white">
-                  {coverVisual.primary}
-                </p>
-                <p className="mt-1 max-w-full truncate font-mono text-[11px] font-semibold text-white/65">
-                  {coverVisual.secondary}
-                </p>
-              </div>
-              <p className="mx-auto line-clamp-3 max-w-[13rem] text-base font-black leading-tight drop-shadow-sm">{m.title}</p>
-            </div>
-
-            <div className="relative z-10 space-y-2">
-              <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px] font-bold text-white/65">
-                {coverVisual.marks.map(mark => (
-                  <span key={mark} className="truncate rounded-lg bg-white/10 px-1.5 py-1">{mark}</span>
-                ))}
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
-                <div className={`h-full w-2/3 rounded-full ${coverVisual.accent}`} />
-              </div>
-            </div>
           </div>
         )}
         {hasWebContent(m) && <span className="absolute left-2 top-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Web</span>}
