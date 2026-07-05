@@ -45,13 +45,20 @@ export default function LoginPage() {
           transition: background-color 9999s ease-out 0s;
         }
 
-        @media (min-width: 1024px) {
-          .auth-login-page {
-            height: 100dvh;
-            min-height: 100dvh;
-            overflow: hidden;
-          }
-        }
+	        @media (min-width: 1024px) {
+	          .auth-login-page {
+	            height: 100dvh;
+	            min-height: 100dvh;
+	            overflow: hidden;
+	          }
+
+	          .auth-login-shell {
+	            width: 133.333333%;
+	            min-height: 133.333333dvh !important;
+	            transform: scale(0.75);
+	            transform-origin: top center;
+	          }
+	        }
 
         /* ── Falling petal animation ── */
         @keyframes petalFall {
@@ -313,12 +320,155 @@ export default function LoginPage() {
             padding-bottom: 0.58rem !important;
           }
 
-          .auth-login-form button[type="submit"] {
-            padding-top: 0.66rem !important;
-            padding-bottom: 0.66rem !important;
-          }
-        }
-      `}</style>
+	          .auth-login-form button[type="submit"] {
+	            padding-top: 0.66rem !important;
+	            padding-bottom: 0.66rem !important;
+	          }
+	        }
+
+	        @media (min-width: 1024px) {
+	          .auth-login-shell {
+	            width: 133.333333% !important;
+	            min-height: 133.333333dvh !important;
+	            gap: 1.75rem !important;
+	            padding-top: 1.5rem !important;
+	            padding-bottom: 1.5rem !important;
+	            transform: scale(0.75) !important;
+	            transform-origin: top center !important;
+	          }
+
+	          .auth-login-hero {
+	            min-height: 570px !important;
+	          }
+
+	          .auth-login-logo {
+	            margin-bottom: 2rem !important;
+	          }
+
+	          .auth-login-logo-mark {
+	            width: 3rem !important;
+	            height: 3rem !important;
+	            border-radius: 1rem !important;
+	            font-size: 1.5rem !important;
+	          }
+
+	          .auth-login-logo-text {
+	            font-size: 1.875rem !important;
+	          }
+
+	          .auth-login-title {
+	            font-size: clamp(2.8rem, 4vw, 4.9rem) !important;
+	            line-height: 1.08 !important;
+	          }
+
+	          .auth-login-divider {
+	            margin-top: 1.75rem !important;
+	            margin-bottom: 1.75rem !important;
+	          }
+
+	          .auth-login-divider svg {
+	            width: 2rem !important;
+	            height: 2rem !important;
+	          }
+
+	          .auth-login-subtitle {
+	            max-width: 42rem !important;
+	            font-size: clamp(1.35rem, 1.85vw, 2rem) !important;
+	          }
+
+	          .auth-feature-row {
+	            display: flex !important;
+	            margin-top: 1.25rem !important;
+	            gap: 1rem !important;
+	          }
+
+	          .auth-feature-badge {
+	            min-height: 4rem !important;
+	            min-width: 8rem !important;
+	            border-radius: 1rem !important;
+	            padding-left: 1rem !important;
+	            padding-right: 1rem !important;
+	            font-size: 1rem !important;
+	          }
+
+	          .auth-feature-badge svg {
+	            width: 1.5rem !important;
+	            height: 1.5rem !important;
+	          }
+
+	          .auth-stat-panel {
+	            display: block !important;
+	            margin-top: auto !important;
+	            padding: 1.25rem !important;
+	            border-radius: 1.75rem !important;
+	            transform: translateY(0.75rem) !important;
+	          }
+
+	          .auth-stat-item {
+	            padding-left: 1.5rem !important;
+	            padding-right: 1.5rem !important;
+	          }
+
+	          .auth-stat-icon {
+	            width: 3.5rem !important;
+	            height: 3.5rem !important;
+	            margin-bottom: 0.75rem !important;
+	          }
+
+	          .auth-stat-icon svg {
+	            width: 1.5rem !important;
+	            height: 1.5rem !important;
+	          }
+
+	          .auth-stat-value {
+	            font-size: 1.875rem !important;
+	          }
+
+	          .auth-stat-label {
+	            margin-top: 0.5rem !important;
+	            font-size: 1.125rem !important;
+	          }
+
+	          .auth-stat-desc {
+	            margin-top: 0.25rem !important;
+	            font-size: 0.875rem !important;
+	          }
+
+	          .auth-login-card {
+	            max-width: 450px !important;
+	            padding: 2rem 2.25rem !important;
+	            border-radius: 1.75rem !important;
+	          }
+
+	          .auth-login-form > div:first-child {
+	            margin-bottom: 1.75rem !important;
+	          }
+
+	          .auth-login-form > div:first-child h1 {
+	            font-size: 2.25rem !important;
+	            line-height: 1.1 !important;
+	          }
+
+	          .auth-login-form > div:first-child p {
+	            margin-top: 0.75rem !important;
+	            font-size: 0.875rem !important;
+	          }
+
+	          .auth-login-form form > :not([hidden]) ~ :not([hidden]) {
+	            margin-top: 1rem !important;
+	          }
+
+	          .auth-login-input {
+	            padding-top: 0.875rem !important;
+	            padding-bottom: 0.875rem !important;
+	          }
+
+	          .auth-login-form button[type="submit"] {
+	            padding-top: 0.875rem !important;
+	            padding-bottom: 0.875rem !important;
+	          }
+	        }
+	      `}</style>
 
       {/* ── Background Layer ── */}
       <div
@@ -368,12 +518,6 @@ export default function LoginPage() {
               <FiHome className="h-8 w-8 text-[#3f3a36]" />
               <span className="h-px w-20 bg-[#d7b587]" />
             </div>
-            <p
-              className="auth-login-subtitle max-w-2xl text-center text-[clamp(1.35rem,1.85vw,2rem)] leading-snug text-[#3b332d] lg:text-left"
-              style={{ fontFamily: '"Times New Roman", Georgia, serif' }}
-            >
-              Dự án CSCA Moly đồng hành ôn thi, chấm bài và săn học bổng Trung Quốc
-            </p>
           </div>
 
           <div className="auth-feature-row mt-5 flex flex-wrap gap-4">

@@ -29,7 +29,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
-import { FiShield } from 'react-icons/fi';
+import { FiArrowRight, FiLock, FiMail, FiShield } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -492,13 +492,16 @@ export default function LoginForm() {
     }
   };
 
-  const loginInputBaseClass = 'w-full px-4 py-3 border rounded-lg bg-white dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors outline-none';
+  const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-slate-400 focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
   return (
-    <div className="w-full max-w-md">
-      <div className="text-center mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">{t('auth.loginTitle')}</h1>
-        <p className="text-gray-600 dark:text-slate-300">{t('auth.loginSubtitle')}</p>
+    <div className="auth-login-form w-full max-w-md">
+      <div className="mb-7 text-center">
+        <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-gradient-to-r from-[#df1f24] to-[#f0b45a]" />
+        <h1 className="text-3xl font-black tracking-tight text-[#2d2926] sm:text-4xl">Chào mừng trở lại!</h1>
+        <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[#6a5c53]">
+          Đăng nhập để tiếp tục hành trình chinh phục học bổng Trung Quốc
+        </p>
       </div>
 
       {isLocked && (
@@ -817,40 +820,46 @@ export default function LoginForm() {
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {errors.general && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">
             {errors.general}
           </div>
         )}
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.email')}</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            autoComplete="email"
-            value={formData.email}
-            onChange={handleChange}
-            disabled={isSubmitting || isLocked}
-            className={`${loginInputBaseClass} ${errors.email ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="example@email.com"
-          />
+          <label htmlFor="email" className="mb-2 block text-sm font-bold text-[#493d35]">{t('auth.email')}</label>
+          <div className="relative">
+            <FiMail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="email"
+              id="email"
+              name="email"
+              autoComplete="email"
+              value={formData.email}
+              onChange={handleChange}
+              disabled={isSubmitting || isLocked}
+              className={`${loginInputBaseClass} ${errors.email ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="example@email.com"
+            />
+          </div>
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1.5">{t('auth.password')}</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            autoComplete="current-password"
-            value={formData.password}
-            onChange={handleChange}
-            disabled={isSubmitting || isLocked}
-            className={`${loginInputBaseClass} ${errors.password ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} ${(isSubmitting || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            placeholder="••••••••"
-          />
+          <label htmlFor="password" className="mb-2 block text-sm font-bold text-[#493d35]">{t('auth.password')}</label>
+          <div className="relative">
+            <FiLock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autoComplete="current-password"
+              value={formData.password}
+              onChange={handleChange}
+              disabled={isSubmitting || isLocked}
+              className={`${loginInputBaseClass} ${errors.password ? 'border-red-500' : 'border-white/80'}`}
+              placeholder="••••••••"
+            />
+          </div>
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
@@ -863,16 +872,16 @@ export default function LoginForm() {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
-            <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-            <span className="ml-2 text-sm text-gray-600 dark:text-slate-300">{t('auth.remember')}</span>
+            <input type="checkbox" className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" />
+            <span className="ml-2 text-sm text-[#675950]">{t('auth.remember')}</span>
           </label>
-          <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-500">{t('auth.forgot')}</Link>
+          <Link href="/forgot-password" className="text-sm font-semibold text-[#bd111c] hover:text-[#8d0d14]">{t('auth.forgot')}</Link>
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting || isLocked || (isTurnstileEnabled && !turnstileToken)}
-          className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (
             <span className="flex items-center justify-center gap-2">
@@ -882,11 +891,16 @@ export default function LoginForm() {
               </svg>
               {t('auth.loggingIn')}
             </span>
-          ) : t('auth.login')}
+          ) : (
+            <>
+              {t('auth.login')}
+              <FiArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+            </>
+          )}
         </button>
 
         <SocialAuthButtons
-          dividerLabel={t('auth.socialLogin')}
+          dividerLabel="Hoặc đăng nhập với"
           disabled={isSubmitting || isLocked}
           onGoogleAccessToken={handleGoogleAccessToken}
           onGoogleError={handleGoogleError}
@@ -897,13 +911,13 @@ export default function LoginForm() {
       )}
 
       {/* Terms and Privacy Links */}
-      <div className="mt-6 pt-5 border-t border-gray-100 space-y-2">
-        <p className="text-xs text-gray-500 dark:text-slate-400 text-center leading-relaxed">
+      <div className="mt-6 space-y-2 border-t border-white/70 pt-5">
+        <p className="text-center text-xs leading-relaxed text-[#6b5b51]">
           {t('auth.loginConsentPrefix')}{' '}
           <button
             type="button"
             onClick={() => { setTermsModalType('terms'); setShowTermsModal(true); }}
-            className="text-indigo-600 hover:text-indigo-500 font-medium hover:underline"
+            className="font-bold text-[#bd111c] hover:text-[#8d0d14] hover:underline"
           >
             {t('auth.terms')}
           </button>
@@ -911,7 +925,7 @@ export default function LoginForm() {
           <button
             type="button"
             onClick={() => { setTermsModalType('privacy'); setShowTermsModal(true); }}
-            className="text-indigo-600 hover:text-indigo-500 font-medium hover:underline"
+            className="font-bold text-[#bd111c] hover:text-[#8d0d14] hover:underline"
           >
             {t('auth.privacy')}
           </button>
@@ -919,8 +933,8 @@ export default function LoginForm() {
         </p>
       </div>
 
-      <p className="mt-6 text-center text-sm text-gray-600 dark:text-slate-300">
-        {t('auth.noAccount')} <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">{t('auth.registerNow')}</Link>
+      <p className="mt-6 text-center text-sm text-[#675950]">
+        Chưa có tài khoản? <Link href="/register" className="font-black text-[#bd111c] hover:text-[#8d0d14]">{t('auth.registerNow')}</Link>
       </p>
 
       <TermsModal isOpen={showTermsModal} onClose={() => setShowTermsModal(false)} type={termsModalType} />

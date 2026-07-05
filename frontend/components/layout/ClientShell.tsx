@@ -54,11 +54,11 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
-  const showFloatingContacts = !isAdmin && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
+  const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showDailyGift = showMoliPet && isAuthenticated;
   const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
-  const showPwaPrompt = !isChat;
+  const showPwaPrompt = !isAuth && !isChat;
   const showUpdateToast = !isChat;
   const moliPetPosition = 'left';
 
