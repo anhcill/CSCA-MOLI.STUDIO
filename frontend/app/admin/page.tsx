@@ -67,6 +67,11 @@ function formatUsd(value: number | string | null | undefined) {
     return `$${num(value).toFixed(4)}`;
 }
 
+function formatModelPricing(pricing?: { input?: number; inputCached?: number; output?: number }) {
+    if (!pricing) return 'Chưa có giá';
+    return `In $${num(pricing.input).toFixed(3)}/1M · cache $${num(pricing.inputCached).toFixed(3)}/1M · out $${num(pricing.output).toFixed(3)}/1M`;
+}
+
 export default function AdminDashboard() {
     const { user, isAuthenticated } = useAuthStore();
     const [stats, setStats] = useState<DashboardStats>({
@@ -391,6 +396,7 @@ export default function AdminDashboard() {
                                     <thead className="text-xs uppercase text-gray-400">
                                         <tr>
                                             <th className="px-3 py-2 text-left">User</th>
+                                            <th className="px-3 py-2 text-left">Model / giá</th>
                                             <th className="px-3 py-2 text-right">Token</th>
                                             <th className="px-3 py-2 text-right">Cost</th>
                                         </tr>
@@ -402,12 +408,35 @@ export default function AdminDashboard() {
                                                     <p className="font-bold text-gray-900 dark:text-white">{row.full_name || 'Không rõ user'}</p>
                                                     <p className="text-xs text-gray-400">{row.email || `user_id: ${row.user_id || 'N/A'}`}</p>
                                                 </td>
+                                                <td className="px-3 py-3">
+                                                    <div className="space-y-2">
+                                                        {(row.models || []).slice(0, 3).map(model => (
+                                                            <div key={`${row.user_id || 'unknown'}-${model.provider}-${model.model}`} className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-slate-800">
+                                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                    <span className="max-w-[220px] truncate text-xs font-black text-gray-800 dark:text-slate-100" title={model.model}>
+                                                                        {model.model}
+                                                                    </span>
+                                                                    <span className="text-xs font-black text-rose-600">{formatUsd(model.cost_usd)}</span>
+                                                                </div>
+                                                                <p className="mt-0.5 text-[11px] text-gray-400">
+                                                                    {model.provider} · {num(model.requests).toLocaleString('vi-VN')} req · {formatTokens(model.total_tokens)}
+                                                                </p>
+                                                                <p className="mt-0.5 text-[10px] font-semibold text-gray-400">
+                                                                    {formatModelPricing(model.pricing)}
+                                                                </p>
+                                                            </div>
+                                                        ))}
+                                                        {(!row.models || row.models.length === 0) && (
+                                                            <span className="text-xs text-gray-400">Chưa ghi nhận model</span>
+                                                        )}
+                                                    </div>
+                                                </td>
                                                 <td className="px-3 py-3 text-right font-semibold">{formatTokens(row.total_tokens)}</td>
                                                 <td className="px-3 py-3 text-right font-black text-rose-600">{formatUsd(row.cost_usd)}</td>
                                             </tr>
                                         ))}
                                         {!aiLoading && aiUsage.perUser.length === 0 && (
-                                            <tr><td colSpan={3} className="px-3 py-8 text-center text-gray-400">Chưa có log AI trong khoảng này.</td></tr>
+                                            <tr><td colSpan={4} className="px-3 py-8 text-center text-gray-400">Chưa có log AI trong khoảng này.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

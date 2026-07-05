@@ -202,6 +202,25 @@ async function getUsageStats({ from, to, userId, limit = 50 } = {}) {
     params,
   );
 
+  const perUserModelResult = await db.query(
+    `SELECT
+       t.user_id,
+       t.provider,
+       t.model,
+       COUNT(*)::int AS requests,
+       COALESCE(SUM(t.prompt_tokens), 0)::bigint AS prompt_tokens,
+       COALESCE(SUM(t.prompt_cache_hit_tokens), 0)::bigint AS cache_hit_tokens,
+       COALESCE(SUM(t.prompt_cache_miss_tokens), 0)::bigint AS cache_miss_tokens,
+       COALESCE(SUM(t.completion_tokens), 0)::bigint AS completion_tokens,
+       COALESCE(SUM(t.total_tokens), 0)::bigint AS total_tokens,
+       COALESCE(SUM(t.cost_usd), 0)::numeric AS cost_usd
+     FROM ai_token_usage t
+     ${where}
+     GROUP BY t.user_id, t.provider, t.model
+     ORDER BY t.user_id NULLS LAST, cost_usd DESC`,
+    params,
+  );
+
   const perModelResult = await db.query(
     `SELECT
        t.provider,
@@ -250,9 +269,29 @@ async function getUsageStats({ from, to, userId, limit = 50 } = {}) {
     params,
   );
 
+  const modelsByUser = new Map();
+  for (const row of perUserModelResult.rows) {
+    const key = row.user_id === null || row.user_id === undefined ? '__unknown__' : String(row.user_id);
+    const pricing = getModelPricing(row.model);
+    const current = modelsByUser.get(key) || [];
+    current.push({
+      ...row,
+      pricing,
+    });
+    modelsByUser.set(key, current);
+  }
+
+  const perUser = perUserResult.rows.map((row) => {
+    const key = row.user_id === null || row.user_id === undefined ? '__unknown__' : String(row.user_id);
+    return {
+      ...row,
+      models: (modelsByUser.get(key) || []).slice(0, 5),
+    };
+  });
+
   return {
     overview: overallResult.rows[0] || {},
-    perUser: perUserResult.rows,
+    perUser,
     perModel: perModelResult.rows,
     perFeature: perFeatureResult.rows,
     daily: dailyResult.rows,

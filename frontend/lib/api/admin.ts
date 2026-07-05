@@ -69,6 +69,18 @@ export interface AIUsageStats {
         total_tokens: number | string;
         cost_usd: number | string;
         last_used_at: string | null;
+        models?: Array<{
+            provider: string;
+            model: string;
+            requests: number | string;
+            prompt_tokens: number | string;
+            cache_hit_tokens: number | string;
+            cache_miss_tokens: number | string;
+            completion_tokens: number | string;
+            total_tokens: number | string;
+            cost_usd: number | string;
+            pricing?: { input: number; inputCached: number; output: number };
+        }>;
     }>;
     perModel: Array<{
         provider: string;
@@ -200,4 +212,3 @@ export const adminControlApi = {
         return response.data as { success: boolean; message: string };
     },
 };
-
