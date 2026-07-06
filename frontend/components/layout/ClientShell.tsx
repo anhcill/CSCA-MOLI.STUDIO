@@ -16,16 +16,30 @@ import axios from '@/lib/utils/axios';
 const ACTIVITY_RECORD_TTL = 5 * 60 * 1000;
 let lastActivityRecordedAt = 0;
 let activityRecordRequest: Promise<unknown> | null = null;
+const CURRENT_ROUTE_KEY = 'moli:currentRoute';
+const PREVIOUS_ROUTE_KEY = 'moli:previousRoute';
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryString = searchParams?.toString();
+  const currentRoute = `${pathname || '/'}${queryString ? `?${queryString}` : ''}`;
   const [mounted, setMounted] = useState(false);
   const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return;
+
+    const previousCurrentRoute = sessionStorage.getItem(CURRENT_ROUTE_KEY);
+    if (previousCurrentRoute && previousCurrentRoute !== currentRoute) {
+      sessionStorage.setItem(PREVIOUS_ROUTE_KEY, previousCurrentRoute);
+    }
+    sessionStorage.setItem(CURRENT_ROUTE_KEY, currentRoute);
+  }, [mounted, currentRoute]);
 
   useEffect(() => {
     if (!mounted || !isAuthenticated) return;

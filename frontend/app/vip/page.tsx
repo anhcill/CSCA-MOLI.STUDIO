@@ -8,6 +8,8 @@ import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
 import { FiArrowLeft, FiLoader, FiTag, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
 
+const PREVIOUS_ROUTE_KEY = 'moli:previousRoute';
+
 interface VipPackage {
   id: number;
   name: string;
@@ -288,10 +290,22 @@ export default function VipPricingPage() {
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
   const handleBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back();
-      return;
+    if (typeof window !== 'undefined') {
+      const storedRoute = sessionStorage.getItem(PREVIOUS_ROUTE_KEY);
+      if (storedRoute?.startsWith('/') && !storedRoute.startsWith('//') && !storedRoute.startsWith('/vip')) {
+        router.push(storedRoute);
+        return;
+      }
+
+      try {
+        const referrerUrl = document.referrer ? new URL(document.referrer) : null;
+        if (referrerUrl && referrerUrl.origin === window.location.origin && referrerUrl.pathname !== '/vip') {
+          router.push(`${referrerUrl.pathname}${referrerUrl.search}${referrerUrl.hash}`);
+          return;
+        }
+      } catch (_) {}
     }
+
     router.push('/');
   };
 
