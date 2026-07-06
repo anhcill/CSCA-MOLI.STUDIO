@@ -71,6 +71,26 @@ function authorInitial(ticket: Ticket) {
   return (ticket.author_name || ticket.author_email || 'H').charAt(0).toUpperCase();
 }
 
+function useAdminChatViewportLock() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+
+    root.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+
+    return () => {
+      root.style.overflow = previousRootOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, []);
+}
+
 export default function AdminFeedbackDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
@@ -83,6 +103,7 @@ export default function AdminFeedbackDashboard() {
   const [loadError, setLoadError] = useState('');
   const [toast, setToast] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  useAdminChatViewportLock();
 
   const counts = useMemo(() => ({
     all: tickets.length,
@@ -245,7 +266,7 @@ export default function AdminFeedbackDashboard() {
 
   return (
     <AdminLayout title="Góp Ý Người Dùng" description="Quản lý câu hỏi, báo lỗi, trải nghiệm và yêu cầu nâng cấp">
-      <div className="relative h-[calc(100dvh-132px)] min-h-0 max-h-[calc(100dvh-132px)] overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="relative h-[calc(100dvh-132px)] min-h-0 max-h-[calc(100dvh-132px)] overflow-hidden overscroll-contain rounded-xl border border-gray-200 bg-white">
         {toast && (
           <div className="absolute right-4 top-4 z-30 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg">
             {toast}
