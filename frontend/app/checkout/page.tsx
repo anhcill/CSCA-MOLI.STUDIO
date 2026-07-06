@@ -8,7 +8,9 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { canAccessSubject, getTierLevel, type TierLevel } from '@/lib/utils/permissions';
 import { queueVipCelebration, VIP_CELEBRATION_HOME_URL } from '@/lib/utils/paymentCelebration';
 import { FaCrown, FaShieldAlt, FaBolt, FaGift, FaLock, FaArrowRight, FaCopy } from 'react-icons/fa';
-import { FiArrowLeft, FiCheck, FiLoader, FiRefreshCw } from 'react-icons/fi';
+import { FiArrowLeft, FiCheck, FiClock, FiLoader, FiRefreshCw } from 'react-icons/fi';
+
+const BANK_TRANSFER_PAYMENT_WINDOW_SECONDS = 5 * 60;
 
 interface DbPackage {
   id: number;
@@ -322,11 +324,33 @@ function BankTransferScreen({
   const [copied, setCopied] = useState<string | null>(null);
   const [polling, setPolling] = useState(true);
   const [dots, setDots] = useState('.');
+  const [timeLeft, setTimeLeft] = useState(BANK_TRANSFER_PAYMENT_WINDOW_SECONDS);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isExpired = timeLeft <= 0;
+  const countdownText = `${Math.floor(timeLeft / 60).toString().padStart(2, '0')}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+
+  useEffect(() => {
+    setTimeLeft(BANK_TRANSFER_PAYMENT_WINDOW_SECONDS);
+    setPolling(true);
+  }, [orderId]);
+
+  useEffect(() => {
+    if (isExpired) return;
+    const timer = setTimeout(() => {
+      setTimeLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [orderId, timeLeft, isExpired]);
+
+  useEffect(() => {
+    if (!isExpired) return;
+    setPolling(false);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  }, [isExpired]);
 
   // Chạy polling mỗi 4 giây
   useEffect(() => {
-    if (!polling) return;
+    if (!polling || isExpired) return;
 
     const check = async () => {
       try {
@@ -347,7 +371,7 @@ function BankTransferScreen({
     check();
     intervalRef.current = setInterval(check, 4000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [orderId, polling]);
+  }, [orderId, polling, isExpired]);
 
   // Animate dots
   useEffect(() => {
@@ -381,12 +405,23 @@ function BankTransferScreen({
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-green-100 rounded-full text-green-700 text-sm font-bold mb-3">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          Đang chờ thanh toán{dots}
+        <div className={`mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold ${isExpired ? 'bg-rose-100 text-rose-700' : 'bg-green-100 text-green-700'}`}>
+          <div className={`h-2 w-2 rounded-full ${isExpired ? 'bg-rose-500' : 'animate-pulse bg-green-500'}`} />
+          {isExpired ? 'Mã QR đã hết hạn' : `Đang chờ thanh toán${dots}`}
         </div>
         <h2 className="text-xl font-black text-gray-900">Quét QR để thanh toán</h2>
         <p className="text-gray-500 text-sm mt-1">Mở app ngân hàng → Quét QR → Xác nhận</p>
+      </div>
+
+      <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${isExpired ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-indigo-100 bg-indigo-50 text-indigo-700'}`}>
+        <div className="flex items-center gap-2">
+          <FiClock size={18} className={isExpired ? 'text-rose-500' : 'text-indigo-500'} />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide opacity-70">Thời gian thanh toán</p>
+            <p className="text-sm font-bold">{isExpired ? 'Vui lòng tạo lại mã mới' : 'QR có hiệu lực trong 5 phút'}</p>
+          </div>
+        </div>
+        <span className="shrink-0 tabular-nums text-2xl font-black">{countdownText}</span>
       </div>
 
       {/* QR Code */}
@@ -419,14 +454,20 @@ function BankTransferScreen({
         <ul className="text-amber-700 space-y-1 text-xs">
           <li>• Nhập <strong>đúng nội dung</strong> chuyển khoản bên trên để hệ thống tự xác nhận</li>
           <li>• VIP được kích hoạt <strong>tự động trong vài giây</strong> sau khi tiền về</li>
-          <li>• Nếu sau 5 phút chưa kích hoạt, liên hệ Admin qua Fanpage</li>
+          <li>• Mã QR có hiệu lực trong <strong>5 phút</strong>; nếu hết hạn, quay lại để tạo mã mới</li>
         </ul>
       </div>
 
       {/* Status indicator */}
-      <div className="flex items-center justify-center gap-3 rounded-xl bg-indigo-50 px-3 py-3 text-center">
-        <FiRefreshCw size={16} className="text-indigo-500 animate-spin" />
-        <span className="text-indigo-700 text-sm font-medium">Hệ thống đang tự động kiểm tra thanh toán{dots}</span>
+      <div className={`flex items-center justify-center gap-3 rounded-xl px-3 py-3 text-center ${isExpired ? 'bg-rose-50' : 'bg-indigo-50'}`}>
+        {isExpired ? (
+          <FiClock size={16} className="text-rose-500" />
+        ) : (
+          <FiRefreshCw size={16} className="text-indigo-500 animate-spin" />
+        )}
+        <span className={`text-sm font-medium ${isExpired ? 'text-rose-700' : 'text-indigo-700'}`}>
+          {isExpired ? 'Mã đã hết hạn, vui lòng quay lại chọn gói để tạo QR mới.' : `Hệ thống đang tự động kiểm tra thanh toán${dots}`}
+        </span>
       </div>
     </div>
   );
@@ -451,6 +492,7 @@ function CheckoutContent() {
   const [error, setError] = useState('');
   const [step, setStep] = useState<'select' | 'qr'>('select');
   const [qrData, setQrData] = useState<any>(null);
+  const qrScreenRef = useRef<HTMLDivElement | null>(null);
 
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(urlCoupon || null);
   const [appliedCouponInfo, setAppliedCouponInfo] = useState<{ discount_amount: number; final_amount: number } | null>(null);
@@ -586,6 +628,15 @@ function CheckoutContent() {
     }
   }, [useCoins, maxCoinUse]);
 
+  useEffect(() => {
+    if (step !== 'qr') return;
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      qrScreenRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [step, qrData?.orderId]);
+
   const refreshAuthUser = async () => {
     try {
       const response = await getCurrentUser();
@@ -675,7 +726,7 @@ function CheckoutContent() {
   // ── QR SCREEN ──
   if (step === 'qr' && qrData) {
     return (
-      <div>
+      <div ref={qrScreenRef} className="scroll-mt-24">
         <button
           onClick={() => setStep('select')}
           className="flex items-center gap-1 text-gray-400 hover:text-gray-700 text-sm mb-6 transition-colors"

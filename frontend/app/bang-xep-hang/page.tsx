@@ -334,16 +334,16 @@ export default function LeaderboardPage() {
 
                         {/* Table (Ranks 4+) */}
                         {restEntries.length > 0 && (
-                            <div className={`overflow-x-auto rounded-[24px] ${inkResultSoftPanel}`}>
-                                <table className="w-full text-left border-collapse min-w-[700px]">
+                            <div className={`overflow-x-auto rounded-[24px] pb-2 ${inkResultSoftPanel}`}>
+                                <table className="w-full min-w-[860px] border-collapse text-left">
                                     <thead>
                                         <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
-                                            <th className="py-4 px-6 text-center w-20">HANG</th>
-                                            <th className="py-4 px-6">THÍ SINH</th>
-                                            <th className="py-4 px-6 text-center">SỐ LẦN THI</th>
-                                            <th className="py-4 px-6 text-center">ĐIỂM TRUNG BÌNH</th>
-                                            <th className="py-4 px-6 text-center">ĐIỂM CAO NHẤT</th>
-                                            <th className="py-4 px-6 text-center">THỜI GIAN GẦN NHẤT</th>
+                                            <th className="w-20 px-6 py-4 text-center">HANG</th>
+                                            <th className="min-w-[220px] px-6 py-4">THÍ SINH</th>
+                                            <th className="min-w-[105px] px-6 py-4 text-center">SỐ LẦN THI</th>
+                                            <th className="min-w-[135px] px-6 py-4 text-center">ĐIỂM TRUNG BÌNH</th>
+                                            <th className="min-w-[135px] px-6 py-4 text-center">ĐIỂM CAO NHẤT</th>
+                                            <th className="min-w-[170px] px-6 py-4 text-center">THỜI GIAN GẦN NHẤT</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
@@ -411,7 +411,7 @@ export default function LeaderboardPage() {
                                                     </td>
                                                     
                                                     {/* Latest Time */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-500 dark:text-slate-400">
+                                                    <td className="min-w-[170px] whitespace-nowrap px-6 py-4 text-center font-bold text-slate-500 dark:text-slate-400">
                                                         <div className="inline-flex items-center gap-1.5">
                                                             <FiClock className="text-slate-400 dark:text-slate-500" size={13} />
                                                             <span>{formatRelativeTime(entry.last_attempt_at)}</span>
