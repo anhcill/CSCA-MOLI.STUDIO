@@ -28,24 +28,14 @@ import { isVipActive } from '@/lib/utils/permissions';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { deleteBookmark, saveBookmark } from '@/lib/api/insights';
 import MaterialContentViewer from '@/components/materials/MaterialContentViewer';
-
-interface Material {
-  id: number;
-  title: string;
-  description: string;
-  file_url: string;
-  file_type: string;
-  category: string;
-  subject: string;
-  created_at: string;
-  is_premium?: boolean;
-  content_html?: string;
-  content_text?: string;
-}
+import {
+  canUsePdfProxy,
+  getMaterialCoverImage,
+  getMaterialImages,
+  type Material,
+} from '@/components/materials/materialLibraryTypes';
 
 const FORMULA_CATEGORY = 'cong-thuc-on-thi';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
 const SUBJECTS = [
   { value: '', label: 'Tất cả môn', Icon: FiGrid },
   { value: 'toan', label: 'Toán', Icon: FiHash },
@@ -67,10 +57,6 @@ function hasWebContent(material: Material) {
   return Boolean(material.content_html || material.content_text);
 }
 
-function canUsePdfProxy(fileUrl?: string) {
-  return Boolean(fileUrl && /\/upload\/v\d+\//.test(fileUrl));
-}
-
 function countBy(items: Material[], key: 'subject' | 'category', value: string) {
   if (!value || value === 'all') return items.length;
   return items.filter((item) => item[key] === value).length;
@@ -84,6 +70,14 @@ function categoryLabel(value: string) {
   return CATEGORIES.find((item) => item.value === value)?.label || 'Tài liệu';
 }
 
+const COVER_STYLES: Record<string, string> = {
+  toan: 'from-indigo-950 via-blue-900 to-violet-800',
+  'vat-ly': 'from-slate-950 via-cyan-950 to-blue-800',
+  'hoa-hoc': 'from-emerald-950 via-teal-900 to-cyan-800',
+  'tieng-trung-xh': 'from-rose-950 via-red-900 to-orange-700',
+  'tieng-trung-tn': 'from-green-950 via-emerald-900 to-lime-700',
+};
+
 function MaterialRow({ material }: { material: Material }) {
   const user = useAuthStore((state) => state.user);
   const isVip = isVipActive(user);
@@ -92,16 +86,32 @@ function MaterialRow({ material }: { material: Material }) {
   const [showVipModal, setShowVipModal] = useState(false);
   const hasFile = Boolean(material.file_url);
   const hasContent = hasWebContent(material);
-  const hasPdfProxy = canUsePdfProxy(material.file_url);
+  const materialImages = getMaterialImages(material);
+  const coverImage = getMaterialCoverImage(material);
+  const hasImages = materialImages.length > 0;
+  const hasPdfProxy = !hasImages && canUsePdfProxy(material.file_url);
   const locked = Boolean(material.is_premium && !isVip);
-  const pdfUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${material.id}` : material.file_url;
-  const downloadUrl = hasPdfProxy ? `${API_URL}/materials/pdf/${material.id}/download` : material.file_url;
-  const SubjectIcon = SUBJECTS.find((item) => item.value === material.subject)?.Icon || FiFileText;
+  const pdfUrl = hasPdfProxy
+    ? `/tailieu/pdf/${material.id}?title=${encodeURIComponent(material.title || 'Tài liệu')}`
+    : material.file_url;
+  const downloadUrl = hasPdfProxy ? `/api/materials/pdf/${material.id}/download` : material.file_url;
+  const coverStyle = COVER_STYLES[material.subject] || 'from-slate-950 via-violet-950 to-fuchsia-800';
+
+  const getAuthToken = () => {
+    const sessionToken = sessionStorage.getItem('token');
+    if (sessionToken) return sessionToken;
+    try {
+      const stored = JSON.parse(localStorage.getItem('auth-storage') || '{}');
+      return stored?.state?.token || null;
+    } catch {
+      return null;
+    }
+  };
 
   const openProtectedPdf = async (url: string, download = false) => {
-    const token = sessionStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) {
-      window.location.href = '/auth';
+      window.location.href = '/login';
       return;
     }
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -125,12 +135,9 @@ function MaterialRow({ material }: { material: Material }) {
       setShowVipModal(true);
       return;
     }
-    if (hasContent) {
+    if (hasContent || hasImages) {
       event.preventDefault();
       setExpanded((value) => !value);
-    } else if (hasPdfProxy && pdfUrl) {
-      event.preventDefault();
-      await openProtectedPdf(pdfUrl);
     }
   };
 
@@ -165,10 +172,24 @@ function MaterialRow({ material }: { material: Material }) {
 
   return (
     <article className="border-b border-slate-200 last:border-b-0">
-      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5 lg:grid-cols-[48px_minmax(0,1fr)_190px_110px_44px_128px] lg:items-center">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-700 ring-1 ring-violet-100">
-          <SubjectIcon size={20} />
-        </div>
+      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5 lg:grid-cols-[76px_minmax(0,1fr)_190px_110px_44px_128px] lg:items-center">
+        <button
+          type="button"
+          onClick={() => locked ? setShowVipModal(true) : (hasContent || hasImages) ? setExpanded((value) => !value) : hasFile ? window.open(pdfUrl, '_blank', 'noopener,noreferrer') : undefined}
+          className={`group/cover relative h-[98px] w-[72px] overflow-hidden rounded-lg bg-gradient-to-br ${coverStyle} text-left text-white shadow-md ring-1 ring-black/10`}
+          aria-label={`Mở ${material.title}`}
+        >
+          {coverImage?.url ? (
+            <img src={coverImage.url} alt={coverImage.caption || `Bìa ${material.title}`} className="h-full w-full object-cover transition duration-300 group-hover/cover:scale-105" loading="lazy" />
+          ) : (
+            <span className="flex h-full flex-col justify-between p-2.5">
+              <span className="text-[8px] font-black uppercase tracking-[0.18em] text-white/65">CSCA</span>
+              <span className="line-clamp-3 text-[11px] font-black leading-[1.25]">{material.title}</span>
+              <span className="h-1 w-7 rounded-full bg-white/45" />
+            </span>
+          )}
+          {material.is_premium && <span className="absolute right-1.5 top-1.5 rounded bg-amber-300 px-1.5 py-0.5 text-[8px] font-black text-amber-950">PRO</span>}
+        </button>
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -203,8 +224,8 @@ function MaterialRow({ material }: { material: Material }) {
             <button type="button" onClick={() => setShowVipModal(true)} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-100">
               <FiLock /> Mở PRO
             </button>
-          ) : hasFile || hasContent ? (
-            <a href={hasContent ? '#' : pdfUrl} target={hasContent ? undefined : '_blank'} rel="noreferrer" onClick={handleOpen} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 text-sm font-semibold text-violet-700 hover:bg-violet-50">
+          ) : hasFile || hasContent || hasImages ? (
+            <a href={hasContent || hasImages ? '#' : pdfUrl} target={hasContent || hasImages ? undefined : '_blank'} rel="noreferrer" onClick={handleOpen} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 text-sm font-semibold text-violet-700 hover:bg-violet-50">
               Xem tài liệu {expanded ? <FiChevronUp /> : <FiExternalLink />}
             </a>
           ) : (
@@ -221,7 +242,21 @@ function MaterialRow({ material }: { material: Material }) {
       {expanded && !locked && hasContent && (
         <MaterialContentViewer contentHtml={material.content_html} contentText={material.content_text} className="border-t border-slate-200 bg-slate-50" />
       )}
-      {expanded && !locked && !hasContent && hasFile && !hasPdfProxy && (
+      {expanded && !locked && !hasContent && hasImages && (
+        <div className="border-t border-slate-200 bg-slate-50 p-4 sm:p-6">
+          <div className="mx-auto max-w-4xl space-y-4">
+            {materialImages.map((image, index) => (
+              <figure key={`${image.url}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <a href={image.url} target="_blank" rel="noreferrer">
+                  <img src={image.url} alt={image.caption || `${material.title} - trang ${index + 1}`} className="w-full object-contain" loading="lazy" />
+                </a>
+                {image.caption && <figcaption className="border-t border-slate-100 px-4 py-3 text-sm text-slate-600">{image.caption}</figcaption>}
+              </figure>
+            ))}
+          </div>
+        </div>
+      )}
+      {expanded && !locked && !hasContent && !hasImages && hasFile && !hasPdfProxy && (
         <div className="border-t border-slate-200 bg-slate-50 p-4">
           <iframe src={pdfUrl} className="h-[600px] w-full rounded-xl border border-slate-200 bg-white" title={material.title} loading="lazy" />
         </div>
