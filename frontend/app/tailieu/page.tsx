@@ -172,11 +172,11 @@ function MaterialRow({ material }: { material: Material }) {
 
   return (
     <article className="border-b border-slate-200 last:border-b-0">
-      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5 lg:grid-cols-[76px_minmax(0,1fr)_190px_110px_44px_128px] lg:items-center">
+      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5 md:grid-cols-[76px_minmax(0,1fr)] md:items-center xl:grid-cols-[76px_minmax(0,1fr)_190px_110px_44px_184px]">
         <button
           type="button"
           onClick={() => locked ? setShowVipModal(true) : (hasContent || hasImages) ? setExpanded((value) => !value) : hasFile ? window.open(pdfUrl, '_blank', 'noopener,noreferrer') : undefined}
-          className={`group/cover relative h-[98px] w-[72px] overflow-hidden rounded-lg bg-gradient-to-br ${coverStyle} text-left text-white shadow-md ring-1 ring-black/10`}
+          className={`group/cover relative h-[98px] w-[72px] overflow-hidden rounded-lg bg-gradient-to-br ${coverStyle} text-left text-white shadow-md ring-1 ring-black/10 md:row-span-3 xl:row-span-1`}
           aria-label={`Mở ${material.title}`}
         >
           {coverImage?.url ? (
@@ -203,12 +203,12 @@ function MaterialRow({ material }: { material: Material }) {
           <p className="mt-1 line-clamp-1 text-sm text-slate-500">{material.description || 'Tài liệu học tập và ôn luyện CSCA.'}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 md:col-start-2 xl:col-start-auto">
           <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{subjectLabel(material.subject)}</span>
           <span className="rounded-md bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{categoryLabel(material.category)}</span>
         </div>
 
-        <time className="text-sm text-slate-500">{new Date(material.created_at).toLocaleDateString('vi-VN')}</time>
+        <time className="text-sm text-slate-500 md:col-start-2 xl:col-start-auto">{new Date(material.created_at).toLocaleDateString('vi-VN')}</time>
 
         <button
           type="button"
@@ -219,13 +219,13 @@ function MaterialRow({ material }: { material: Material }) {
           <FiBookmark size={18} />
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {locked ? (
-            <button type="button" onClick={() => setShowVipModal(true)} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-100">
+            <button type="button" onClick={() => setShowVipModal(true)} className="inline-flex h-10 min-w-[126px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-100">
               <FiLock /> Mở PRO
             </button>
           ) : hasFile || hasContent || hasImages ? (
-            <a href={hasContent || hasImages ? '#' : pdfUrl} target={hasContent || hasImages ? undefined : '_blank'} rel="noreferrer" onClick={handleOpen} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 text-sm font-semibold text-violet-700 hover:bg-violet-50">
+            <a href={hasContent || hasImages ? '#' : pdfUrl} target={hasContent || hasImages ? undefined : '_blank'} rel="noreferrer" onClick={handleOpen} className="inline-flex h-10 min-w-[126px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-violet-300 bg-white px-3 text-sm font-semibold text-violet-700 hover:bg-violet-50">
               Xem tài liệu {expanded ? <FiChevronUp /> : <FiExternalLink />}
             </a>
           ) : (
@@ -321,8 +321,8 @@ export default function TaiLieuPage() {
           <button type="button" className="hidden h-12 rounded-lg bg-violet-600 px-7 text-sm font-bold text-white shadow-sm hover:bg-violet-700 sm:block">Tìm kiếm</button>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
-          <aside className="h-fit overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-24">
+        <div className="grid gap-5 xl:grid-cols-[270px_minmax(0,1fr)]">
+          <aside className="h-fit overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-24">
             <FilterGroup title="Môn học" Icon={FiBookOpen} items={SUBJECTS} value={subject} onChange={setSubject} counts={(value) => countBy(materials, 'subject', value)} />
             <FilterGroup title="Loại tài liệu" Icon={FiSliders} items={CATEGORIES} value={category} onChange={setCategory} counts={(value) => countBy(materials, 'category', value)} />
             <div className="border-t border-slate-200 p-3">
