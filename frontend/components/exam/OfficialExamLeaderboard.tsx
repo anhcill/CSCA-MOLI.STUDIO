@@ -258,19 +258,27 @@ export default function OfficialExamLeaderboard({
 
           {/* Table list for 4+ */}
           {restEntries.length > 0 && (
-            <div className="overflow-x-auto rounded-[24px] border border-[#ead9bd]/80 bg-[#fffaf2]/78 pb-2 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full min-w-[840px] border-collapse text-left">
+            <div className="overflow-hidden rounded-[24px] border border-[#ead9bd]/80 bg-[#fffaf2]/78 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[8%]" />
+                  <col className="w-[27%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[15%]" />
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
-                    <th className="w-20 px-6 py-4 text-center">HANG</th>
-                    <th className="min-w-[210px] px-6 py-4">THÍ SINH</th>
-                    <th className="min-w-[150px] px-6 py-4">PHÒNG THI</th>
-                    <th className="min-w-[105px] px-6 py-4 text-center">SỐ LẦN THI</th>
-                    <th className="min-w-[135px] px-6 py-4 text-center">ĐIỂM CAO NHẤT</th>
-                    <th className="min-w-[155px] px-6 py-4 text-center">THỜI GIAN</th>
+                  <tr className="border-b border-slate-50 bg-slate-50/40 text-[8px] font-black uppercase leading-tight tracking-normal text-slate-400 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-500 sm:text-[10px] lg:text-[11px] lg:tracking-wide">
+                    <th className="px-1 py-3 text-center sm:px-2 lg:px-4 lg:py-4">HẠNG</th>
+                    <th className="px-1 py-3 sm:px-2 lg:px-4 lg:py-4">THÍ SINH</th>
+                    <th className="px-1 py-3 sm:px-2 lg:px-4 lg:py-4">PHÒNG THI</th>
+                    <th className="px-1 py-3 text-center sm:px-2 lg:px-4 lg:py-4">SỐ LẦN THI</th>
+                    <th className="px-1 py-3 text-center sm:px-2 lg:px-4 lg:py-4">ĐIỂM CAO NHẤT</th>
+                    <th className="px-1 py-3 text-center sm:px-2 lg:px-4 lg:py-4">THỜI GIAN</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                <tbody className="divide-y divide-slate-100 text-[10px] dark:divide-slate-800 sm:text-xs lg:text-sm">
                   {restEntries.map((entry) => {
                     const initials = String(entry.full_name || '?')
                       .trim()
@@ -293,37 +301,37 @@ export default function OfficialExamLeaderboard({
 
                     return (
                       <tr key={entry.user_id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-4 px-6 text-center font-bold text-slate-850 dark:text-slate-350">
+                        <td className="px-1 py-3 text-center font-bold text-slate-850 dark:text-slate-350 sm:px-2 lg:px-4 lg:py-4">
                           {entry.rank}
                         </td>
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
+                        <td className="min-w-0 px-1 py-3 sm:px-2 lg:px-4 lg:py-4">
+                          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 lg:gap-3">
                             {entry.avatar_url ? (
                               <img
                                 src={entry.avatar_url}
                                 alt={entry.full_name}
-                                className="w-9 h-9 rounded-full object-cover border border-slate-100 dark:border-slate-800 shadow-sm"
+                                className="hidden h-7 w-7 shrink-0 rounded-full object-cover border border-slate-100 shadow-sm dark:border-slate-800 sm:block lg:h-9 lg:w-9"
                               />
                             ) : (
-                              <div className={`w-9 h-9 rounded-full ${getAvatarBg(entry.full_name)} text-white font-extrabold flex items-center justify-center text-xs border border-white dark:border-slate-800 shadow-sm`}>
+                              <div className={`hidden h-7 w-7 shrink-0 rounded-full sm:flex lg:h-9 lg:w-9 ${getAvatarBg(entry.full_name)} items-center justify-center border border-white text-[10px] font-extrabold text-white shadow-sm dark:border-slate-800 lg:text-xs`}>
                                 {initials}
                               </div>
                             )}
-                            <span className="font-extrabold text-slate-900 dark:text-slate-100">{entry.full_name}</span>
+                            <span className="min-w-0 truncate font-extrabold text-slate-900 dark:text-slate-100" title={entry.full_name}>{entry.full_name}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-6 font-bold text-slate-650 dark:text-slate-450">
-                          {getEntryMeta(entry, noRoomLabel)}
+                        <td className="px-1 py-3 font-bold leading-tight text-slate-650 dark:text-slate-450 sm:px-2 lg:px-4 lg:py-4">
+                          <span className="line-clamp-2" title={getEntryMeta(entry, noRoomLabel)}>{getEntryMeta(entry, noRoomLabel)}</span>
                         </td>
-                        <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
+                        <td className="px-1 py-3 text-center font-bold text-slate-600 dark:text-slate-400 sm:px-2 lg:px-4 lg:py-4">
                           {entry.total_attempts}
                         </td>
-                        <td className="py-4 px-6 text-center font-black text-emerald-600 dark:text-emerald-500">
+                        <td className="px-1 py-3 text-center font-black text-emerald-600 dark:text-emerald-500 sm:px-2 lg:px-4 lg:py-4">
                           {formatScore(entry.total_score)}/100
                         </td>
-                        <td className="min-w-[155px] whitespace-nowrap px-6 py-4 text-center font-bold text-slate-500 dark:text-slate-400">
-                          <div className="inline-flex items-center justify-center gap-1.5">
-                            <FiClock className="text-slate-400 dark:text-slate-500" size={13} />
+                        <td className="whitespace-nowrap px-1 py-3 text-center font-bold text-slate-500 dark:text-slate-400 sm:px-2 lg:px-4 lg:py-4">
+                          <div className="inline-flex items-center justify-center gap-0.5 sm:gap-1">
+                            <FiClock className="hidden text-slate-400 dark:text-slate-500 sm:block" size={12} />
                             <span>{formatDuration(entry.duration_seconds)}</span>
                           </div>
                         </td>

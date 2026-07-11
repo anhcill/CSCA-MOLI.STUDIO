@@ -465,7 +465,7 @@ export default function StudentQADetailPage() {
                         if (content.trim() || image) handleReply(e as any);
                       }
                     }}
-                    className="w-full px-4 py-3 bg-gray-50/80 border border-gray-200 rounded-2xl text-sm resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-300 focus:bg-white outline-none transition-all placeholder:text-gray-400 leading-relaxed"
+                    className="w-full rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3 text-sm leading-relaxed text-gray-900 caret-indigo-500 outline-none transition-all placeholder:text-gray-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-950"
                     placeholder="Nhắn cho admin... (Enter để gửi)"
                     rows={1}
                     style={{ maxHeight: '120px', minHeight: '46px' }}

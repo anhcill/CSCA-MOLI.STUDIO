@@ -265,7 +265,7 @@ export default function StudentQAPage() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="flex-1 text-sm outline-none"
+            className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-slate-100 dark:placeholder:text-slate-500"
             placeholder="Tìm trong nội dung góp ý..."
           />
           <button onClick={loadTickets} className="rounded-lg p-2 text-gray-400 hover:bg-gray-50 hover:text-indigo-600">
@@ -350,7 +350,7 @@ export default function StudentQAPage() {
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 rows={5}
-                className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:bg-white"
+                className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 caret-indigo-500 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-950"
                 placeholder="Nhập câu hỏi, lỗi gặp phải, trải nghiệm khi dùng web hoặc đề xuất bạn muốn admin bổ sung..."
               />
 
