@@ -14,6 +14,7 @@ import {
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
 import AdminDailyLetter from '@/components/admin/AdminDailyLetter';
+import AdminNotificationBell from '@/components/admin/AdminNotificationBell';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -214,6 +215,7 @@ export default function AdminLayout({ children, title, description }: AdminLayou
   }
 
   const userInitial = user?.full_name?.trim()?.charAt(0)?.toUpperCase() || 'A';
+  const canViewRiskNotifications = hasPermission(user, 'risk_center.view') || hasPermission(user, 'exams.manage');
 
   const visibleSections = NAV_SECTIONS
     .map(section => ({
@@ -325,6 +327,8 @@ export default function AdminLayout({ children, title, description }: AdminLayou
             className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
             ← Về trang chủ
           </Link>
+
+          {canViewRiskNotifications && <AdminNotificationBell />}
 
           <ThemeToggle />
 

@@ -1064,10 +1064,47 @@ function repairEscapedMathWordsInProse(input: string): string {
     .replace(/(^|[\s([{"'“‘:;,.!?-])\\sec\s+ond\b/g, '$1second');
 }
 
+function repairGluedTransitionCommands(input: string): string {
+  return input
+    .split(WRAPPED_MATH_RE)
+    .map((part) => {
+      if (
+        !part ||
+        part.startsWith('\\(') ||
+        part.startsWith('\\[') ||
+        part.startsWith('$$') ||
+        part.startsWith('$')
+      ) return part;
+
+      // Imported explanations sometimes glue a transition arrow directly to
+      // prose (for example `\RightarrowĐáp án` or `\Rightarrow答案`). Give the
+      // command its own math delimiters so KaTeX can render it safely.
+      return part.replace(
+        /\\(Rightarrow|Leftarrow|Leftrightarrow|rightarrow|leftarrow|to)(?=[^\s\\()[\]{}$.,;:!?])/g,
+        (_, command: string) => `\\(\\${command}\\) `,
+      );
+    })
+    .join('');
+}
+
+function stripStandaloneFormattingPunctuation(input: string): string {
+  return input
+    .split('\n')
+    .filter((line) => !/^\s*[.:\uFF1A\u3002]\s*$/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export function normalizeRichMathText(input: string): string {
   if (!input) return '';
 
-  const displayRuleInput = applyDisplayLatexInputRules(repairEscapedMathWordsInProse(input));
+  // Imported/API text can contain JSON-escaped LaTeX delimiters such as
+  // `\\(` or `\\frac`. Repair those before splitting into math segments;
+  // otherwise the splitter consumes only the last slash and leaves a raw
+  // backslash that later turns into broken `$`/`$$` preview output.
+  const unescapedInput = normalizeEscapedLatexBackslashes(input);
+  const cleanedInput = stripStandaloneFormattingPunctuation(repairGluedTransitionCommands(unescapedInput));
+  const displayRuleInput = applyDisplayLatexInputRules(repairEscapedMathWordsInProse(cleanedInput));
   const repairedInput = repairMalformedInlineDollarDelimiters(stripStackedOcrMathFragments(displayRuleInput));
   const normalized = repairedInput
     .split(/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]*\$|`[^`\n]*`)/g)

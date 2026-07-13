@@ -2,6 +2,17 @@ const { pool } = require('../config/database');
 const AuditLog = require('../utils/auditLog');
 const { regradeQuestionAnswers } = require('../services/examRegradeService');
 
+const REPORT_TYPE_LABELS = {
+  wrong_answer: 'Sai đáp án',
+  formula_error: 'Lỗi công thức',
+  translation_error: 'Lỗi dịch',
+  missing_image: 'Thiếu hình ảnh',
+  missing_data: 'Thiếu dữ kiện',
+  duplicate_question: 'Trùng câu hỏi',
+  answer_mismatch: 'Đáp án không khớp',
+  other: 'Lỗi khác',
+};
+
 /**
  * Risk Center  Phase D: Question Report Actions
  * User-facing report API + Admin actions
@@ -25,7 +36,11 @@ const QuestionReportActions = {
 
       // Check question exists
       const qCheck = await pool.query(
-        'SELECT id FROM questions WHERE id = $1 AND exam_id = $2', [question_id, exam_id]
+        `SELECT q.id, q.question_number, e.title AS exam_title
+         FROM questions q
+         LEFT JOIN exams e ON e.id = q.exam_id
+         WHERE q.id = $1 AND q.exam_id = $2`,
+        [question_id, exam_id]
       );
       if (!qCheck.rows[0]) {
         return res.status(404).json({ success: false, message: 'Question not found' });
@@ -55,19 +70,37 @@ const QuestionReportActions = {
       );
       const reportCount = countResult.rows[0].count;
 
-      // Auto-create notification if >= 3 reports
-      if (reportCount >= 3) {
-        await AuditLog.notify({
-          type: 'question_report',
-          severity: reportCount >= 5 ? 'critical' : 'high',
-          title: `Câu hỏi #${question_id} bị báo lỗi ${reportCount} lần`,
-          message: `Lỗi: ${type}. ${description?.trim() || ''}`.trim(),
-          entityType: 'question',
-          entityId: question_id,
-          userId: req.user.id,
-          metadata: { examId: exam_id, reportCount, reportType: type },
-        });
-      }
+      // Notify admins for every new report. The duplicate guard above keeps one
+      // user from flooding the same question while the report is still open.
+      const reporterResult = await pool.query(
+        'SELECT full_name, email FROM users WHERE id = $1 LIMIT 1',
+        [req.user.id]
+      );
+      const reporter = reporterResult.rows[0] || {};
+      const reporterName = reporter.full_name || reporter.email || `User #${req.user.id}`;
+      const questionNumber = qCheck.rows[0].question_number || question_id;
+      const examTitle = qCheck.rows[0].exam_title || `Đề #${exam_id}`;
+      const highPriorityTypes = new Set(['wrong_answer', 'formula_error', 'answer_mismatch', 'missing_data']);
+
+      await AuditLog.notify({
+        type: 'question_report',
+        severity: reportCount >= 5 ? 'critical' : highPriorityTypes.has(type) ? 'high' : 'medium',
+        title: `${reporterName} báo lỗi câu #${questionNumber}`,
+        message: `${examTitle} · ${REPORT_TYPE_LABELS[type] || type}${description?.trim() ? ` · ${description.trim()}` : ''}`,
+        entityType: 'question_report',
+        entityId: result.rows[0].id,
+        userId: req.user.id,
+        metadata: {
+          reportId: result.rows[0].id,
+          questionId: question_id,
+          questionNumber,
+          examId: exam_id,
+          examTitle,
+          reportCount,
+          reportType: type,
+          reporterEmail: reporter.email || null,
+        },
+      });
 
       res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {

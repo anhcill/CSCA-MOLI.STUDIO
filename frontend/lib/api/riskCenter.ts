@@ -153,6 +153,8 @@ export interface AdminNotification {
   read_at: string | null;
   created_at: string;
   user_name?: string;
+  user_email?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface AuditLogEntry {

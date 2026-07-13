@@ -234,6 +234,9 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
         <div className="rounded-md border border-gray-200 bg-white px-3 py-2">
           <RichMathText value={normalized || editableValue} className="admin-question-preview-math text-gray-900" />
         </div>
+        <label className="mt-2 block text-[11px] font-bold uppercase tracking-wide text-gray-400">
+          Mã nguồn LaTeX · sửa nhanh
+        </label>
         <textarea
           value={draftValue}
           onChange={event => setPreviewDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))}
@@ -527,36 +530,47 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
                 </button>
               )}
             </div>
-            <input
-              type="text"
-              value={stripPlainTextMathMarker(ans.text)}
-              onChange={e => {
-                const a = [...form.answers]; a[i] = { ...a[i], text: preservePlainTextMathMode(ans.text, e.target.value) };
-                set('answers', a);
-              }}
-              className={`${ADMIN_INPUT_CLASS} mb-1.5 py-1`}
-              placeholder={`Lựa chọn ${key} (Tiếng Việt)...`}
-            />
-            <input
-              type="text"
-              value={stripPlainTextMathMarker(ans.textCn)}
-              onChange={e => {
-                const a = [...form.answers]; a[i] = { ...a[i], textCn: preservePlainTextMathMode(ans.textCn, e.target.value) };
-                set('answers', a);
-              }}
-              className={`${ADMIN_INPUT_CLASS} py-1`}
-              placeholder={`选项${key} (中文)...`}
-            />
-            <input
-              type="text"
-              value={stripPlainTextMathMarker(ans.textEn || '')}
-              onChange={e => {
-                const a = [...form.answers]; a[i] = { ...a[i], textEn: preservePlainTextMathMode(ans.textEn || '', e.target.value) };
-                set('answers', a);
-              }}
-              className={`${ADMIN_INPUT_CLASS} mt-1.5 py-1`}
-              placeholder={`Option ${key} (English)...`}
-            />
+            <div className="space-y-1.5">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-gray-400">Tiếng Việt</span>
+                <input
+                  type="text"
+                  value={stripPlainTextMathMarker(ans.text)}
+                  onChange={e => {
+                    const a = [...form.answers]; a[i] = { ...a[i], text: preservePlainTextMathMode(ans.text, e.target.value) };
+                    set('answers', a);
+                  }}
+                  className={`${ADMIN_INPUT_CLASS} py-1`}
+                  placeholder={`Lựa chọn ${key} (Tiếng Việt)...`}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-gray-400">Tiếng Trung</span>
+                <input
+                  type="text"
+                  value={stripPlainTextMathMarker(ans.textCn)}
+                  onChange={e => {
+                    const a = [...form.answers]; a[i] = { ...a[i], textCn: preservePlainTextMathMode(ans.textCn, e.target.value) };
+                    set('answers', a);
+                  }}
+                  className={`${ADMIN_INPUT_CLASS} py-1`}
+                  placeholder={`选项${key} (中文)...`}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-gray-400">Tiếng Anh</span>
+                <input
+                  type="text"
+                  value={stripPlainTextMathMarker(ans.textEn || '')}
+                  onChange={e => {
+                    const a = [...form.answers]; a[i] = { ...a[i], textEn: preservePlainTextMathMode(ans.textEn || '', e.target.value) };
+                    set('answers', a);
+                  }}
+                  className={`${ADMIN_INPUT_CLASS} py-1`}
+                  placeholder={`Option ${key} (English)...`}
+                />
+              </label>
+            </div>
 
             {ans.text && renderMathPreview(ans.text, value => {
               const a = [...form.answers]; a[i] = { ...a[i], text: value };

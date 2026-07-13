@@ -573,6 +573,21 @@ export default function RiskCenterPage() {
   const visibleTabs = canViewRiskCenter ? TABS.filter(tab => canViewPaymentRisk || tab.id !== 'payment') : [];
 
   useEffect(() => {
+    const selectTab = (requestedTab: TabId | null) => {
+      if (requestedTab && TABS.some(tab => tab.id === requestedTab)) {
+        if (requestedTab !== 'payment' || canViewPaymentRisk) setActiveTab(requestedTab);
+      }
+    };
+    selectTab(new URLSearchParams(window.location.search).get('tab') as TabId | null);
+
+    const handleTabRequest = (event: Event) => {
+      selectTab((event as CustomEvent<{ tab?: TabId }>).detail?.tab || null);
+    };
+    window.addEventListener('admin-risk-center-tab', handleTabRequest);
+    return () => window.removeEventListener('admin-risk-center-tab', handleTabRequest);
+  }, [canViewPaymentRisk]);
+
+  useEffect(() => {
     if (!canViewPaymentRisk && activeTab === 'payment') {
       setActiveTab('exam');
     }
@@ -581,7 +596,6 @@ export default function RiskCenterPage() {
   // Socket.io realtime
   useEffect(() => {
     const socket = initSocket();
-    socket?.emit('join_admin_risk_center');
 
     const handleNotification = () => {
       loadSummary();
@@ -593,7 +607,6 @@ export default function RiskCenterPage() {
     return () => {
       socket?.off('admin_notification', handleNotification);
       socket?.off('risk_case_update', handleNotification);
-      socket?.emit('leave_admin_risk_center');
     };
   }, [activeTab]);
 

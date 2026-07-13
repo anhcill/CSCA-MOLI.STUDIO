@@ -2,6 +2,25 @@ const crypto = require("crypto");
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
+const AuditLog = require("../utils/auditLog");
+
+const ADMIN_VIOLATION_LABELS = {
+  tab_switch: "Chuyển tab / rời trang thi",
+  window_blur: "Mất focus cửa sổ thi",
+  right_click: "Click chuột phải",
+  copy: "Copy nội dung",
+  copy_attempt: "Cố gắng copy nội dung",
+  print: "In đề thi",
+  print_attempt: "Cố gắng in đề thi",
+  print_shortcut: "Dùng phím tắt in / lưu",
+  screenshot_suspected: "Nghi vấn chụp màn hình",
+  screenshot_key: "Bấm phím chụp màn hình",
+  fullscreen_exit: "Thoát toàn màn hình",
+  multi_tab_conflict: "Mở lượt thi ở tab khác",
+  devtools: "Mở công cụ lập trình",
+  resize_suspicious: "Thay đổi kích thước cửa sổ bất thường",
+  multi_touch: "Cử chỉ nhiều ngón bất thường",
+};
 
 function parsePositiveInt(value) {
   const parsed = Number.parseInt(value, 10);
@@ -801,8 +820,11 @@ const officialExamController = {
 
       const attemptResult = await pool.query(
         `SELECT ea.id, ea.exam_id, ea.user_id, er.id AS registration_id,
-                room.id AS room_id
+                room.id AS room_id, u.full_name AS user_name, u.email AS user_email,
+                e.title AS exam_title
          FROM exam_attempts ea
+         LEFT JOIN users u ON u.id = ea.user_id
+         LEFT JOIN exams e ON e.id = ea.exam_id
          LEFT JOIN exam_registrations er ON er.exam_id = ea.exam_id AND er.user_id = ea.user_id
          LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
          LEFT JOIN exam_rooms room ON room.id = ers.room_id
@@ -849,6 +871,42 @@ const officialExamController = {
         userAgent: req.headers["user-agent"],
       });
       emitExamMonitor(req, attempt.exam_id, "exam_violation_logged", { examId: attempt.exam_id, violation: result.rows[0] });
+
+      // Keep the admin informed in real time, but collapse repeated events of
+      // the same type for one attempt into a five-minute notification window.
+      const recentNotification = await pool.query(
+        `SELECT id
+         FROM admin_notifications
+         WHERE type = 'exam_violation'
+           AND metadata->>'attemptId' = $1
+           AND metadata->>'violationType' = $2
+           AND created_at >= NOW() - INTERVAL '5 minutes'
+         LIMIT 1`,
+        [String(attempt.id), type]
+      ).catch(() => ({ rows: [] }));
+
+      if (!recentNotification.rows[0]) {
+        const userLabel = attempt.user_name || attempt.user_email || `User #${attempt.user_id}`;
+        const adminSeverity = ['critical', 'high'].includes(severity) ? severity : 'medium';
+        await AuditLog.notify({
+          type: 'exam_violation',
+          severity: adminSeverity,
+          title: `Phát hiện gian lận: ${userLabel}`,
+          message: `${attempt.exam_title || `Đề #${attempt.exam_id}`} · ${ADMIN_VIOLATION_LABELS[type] || type} (x${count}) · lượt thi #${attempt.id}`,
+          entityType: 'exam_attempt',
+          entityId: attempt.id,
+          userId: attempt.user_id,
+          metadata: {
+            attemptId: attempt.id,
+            examId: attempt.exam_id,
+            examTitle: attempt.exam_title || null,
+            violationId: result.rows[0].id,
+            violationType: type,
+            violationCount: count,
+            userEmail: attempt.user_email || null,
+          },
+        });
+      }
 
       return res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
