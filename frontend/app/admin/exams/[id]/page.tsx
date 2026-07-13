@@ -756,6 +756,26 @@ export default function AdminExamDetailPage() {
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [editMode]);
 
+    useEffect(() => {
+        const targetQuestionId = Number(searchParams.get('questionId'));
+        if (!Number.isInteger(targetQuestionId) || targetQuestionId <= 0 || savedQuestions.length === 0) return;
+
+        const targetIndex = findQuestionItemIndex(savedQuestions, targetQuestionId);
+        if (targetIndex >= 0) {
+            setEditVisibleCount(current => Math.max(current, targetIndex + 1));
+        }
+
+        const timer = window.setTimeout(() => {
+            const target = document.getElementById(`question-${targetQuestionId}`);
+            if (!target) return;
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.classList.add('ring-4', 'ring-amber-300', 'ring-offset-2');
+            window.setTimeout(() => target.classList.remove('ring-4', 'ring-amber-300', 'ring-offset-2'), 3500);
+        }, 150);
+
+        return () => window.clearTimeout(timer);
+    }, [savedQuestions, searchParams]);
+
     const loadSubjects = async () => {
         try {
             const response = await axios.get('/subjects');
@@ -2880,7 +2900,7 @@ export default function AdminExamDetailPage() {
                                             )}
                                             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 {q.children.map(child => (
-                                                    <div key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700">
+                                                    <div id={`question-${child.id}`} key={child.id} className="px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-700 transition-shadow">
                                                         <span className="font-semibold">Câu {child.question_number}:</span>
                                                         <RichMathText
                                                             value={[

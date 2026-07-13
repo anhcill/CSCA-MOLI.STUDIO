@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
+import RichMathText from '@/components/common/RichMathText';
 import { riskCenterApi, RiskSummary, ExamRiskCase, PaymentRisk, QuestionReport, QuestionReportDetail, AdminNotification, AuditLogEntry, Pagination, ExamRiskDetail } from '@/lib/api/riskCenter';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasAnyPermission, hasPermission } from '@/lib/utils/permissions';
@@ -9,7 +10,7 @@ import {
   FiAlertTriangle, FiShield, FiCreditCard, FiFileText, FiBell, FiList,
   FiRefreshCw, FiChevronLeft, FiChevronRight, FiEye, FiCheck, FiX,
   FiAlertOctagon, FiArrowUp, FiLock, FiUserX, FiCheckCircle, FiXCircle,
-  FiClock, FiSearch, FiFilter, FiZap
+  FiClock, FiSearch, FiFilter, FiZap, FiExternalLink, FiHash, FiUser
 } from 'react-icons/fi';
 import { initSocket } from '@/lib/socket';
 
@@ -52,6 +53,17 @@ const VIOLATION_LABELS: Record<string, string> = {
   devtools: 'Mở công cụ lập trình',
   resize_suspicious: 'Thay đổi kích thước cửa sổ bất thường',
   multi_touch: 'Cử chỉ nhiều ngón bất thường',
+};
+
+const QUESTION_REPORT_LABELS: Record<string, string> = {
+  wrong_answer: 'Sai đáp án',
+  formula_error: 'Lỗi công thức',
+  translation_error: 'Lỗi dịch',
+  missing_image: 'Thiếu hình ảnh',
+  missing_data: 'Thiếu dữ kiện',
+  duplicate_question: 'Trùng câu hỏi',
+  answer_mismatch: 'Đáp án không khớp',
+  other: 'Lỗi khác',
 };
 
 function violationLabel(type: string) {
@@ -350,14 +362,17 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-2xl overflow-y-auto bg-white shadow-2xl dark:bg-slate-900">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
-          <div>
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-4xl overflow-y-auto bg-white shadow-2xl dark:bg-slate-900">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="min-w-0 flex-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">Báo lỗi #{detail.id}</h2>
-            <div className="mt-1 flex gap-2">
-              <Badge text={detail.report_type} colorClass={SEVERITY_COLORS[detail.severity]} />
+            <p className="mt-1 truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+              {detail.exam_title || `Đề #${detail.exam_id}`} · Câu {detail.question_number || '?'}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Badge text={QUESTION_REPORT_LABELS[detail.report_type] || detail.report_type} colorClass={SEVERITY_COLORS[detail.severity]} />
               <Badge text={detail.status} colorClass={STATUS_COLORS[detail.status]} />
-              <span className="text-xs font-bold text-gray-400">Câu #{detail.question_number || detail.question_id}</span>
+              <span className="text-xs font-bold text-gray-400">Question ID #{detail.question_id}</span>
             </div>
           </div>
           <button onClick={onClose} className="rounded-xl p-2 hover:bg-gray-100 dark:hover:bg-slate-800"><FiX size={18} /></button>
@@ -365,29 +380,49 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
 
         <div className="space-y-5 px-6 py-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800">
-              <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Đề thi</p>
-              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{detail.exam_title || 'N/A'}</p>
-              <p className="text-xs text-gray-500">{detail.exam_code || `Exam #${detail.exam_id}`}</p>
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-indigo-500"><FiHash /> Đề và câu bị báo</div>
+              <p className="text-sm font-black text-gray-900 dark:text-white">{detail.exam_title || 'Không tìm thấy tên đề'}</p>
+              <p className="mt-1 text-xs font-semibold text-gray-600 dark:text-slate-300">
+                {detail.exam_code || 'Không có mã đề'} · Exam ID #{detail.exam_id}
+              </p>
+              <p className="mt-1 text-xs font-black text-indigo-700 dark:text-indigo-300">
+                Câu {detail.question_number || '?'} · Question ID #{detail.question_id}
+              </p>
+              <a
+                href={`/admin/exams/${detail.exam_id}?questionId=${detail.question_id}#question-${detail.question_id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+              >
+                <FiExternalLink size={12} /> Mở đúng câu trong đề
+              </a>
               {detail.exam_is_hidden && <Badge text="Đề đã ẩn" colorClass="bg-red-100 text-red-700 border-red-200" />}
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800">
-              <p className="mb-1 text-[10px] font-bold uppercase text-gray-400">Người báo</p>
-              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{detail.reporter_name || 'N/A'}</p>
-              <p className="truncate text-xs text-gray-500">{detail.reporter_email || 'N/A'}</p>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-4 dark:border-sky-900/50 dark:bg-sky-950/20">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-sky-600"><FiUser /> Người gửi báo lỗi</div>
+              <p className="truncate text-sm font-black text-gray-900 dark:text-white">{detail.reporter_name || 'Tài khoản không còn tồn tại'}</p>
+              <p className="mt-1 truncate text-xs text-gray-600 dark:text-slate-300">{detail.reporter_email || 'Không có email'}</p>
+              <p className="mt-1 text-xs font-semibold text-sky-700 dark:text-sky-300">User ID #{detail.reporter_id || '?'}</p>
+              <p className="mt-3 text-[11px] text-gray-500 dark:text-slate-400">
+                Báo lúc {new Date(detail.created_at).toLocaleString('vi-VN')}
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
             <p className="mb-1 text-xs font-bold uppercase text-amber-700 dark:text-amber-300">Mô tả người dùng</p>
-            <p className="text-sm text-gray-800 dark:text-slate-100">{detail.description || 'Không có mô tả thêm.'}</p>
+            <RichMathText value={detail.description || 'Không có mô tả thêm.'} className="text-sm text-gray-800 dark:text-slate-100" />
           </div>
 
           <div>
             <p className="mb-2 text-xs font-bold uppercase text-gray-400">Nội dung câu hỏi</p>
-            <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100">
-              <p className="whitespace-pre-wrap">{detail.question_text || 'N/A'}</p>
-              {detail.question_text_cn && <p className="mt-3 whitespace-pre-wrap text-xs text-gray-500">{detail.question_text_cn}</p>}
+            <div className="max-h-96 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100">
+              <RichMathText value={detail.question_text || 'N/A'} className="text-[15px] leading-7 text-gray-900 dark:text-slate-100 [&_.katex-display]:overflow-x-auto" />
+              {detail.question_text_cn && (
+                <RichMathText value={detail.question_text_cn} className="mt-3 border-t border-gray-200 pt-3 text-sm leading-7 text-gray-500 dark:border-slate-800 dark:text-slate-300 [&_.katex-display]:overflow-x-auto" />
+              )}
+              {detail.question_image && <img src={detail.question_image} alt={`Hình câu ${detail.question_number || detail.question_id}`} className="mt-4 max-h-80 w-auto rounded-lg border border-gray-200 object-contain dark:border-slate-700" />}
             </div>
           </div>
 
@@ -396,10 +431,15 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
               <p className="mb-2 text-xs font-bold uppercase text-gray-400">Đáp án</p>
               <div className="space-y-2">
                 {detail.answers.map(answer => (
-                  <div key={answer.id} className={`rounded-xl border px-3 py-2 text-sm ${answer.is_correct ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-100 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}>
-                    <span className="mr-2 font-black">{answer.answer_key}.</span>
-                    {answer.answer_text}
-                    {answer.is_correct && <span className="ml-2 text-xs font-black text-green-700">Đúng</span>}
+                  <div key={answer.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${answer.is_correct ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-100 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}>
+                    <span className="font-black">{answer.answer_key}.</span>
+                    <div className="min-w-0 flex-1">
+                      <RichMathText value={answer.answer_text || answer.answer_text_cn || ''} className="text-sm leading-6 [&_.katex-display]:overflow-x-auto" />
+                      {answer.answer_text_cn && answer.answer_text_cn !== answer.answer_text && (
+                        <RichMathText value={answer.answer_text_cn} className="mt-1 text-xs leading-5 opacity-70 [&_.katex-display]:overflow-x-auto" />
+                      )}
+                    </div>
+                    {answer.is_correct && <span className="shrink-0 text-xs font-black text-green-700">Đúng</span>}
                   </div>
                 ))}
               </div>
@@ -409,9 +449,9 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
           {(detail.explanation || detail.explanation_cn) && (
             <div>
               <p className="mb-2 text-xs font-bold uppercase text-gray-400">Lời giải</p>
-              <div className="max-h-40 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
-                {detail.explanation && <p className="whitespace-pre-wrap">{detail.explanation}</p>}
-                {detail.explanation_cn && <p className="mt-2 whitespace-pre-wrap">{detail.explanation_cn}</p>}
+              <div className="max-h-80 overflow-y-auto rounded-xl bg-gray-50 p-4 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                {detail.explanation && <RichMathText value={detail.explanation} className="text-sm leading-7 text-gray-700 dark:text-slate-200 [&_.katex-display]:overflow-x-auto" readableBreaks />}
+                {detail.explanation_cn && <RichMathText value={detail.explanation_cn} className="mt-3 border-t border-gray-200 pt-3 text-sm leading-7 text-gray-600 dark:border-slate-700 dark:text-slate-300 [&_.katex-display]:overflow-x-auto" readableBreaks />}
               </div>
             </div>
           )}
