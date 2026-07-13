@@ -9,7 +9,7 @@ const REPORT_TYPE_LABELS = {
   missing_image: 'Thiếu hình ảnh',
   missing_data: 'Thiếu dữ kiện',
   duplicate_question: 'Trùng câu hỏi',
-  answer_mismatch: 'Đáp án không khớp',
+  answer_mismatch: 'Đề/đáp án không khớp',
   other: 'Lỗi khác',
 };
 

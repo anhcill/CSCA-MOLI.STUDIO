@@ -30,19 +30,9 @@ import InkResultBackground, {
   inkResultSoftPanel,
   inkResultTitle,
 } from '@/components/layout/InkResultBackground';
+import { QUESTION_REPORT_TYPES } from '@/lib/questionReports';
 
 const AI_ANALYSIS_COST = 50;
-
-const QUESTION_REPORT_TYPES: { value: QuestionReportType; label: string }[] = [
-  { value: 'wrong_answer', label: 'Sai đáp án' },
-  { value: 'formula_error', label: 'Lỗi công thức' },
-  { value: 'translation_error', label: 'Lỗi dịch' },
-  { value: 'missing_image', label: 'Thiếu ảnh' },
-  { value: 'missing_data', label: 'Thiếu dữ kiện' },
-  { value: 'duplicate_question', label: 'Trùng câu' },
-  { value: 'answer_mismatch', label: 'Đề/đáp án không khớp' },
-  { value: 'other', label: 'Khác' },
-];
 
 interface AnswerOption {
   key: string;

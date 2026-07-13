@@ -13,6 +13,7 @@ import {
   FiClock, FiSearch, FiFilter, FiZap, FiExternalLink, FiHash, FiUser
 } from 'react-icons/fi';
 import { initSocket } from '@/lib/socket';
+import { questionReportDescription, questionReportLabel } from '@/lib/questionReports';
 
 //  Helpers
 
@@ -53,17 +54,6 @@ const VIOLATION_LABELS: Record<string, string> = {
   devtools: 'Mở công cụ lập trình',
   resize_suspicious: 'Thay đổi kích thước cửa sổ bất thường',
   multi_touch: 'Cử chỉ nhiều ngón bất thường',
-};
-
-const QUESTION_REPORT_LABELS: Record<string, string> = {
-  wrong_answer: 'Sai đáp án',
-  formula_error: 'Lỗi công thức',
-  translation_error: 'Lỗi dịch',
-  missing_image: 'Thiếu hình ảnh',
-  missing_data: 'Thiếu dữ kiện',
-  duplicate_question: 'Trùng câu hỏi',
-  answer_mismatch: 'Đáp án không khớp',
-  other: 'Lỗi khác',
 };
 
 function violationLabel(type: string) {
@@ -370,7 +360,7 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
               {detail.exam_title || `Đề #${detail.exam_id}`} · Câu {detail.question_number || '?'}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge text={QUESTION_REPORT_LABELS[detail.report_type] || detail.report_type} colorClass={SEVERITY_COLORS[detail.severity]} />
+              <Badge text={questionReportLabel(detail.report_type)} colorClass={SEVERITY_COLORS[detail.severity]} />
               <Badge text={detail.status} colorClass={STATUS_COLORS[detail.status]} />
               <span className="text-xs font-bold text-gray-400">Question ID #{detail.question_id}</span>
             </div>
@@ -412,7 +402,7 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
 
           <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
             <p className="mb-1 text-xs font-bold uppercase text-amber-700 dark:text-amber-300">Mô tả người dùng</p>
-            <RichMathText value={detail.description || 'Không có mô tả thêm.'} className="text-sm text-gray-800 dark:text-slate-100" />
+            <RichMathText value={questionReportDescription(detail.report_type, detail.description)} className="text-sm text-gray-800 dark:text-slate-100" />
           </div>
 
           <div>
@@ -474,10 +464,10 @@ function QuestionReportDrawer({ detail, onClose, onAction }: {
                 {detail.relatedReports.map(report => (
                   <div key={report.id} className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600 dark:bg-slate-800 dark:text-slate-300">
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <Badge text={report.report_type} colorClass={STATUS_COLORS[report.status]} />
+                      <Badge text={questionReportLabel(report.report_type)} colorClass={STATUS_COLORS[report.status]} />
                       <span className="text-gray-400">{timeAgo(report.created_at)}</span>
                     </div>
-                    <p>{report.description || 'Không có mô tả'}</p>
+                    <p>{questionReportDescription(report.report_type, report.description)}</p>
                   </div>
                 ))}
               </div>
@@ -924,7 +914,7 @@ export default function RiskCenterPage() {
                       <p className="text-xs font-semibold text-gray-900 dark:text-white truncate max-w-[140px]">{qr.exam_title || 'N/A'}</p>
                       <p className="text-[10px] text-gray-400">Câu #{qr.question_number} {qr.question_is_hidden ? '(ẩn)' : ''}</p>
                     </td>
-                    <td className="px-4 py-3"><Badge text={qr.report_type} colorClass={SEVERITY_COLORS[qr.severity]} /></td>
+                    <td className="px-4 py-3"><Badge text={questionReportLabel(qr.report_type)} colorClass={SEVERITY_COLORS[qr.severity]} /></td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 truncate max-w-[160px]">{qr.description || 'N/A'}</td>
                     <td className="px-4 py-3 text-center text-xs font-bold text-red-600">{qr.total_reports || 1}</td>
                     <td className="px-4 py-3 text-center"><Badge text={qr.status} colorClass={STATUS_COLORS[qr.status]} /></td>
