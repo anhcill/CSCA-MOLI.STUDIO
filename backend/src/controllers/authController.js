@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const QRCode = require("qrcode");
 const User = require("../models/User");
 const UserActivity = require("../models/UserActivity");
 const { OAuth2Client } = require("google-auth-library");
@@ -289,6 +290,21 @@ const getFrontendUrl = () => (process.env.FRONTEND_URL || "http://localhost:3000
 const buildDeviceApprovalUrl = (challengeToken) =>
   `${getFrontendUrl()}/login?deviceApproval=${encodeURIComponent(challengeToken)}`;
 
+const maskEmail = (email = "") => {
+  const [local, domain] = String(email).split("@");
+  if (!local || !domain) return "email tài khoản";
+  return `${local.slice(0, 2)}${"*".repeat(Math.max(3, local.length - 2))}@${domain}`;
+};
+
+const buildCompletedAuthData = async (user, jti) => {
+  const authz = await resolveAuthorizationContext(user);
+  return {
+    user: buildSafeUser(user, authz),
+    token: generateToken(buildTokenPayloadWithMfa(user, jti)),
+    refreshToken: generateRefreshToken(buildRefreshPayloadWithMfa(user, jti)),
+  };
+};
+
 const completeDeviceLoginRequest = async (req, request) => {
   const user = await User.findById(request.user_id);
   if (!user || !user.is_active) {
@@ -311,12 +327,7 @@ const completeDeviceLoginRequest = async (req, request) => {
 
   await DeviceSessionService.markLoginRequestCompleted(request.challenge_token);
 
-  const authz = await resolveAuthorizationContext(user);
-  return {
-    user: buildSafeUser(user, authz),
-    token: generateToken(buildTokenPayloadWithMfa(user, jti)),
-    refreshToken: generateRefreshToken(buildRefreshPayloadWithMfa(user, jti)),
-  };
+  return buildCompletedAuthData(user, jti);
 };
 
 const createAdminMfaRequiredResponse = async (user) => {
@@ -487,12 +498,7 @@ const register = async (req, res) => {
       console.error(`❌ Error sending welcome/verification email: ${err.message}`);
     });
 
-    // Register session (auto-evicts oldest if at device limit — no blocking)
-    if (isAdminUser(user) && reason === 'login') {
-      const mfaResponse = await createAdminMfaRequiredResponse(user);
-      return res.json(mfaResponse);
-    }
-
+    // Register the initial session.
     const jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
     await DeviceSessionService.registerSession({
@@ -618,7 +624,10 @@ const login = async (req, res) => {
       userAgent: req.get('User-Agent'),
     });
     const loginAllowed = await DeviceSessionService.checkLoginAllowed(user.id, deviceType);
-    if (!loginAllowed.allowed && !hasMatchingDeviceSession) {
+    // Admins must finish email OTP + Authenticator before receiving a device
+    // replacement challenge. This prevents email-only replacement from
+    // bypassing the stronger admin MFA requirement.
+    if (!isAdminUser(user) && !loginAllowed.allowed && !hasMatchingDeviceSession) {
       const deviceRequest = await DeviceSessionService.createLoginRequest({
         userId: user.id,
         deviceType,
@@ -1093,28 +1102,12 @@ const facebookAuthCallback = async (req, res) => {
       );
     }
 
-    const facebookJti = crypto.randomBytes(16).toString('hex');
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti: facebookJti,
-      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Facebook OAuth',
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      expiresAt: new Date(Date.now() + 604800000),
-    });
-
-    UserActivity.log(user.id, 'facebook_login', {
-      ip: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-    });
-
-    const token = generateToken(buildTokenPayload({ ...user, jti: facebookJti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti: facebookJti }, facebookJti));
+    const data = await completeLoginForUser(req, user, "Facebook OAuth", "facebook_login", avatarUrl);
 
     return res.redirect(
       buildRedirectWithHash(redirectTarget, {
-        token,
-        refreshToken,
+        token: data.token,
+        refreshToken: data.refreshToken,
       }),
     );
   } catch (error) {
@@ -1124,6 +1117,7 @@ const facebookAuthCallback = async (req, res) => {
         buildRedirectWithHash(redirectTarget, {
           error: 'device_limit_reached',
           message: error.message,
+          requestToken: error.requestToken,
         }),
       );
     }
@@ -1201,52 +1195,12 @@ const googleAuth = async (req, res) => {
       return res.json(mfaResponse);
     }
 
-    // Register session for Google login (auto-evicts oldest if at limit)
-    const googleJti = crypto.randomBytes(16).toString("hex");
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti: googleJti,
-      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Google OAuth',
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      expiresAt: new Date(Date.now() + 604800000),
-    });
-
-    // Log hành vi đăng nhập Google
-    UserActivity.log(user.id, 'google_login', {
-      ip: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-    });
-
-    const token = generateToken(buildTokenPayload({ ...user, jti: googleJti, subscription_tier: user.subscription_tier || 'vip' }));
-    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti: googleJti }, googleJti));
-
-    const authz = await resolveAuthorizationContext(user);
+    const data = await completeLoginForUser(req, user, "Google OAuth", "google_login", picture);
 
     return res.json({
       success: true,
       message: "Đăng nhập Google thành công",
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          full_name: user.full_name,
-          avatar: user.avatar || user.avatar_url || picture,
-          avatar_url: user.avatar_url || picture,
-          role: user.role || "student",
-          is_vip: isVipActive(user),
-          subscription_tier: user.subscription_tier || 'basic',
-          vip_expires_at: user.vip_expires_at || null,
-          vip_package_id: user.vip_package_id || null,
-          vip_allowed_subjects: user.vip_allowed_subjects || [],
-          roles: authz.roles,
-          permissions: authz.permissions,
-          created_at: user.created_at,
-        },
-        token,
-        refreshToken,
-      },
+      data,
     });
   } catch (error) {
     if (isDeviceLimitError(error)) {
@@ -1415,6 +1369,11 @@ const verifyOtpController = async (req, res) => {
       return res.status(400).json({ success: false, message: msgs[result.reason] || 'OTP không hợp lệ.' });
     }
 
+    if (isAdminUser(user) && reason === 'login') {
+      const mfaResponse = await createAdminMfaRequiredResponse(user);
+      return res.json(mfaResponse);
+    }
+
     // Xác thực thành công — tạo token
     const jti = crypto.randomBytes(16).toString("hex");
     const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
@@ -1576,19 +1535,80 @@ const getDeviceLoginRequestStatus = async (req, res) => {
       await DeviceSessionService.expireLoginRequest(request.challenge_token);
       return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
     }
+    if (request.status === "completed" && request.replacement_jti) {
+      if (new Date(request.expires_at) < new Date()) {
+        return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+      }
+      const user = await User.findById(request.user_id);
+      const active = await DeviceSessionService.assertActiveSession(request.replacement_jti, request.user_id);
+      if (!user || !active) {
+        return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Phiên đăng nhập mới không còn hiệu lực." });
+      }
+      const data = await buildCompletedAuthData(user, request.replacement_jti);
+      return res.json({ success: true, status: "completed", data });
+    }
     if (request.status === "approved") {
       const data = await completeDeviceLoginRequest(req, request);
       return res.json({ success: true, status: "completed", data });
     }
+    const sessions = (await DeviceSessionService.getActiveSessions(request.user_id))
+      .filter((session) => (session.device_type || "desktop") === request.device_type);
+    const maxDevices = await DeviceSessionService.getUserMaxDevices(request.user_id, request.device_type);
     return res.json({
       success: true,
       status: request.status,
       expiresAt: request.expires_at,
       deviceType: request.device_type,
+      deviceLimit: request.status === "pending" ? {
+        deviceType: request.device_type,
+        maxDevices,
+        sessions,
+        requestToken: request.challenge_token,
+        approveUrl: buildDeviceApprovalUrl(request.challenge_token),
+        expiresAt: request.expires_at,
+        targetSessionJti: request.target_session_jti || null,
+      } : undefined,
     });
   } catch (error) {
     console.error("Device login status error:", error.message);
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Không kiểm tra được yêu cầu thay thiết bị." });
+  }
+};
+
+const getDeviceLoginRequestQr = async (req, res) => {
+  try {
+    const request = await DeviceSessionService.getLoginRequest(req.params.token);
+    if (!request || request.status !== "pending" || new Date(request.expires_at) < new Date()) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
+    const svg = await QRCode.toString(buildDeviceApprovalUrl(request.challenge_token), {
+      type: "svg",
+      margin: 1,
+      width: 180,
+      errorCorrectionLevel: "M",
+    });
+    res.set("Cache-Control", "no-store");
+    return res.type("image/svg+xml").send(svg);
+  } catch (error) {
+    console.error("Device approval QR error:", error.message);
+    return res.status(500).json({ success: false, message: "Không thể tạo mã QR." });
+  }
+};
+
+const selectDeviceLoginTarget = async (req, res) => {
+  try {
+    const { sessionJti } = req.body || {};
+    if (!sessionJti) {
+      return res.status(400).json({ success: false, message: "Vui lòng chọn thiết bị cần đăng xuất." });
+    }
+    const request = await DeviceSessionService.setLoginRequestTarget(req.params.token, sessionJti);
+    if (!request) {
+      return res.status(409).json({ success: false, code: "DEVICE_TARGET_INVALID", message: "Thiết bị đã chọn không còn khả dụng hoặc yêu cầu đã hết hạn." });
+    }
+    return res.json({ success: true, message: "Đã chọn thiết bị cần thay.", targetSessionJti: request.target_session_jti });
+  } catch (error) {
+    console.error("Select device target error:", error.message);
+    return res.status(500).json({ success: false, message: "Không thể chọn thiết bị cần thay." });
   }
 };
 
@@ -1605,18 +1625,23 @@ const approveDeviceLoginRequest = async (req, res) => {
       return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
     }
 
-    const approved = await DeviceSessionService.markLoginRequestApproved(request.challenge_token, req.user.jti);
-    if (!approved) {
-      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
-    }
-    const removed = await DeviceSessionService.removeSession(req.user.jti, req.user.id);
-    if (!removed) {
-      return res.status(401).json({ success: false, message: "Phiên thiết bị cũ không còn hợp lệ." });
-    }
+    const newJti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10));
+    await DeviceSessionService.approveLoginRequestWithSession(
+      request.challenge_token,
+      req.user.id,
+      req.user.jti,
+      newJti,
+      expiresAt,
+    );
     return res.json({ success: true, message: "Đã duyệt thiết bị mới. Thiết bị hiện tại sẽ đăng xuất." });
   } catch (error) {
     console.error("Device login approve error:", error.message);
-    return res.status(500).json({ success: false, message: "Không thể duyệt thiết bị mới." });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code,
+      message: error.message || "Không thể duyệt thiết bị mới.",
+    });
   }
 };
 
@@ -1626,18 +1651,36 @@ const sendDeviceReplacementOtp = async (req, res) => {
     if (!request || request.status !== "pending" || new Date(request.expires_at) < new Date()) {
       return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
     }
+    if (!request.target_session_jti) {
+      return res.status(400).json({ success: false, code: "DEVICE_TARGET_REQUIRED", message: "Vui lòng chọn thiết bị cần đăng xuất trước." });
+    }
+    if (request.otp_sent_at && Date.now() - new Date(request.otp_sent_at).getTime() < 60000) {
+      const retryAfterSeconds = Math.ceil((60000 - (Date.now() - new Date(request.otp_sent_at).getTime())) / 1000);
+      return res.status(429).json({ success: false, code: "OTP_RESEND_TOO_SOON", message: `Vui lòng đợi ${retryAfterSeconds} giây trước khi gửi lại OTP.`, retryAfterSeconds });
+    }
     const user = await User.findById(request.user_id);
     if (!user || !user.email) {
       return res.status(404).json({ success: false, message: "Không tìm thấy tài khoản." });
     }
-    const otp = await storeOtp(user.id, user.email, "device_replace");
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    const stored = await DeviceSessionService.storeLoginRequestOtp(request.challenge_token, otpHash, otpExpiresAt);
+    if (!stored) {
+      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    }
     await emailService.sendOtpEmail({
       email: user.email,
       name: user.full_name || user.username,
       otp,
       reason: "device_replace",
     });
-    return res.json({ success: true, message: "Đã gửi mã OTP xác minh thay thiết bị.", userId: user.id });
+    return res.json({
+      success: true,
+      message: `Đã gửi OTP đến ${maskEmail(user.email)}.`,
+      maskedEmail: maskEmail(user.email),
+      retryAfterSeconds: 60,
+    });
   } catch (error) {
     console.error("Device replacement OTP error:", error.message);
     return res.status(500).json({ success: false, message: "Không thể gửi OTP thay thiết bị." });
@@ -1647,30 +1690,32 @@ const sendDeviceReplacementOtp = async (req, res) => {
 const verifyDeviceReplacementOtp = async (req, res) => {
   try {
     const { otp } = req.body || {};
-    const request = await DeviceSessionService.getLoginRequest(req.params.token);
-    if (!request || request.status !== "pending" || new Date(request.expires_at) < new Date()) {
-      return res.status(410).json({ success: false, code: "DEVICE_REQUEST_EXPIRED", message: "Yêu cầu thay thiết bị đã hết hạn." });
+    if (!/^\d{6}$/.test(String(otp || ""))) {
+      return res.status(400).json({ success: false, message: "OTP phải gồm đúng 6 chữ số." });
     }
-    if (!otp) {
-      return res.status(400).json({ success: false, message: "Thiếu mã OTP." });
-    }
-    const result = await verifyOtp(request.user_id, otp, "device_replace");
-    if (!result.valid) {
-      const msgs = {
-        no_otp: "Không tìm thấy mã OTP. Vui lòng yêu cầu mã mới.",
-        expired: "Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.",
-        already_used: "Mã OTP đã được sử dụng. Vui lòng yêu cầu mã mới.",
-        invalid: "Mã OTP không đúng. Vui lòng thử lại.",
-      };
-      return res.status(400).json({ success: false, message: msgs[result.reason] || "OTP không hợp lệ." });
-    }
-
-    await DeviceSessionService.removeOldestSessionForType(request.user_id, request.device_type || "desktop");
-    const data = await completeDeviceLoginRequest(req, request);
+    const jti = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + parseInt(process.env.JWT_REFRESH_EXPIRES_MS || "604800000", 10));
+    const request = await DeviceSessionService.replaceSessionWithOtp({
+      challengeToken: req.params.token,
+      otp: String(otp),
+      newJti: jti,
+      expiresAt,
+    });
+    const user = await User.findById(request.user_id);
+    const data = await buildCompletedAuthData(user, jti);
+    emailService.sendSecurityAlert({
+      email: user.email,
+      name: user.full_name || user.username,
+      event: "device_replaced",
+      ip: request.new_ip_address || getClientIp(req),
+      location: null,
+      device: parseUserAgent(request.new_user_agent),
+      time: new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }),
+    }).catch(() => {});
     return res.json({ success: true, message: "Đã xác minh và đăng nhập thiết bị mới.", data });
   } catch (error) {
     console.error("Device replacement verify error:", error.message);
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Không thể xác minh thay thiết bị." });
+    return res.status(error.statusCode || 500).json({ success: false, code: error.code, message: error.message || "Không thể xác minh thay thiết bị." });
   }
 };
 
@@ -1766,6 +1811,8 @@ module.exports = {
   verifyEmail,
   verifyOtp: verifyOtpController,
   getDeviceLoginRequestStatus,
+  getDeviceLoginRequestQr,
+  selectDeviceLoginTarget,
   approveDeviceLoginRequest,
   sendDeviceReplacementOtp,
   verifyDeviceReplacementOtp,

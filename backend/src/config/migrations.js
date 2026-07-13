@@ -1118,6 +1118,7 @@ async function runOptimizations() {
       "044_risk_center_phase_d.sql",
       "045_device_session_type_limits.sql",
       "046_device_login_requests.sql",
+      "051_device_replacement_hardening.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

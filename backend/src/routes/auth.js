@@ -50,6 +50,8 @@ router.post("/admin-mfa/verify", otpLimiter, authController.adminMfaVerify);
 
 // Device replacement login requests
 router.get("/device-login-requests/:token/status", authController.getDeviceLoginRequestStatus);
+router.get("/device-login-requests/:token/qr", authController.getDeviceLoginRequestQr);
+router.post("/device-login-requests/:token/target", otpLimiter, authController.selectDeviceLoginTarget);
 router.post("/device-login-requests/:token/approve", authenticate, authController.approveDeviceLoginRequest);
 router.post("/device-login-requests/:token/otp", otpLimiter, authController.sendDeviceReplacementOtp);
 router.post("/device-login-requests/:token/otp/verify", otpLimiter, authController.verifyDeviceReplacementOtp);

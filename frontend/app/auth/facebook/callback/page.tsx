@@ -12,6 +12,7 @@ type CallbackPayload = {
   refreshToken?: string;
   error?: string;
   message?: string;
+  requestToken?: string;
 };
 
 const parseHashParams = (): CallbackPayload => {
@@ -24,6 +25,7 @@ const parseHashParams = (): CallbackPayload => {
     refreshToken: params.get('refreshToken') || undefined,
     error: params.get('error') || undefined,
     message: params.get('message') || undefined,
+    requestToken: params.get('requestToken') || undefined,
   };
 };
 
@@ -39,6 +41,10 @@ export default function FacebookCallbackPage() {
     }
 
     if (payload.error) {
+      if (payload.error === 'device_limit_reached' && payload.requestToken) {
+        router.replace(`/login?deviceRequest=${encodeURIComponent(payload.requestToken)}`);
+        return;
+      }
       setError(payload.message || 'Đăng nhập Facebook thất bại. Vui lòng thử lại.');
       setLoading(false);
       return;

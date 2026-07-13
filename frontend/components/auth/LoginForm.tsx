@@ -10,6 +10,7 @@ import {
   verifyOtp,
   resendOtp,
   getDeviceLoginStatus,
+  selectDeviceLoginTarget,
   approveDeviceLogin,
   sendDeviceReplacementOtp,
   verifyDeviceReplacementOtp,
@@ -29,7 +30,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
-import { FiArrowRight, FiLock, FiMail, FiShield } from 'react-icons/fi';
+import { FiArrowRight, FiLock, FiMail, FiMonitor, FiShield } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -73,6 +74,8 @@ export default function LoginForm() {
   const [deviceOtpOpen, setDeviceOtpOpen] = useState(false);
   const [deviceOtp, setDeviceOtp] = useState('');
   const [deviceOtpSending, setDeviceOtpSending] = useState(false);
+  const [selectedDeviceJti, setSelectedDeviceJti] = useState('');
+  const [deviceOtpCountdown, setDeviceOtpCountdown] = useState(0);
 
   // OTP countdown timer
   useEffect(() => {
@@ -87,9 +90,35 @@ export default function LoginForm() {
   }, [otpCountdown]);
 
   useEffect(() => {
+    if (deviceOtpCountdown <= 0) return;
+    const timer = window.setInterval(() => {
+      setDeviceOtpCountdown(prev => {
+        if (prev <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [deviceOtpCountdown]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
-    const token = new URLSearchParams(window.location.search).get('deviceApproval') || '';
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('deviceApproval') || '';
     if (token) setDeviceApprovalToken(token);
+    const requestToken = params.get('deviceRequest') || '';
+    if (requestToken) {
+      getDeviceLoginStatus(requestToken)
+        .then(response => {
+          if (response.deviceLimit) {
+            setDeviceLimitData(response.deviceLimit);
+            setSelectedDeviceJti(response.deviceLimit.targetSessionJti || '');
+          }
+        })
+        .catch((error: any) => setErrors({ general: error.response?.data?.message || 'Yêu cầu thay thiết bị không còn hợp lệ.' }));
+    }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,8 +156,29 @@ export default function LoginForm() {
       ? `${window.location.origin}/login?deviceApproval=${encodeURIComponent(deviceLimitData.requestToken)}`
       : '');
   const deviceQrUrl = deviceApproveUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(deviceApproveUrl)}`
+    ? `/api/auth/device-login-requests/${encodeURIComponent(deviceLimitData?.requestToken || '')}/qr`
     : '';
+
+  const getFriendlyDeviceName = (deviceInfo?: string) => {
+    const ua = String(deviceInfo || 'Thiết bị không xác định');
+    const browser = /Edg\//i.test(ua) ? 'Microsoft Edge'
+      : /Chrome\//i.test(ua) ? 'Google Chrome'
+        : /Firefox\//i.test(ua) ? 'Mozilla Firefox'
+          : /Safari\//i.test(ua) ? 'Safari' : 'Trình duyệt';
+    const os = /Windows/i.test(ua) ? 'Windows'
+      : /Android/i.test(ua) ? 'Android'
+        : /iPhone|iPad|iOS/i.test(ua) ? 'iOS/iPadOS'
+          : /Mac OS|Macintosh/i.test(ua) ? 'macOS'
+            : /Linux/i.test(ua) ? 'Linux' : 'không rõ hệ điều hành';
+    return `${browser} · ${os}`;
+  };
+
+  const maskIp = (ip?: string) => {
+    if (!ip) return 'IP không xác định';
+    if (ip.includes(':')) return `${ip.split(':').slice(0, 2).join(':')}:…`;
+    const parts = ip.split('.');
+    return parts.length === 4 ? `${parts[0]}.${parts[1]}.*.*` : ip;
+  };
 
   const completeAuth = async (user: User, token: string, refreshToken: string) => {
     setAuth(user, token, refreshToken);
@@ -213,7 +263,16 @@ export default function LoginForm() {
         setAdminMfaError(response.message || 'Ma Microsoft Authenticator khong dung.');
       }
     } catch (error: any) {
-      setAdminMfaError(error.response?.data?.message || 'Ma Microsoft Authenticator khong dung.');
+      if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
+        const limitData = error.response.data.data as DeviceLimitData;
+        setAdminMfaStep(null);
+        setDeviceLimitData(limitData);
+        setSelectedDeviceJti(limitData.targetSessionJti || '');
+        setDeviceApprovalError('');
+        setDeviceApprovalMessage('');
+      } else {
+        setAdminMfaError(error.response?.data?.message || 'Ma Microsoft Authenticator khong dung.');
+      }
     } finally {
       setAdminMfaLoading(false);
     }
@@ -277,6 +336,8 @@ export default function LoginForm() {
         setDeviceApprovalError('');
         setDeviceOtpOpen(false);
         setDeviceOtp('');
+        setSelectedDeviceJti(error.response.data.data.targetSessionJti || '');
+        setDeviceOtpCountdown(0);
         setErrors({});
         return;
       }
@@ -312,7 +373,15 @@ export default function LoginForm() {
       }
       if (response.success) await completeAuthData(response.data);
     } catch (error: any) {
-      setErrors({ general: error.response?.data?.message || t('auth.googleLoginFailed') });
+      if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
+        const limitData = error.response.data.data as DeviceLimitData;
+        setDeviceLimitData(limitData);
+        setSelectedDeviceJti(limitData.targetSessionJti || '');
+        setDeviceApprovalError('');
+        setDeviceApprovalMessage('');
+      } else {
+        setErrors({ general: error.response?.data?.message || t('auth.googleLoginFailed') });
+      }
     } finally {
       setIsSubmitting(false);
       setLoading(false);
@@ -431,6 +500,10 @@ export default function LoginForm() {
     try {
       const response = await getDeviceLoginStatus(deviceLimitData.requestToken);
       if (response.success && response.data && await completeAuthData(response.data)) return;
+      if (response.deviceLimit) {
+        setDeviceLimitData(response.deviceLimit);
+        setSelectedDeviceJti(response.deviceLimit.targetSessionJti || selectedDeviceJti);
+      }
       setDeviceApprovalMessage(response.status === 'pending'
         ? 'Thiết bị cũ chưa duyệt yêu cầu này.'
         : response.message || 'Chưa thể đăng nhập thiết bị mới.');
@@ -463,11 +536,17 @@ export default function LoginForm() {
 
   const handleSendDeviceOtp = async () => {
     if (!deviceLimitData?.requestToken) return;
+    if (!selectedDeviceJti) {
+      setDeviceApprovalError('Vui lòng chọn thiết bị cần đăng xuất trước.');
+      return;
+    }
     setDeviceOtpSending(true);
     setDeviceApprovalError('');
     try {
+      await selectDeviceLoginTarget(deviceLimitData.requestToken, selectedDeviceJti);
       const response = await sendDeviceReplacementOtp(deviceLimitData.requestToken);
       setDeviceOtpOpen(true);
+      setDeviceOtpCountdown(response.retryAfterSeconds || 60);
       setDeviceApprovalMessage(response.message || 'Đã gửi OTP đến email tài khoản.');
     } catch (error: any) {
       setDeviceApprovalError(error.response?.data?.message || 'Không gửi được OTP thay thiết bị.');
@@ -491,6 +570,22 @@ export default function LoginForm() {
       setDeviceApprovalLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!deviceLimitData?.requestToken || deviceOtpOpen) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await getDeviceLoginStatus(deviceLimitData.requestToken);
+        if (response.success && response.data) {
+          window.clearInterval(timer);
+          await completeAuthData(response.data);
+        }
+      } catch {
+        // Keep the manual retry/error controls available.
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [deviceLimitData?.requestToken, deviceOtpOpen]);
 
   const loginInputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -673,12 +768,49 @@ export default function LoginForm() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-gray-800 dark:text-slate-100">Chọn thiết bị cần đăng xuất</p>
+            {deviceLimitData.sessions?.map(session => {
+              const selected = selectedDeviceJti === session.jti;
+              return (
+                <button
+                  key={session.jti}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDeviceJti(session.jti);
+                    setDeviceOtpOpen(false);
+                    setDeviceOtp('');
+                    setDeviceApprovalError('');
+                    setDeviceApprovalMessage('');
+                  }}
+                  className={`w-full rounded-xl border p-3 text-left transition ${selected
+                    ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500/20 dark:bg-indigo-950/30'
+                    : 'border-gray-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-950'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 rounded-lg p-2 ${selected ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                      <FiMonitor className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-bold text-gray-900 dark:text-white">{getFriendlyDeviceName(session.device_info)}</span>
+                      <span className="mt-1 block text-xs text-gray-500 dark:text-slate-400">
+                        {maskIp(session.ip_address)}
+                        {session.last_active ? ` · Hoạt động ${new Date(session.last_active).toLocaleString('vi-VN')}` : ''}
+                      </span>
+                    </span>
+                    <span className={`mt-2 h-4 w-4 rounded-full border-2 ${selected ? 'border-indigo-600 bg-indigo-600 ring-2 ring-indigo-200' : 'border-gray-300'}`} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
           {deviceApproveUrl && (
             <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900 p-4 text-center">
               {deviceQrUrl && (
                 <img src={deviceQrUrl} alt="QR duyệt thiết bị mới" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" />
               )}
-              <p className="mt-3 break-all text-xs text-gray-500 dark:text-slate-400">{deviceApproveUrl}</p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-slate-400">Quét mã này trên thiết bị cũ đang đăng nhập để duyệt.</p>
             </div>
           )}
 
@@ -705,10 +837,14 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={handleSendDeviceOtp}
-              disabled={deviceOtpSending}
+              disabled={deviceOtpSending || !selectedDeviceJti || deviceOtpCountdown > 0}
               className="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {deviceOtpSending ? 'Đang gửi...' : 'Không còn thiết bị cũ'}
+              {deviceOtpSending
+                ? 'Đang gửi...'
+                : deviceOtpCountdown > 0
+                  ? `Gửi lại OTP sau ${deviceOtpCountdown}s`
+                  : 'Không truy cập được · Gửi OTP'}
             </button>
           </div>
 
@@ -745,6 +881,8 @@ export default function LoginForm() {
               setDeviceApprovalMessage('');
               setDeviceOtpOpen(false);
               setDeviceOtp('');
+              setSelectedDeviceJti('');
+              setDeviceOtpCountdown(0);
             }}
             className="w-full text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 underline"
           >

@@ -75,6 +75,14 @@ export interface DeviceLimitData {
   requestToken: string;
   approveUrl: string;
   expiresAt: string;
+  targetSessionJti?: string | null;
+}
+
+export interface DeviceLoginStatusResponse extends AuthResponse {
+  status?: string;
+  expiresAt?: string;
+  deviceType?: 'mobile' | 'desktop';
+  deviceLimit?: DeviceLimitData;
 }
 
 export interface AdminMfaSetupData {
@@ -194,8 +202,13 @@ export const resendOtp = async (userId: number): Promise<{ success: boolean; mes
   return response.data;
 };
 
-export const getDeviceLoginStatus = async (token: string): Promise<AuthResponse & { status?: string }> => {
+export const getDeviceLoginStatus = async (token: string): Promise<DeviceLoginStatusResponse> => {
   const response = await axios.get(`/auth/device-login-requests/${token}/status`);
+  return response.data;
+};
+
+export const selectDeviceLoginTarget = async (token: string, sessionJti: string): Promise<{ success: boolean; message: string; targetSessionJti: string }> => {
+  const response = await axios.post(`/auth/device-login-requests/${token}/target`, { sessionJti });
   return response.data;
 };
 
@@ -204,7 +217,7 @@ export const approveDeviceLogin = async (token: string): Promise<{ success: bool
   return response.data;
 };
 
-export const sendDeviceReplacementOtp = async (token: string): Promise<{ success: boolean; message: string; userId?: number }> => {
+export const sendDeviceReplacementOtp = async (token: string): Promise<{ success: boolean; message: string; maskedEmail?: string; retryAfterSeconds?: number }> => {
   const response = await axios.post(`/auth/device-login-requests/${token}/otp`);
   return response.data;
 };

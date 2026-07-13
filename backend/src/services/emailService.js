@@ -466,6 +466,7 @@ class EmailService {
     const safeName = this.escapeHtml(name || 'bạn');
     const eventLabel = {
       login: 'Có yêu cầu đăng nhập',
+      device_replaced: 'Một thiết bị đăng nhập vừa được thay thế',
       password_change: 'Mật khẩu vừa được thay đổi',
       suspicious: 'Hoạt động đáng ngờ',
     }[event] || 'Thông báo bảo mật';
