@@ -285,6 +285,14 @@ function extractOpenAICompatibleText(data) {
   if (typeof data !== 'string') {
     const messageText = data?.choices?.[0]?.message?.content;
     if (typeof messageText === 'string') return messageText.trim();
+    if (Array.isArray(messageText)) {
+      const joined = messageText.map(part => part?.text || part?.content || '').filter(Boolean).join('');
+      if (joined) return joined.trim();
+    }
+    const toolArguments = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (typeof toolArguments === 'string') return toolArguments.trim();
+    const reasoningText = data?.choices?.[0]?.message?.reasoning_content;
+    if (typeof reasoningText === 'string' && /[\[{]/.test(reasoningText)) return reasoningText.trim();
     const deltaText = data?.choices?.[0]?.delta?.content;
     if (typeof deltaText === 'string') return deltaText.trim();
     return '';
@@ -496,6 +504,7 @@ async function callAdminExamAIMessages(messages, options = {}) {
         max_tokens: maxTokens,
         temperature,
       };
+      if (options.responseFormat) payload.response_format = options.responseFormat;
 
       try {
         return await withConcurrency(async () => {

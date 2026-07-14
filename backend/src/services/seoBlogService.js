@@ -119,13 +119,20 @@ async function cannibalization(primaryKeyword, excludeId) {
 }
 
 async function findImage(query, topic) {
-  if (process.env.PEXELS_API_KEY) {
-    const { data } = await axios.get('https://api.pexels.com/v1/search', { headers:{Authorization:process.env.PEXELS_API_KEY}, params:{query,per_page:1}, timeout:10000 });
-    const p=data.photos?.[0]; if(p) return {url:p.src.large2x || p.src.large,alt:p.alt || query,source:'Pexels',source_url:p.url};
-  }
-  if (process.env.UNSPLASH_ACCESS_KEY) {
-    const { data } = await axios.get('https://api.unsplash.com/search/photos', { headers:{Authorization:`Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`}, params:{query,per_page:1}, timeout:10000 });
-    const p=data.results?.[0]; if(p) return {url:p.urls.regular,alt:p.alt_description || query,source:`Unsplash / ${p.user?.name || ''}`.trim(),source_url:p.links.html};
+  const searches = [...new Set([String(query||'').trim(),String(topic||'').trim(),'Chinese university students studying education'].filter(Boolean))];
+  for (const search of searches) {
+    if (process.env.PEXELS_API_KEY) {
+      try {
+        const { data } = await axios.get('https://api.pexels.com/v1/search', { headers:{Authorization:process.env.PEXELS_API_KEY}, params:{query:search,per_page:3,orientation:'landscape'}, timeout:10000 });
+        const p=data.photos?.[0]; if(p) return {url:p.src.large2x || p.src.large,alt:p.alt || query,source:'Pexels',source_url:p.url,search_query:search};
+      } catch (error) { console.warn('SEO image Pexels search failed, trying next source:', error.response?.status || error.message); }
+    }
+    if (process.env.UNSPLASH_ACCESS_KEY) {
+      try {
+        const { data } = await axios.get('https://api.unsplash.com/search/photos', { headers:{Authorization:`Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`}, params:{query:search,per_page:3,orientation:'landscape'}, timeout:10000 });
+        const p=data.results?.[0]; if(p) return {url:p.urls.regular,alt:p.alt_description || query,source:`Unsplash / ${p.user?.name || ''}`.trim(),source_url:p.links.html,search_query:search};
+      } catch (error) { console.warn('SEO image Unsplash search failed, trying next query:', error.response?.status || error.message); }
+    }
   }
   // Only return explicitly curated entries. Never synthesize an image URL.
   return topicImageLibrary()[slugify(topic)] || null;
@@ -140,15 +147,15 @@ Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không 
   const model=process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
   let parsed;
   try {
-    const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog'});
+    const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog',responseFormat:{type:'json_object'}});
     parsed=parseGeneratedJson(raw);
   } catch (firstError) {
     const retryPrompt=`${prompt}\nLẦN TRƯỚC SAI ĐỊNH DẠNG. Chỉ xuất đúng một JSON object hợp lệ, không markdown, không giải thích, không trailing comma.`;
-    const retryRaw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.15,feature:'seo_blog_retry'});
+    const retryRaw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.15,feature:'seo_blog_retry',responseFormat:{type:'json_object'}});
     parsed=parseGeneratedJson(retryRaw);
   }
   const image=await findImage(keyword,parsed.topic).catch(()=>null);
-  return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},created_by:userId});
+  return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},generation_metadata:{image_search_query:keyword,image_found:Boolean(image),image_source:image?.source||null},created_by:userId});
 }
 
 async function suggestIdeas(input = {}, userId) {
@@ -167,13 +174,19 @@ Trả về JSON thuần: {"ideas":[{"topic":"...","category":"...","primary_keyw
 Từ khóa phải tự nhiên bằng tiếng Việt, có long-tail, ý định tìm kiếm rõ ràng và đủ khác nhau.`;
   const model = process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
   try {
-    const raw = await callAdminExamAI(prompt, {
+    let raw = await callAdminExamAI(prompt, {
       model,
       maxTokens: 3000,
       temperature: 0.75,
       feature: 'seo_blog_ideas',
+      responseFormat: { type: 'json_object' },
     });
-    const parsed = parseGeneratedJson(raw);
+    let parsed;
+    try { parsed = parseGeneratedJson(raw); }
+    catch {
+      raw = await callAdminExamAI(`Convert the following output to valid JSON using exactly the schema {"ideas":[{"topic":"","category":"","primary_keyword":"","secondary_keywords":[],"search_intent":"informational","angle":""}]}. Return JSON only.\n\n${String(raw).slice(0,12000)}`, {model,maxTokens:3000,temperature:0.1,feature:'seo_blog_ideas_repair',responseFormat:{type:'json_object'}});
+      parsed = parseGeneratedJson(raw);
+    }
     const ideas = Array.isArray(parsed) ? parsed : Array.isArray(parsed.ideas) ? parsed.ideas : [];
     const valid = ideas.filter((idea) => idea?.primary_keyword);
     if (valid.length) return persistIdeas(valid.slice(0, 12), focus, userId);
