@@ -118,9 +118,25 @@ async function cannibalization(primaryKeyword, excludeId) {
   return { conflict: rows.length > 0, posts: rows };
 }
 
+function imageSearchTerms(query, topic) {
+  const text = `${query||''} ${topic||''}`.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/đ/g,'d');
+  const terms = [];
+  if (/visa|phong van|thu tuc|x1|x2/.test(text)) terms.push('China student visa passport application documents','visa interview embassy passport');
+  if (/hoc bong|csc|scholarship/.test(text)) terms.push('international student scholarship university China','Chinese university campus students');
+  if (/ho so|apply|admission|jw201|jw202/.test(text)) terms.push('university application admission documents desk','student filling application documents');
+  if (/csca|on thi|de thi|toan|vat ly|hoa hoc|tieng trung/.test(text)) terms.push('Asian students studying exam classroom','student studying mathematics books desk');
+  if (/chon truong|dai hoc|nganh hoc/.test(text)) terms.push('Chinese university campus library students','university campus China architecture');
+  if (/chi phi|hoc phi|sinh hoat phi/.test(text)) terms.push('student budgeting calculator notebook','education cost planning desk');
+  if (/doi song|du hoc sinh|ky tuc xa/.test(text)) terms.push('international students university campus China','Asian students dormitory study');
+  if (/du hoc|trung quoc|china/.test(text)) terms.push('international students studying at Chinese university','China university campus students library');
+  if (/tai lieu|cong cu|sach/.test(text)) terms.push('study books notes laptop desk','exam preparation study materials');
+  terms.push('Asian student studying at desk');
+  return [...new Set(terms)];
+}
+
 async function findImages(query, topic, limit = 8, page = 1) {
   const results = [];
-  const searches = [...new Set([String(query||'').trim(),String(topic||'').trim(),'Chinese university students studying education'].filter(Boolean))];
+  const searches = imageSearchTerms(query,topic);
   for (const search of searches) {
     if (process.env.PEXELS_API_KEY) {
       try {

@@ -135,7 +135,7 @@ export default function Page() {
     }
     setBusy(true);
     try {
-      const images = await seoBlogApi.searchImages(draft.primary_keyword, imageOptions.length ? Math.floor(Math.random() * 5) + 2 : 1);
+      const images = await seoBlogApi.searchImages(draft.primary_keyword, draft.topic || draft.category, imageOptions.length ? Math.floor(Math.random() * 5) + 2 : 1);
       if (!images.length) {
         setNotice(
           "Chưa tìm thấy ảnh. Hãy cấu hình Pexels, Unsplash hoặc thư viện ảnh chủ đề.",

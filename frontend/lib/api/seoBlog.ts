@@ -26,7 +26,7 @@ export const seoBlogApi = {
   async create(input: Partial<SeoPostInput>) { const r = await axios.post('/admin/seo-blog', input); return { ...r.data.data, seo_score:r.data.seo?.score, seo_issues:r.data.seo?.checks } as SeoPost; },
   async update(id: SeoPost['id'], input: Partial<SeoPostInput>) { const r = await axios.put(`/admin/seo-blog/${id}`, input); const d=r.data.data; return { ...d, seo_score:d.seo?.score ?? d.seo_score, seo_issues:d.seo?.checks ?? d.seo_issues } as SeoPost; },
   async validate(id: SeoPost['id']) { const r=await axios.post(`/admin/seo-blog/${id}/validate`); const d=r.data.data; return { seo:{...d.seo,issues:d.seo?.checks||[]},cannibalization:d.cannibalization?.posts||[] } as { seo: { score:number; issues:SeoIssue[] }; cannibalization: SeoPost['cannibalization'] }; },
-  async searchImages(query: string, page = 1) { const r=await axios.get('/admin/seo-blog/image-search',{params:{q:query,limit:8,page}}); return (r.data.data ?? []) as SeoImage[]; },
+  async searchImages(query: string, topic?: string, page = 1) { const r=await axios.get('/admin/seo-blog/image-search',{params:{q:query,topic,limit:8,page}}); return (r.data.data ?? []) as SeoImage[]; },
   async publish(id: SeoPost['id']) { const r = await axios.post(`/admin/seo-blog/${id}/publish`); return unwrap<SeoPost>(r.data); },
   async schedule(id: SeoPost['id'], scheduled_at: string) { const r = await axios.post(`/admin/seo-blog/${id}/schedule`, { scheduled_at, timezone: 'Asia/Ho_Chi_Minh' }); return unwrap<SeoPost>(r.data); },
   async archive(id: SeoPost['id']) { const r=await axios.patch(`/admin/seo-blog/${id}`,{status:'archived'}); return unwrap<SeoPost>(r.data); },
