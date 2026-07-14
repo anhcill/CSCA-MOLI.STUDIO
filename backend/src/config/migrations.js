@@ -1121,6 +1121,7 @@ async function runOptimizations() {
       "051_device_replacement_hardening.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
+      "20260714_remove_seo_blog_bold_markers.sql",
     ];
     for (const filename of gamificationMigrationFiles) {
       const migrationPath = path.resolve(

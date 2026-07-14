@@ -143,7 +143,7 @@ async function generate(input, userId) {
   const prompt=`Tạo bài blog SEO tiếng Việt về "${keyword}".
 Định hướng: category=${input.category || 'AI tự chọn'}, search_intent=${input.search_intent || 'AI tự chọn'}, topic=${input.topic || 'AI tự chọn'}, từ khóa phụ=${JSON.stringify(input.secondary_keywords || [])}.
 Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt.
-Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
+Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Không dùng cú pháp in đậm Markdown và tuyệt đối không tạo dấu **. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
   const model=process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
   let parsed;
   try {
@@ -154,6 +154,7 @@ Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không 
     const retryRaw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.15,feature:'seo_blog_retry',responseFormat:{type:'json_object'}});
     parsed=parseGeneratedJson(retryRaw);
   }
+  parsed.content = String(parsed.content || '').replace(/\*\*/g, '');
   const image=await findImage(keyword,parsed.topic).catch(()=>null);
   return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},generation_metadata:{image_search_query:keyword,image_found:Boolean(image),image_source:image?.source||null},created_by:userId});
 }
