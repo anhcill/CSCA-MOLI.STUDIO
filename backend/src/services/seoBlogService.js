@@ -63,6 +63,39 @@ function fallbackIdeas(existing, focus) {
     .slice(0, 12);
 }
 
+async function persistIdeas(ideas, focus, userId) {
+  const saved = [];
+  for (const idea of ideas) {
+    const values = [
+      idea.topic || idea.category || '',
+      idea.category || 'Kiến thức CSCA',
+      String(idea.primary_keyword || '').trim(),
+      Array.isArray(idea.secondary_keywords) ? idea.secondary_keywords : [],
+      idea.search_intent || 'informational',
+      idea.angle || '',
+      focus || '',
+      userId || null,
+    ];
+    if (!values[2]) continue;
+    const { rows } = await db.query(
+      `INSERT INTO seo_blog_ideas (
+         topic, category, primary_keyword, secondary_keywords,
+         search_intent, angle, focus, created_by
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (primary_keyword) DO UPDATE SET
+         topic=EXCLUDED.topic,
+         category=EXCLUDED.category,
+         secondary_keywords=EXCLUDED.secondary_keywords,
+         search_intent=EXCLUDED.search_intent,
+         angle=EXCLUDED.angle
+       RETURNING *`,
+      values,
+    );
+    saved.push(rows[0]);
+  }
+  return saved;
+}
+
 function validateSeo(post) {
   const checks = [];
   const add = (key, ok, weight, message) => checks.push({ key, ok, weight, message });
@@ -118,7 +151,7 @@ Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không 
   return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},created_by:userId});
 }
 
-async function suggestIdeas(input = {}) {
+async function suggestIdeas(input = {}, userId) {
   const { rows } = await db.query(
     `SELECT primary_keyword FROM seo_blog_posts
      WHERE status <> 'archived'
@@ -143,11 +176,40 @@ Từ khóa phải tự nhiên bằng tiếng Việt, có long-tail, ý định t
     const parsed = parseGeneratedJson(raw);
     const ideas = Array.isArray(parsed) ? parsed : Array.isArray(parsed.ideas) ? parsed.ideas : [];
     const valid = ideas.filter((idea) => idea?.primary_keyword);
-    if (valid.length) return valid.slice(0, 12);
+    if (valid.length) return persistIdeas(valid.slice(0, 12), focus, userId);
   } catch (error) {
     console.warn('SEO idea AI output invalid, using curated fallback:', error.message);
   }
-  return fallbackIdeas(existing, focus);
+  return persistIdeas(fallbackIdeas(existing, focus), focus, userId);
+}
+
+async function listIdeas(status = 'unused') {
+  const args = [];
+  let where = 'TRUE';
+  if (status && status !== 'all') { args.push(status); where = `status=$${args.length}`; }
+  const { rows } = await db.query(
+    `SELECT * FROM seo_blog_ideas WHERE ${where}
+     ORDER BY CASE status WHEN 'unused' THEN 0 WHEN 'used' THEN 1 ELSE 2 END, created_at DESC
+     LIMIT 200`,
+    args,
+  );
+  return rows;
+}
+
+async function updateIdea(id, data = {}) {
+  const status = ['unused','used','dismissed'].includes(data.status) ? data.status : 'used';
+  const { rows } = await db.query(
+    `UPDATE seo_blog_ideas SET status=$1, used_post_id=$2,
+       used_at=CASE WHEN $1='used' THEN NOW() ELSE NULL END
+     WHERE id=$3 RETURNING *`,
+    [status, data.used_post_id || null, id],
+  );
+  return rows[0] || null;
+}
+
+async function deleteIdea(id) {
+  const result = await db.query('DELETE FROM seo_blog_ideas WHERE id=$1', [id]);
+  return result.rowCount > 0;
 }
 
 async function create(data) {
@@ -158,4 +220,4 @@ async function create(data) {
 }
 async function update(id,data) { const cols=FIELDS.filter(k=>data[k]!==undefined && k!=='slug'); if(data.slug!==undefined) { data.slug=slugify(data.slug); cols.push('slug'); } if(!cols.length) return get(id); const {rows}=await db.query(`UPDATE seo_blog_posts SET ${cols.map((k,i)=>`${k}=$${i+1}`).join(',')},updated_at=NOW() WHERE id=$${cols.length+1} RETURNING *`,[...cols.map(k=>data[k]),id]); return rows[0]; }
 async function get(id){const {rows}=await db.query('SELECT * FROM seo_blog_posts WHERE id=$1',[id]);return rows[0];}
-module.exports={validateSeo,cannibalization,findImage,generate,suggestIdeas,create,update,get};
+module.exports={validateSeo,cannibalization,findImage,generate,suggestIdeas,listIdeas,updateIdea,deleteIdea,create,update,get};
