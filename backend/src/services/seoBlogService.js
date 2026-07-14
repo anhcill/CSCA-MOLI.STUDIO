@@ -15,13 +15,52 @@ const words = value => String(value || '').trim().split(/\s+/).filter(Boolean).l
 
 function parseGeneratedJson(raw) {
   const text = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
-  try { return JSON.parse(text); } catch {}
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
+  const candidates = [text];
+  const objectStart = text.indexOf('{'), objectEnd = text.lastIndexOf('}');
+  const arrayStart = text.indexOf('['), arrayEnd = text.lastIndexOf(']');
+  if (objectStart >= 0 && objectEnd > objectStart) candidates.push(text.slice(objectStart, objectEnd + 1));
+  if (arrayStart >= 0 && arrayEnd > arrayStart) candidates.push(text.slice(arrayStart, arrayEnd + 1));
+  for (const candidate of candidates) {
+    for (const version of [candidate, candidate.replace(/,\s*([}\]])/g, '$1')]) {
+      try { return JSON.parse(version); } catch {}
+    }
   }
   throw Object.assign(new Error('AI returned invalid JSON'), { status: 502 });
+}
+
+const FALLBACK_IDEAS = [
+  ['Luyện thi CSCA','lộ trình ôn thi CSCA cho người mới','informational',['cách học CSCA từ đầu','kế hoạch ôn CSCA']],
+  ['Đề thi & chiến thuật','cách phân bổ thời gian làm bài CSCA','informational',['chiến thuật thi CSCA','quản lý thời gian thi CSCA']],
+  ['Toán CSCA','từ vựng toán tiếng Trung trong đề CSCA','informational',['thuật ngữ toán CSCA','đọc đề toán tiếng Trung']],
+  ['Vật lý CSCA','công thức vật lý CSCA thường gặp','informational',['ôn vật lý CSCA','dạng bài vật lý CSCA']],
+  ['Hóa học CSCA','chủ đề hóa học trọng tâm kỳ thi CSCA','informational',['ôn hóa CSCA','từ vựng hóa học tiếng Trung']],
+  ['Tiếng Trung CSCA','cách học từ vựng học thuật cho CSCA','informational',['từ vựng CSCA','tiếng Trung học thuật']],
+  ['Học bổng CSC','điều kiện xin học bổng CSC mới nhất','informational',['hồ sơ học bổng CSC','kinh nghiệm xin CSC']],
+  ['Học bổng trường','so sánh học bổng CSC và học bổng trường','commercial',['các loại học bổng Trung Quốc','chọn học bổng du học']],
+  ['Hồ sơ du học','checklist hồ sơ du học Trung Quốc đầy đủ','informational',['chuẩn bị hồ sơ du học','giấy tờ du học Trung Quốc']],
+  ['Visa & thủ tục','kinh nghiệm phỏng vấn visa du học Trung Quốc','informational',['xin visa X1 Trung Quốc','câu hỏi phỏng vấn visa']],
+  ['Chọn trường & ngành','cách chọn trường đại học Trung Quốc phù hợp','commercial',['xếp hạng đại học Trung Quốc','chọn ngành du học Trung Quốc']],
+  ['Chi phí du học','chi phí du học Trung Quốc một năm bao nhiêu','commercial',['sinh hoạt phí du học Trung Quốc','học phí đại học Trung Quốc']],
+  ['Đời sống du học sinh','những điều cần biết trước khi sang Trung Quốc du học','informational',['kinh nghiệm sống tại Trung Quốc','chuẩn bị hành lý du học']],
+  ['Kinh nghiệm apply','timeline apply du học Trung Quốc không trễ hạn','informational',['lịch apply học bổng Trung Quốc','các mốc nộp hồ sơ']],
+  ['Công cụ & tài liệu học','tài liệu luyện thi CSCA cho học sinh Việt Nam','commercial',['sách ôn thi CSCA','website luyện đề CSCA']],
+];
+
+function fallbackIdeas(existing, focus) {
+  const used = new Set(existing.map((item) => String(item).toLocaleLowerCase('vi')));
+  const needle = String(focus || '').toLocaleLowerCase('vi');
+  return FALLBACK_IDEAS
+    .map(([category, primary_keyword, search_intent, secondary_keywords]) => ({
+      topic: category,
+      category,
+      primary_keyword,
+      secondary_keywords,
+      search_intent,
+      angle: `Hướng dẫn thực tế dành cho học sinh Việt Nam${needle ? `, liên hệ ${focus}` : ''}`,
+    }))
+    .filter((idea) => !used.has(String(idea.primary_keyword).toLocaleLowerCase('vi')))
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 12);
 }
 
 function validateSeo(post) {
@@ -66,8 +105,15 @@ async function generate(input, userId) {
 Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt.
 Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
   const model=process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
-  const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog'});
-  const parsed=parseGeneratedJson(raw);
+  let parsed;
+  try {
+    const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog'});
+    parsed=parseGeneratedJson(raw);
+  } catch (firstError) {
+    const retryPrompt=`${prompt}\nLẦN TRƯỚC SAI ĐỊNH DẠNG. Chỉ xuất đúng một JSON object hợp lệ, không markdown, không giải thích, không trailing comma.`;
+    const retryRaw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.15,feature:'seo_blog_retry'});
+    parsed=parseGeneratedJson(retryRaw);
+  }
   const image=await findImage(keyword,parsed.topic).catch(()=>null);
   return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},created_by:userId});
 }
@@ -87,15 +133,21 @@ Không lặp hoặc gần trùng các từ khóa đã có: ${JSON.stringify(exis
 Trả về JSON thuần: {"ideas":[{"topic":"...","category":"...","primary_keyword":"...","secondary_keywords":["..."],"search_intent":"informational|commercial|transactional","angle":"góc triển khai khác biệt"}]}.
 Từ khóa phải tự nhiên bằng tiếng Việt, có long-tail, ý định tìm kiếm rõ ràng và đủ khác nhau.`;
   const model = process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
-  const raw = await callAdminExamAI(prompt, {
-    model,
-    maxTokens: 3000,
-    temperature: 0.85,
-    feature: 'seo_blog_ideas',
-  });
-  const parsed = parseGeneratedJson(raw);
-  const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
-  return ideas.slice(0, 12).filter((idea) => idea?.primary_keyword);
+  try {
+    const raw = await callAdminExamAI(prompt, {
+      model,
+      maxTokens: 3000,
+      temperature: 0.75,
+      feature: 'seo_blog_ideas',
+    });
+    const parsed = parseGeneratedJson(raw);
+    const ideas = Array.isArray(parsed) ? parsed : Array.isArray(parsed.ideas) ? parsed.ideas : [];
+    const valid = ideas.filter((idea) => idea?.primary_keyword);
+    if (valid.length) return valid.slice(0, 12);
+  } catch (error) {
+    console.warn('SEO idea AI output invalid, using curated fallback:', error.message);
+  }
+  return fallbackIdeas(existing, focus);
 }
 
 async function create(data) {
