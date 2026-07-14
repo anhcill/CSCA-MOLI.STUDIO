@@ -1,5 +1,4 @@
 const axios = require('axios');
-const JSON5 = require('json5');
 const db = require('../config/database');
 const aiConfig = require('../config/aiConfig');
 const { callAdminExamAI } = require('./aiService');
@@ -38,7 +37,6 @@ function parseGeneratedJson(raw) {
     const clean=candidate.replace(/,\s*([}\]])/g, '$1');
     for (const version of [candidate,clean,escapeControlsInStrings(clean)]) {
       try { return JSON.parse(version); } catch {}
-      try { return JSON5.parse(version); } catch {}
     }
   }
   throw Object.assign(new Error('AI returned invalid JSON'), { status: 502 });
