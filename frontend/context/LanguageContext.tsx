@@ -34,7 +34,8 @@ const COPY: CopyMap = {
   'common.minutes': { vi: 'phút', en: 'minutes', zh: '分钟' },
 
   'nav.home': { vi: 'Trang chủ', en: 'Home', zh: '首页' },
-  'nav.courses': { vi: 'Khóa học', en: 'Courses', zh: '课程' },
+  'nav.courses': { vi: 'Luyện tập', en: 'Practice', zh: '练习' },
+  'nav.videoCourses': { vi: 'Khóa học', en: 'Courses', zh: '课程' },
   'nav.chooseSubject': { vi: 'Chọn môn học', en: 'Choose a subject', zh: '选择科目' },
   'nav.roadmap': { vi: 'Lộ trình', en: 'Roadmap', zh: '学习路径' },
   'nav.examRoom': { vi: 'Phòng thi', en: 'Exam room', zh: '考试中心' },
