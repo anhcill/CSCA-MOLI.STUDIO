@@ -62,6 +62,7 @@ export default function Page() {
     [draft, setDraft] = useState<Partial<SeoPost>>(blank),
     [secondary, setSecondary] = useState(""),
     [ideas, setIdeas] = useState<SeoIdea[]>([]),
+    [ideasLoading, setIdeasLoading] = useState(false),
     [imageOptions, setImageOptions] = useState<SeoImage[]>([]),
     [ideaFocus, setIdeaFocus] = useState(""),
     [ideaStatus, setIdeaStatus] = useState<"unused" | "used" | "all">("unused"),
@@ -84,10 +85,13 @@ export default function Page() {
     }
   };
   const loadIdeas = async (nextStatus: typeof ideaStatus = ideaStatus) => {
+    setIdeasLoading(true);
     try {
       setIdeas(await seoBlogApi.listIdeas(nextStatus));
     } catch {
       setNotice("Không tải được kho ý tưởng.");
+    } finally {
+      setIdeasLoading(false);
     }
   };
   useEffect(() => {
@@ -170,7 +174,8 @@ export default function Page() {
     setNotice("AI đang nghiên cứu các cụm chủ đề chưa bị trùng...");
     try {
       const next = await seoBlogApi.suggestIdeas(ideaFocus);
-      setIdeas(next);
+      setIdeaStatus("unused");
+      await loadIdeas("unused");
       finishAiTask("ideas");
       setNotice(
         `AI đã tạo ${next.length} ý tưởng khác nhau. Chọn một ý tưởng bên dưới.`,
@@ -442,19 +447,19 @@ export default function Page() {
                       {ideas.length} ý tưởng · chọn để dùng dần
                     </p>
                   </div>
-                  <select
-                    className="rounded-lg border border-fuchsia-200 px-2 py-1.5 text-xs"
-                    value={ideaStatus}
-                    onChange={(e) => {
-                      const next = e.target.value as typeof ideaStatus;
-                      setIdeaStatus(next);
-                      void loadIdeas(next);
-                    }}
-                  >
-                    <option value="unused">Chưa dùng</option>
-                    <option value="used">Đã dùng</option>
-                    <option value="all">Tất cả</option>
-                  </select>
+                  <div className="flex rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-1">
+                    {([['unused','Chưa dùng'],['used','Đã dùng'],['all','Tất cả']] as const).map(([value,label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={ideasLoading}
+                        onClick={() => { setIdeaStatus(value); setSelectedIdeaId(null); void loadIdeas(value); }}
+                        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${ideaStatus===value?'bg-fuchsia-600 text-white shadow':'text-fuchsia-700 hover:bg-white'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <Card t="1. Từ khóa & ý định">
                   <div className="mb-4 rounded-xl border border-fuchsia-100 bg-fuchsia-50/60 p-3">
@@ -480,14 +485,16 @@ export default function Page() {
                         AI đề xuất ý tưởng
                       </button>
                     </div>
-                    {ideas.length > 0 && (
+                    {ideasLoading ? <div className="mt-3 rounded-xl bg-white p-5 text-center text-sm text-fuchsia-600">Đang lọc ý tưởng...</div> : ideas.length > 0 ? (
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {ideas.map((idea, index) => (
                           <button
                             key={`${idea.primary_keyword}-${index}`}
                             onClick={() => chooseIdea(idea)}
-                            className="rounded-xl border border-fuchsia-100 bg-white p-3 text-left hover:border-fuchsia-400"
+                            className={`relative rounded-xl border-2 bg-white p-3 text-left transition ${selectedIdeaId===idea.id?'border-fuchsia-600 ring-2 ring-fuchsia-200':'border-fuchsia-100 hover:border-fuchsia-400'}`}
                           >
+                            {selectedIdeaId===idea.id && <span className="absolute right-2 top-2 rounded-full bg-fuchsia-600 px-2 py-0.5 text-[10px] font-bold text-white">Đang chọn</span>}
+                            <span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${idea.status==='used'?'bg-slate-100 text-slate-500':'bg-emerald-100 text-emerald-700'}`}>{idea.status==='used'?'Đã dùng':'Chưa dùng'}</span>
                             <b className="block text-sm text-slate-800">
                               {idea.primary_keyword}
                             </b>
@@ -498,7 +505,7 @@ export default function Page() {
                           </button>
                         ))}
                       </div>
-                    )}
+                    ) : <div className="mt-3 rounded-xl border border-dashed border-fuchsia-200 bg-white p-5 text-center text-sm text-slate-500">Không có ý tưởng trong danh sách này.</div>}
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <select
