@@ -61,12 +61,41 @@ async function findImage(query, topic) {
 
 async function generate(input, userId) {
   const keyword=String(input.primary_keyword||'').trim(); if(!keyword) throw Object.assign(new Error('primary_keyword is required'),{status:400});
-  const prompt=`Tạo bài blog SEO tiếng Việt về "${keyword}". Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt. Nội dung phải chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
+  const prompt=`Tạo bài blog SEO tiếng Việt về "${keyword}".
+Định hướng: category=${input.category || 'AI tự chọn'}, search_intent=${input.search_intent || 'AI tự chọn'}, topic=${input.topic || 'AI tự chọn'}, từ khóa phụ=${JSON.stringify(input.secondary_keywords || [])}.
+Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt.
+Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
   const model=process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
   const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog'});
   const parsed=parseGeneratedJson(raw);
   const image=await findImage(keyword,parsed.topic).catch(()=>null);
   return create({...parsed,primary_keyword:keyword,cover_image:image?.url,cover_image_alt:image?.alt||parsed.cover_image_alt,cover_image_source:image?.source,cover_image_source_url:image?.source_url,status:'draft',generated_provider:aiConfig.adminExam.provider,generated_model:model,generation_prompt:{prompt},created_by:userId});
+}
+
+async function suggestIdeas(input = {}) {
+  const { rows } = await db.query(
+    `SELECT primary_keyword FROM seo_blog_posts
+     WHERE status <> 'archived'
+     ORDER BY created_at DESC LIMIT 200`,
+  );
+  const existing = rows.map((row) => row.primary_keyword).filter(Boolean);
+  const focus = String(input.focus || '').trim();
+  const prompt = `Bạn là chiến lược gia SEO cho MOLI.STUDIO, nền tảng ôn thi CSCA và du học Trung Quốc.
+Hãy đề xuất đúng 12 ý tưởng bài viết thật đa dạng${focus ? `, ưu tiên định hướng "${focus}"` : ''}.
+Phải trải đều nhiều nhóm: luyện thi CSCA, từng môn thi, tiếng Trung học thuật, học bổng, hồ sơ, visa, chọn trường/ngành, đời sống du học, chi phí, kinh nghiệm và công cụ học tập.
+Không lặp hoặc gần trùng các từ khóa đã có: ${JSON.stringify(existing)}.
+Trả về JSON thuần: {"ideas":[{"topic":"...","category":"...","primary_keyword":"...","secondary_keywords":["..."],"search_intent":"informational|commercial|transactional","angle":"góc triển khai khác biệt"}]}.
+Từ khóa phải tự nhiên bằng tiếng Việt, có long-tail, ý định tìm kiếm rõ ràng và đủ khác nhau.`;
+  const model = process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
+  const raw = await callAdminExamAI(prompt, {
+    model,
+    maxTokens: 3000,
+    temperature: 0.85,
+    feature: 'seo_blog_ideas',
+  });
+  const parsed = parseGeneratedJson(raw);
+  const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
+  return ideas.slice(0, 12).filter((idea) => idea?.primary_keyword);
 }
 
 async function create(data) {
@@ -77,4 +106,4 @@ async function create(data) {
 }
 async function update(id,data) { const cols=FIELDS.filter(k=>data[k]!==undefined && k!=='slug'); if(data.slug!==undefined) { data.slug=slugify(data.slug); cols.push('slug'); } if(!cols.length) return get(id); const {rows}=await db.query(`UPDATE seo_blog_posts SET ${cols.map((k,i)=>`${k}=$${i+1}`).join(',')},updated_at=NOW() WHERE id=$${cols.length+1} RETURNING *`,[...cols.map(k=>data[k]),id]); return rows[0]; }
 async function get(id){const {rows}=await db.query('SELECT * FROM seo_blog_posts WHERE id=$1',[id]);return rows[0];}
-module.exports={validateSeo,cannibalization,findImage,generate,create,update,get};
+module.exports={validateSeo,cannibalization,findImage,generate,suggestIdeas,create,update,get};
