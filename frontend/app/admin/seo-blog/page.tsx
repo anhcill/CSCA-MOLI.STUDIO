@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { useAuthStore } from "@/lib/store/authStore";
 import { hasPermission } from "@/lib/utils/permissions";
-import { seoBlogApi, SeoPost, SeoIdea } from "@/lib/api/seoBlog";
+import { seoBlogApi, SeoPost, SeoIdea, SeoImage } from "@/lib/api/seoBlog";
 import {
   FiArchive,
   FiCalendar,
@@ -62,6 +62,7 @@ export default function Page() {
     [draft, setDraft] = useState<Partial<SeoPost>>(blank),
     [secondary, setSecondary] = useState(""),
     [ideas, setIdeas] = useState<SeoIdea[]>([]),
+    [imageOptions, setImageOptions] = useState<SeoImage[]>([]),
     [ideaFocus, setIdeaFocus] = useState(""),
     [ideaStatus, setIdeaStatus] = useState<"unused" | "used" | "all">("unused"),
     [selectedIdeaId, setSelectedIdeaId] = useState<SeoIdea["id"] | null>(null),
@@ -100,6 +101,7 @@ export default function Page() {
     setDraft({ ...v });
     setSecondary((v.secondary_keywords || []).join(", "));
     setSelectedIdeaId(null);
+    setImageOptions([]);
     setOpen(true);
     void loadIdeas();
   };
@@ -133,26 +135,30 @@ export default function Page() {
     }
     setBusy(true);
     try {
-      const image = await seoBlogApi.searchImage(draft.primary_keyword);
-      if (!image) {
+      const images = await seoBlogApi.searchImages(draft.primary_keyword, imageOptions.length ? Math.floor(Math.random() * 5) + 2 : 1);
+      if (!images.length) {
         setNotice(
           "Chưa tìm thấy ảnh. Hãy cấu hình Pexels, Unsplash hoặc thư viện ảnh chủ đề.",
         );
         return;
       }
-      setDraft({
-        ...draft,
-        cover_image: image.url,
-        cover_image_alt: image.alt,
-        cover_image_source: image.source,
-        cover_image_source_url: image.source_url,
-      });
-      setNotice("Đã chọn ảnh đúng chủ đề, nhớ lưu lại bản nháp.");
+      setImageOptions(images);
+      setNotice(`Đã tìm thấy ${images.length} ảnh. Hãy chọn ảnh phù hợp.`);
     } catch {
       setNotice("Tìm ảnh thất bại.");
     } finally {
       setBusy(false);
     }
+  };
+  const chooseImage = (image: SeoImage) => {
+    setDraft({
+      ...draft,
+      cover_image: image.url,
+      cover_image_alt: image.alt,
+      cover_image_source: image.source,
+      cover_image_source_url: image.source_url,
+    });
+    setNotice("Đã chọn ảnh mới, nhớ lưu lại bản nháp.");
   };
   const finishAiTask = (mode: "ideas" | "article") => {
     setAiTask({ mode, done: true });
@@ -569,8 +575,30 @@ export default function Page() {
                     onClick={findImage}
                     className="mb-2 w-full rounded-xl border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-700"
                   >
-                    Tìm ảnh theo từ khóa chính
+                    {imageOptions.length ? "Đổi danh sách ảnh khác" : "Chọn / đổi ảnh"}
                   </button>
+                  {imageOptions.length > 0 && (
+                    <div className="mb-3 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto rounded-xl bg-slate-100 p-2">
+                      {imageOptions.map((image) => (
+                        <button
+                          key={image.url}
+                          type="button"
+                          onClick={() => chooseImage(image)}
+                          title={`Chọn ảnh từ ${image.source}`}
+                          className={`overflow-hidden rounded-lg border-2 bg-white ${draft.cover_image === image.url ? "border-violet-600" : "border-transparent hover:border-violet-300"}`}
+                        >
+                          <img
+                            src={image.thumbnail || image.url}
+                            alt={image.alt || "Ảnh gợi ý"}
+                            className="aspect-video w-full object-cover"
+                          />
+                          <span className="block truncate px-1 py-1 text-[10px] text-slate-500">
+                            {image.source}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <input
                     className={cls}
                     value={draft.cover_image || ""}

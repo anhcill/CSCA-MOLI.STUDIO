@@ -118,25 +118,29 @@ async function cannibalization(primaryKeyword, excludeId) {
   return { conflict: rows.length > 0, posts: rows };
 }
 
-async function findImage(query, topic) {
+async function findImages(query, topic, limit = 8, page = 1) {
+  const results = [];
   const searches = [...new Set([String(query||'').trim(),String(topic||'').trim(),'Chinese university students studying education'].filter(Boolean))];
   for (const search of searches) {
     if (process.env.PEXELS_API_KEY) {
       try {
-        const { data } = await axios.get('https://api.pexels.com/v1/search', { headers:{Authorization:process.env.PEXELS_API_KEY}, params:{query:search,per_page:3,orientation:'landscape'}, timeout:10000 });
-        const p=data.photos?.[0]; if(p) return {url:p.src.large2x || p.src.large,alt:p.alt || query,source:'Pexels',source_url:p.url,search_query:search};
+        const { data } = await axios.get('https://api.pexels.com/v1/search', { headers:{Authorization:process.env.PEXELS_API_KEY}, params:{query:search,per_page:Math.min(limit,8),page,orientation:'landscape'}, timeout:10000 });
+        for (const p of data.photos||[]) results.push({url:p.src.large2x || p.src.large,thumbnail:p.src.medium,alt:p.alt || query,source:'Pexels',source_url:p.url,search_query:search});
       } catch (error) { console.warn('SEO image Pexels search failed, trying next source:', error.response?.status || error.message); }
     }
     if (process.env.UNSPLASH_ACCESS_KEY) {
       try {
-        const { data } = await axios.get('https://api.unsplash.com/search/photos', { headers:{Authorization:`Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`}, params:{query:search,per_page:3,orientation:'landscape'}, timeout:10000 });
-        const p=data.results?.[0]; if(p) return {url:p.urls.regular,alt:p.alt_description || query,source:`Unsplash / ${p.user?.name || ''}`.trim(),source_url:p.links.html,search_query:search};
+        const { data } = await axios.get('https://api.unsplash.com/search/photos', { headers:{Authorization:`Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`}, params:{query:search,per_page:Math.min(limit,8),page,orientation:'landscape'}, timeout:10000 });
+        for (const p of data.results||[]) results.push({url:p.urls.regular,thumbnail:p.urls.small,alt:p.alt_description || query,source:`Unsplash / ${p.user?.name || ''}`.trim(),source_url:p.links.html,search_query:search});
       } catch (error) { console.warn('SEO image Unsplash search failed, trying next query:', error.response?.status || error.message); }
     }
+    if (results.length >= limit) break;
   }
-  // Only return explicitly curated entries. Never synthesize an image URL.
-  return topicImageLibrary()[slugify(topic)] || null;
+  const curated = topicImageLibrary()[slugify(topic)];
+  if (!results.length && curated) results.push(curated);
+  return [...new Map(results.map(image=>[image.url,image])).values()].slice(0,limit);
 }
+async function findImage(query, topic) { return (await findImages(query,topic,1))[0] || null; }
 
 async function generate(input, userId) {
   const keyword=String(input.primary_keyword||'').trim(); if(!keyword) throw Object.assign(new Error('primary_keyword is required'),{status:400});
@@ -234,4 +238,4 @@ async function create(data) {
 }
 async function update(id,data) { const cols=FIELDS.filter(k=>data[k]!==undefined && k!=='slug'); if(data.slug!==undefined) { data.slug=slugify(data.slug); cols.push('slug'); } if(!cols.length) return get(id); const {rows}=await db.query(`UPDATE seo_blog_posts SET ${cols.map((k,i)=>`${k}=$${i+1}`).join(',')},updated_at=NOW() WHERE id=$${cols.length+1} RETURNING *`,[...cols.map(k=>data[k]),id]); return rows[0]; }
 async function get(id){const {rows}=await db.query('SELECT * FROM seo_blog_posts WHERE id=$1',[id]);return rows[0];}
-module.exports={validateSeo,cannibalization,findImage,generate,suggestIdeas,listIdeas,updateIdea,deleteIdea,create,update,get};
+module.exports={validateSeo,cannibalization,findImage,findImages,generate,suggestIdeas,listIdeas,updateIdea,deleteIdea,create,update,get};
