@@ -1,4 +1,5 @@
 const axios = require('axios');
+const JSON5 = require('json5');
 const db = require('../config/database');
 const aiConfig = require('../config/aiConfig');
 const { callAdminExamAI } = require('./aiService');
@@ -20,9 +21,24 @@ function parseGeneratedJson(raw) {
   const arrayStart = text.indexOf('['), arrayEnd = text.lastIndexOf(']');
   if (objectStart >= 0 && objectEnd > objectStart) candidates.push(text.slice(objectStart, objectEnd + 1));
   if (arrayStart >= 0 && arrayEnd > arrayStart) candidates.push(text.slice(arrayStart, arrayEnd + 1));
+  const escapeControlsInStrings = value => {
+    let output='',inString=false,escaped=false;
+    for(const char of value) {
+      if(inString&&!escaped&&char==='\n'){output+='\\n';continue;}
+      if(inString&&!escaped&&char==='\r'){output+='\\r';continue;}
+      if(inString&&!escaped&&char==='\t'){output+='\\t';continue;}
+      output+=char;
+      if(char==='"'&&!escaped) inString=!inString;
+      escaped=char==='\\'&&!escaped;
+      if(char!=='\\') escaped=false;
+    }
+    return output;
+  };
   for (const candidate of candidates) {
-    for (const version of [candidate, candidate.replace(/,\s*([}\]])/g, '$1')]) {
+    const clean=candidate.replace(/,\s*([}\]])/g, '$1');
+    for (const version of [candidate,clean,escapeControlsInStrings(clean)]) {
       try { return JSON.parse(version); } catch {}
+      try { return JSON5.parse(version); } catch {}
     }
   }
   throw Object.assign(new Error('AI returned invalid JSON'), { status: 502 });
@@ -170,14 +186,19 @@ async function generate(input, userId) {
 Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt.
 Nội dung phải có góc triển khai riêng, chính xác, hữu ích, không bịa số liệu hoặc nguồn, có H2/H3, FAQ và ít nhất một internal link phù hợp bắt đầu bằng /. Không dùng cú pháp in đậm Markdown và tuyệt đối không tạo dấu **. Meta title dài 40-65 ký tự và meta description dài 120-160 ký tự.`;
   const model=process.env.SEO_BLOG_AI_MODEL || aiConfig.adminExam.model;
-  let parsed;
+  let parsed,raw;
   try {
-    const raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.35,feature:'seo_blog',responseFormat:{type:'json_object'}});
+    raw=await callAdminExamAI(prompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||8000),temperature:0.35,feature:'seo_blog',responseFormat:{type:'json_object'}});
     parsed=parseGeneratedJson(raw);
   } catch (firstError) {
     const retryPrompt=`${prompt}\nLẦN TRƯỚC SAI ĐỊNH DẠNG. Chỉ xuất đúng một JSON object hợp lệ, không markdown, không giải thích, không trailing comma.`;
-    const retryRaw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||6000),temperature:0.15,feature:'seo_blog_retry',responseFormat:{type:'json_object'}});
-    parsed=parseGeneratedJson(retryRaw);
+    raw=await callAdminExamAI(retryPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||8000),temperature:0.15,feature:'seo_blog_retry',responseFormat:{type:'json_object'}});
+    try { parsed=parseGeneratedJson(raw); }
+    catch {
+      const repairPrompt=`Repair this malformed or truncated JSON. Preserve all Vietnamese article content. Return exactly one valid JSON object with fields title,meta_title,slug,excerpt,meta_description,content,secondary_keywords,search_intent,topic,category,tags,cover_image_alt. No markdown fence or explanation.\n\n${String(raw).slice(0,30000)}`;
+      const repaired=await callAdminExamAI(repairPrompt,{model,maxTokens:Number(process.env.SEO_BLOG_AI_MAX_TOKENS||8000),temperature:0,feature:'seo_blog_json_repair',responseFormat:{type:'json_object'}});
+      parsed=parseGeneratedJson(repaired);
+    }
   }
   parsed.content = String(parsed.content || '').replace(/\*\*/g, '');
   const image=await findImage(keyword,parsed.topic).catch(()=>null);
