@@ -440,3 +440,39 @@ html {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* The ink leaderboard always uses a light paper background, even when the
+   application theme is dark. These scoped rules must win over the global
+   dark utility remapping above. */
+.dark .leaderboard-force-light .leaderboard-podium-rank-1 {
+  background: linear-gradient(to bottom, #fffdf3, #ffffff, #fff9e6) !important;
+}
+.dark .leaderboard-force-light .leaderboard-podium-rank-2 {
+  background: linear-gradient(to bottom, #f5faff, #ffffff, #ebf5ff) !important;
+}
+.dark .leaderboard-force-light .leaderboard-podium-rank-3 {
+  background: linear-gradient(to bottom, #fff5f6, #ffffff, #ffebef) !important;
+}
+.dark .leaderboard-force-light .leaderboard-podium-card .text-slate-900 {
+  color: #0f172a !important;
+}
+.dark .leaderboard-force-light .leaderboard-podium-card .text-slate-500,
+.dark .leaderboard-force-light .leaderboard-podium-card .text-slate-400 {
+  color: #64748b !important;
+}
+.dark .leaderboard-force-light .leaderboard-table thead {
+  color: #725d48 !important;
+}
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-900,
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-800,
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-700 {
+  color: #1e293b !important;
+}
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-600,
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-500,
+.dark .leaderboard-force-light .leaderboard-table tbody .text-slate-400 {
+  color: #64748b !important;
+}
+.dark .leaderboard-force-light .leaderboard-table tbody .text-emerald-700 {
+  color: #047857 !important;
+}

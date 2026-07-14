@@ -149,7 +149,7 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
     const tone = getRankTone(entry.rank);
 
     return (
-        <div className={`relative flex flex-col items-center justify-between rounded-[24px] border px-4 pb-5 pt-8 ${tone.shell} ${tone.height} ${
+        <div className={`leaderboard-podium-card leaderboard-podium-rank-${entry.rank} relative flex flex-col items-center justify-between rounded-[24px] border px-4 pb-5 pt-8 ${tone.shell} ${tone.height} ${
             entry.rank === 1 ? 'order-1 md:order-2' : entry.rank === 2 ? 'order-2 md:order-1' : 'order-3 md:order-3'
         }`}>
             {/* Ribbon Badge */}
@@ -256,7 +256,7 @@ export default function LeaderboardPage() {
     const restEntries = entries.slice(3);
 
     return (
-        <InkResultBackground className="transition-colors duration-300">
+        <InkResultBackground className="leaderboard-force-light transition-colors duration-300">
             <Header />
 
             <div className="mx-auto max-w-5xl px-4 py-8">
@@ -335,7 +335,7 @@ export default function LeaderboardPage() {
                         {/* Table (Ranks 4+) */}
                         {restEntries.length > 0 && (
                             <div className={`overflow-x-auto rounded-[24px] pb-2 ${inkResultSoftPanel}`}>
-                                <table className="w-full min-w-[860px] border-collapse text-left">
+                                <table className="leaderboard-table w-full min-w-[860px] border-collapse text-left">
                                     <thead>
                                         <tr className="border-b border-[#dfcfb9] text-[11px] font-black text-[#725d48] uppercase tracking-wider bg-[#f4eadc]/90">
                                             <th className="w-20 px-6 py-4 text-center">HANG</th>
