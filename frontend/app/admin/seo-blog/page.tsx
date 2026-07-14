@@ -226,9 +226,9 @@ export default function Page() {
         await loadIdeas();
       }
       finishAiTask("article");
-      setNotice(
-        "Đã tạo xong, ý tưởng đã được đánh dấu đã dùng. Hãy duyệt kỹ trước khi đăng.",
-      );
+      setNotice(x.reused_existing
+        ? "Từ khóa này đã có bài. Hệ thống đã mở lại bài cũ và đánh dấu ý tưởng là đã dùng."
+        : "Đã tạo xong, ý tưởng đã được đánh dấu đã dùng. Hãy duyệt kỹ trước khi đăng.");
       await load();
     } catch {
       setAiTask(null);

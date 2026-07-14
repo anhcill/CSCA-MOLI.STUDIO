@@ -10,6 +10,7 @@ export interface SeoPost {
   cover_image_alt?: string; seo_score?: number; seo_issues?: SeoIssue[];
   cannibalization?: Array<{ id: number | string; title: string; slug?: string; similarity?: number }>;
   scheduled_at?: string | null; published_at?: string | null; updated_at?: string;
+  reused_existing?: boolean;
 }
 export type SeoPostInput = Omit<SeoPost, 'id' | 'updated_at' | 'published_at'>;
 export interface GenerateDraftInput { primary_keyword: string; secondary_keywords: string[]; category: string; search_intent: string; topic?: string }

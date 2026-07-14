@@ -160,6 +160,11 @@ async function findImage(query, topic) { return (await findImages(query,topic,1)
 
 async function generate(input, userId) {
   const keyword=String(input.primary_keyword||'').trim(); if(!keyword) throw Object.assign(new Error('primary_keyword is required'),{status:400});
+  const existingPost = await db.query(`SELECT * FROM seo_blog_posts WHERE lower(trim(primary_keyword))=lower(trim($1)) ORDER BY created_at DESC LIMIT 1`,[keyword]);
+  if(existingPost.rows[0]) {
+    await db.query(`UPDATE seo_blog_ideas SET status='used',used_post_id=$1,used_at=COALESCE(used_at,NOW()) WHERE lower(trim(primary_keyword))=lower(trim($2))`,[existingPost.rows[0].id,keyword]);
+    return {...existingPost.rows[0],reused_existing:true};
+  }
   const prompt=`Tạo bài blog SEO tiếng Việt về "${keyword}".
 Định hướng: category=${input.category || 'AI tự chọn'}, search_intent=${input.search_intent || 'AI tự chọn'}, topic=${input.topic || 'AI tự chọn'}, từ khóa phụ=${JSON.stringify(input.secondary_keywords || [])}.
 Trả về JSON thuần gồm title,meta_title,slug,excerpt,meta_description,content (Markdown >= 1000 từ),secondary_keywords,search_intent,topic,category,tags,cover_image_alt.
@@ -262,11 +267,19 @@ async function deleteIdea(id) {
 }
 
 async function create(data) {
-  const slug=slugify(data.slug||data.title); if(!slug) throw Object.assign(new Error('slug/title is required'),{status:400});
+  const baseSlug=slugify(data.slug||data.title); if(!baseSlug) throw Object.assign(new Error('slug/title is required'),{status:400});
   const cols=[...FIELDS.filter(k=>k!=='slug'),'generated_provider','generated_model','generation_prompt','generation_metadata','created_by'].filter(k=>data[k]!==undefined);
   const vals=cols.map(k=>['generation_prompt','generation_metadata'].includes(k)?JSON.stringify(data[k]):data[k]);
-  const {rows}=await db.query(`INSERT INTO seo_blog_posts (${cols.join(',')},slug,updated_at) VALUES (${cols.map((_,i)=>`$${i+1}`).join(',')},$${cols.length+1},NOW()) RETURNING *`,[...vals,slug]);
-  const post=rows[0];
+  let post;
+  for(let attempt=1;attempt<=20;attempt++) {
+    const slug=attempt===1?baseSlug:`${baseSlug}-${attempt}`;
+    try {
+      const {rows}=await db.query(`INSERT INTO seo_blog_posts (${cols.join(',')},slug,updated_at) VALUES (${cols.map((_,i)=>`$${i+1}`).join(',')},$${cols.length+1},NOW()) RETURNING *`,[...vals,slug]);
+      post=rows[0]; break;
+    } catch(error) {
+      if(error.code!=='23505'||error.constraint!=='seo_blog_posts_slug_key'||attempt===20) throw error;
+    }
+  }
   if(post.primary_keyword) await db.query(`UPDATE seo_blog_ideas SET status='used',used_post_id=$1,used_at=NOW() WHERE lower(trim(primary_keyword))=lower(trim($2))`,[post.id,post.primary_keyword]);
   return post;
 }
