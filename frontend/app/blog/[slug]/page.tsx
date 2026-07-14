@@ -4,12 +4,16 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
-import { BLOG_POSTS, getBlogPost, formatDate } from '../blogData';
+import { BLOG_POSTS, formatDate } from '../blogData';
+import { extractFaq, getPublicBlogPost, getPublicBlogPosts } from '@/lib/seoBlog';
+import { getCanonicalSiteUrl } from '@/lib/seo/site';
 import { FiCalendar, FiClock, FiTag, FiArrowLeft, FiShare2 } from 'react-icons/fi';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
+
+export const dynamic = 'force-dynamic';
 
 const isTableLine = (line: string) => {
   const trimmed = line.trim();
@@ -228,18 +232,18 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const post = getBlogPost(slug);
+  const post = await getPublicBlogPost(slug);
   if (!post) return {};
 
   return {
-    title: post.title,
+    title: post.seoTitle || post.title,
     description: post.excerpt,
     authors: [{ name: post.author }],
     alternates: {
       canonical: `/blog/${post.slug}`,
     },
     openGraph: {
-      title: post.title,
+      title: post.seoTitle || post.title,
       description: post.excerpt,
       type: 'article',
       url: `/blog/${post.slug}`,
@@ -250,18 +254,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     },
     twitter: {
       card: 'summary_large_image',
-      title: post.title,
+      title: post.seoTitle || post.title,
       description: post.excerpt,
+      images: [post.coverImage],
     },
   };
 }
 
 export default async function BlogPostPage({ params }: PageProps) {
   const { slug } = await params;
-  const post = getBlogPost(slug);
+  const [post, allPosts] = await Promise.all([getPublicBlogPost(slug), getPublicBlogPosts()]);
   if (!post) notFound();
   
-  const siteUrl = 'https://www.molystudio.online';
+  const siteUrl = getCanonicalSiteUrl();
   
   const articleJsonLd = {
     '@context': 'https://schema.org',
@@ -288,7 +293,18 @@ export default async function BlogPostPage({ params }: PageProps) {
     ],
   };
 
-  const relatedPosts = BLOG_POSTS
+  const faqItems = extractFaq(post.content);
+  const faqJsonLd = faqItems.length > 0 ? {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqItems.map(item => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: { '@type': 'Answer', text: item.answer },
+    })),
+  } : null;
+
+  const relatedPosts = allPosts
     .filter(p => p.slug !== slug && (p.category === post.category || p.tags.some(t => post.tags.includes(t))))
     .slice(0, 3);
 
@@ -311,6 +327,7 @@ export default async function BlogPostPage({ params }: PageProps) {
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      {faqJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />}
       
       <Header />
       

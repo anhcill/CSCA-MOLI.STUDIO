@@ -1,0 +1,24 @@
+const db = require('../config/database');
+const service = require('../services/seoBlogService');
+const ok = (res,data,meta) => res.json({success:true,data,...(meta?{meta}:{})});
+const fail = (res,e) => { console.error('SEO blog:',e); const duplicate=e?.code==='23505'; res.status(e.status||(duplicate?409:500)).json({success:false,message:e.status?e.message:(duplicate?'Slug hoặc từ khóa đã tồn tại':'Không thể xử lý bài viết')}); };
+
+exports.publicList=async(req,res)=>{try{
+  const page=Math.max(1,Number(req.query.page)||1),limit=Math.min(50,Math.max(1,Number(req.query.limit)||12)),off=(page-1)*limit;
+  const args=[]; let where=`((status='published') OR (status='scheduled' AND scheduled_at<=NOW()))`;
+  if(req.query.category){args.push(req.query.category);where+=` AND category=$${args.length}`;} if(req.query.q){args.push(`%${req.query.q}%`);where+=` AND (title ILIKE $${args.length} OR primary_keyword ILIKE $${args.length})`;}
+  const count=await db.query(`SELECT count(*)::int total FROM seo_blog_posts WHERE ${where}`,args); args.push(limit,off);
+  const {rows}=await db.query(`SELECT id,primary_keyword,title,slug,excerpt,meta_description,cover_image,cover_image_alt,category,tags,author,read_time,featured,COALESCE(published_at,scheduled_at) published_at FROM seo_blog_posts WHERE ${where} ORDER BY featured DESC,COALESCE(published_at,scheduled_at) DESC LIMIT $${args.length-1} OFFSET $${args.length}`,args);
+  ok(res,rows,{page,limit,total:count.rows[0].total,total_pages:Math.ceil(count.rows[0].total/limit)});
+}catch(e){fail(res,e)}};
+exports.publicGet=async(req,res)=>{try{const{rows}=await db.query(`SELECT * FROM seo_blog_posts WHERE slug=$1 AND ((status='published') OR (status='scheduled' AND scheduled_at<=NOW())) LIMIT 1`,[req.params.slug]);if(!rows[0])return res.status(404).json({success:false,message:'Không tìm thấy bài viết'});ok(res,rows[0]);}catch(e){fail(res,e)}};
+exports.adminList=async(req,res)=>{try{const page=Math.max(1,+req.query.page||1),limit=Math.min(100,Math.max(1,+req.query.limit||20)),args=[];let w='TRUE';if(req.query.status){args.push(req.query.status);w+=` AND status=$${args.length}`;}if(req.query.q){args.push(`%${req.query.q}%`);w+=` AND (title ILIKE $${args.length} OR primary_keyword ILIKE $${args.length})`;}const c=await db.query(`SELECT count(*)::int total FROM seo_blog_posts WHERE ${w}`,args);args.push(limit,(page-1)*limit);const{rows}=await db.query(`SELECT * FROM seo_blog_posts WHERE ${w} ORDER BY created_at DESC LIMIT $${args.length-1} OFFSET $${args.length}`,args);ok(res,rows.map(post=>{const seo=service.validateSeo(post);return{...post,seo_score:seo.score,seo_issues:seo.checks}}),{page,limit,total:c.rows[0].total});}catch(e){fail(res,e)}};
+exports.adminGet=async(req,res)=>{try{const p=await service.get(req.params.id);if(!p)return res.status(404).json({success:false,message:'Không tìm thấy bài viết'});ok(res,{...p,seo:service.validateSeo(p),cannibalization:await service.cannibalization(p.primary_keyword,p.id)});}catch(e){fail(res,e)}};
+exports.create=async(req,res)=>{try{const p=await service.create({...req.body,created_by:req.user.id});res.status(201).json({success:true,data:p,seo:service.validateSeo(p)});}catch(e){fail(res,e)}};
+exports.update=async(req,res)=>{try{const p=await service.update(req.params.id,req.body);if(!p)return res.status(404).json({success:false,message:'Không tìm thấy bài viết'});ok(res,{...p,seo:service.validateSeo(p)});}catch(e){fail(res,e)}};
+exports.remove=async(req,res)=>{try{const r=await db.query('DELETE FROM seo_blog_posts WHERE id=$1 RETURNING id',[req.params.id]);if(!r.rowCount)return res.status(404).json({success:false,message:'Không tìm thấy bài viết'});ok(res,{id:r.rows[0].id});}catch(e){fail(res,e)}};
+exports.generate=async(req,res)=>{try{const p=await service.generate(req.body,req.user.id);res.status(201).json({success:true,data:p,seo:service.validateSeo(p),cannibalization:await service.cannibalization(p.primary_keyword,p.id)});}catch(e){fail(res,e)}};
+exports.schedule=async(req,res)=>{try{const d=new Date(req.body.scheduled_at);if(!req.body.scheduled_at||isNaN(d))return res.status(400).json({success:false,message:'scheduled_at không hợp lệ'});ok(res,await service.update(req.params.id,{status:'scheduled',scheduled_at:d,published_at:null}));}catch(e){fail(res,e)}};
+exports.publish=async(req,res)=>{try{ok(res,await service.update(req.params.id,{status:'published',published_at:new Date(),scheduled_at:null}));}catch(e){fail(res,e)}};
+exports.validate=async(req,res)=>{try{const p=req.params.id?await service.get(req.params.id):req.body;if(!p)return res.status(404).json({success:false,message:'Không tìm thấy bài viết'});ok(res,{seo:service.validateSeo(p),cannibalization:await service.cannibalization(p.primary_keyword,p.id)});}catch(e){fail(res,e)}};
+exports.imageSearch=async(req,res)=>{try{ok(res,await service.findImage(req.query.q,req.query.topic));}catch(e){fail(res,e)}};

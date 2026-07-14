@@ -120,6 +120,10 @@ export default function GiftLetterModal({
 
             <div className="h-px bg-gradient-to-r from-transparent via-rose-200 to-transparent" />
 
+            <p className="text-[15px] font-semibold leading-7 text-slate-600 sm:text-base">
+              Moly có một lời nhắn nhỏ muốn gửi đến bạn hôm nay:
+            </p>
+
             <p className="text-[15px] font-medium leading-7 text-slate-600 sm:text-base">
               {encouragement}
             </p>
@@ -135,6 +139,11 @@ export default function GiftLetterModal({
                 {blessing}
               </p>
             )}
+
+            <div className="pt-1 text-right text-sm font-semibold leading-6 text-slate-500 sm:text-[15px]">
+              <p>Thương mến,</p>
+              <p className="font-extrabold text-rose-500">Moly 💌</p>
+            </div>
           </div>
         </div>
 

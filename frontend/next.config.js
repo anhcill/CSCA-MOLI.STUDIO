@@ -39,6 +39,10 @@ const imageRemotePatterns = [
     protocol: "https",
     hostname: "images.unsplash.com",
   },
+  {
+    protocol: "https",
+    hostname: "images.pexels.com",
+  },
 ];
 
 /** @type {import('next').NextConfig} */

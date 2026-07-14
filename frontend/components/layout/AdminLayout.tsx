@@ -102,6 +102,13 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
+        label: 'SEO Blog AI',
+        icon: FiFileText,
+        href: '/admin/seo-blog',
+        permission: 'content.manage',
+        roles: [],
+      },
+      {
         label: 'Hình ảnh',
         icon: FiImage,
         href: '/admin/images',

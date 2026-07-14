@@ -1,6 +1,8 @@
 import { MetadataRoute } from 'next';
 import { getCanonicalSiteUrl } from '@/lib/seo/site';
-import { BLOG_POSTS } from './blog/blogData';
+import { getPublicBlogPosts } from '@/lib/seoBlog';
+
+export const dynamic = 'force-dynamic';
 
 const BASE_URL = getCanonicalSiteUrl();
 
@@ -16,7 +18,8 @@ const route = (
   priority,
 });
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const blogPosts = await getPublicBlogPosts();
   const siteUpdated = new Date('2026-05-18');
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -62,7 +65,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const blogRoutes: MetadataRoute.Sitemap = [
     route('/blog', siteUpdated, 'daily', 0.9),
-    ...BLOG_POSTS.map((post) =>
+    ...blogPosts.map((post) =>
       route(
         `/blog/${post.slug}`,
         new Date(post.updatedAt || post.publishedAt),

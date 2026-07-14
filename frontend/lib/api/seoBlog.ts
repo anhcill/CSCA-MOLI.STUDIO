@@ -1,0 +1,28 @@
+import axios from '../utils/axios';
+
+export type SeoPostStatus = 'draft' | 'scheduled' | 'published' | 'archived';
+export interface SeoIssue { type?: 'error' | 'warning' | 'success'; ok?: boolean; message: string }
+export interface SeoPost {
+  id: number | string; title: string; slug: string; excerpt: string; content: string;
+  meta_title: string; meta_description: string; primary_keyword: string;
+  secondary_keywords: string[]; category: string; search_intent: string;
+  status: SeoPostStatus; cover_image?: string; cover_image_source?: string; cover_image_source_url?: string;
+  cover_image_alt?: string; seo_score?: number; seo_issues?: SeoIssue[];
+  cannibalization?: Array<{ id: number | string; title: string; slug?: string; similarity?: number }>;
+  scheduled_at?: string | null; published_at?: string | null; updated_at?: string;
+}
+export type SeoPostInput = Omit<SeoPost, 'id' | 'updated_at' | 'published_at'>;
+export interface GenerateDraftInput { primary_keyword: string; secondary_keywords: string[]; category: string; search_intent: string; topic?: string }
+const unwrap = <T>(payload: any): T => (payload?.data ?? payload) as T;
+export const seoBlogApi = {
+  async list(params?: { search?: string; status?: string; category?: string; page?: number }) { const r = await axios.get('/admin/seo-blog', { params: { ...params, q: params?.search, search: undefined } }); return { posts: (r.data?.data ?? []) as SeoPost[], pagination: r.data?.meta }; },
+  async generateDraft(input: GenerateDraftInput) { const r = await axios.post('/admin/seo-blog/generate', input); return { ...r.data.data, seo_score: r.data.seo?.score, seo_issues: r.data.seo?.checks, cannibalization: r.data.cannibalization?.posts } as SeoPost; },
+  async create(input: Partial<SeoPostInput>) { const r = await axios.post('/admin/seo-blog', input); return { ...r.data.data, seo_score:r.data.seo?.score, seo_issues:r.data.seo?.checks } as SeoPost; },
+  async update(id: SeoPost['id'], input: Partial<SeoPostInput>) { const r = await axios.put(`/admin/seo-blog/${id}`, input); const d=r.data.data; return { ...d, seo_score:d.seo?.score ?? d.seo_score, seo_issues:d.seo?.checks ?? d.seo_issues } as SeoPost; },
+  async validate(id: SeoPost['id']) { const r=await axios.post(`/admin/seo-blog/${id}/validate`); const d=r.data.data; return { seo:{...d.seo,issues:d.seo?.checks||[]},cannibalization:d.cannibalization?.posts||[] } as { seo: { score:number; issues:SeoIssue[] }; cannibalization: SeoPost['cannibalization'] }; },
+  async searchImage(query: string) { const r=await axios.get('/admin/seo-blog/image-search',{params:{q:query}}); return r.data.data ?? null; },
+  async publish(id: SeoPost['id']) { const r = await axios.post(`/admin/seo-blog/${id}/publish`); return unwrap<SeoPost>(r.data); },
+  async schedule(id: SeoPost['id'], scheduled_at: string) { const r = await axios.post(`/admin/seo-blog/${id}/schedule`, { scheduled_at, timezone: 'Asia/Ho_Chi_Minh' }); return unwrap<SeoPost>(r.data); },
+  async archive(id: SeoPost['id']) { const r=await axios.patch(`/admin/seo-blog/${id}`,{status:'archived'}); return unwrap<SeoPost>(r.data); },
+  async remove(id: SeoPost['id']) { await axios.delete(`/admin/seo-blog/${id}`); },
+};

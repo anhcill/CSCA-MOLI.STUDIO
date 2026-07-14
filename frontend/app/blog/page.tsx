@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import Header from '@/components/layout/Header';
-import { BLOG_POSTS } from './blogData';
 import BlogListClient from './BlogListClient';
 import { getCanonicalSiteUrl } from '@/lib/seo/site';
+import { getPublicBlogPosts } from '@/lib/seoBlog';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Blog Ôn Thi CSCA & Du Học Trung Quốc',
@@ -18,7 +20,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BlogPage() {
+export default async function BlogPage() {
+  const posts = await getPublicBlogPosts();
   const siteUrl = getCanonicalSiteUrl();
   const blogUrl = `${siteUrl}/blog`;
   const topicLinks = [
@@ -42,7 +45,7 @@ export default function BlogPage() {
       name: 'CSCA MOLI.STUDIO',
       url: siteUrl,
     },
-    blogPost: BLOG_POSTS.slice(0, 12).map((post) => ({
+    blogPost: posts.slice(0, 12).map((post) => ({
       '@type': 'BlogPosting',
       headline: post.title,
       description: post.excerpt,
@@ -89,7 +92,7 @@ export default function BlogPage() {
         </div>
 
         {/* Client Interactive Workspace */}
-        <BlogListClient posts={BLOG_POSTS} />
+        <BlogListClient posts={posts} />
 
         {/* Premium Topic Cloud (Footer Section) */}
         <div className="mt-16 bg-white rounded-3xl border border-gray-150/60 p-8 shadow-sm">

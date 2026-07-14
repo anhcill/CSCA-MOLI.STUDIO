@@ -7,6 +7,7 @@ export { formatDate };
 export interface BlogPost {
   slug: string;
   title: string;
+  seoTitle?: string;
   excerpt: string;
   content: string;
   coverImage: string;
