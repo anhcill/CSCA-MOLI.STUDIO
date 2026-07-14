@@ -118,30 +118,30 @@ function getRankTone(rank: number) {
     if (rank === 1) {
         return {
             badgeColor: 'bg-[#FFC524]',
-            shell: 'border-[#FFE899] dark:border-amber-700/30 bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] dark:from-[#3a2f15]/20 dark:via-slate-900 dark:to-slate-900 shadow-md shadow-amber-100/50 dark:shadow-none',
+            shell: 'border-[#FFE899] bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] shadow-md shadow-amber-100/50',
             score: 'bg-[#FFB800] text-white',
             avatar: 72,
             height: 'h-[330px]',
-            wreathColor: 'text-[#F5D06E] dark:text-[#d4af37]',
+            wreathColor: 'text-[#F5D06E]',
         };
     }
     if (rank === 2) {
         return {
             badgeColor: 'bg-[#4FA2FF]',
-            shell: 'border-[#D0E7FF] dark:border-blue-700/30 bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] dark:from-[#1b2b48]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-blue-100/40 dark:shadow-none',
+            shell: 'border-[#D0E7FF] bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] shadow-sm shadow-blue-100/40',
             score: 'bg-[#3B82F6] text-white',
             avatar: 64,
             height: 'h-[295px]',
-            wreathColor: 'text-[#9ECBFF] dark:text-[#4a90e2]',
+            wreathColor: 'text-[#9ECBFF]',
         };
     }
     return {
         badgeColor: 'bg-[#FF7894]',
-        shell: 'border-[#FFE4E6] dark:border-rose-700/30 bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] dark:from-[#3b1c24]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-rose-100/40 dark:shadow-none',
+        shell: 'border-[#FFE4E6] bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] shadow-sm shadow-rose-100/40',
         score: 'bg-[#EC4899] text-white',
         avatar: 58,
         height: 'h-[270px]',
-        wreathColor: 'text-[#FFA1B5] dark:text-[#d04a6b]',
+        wreathColor: 'text-[#FFA1B5]',
     };
 }
 
@@ -185,11 +185,11 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
                     <Avatar name={entry.full_name} url={entry.avatar_url} size={tone.avatar} />
                 </div>
 
-                <h3 className="font-extrabold text-slate-850 dark:text-slate-200 text-[15px] text-center line-clamp-1 max-w-[90%] mt-2.5">
+                <h3 className="font-extrabold text-slate-900 text-[15px] text-center line-clamp-1 max-w-[90%] mt-2.5">
                     {entry.full_name}{isMe ? ' (Bạn)' : ''}
                 </h3>
                 
-                <p className="mt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 text-center">
+                <p className="mt-1 text-[11px] font-bold text-slate-500 text-center">
                     {entry.total_attempts} lần thi · ĐTB: {formatScore(entry.avg_score)}/100
                 </p>
             </div>
@@ -201,7 +201,7 @@ function PodiumCard({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean })
                     <p className="text-[10px] font-bold opacity-90 mt-0.5">điểm</p>
                 </div>
 
-                <p className="mt-3.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                <p className="mt-3.5 inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
                     <FiClock size={12} className="text-slate-400 dark:text-slate-500" /> {formatDuration(entry.best_time_spent)}
                 </p>
             </div>
@@ -273,7 +273,7 @@ export default function LeaderboardPage() {
                         <button
                             onClick={loadLeaderboard}
                             disabled={loading}
-                            className="p-2.5 bg-[#fffaf2]/75 dark:bg-slate-900 border border-[#ead9bd]/80 dark:border-slate-800 rounded-xl text-[#8b7866] dark:text-slate-500 hover:text-[#4f3521] dark:hover:text-slate-355 shadow-sm hover:bg-[#fff8ec] dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            className="p-2.5 bg-[#fffaf2]/90 border border-[#ead9bd]/80 rounded-xl text-[#6f563f] hover:text-[#4f3521] shadow-sm hover:bg-white transition-colors disabled:opacity-50"
                             title="Làm mới"
                         >
                             <FiRefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -282,23 +282,23 @@ export default function LeaderboardPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#fffaf2]/75 dark:bg-slate-900 rounded-xl border border-[#ead9bd]/80 dark:border-slate-800 text-sm font-bold text-[#6f563f] dark:text-slate-300 shadow-sm hover:bg-[#fff8ec] dark:hover:bg-slate-800 transition-colors"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-[#fffaf2]/90 rounded-xl border border-[#ead9bd]/80 text-sm font-bold text-[#4f3521] shadow-sm hover:bg-white transition-colors"
                             >
                                 <FiCalendar className="text-slate-400" size={16} />
                                 <span>{period === 'week' ? 'Tuần này' : 'Toàn hệ thống'}</span>
                                 <FiChevronDown className="text-slate-400" size={16} />
                             </button>
                             {dropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-[#fffaf2]/95 dark:bg-slate-900 border border-[#ead9bd]/90 dark:border-slate-800 rounded-xl shadow-lg z-30 overflow-hidden backdrop-blur-md">
+                                <div className="absolute right-0 mt-2 w-48 bg-[#fffaf2]/95 border border-[#ead9bd]/90 rounded-xl shadow-lg z-30 overflow-hidden backdrop-blur-md">
                                     <button
                                         onClick={() => { setPeriod('week'); setDropdownOpen(false); }}
-                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${period === 'week' ? 'text-violet-600 bg-violet-50/50 dark:bg-violet-950/20' : 'text-slate-700 dark:text-slate-300'}`}
+                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-white transition-colors ${period === 'week' ? 'text-violet-700 bg-violet-100/70' : 'text-slate-700'}`}
                                     >
                                         Tuần này
                                     </button>
                                     <button
                                         onClick={() => { setPeriod('all'); setDropdownOpen(false); }}
-                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${period === 'all' ? 'text-violet-600 bg-violet-50/50 dark:bg-violet-950/20' : 'text-slate-700 dark:text-slate-300'}`}
+                                        className={`w-full text-left px-4 py-2.5 text-sm font-bold hover:bg-white transition-colors ${period === 'all' ? 'text-violet-700 bg-violet-100/70' : 'text-slate-700'}`}
                                     >
                                         Toàn hệ thống
                                     </button>
@@ -337,7 +337,7 @@ export default function LeaderboardPage() {
                             <div className={`overflow-x-auto rounded-[24px] pb-2 ${inkResultSoftPanel}`}>
                                 <table className="w-full min-w-[860px] border-collapse text-left">
                                     <thead>
-                                        <tr className="border-b border-slate-50 dark:border-slate-800 text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50/40 dark:bg-slate-800/40">
+                                        <tr className="border-b border-[#dfcfb9] text-[11px] font-black text-[#725d48] uppercase tracking-wider bg-[#f4eadc]/90">
                                             <th className="w-20 px-6 py-4 text-center">HANG</th>
                                             <th className="min-w-[220px] px-6 py-4">THÍ SINH</th>
                                             <th className="min-w-[105px] px-6 py-4 text-center">SỐ LẦN THI</th>
@@ -346,7 +346,7 @@ export default function LeaderboardPage() {
                                             <th className="min-w-[170px] px-6 py-4 text-center">THỜI GIAN GẦN NHẤT</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                                    <tbody className="divide-y divide-[#dfcfb9] bg-[#fffaf2]/90 text-sm text-slate-800">
                                         {restEntries.map((entry) => {
                                             const isMe = isAuthenticated && entry.id === user?.id;
                                             const initials = String(entry.full_name || '?')
@@ -369,9 +369,9 @@ export default function LeaderboardPage() {
                                             };
 
                                             return (
-                                                <tr key={entry.id} className={`hover:bg-slate-50/40 dark:hover:bg-slate-800/40 transition-colors ${isMe ? 'bg-violet-50/30 dark:bg-violet-950/20' : ''}`}>
+                                                <tr key={entry.id} className={`hover:bg-[#fff3df] transition-colors ${isMe ? 'bg-violet-100/80' : ''}`}>
                                                     {/* Rank */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-850 dark:text-slate-350">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-800">
                                                         {entry.rank}
                                                     </td>
                                                     
@@ -389,29 +389,29 @@ export default function LeaderboardPage() {
                                                                     {initials}
                                                                 </div>
                                                             )}
-                                                            <span className="font-extrabold text-slate-900 dark:text-slate-100">
+                                                            <span className="font-extrabold text-slate-900">
                                                                 {entry.full_name} {isMe && <span className="text-violet-600 dark:text-violet-400 font-bold text-xs">(Bạn)</span>}
                                                             </span>
                                                         </div>
                                                     </td>
                                                     
                                                     {/* Attempts */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-700">
                                                         {entry.total_attempts}
                                                     </td>
                                                     
                                                     {/* Average Score */}
-                                                    <td className="py-4 px-6 text-center font-bold text-slate-600 dark:text-slate-400">
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-700">
                                                         {formatScore(entry.avg_score)}/100
                                                     </td>
                                                     
                                                     {/* Highest Score */}
-                                                    <td className="py-4 px-6 text-center font-black text-emerald-600 dark:text-emerald-500">
+                                                    <td className="py-4 px-6 text-center font-black text-emerald-700">
                                                         {formatScore(entry.best_score)}/100
                                                     </td>
                                                     
                                                     {/* Latest Time */}
-                                                    <td className="min-w-[170px] whitespace-nowrap px-6 py-4 text-center font-bold text-slate-500 dark:text-slate-400">
+                                                    <td className="min-w-[170px] whitespace-nowrap px-6 py-4 text-center font-bold text-slate-600">
                                                         <div className="inline-flex items-center gap-1.5">
                                                             <FiClock className="text-slate-400 dark:text-slate-500" size={13} />
                                                             <span>{formatRelativeTime(entry.last_attempt_at)}</span>
@@ -434,7 +434,7 @@ export default function LeaderboardPage() {
                 )}
 
                 {isAuthenticated && !myEntry && !loading && (
-                    <div className="mt-8 rounded-2xl border border-dashed border-[#d9b784] bg-[#fffaf2]/76 p-6 text-center shadow-sm backdrop-blur-md dark:border-violet-800 dark:bg-slate-900">
+                    <div className="mt-8 rounded-2xl border border-dashed border-[#d9b784] bg-[#fffaf2]/90 p-6 text-center shadow-sm backdrop-blur-md">
                         <FiTarget size={32} className="mx-auto mb-3 text-violet-400" />
                         <p className={`font-bold ${inkResultTitle}`}>Bạn chưa có trên bảng xếp hạng</p>
                         <p className={`mt-1 text-sm ${inkResultMuted}`}>Hoàn thành ít nhất 1 bài thi để xuất hiện</p>
