@@ -53,6 +53,11 @@ const blank: Partial<SeoPost> = {
 const cls =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white";
 type AiTask = { mode: "ideas" | "article"; done?: boolean } | null;
+const isEffectivelyPublished = (post: SeoPost) =>
+  post.status === "published" ||
+  (post.status === "scheduled" &&
+    Boolean(post.scheduled_at) &&
+    new Date(post.scheduled_at as string).getTime() <= Date.now());
 
 export default function Page() {
   const router = useRouter(),
@@ -314,11 +319,11 @@ export default function Page() {
           <Stat l="Tổng bài" v={posts.length} />
           <Stat
             l="Đã xuất bản"
-            v={posts.filter((p) => p.status === "published").length}
+            v={posts.filter(isEffectivelyPublished).length}
           />
           <Stat
             l="Chờ lịch"
-            v={posts.filter((p) => p.status === "scheduled").length}
+            v={posts.filter((p) => p.status === "scheduled" && !isEffectivelyPublished(p)).length}
           />
         </div>
         <section className="rounded-2xl border bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -390,7 +395,7 @@ export default function Page() {
                       <td>{p.primary_keyword}</td>
                       <td>{p.seo_score ?? "—"}/100</td>
                       <td>
-                        <Badge s={p.status} />
+                        <Badge s={isEffectivelyPublished(p) ? "published" : p.status} />
                       </td>
                       <td>
                         {p.scheduled_at

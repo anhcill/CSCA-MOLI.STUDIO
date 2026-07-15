@@ -13,6 +13,15 @@ function topicImageLibrary() {
 const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,180);
 const words = value => String(value || '').trim().split(/\s+/).filter(Boolean).length;
 
+async function publishDuePosts() {
+  const { rows } = await db.query(
+    `UPDATE seo_blog_posts SET status='published',published_at=COALESCE(published_at,scheduled_at,NOW()),updated_at=NOW()
+     WHERE status='scheduled' AND scheduled_at IS NOT NULL AND scheduled_at<=NOW()
+     RETURNING id`,
+  );
+  return rows.length;
+}
+
 function parseGeneratedJson(raw) {
   const text = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   const candidates = [text];
@@ -304,4 +313,4 @@ async function create(data) {
 }
 async function update(id,data) { const cols=FIELDS.filter(k=>data[k]!==undefined && k!=='slug'); if(data.slug!==undefined) { data.slug=slugify(data.slug); cols.push('slug'); } if(!cols.length) return get(id); const {rows}=await db.query(`UPDATE seo_blog_posts SET ${cols.map((k,i)=>`${k}=$${i+1}`).join(',')},updated_at=NOW() WHERE id=$${cols.length+1} RETURNING *`,[...cols.map(k=>data[k]),id]); const post=rows[0]; if(post?.primary_keyword) await db.query(`UPDATE seo_blog_ideas SET status='used',used_post_id=$1,used_at=COALESCE(used_at,NOW()) WHERE lower(trim(primary_keyword))=lower(trim($2))`,[post.id,post.primary_keyword]); return post; }
 async function get(id){const {rows}=await db.query('SELECT * FROM seo_blog_posts WHERE id=$1',[id]);return rows[0];}
-module.exports={validateSeo,cannibalization,findImage,findImages,generate,suggestIdeas,listIdeas,updateIdea,deleteIdea,create,update,get};
+module.exports={validateSeo,cannibalization,findImage,findImages,generate,suggestIdeas,listIdeas,updateIdea,deleteIdea,publishDuePosts,create,update,get};
