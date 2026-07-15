@@ -1374,12 +1374,19 @@ export default function ExamPage() {
                    {currentFeedback.is_correct ? 'Đúng' : 'Chưa đúng'}
                  </p>
                  {!currentFeedback.is_correct && (
-                   <p className="mb-2 text-sm font-semibold text-slate-700">
-                      Đáp án đúng: {currentFeedback.correct_answer_key}. {feedbackAnswerText.primary}
+                   <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      <span className="mb-1 block">Đáp án đúng: {currentFeedback.correct_answer_key}.</span>
+                      <RichMathText
+                        value={feedbackAnswerText.primary}
+                        className="exam-math-readable text-inherit"
+                      />
                       {feedbackAnswerText.secondary && (
-                        <span className="mt-1 block text-slate-500">{feedbackAnswerText.secondary}</span>
+                        <RichMathText
+                          value={feedbackAnswerText.secondary}
+                          className="exam-math-readable mt-1 text-slate-500 dark:text-slate-400"
+                        />
                       )}
-                   </p>
+                   </div>
                   )}
                   {(currentFeedback.explanation || currentFeedback.explanation_cn || currentFeedback.explanation_en || currentFeedback.explanation_image_url) && (
                     <div className="mt-3 rounded-xl border border-white/70 bg-white/90 p-4 shadow-sm">
