@@ -543,7 +543,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                     secondary={q.question_text_cn}
                                                     tertiary={q.question_text_en}
                                                     languageMode={languageMode}
-                                                    className="text-sm font-medium leading-relaxed text-gray-900 dark:text-gray-100"
+                                                    className="exam-math-readable text-sm font-medium leading-relaxed text-gray-900 dark:text-gray-100"
                                                 />
                                             </div>
                                         </div>
@@ -564,7 +564,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                                                                 secondary={opt.text_cn}
                                                                 tertiary={opt.text_en}
                                                                 languageMode={languageMode}
-                                                                className={`text-sm ${tone.text}`}
+                                                                className={`exam-math-readable text-sm ${tone.text}`}
                                                                 secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
                                                             />
                                                         </div>

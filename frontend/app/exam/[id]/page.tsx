@@ -1181,17 +1181,17 @@ export default function ExamPage() {
 
              {/* Question Text */}
              <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
-                <RichMathText value={questionText.primary} className="text-inherit" />
+                <RichMathText value={questionText.primary} className="exam-math-readable text-inherit" />
                 
                 {questionText.secondary && (
                   <div className="text-lg md:text-xl font-medium text-slate-500 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
-                    <RichMathText value={questionText.secondary} className="text-inherit" />
+                    <RichMathText value={questionText.secondary} className="exam-math-readable text-inherit" />
                   </div>
                 )}
 
                 {questionText.tertiary && (
                   <div className="text-lg md:text-xl font-medium text-slate-400 mt-5 pt-5 border-t border-dashed border-slate-200 leading-[1.8]">
-                    <RichMathText value={questionText.tertiary} className="text-inherit" />
+                    <RichMathText value={questionText.tertiary} className="exam-math-readable text-inherit" />
                   </div>
                 )}
              </div>
@@ -1305,11 +1305,11 @@ export default function ExamPage() {
                         <div className="min-w-0 flex-1 mt-0.5">
                           <RichMathText
                             value={answerText.primary}
-                            className={`text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
+                            className={`exam-math-readable text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
                           />
                           {answerText.secondary && (
                             <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
-                              <RichMathText value={answerText.secondary} className="text-inherit" />
+                              <RichMathText value={answerText.secondary} className="exam-math-readable text-inherit" />
                             </div>
                           )}
                           {answer.image_url && (
@@ -1389,14 +1389,14 @@ export default function ExamPage() {
                           <RichMathText
                             value={feedbackExplanationText.primary}
                             readableBreaks
-                            className="text-base leading-7 text-slate-800"
+                            className="exam-math-readable text-base leading-7 text-slate-800"
                           />
                           {feedbackExplanationText.secondary && (
                             <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
                               <RichMathText
                                 value={feedbackExplanationText.secondary}
                                 readableBreaks
-                                className="text-base leading-7 text-slate-500"
+                                className="exam-math-readable text-base leading-7 text-slate-500"
                               />
                             </div>
                           )}
@@ -1405,7 +1405,7 @@ export default function ExamPage() {
                               <RichMathText
                                 value={feedbackExplanationText.tertiary}
                                 readableBreaks
-                                className="text-base leading-7 text-slate-400"
+                                className="exam-math-readable text-base leading-7 text-slate-400"
                               />
                             </div>
                           )}

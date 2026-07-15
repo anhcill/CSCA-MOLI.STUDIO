@@ -476,3 +476,25 @@ html {
 .dark .leaderboard-force-light .leaderboard-table tbody .text-emerald-700 {
   color: #047857 !important;
 }
+/* Keep formulas comfortably readable in learner-facing exam and result screens. */
+.exam-math-readable {
+  font-size: 1.0625rem !important;
+  line-height: 1.85 !important;
+}
+
+.exam-math-readable .katex {
+  font-size: 1.2em;
+}
+
+.exam-math-readable .katex-display {
+  margin: 0.8rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0 0.25rem;
+}
+
+@media (min-width: 640px) {
+  .exam-math-readable {
+    font-size: 1.125rem !important;
+  }
+}

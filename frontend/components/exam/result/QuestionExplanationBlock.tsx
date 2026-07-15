@@ -25,8 +25,8 @@ export default function QuestionExplanationBlock({
           secondary={question.explanation_cn}
           tertiary={question.explanation_en}
           languageMode={languageMode}
-          className="min-w-0 overflow-x-auto text-base leading-7 text-blue-950 dark:text-blue-50 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
-          secondaryClassName="mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800 dark:border-blue-800/70 dark:text-blue-200"
+          className="exam-math-readable min-w-0 overflow-x-auto text-base leading-7 text-blue-950 dark:text-blue-50 [&_.katex-display]:overflow-x-auto [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto"
+          secondaryClassName="exam-math-readable mt-3 border-t border-blue-200 pt-3 text-base leading-7 text-blue-800 dark:border-blue-800/70 dark:text-blue-200"
           readableBreaks
         />
       )}

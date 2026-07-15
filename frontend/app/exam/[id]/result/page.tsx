@@ -741,7 +741,7 @@ function ExamResultContent() {
                           secondary={q.question_text_cn}
                           tertiary={q.question_text_en}
                           languageMode={languageMode}
-                          className="text-gray-900 font-medium leading-relaxed dark:text-gray-100"
+                          className="exam-math-readable text-gray-900 font-medium leading-relaxed dark:text-gray-100"
                         />
                         <div className="mt-3">
                           <button
@@ -777,7 +777,7 @@ function ExamResultContent() {
                                 secondary={opt.text_cn}
                                 tertiary={opt.text_en}
                                 languageMode={languageMode}
-                                className={`text-sm ${tone.text}`}
+                                className={`exam-math-readable text-sm ${tone.text}`}
                                 secondaryClassName={`mt-1 text-xs ${tone.secondary}`}
                               />
                             </div>
