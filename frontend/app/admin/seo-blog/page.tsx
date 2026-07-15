@@ -64,6 +64,7 @@ export default function Page() {
     [ideas, setIdeas] = useState<SeoIdea[]>([]),
     [ideasLoading, setIdeasLoading] = useState(false),
     [imageOptions, setImageOptions] = useState<SeoImage[]>([]),
+    [imagePage, setImagePage] = useState(0),
     [ideaFocus, setIdeaFocus] = useState(""),
     [ideaStatus, setIdeaStatus] = useState<"unused" | "used" | "all">("unused"),
     [selectedIdeaId, setSelectedIdeaId] = useState<SeoIdea["id"] | null>(null),
@@ -106,6 +107,7 @@ export default function Page() {
     setSecondary((v.secondary_keywords || []).join(", "));
     setSelectedIdeaId(null);
     setImageOptions([]);
+    setImagePage(0);
     setOpen(true);
     void loadIdeas();
   };
@@ -116,6 +118,7 @@ export default function Page() {
       .map((x) => x.trim())
       .filter(Boolean),
   });
+  const showPostImmediately = (post: SeoPost) => setPosts((current) => [post, ...current.filter((item) => item.id !== post.id)]);
   const save = async () => {
     setBusy(true);
     try {
@@ -124,6 +127,7 @@ export default function Page() {
         ? await seoBlogApi.update(draft.id, p)
         : await seoBlogApi.create(p);
       setDraft(x);
+      showPostImmediately(x);
       setNotice("Đã lưu bản nháp.");
       await load();
     } catch {
@@ -132,21 +136,23 @@ export default function Page() {
       setBusy(false);
     }
   };
-  const findImage = async () => {
+  const findImage = async (append = false) => {
     if (!draft.primary_keyword) {
       setNotice("Hãy nhập từ khóa chính trước khi tìm ảnh.");
       return;
     }
     setBusy(true);
     try {
-      const images = await seoBlogApi.searchImages(draft.primary_keyword, draft.topic || draft.category, imageOptions.length ? Math.floor(Math.random() * 5) + 2 : 1);
+      const nextPage = append ? imagePage + 1 : (imagePage % 10) + 1;
+      const images = await seoBlogApi.searchImages(draft.primary_keyword, draft.topic || draft.category, nextPage);
       if (!images.length) {
         setNotice(
           "Chưa tìm thấy ảnh. Hãy cấu hình Pexels, Unsplash hoặc thư viện ảnh chủ đề.",
         );
         return;
       }
-      setImageOptions(images);
+      setImagePage(nextPage);
+      setImageOptions((current) => append ? [...new Map([...current,...images].map((image) => [image.url,image])).values()] : images);
       setNotice(`Đã tìm thấy ${images.length} ảnh. Hãy chọn ảnh phù hợp.`);
     } catch {
       setNotice("Tìm ảnh thất bại.");
@@ -216,6 +222,7 @@ export default function Page() {
         topic: draft.topic,
       });
       setDraft(x);
+      showPostImmediately(x);
       setSecondary((x.secondary_keywords || []).join(", "));
       if (selectedIdeaId) {
         await seoBlogApi.updateIdea(selectedIdeaId, {
@@ -579,10 +586,10 @@ export default function Page() {
                   )}
                   <button
                     disabled={busy}
-                    onClick={findImage}
+                    onClick={() => void findImage(false)}
                     className="mb-2 w-full rounded-xl border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-700"
                   >
-                    {imageOptions.length ? "Đổi danh sách ảnh khác" : "Chọn / đổi ảnh"}
+                    {imageOptions.length ? "Đổi sang bộ ảnh khác" : "Chọn / đổi ảnh"}
                   </button>
                   {imageOptions.length > 0 && (
                     <div className="mb-3 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto rounded-xl bg-slate-100 p-2">
@@ -605,6 +612,16 @@ export default function Page() {
                         </button>
                       ))}
                     </div>
+                  )}
+                  {imageOptions.length > 0 && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void findImage(true)}
+                      className="mb-3 w-full rounded-xl bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:bg-violet-950/40 dark:text-violet-300"
+                    >
+                      Xem thêm 8 ảnh
+                    </button>
                   )}
                   <input
                     className={cls}

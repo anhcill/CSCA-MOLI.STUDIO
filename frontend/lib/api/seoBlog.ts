@@ -18,7 +18,7 @@ export interface SeoIdea { id: number | string; topic: string; category: string;
 export interface SeoImage { url:string; thumbnail?:string; alt:string; source:string; source_url:string; search_query?:string }
 const unwrap = <T>(payload: any): T => (payload?.data ?? payload) as T;
 export const seoBlogApi = {
-  async list(params?: { search?: string; status?: string; category?: string; page?: number }) { const r = await axios.get('/admin/seo-blog', { params: { ...params, q: params?.search, search: undefined } }); return { posts: (r.data?.data ?? []) as SeoPost[], pagination: r.data?.meta }; },
+  async list(params?: { search?: string; status?: string; category?: string; page?: number }) { const r = await axios.get('/admin/seo-blog', { params: { ...params, q: params?.search, search: undefined, _t: Date.now() } }); return { posts: (r.data?.data ?? []) as SeoPost[], pagination: r.data?.meta }; },
   async generateDraft(input: GenerateDraftInput) { const r = await axios.post('/admin/seo-blog/generate', input); return { ...r.data.data, seo_score: r.data.seo?.score, seo_issues: r.data.seo?.checks, cannibalization: r.data.cannibalization?.posts } as SeoPost; },
   async suggestIdeas(focus?: string) { const r = await axios.post('/admin/seo-blog/suggest-ideas', { focus }); return (r.data?.data ?? []) as SeoIdea[]; },
   async listIdeas(status: 'unused'|'used'|'dismissed'|'all' = 'unused') { const r=await axios.get('/admin/seo-blog/ideas',{params:{status}}); return (r.data?.data??[]) as SeoIdea[]; },
