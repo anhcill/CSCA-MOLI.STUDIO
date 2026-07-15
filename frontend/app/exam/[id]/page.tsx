@@ -1291,24 +1291,24 @@ export default function ExamPage() {
                         onClick={() => handleAnswerSelect(answer.id, answer.answer_key)}
                         className={`relative w-full text-left p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 group flex items-start gap-3 sm:gap-4 outline-none ${
                             isSelected
-                            ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20'
-                            : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white'
+                            ? 'border-indigo-600 bg-indigo-50/50 shadow-[0_4px_20px_-4px_rgba(79,70,229,0.15)] ring-1 ring-indigo-600/20 dark:border-violet-400 dark:bg-violet-500/25 dark:shadow-[0_0_24px_-8px_rgba(139,92,246,0.8)] dark:ring-violet-400/50'
+                            : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50 bg-white dark:border-slate-700 dark:bg-slate-900/80 dark:hover:border-violet-400 dark:hover:bg-slate-800'
                           }`}
                       >
                         <div className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold text-sm transition-all ${
                             isSelected
-                            ? 'border-indigo-600 bg-indigo-600 text-white'
-                            : 'border-slate-300 text-slate-500 group-hover:border-indigo-300 group-hover:text-indigo-500 bg-white'
+                            ? 'border-indigo-600 bg-indigo-600 text-white dark:border-violet-300 dark:bg-violet-500'
+                            : 'border-slate-300 text-slate-500 group-hover:border-indigo-300 group-hover:text-indigo-500 bg-white dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300 dark:group-hover:border-violet-400 dark:group-hover:text-violet-300'
                           }`}>
                           {isSelected ? <FiCheck strokeWidth={3} /> : letter}
                         </div>
                         <div className="min-w-0 flex-1 mt-0.5">
                           <RichMathText
                             value={answerText.primary}
-                            className={`exam-math-readable exam-taking-math text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}
+                            className={`exam-math-readable exam-taking-math text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900 dark:text-violet-100' : 'text-slate-700 dark:text-slate-100'}`}
                           />
                           {answerText.secondary && (
-                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80' : 'text-slate-500'}`}>
+                            <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80 dark:text-violet-200' : 'text-slate-500 dark:text-slate-400'}`}>
                               <RichMathText value={answerText.secondary} className="exam-math-readable exam-taking-math text-inherit" />
                             </div>
                           )}
@@ -1451,7 +1451,7 @@ export default function ExamPage() {
 
         {/* Right Area: Nav Grid Floating Panel */}
         <div className="lg:w-80 shrink-0">
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 lg:sticky lg:top-24">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 dark:border-slate-700 dark:bg-slate-900/95 lg:sticky lg:top-24">
             
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
@@ -1473,8 +1473,8 @@ export default function ExamPage() {
                   onClick={() => setNavFilter(item.key as typeof navFilter)}
                   className={`rounded-xl px-3 py-2 text-xs font-black transition-colors ${
                     navFilter === item.key
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-slate-900 text-white dark:bg-violet-600'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
                   }`}
                 >
                   {item.label}
@@ -1496,10 +1496,10 @@ export default function ExamPage() {
                     className={`
                       relative aspect-square rounded-xl font-bold text-[13px] transition-all flex items-center justify-center outline-none
                       ${isActive
-                        ? 'bg-slate-800 text-white shadow-lg ring-4 ring-slate-100 scale-110 z-10'
+                        ? 'bg-slate-800 text-white shadow-lg ring-4 ring-slate-100 scale-110 z-10 dark:bg-white dark:text-slate-950 dark:ring-violet-400'
                         : isDone
-                          ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 hover:border-indigo-300'
-                          : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                          ? 'bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 hover:border-indigo-300 dark:border-violet-400/70 dark:bg-violet-500/25 dark:text-violet-200 dark:hover:bg-violet-500/40'
+                          : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:bg-slate-800'
                       }
                       ${isFlagged && !isActive ? 'ring-2 ring-amber-300' : ''}
                     `}
