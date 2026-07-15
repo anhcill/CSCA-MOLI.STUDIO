@@ -1450,8 +1450,8 @@ export default function ExamPage() {
         </div>
 
         {/* Right Area: Nav Grid Floating Panel */}
-        <div className="lg:w-80 shrink-0">
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 dark:border-slate-700 dark:bg-slate-900/95 lg:sticky lg:top-24">
+        <div className="shrink-0 lg:w-[380px] xl:w-[420px]">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-5 xl:p-6 dark:border-slate-700 dark:bg-slate-900/95 lg:sticky lg:top-24">
             
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
@@ -1483,7 +1483,7 @@ export default function ExamPage() {
             </div>
 
             {/* The Grid */}
-            <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-5 gap-2.5 max-h-[40vh] lg:max-h-[50vh] overflow-y-auto px-1 custom-scrollbar">
+            <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-6 xl:grid-cols-7 gap-2.5 max-h-[40vh] lg:max-h-[62vh] overflow-y-auto px-1 custom-scrollbar">
               {displayedQuestionIndexes.map(({ q, index }) => {
                 const isActive = index === currentQuestionIndex;
                 const isDone = hasAnsweredValue(selectedAnswers[q.id]);
