@@ -43,11 +43,11 @@ const COURSE_ITEMS = [
 
 const MAIN_NAV_TOP = [
   { id: 'home', labelKey: 'nav.home', href: '/', icon: FiHome },
-  { id: 'roadmap', labelKey: 'nav.roadmap', href: '/lo-trinh', icon: FiGitBranch },
   { id: 'exam', labelKey: 'nav.examRoom', href: '/exam-room', icon: FiMonitor },
 ];
 
 const MAIN_NAV_BOTTOM = [
+  { id: 'roadmap', labelKey: 'nav.roadmap', href: '/lo-trinh', icon: FiGitBranch },
   { id: 'games', labelKey: 'nav.games', href: '/games', icon: FaGamepad },
   { id: 'docs', labelKey: 'nav.docs', href: '/tailieu', icon: FiFileText },
   { id: 'forum', labelKey: 'nav.forum', href: '/forum', icon: FiMessageSquare },
