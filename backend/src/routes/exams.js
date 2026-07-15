@@ -16,6 +16,7 @@ router.get("/exams/:examId", examController.getExamDetail);
 
 // Protected routes - Require authentication
 router.get("/exams/:examId/preflight", authenticate, examController.getExamPreflight);
+router.get("/exams/:examId/download", authenticate, examController.getDownloadableExam);
 router.post("/exams/:examId/start", authenticate, examController.startExam);
 router.get(
   "/exams/:examId/registration",

@@ -4,6 +4,7 @@ const UserActivity = require("../models/UserActivity");
 const { cache, TTL } = require("../config/cache");
 const { checkVipContentAccess } = require("../middleware/authMiddleware");
 const insightService = require("../services/insightService");
+const { pool } = require("../config/database");
 
 function sanitizeQuestionForAttempt(question) {
   const {
@@ -142,6 +143,48 @@ const examController = {
         message: "Lỗi khi lấy chi tiết đề thi",
         error: error.message,
       });
+    }
+  },
+
+  // Download is available only for free exams after the learner has submitted it.
+  async getDownloadableExam(req, res) {
+    try {
+      const examId = Number.parseInt(req.params.examId, 10);
+      if (!Number.isFinite(examId) || examId <= 0) {
+        return res.status(400).json({ success: false, message: "ID đề thi không hợp lệ" });
+      }
+
+      const exam = await Exam.getById(examId, false);
+      if (!exam) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy đề thi" });
+      }
+
+      const requiredTier = getRequiredVipTier(exam);
+      if (!getExamAllowDownload(requiredTier)) {
+        return res.status(403).json({ success: false, message: "Chỉ đề miễn phí mới được tải xuống" });
+      }
+
+      const completed = await pool.query(
+        `SELECT 1
+         FROM exam_attempts
+         WHERE exam_id = $1 AND user_id = $2 AND status = 'completed'
+         LIMIT 1`,
+        [examId, req.user.id],
+      );
+      if (completed.rowCount === 0) {
+        return res.status(403).json({
+          success: false,
+          code: "EXAM_NOT_COMPLETED",
+          message: "Bạn cần hoàn thành đề thi trước khi tải PDF",
+        });
+      }
+
+      exam.allow_download = true;
+      exam.questions = (exam.questions || []).map(sanitizeQuestionForAttempt);
+      return res.json({ success: true, data: exam });
+    } catch (error) {
+      console.error("Get downloadable exam error:", error);
+      return res.status(500).json({ success: false, message: "Không thể tải đề thi" });
     }
   },
 
@@ -693,6 +736,9 @@ const examController = {
           message: "Không tìm thấy kết quả thi",
         });
       }
+
+      detail.allow_download = detail.status === "completed"
+        && getExamAllowDownload(getRequiredVipTier(detail));
 
       res.json({
         success: true,

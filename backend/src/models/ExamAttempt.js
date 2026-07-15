@@ -601,6 +601,8 @@ const ExamAttempt = {
         e.code as exam_code,
         e.title as exam_title,
         e.language_mode,
+        e.is_premium,
+        e.vip_tier,
         e.total_questions,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,

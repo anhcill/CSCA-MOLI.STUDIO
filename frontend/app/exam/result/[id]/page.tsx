@@ -90,6 +90,7 @@ interface AttemptResult {
     submit_time: string;
     total_questions: number;
     answers: QuestionResult[];
+    allow_download?: boolean;
 }
 
 export default function ExamResultPage({ params }: { params: { id: string } }) {
@@ -261,10 +262,12 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
                 </button>
                 <div className="flex-1" />
                 <LanguageSwitcher compact />
-                <button onClick={() => window.print()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print">
-                    <FiPrinter size={14} /> Xuất PDF
-                </button>
+                {result?.allow_download && (
+                    <a href={`/exam/${result.exam_id}/print`} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print">
+                        <FiPrinter size={14} /> Tải đề PDF
+                    </a>
+                )}
             </div>
             <main className="container mx-auto max-w-[1360px] px-3 py-4 sm:px-4 sm:py-6">
 

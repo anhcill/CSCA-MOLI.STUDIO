@@ -1529,18 +1529,6 @@ export default function ExamPage() {
               </div>
             </div>
 
-            {/* PDF Download button — only shown if exam allows it */}
-            {(exam as any)?.allow_download && (
-              <a
-                href={`/exam/${examId}/print`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-xl text-sm font-semibold hover:bg-purple-100 transition-colors"
-              >
-                Tải xuống PDF
-              </a>
-            )}
-
           </div>
         </div>
 

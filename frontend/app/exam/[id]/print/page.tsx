@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from '@/lib/utils/axios';
-import { useAuthStore } from '@/lib/store/authStore';
 import { useLanguage } from '@/context/LanguageContext';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
 import RichMathText from '@/components/common/RichMathText';
@@ -46,7 +45,6 @@ interface ExamData {
 
 function ExamPrintContent({ examId }: { examId: string }) {
   const { t, pick } = useLanguage();
-  const { isAuthenticated } = useAuthStore();
   const searchParams = useSearchParams();
   const showAnswers = searchParams.get('answers') === '1';
   const [exam, setExam] = useState<ExamData | null>(null);
@@ -54,13 +52,7 @@ function ExamPrintContent({ examId }: { examId: string }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setError(pick({ vi: 'Vui lòng đăng nhập để xem tài liệu.', en: 'Please log in to view this document.', zh: '请登录后查看资料。' }));
-      setLoading(false);
-      return;
-    }
-
-    axios.get(`/exams/${examId}`)
+    axios.get(`/exams/${examId}/download`)
       .then((res) => {
         const data = res.data?.data || res.data;
         if (!data?.allow_download) {
@@ -71,11 +63,12 @@ function ExamPrintContent({ examId }: { examId: string }) {
         setExam(data);
         setLoading(false);
       })
-      .catch(() => {
-        setError(pick({ vi: 'Không thể tải đề thi.', en: 'Cannot load this exam.', zh: '无法加载试卷。' }));
+      .catch((requestError) => {
+        const apiMessage = requestError?.response?.data?.message;
+        setError(apiMessage || pick({ vi: 'Không thể tải đề thi.', en: 'Cannot load this exam.', zh: '无法加载试卷。' }));
         setLoading(false);
       });
-  }, [examId, isAuthenticated, pick]);
+  }, [examId, pick]);
 
   useEffect(() => {
     if (!loading && exam) setTimeout(() => window.print(), 600);

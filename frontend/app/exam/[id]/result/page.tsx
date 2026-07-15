@@ -94,6 +94,7 @@ interface ExamResult {
   submit_time: string;
   total_questions: number;
   answers: QuestionResult[];
+  allow_download?: boolean;
 }
 
 function ExamResultContent() {
@@ -384,12 +385,16 @@ function ExamResultContent() {
           <FiArrowLeft size={18} /> Quay lại
         </button>
         <div className="flex-1" />
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print"
-        >
-          <FiPrinter size={14} /> Xuất PDF
-        </button>
+        {result?.allow_download && (
+          <a
+            href={`/exam/${result.exam_id}/print`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print"
+          >
+            <FiPrinter size={14} /> Tải đề PDF
+          </a>
+        )}
       </div>
       <main className="container mx-auto px-4 py-6 max-w-[1360px]">
 
