@@ -498,3 +498,18 @@ html {
     font-size: 1.125rem !important;
   }
 }
+
+/* The active exam needs an extra step up because learners read it for long periods. */
+.exam-taking-math {
+  font-size: 1.1875rem !important;
+}
+
+.exam-taking-math .katex {
+  font-size: 1.25em;
+}
+
+@media (min-width: 640px) {
+  .exam-taking-math {
+    font-size: 1.25rem !important;
+  }
+}
