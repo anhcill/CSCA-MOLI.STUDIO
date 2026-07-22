@@ -2,8 +2,18 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { FiAward, FiBookOpen, FiCheckCircle, FiClock, FiPlayCircle, FiShield } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
+
+const accessLabels = { free: 'Miễn phí', vip: 'Gói VIP', premium: 'Gói Premium', contact: 'Liên hệ tư vấn', private: 'Khóa học riêng' };
+const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
+
+function durationLabel(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours ? `${hours} giờ ` : ''}${minutes} phút`;
+}
 
 export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
   const router = useRouter();
@@ -24,5 +34,16 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
       setError('Chưa thể đăng ký khóa học. Vui lòng thử lại.'); setBusy(false);
     }
   };
-  return <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl lg:sticky lg:top-6"><div className="aspect-video rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-700" /><p className="mt-5 text-sm font-bold text-slate-500">Quyền truy cập</p><p className="text-3xl font-black uppercase text-indigo-700">{course.accessType}</p><button type="button" onClick={handleAction} disabled={busy} className="mt-5 w-full rounded-xl bg-indigo-600 px-5 py-3 font-black text-white disabled:opacity-50">{busy ? 'Đang xử lý...' : course.access.ctaLabel}</button>{error ? <p role="alert" className="mt-3 text-sm text-red-600">{error}</p> : null}<ul className="mt-5 space-y-2 text-sm text-slate-600"><li>{course.totalSections} chương</li><li>{course.totalLessons} bài học</li><li>Trình độ: {course.level}</li><li>{course.certificateEnabled ? 'Có chứng nhận hoàn thành' : 'Không có chứng nhận'}</li></ul></aside>;
+
+  return (
+    <aside className="overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] lg:sticky lg:top-6">
+      <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-6 text-white"><p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-200">Quyền truy cập</p><p className="mt-2 text-3xl font-black">{accessLabels[course.accessType]}</p>{course.priceVnd ? <p className="mt-1 text-lg font-bold text-indigo-100">{course.priceVnd.toLocaleString('vi-VN')}đ</p> : <p className="mt-1 text-sm font-semibold text-indigo-100">Bắt đầu học ngay hôm nay</p>}</div>
+      <div className="p-6">
+        <button type="button" onClick={handleAction} disabled={busy} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><FiPlayCircle className="text-xl" /> {busy ? 'Đang xử lý...' : course.access.ctaLabel}</button>
+        {error ? <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-600">{error}</p> : null}
+        <ul className="mt-6 space-y-3 text-sm font-semibold text-slate-600"><li className="flex items-center gap-3"><FiBookOpen className="text-lg text-indigo-600" /><span><strong className="text-slate-900">{course.totalSections} chương</strong> · {course.totalLessons} bài học</span></li><li className="flex items-center gap-3"><FiClock className="text-lg text-indigo-600" /><span>Thời lượng <strong className="text-slate-900">{durationLabel(course.totalDurationSeconds)}</strong></span></li><li className="flex items-center gap-3"><FiShield className="text-lg text-indigo-600" /><span>Trình độ <strong className="text-slate-900">{levelLabels[course.level]}</strong></span></li><li className="flex items-center gap-3"><FiAward className="text-lg text-indigo-600" /><span>{course.certificateEnabled ? 'Có chứng nhận hoàn thành' : 'Theo dõi tiến độ học tập'}</span></li></ul>
+        <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800"><p className="flex items-center gap-2 font-black"><FiCheckCircle /> Học linh hoạt</p><p className="mt-1 leading-5 text-emerald-700">Tiến độ được lưu tự động trên mọi thiết bị.</p></div>
+      </div>
+    </aside>
+  );
 }

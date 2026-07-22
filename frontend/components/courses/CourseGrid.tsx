@@ -1,11 +1,12 @@
+import { FiBookOpen } from 'react-icons/fi';
 import type { CourseCatalogItemDto } from '@/lib/types/courses';
 import { CourseCard } from './CourseCard';
 
 export function CourseGrid({ courses }: { courses: CourseCatalogItemDto[] }) {
-  if (!courses.length) return <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">Chưa có khóa học CSCA phù hợp.</div>;
+  if (!courses.length) return <div className="rounded-[1.75rem] border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm"><span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-3xl text-indigo-600"><FiBookOpen /></span><h3 className="mt-5 text-xl font-black text-slate-900">Chưa tìm thấy khóa học phù hợp</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Thử chọn một môn học hoặc quyền truy cập khác để xem thêm nội dung.</p></div>;
   return <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">{courses.map((course) => <CourseCard key={course.id} course={course} />)}</div>;
 }
 
 export function CourseGridSkeleton() {
-  return <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-96 animate-pulse rounded-3xl bg-slate-200" />)}</div>;
+  return <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white"><div className="aspect-video animate-pulse bg-slate-200" /><div className="space-y-4 p-6"><div className="h-5 w-28 animate-pulse rounded-full bg-slate-200" /><div className="h-7 animate-pulse rounded-lg bg-slate-200" /><div className="h-12 animate-pulse rounded-lg bg-slate-100" /><div className="h-14 animate-pulse rounded-2xl bg-slate-100" /></div></div>)}</div>;
 }
