@@ -65,9 +65,10 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/tin-nhan') ||
     pathname?.startsWith('/ho-tro/messages');
   const isGame = pathname?.startsWith('/games');
+  const isCoursePage = pathname?.startsWith('/khoa-hoc') || pathname?.startsWith('/hoc');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
-  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isSubjectPage || isSubjectScopedPage;
+  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showDailyGift = showMoliPet && isAuthenticated;
