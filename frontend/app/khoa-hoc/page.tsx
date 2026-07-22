@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 
 export default function CoursesPage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f6f7fb] pb-20 pt-6">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <main className="min-h-screen overflow-hidden bg-[#f6f7fb] px-4 pb-20 pt-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
         <nav className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link href="/" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-700 hover:shadow-md">
             <FiArrowLeft aria-hidden="true" /> Về trang chủ
@@ -21,14 +21,11 @@ export default function CoursesPage() {
           </Link>
         </nav>
 
-      </div>
-
-      <section className="relative isolate overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 py-10 text-white shadow-[0_30px_80px_rgba(49,46,129,0.22)] sm:py-14">
-        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
-        <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
-        <div className="absolute right-8 top-8 hidden h-44 w-44 rotate-12 rounded-[2rem] border border-white/10 bg-white/5 backdrop-blur-sm lg:block" />
-        <div className="relative mx-auto max-w-7xl px-6 sm:px-10 lg:px-14">
-          <div className="max-w-3xl">
+        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 px-6 py-10 text-white shadow-[0_30px_80px_rgba(49,46,129,0.22)] sm:px-10 sm:py-14 lg:px-14">
+          <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+          <div className="absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
+          <div className="absolute right-8 top-8 hidden h-44 w-44 rotate-12 rounded-[2rem] border border-white/10 bg-white/5 backdrop-blur-sm lg:block" />
+          <div className="relative max-w-3xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.2em] text-cyan-200">
               <FiPlayCircle aria-hidden="true" /> CSCA Learning
             </span>
@@ -49,11 +46,11 @@ export default function CoursesPage() {
             <div><p className="text-2xl font-black text-white">4K</p><p className="mt-1 text-xs font-semibold text-slate-400">trải nghiệm sắc nét</p></div>
             <div><p className="flex items-center justify-center gap-1 text-2xl font-black text-white sm:justify-start"><FiTrendingUp /> 24/7</p><p className="mt-1 text-xs font-semibold text-slate-400">học theo nhịp riêng</p></div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <div className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
-        <CourseCatalogClient />
+        <div className="mt-12">
+          <CourseCatalogClient />
+        </div>
       </div>
     </main>
   );
