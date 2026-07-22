@@ -9,7 +9,7 @@ import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
-  FiBarChart2, FiAward
+  FiBarChart2, FiAward, FiVideo
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -87,6 +87,13 @@ const NAV_SECTIONS = [
   {
     label: 'Nội dung',
     items: [
+      {
+        label: 'Khóa học',
+        icon: FiVideo,
+        href: '/admin/courses',
+        permission: 'content.manage',
+        roles: [],
+      },
       {
         label: 'Tài liệu',
         icon: FiBook,
