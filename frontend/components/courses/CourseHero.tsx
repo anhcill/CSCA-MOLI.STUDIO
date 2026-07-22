@@ -14,10 +14,10 @@ function durationLabel(seconds: number) {
 
 export function CourseHero({ course }: { course: CourseDetailDto }) {
   return (
-    <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 p-6 text-white shadow-[0_30px_80px_rgba(49,46,129,0.2)] sm:p-10 lg:p-12">
+    <section className="relative isolate overflow-hidden bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 py-8 text-white shadow-[0_30px_80px_rgba(49,46,129,0.2)] sm:py-10 lg:py-12">
       <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full bg-cyan-400/15 blur-3xl" />
       <div className="absolute -bottom-36 left-1/3 h-80 w-80 rounded-full bg-fuchsia-500/15 blur-3xl" />
-      <div className="relative grid items-center gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)] lg:px-8">
         <div>
           <div className="flex flex-wrap gap-2"><span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-cyan-200">CSCA · {subjectLabels[course.subjectCode]}</span><span className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-black">{levelLabels[course.level]}</span>{course.isNew ? <span className="rounded-full bg-emerald-400 px-3 py-1.5 text-xs font-black text-emerald-950">MỚI</span> : null}</div>
           <h1 className="mt-6 max-w-4xl text-4xl font-black leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">{course.title}</h1>

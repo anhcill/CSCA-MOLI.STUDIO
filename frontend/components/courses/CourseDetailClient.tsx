@@ -25,13 +25,13 @@ export function CourseDetailClient({ slug }: { slug: string }) {
     return () => { active = false; };
   }, [slug, requestVersion]);
 
-  if (loading) return <div aria-label="Đang tải khóa học" className="space-y-8"><div className="h-[430px] animate-pulse rounded-[2rem] bg-slate-200" /><div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]"><div className="h-96 animate-pulse rounded-[1.75rem] bg-slate-200" /><div className="h-96 animate-pulse rounded-[1.75rem] bg-slate-200" /></div></div>;
-  if (error || !course) return <div role="alert" className="rounded-[2rem] border border-red-200 bg-white p-12 text-center shadow-sm"><p className="text-lg font-black text-red-700">{error || 'Không có dữ liệu khóa học.'}</p><button type="button" onClick={() => setRequestVersion((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 font-bold text-white"><FiRefreshCw /> Thử lại</button></div>;
+  if (loading) return <div aria-label="Đang tải khóa học" className="space-y-8"><div className="h-[430px] animate-pulse bg-slate-200" /><div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-8"><div className="h-96 animate-pulse rounded-[1.75rem] bg-slate-200" /><div className="h-96 animate-pulse rounded-[1.75rem] bg-slate-200" /></div></div>;
+  if (error || !course) return <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div role="alert" className="rounded-[2rem] border border-red-200 bg-white p-12 text-center shadow-sm"><p className="text-lg font-black text-red-700">{error || 'Không có dữ liệu khóa học.'}</p><button type="button" onClick={() => setRequestVersion((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 font-bold text-white"><FiRefreshCw /> Thử lại</button></div></div>;
 
   return (
     <>
       <CourseHero course={course} />
-      <div className="mt-10 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px] xl:gap-10">
+      <div className="mx-auto mt-10 grid max-w-7xl items-start gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-8 xl:gap-10">
         <main className="space-y-8">
           <section className="rounded-[1.75rem] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
             <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl text-emerald-700"><FiTarget /></span><div><p className="text-xs font-black uppercase tracking-wider text-emerald-600">Kết quả sau khóa học</p><h2 className="text-2xl font-black text-slate-950 sm:text-3xl">Bạn sẽ học được gì?</h2></div></div>
