@@ -64,7 +64,6 @@ export default function Header() {
   const [showCourseMenu, setShowCourseMenu] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileCourseOpen, setMobileCourseOpen] = useState(false);
-  const [showCourseComingSoon, setShowCourseComingSoon] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [visible, setVisible] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -175,11 +174,10 @@ export default function Header() {
                 )}
               </div>
 
-              <button type="button" onClick={() => setShowCourseComingSoon(true)} className={navLinkClass(false)}>
+              <Link href="/khoa-hoc" className={navLinkClass(isActive('/khoa-hoc'))}>
                 <FaGraduationCap className="text-lg" />
                 {t('nav.videoCourses')}
-                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Soon</span>
-              </button>
+              </Link>
 
               {MAIN_NAV_TOP.slice(1).map((item) => {
                 const Icon = item.icon;
@@ -411,10 +409,9 @@ export default function Header() {
               </div>
             </div>
 
-            <button type="button" onClick={() => { setShowCourseComingSoon(true); setMobileOpen(false); }} className="flex w-full items-center justify-between rounded-2xl p-4 font-bold text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800">
+            <Link href="/khoa-hoc" onClick={() => setMobileOpen(false)} className="flex w-full items-center justify-between rounded-2xl p-4 font-bold text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800">
               <span className="flex items-center gap-3"><FaGraduationCap /> {t('nav.videoCourses')}</span>
-              <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black uppercase text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Sắp ra mắt</span>
-            </button>
+            </Link>
 
             {[...MAIN_NAV_TOP.slice(1), ...MAIN_NAV_BOTTOM].map((item) => {
               const Icon = item.icon;
@@ -467,18 +464,6 @@ export default function Header() {
         </div>
       </div>
     </header>
-    {showCourseComingSoon && (
-      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/55 p-4" onClick={() => setShowCourseComingSoon(false)}>
-        <div className="relative w-full max-w-sm rounded-3xl border border-violet-100 bg-white p-7 text-center shadow-2xl dark:border-violet-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
-          <button type="button" onClick={() => setShowCourseComingSoon(false)} className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><FiX /></button>
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 text-3xl text-white shadow-lg"><FaGraduationCap /></div>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase text-amber-700">Coming soon</span>
-          <h2 className="mt-4 text-2xl font-black text-slate-900 dark:text-white">Khóa học video sắp ra mắt</h2>
-          <p className="mt-2 text-sm font-medium leading-6 text-slate-500 dark:text-slate-400">Các bài giảng video chất lượng đang được chuẩn bị. Cùng đón chờ nhé!</p>
-          <button type="button" onClick={() => setShowCourseComingSoon(false)} className="mt-5 w-full rounded-2xl bg-violet-600 px-4 py-3 text-sm font-bold text-white hover:bg-violet-700">Mình sẽ đón chờ</button>
-        </div>
-      </div>
-    )}
     <DailyQuestBanner />
     </>
   );
