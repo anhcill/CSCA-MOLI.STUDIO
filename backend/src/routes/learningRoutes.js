@@ -1,0 +1,17 @@
+const express = require("express");
+const controller = require("../controllers/learningController");
+const videoPlaybackController = require("../controllers/videoPlaybackController");
+const { authenticate } = require("../middleware/authMiddleware");
+const { playbackLimiter, progressLimiter } = require("./courseRateLimiters");
+
+const router = express.Router();
+
+router.use(authenticate);
+router.get("/courses/:courseId", controller.getLearningCourse);
+router.get("/courses/:courseId/progress", controller.getCourseProgress);
+router.get("/lessons/:lessonId", controller.getLearningLesson);
+router.post("/lessons/:lessonId/playback-session", playbackLimiter, videoPlaybackController.createPlaybackSession);
+router.put("/lessons/:lessonId/progress", progressLimiter, controller.updateLessonProgress);
+router.post("/lessons/:lessonId/complete", progressLimiter, controller.completeLesson);
+
+module.exports = router;

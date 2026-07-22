@@ -32,6 +32,7 @@ backend/.ai_ratelimit
 screenshots/
 
 # Local tooling
+.wrangler/
 .claude/settings.local.json
 .vscode/
 .idea/

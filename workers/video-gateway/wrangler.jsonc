@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "csca-video-gateway",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "r2_buckets": [
+    {
+      "binding": "VIDEO_BUCKET",
+      "bucket_name": "csca-video-private"
+    }
+  ],
+  "vars": {
+    "VIDEO_PLAYBACK_TOKEN_ISSUER": "csca-api",
+    "VIDEO_PLAYBACK_TOKEN_AUDIENCE": "csca-video-gateway",
+    "VIDEO_ALLOWED_ORIGINS": "https://molystudio.online,https://www.molystudio.online"
+  }
+}

@@ -9,10 +9,15 @@ const rateLimit = require("express-rate-limit");
 const db = require("./config/database");
 const { runOptimizations } = require("./config/migrations");
 const { aiRequestContextMiddleware } = require("./services/aiRequestContext");
+const { getHttpOrigin, parseFeatureFlag } = require("./utils/courseFeatureConfig");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.API_SERVER_TIMEOUT_MS || "1200000", 10);
+const coursesEnabled = parseFeatureFlag(process.env.CSCA_COURSES_ENABLED, "CSCA_COURSES_ENABLED");
+const videoGatewayOrigin = getHttpOrigin(process.env.VIDEO_GATEWAY_BASE_URL, {
+  requireHttps: process.env.NODE_ENV === "production",
+});
 
 function configureServerTimeouts(server) {
   if (!server || !Number.isFinite(SERVER_TIMEOUT_MS) || SERVER_TIMEOUT_MS <= 0) return server;
@@ -78,7 +83,9 @@ app.use(
           "wss://www.moli.studio",
           "ws://localhost:*",
           "ws://127.0.0.1:*",
+          ...(videoGatewayOrigin ? [videoGatewayOrigin] : []),
         ],
+        mediaSrc: ["'self'", "blob:", ...(videoGatewayOrigin ? [videoGatewayOrigin] : [])],
         // Cho phép frontend nhúng PDF từ backend vào iframe
         frameAncestors: [
           "'self'",
@@ -247,6 +254,17 @@ app.use("/api/qa", require("./routes/qaRoutes")); // Q&A for Users
 app.use("/api/messages", require("./routes/messages")); // Private messaging
 app.use("/api/users", require("./routes/userProfile")); // Public user profiles
 app.use("/api/users", require("./routes/userActions")); // Block/Report actions
+
+// CSCA Courses are opt-in so Railway can apply migrations before any route is exposed.
+// Keep requires inside this block: a disabled/incomplete deployment must remain isolated.
+if (coursesEnabled) {
+  const { adminWriteLimiter } = require("./routes/courseRateLimiters");
+  app.use("/api/courses", require("./routes/courseRoutes"));
+  app.use("/api/me", require("./routes/meCourseRoutes"));
+  app.use("/api/learning", require("./routes/learningRoutes"));
+  app.use("/api/admin/courses", adminWriteLimiter, require("./routes/adminCourseRoutes"));
+  app.use("/api/admin/course-media", require("./routes/courseMediaRoutes"));
+}
 
 // ====================================
 // ERROR HANDLING

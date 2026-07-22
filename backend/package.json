@@ -7,7 +7,9 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest --watchAll --verbose",
+    "test:hls": "node --test test/courseHls.test.cjs ../tools/video/test/publish.test.mjs ../workers/video-gateway/test/gateway.test.mjs",
     "db:migrate": "node src/scripts/migrate.js",
+    "db:migrate:courses": "node scripts/apply_csca_course_migrations.js",
     "db:seed": "node src/scripts/seed.js",
     "db:rbac": "node scripts/setup_rbac.js",
     "db:rbac:migrate": "node scripts/setup_rbac.js --migrate-only",
@@ -29,6 +31,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "3.967.0",
+    "@aws-sdk/s3-request-presigner": "3.967.0",
     "@google/generative-ai": "^0.24.1",
     "@xmldom/xmldom": "^0.8.13",
     "axios": "^1.17.0",

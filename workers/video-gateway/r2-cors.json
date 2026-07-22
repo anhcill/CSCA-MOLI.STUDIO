@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://molystudio.online",
+          "https://www.molystudio.online",
+          "https://csca-moli-studio.vercel.app",
+          "http://localhost:3000"
+        ],
+        "methods": ["PUT"],
+        "headers": ["Content-Type", "x-amz-meta-sha256"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

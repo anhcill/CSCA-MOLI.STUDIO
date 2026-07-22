@@ -1,0 +1,17 @@
+{
+  "name": "csca-video-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/gateway.test.mjs",
+    "cf:dry-run": "wrangler deploy --dry-run",
+    "cf:startup": "wrangler check startup",
+    "cf:deploy": "wrangler deploy --keep-vars"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260722.1",
+    "@types/node": "26.1.1",
+    "wrangler": "4.113.0"
+  }
+}
