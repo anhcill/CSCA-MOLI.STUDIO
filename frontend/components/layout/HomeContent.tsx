@@ -324,6 +324,8 @@ export default function HomeContent() {
         </div>
       </section>
 
+      <ChinaCampusShowcase />
+
       <section className="w-full bg-gray-50/60 py-20 dark:bg-gray-800">
         <div className="mx-auto max-w-6xl px-6">
           <div className="mb-12 text-center">
@@ -536,8 +538,6 @@ export default function HomeContent() {
           </div>
         </div>
       </section>
-
-      <ChinaCampusShowcase />
 
       <section className="w-full bg-white py-20 dark:bg-gray-900">
         <div className="mx-auto max-w-6xl px-6">

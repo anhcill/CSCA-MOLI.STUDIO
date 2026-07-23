@@ -132,8 +132,8 @@ function CampusGallery() {
 export default function ChinaCampusShowcase() {
   return (
     <>
-      <UniversityMarquee />
       <CampusGallery />
+      <UniversityMarquee />
     </>
   );
 }
