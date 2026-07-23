@@ -21,6 +21,7 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useLanguage } from '@/context/LanguageContext';
+import ChinaCampusShowcase from './ChinaCampusShowcase';
 
 type StatsData = { users: number; exams: number; materials: number; passRate: number };
 type Countdown = { days: number; hours: number; minutes: number; seconds: number };
@@ -535,6 +536,8 @@ export default function HomeContent() {
           </div>
         </div>
       </section>
+
+      <ChinaCampusShowcase />
 
       <section className="w-full bg-white py-20 dark:bg-gray-900">
         <div className="mx-auto max-w-6xl px-6">
