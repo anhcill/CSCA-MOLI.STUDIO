@@ -22,6 +22,7 @@ export default function EmailCampaignPage() {
   const [actionLabel, setActionLabel] = useState('Nhận ưu đãi ngay');
   const [actionUrl, setActionUrl] = useState('');
   const [sending, setSending] = useState(false);
+  const [sentSuccessfully, setSentSuccessfully] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
@@ -53,7 +54,20 @@ export default function EmailCampaignPage() {
 
   const recipientCount = mode === 'all' ? activeUsers : selected ? 1 : 0;
   const canSend = subject.trim().length >= 3 && content.trim().length >= 3
-    && recipientCount > 0 && !sending;
+    && recipientCount > 0 && !sending && !sentSuccessfully;
+
+  function startNewEmail() {
+    setSubject('');
+    setContent('');
+    setDiscountCode('');
+    setActionLabel('Nhận ưu đãi ngay');
+    setActionUrl('');
+    setSelected(null);
+    setQuery('');
+    setResults([]);
+    setNotice(null);
+    setSentSuccessfully(false);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -76,6 +90,7 @@ export default function EmailCampaignPage() {
         actionUrl: actionUrl.trim(),
       });
       setNotice({ ok: true, text: response.message });
+      setSentSuccessfully(true);
     } catch (error: any) {
       setNotice({ ok: false, text: error?.response?.data?.message || 'Gửi email thất bại.' });
     } finally {
@@ -181,8 +196,18 @@ export default function EmailCampaignPage() {
           {notice && <div className={`rounded-xl border p-4 text-sm font-medium ${notice.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>{notice.text}</div>}
           <button type="submit" disabled={!canSend}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 font-bold text-white shadow-lg shadow-violet-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
-            <FiSend /> {sending ? 'Đang gửi email...' : `Gửi đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
+            <FiSend /> {sending
+              ? 'Đang gửi email...'
+              : sentSuccessfully
+                ? 'Đã gửi — nút đã khóa'
+                : `Gửi đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
           </button>
+          {sentSuccessfully && (
+            <button type="button" onClick={startNewEmail}
+              className="w-full rounded-xl border border-violet-200 bg-white px-5 py-3 text-sm font-bold text-violet-700 transition hover:bg-violet-50 dark:border-violet-800 dark:bg-slate-900 dark:text-violet-300 dark:hover:bg-slate-800">
+              Soạn email mới
+            </button>
+          )}
           <p className="text-center text-xs leading-5 text-slate-500">Hệ thống hỏi xác nhận lần cuối trước khi gửi. Người nhận không nhìn thấy email của nhau.</p>
         </div>
       </form>
