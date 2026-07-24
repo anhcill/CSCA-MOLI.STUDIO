@@ -182,7 +182,10 @@ export const adminApi = {
 
     async getEmailAudienceStats() {
         const response = await axios.get('/admin/email-campaign/audience');
-        return response.data as { success: boolean; data: { active_users: number } };
+        return response.data as {
+            success: boolean;
+            data: { active_users: number; active_accounts: number };
+        };
     },
 
     async sendEmailCampaign(payload: {
@@ -195,6 +198,22 @@ export const adminApi = {
         actionUrl?: string;
     }) {
         const response = await axios.post('/admin/email-campaign/send', payload, { timeout: 120000 });
+        return response.data as {
+            success: boolean;
+            message: string;
+            data: { sent: number };
+        };
+    },
+
+    async sendUserNotification(payload: {
+        mode: 'all' | 'single';
+        userId?: number;
+        title: string;
+        content: string;
+        discountCode?: string;
+        link?: string;
+    }) {
+        const response = await axios.post('/admin/notification-campaign/send', payload);
         return response.data as {
             success: boolean;
             message: string;

@@ -36,7 +36,8 @@ class Notification {
   static async getForUser(userId, limit = 30, offset = 0) {
     const { rows } = await db.query(
       `SELECT
-         n.id, n.type, n.post_id, n.comment_id, n.is_read, n.created_at,
+         n.id, n.type, n.post_id, n.comment_id, n.title, n.message, n.link,
+         n.is_read, n.created_at,
          u.id        AS actor_id,
          u.full_name AS actor_name,
          u.avatar    AS actor_avatar,

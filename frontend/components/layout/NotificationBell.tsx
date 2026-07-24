@@ -10,6 +10,7 @@ import {
   markAllRead,
   type Notification,
 } from '@/lib/api/notifications';
+import { onNotification } from '@/lib/socket';
 
 type NotificationResponse = {
   data: Notification[];
@@ -43,6 +44,7 @@ const TYPE_LABEL: Record<string, string> = {
   like_post:     'đã thích bài viết của bạn',
   comment_post:  'đã bình luận bài viết của bạn',
   reply_comment: 'đã trả lời bình luận của bạn',
+  admin_announcement: 'đã gửi một thông báo mới',
 };
 
 function timeAgo(dateStr: string) {
@@ -84,6 +86,15 @@ export default function NotificationBell() {
       if (document.visibilityState === 'visible') fetchNotifications();
     }, 120_000);
     return () => clearInterval(interval);
+  }, [mounted, isAuthenticated, fetchNotifications]);
+
+  useEffect(() => {
+    if (!mounted || !isAuthenticated) return;
+    const unsubscribe = onNotification(() => {
+      notificationCache = null;
+      fetchNotifications();
+    });
+    return () => { unsubscribe(); };
   }, [mounted, isAuthenticated, fetchNotifications]);
 
   // Close on outside click
@@ -128,7 +139,7 @@ export default function NotificationBell() {
       }
     }
     setOpen(false);
-    router.push(`/forum`);
+    router.push(n.link || `/forum`);
   };
 
   if (!mounted || !isAuthenticated) return null;
@@ -196,10 +207,17 @@ export default function NotificationBell() {
                     className="w-9 h-9 rounded-full object-cover flex-shrink-0 mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-700 leading-snug">
-                      <span className="font-semibold text-gray-900">{n.actor_name}</span>
-                      {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
-                    </p>
+                    {n.type === 'admin_announcement' ? (
+                      <>
+                        <p className="text-xs font-semibold text-gray-900">{n.title || 'Thông báo từ MOLY.STUDIO'}</p>
+                        <p className="mt-1 whitespace-pre-line text-xs leading-snug text-gray-600">{n.message}</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-700 leading-snug">
+                        <span className="font-semibold text-gray-900">{n.actor_name}</span>
+                        {' '}{TYPE_LABEL[n.type] || 'đã tương tác với bài viết của bạn'}
+                      </p>
+                    )}
                     {n.post_preview && (
                       <p className="text-xs text-gray-400 truncate mt-0.5">
                         "{n.post_preview?.slice(0, 60)}{(n.post_preview?.length ?? 0) > 60 ? '…' : ''}"

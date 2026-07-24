@@ -175,7 +175,7 @@ const NAV_SECTIONS = [
         roles: [],
       },
       {
-        label: 'Gửi email ưu đãi',
+        label: 'Gửi thông báo',
         icon: FiMail,
         href: '/admin/email-campaign',
         permission: 'admin.super',

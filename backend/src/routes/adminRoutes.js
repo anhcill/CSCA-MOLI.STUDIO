@@ -120,6 +120,11 @@ router.post(
 	authorizePermission("admin.super"),
 	adminCampaignController.send,
 );
+router.post(
+	"/notification-campaign/send",
+	authorizePermission("admin.super"),
+	adminCampaignController.sendNotification,
+);
 
 module.exports = router;
 

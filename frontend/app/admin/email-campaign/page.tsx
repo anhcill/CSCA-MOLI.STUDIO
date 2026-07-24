@@ -10,8 +10,10 @@ type Recipient = { id: number; full_name: string; email: string };
 const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
 export default function EmailCampaignPage() {
+  const [channel, setChannel] = useState<'notification' | 'email'>('notification');
   const [mode, setMode] = useState<'all' | 'single'>('all');
   const [activeUsers, setActiveUsers] = useState(0);
+  const [activeAccounts, setActiveAccounts] = useState(0);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Recipient[]>([]);
   const [selected, setSelected] = useState<Recipient | null>(null);
@@ -27,7 +29,10 @@ export default function EmailCampaignPage() {
 
   useEffect(() => {
     adminApi.getEmailAudienceStats()
-      .then(response => setActiveUsers(Number(response.data.active_users) || 0))
+      .then(response => {
+        setActiveUsers(Number(response.data.active_users) || 0);
+        setActiveAccounts(Number(response.data.active_accounts) || 0);
+      })
       .catch(() => setNotice({ ok: false, text: 'Không thể lấy số lượng người nhận.' }));
   }, []);
 
@@ -52,7 +57,9 @@ export default function EmailCampaignPage() {
     return () => window.clearTimeout(timer);
   }, [mode, query]);
 
-  const recipientCount = mode === 'all' ? activeUsers : selected ? 1 : 0;
+  const recipientCount = mode === 'all'
+    ? (channel === 'notification' ? activeAccounts : activeUsers)
+    : selected ? 1 : 0;
   const canSend = subject.trim().length >= 3 && content.trim().length >= 3
     && recipientCount > 0 && !sending && !sentSuccessfully;
 
@@ -73,26 +80,36 @@ export default function EmailCampaignPage() {
     event.preventDefault();
     if (!canSend) return;
     const target = mode === 'all'
-      ? `${activeUsers.toLocaleString('vi-VN')} người dùng đang hoạt động`
+      ? `${recipientCount.toLocaleString('vi-VN')} người dùng đang hoạt động`
       : selected?.email;
-    if (!window.confirm(`Xác nhận gửi email này đến ${target}? Hành động này không thể hoàn tác.`)) return;
+    const itemName = channel === 'notification' ? 'thông báo' : 'email';
+    if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}? Hành động này không thể hoàn tác.`)) return;
 
     setSending(true);
     setNotice(null);
     try {
-      const response = await adminApi.sendEmailCampaign({
-        mode,
-        userId: selected?.id,
-        subject: subject.trim(),
-        content: content.trim(),
-        discountCode: discountCode.trim(),
-        actionLabel: actionLabel.trim(),
-        actionUrl: actionUrl.trim(),
-      });
+      const response = channel === 'notification'
+        ? await adminApi.sendUserNotification({
+            mode,
+            userId: selected?.id,
+            title: subject.trim(),
+            content: content.trim(),
+            discountCode: discountCode.trim(),
+            link: actionUrl.trim(),
+          })
+        : await adminApi.sendEmailCampaign({
+            mode,
+            userId: selected?.id,
+            subject: subject.trim(),
+            content: content.trim(),
+            discountCode: discountCode.trim(),
+            actionLabel: actionLabel.trim(),
+            actionUrl: actionUrl.trim(),
+          });
       setNotice({ ok: true, text: response.message });
       setSentSuccessfully(true);
     } catch (error: any) {
-      setNotice({ ok: false, text: error?.response?.data?.message || 'Gửi email thất bại.' });
+      setNotice({ ok: false, text: error?.response?.data?.message || 'Gửi thất bại.' });
     } finally {
       setSending(false);
     }
@@ -101,9 +118,24 @@ export default function EmailCampaignPage() {
   const field = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
 
   return (
-    <AdminLayout title="Gửi email ưu đãi" description="Gửi đến toàn bộ hệ thống hoặc một người dùng cụ thể">
+    <AdminLayout title="Gửi thông báo" description="Gửi qua chuông trong hệ thống hoặc qua email">
       <form onSubmit={submit} className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,.85fr)]">
         <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-3 font-bold text-slate-900 dark:text-white">Kênh gửi</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button type="button" disabled={sentSuccessfully} onClick={() => setChannel('notification')}
+                className={`rounded-xl border p-4 text-left transition ${channel === 'notification' ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100 dark:bg-violet-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
+                <span className="block font-bold text-slate-900 dark:text-white">Thông báo hệ thống</span>
+                <span className="mt-1 block text-sm text-slate-500">Hiện ở chuông thông báo, không gửi mail</span>
+              </button>
+              <button type="button" disabled={sentSuccessfully} onClick={() => setChannel('email')}
+                className={`rounded-xl border p-4 text-left transition ${channel === 'email' ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100 dark:bg-violet-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
+                <span className="block font-bold text-slate-900 dark:text-white">Email</span>
+                <span className="mt-1 block text-sm text-slate-500">Gửi qua email đã đăng ký</span>
+              </button>
+            </div>
+          </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
               <span className="rounded-xl bg-violet-100 p-2.5 text-violet-700"><FiUsers /></span>
@@ -114,7 +146,7 @@ export default function EmailCampaignPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {([
-                ['all', 'Gửi hàng loạt', `${activeUsers.toLocaleString('vi-VN')} người dùng đang hoạt động`],
+                ['all', 'Gửi hàng loạt', `${recipientCount.toLocaleString('vi-VN')} người dùng đang hoạt động`],
                 ['single', 'Một người chỉ định', 'Tìm bằng tên hoặc email'],
               ] as const).map(option => (
                 <button key={option[0]} type="button" onClick={() => setMode(option[0])}
@@ -152,7 +184,7 @@ export default function EmailCampaignPage() {
               <h2 className="font-bold text-slate-900 dark:text-white">2. Soạn nội dung</h2>
             </div>
             <div className="space-y-4">
-              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tiêu đề email *
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tiêu đề *
                 <input value={subject} maxLength={160} onChange={e => setSubject(e.target.value)}
                   placeholder="Ví dụ: Ưu đãi 30% dành riêng cho bạn" className={field} />
               </label>
@@ -165,13 +197,14 @@ export default function EmailCampaignPage() {
                   <input value={discountCode} maxLength={80} onChange={e => setDiscountCode(e.target.value.toUpperCase())}
                     placeholder="MOLY30" className={`${field} font-mono`} />
                 </label>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tên nút
+                {channel === 'email' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tên nút
                   <input value={actionLabel} maxLength={80} onChange={e => setActionLabel(e.target.value)} className={field} />
-                </label>
+                </label>}
               </div>
-              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Đường dẫn khi bấm nút
-                <input type="url" value={actionUrl} maxLength={500} onChange={e => setActionUrl(e.target.value)}
-                  placeholder="https://molystudio.online/vip" className={field} />
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                {channel === 'notification' ? 'Trang mở khi bấm thông báo' : 'Đường dẫn khi bấm nút'}
+                <input type={channel === 'notification' ? 'text' : 'url'} value={actionUrl} maxLength={500} onChange={e => setActionUrl(e.target.value)}
+                  placeholder={channel === 'notification' ? '/vip' : 'https://molystudio.online/vip'} className={field} />
               </label>
             </div>
           </section>
@@ -180,8 +213,8 @@ export default function EmailCampaignPage() {
         <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 text-white">
-              <p className="flex items-center gap-2 text-sm font-bold"><FiMail /> Xem trước email</p>
-              <h3 className="mt-2 text-xl font-black">{subject || 'Tiêu đề email ưu đãi'}</h3>
+              <p className="flex items-center gap-2 text-sm font-bold"><FiMail /> {channel === 'notification' ? 'Xem trước thông báo' : 'Xem trước email'}</p>
+              <h3 className="mt-2 text-xl font-black">{subject || 'Tiêu đề thông báo'}</h3>
             </div>
             <div className="p-5">
               <div className="mb-5 rounded-xl bg-violet-50 p-5 text-center">
@@ -197,7 +230,7 @@ export default function EmailCampaignPage() {
           <button type="submit" disabled={!canSend}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 font-bold text-white shadow-lg shadow-violet-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
             <FiSend /> {sending
-              ? 'Đang gửi email...'
+              ? 'Đang gửi...'
               : sentSuccessfully
                 ? 'Đã gửi — nút đã khóa'
                 : `Gửi đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
@@ -205,10 +238,14 @@ export default function EmailCampaignPage() {
           {sentSuccessfully && (
             <button type="button" onClick={startNewEmail}
               className="w-full rounded-xl border border-violet-200 bg-white px-5 py-3 text-sm font-bold text-violet-700 transition hover:bg-violet-50 dark:border-violet-800 dark:bg-slate-900 dark:text-violet-300 dark:hover:bg-slate-800">
-              Soạn email mới
+              Soạn thông báo mới
             </button>
           )}
-          <p className="text-center text-xs leading-5 text-slate-500">Hệ thống hỏi xác nhận lần cuối trước khi gửi. Người nhận không nhìn thấy email của nhau.</p>
+          <p className="text-center text-xs leading-5 text-slate-500">
+            {channel === 'notification'
+              ? 'Thông báo sẽ xuất hiện tại biểu tượng chuông của tài khoản người nhận.'
+              : 'Hệ thống hỏi xác nhận lần cuối trước khi gửi. Người nhận không nhìn thấy email của nhau.'}
+          </p>
         </div>
       </form>
     </AdminLayout>

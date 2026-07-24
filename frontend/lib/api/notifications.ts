@@ -2,9 +2,12 @@ import axios from '../utils/axios';
 
 export interface Notification {
   id: number;
-  type: 'like_post' | 'comment_post' | 'reply_comment';
-  post_id: number;
+  type: 'like_post' | 'comment_post' | 'reply_comment' | 'admin_announcement';
+  post_id: number | null;
   comment_id: number | null;
+  title?: string | null;
+  message?: string | null;
+  link?: string | null;
   is_read: boolean;
   created_at: string;
   actor_id: number;
