@@ -72,27 +72,41 @@ class EmailService {
   buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl }) {
     const safeContent = this.escapeHtml(content).replace(/\r?\n/g, '<br>');
     const safeCode = discountCode ? this.escapeHtml(discountCode) : '';
-    const codeBlock = safeCode
-      ? `<div style="margin:24px 0;text-align:center">
-          <p style="margin:0 0 8px;color:#64748b;font-size:13px;font-weight:700">Mã ưu đãi của bạn</p>
-          <div style="display:inline-block;padding:14px 24px;border:2px dashed #7c3aed;border-radius:16px;background:#f5f3ff;color:#6d28d9;font:900 22px/1.2 Consolas,monospace;letter-spacing:2px">${safeCode}</div>
-        </div>`
-      : '';
-    const actionButton = actionUrl
-      ? this.button(actionLabel || 'Nhận ưu đãi ngay', actionUrl, 'violet')
-      : '';
+    const safeActionUrl = actionUrl ? this.escapeHtml(actionUrl) : '';
+    const safeActionLabel = this.escapeHtml(actionLabel || 'Xem thông tin');
 
-    return this._wrapper({
-      title: subject,
-      emoji: '🎁',
-      tone: 'violet',
-      preheader: subject,
-      content: `
-        ${this.heroCard({ emoji: '🎁', title: 'Ưu đãi dành cho bạn', subtitle: 'Một món quà nhỏ từ MOLY.STUDIO.', tone: 'violet' })}
-        <div style="color:#334155;font-size:15px;line-height:1.75">${safeContent}</div>
-        ${codeBlock}
-        ${actionButton}`,
-    });
+    // Keep admin announcements closer to a personal letter than a marketing
+    // newsletter. Gmail still makes the final inbox-category decision.
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${this.escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,'Segoe UI',sans-serif;color:#1f2937">
+  <div style="max-width:620px;margin:0 auto;padding:28px 22px">
+    <p style="margin:0 0 22px;font-size:16px;line-height:1.7">Chào bạn,</p>
+    <div style="font-size:15px;line-height:1.75;color:#374151">${safeContent}</div>
+    ${safeCode ? `
+      <div style="margin:24px 0;padding:16px;border:1px solid #d1d5db;border-radius:8px">
+        <span style="font-size:14px;color:#4b5563">Mã dành cho bạn: </span>
+        <strong style="font-family:Consolas,monospace;font-size:17px;color:#111827">${safeCode}</strong>
+      </div>` : ''}
+    ${safeActionUrl ? `
+      <p style="margin:22px 0;font-size:15px;line-height:1.7">
+        <a href="${safeActionUrl}" style="color:#2563eb;text-decoration:underline">${safeActionLabel}</a>
+      </p>` : ''}
+    <p style="margin:26px 0 0;font-size:15px;line-height:1.7">
+      Thân mến,<br>
+      <strong>Đội ngũ MOLY.STUDIO</strong>
+    </p>
+    <p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.6">
+      Đây là thông báo được gửi từ tài khoản MOLY.STUDIO của bạn.
+    </p>
+  </div>
+</body>
+</html>`;
   }
 
   escapeHtml(value) {
