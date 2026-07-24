@@ -25,7 +25,7 @@ const AdminCampaignController = {
       const mode = req.body?.mode === 'single' ? 'single' : 'all';
       const userId = Number.parseInt(req.body?.userId, 10);
       const subject = cleanText(req.body?.subject, 160);
-      const content = cleanText(req.body?.content, 10000);
+      const content = cleanText(req.body?.content, 10000).replace(/\*+/g, '');
       const discountCode = cleanText(req.body?.discountCode, 80);
       const actionLabel = cleanText(req.body?.actionLabel, 80);
       const actionUrl = cleanText(req.body?.actionUrl, 500);

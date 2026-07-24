@@ -7,6 +7,8 @@ import { adminApi } from '@/lib/api/admin';
 
 type Recipient = { id: number; full_name: string; email: string };
 
+const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
+
 export default function EmailCampaignPage() {
   const [mode, setMode] = useState<'all' | 'single'>('all');
   const [activeUsers, setActiveUsers] = useState(0);
@@ -140,7 +142,7 @@ export default function EmailCampaignPage() {
                   placeholder="Ví dụ: Ưu đãi 30% dành riêng cho bạn" className={field} />
               </label>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Nội dung *
-                <textarea value={content} maxLength={10000} rows={9} onChange={e => setContent(e.target.value)}
+                <textarea value={content} maxLength={10000} rows={9} onChange={e => setContent(cleanCopiedContent(e.target.value))}
                   placeholder="Nhập nội dung, thời hạn và điều kiện áp dụng..." className={`${field} resize-y leading-6`} />
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
