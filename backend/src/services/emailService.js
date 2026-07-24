@@ -57,6 +57,11 @@ class EmailService {
         // One recipient per version prevents exposing the audience list.
         messageVersions: chunk.map(recipient => ({
           to: [{ email: recipient.email, name: recipient.name || recipient.email }],
+          // Explicitly repeat these fields for every version. Brevo does not
+          // reliably inherit the global values for custom-HTML batch sends.
+          subject,
+          htmlContent: html,
+          textContent: text || subject,
         })),
       });
       sent += chunk.length;
