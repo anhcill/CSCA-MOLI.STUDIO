@@ -41,6 +41,55 @@ class EmailService {
     }
   }
 
+  async sendCampaignBatch({ recipients, subject, html, text }) {
+    if (!this.apiKey) throw new Error('BREVO_API_KEY not configured');
+    const validRecipients = (recipients || []).filter(item => item?.email);
+    if (!validRecipients.length) throw new Error('No valid recipients');
+
+    let sent = 0;
+    for (let index = 0; index < validRecipients.length; index += 1000) {
+      const chunk = validRecipients.slice(index, index + 1000);
+      await this.client.post('/smtp/email', {
+        sender: { email: this.senderEmail, name: this.senderName },
+        subject,
+        htmlContent: html,
+        textContent: text || subject,
+        // One recipient per version prevents exposing the audience list.
+        messageVersions: chunk.map(recipient => ({
+          to: [{ email: recipient.email, name: recipient.name || recipient.email }],
+        })),
+      });
+      sent += chunk.length;
+    }
+    return { sent };
+  }
+
+  buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl }) {
+    const safeContent = this.escapeHtml(content).replace(/\r?\n/g, '<br>');
+    const safeCode = discountCode ? this.escapeHtml(discountCode) : '';
+    const codeBlock = safeCode
+      ? `<div style="margin:24px 0;text-align:center">
+          <p style="margin:0 0 8px;color:#64748b;font-size:13px;font-weight:700">Mã ưu đãi của bạn</p>
+          <div style="display:inline-block;padding:14px 24px;border:2px dashed #7c3aed;border-radius:16px;background:#f5f3ff;color:#6d28d9;font:900 22px/1.2 Consolas,monospace;letter-spacing:2px">${safeCode}</div>
+        </div>`
+      : '';
+    const actionButton = actionUrl
+      ? this.button(actionLabel || 'Nhận ưu đãi ngay', actionUrl, 'violet')
+      : '';
+
+    return this._wrapper({
+      title: subject,
+      emoji: '🎁',
+      tone: 'violet',
+      preheader: subject,
+      content: `
+        ${this.heroCard({ emoji: '🎁', title: 'Ưu đãi dành cho bạn', subtitle: 'Một món quà nhỏ từ MOLY.STUDIO.', tone: 'violet' })}
+        <div style="color:#334155;font-size:15px;line-height:1.75">${safeContent}</div>
+        ${codeBlock}
+        ${actionButton}`,
+    });
+  }
+
   escapeHtml(value) {
     return String(value || '')
       .replace(/&/g, '&amp;')

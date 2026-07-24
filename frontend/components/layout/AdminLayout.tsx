@@ -9,7 +9,7 @@ import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
-  FiBarChart2, FiAward, FiVideo
+  FiBarChart2, FiAward, FiVideo, FiMail
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -171,6 +171,13 @@ const NAV_SECTIONS = [
         label: 'Kiểm soát Admin',
         icon: FiShield,
         href: '/admin/admins',
+        permission: 'admin.super',
+        roles: [],
+      },
+      {
+        label: 'Gửi email ưu đãi',
+        icon: FiMail,
+        href: '/admin/email-campaign',
         permission: 'admin.super',
         roles: [],
       },

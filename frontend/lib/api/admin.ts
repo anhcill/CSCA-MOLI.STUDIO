@@ -178,6 +178,28 @@ export const adminApi = {
     async getAIUsageStats(params?: { from?: string; to?: string; userId?: number; limit?: number }) {
         const response = await axios.get('/admin/ai-usage', { params });
         return response.data as { success: boolean; data: AIUsageStats };
+    },
+
+    async getEmailAudienceStats() {
+        const response = await axios.get('/admin/email-campaign/audience');
+        return response.data as { success: boolean; data: { active_users: number } };
+    },
+
+    async sendEmailCampaign(payload: {
+        mode: 'all' | 'single';
+        userId?: number;
+        subject: string;
+        content: string;
+        discountCode?: string;
+        actionLabel?: string;
+        actionUrl?: string;
+    }) {
+        const response = await axios.post('/admin/email-campaign/send', payload, { timeout: 120000 });
+        return response.data as {
+            success: boolean;
+            message: string;
+            data: { sent: number };
+        };
     }
 };
 

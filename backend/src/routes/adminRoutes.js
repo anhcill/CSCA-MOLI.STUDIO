@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
 const adminAnalyticsController = require("../controllers/adminAnalyticsController");
+const adminCampaignController = require("../controllers/adminCampaignController");
 const {
 	authenticate,
 	authorizePermission,
@@ -107,6 +108,17 @@ router.get(
 	"/ai-usage",
 	authorizePermission("admin.super"),
 	adminController.getAIUsageStats,
+);
+
+router.get(
+	"/email-campaign/audience",
+	authorizePermission("admin.super"),
+	adminCampaignController.getAudienceStats,
+);
+router.post(
+	"/email-campaign/send",
+	authorizePermission("admin.super"),
+	adminCampaignController.send,
 );
 
 module.exports = router;
