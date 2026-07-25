@@ -3,10 +3,12 @@ const controller = require("../controllers/learningController");
 const videoPlaybackController = require("../controllers/videoPlaybackController");
 const { authenticate } = require("../middleware/authMiddleware");
 const { playbackLimiter, progressLimiter } = require("./courseRateLimiters");
+const { requireCoursePreviewAdmin } = require("../middleware/coursePreviewMiddleware");
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(requireCoursePreviewAdmin);
 router.get("/courses/:courseId", controller.getLearningCourse);
 router.get("/courses/:courseId/progress", controller.getCourseProgress);
 router.get("/lessons/:lessonId", controller.getLearningLesson);
