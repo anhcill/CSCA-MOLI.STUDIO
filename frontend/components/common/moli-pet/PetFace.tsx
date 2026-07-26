@@ -79,6 +79,15 @@ const sparkleAnimation = {
   ],
 };
 
+const RIGGED_PET_MODELS: Partial<Record<PetVariant, { src: string; label: string }>> = {
+  'moly-3d': { src: '/models/moli-pet/moli-cat.glb', label: 'Mèo Moly 3D' },
+  'moly-3d-hog': { src: '/models/moli-pet/moli-hog.glb', label: 'Heo Moly 3D' },
+  'moly-3d-penguin': { src: '/models/moli-pet/moli-penguin.glb', label: 'Chim cánh cụt Moly 3D' },
+  'moly-3d-fox': { src: '/models/moli-pet/moli-fox.glb', label: 'Cáo Moly 3D' },
+  'moly-3d-crab': { src: '/models/moli-pet/moli-crab.glb', label: 'Cua Moly 3D' },
+  'moly-3d-panda': { src: '/models/moli-pet/moli-panda.glb', label: 'Gấu trúc Moly 3D' },
+};
+
 function MolyThreeCat({
   color,
   variant,
@@ -416,18 +425,22 @@ function MolyThreeCat({
   return <div ref={mountRef} className="h-20 w-20" aria-hidden="true" />;
 }
 
-function MolyRiggedCat({
+function MolyRiggedPet({
   color,
   mood,
   walking,
   facing,
   waving,
+  modelSrc,
+  modelLabel,
 }: {
   color: PetColor;
   mood: PetMood;
   walking: boolean;
   facing: PetPosition;
   waving: boolean;
+  modelSrc: string;
+  modelLabel: string;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const liveStateRef = useRef({ mood, walking, facing, waving });
@@ -438,6 +451,8 @@ function MolyRiggedCat({
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
+    setLoaded(false);
+    setLoadFailed(false);
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -513,7 +528,7 @@ function MolyRiggedCat({
 
     const loader = new GLTFLoader();
     loader.load(
-      '/models/moli-pet/moli-cat.glb',
+      modelSrc,
       (gltf) => {
         if (disposed) {
           disposeObject(gltf.scene);
@@ -535,7 +550,11 @@ function MolyRiggedCat({
         const bounds = new THREE.Box3().setFromObject(model);
         const size = bounds.getSize(new THREE.Vector3());
         const center = bounds.getCenter(new THREE.Vector3());
-        const normalizedScale = 2.12 / Math.max(size.y, 0.01);
+        const normalizedScale = Math.min(
+          2.12 / Math.max(size.y, 0.01),
+          2.45 / Math.max(size.x, 0.01),
+          2.35 / Math.max(size.z, 0.01),
+        );
         model.position.copy(center).multiplyScalar(-normalizedScale);
         model.scale.setScalar(normalizedScale);
 
@@ -604,7 +623,7 @@ function MolyRiggedCat({
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, [color]);
+  }, [color, modelSrc]);
 
   return (
     <div className="relative h-20 w-20">
@@ -621,7 +640,7 @@ function MolyRiggedCat({
           loaded && !loadFailed ? 'opacity-100' : 'opacity-0'
         }`}
         role="img"
-        aria-label="Moly 3D đang cử động"
+        aria-label={`${modelLabel} đang cử động`}
       />
     </div>
   );
@@ -643,19 +662,22 @@ export function PetFace({
   waving?: boolean;
 }) {
   const waveSideClass = facing === 'left' ? 'left-1' : 'right-1';
+  const riggedPet = RIGGED_PET_MODELS[variant];
 
-  if (variant === 'moly-3d') {
+  if (riggedPet) {
     return (
       <div className="relative h-20 w-20">
         <div className="pointer-events-none absolute inset-[-14px] opacity-45">
           <Lottie animationData={sparkleAnimation} loop autoplay />
         </div>
-        <MolyRiggedCat
+        <MolyRiggedPet
           color={color}
           mood={mood}
           walking={walking}
           facing={facing}
           waving={waving}
+          modelSrc={riggedPet.src}
+          modelLabel={riggedPet.label}
         />
       </div>
     );
@@ -673,7 +695,7 @@ export function PetFace({
     );
   }
 
-  if (variant !== 'cat') {
+  if (variant === 'star' || variant === 'bunny') {
     return (
       <div className="relative h-20 w-20">
         <div className="pointer-events-none absolute inset-[-14px] opacity-45">

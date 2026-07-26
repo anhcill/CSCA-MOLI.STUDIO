@@ -4,7 +4,18 @@ import type { PastedChatImage } from '@/lib/utils/chatImagePaste';
 export type PetColor = 'ocean' | 'berry' | 'leaf' | 'sun';
 export type PetMood = 'friendly' | 'happy' | 'focus' | 'sleepy';
 export type PetPosition = 'left' | 'right';
-export type PetVariant = 'cat' | 'star' | 'bunny' | 'moly-purple' | 'moly-chibi' | 'moly-3d';
+export type PetVariant =
+  | 'cat'
+  | 'star'
+  | 'bunny'
+  | 'moly-purple'
+  | 'moly-chibi'
+  | 'moly-3d'
+  | 'moly-3d-hog'
+  | 'moly-3d-penguin'
+  | 'moly-3d-fox'
+  | 'moly-3d-crab'
+  | 'moly-3d-panda';
 export type PetSkinId =
   | 'bubble-cute'
   | 'floating-pet'

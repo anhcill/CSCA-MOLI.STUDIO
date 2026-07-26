@@ -57,7 +57,15 @@ export const PET_3D_PALETTES: Record<PetColor, { body: number; accent: number; i
   sun: { body: 0xfbbf24, accent: 0xfdba74, innerEar: 0xfca5a5, cheek: 0xfb7185 },
 };
 
-export const PET_VARIANTS: Record<PetVariant, { label: string; body: number; accent: number; innerEar: number; cheek: number; swatch: string }> = {
+export const PET_VARIANTS: Record<PetVariant, {
+  label: string;
+  body: number;
+  accent: number;
+  innerEar: number;
+  cheek: number;
+  swatch: string;
+  preview?: string;
+}> = {
   cat: {
     label: 'Mèo xanh',
     body: 0x38d5f4,
@@ -99,12 +107,58 @@ export const PET_VARIANTS: Record<PetVariant, { label: string; body: number; acc
     swatch: 'from-rose-100 via-pink-200 to-rose-400',
   },
   'moly-3d': {
-    label: 'Moly 3D',
+    label: 'Mèo 3D hiện tại',
     body: 0x8f70c4,
     accent: 0xf2a7c9,
     innerEar: 0xffc4d6,
     cheek: 0xff8ba8,
     swatch: 'from-violet-300 via-fuchsia-300 to-indigo-500',
+    preview: '/models/moli-pet/previews/cat.png',
+  },
+  'moly-3d-hog': {
+    label: 'Heo 3D',
+    body: 0xb8734f,
+    accent: 0xf5a07f,
+    innerEar: 0xffb4a2,
+    cheek: 0xff8ba8,
+    swatch: 'from-orange-300 via-rose-300 to-amber-600',
+    preview: '/models/moli-pet/previews/hog.png',
+  },
+  'moly-3d-penguin': {
+    label: 'Cánh cụt 3D',
+    body: 0x334155,
+    accent: 0xf8fafc,
+    innerEar: 0xfbbf24,
+    cheek: 0xfb7185,
+    swatch: 'from-slate-700 via-slate-300 to-orange-300',
+    preview: '/models/moli-pet/previews/penguin.png',
+  },
+  'moly-3d-fox': {
+    label: 'Cáo 3D',
+    body: 0xf97316,
+    accent: 0xfdba74,
+    innerEar: 0xffedd5,
+    cheek: 0xfb7185,
+    swatch: 'from-orange-300 via-orange-500 to-amber-700',
+    preview: '/models/moli-pet/previews/fox.png',
+  },
+  'moly-3d-crab': {
+    label: 'Cua 3D',
+    body: 0xf43f5e,
+    accent: 0xfb7185,
+    innerEar: 0xfda4af,
+    cheek: 0xff8ba8,
+    swatch: 'from-rose-300 via-red-500 to-orange-500',
+    preview: '/models/moli-pet/previews/crab.png',
+  },
+  'moly-3d-panda': {
+    label: 'Panda 3D',
+    body: 0xf8fafc,
+    accent: 0x1e293b,
+    innerEar: 0x334155,
+    cheek: 0xfb7185,
+    swatch: 'from-white via-slate-300 to-slate-800',
+    preview: '/models/moli-pet/previews/panda.png',
   },
 };
 

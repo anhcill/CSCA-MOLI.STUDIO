@@ -13,7 +13,6 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
     updateSettings({
       skin: skinId,
       color: skin.defaultColor,
-      variant: skin.defaultVariant,
     });
   };
 
@@ -31,7 +30,10 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
         />
       </label>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <p className="mt-3 text-[11px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        Giao diện
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {PET_SKIN_IDS.map((skinId) => {
           const skin = PET_SKINS[skinId];
           const selected = settings.skin === skinId;
@@ -69,23 +71,40 @@ export function MoliPetSettings({ controller }: { controller: MoliPetController 
         ))}
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {(Object.keys(PET_VARIANTS) as PetVariant[]).map((variant) => (
-          <button
-            key={variant}
-            type="button"
-            title={PET_VARIANTS[variant].label}
-            onClick={() => updateSettings({ variant })}
-            className={`rounded-xl border px-2 py-2 text-xs font-bold transition ${
-              settings.variant === variant
-                ? 'border-slate-900 bg-white text-slate-900 ring-2 ring-slate-900/10 dark:border-white dark:bg-slate-800 dark:text-white'
-                : 'border-white/70 bg-white/70 text-slate-600 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-            }`}
-          >
-            <span className={`mb-1 block h-5 rounded-lg bg-gradient-to-br ${PET_VARIANTS[variant].swatch}`} />
-            {PET_VARIANTS[variant].label}
-          </button>
-        ))}
+      <p className="mt-3 text-[11px] font-black uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        Model pet
+      </p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {(Object.keys(PET_VARIANTS) as PetVariant[]).map((variant) => {
+          const model = PET_VARIANTS[variant];
+          return (
+            <button
+              key={variant}
+              type="button"
+              title={model.label}
+              onClick={() => updateSettings({ variant })}
+              className={`rounded-xl border px-2 py-2 text-xs font-bold transition ${
+                settings.variant === variant
+                  ? 'border-slate-900 bg-white text-slate-900 ring-2 ring-slate-900/10 dark:border-white dark:bg-slate-800 dark:text-white'
+                  : 'border-white/70 bg-white/70 text-slate-600 hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+              }`}
+            >
+              <span
+                className={`relative mb-1 flex h-11 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br ${model.swatch}`}
+              >
+                {model.preview && (
+                  <img
+                    src={model.preview}
+                    alt=""
+                    loading="lazy"
+                    className="h-11 w-11 object-contain [image-rendering:auto]"
+                  />
+                )}
+              </span>
+              <span className="block min-h-7 leading-tight">{model.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
