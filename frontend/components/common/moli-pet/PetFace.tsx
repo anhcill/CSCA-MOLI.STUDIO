@@ -3,6 +3,7 @@
 import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { PET_3D_PALETTES, PET_VARIANTS } from './constants';
 import type { PetColor, PetMood, PetPosition, PetVariant } from './types';
 
@@ -415,6 +416,217 @@ function MolyThreeCat({
   return <div ref={mountRef} className="h-20 w-20" aria-hidden="true" />;
 }
 
+function MolyRiggedCat({
+  color,
+  mood,
+  walking,
+  facing,
+  waving,
+}: {
+  color: PetColor;
+  mood: PetMood;
+  walking: boolean;
+  facing: PetPosition;
+  waving: boolean;
+}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const liveStateRef = useRef({ mood, walking, facing, waving });
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  liveStateRef.current = { mood, walking, facing, waving };
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        powerPreference: 'low-power',
+      });
+    } catch {
+      setLoadFailed(true);
+      return;
+    }
+
+    let disposed = false;
+    let frameId = 0;
+    let mixer: THREE.AnimationMixer | null = null;
+    let modelRoot: THREE.Group | null = null;
+    let currentAction: THREE.AnimationAction | null = null;
+    let currentClipName = '';
+    const actions = new Map<string, THREE.AnimationAction>();
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1.42, 1.42, 1.42, -1.42, 0.1, 30);
+    const clock = new THREE.Clock();
+
+    camera.position.set(3.4, 2.25, 5.2);
+    camera.lookAt(0, 0.02, 0);
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(112, 112, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    renderer.domElement.className = 'block h-full w-full';
+    renderer.domElement.setAttribute('aria-hidden', 'true');
+    mount.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x786a9f, 2.7));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 4.2);
+    keyLight.position.set(3.2, 5.5, 5);
+    scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight(PET_3D_PALETTES[color].accent, 2.1);
+    rimLight.position.set(-4, 2.5, 1.5);
+    scene.add(rimLight);
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.76, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x4c3b65,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+      }),
+    );
+    shadow.scale.set(1.3, 0.52, 1);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(0, -1.08, 0.02);
+    scene.add(shadow);
+
+    const disposeObject = (root: THREE.Object3D) => {
+      root.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.geometry?.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach((material) => {
+          for (const value of Object.values(material)) {
+            if (value instanceof THREE.Texture) value.dispose();
+          }
+          material.dispose();
+        });
+      });
+    };
+
+    const loader = new GLTFLoader();
+    loader.load(
+      '/models/moli-pet/moli-cat.glb',
+      (gltf) => {
+        if (disposed) {
+          disposeObject(gltf.scene);
+          return;
+        }
+
+        const model = gltf.scene;
+        model.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) return;
+          object.frustumCulled = false;
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach((material) => {
+            if ('map' in material && material.map instanceof THREE.Texture) {
+              material.map.colorSpace = THREE.SRGBColorSpace;
+            }
+          });
+        });
+
+        const bounds = new THREE.Box3().setFromObject(model);
+        const size = bounds.getSize(new THREE.Vector3());
+        const center = bounds.getCenter(new THREE.Vector3());
+        const normalizedScale = 2.12 / Math.max(size.y, 0.01);
+        model.position.copy(center).multiplyScalar(-normalizedScale);
+        model.scale.setScalar(normalizedScale);
+
+        modelRoot = new THREE.Group();
+        modelRoot.add(model);
+        modelRoot.position.y = -0.02;
+        scene.add(modelRoot);
+
+        mixer = new THREE.AnimationMixer(model);
+        gltf.animations.forEach((clip) => actions.set(clip.name.toLowerCase(), mixer!.clipAction(clip)));
+        setLoaded(true);
+      },
+      undefined,
+      () => {
+        if (!disposed) setLoadFailed(true);
+      },
+    );
+
+    const chooseClip = () => {
+      const state = liveStateRef.current;
+      if (reduceMotion) return 'static';
+      if (state.waving) return 'gesture-positive';
+      if (state.walking) return 'walk';
+      if (state.mood === 'happy') return 'dance';
+      if (state.mood === 'focus') return 'static';
+      return 'idle';
+    };
+
+    const playClip = (name: string) => {
+      const nextAction = actions.get(name) ?? actions.get('idle') ?? actions.get('static');
+      if (!nextAction) return;
+      const nextName = nextAction.getClip().name;
+      const speed = liveStateRef.current.mood === 'sleepy' && name === 'idle' ? 0.48 : 1;
+
+      if (nextName === currentClipName) {
+        nextAction.setEffectiveTimeScale(speed);
+        return;
+      }
+
+      nextAction.reset().setEffectiveTimeScale(speed).setEffectiveWeight(1).fadeIn(0.2).play();
+      currentAction?.fadeOut(0.2);
+      currentAction = nextAction;
+      currentClipName = nextName;
+    };
+
+    const animate = () => {
+      const delta = Math.min(clock.getDelta(), 0.05);
+      if (modelRoot && mixer) {
+        const state = liveStateRef.current;
+        playClip(chooseClip());
+        modelRoot.scale.x = state.facing === 'left' ? -1 : 1;
+        modelRoot.rotation.y = state.facing === 'left' ? 0.42 : -0.42;
+        mixer.update(delta);
+      }
+      renderer.render(scene, camera);
+      frameId = window.requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(frameId);
+      mixer?.stopAllAction();
+      actions.clear();
+      disposeObject(scene);
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
+      renderer.dispose();
+    };
+  }, [color]);
+
+  return (
+    <div className="relative h-20 w-20">
+      <div
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+          loaded && !loadFailed ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        <MolyReferencePet variant="moly-chibi" walking={walking} facing={facing} />
+      </div>
+      <div
+        ref={mountRef}
+        className={`absolute inset-[-4px] transition-opacity duration-300 ${
+          loaded && !loadFailed ? 'opacity-100' : 'opacity-0'
+        }`}
+        role="img"
+        aria-label="Moly 3D đang cử động"
+      />
+    </div>
+  );
+}
+
 export function PetFace({
   color,
   variant,
@@ -431,6 +643,23 @@ export function PetFace({
   waving?: boolean;
 }) {
   const waveSideClass = facing === 'left' ? 'left-1' : 'right-1';
+
+  if (variant === 'moly-3d') {
+    return (
+      <div className="relative h-20 w-20">
+        <div className="pointer-events-none absolute inset-[-14px] opacity-45">
+          <Lottie animationData={sparkleAnimation} loop autoplay />
+        </div>
+        <MolyRiggedCat
+          color={color}
+          mood={mood}
+          walking={walking}
+          facing={facing}
+          waving={waving}
+        />
+      </div>
+    );
+  }
 
   if (variant === 'moly-purple' || variant === 'moly-chibi') {
     return (

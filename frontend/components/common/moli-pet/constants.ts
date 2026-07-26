@@ -3,7 +3,7 @@ import type { MoliPetSettings, PetColor, PetMood, PetPoint, PetPosition, PetSkin
 export const SETTINGS_KEY = 'moli_pet_settings_v1';
 export const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
 export const POSITION_KEY = 'moli_pet_position_v2';
-export const SETTINGS_DEFAULTS_VERSION = 4;
+export const SETTINGS_DEFAULTS_VERSION = 5;
 export const PET_FRAME_SIZE = 88;
 export const PET_PANEL_MAX_WIDTH = 372;
 export const PET_PANEL_MARGIN = 12;
@@ -97,6 +97,14 @@ export const PET_VARIANTS: Record<PetVariant, { label: string; body: number; acc
     innerEar: 0xffc4d6,
     cheek: 0xff8ba8,
     swatch: 'from-rose-100 via-pink-200 to-rose-400',
+  },
+  'moly-3d': {
+    label: 'Moly 3D',
+    body: 0x8f70c4,
+    accent: 0xf2a7c9,
+    innerEar: 0xffc4d6,
+    cheek: 0xff8ba8,
+    swatch: 'from-violet-300 via-fuchsia-300 to-indigo-500',
   },
 };
 
@@ -269,7 +277,7 @@ export const getDefaultSettings = (position: PetPosition): MoliPetSettings => ({
   position,
   showBubble: false,
   motion: false,
-  variant: 'moly-chibi',
+  variant: 'moly-3d',
   skin: 'chibi-pet',
 });
 
