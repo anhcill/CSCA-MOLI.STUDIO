@@ -6,10 +6,12 @@ const MIGRATIONS = [
   "052_csca_courses_core.sql",
   "053_csca_course_progress.sql",
   "054_csca_video_assets.sql",
+  "055_csca_course_package_access.sql",
 ];
 
 const EXPECTED_TABLES = [
   "course_enrollments",
+  "course_package_access",
   "course_instructors",
   "course_lessons",
   "course_outcomes",
@@ -28,6 +30,8 @@ const EXPECTED_CONSTRAINTS = [
   "fk_course_lessons_video_asset",
   "fk_courses_preview_video_asset",
   "fk_lesson_progress_lesson_course",
+  "chk_courses_access_type",
+  "chk_course_enrollments_source",
 ];
 
 function connectionString() {
@@ -41,6 +45,7 @@ async function verifyPrerequisites(client) {
     SELECT
       to_regclass('public.users') IS NOT NULL AS users_exists,
       to_regclass('public.materials') IS NOT NULL AS materials_exists,
+      to_regclass('public.vip_packages') IS NOT NULL AS vip_packages_exists,
       to_regprocedure('public.update_updated_at_column()') IS NOT NULL AS trigger_function_exists
   `);
   const missing = Object.entries(result.rows[0])
@@ -76,6 +81,10 @@ async function verifyCourseSchema(client) {
         SELECT 1 FROM pg_indexes
         WHERE schemaname = 'public' AND indexname = 'idx_video_variants_ready'
       ) AS video_index,
+      EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'public' AND indexname = 'idx_course_package_access_package'
+      ) AS package_access_index,
       EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'video_assets'
@@ -131,7 +140,7 @@ async function main() {
 
     await client.query("BEGIN");
     await client.query("SET LOCAL statement_timeout = '120s'");
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('csca-course-migrations-052-054'))");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('csca-course-migrations-052-055'))");
     for (const filename of MIGRATIONS) {
       const sqlPath = path.resolve(__dirname, "../../database/migrations", filename);
       const sql = fs.readFileSync(sqlPath, "utf8");

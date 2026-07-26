@@ -10,7 +10,8 @@ const SUBJECT_ALIASES: Record<string, string> = {
   'tiengtrung-tunhien': 'tiengtrung-tunhien',
 };
 
-export default function LichSuPage({ params }: { params: { subject: string } }) {
-  const subject = SUBJECT_ALIASES[params.subject] || params.subject;
+export default async function LichSuPage({ params }: { params: Promise<{ subject: string }> }) {
+  const { subject: requestedSubject } = await params;
+  const subject = SUBJECT_ALIASES[requestedSubject] || requestedSubject;
   redirect(`/lich-su?subject=${encodeURIComponent(subject)}`);
 }

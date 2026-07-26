@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getExamSubjectSlug, normalizeContentSubject } from '@/lib/utils/subjectScope';
 
-export default function DeMoPhongPage({
+export default async function DeMoPhongPage({
   searchParams,
 }: {
-  searchParams?: { subject?: string };
+  searchParams?: Promise<{ subject?: string }>;
 }) {
-  const subject = normalizeContentSubject(searchParams?.subject);
+  const resolvedSearchParams = await searchParams;
+  const subject = normalizeContentSubject(resolvedSearchParams?.subject);
   const examSlug = getExamSubjectSlug(subject) || 'toan';
   redirect(`/${examSlug}/de-mo-phong`);
 }

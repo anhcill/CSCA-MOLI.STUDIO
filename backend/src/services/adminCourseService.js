@@ -5,7 +5,7 @@ const { CourseApiError } = require("../utils/courseResponses");
 
 const SUBJECTS = new Set(["MATH", "PHYSICS", "CHEMISTRY", "CHINESE_SCI", "CHINESE_SOC"]);
 const LEVELS = new Set(["basic", "intermediate", "advanced"]);
-const ACCESS_TYPES = new Set(["free", "vip", "premium", "contact", "private"]);
+const ACCESS_TYPES = new Set(["free", "package", "vip", "premium", "contact", "private"]);
 const COURSE_STATUSES = new Set(["draft", "review", "published", "archived"]);
 const LESSON_TYPES = new Set(["video", "article", "document", "quiz"]);
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -59,6 +59,14 @@ function decimalValue(value, field, { min = 0, max = 100, nullable = false } = {
     fail(422, "ADMIN_COURSE_VALIDATION_FAILED", `${field} must be between ${min} and ${max}.`);
   }
   return value;
+}
+
+function positiveIdList(value, field) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    fail(422, "ADMIN_COURSE_VALIDATION_FAILED", `${field} must be an array.`);
+  }
+  return [...new Set(value.map((item) => positiveId(item, field)))];
 }
 
 function enumValue(value, field, allowed, { required = false } = {}) {
@@ -116,6 +124,7 @@ function normalizeCourseInput(body, { create = false } = {}) {
     thumbnailUrl: stringValue(body.thumbnailUrl, "thumbnailUrl", { max: 1000, nullable: true }),
     instructorId: body.instructorId === undefined ? undefined : (body.instructorId === null ? null : positiveId(body.instructorId, "instructorId")),
     accessType,
+    packageIds: positiveIdList(body.packageIds, "packageIds"),
     priceVnd: integerValue(body.priceVnd, "priceVnd"),
     compareAtPriceVnd: integerValue(body.compareAtPriceVnd, "compareAtPriceVnd", { nullable: true }),
     status,
@@ -175,6 +184,7 @@ function mapCourse(row) {
     shortDescription: row.short_description, descriptionHtml: row.description || "", subjectCode: row.subject_code,
     level: row.level, thumbnailUrl: row.thumbnail_url, previewVideoAssetId: numberOrNull(row.preview_video_asset_id),
     instructorId: numberOrNull(row.instructor_id), accessType: row.access_type, requiredTier: row.required_tier,
+    packageIds: Array.isArray(row.package_ids) ? row.package_ids.map(Number) : [],
     priceVnd: row.price_vnd, compareAtPriceVnd: row.compare_at_price_vnd, status: row.status,
     isFeatured: row.is_featured, isNew: row.is_new, isHot: row.is_hot,
     certificateEnabled: row.certificate_enabled, totalSections: row.total_sections,
@@ -208,6 +218,9 @@ function translateDatabaseError(error) {
     fail(409, key === "slug" ? "ADMIN_COURSE_SLUG_CONFLICT" : "ADMIN_COURSE_EXTERNAL_KEY_CONFLICT", `${key} is already in use.`);
   }
   if (error.code === "23503") fail(422, "ADMIN_COURSE_RELATION_NOT_FOUND", "A referenced instructor, material, section, lesson, or video asset does not exist.");
+  if (error.code === "COURSE_PACKAGE_NOT_FOUND") {
+    fail(422, "ADMIN_COURSE_PACKAGE_NOT_FOUND", "One or more packages do not exist.", { packageIds: error.packageIds });
+  }
   throw error;
 }
 
@@ -266,11 +279,16 @@ async function createCourse(body) {
     values.level ??= "basic"; values.status ??= "draft"; values.priceVnd ??= 0;
     values.isFeatured ??= false; values.isNew ??= false; values.isHot ??= false;
     values.certificateEnabled ??= false; values.requiredTier = requiredTierFor(values.accessType);
+    if (values.accessType === "package" && !values.packageIds?.length) {
+      fail(422, "ADMIN_COURSE_PACKAGE_REQUIRED", "packageIds must contain at least one package for package access.");
+    }
     const row = await repository.transaction(async (client) => {
       if (values.previewVideoAssetId && !await repository.findPreviewAsset(null, values.previewVideoAssetId, client)) {
         fail(422, "ADMIN_COURSE_VIDEO_ASSET_INVALID", "Create the course before attaching a preview video asset.");
       }
-      return repository.createCourse(values, client);
+      const created = await repository.createCourse(values, client);
+      await repository.replacePackageAccess(created.id, values.packageIds || [], client);
+      return repository.findById(created.id, client);
     });
     return mapCourse(row);
   } catch (error) { return translateDatabaseError(error); }
@@ -282,11 +300,20 @@ async function updateCourse(courseIdValue, body) {
     const patch = normalizeCourseInput(body);
     if (!Object.keys(patch).length) fail(422, "ADMIN_COURSE_EMPTY_PATCH", "No supported fields were supplied.");
     const row = await repository.transaction(async (client) => {
-      await ensureCourse(courseId, client, true);
+      const current = await ensureCourse(courseId, client, true);
+      const resultingAccessType = patch.accessType ?? current.access_type;
+      const resultingPackageIds = patch.packageIds ?? (current.package_ids || []).map(Number);
+      if (resultingAccessType === "package" && resultingPackageIds.length === 0) {
+        fail(422, "ADMIN_COURSE_PACKAGE_REQUIRED", "packageIds must contain at least one package for package access.");
+      }
       if (patch.previewVideoAssetId && !await repository.findPreviewAsset(courseId, patch.previewVideoAssetId, client)) {
         fail(422, "ADMIN_COURSE_VIDEO_ASSET_INVALID", "Preview asset does not belong to this course.");
       }
-      return repository.updateCourse(courseId, patch, client);
+      const packageIds = patch.packageIds;
+      delete patch.packageIds;
+      await repository.updateCourse(courseId, patch, client);
+      if (packageIds !== undefined) await repository.replacePackageAccess(courseId, packageIds, client);
+      return repository.findById(courseId, client);
     });
     return mapCourse(row);
   } catch (error) { return translateDatabaseError(error); }
@@ -402,5 +429,5 @@ module.exports = {
   listCourses, getCourse, createCourse, updateCourse, createSection, updateSection,
   createLesson, updateLesson, publishCourse: (id) => transition(id, "published"),
   unpublishCourse: (id) => transition(id, "draft"), archiveCourse: (id) => transition(id, "archived"),
-  _validation: { normalizeCourseInput, normalizeSectionInput, normalizeLessonInput, requiredTierFor, positiveId },
+  _validation: { normalizeCourseInput, normalizeSectionInput, normalizeLessonInput, requiredTierFor, positiveId, positiveIdList },
 };

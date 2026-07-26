@@ -25,10 +25,11 @@ function isActiveEnrollment(enrollment) {
   return !enrollment.expires_at || new Date(enrollment.expires_at) > new Date();
 }
 
-function hasEntitlement(user, course, enrollment = null) {
+function hasEntitlement(user, course, enrollment = null, packageEntitlement = null) {
   if (user?.role === "admin") return true;
   if (!course) return false;
   if (course.access_type === "free") return true;
+  if (course.access_type === "package") return Boolean(packageEntitlement);
   if (course.access_type === "vip") {
     return canAccessVipContent(user, "vip", course.subject_code);
   }
@@ -39,9 +40,9 @@ function hasEntitlement(user, course, enrollment = null) {
   return isActiveEnrollment(enrollment) && enrollment.source === "admin";
 }
 
-function accessView(user, course, enrollment) {
+function accessView(user, course, enrollment, packageEntitlement = null) {
   const enrolled = isActiveEnrollment(enrollment);
-  const entitled = hasEntitlement(user, course, enrollment);
+  const entitled = hasEntitlement(user, course, enrollment, packageEntitlement);
   return {
     isEnrolled: enrolled,
     enrollmentStatus: enrollment?.status || null,
@@ -52,6 +53,7 @@ function accessView(user, course, enrollment) {
       : !entitled
         ? course.access_type === "vip" ? "VIP_REQUIRED"
           : course.access_type === "premium" ? "PREMIUM_REQUIRED"
+            : course.access_type === "package" ? "PACKAGE_REQUIRED"
             : "ADMIN_ENROLLMENT_REQUIRED"
         : !enrolled ? "ENROLLMENT_REQUIRED" : null,
   };
@@ -99,6 +101,7 @@ function mapCatalogItem(row) {
     ratingCount: course.ratingCount, enrolledCount: course.enrolledCount,
     totalSections: course.totalSections, totalLessons: course.totalLessons,
     totalDurationSeconds: course.totalDurationSeconds, instructor: null, progress,
+    packages: course.packages,
     publishedAt: course.publishedAt, contentUpdatedAt: course.contentUpdatedAt,
   };
 }
@@ -144,12 +147,15 @@ async function getCourseLanding(slug, user) {
   const row = await repository.findPublishedBySlug(String(slug || "").trim());
   if (!row) throw new CourseApiError(404, "COURSE_NOT_FOUND", "Course not found.");
   const enrollment = user ? await repository.findEnrollment(user.id, row.id) : null;
-  const [{ sections, lessons }, metadata, progressRow] = await Promise.all([
+  const [{ sections, lessons }, metadata, progressRow, packageEntitlement] = await Promise.all([
     repository.listCurriculum(row.id, { userId: user?.id || null }),
     repository.listCourseMetadata(row.id),
     user && enrollment ? repository.getCourseProgress(user.id, row.id) : null,
+    user && row.access_type === "package"
+      ? repository.findActivePackageEntitlement(user.id, row.id)
+      : null,
   ]);
-  const access = accessView(user, row, enrollment);
+  const access = accessView(user, row, enrollment, packageEntitlement);
   const totalLessons = toFiniteNumber(progressRow?.required_lessons);
   const completedLessons = toFiniteNumber(progressRow?.completed_lessons);
   const detailCurriculum = buildCurriculum(sections, lessons).map((section) => {
@@ -200,14 +206,20 @@ async function enroll(courseIdValue, user) {
   if (existing?.status === "revoked") {
     throw new CourseApiError(403, "ENROLLMENT_REVOKED", "This enrollment was revoked by an administrator.");
   }
-  if (isActiveEnrollment(existing)) return mapEnrollmentDto(existing, course);
-  if (!hasEntitlement(user, course, existing)) {
+  const packageEntitlement = course.access_type === "package"
+    ? await repository.findActivePackageEntitlement(user.id, courseId)
+    : null;
+  if (!hasEntitlement(user, course, existing, packageEntitlement)) {
     throw new CourseApiError(
       403,
-      course.access_type === "premium" ? "PREMIUM_REQUIRED" : course.access_type === "vip" ? "VIP_REQUIRED" : "ADMIN_ENROLLMENT_REQUIRED",
+      course.access_type === "premium" ? "PREMIUM_REQUIRED"
+        : course.access_type === "vip" ? "VIP_REQUIRED"
+          : course.access_type === "package" ? "PACKAGE_REQUIRED"
+            : "ADMIN_ENROLLMENT_REQUIRED",
       "You do not have access to enroll in this course.",
     );
   }
+  if (isActiveEnrollment(existing)) return mapEnrollmentDto(existing, course);
   if (["contact", "private"].includes(course.access_type)) {
     throw new CourseApiError(403, "ADMIN_ENROLLMENT_REQUIRED", "This course requires enrollment by an administrator.");
   }
@@ -216,7 +228,11 @@ async function enroll(courseIdValue, user) {
     userId: user.id,
     courseId,
     source,
-    expiresAt: source === "free" ? null : user.vip_expires_at || null,
+    expiresAt: source === "free"
+      ? null
+      : source === "package"
+        ? packageEntitlement?.expires_at || null
+        : user.vip_expires_at || null,
   });
   if (!isActiveEnrollment(created)) {
     throw new CourseApiError(409, "ENROLLMENT_INACTIVE", "An inactive enrollment already exists.");
@@ -234,7 +250,10 @@ async function requireLearningAccess(courseIdValue, user) {
   if (!isActiveEnrollment(enrollment)) {
     throw new CourseApiError(403, "ENROLLMENT_REQUIRED", "An active enrollment is required.");
   }
-  if (!hasEntitlement(user, course, enrollment)) {
+  const packageEntitlement = course.access_type === "package"
+    ? await repository.findActivePackageEntitlement(user.id, courseId)
+    : null;
+  if (!hasEntitlement(user, course, enrollment, packageEntitlement)) {
     throw new CourseApiError(403, "ENTITLEMENT_EXPIRED", "The entitlement for this course is no longer active.");
   }
   return { course, enrollment };

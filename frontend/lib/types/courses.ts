@@ -7,7 +7,7 @@ export const CSCA_SUBJECT_CODES = [
 ] as const;
 
 export type CscaSubjectCode = (typeof CSCA_SUBJECT_CODES)[number];
-export type CourseAccessType = 'free' | 'vip' | 'premium' | 'contact' | 'private';
+export type CourseAccessType = 'free' | 'package' | 'vip' | 'premium' | 'contact' | 'private';
 export type CourseLevel = 'basic' | 'intermediate' | 'advanced';
 export type CourseStatus = 'draft' | 'review' | 'published' | 'archived';
 export type LessonType = 'video' | 'article' | 'document' | 'quiz';
@@ -43,6 +43,11 @@ export interface CourseInstructorDto {
   headline: string | null;
 }
 
+export interface CoursePackageSummaryDto {
+  id: number;
+  name: string;
+}
+
 export interface CourseProgressSummaryDto {
   completedLessons: number;
   totalLessons: number;
@@ -62,6 +67,7 @@ export interface CourseCatalogItemDto {
   level: CourseLevel;
   thumbnailUrl: string | null;
   accessType: CourseAccessType;
+  packages: CoursePackageSummaryDto[];
   priceVnd: number | null;
   compareAtPriceVnd: number | null;
   isFeatured: boolean;
@@ -150,7 +156,7 @@ export interface EnrollmentDto {
   courseId: number;
   courseSlug: string;
   status: EnrollmentStatus;
-  source: 'free' | 'vip' | 'premium' | 'admin' | 'coupon';
+  source: 'free' | 'package' | 'vip' | 'premium' | 'admin' | 'coupon';
   startsAt: string;
   expiresAt: string | null;
   completedAt: string | null;
@@ -235,6 +241,8 @@ export interface CourseAdminInput {
   subjectCode: CscaSubjectCode;
   level: CourseLevel;
   accessType: CourseAccessType;
+  /** Payment packages that unlock this course when accessType is "package". */
+  packageIds: number[];
   thumbnailUrl?: string | null;
   priceVnd?: number | null;
   compareAtPriceVnd?: number | null;
@@ -242,6 +250,7 @@ export interface CourseAdminInput {
 }
 
 export interface CourseAdminDto extends CourseDetailDto {
+  packageIds: number[];
   status: CourseStatus;
   createdAt: string;
   updatedAt: string;
@@ -271,6 +280,18 @@ export interface CurriculumLessonInput {
   isPublished?: boolean;
   videoAssetId?: number | null;
   contentHtml?: string | null;
+  estimatedDurationSeconds?: number;
+}
+
+export interface VipPackageDto {
+  id: number;
+  name: string;
+  tier: string;
+  duration_days: number;
+  price: number;
+  allowed_subjects?: string[];
+  requires_subject_choice?: boolean;
+  is_active: boolean;
 }
 
 

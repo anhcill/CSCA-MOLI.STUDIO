@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { FiArrowUpRight, FiBookOpen, FiClock, FiPlay, FiUsers } from 'react-icons/fi';
 import type { CourseCatalogItemDto, CscaSubjectCode } from '@/lib/types/courses';
 
-const accessLabels = { free: 'Miễn phí', vip: 'VIP', premium: 'PREMIUM', contact: 'Liên hệ', private: 'Riêng tư' };
 const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
 const subjectMeta: Record<CscaSubjectCode, { label: string; gradient: string; accent: string }> = {
   MATH: { label: 'Toán CSCA', gradient: 'from-blue-600 via-indigo-600 to-violet-700', accent: 'text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300' },
@@ -12,10 +11,26 @@ const subjectMeta: Record<CscaSubjectCode, { label: string; gradient: string; ac
   CHINESE_SOC: { label: 'Trung văn Xã hội', gradient: 'from-amber-500 via-orange-600 to-rose-600', accent: 'text-orange-700 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-300' },
 };
 
+type CatalogItemWithPackages = CourseCatalogItemDto & {
+  packages?: Array<{ id: number; name: string }>;
+  packageNames?: string[];
+};
+
+function accessLabel(course: CourseCatalogItemDto) {
+  if (course.progress) return 'Đang học';
+  if (course.accessType === 'free') return 'Miễn phí';
+  if (course.accessType === 'contact') return 'Liên hệ';
+  if (course.accessType === 'private') return 'Khóa học riêng';
+  const source = course as CatalogItemWithPackages;
+  const names = [...(source.packages ?? []).map((item) => item.name), ...(source.packageNames ?? [])]
+    .filter((name) => name?.trim());
+  return names.length === 1 ? names[0] : 'Mở khóa theo gói';
+}
+
 function durationLabel(seconds: number) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  return hours ? `${hours}g ${minutes ? `${minutes}p` : ''}`.trim() : `${minutes} phút`;
+  return hours ? `${hours}g ${minutes ? `${minutes}p` : ''}`.trim() : `${Math.max(1, minutes)} phút`;
 }
 
 export function CourseCard({ course }: { course: CourseCatalogItemDto }) {
@@ -28,7 +43,7 @@ export function CourseCard({ course }: { course: CourseCatalogItemDto }) {
         {course.thumbnailUrl ? <img src={course.thumbnailUrl} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> : null}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/5 to-transparent" />
         <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2">
-          <span className="rounded-full border border-white/50 bg-white/95 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-indigo-700 shadow-sm">{accessLabels[course.accessType]}</span>
+          <span className="max-w-[75%] truncate rounded-full border border-white/50 bg-white/95 px-3 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm">{accessLabel(course)}</span>
           <div className="flex gap-1.5">{course.isNew ? <span className="rounded-full bg-emerald-400 px-2.5 py-1.5 text-[10px] font-black text-emerald-950 shadow-sm">MỚI</span> : null}{course.isHot ? <span className="rounded-full bg-orange-400 px-2.5 py-1.5 text-[10px] font-black text-orange-950 shadow-sm">HOT</span> : null}</div>
         </div>
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3 text-white">

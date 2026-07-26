@@ -7,7 +7,16 @@ const COURSE_COLUMNS = `
   c.compare_at_price_vnd, c.status, c.is_featured, c.is_new, c.is_hot,
   c.certificate_enabled, c.total_sections, c.total_lessons,
   c.total_duration_seconds, c.rating_avg, c.rating_count, c.enrolled_count,
-  c.published_at, c.content_updated_at, c.created_at, c.updated_at`;
+  c.published_at, c.content_updated_at, c.created_at, c.updated_at,
+  COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object('id', p.id, 'name', p.name)
+      ORDER BY p.sort_order, p.id
+    )
+    FROM course_package_access cpa
+    JOIN vip_packages p ON p.id = cpa.package_id
+    WHERE cpa.course_id = c.id
+  ), '[]'::jsonb) AS packages`;
 
 async function listPublished({ userId = null, subjectCode = null, accessType = null, page = 1, limit = 12 }) {
   const offset = (page - 1) * limit;
@@ -102,6 +111,28 @@ async function findEnrollment(userId, courseId) {
   return result.rows[0] || null;
 }
 
+async function findActivePackageEntitlement(userId, courseId) {
+  const result = await db.query(
+    `SELECT e.id, e.package_id, e.starts_at, e.expires_at
+     FROM user_vip_entitlements e
+     JOIN course_package_access cpa
+       ON cpa.package_id = e.package_id AND cpa.course_id = $2
+     JOIN courses c ON c.id = cpa.course_id
+     WHERE e.user_id = $1
+       AND e.is_active = TRUE
+       AND e.starts_at <= NOW()
+       AND (e.expires_at IS NULL OR e.expires_at > NOW())
+       AND (
+         '*' = ANY(COALESCE(e.allowed_subjects, ARRAY[]::text[]))
+         OR c.subject_code = ANY(COALESCE(e.allowed_subjects, ARRAY[]::text[]))
+       )
+     ORDER BY e.expires_at DESC NULLS FIRST, e.created_at DESC, e.id DESC
+     LIMIT 1`,
+    [userId, courseId],
+  );
+  return result.rows[0] || null;
+}
+
 async function createEnrollment({ userId, courseId, source, expiresAt = null }) {
   const result = await db.query(
     `INSERT INTO course_enrollments (user_id, course_id, source, expires_at)
@@ -114,6 +145,11 @@ async function createEnrollment({ userId, courseId, source, expiresAt = null }) 
        completed_at = NULL,
        updated_at = NOW()
      WHERE course_enrollments.status = 'expired'
+        OR (
+          course_enrollments.status IN ('active', 'completed')
+          AND course_enrollments.expires_at IS NOT NULL
+          AND course_enrollments.expires_at <= NOW()
+        )
      RETURNING *`,
     [userId, courseId, source, expiresAt],
   );
@@ -186,6 +222,7 @@ module.exports = {
   listCurriculum,
   listCourseMetadata,
   findEnrollment,
+  findActivePackageEntitlement,
   createEnrollment,
   findLesson,
   upsertProgress,

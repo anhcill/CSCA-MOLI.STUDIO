@@ -28,4 +28,5 @@ Thumbs.db
 # Test files
 *.test.js
 *.spec.js
+!src/services/__tests__/*.spec.js
 /coverage

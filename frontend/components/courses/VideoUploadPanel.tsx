@@ -14,10 +14,12 @@ type UploadStage = 'idle' | 'hashing' | 'uploading' | 'completing' | 'processing
 export function VideoUploadPanel({
   courseId,
   lessonId,
+  currentVideoAssetId,
   onUploaded,
 }: {
   courseId: number;
   lessonId: number;
+  currentVideoAssetId?: number | null;
   onUploaded?: (videoAssetId: number) => Promise<void> | void;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -102,10 +104,11 @@ export function VideoUploadPanel({
           : 'Tải video lên';
 
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="space-y-3 rounded-xl border-2 border-dashed border-indigo-300 bg-white p-5">
       <div>
-        <h4 className="font-bold text-slate-800">Video nguồn</h4>
-        <p className="text-xs text-slate-500">MP4 hoặc MOV, tối đa 4 GiB. Tệp được tải thẳng vào kho riêng tư.</p>
+        <h4 className="font-black text-slate-800">{currentVideoAssetId ? 'Thay video nguồn' : 'Gắn video nguồn'}</h4>
+        {currentVideoAssetId ? <p className="mt-1 text-sm font-semibold text-emerald-700">Đang sử dụng asset #{currentVideoAssetId}</p> : null}
+        <p className="mt-1 text-xs text-slate-500">MP4 hoặc MOV, tối đa 4 GiB. Tệp được tải thẳng vào kho riêng tư.</p>
       </div>
       <input
         type="file"

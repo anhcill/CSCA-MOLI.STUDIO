@@ -12,6 +12,7 @@ import type {
   CurriculumSectionDto,
   CurriculumSectionInput,
   EnrollmentDto,
+  VipPackageDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -24,6 +25,11 @@ function unwrapData<T>(payload: unknown): T {
 function catalogItem(raw: CourseCatalogItemDto & { progressPct?: number }): CourseCatalogItemDto {
   return {
     ...raw,
+    packages: Array.isArray(raw.packages)
+      ? raw.packages
+          .map((pkg) => ({ id: Number(pkg.id), name: String(pkg.name ?? '') }))
+          .filter((pkg) => Number.isSafeInteger(pkg.id) && pkg.id > 0)
+      : [],
     priceVnd: raw.priceVnd ?? null,
     compareAtPriceVnd: raw.compareAtPriceVnd ?? null,
     thumbnailUrl: raw.thumbnailUrl ?? null,
@@ -120,6 +126,12 @@ function adminCourse(raw: AdminRaw): CourseAdminDto {
     shortDescription: raw.shortDescription ?? '', descriptionHtml: raw.descriptionHtml ?? raw.description ?? '',
     subjectCode: raw.subjectCode ?? 'MATH', level: raw.level ?? 'basic', thumbnailUrl: raw.thumbnailUrl ?? null,
     accessType: raw.accessType ?? 'free', priceVnd: raw.priceVnd ?? null, compareAtPriceVnd: raw.compareAtPriceVnd ?? null,
+    packages: Array.isArray(raw.packages)
+      ? raw.packages.map((pkg) => ({ id: Number(pkg.id), name: String(pkg.name ?? '') }))
+      : [],
+    packageIds: Array.isArray(raw.packageIds)
+      ? raw.packageIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0)
+      : [],
     isFeatured: raw.isFeatured === true, isNew: raw.isNew === true, isHot: raw.isHot === true,
     ratingAvg: raw.ratingAvg ?? 0, ratingCount: raw.ratingCount ?? 0, enrolledCount: raw.enrolledCount ?? 0,
     totalSections: raw.totalSections ?? curriculum.length,
@@ -138,6 +150,10 @@ function adminInput(input: Partial<CourseAdminInput>): Record<string, unknown> {
 }
 
 export const coursesApi = {
+  async getActivePackages(): Promise<VipPackageDto[]> {
+    const response = await axios.get<ApiSuccessEnvelope<VipPackageDto[]>>('/vip/packages');
+    return unwrapData<VipPackageDto[]>(response.data).filter((pkg) => pkg.is_active !== false);
+  },
   async getCatalog(query: CourseCatalogQuery = {}): Promise<CourseCatalogDto> {
     const response = await axios.get<ApiSuccessEnvelope<CourseCatalogDto>>('/courses', { params: query });
     const catalog = unwrapData<CourseCatalogDto>(response.data);

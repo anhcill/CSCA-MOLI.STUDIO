@@ -41,7 +41,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ courseId:
           {course.status !== 'published' ? <button type="button" disabled={publishing} onClick={() => void publish()} className="rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white disabled:opacity-50">{publishing ? 'Đang xuất bản...' : 'Xuất bản'}</button> : null}
         </div>
         {publishError ? <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{publishError}</p> : null}
-        <CourseAdminForm initialValue={{ title: course.title, slug: course.slug, shortDescription: course.shortDescription, descriptionHtml: course.descriptionHtml, subjectCode: course.subjectCode, level: course.level, accessType: course.accessType, thumbnailUrl: course.thumbnailUrl, priceVnd: course.priceVnd, compareAtPriceVnd: course.compareAtPriceVnd, certificateEnabled: course.certificateEnabled }} submitLabel="Lưu thay đổi" onSubmit={update} />
+        <CourseAdminForm initialValue={{ title: course.title, slug: course.slug, shortDescription: course.shortDescription, descriptionHtml: course.descriptionHtml, subjectCode: course.subjectCode, level: course.level, accessType: course.accessType, packageIds: course.packageIds, thumbnailUrl: course.thumbnailUrl, priceVnd: course.priceVnd, compareAtPriceVnd: course.compareAtPriceVnd, certificateEnabled: course.certificateEnabled }} submitLabel="Lưu thay đổi" onSubmit={update} />
       </>}
     </AdminLayout>
   );

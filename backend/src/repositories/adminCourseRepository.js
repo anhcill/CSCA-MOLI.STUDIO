@@ -29,7 +29,12 @@ async function transaction(work) {
 async function list({ q = null, subjectCode = null, status = null, page = 1, limit = 20 }) {
   const offset = (page - 1) * limit;
   const result = await db.query(
-    `SELECT ${COURSE_COLUMNS}, COUNT(*) OVER()::int AS total_count
+    `SELECT ${COURSE_COLUMNS},
+       ARRAY(
+         SELECT cpa.package_id FROM course_package_access cpa
+         WHERE cpa.course_id = courses.id ORDER BY cpa.package_id
+       ) AS package_ids,
+       COUNT(*) OVER()::int AS total_count
      FROM courses
      WHERE ($1::text IS NULL OR subject_code = $1)
        AND ($2::text IS NULL OR status = $2)
@@ -42,7 +47,12 @@ async function list({ q = null, subjectCode = null, status = null, page = 1, lim
 
 async function findById(courseId, client = null, { forUpdate = false } = {}) {
   const result = await executor(client).query(
-    `SELECT ${COURSE_COLUMNS} FROM courses WHERE id = $1${forUpdate ? " FOR UPDATE" : ""}`,
+    `SELECT ${COURSE_COLUMNS},
+       ARRAY(
+         SELECT cpa.package_id FROM course_package_access cpa
+         WHERE cpa.course_id = courses.id ORDER BY cpa.package_id
+       ) AS package_ids
+     FROM courses WHERE id = $1${forUpdate ? " FOR UPDATE OF courses" : ""}`,
     [courseId],
   );
   return result.rows[0] || null;
@@ -71,7 +81,7 @@ async function createCourse(values, client) {
       values.accessType, values.requiredTier, values.priceVnd, values.compareAtPriceVnd,
       values.status, values.isFeatured, values.isNew, values.isHot, values.certificateEnabled],
   );
-  return result.rows[0];
+  return findById(result.rows[0].id, client);
 }
 
 const COURSE_UPDATE_COLUMNS = Object.freeze({
@@ -92,7 +102,34 @@ async function updateCourse(courseId, patch, client) {
     `UPDATE courses SET ${sets.join(", ")}, content_updated_at = NOW() WHERE id = $1 RETURNING ${COURSE_COLUMNS}`,
     [courseId, ...entries.map(([, value]) => value)],
   );
-  return result.rows[0] || null;
+  return result.rows[0] ? findById(courseId, client) : null;
+}
+
+async function replacePackageAccess(courseId, packageIds, client) {
+  const run = executor(client);
+  const ids = [...new Set(packageIds.map(Number))];
+  if (ids.length) {
+    const packages = await run.query(
+      `SELECT id FROM vip_packages WHERE id = ANY($1::int[])`,
+      [ids],
+    );
+    const found = new Set(packages.rows.map((row) => Number(row.id)));
+    const missing = ids.filter((id) => !found.has(id));
+    if (missing.length) {
+      const error = new Error(`Unknown package ids: ${missing.join(", ")}`);
+      error.code = "COURSE_PACKAGE_NOT_FOUND";
+      error.packageIds = missing;
+      throw error;
+    }
+  }
+  await run.query(`DELETE FROM course_package_access WHERE course_id = $1`, [courseId]);
+  if (ids.length) {
+    await run.query(
+      `INSERT INTO course_package_access (course_id, package_id)
+       SELECT $1, package_id FROM UNNEST($2::int[]) AS package_id`,
+      [courseId, ids],
+    );
+  }
 }
 
 async function createSection(courseId, values, client) {
@@ -244,6 +281,7 @@ async function setStatus(courseId, status, client) {
 
 module.exports = {
   transaction, list, findById, listCurriculum, createCourse, updateCourse,
+  replacePackageAccess,
   createSection, updateSection, findSection, createLesson, updateLesson, findLesson,
   claimVideoAsset, findPreviewAsset, recalculateAggregates, getPublishReadiness, setStatus,
 };

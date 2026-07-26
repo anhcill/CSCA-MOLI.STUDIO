@@ -10,8 +10,9 @@ const SUBJECT_CONFIG: Record<string, { redirectPath: string }> = {
   'tiengtrung-tunhien': { redirectPath: '/tiengtrung-tunhien/de-mo-phong' },
 };
 
-export default function SubjectPage({ params }: { params: { subject: string } }) {
-  const subjectInfo = SUBJECT_CONFIG[params.subject];
+export default async function SubjectPage({ params }: { params: Promise<{ subject: string }> }) {
+  const { subject } = await params;
+  const subjectInfo = SUBJECT_CONFIG[subject];
 
   if (!subjectInfo) {
     redirect('/');

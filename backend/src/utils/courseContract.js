@@ -6,7 +6,7 @@ const SUBJECT_CODES = Object.freeze([
   "CHINESE_SOC",
 ]);
 
-const ACCESS_TYPES = Object.freeze(["free", "vip", "premium", "contact", "private"]);
+const ACCESS_TYPES = Object.freeze(["free", "package", "vip", "premium", "contact", "private"]);
 const ENROLLMENT_STATUSES = Object.freeze(["active", "expired", "revoked", "completed"]);
 const PROGRESS_STATUSES = Object.freeze(["not_started", "in_progress", "completed"]);
 
@@ -37,6 +37,9 @@ function mapCourse(row) {
     instructorId: toNullableNumber(row.instructor_id),
     accessType: row.access_type,
     requiredTier: row.required_tier,
+    packages: Array.isArray(row.packages)
+      ? row.packages.map((pkg) => ({ id: toFiniteNumber(pkg.id), name: pkg.name }))
+      : [],
     priceVnd: toFiniteNumber(row.price_vnd),
     compareAtPriceVnd: toNullableNumber(row.compare_at_price_vnd),
     status: row.status,

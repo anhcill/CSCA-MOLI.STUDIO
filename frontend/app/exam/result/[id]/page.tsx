@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import examApi from '@/lib/api/exams';
@@ -93,7 +93,8 @@ interface AttemptResult {
     allow_download?: boolean;
 }
 
-export default function ExamResultPage({ params }: { params: { id: string } }) {
+export default function ExamResultPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id: attemptId } = use(params);
     const router = useRouter();
     const user = useAuthStore((s) => s.user);
     const updateUser = useAuthStore((s) => s.updateUser);
@@ -118,7 +119,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
 
     useEffect(() => {
         loadResult();
-    }, [params.id]);
+    }, [attemptId]);
 
     useEffect(() => {
         if (result?.id && !aiAnalysis && !aiLoading) {
@@ -142,7 +143,7 @@ export default function ExamResultPage({ params }: { params: { id: string } }) {
     const loadResult = async () => {
         try {
             setLoading(true);
-            const data = await examApi.getAttemptDetails(params.id);
+            const data = await examApi.getAttemptDetails(attemptId);
             setResult(data);
             if (data.id) {
                 loadAIAnalysis(data.id);

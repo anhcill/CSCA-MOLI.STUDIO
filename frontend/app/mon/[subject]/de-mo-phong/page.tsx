@@ -76,8 +76,9 @@ const SUBJECT_CONFIG: Record<string, {
   },
 };
 
-export default function DeMoPhongPage({ params }: { params: { subject: string } }) {
-  const subjectInfo = SUBJECT_CONFIG[params.subject];
+export default async function DeMoPhongPage({ params }: { params: Promise<{ subject: string }> }) {
+  const { subject } = await params;
+  const subjectInfo = SUBJECT_CONFIG[subject];
 
   if (!subjectInfo) {
     return (
