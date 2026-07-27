@@ -30,7 +30,13 @@ function createR2VideoStorageAdapter({ config, client, signer = getSignedUrl } =
         Metadata: metadata,
       });
       return {
-        uploadUrl: await signer(s3, command, { expiresIn: resolved.uploadTtlSeconds }),
+        uploadUrl: await signer(s3, command, {
+          expiresIn: resolved.uploadTtlSeconds,
+          // Keep integrity metadata in the signed request headers. Hoisting this
+          // value into the query while also sending the required browser header
+          // makes Cloudflare R2 reject the PUT with SignatureDoesNotMatch.
+          unhoistableHeaders: new Set(["x-amz-meta-sha256"]),
+        }),
         expiresInSeconds: resolved.uploadTtlSeconds,
         requiredHeaders: {
           "content-type": contentType,
