@@ -164,6 +164,12 @@ export function VideoUploadPanel({
               >
                 Sao chép mã
               </button>
+              <a
+                href={`csca-video:${encodeURIComponent(processingCode)}`}
+                className="ml-2 mt-2 inline-block rounded-md bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white"
+              >
+                Mở công cụ xử lý trên máy
+              </a>
             </div>
           ) : null}
           <p className="text-xs text-slate-600">Chạy file XU-LY-VIDEO-KHOA-HOC.cmd trên máy. Khi công cụ báo upload xong, bấm nút dưới đây.</p>

@@ -6,6 +6,7 @@ param(
   [string]$AssetKey,
   [int]$AssetId,
   [string]$ProcessingCode,
+  [string]$LaunchUri,
   [switch]$DryRun,
   [switch]$Configure
 )
@@ -146,6 +147,13 @@ try {
   Set-Location $repositoryRoot
   Write-Host "CSCA - TRO LY XU LY VIDEO KHOA HOC" -ForegroundColor Magenta
   Write-Host "Cong cu se tu encode, kiem tra va upload R2."
+
+  if ($LaunchUri) {
+    if ($LaunchUri -notmatch "^csca-video:(.+)$") {
+      throw "Lien ket mo cong cu khong hop le."
+    }
+    $ProcessingCode = [Uri]::UnescapeDataString($Matches[1]).Trim()
+  }
 
   if ($Configure) {
     Save-Configuration | Out-Null

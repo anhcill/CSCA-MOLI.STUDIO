@@ -21,6 +21,12 @@ Generated HLS work is retained under `.video-work/asset-<id>` so an interrupted
 run can continue without encoding again. Both local configuration and work
 outputs are gitignored.
 
+For a no-copy workflow on Windows, run `DANG-KY-CONG-CU-VIDEO.cmd` once. It
+registers the per-user `csca-video:` URL protocol and points it at the repository
+launcher. Admin can then open the helper with the processing code already
+attached by clicking `Mo cong cu xu ly tren may`. No administrator elevation is
+required; the copy button remains available as a fallback.
+
 `New-CscaHls.ps1` probes the source video, selects only 360p/480p/720p/1080p
 renditions that do not exceed the source height, aligns keyframes to six-second
 segments, and asks FFmpeg to produce a VOD `master.m3u8`.
