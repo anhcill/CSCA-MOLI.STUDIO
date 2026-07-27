@@ -297,11 +297,22 @@ export interface VipPackageDto {
 
 export interface VideoUploadSessionDto {
   sessionId: string;
+  videoAssetId: number;
   assetExternalKey: string;
   uploadUrl: string;
   method: 'PUT';
   requiredHeaders: Record<string, string>;
   expiresAt: string;
+}
+
+export interface VideoAssetDeleteDto {
+  assetId: number;
+  courseId: number;
+  lessonId: number;
+  status: 'deleted';
+  detached: boolean;
+  alreadyDeleted: boolean;
+  deletedObjectCount: number;
 }
 
 export interface VideoUploadCompleteDto {

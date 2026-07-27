@@ -16,11 +16,13 @@ export function VideoUploadPanel({
   lessonId,
   currentVideoAssetId,
   onUploaded,
+  onDeleted,
 }: {
   courseId: number;
   lessonId: number;
   currentVideoAssetId?: number | null;
   onUploaded?: (videoAssetId: number) => Promise<void> | void;
+  onDeleted?: () => Promise<void> | void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<UploadStage>('idle');
@@ -28,6 +30,7 @@ export function VideoUploadPanel({
   const [error, setError] = useState('');
   const [videoAssetId, setVideoAssetId] = useState<number | null>(null);
   const [assetExternalKey, setAssetExternalKey] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -55,6 +58,7 @@ export function VideoUploadPanel({
     const controller = new AbortController();
     abortRef.current = controller;
     setError('');
+    let createdAssetId: number | null = null;
     try {
       setStage('hashing');
       setProgress(0);
@@ -66,6 +70,8 @@ export function VideoUploadPanel({
         sizeBytes: file.size,
         checksumSha256,
       });
+      createdAssetId = session.videoAssetId;
+      setVideoAssetId(session.videoAssetId);
       setAssetExternalKey(session.assetExternalKey);
       setStage('uploading');
       setProgress(0);
@@ -81,14 +87,52 @@ export function VideoUploadPanel({
         setError(`Video đã tải lên với asset #${completed.videoAssetId}, nhưng chưa gắn được vào bài học. Không tải lại tệp; hãy thử lưu bài học lại.`);
       }
     } catch (cause) {
+      let cleanupFailed = false;
+      if (createdAssetId) {
+        try {
+          await courseMediaApi.deleteAsset(createdAssetId);
+          setVideoAssetId(null);
+          setAssetExternalKey('');
+        } catch {
+          cleanupFailed = true;
+        }
+      }
       if (cause instanceof DOMException && cause.name === 'AbortError') {
-        setError('Đã hủy tải video. Bạn có thể thử lại.');
+        setError(cleanupFailed
+          ? 'Đã hủy tải video nhưng chưa dọn được dữ liệu tạm. Hãy bấm “Xóa video và dữ liệu R2”.'
+          : 'Đã hủy tải video và đã dọn dữ liệu tạm.');
       } else {
-        setError('Không thể tải video lên. Kiểm tra kết nối rồi thử lại.');
+        setError(cleanupFailed
+          ? 'Tải video lỗi và chưa dọn được dữ liệu tạm. Hãy bấm “Xóa video và dữ liệu R2”.'
+          : 'Không thể tải video lên. Dữ liệu tạm đã được dọn; kiểm tra kết nối rồi thử lại.');
       }
       setStage('error');
     } finally {
       abortRef.current = null;
+    }
+  };
+
+  const deleteVideo = async () => {
+    const assetId = videoAssetId ?? currentVideoAssetId ?? null;
+    if (!assetId || deleting || busy) return;
+    const confirmed = window.confirm(
+      `Xóa Asset #${assetId}? Video nguồn, toàn bộ HLS trên R2 và liên kết với bài học sẽ bị xóa. Không thể hoàn tác.`,
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await courseMediaApi.deleteAsset(assetId);
+      setFile(null);
+      setVideoAssetId(null);
+      setAssetExternalKey('');
+      setProgress(0);
+      setStage('idle');
+      await onDeleted?.();
+    } catch {
+      setError('Chưa thể xóa video. Hãy dừng công cụ xử lý video nếu đang chạy rồi thử lại.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -107,6 +151,8 @@ export function VideoUploadPanel({
 
   const transferBusy = stage === 'hashing' || stage === 'uploading' || stage === 'completing';
   const busy = transferBusy || stage === 'finalizing';
+  const existingAssetId = videoAssetId ?? currentVideoAssetId ?? null;
+  const mustDeleteBeforeUpload = Boolean(currentVideoAssetId);
   const processingCode = videoAssetId && assetExternalKey
     ? `${courseId}:${lessonId}:${videoAssetId}:${assetExternalKey}`
     : '';
@@ -125,14 +171,15 @@ export function VideoUploadPanel({
   return (
     <div className="space-y-3 rounded-xl border-2 border-dashed border-indigo-300 bg-white p-5">
       <div>
-        <h4 className="font-black text-slate-800">{currentVideoAssetId ? 'Thay video nguồn' : 'Gắn video nguồn'}</h4>
+        <h4 className="font-black text-slate-800">{currentVideoAssetId ? 'Video nguồn hiện tại' : 'Gắn video nguồn'}</h4>
         {currentVideoAssetId ? <p className="mt-1 text-sm font-semibold text-emerald-700">Đang sử dụng asset #{currentVideoAssetId}</p> : null}
         <p className="mt-1 text-xs text-slate-500">MP4 hoặc MOV, tối đa 4 GiB. Tệp được tải thẳng vào kho riêng tư.</p>
+        {mustDeleteBeforeUpload ? <p className="mt-2 text-sm font-semibold text-amber-700">Muốn tải video khác, hãy xóa video hiện tại trước để video cũ không tiếp tục chiếm dung lượng R2.</p> : null}
       </div>
       <input
         type="file"
         accept=".mp4,.mov,video/mp4,video/quicktime"
-        disabled={busy || stage === 'processing'}
+        disabled={busy || deleting || stage === 'processing' || mustDeleteBeforeUpload}
         onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
         className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold"
         aria-describedby={`video-help-${lessonId}`}
@@ -145,10 +192,20 @@ export function VideoUploadPanel({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={!file || busy || stage === 'processing'} onClick={upload} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" disabled={!file || busy || deleting || stage === 'processing' || mustDeleteBeforeUpload} onClick={upload} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
           {stage === 'error' ? 'Thử tải lại' : label}
         </button>
         {transferBusy ? <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold">Hủy</button> : null}
+        {existingAssetId ? (
+          <button
+            type="button"
+            disabled={busy || deleting}
+            onClick={() => void deleteVideo()}
+            className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
+          >
+            {deleting ? 'Đang xóa khỏi R2...' : 'Xóa video và dữ liệu R2'}
+          </button>
+        ) : null}
       </div>
       {stage === 'processing' || stage === 'finalizing' ? (
         <div role="status" className="space-y-2 text-sm font-semibold text-amber-700">

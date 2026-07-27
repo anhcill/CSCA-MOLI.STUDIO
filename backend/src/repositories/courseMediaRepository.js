@@ -65,6 +65,17 @@ async function findAssetForFinalize(assetId) {
   return result.rows[0] || null;
 }
 
+async function findAssetForDelete(assetId) {
+  const result = await db.query(
+    `SELECT id, external_key, course_id, lesson_id, purpose, status, deleted_at
+     FROM video_assets
+     WHERE id = $1 AND purpose = 'lesson'
+     LIMIT 1`,
+    [assetId],
+  );
+  return result.rows[0] || null;
+}
+
 async function expireSession(externalKey, createdBy) {
   await db.query(
     `UPDATE video_upload_sessions
@@ -179,12 +190,76 @@ async function markHlsReady({ assetId, masterObjectKey, manifestVersion, duratio
   }
 }
 
+async function markAssetDeleted(assetId) {
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const locked = await client.query(
+      `SELECT id, course_id, lesson_id, status, deleted_at
+       FROM video_assets
+       WHERE id = $1 AND purpose = 'lesson'
+       FOR UPDATE`,
+      [assetId],
+    );
+    const asset = locked.rows[0];
+    if (!asset) {
+      const error = new Error("VIDEO_ASSET_NOT_FOUND");
+      error.code = "VIDEO_ASSET_NOT_FOUND";
+      throw error;
+    }
+
+    const detached = await client.query(
+      `UPDATE course_lessons
+       SET video_asset_id = NULL, estimated_duration_seconds = 0, updated_at = NOW()
+       WHERE id = $1 AND course_id = $2 AND video_asset_id = $3
+       RETURNING id`,
+      [asset.lesson_id, asset.course_id, assetId],
+    );
+    await client.query(
+      `UPDATE video_upload_sessions
+       SET status = 'aborted', aborted_at = COALESCE(aborted_at, NOW())
+       WHERE video_asset_id = $1 AND status IN ('created', 'uploading')`,
+      [assetId],
+    );
+    await client.query(`DELETE FROM video_variants WHERE video_asset_id = $1`, [assetId]);
+    await client.query(
+      `UPDATE video_assets
+       SET status = 'deleted', deleted_at = COALESCE(deleted_at, NOW()), updated_at = NOW()
+       WHERE id = $1`,
+      [assetId],
+    );
+    if (detached.rows[0]) {
+      await client.query(
+        `UPDATE courses SET total_duration_seconds = COALESCE((
+           SELECT SUM(estimated_duration_seconds)::int FROM course_lessons WHERE course_id = $1
+         ), 0), content_updated_at = NOW() WHERE id = $1`,
+        [asset.course_id],
+      );
+    }
+    await client.query("COMMIT");
+    return {
+      assetId: Number(assetId),
+      courseId: Number(asset.course_id),
+      lessonId: Number(asset.lesson_id),
+      detached: Boolean(detached.rows[0]),
+      alreadyDeleted: Boolean(asset.deleted_at),
+    };
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   completeSourceUpload,
   createSourceUpload,
   expireSession,
+  findAssetForDelete,
   findAssetForFinalize,
   findCourseLesson,
   findSessionForAdmin,
+  markAssetDeleted,
   markHlsReady,
 };

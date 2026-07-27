@@ -30,6 +30,10 @@ function createHlsPrefix({ courseId, lessonId, assetExternalKey }) {
   return `private/courses/${cleanPart(courseId)}/lessons/${cleanPart(lessonId)}/${cleanPart(assetExternalKey)}/hls/`;
 }
 
+function createAssetPrefix({ courseId, lessonId, assetExternalKey }) {
+  return `private/courses/${cleanPart(courseId)}/lessons/${cleanPart(lessonId)}/${cleanPart(assetExternalKey)}/`;
+}
+
 function validateSourceUpload({ contentType, sizeBytes, checksumSha256 }) {
   const mime = String(contentType || "").toLowerCase();
   if (!SOURCE_MIME_TYPES.has(mime)) throw new CourseApiError(415, "VIDEO_MIME_NOT_ALLOWED", "Only MP4 and MOV source videos are accepted.");
@@ -88,18 +92,56 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       const objectKey = createSourceObjectKey({ courseId, lessonId, assetExternalKey, extension });
       const upload = await getStorage().createUploadUrl({ ...validated, objectKey });
       const expiresAt = new Date(now().getTime() + upload.expiresInSeconds * 1000);
-      await repository.createSourceUpload({
+      const created = await repository.createSourceUpload({
         externalKey: sessionId, assetExternalKey, courseId, lessonId, objectKey,
         ...validated, expiresAt, createdBy,
       });
       return {
         sessionId,
+        videoAssetId: Number(created.video_asset_id),
         assetExternalKey,
         uploadUrl: upload.uploadUrl,
         method: "PUT",
         requiredHeaders: upload.requiredHeaders,
         expiresAt: expiresAt.toISOString(),
       };
+    },
+
+    async deleteVideoAsset(assetIdValue, actor) {
+      positiveId(actor?.id, "actor.id");
+      const assetId = positiveId(assetIdValue, "assetId");
+      const asset = await repository.findAssetForDelete(assetId);
+      if (!asset) throw new CourseApiError(404, "VIDEO_ASSET_NOT_FOUND", "Video asset was not found.");
+      if (!asset.course_id || !asset.lesson_id) {
+        throw new CourseApiError(409, "VIDEO_ASSET_NOT_DELETABLE", "Video asset is not attached to a course lesson.");
+      }
+      const prefix = createAssetPrefix({
+        courseId: asset.course_id,
+        lessonId: asset.lesson_id,
+        assetExternalKey: asset.external_key,
+      });
+      let storageResult;
+      try {
+        storageResult = await getStorage().deletePrefix({ prefix });
+      } catch (error) {
+        if (error?.code === "VIDEO_DELETE_PREFIX_INVALID") {
+          throw new CourseApiError(409, error.code, "Video storage path is invalid.");
+        }
+        throw error;
+      }
+      try {
+        const deleted = await repository.markAssetDeleted(assetId);
+        return {
+          ...deleted,
+          status: "deleted",
+          deletedObjectCount: Number(storageResult.deletedObjectCount || 0),
+        };
+      } catch (error) {
+        if (error.code === "VIDEO_ASSET_NOT_FOUND") {
+          throw new CourseApiError(404, error.code, "Video asset was not found.");
+        }
+        throw error;
+      }
     },
 
     async completeDirectUpload(sessionId, actor) {
@@ -244,6 +286,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
 module.exports = {
   MAX_SINGLE_PUT_BYTES,
   createCourseMediaService,
+  createAssetPrefix,
   createHlsPrefix,
   createSourceObjectKey,
   validateSourceUpload,

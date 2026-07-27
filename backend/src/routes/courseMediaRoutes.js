@@ -8,5 +8,6 @@ router.use(authenticate, authorizePermission("content.manage"));
 router.post("/uploads", mediaUploadLimiter, controller.createUpload);
 router.post("/uploads/:sessionId/complete", mediaUploadLimiter, controller.completeUpload);
 router.post("/assets/:assetId/hls/finalize", mediaUploadLimiter, controller.finalizeHls);
+router.delete("/assets/:assetId", mediaUploadLimiter, controller.deleteAsset);
 
 module.exports = router;

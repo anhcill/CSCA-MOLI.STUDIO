@@ -1,4 +1,11 @@
-const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const {
+  S3Client,
+  PutObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { assertUploadConfig } = require("../config/videoStorage");
 class VideoStorageNotImplementedError extends Error {
@@ -71,6 +78,44 @@ function createR2VideoStorageAdapter({ config, client, signer = getSignedUrl } =
         etag: result.ETag ? String(result.ETag).replace(/^\"|\"$/g, "") : null,
       };
     },
+    async deletePrefix({ prefix }) {
+      const normalizedPrefix = String(prefix || "");
+      if (!normalizedPrefix || !normalizedPrefix.endsWith("/")) {
+        const error = new Error("VIDEO_DELETE_PREFIX_INVALID");
+        error.code = "VIDEO_DELETE_PREFIX_INVALID";
+        throw error;
+      }
+      let continuationToken;
+      let deletedObjectCount = 0;
+      do {
+        const listed = await s3.send(new ListObjectsV2Command({
+          Bucket: resolved.bucket,
+          Prefix: normalizedPrefix,
+          ContinuationToken: continuationToken,
+        }));
+        const objectKeys = (listed.Contents || [])
+          .map((object) => object.Key)
+          .filter((key) => typeof key === "string" && key.startsWith(normalizedPrefix));
+        if (objectKeys.length > 0) {
+          const deleted = await s3.send(new DeleteObjectsCommand({
+            Bucket: resolved.bucket,
+            Delete: {
+              Objects: objectKeys.map((Key) => ({ Key })),
+              Quiet: true,
+            },
+          }));
+          if (deleted.Errors?.length) {
+            const error = new Error("VIDEO_STORAGE_DELETE_FAILED");
+            error.code = "VIDEO_STORAGE_DELETE_FAILED";
+            error.details = deleted.Errors.map(({ Key, Code }) => ({ key: Key, code: Code }));
+            throw error;
+          }
+          deletedObjectCount += objectKeys.length;
+        }
+        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+      } while (continuationToken);
+      return { deletedObjectCount };
+    },
   });
 }
 
@@ -82,6 +127,7 @@ function createPlaceholderVideoStorageAdapter() {
     createUploadUrl: unavailable("createUploadUrl"),
     completeMultipartUpload: unavailable("completeMultipartUpload"),
     abortMultipartUpload: unavailable("abortMultipartUpload"),
+    deletePrefix: unavailable("deletePrefix"),
     getTextObject: unavailable("getTextObject"),
     headObject: unavailable("headObject"),
   });

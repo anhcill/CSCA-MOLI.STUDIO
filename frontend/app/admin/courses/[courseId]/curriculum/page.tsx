@@ -119,9 +119,15 @@ function LessonEditor({ courseId, lesson, reload }: { courseId: number; lesson: 
             <div>
               <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                 <p className="font-black text-indigo-950">Video của bài học</p>
-                <p className="mt-1 text-sm text-indigo-800">{lesson.videoAssetId ? `Asset hiện tại: #${lesson.videoAssetId}. Tải tệp mới để thay thế video.` : 'Bài này chưa có video. Chọn tệp bên dưới để gắn video.'}</p>
+                <p className="mt-1 text-sm text-indigo-800">{lesson.videoAssetId ? `Asset hiện tại: #${lesson.videoAssetId}. Xóa video này trước khi tải video thay thế.` : 'Bài này chưa có video. Chọn tệp bên dưới để gắn video.'}</p>
               </div>
-              <VideoUploadPanel courseId={courseId} lessonId={lesson.id} currentVideoAssetId={lesson.videoAssetId} onUploaded={async (videoAssetId) => { await coursesApi.updateLesson(courseId, lesson.id, { videoAssetId }); await reload(); }} />
+              <VideoUploadPanel
+                courseId={courseId}
+                lessonId={lesson.id}
+                currentVideoAssetId={lesson.videoAssetId}
+                onUploaded={async (videoAssetId) => { await coursesApi.updateLesson(courseId, lesson.id, { videoAssetId }); await reload(); }}
+                onDeleted={reload}
+              />
             </div>
           ) : null}
           {error ? <p role="alert" className="text-sm font-semibold text-red-600">{error}</p> : null}

@@ -3,6 +3,7 @@ import axios from '@/lib/utils/axios';
 import type {
   ApiSuccessEnvelope,
   CreateVideoUploadInput,
+  VideoAssetDeleteDto,
   VideoHlsFinalizeDto,
   VideoUploadCompleteDto,
   VideoUploadSessionDto,
@@ -87,6 +88,13 @@ export const courseMediaApi = {
     const response = await axios.post<ApiSuccessEnvelope<VideoHlsFinalizeDto>>(
       `/admin/course-media/assets/${videoAssetId}/hls/finalize`,
       { manifestVersion: 'hls-v1' },
+    );
+    return unwrapData(response.data);
+  },
+
+  async deleteAsset(videoAssetId: number): Promise<VideoAssetDeleteDto> {
+    const response = await axios.delete<ApiSuccessEnvelope<VideoAssetDeleteDto>>(
+      `/admin/course-media/assets/${videoAssetId}`,
     );
     return unwrapData(response.data);
   },

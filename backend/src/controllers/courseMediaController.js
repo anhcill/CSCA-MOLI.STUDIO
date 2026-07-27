@@ -31,4 +31,13 @@ async function finalizeHls(req, res) {
   }
 }
 
-module.exports = { completeUpload, createUpload, finalizeHls };
+async function deleteAsset(req, res) {
+  try {
+    const service = createCourseMediaService();
+    return sendData(res, await service.deleteVideoAsset(req.params.assetId, req.user));
+  } catch (error) {
+    return sendCourseError(res, error);
+  }
+}
+
+module.exports = { completeUpload, createUpload, deleteAsset, finalizeHls };
