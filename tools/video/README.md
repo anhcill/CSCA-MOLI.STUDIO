@@ -1,5 +1,26 @@
 # CSCA HLS encoder
 
+## Cach de nhat tren Windows
+
+FFmpeg must be installed once. From the repository root, double-click:
+
+```text
+XU-LY-VIDEO-KHOA-HOC.cmd
+```
+
+The Vietnamese wizard selects the MP4/MOV file and accepts the one-click
+processing code shown by Admin, then encodes, validates and uploads the asset.
+The code combines the course ID, lesson ID, asset ID and HLS key so the operator
+only copies one value. On first publish the wizard asks for R2 configuration.
+The R2 secret is protected with Windows DPAPI for the current Windows account.
+After the upload, return to Admin and click `Kiem tra va hoan tat video`; the
+browser's existing Admin session securely calls Railway finalization, so the
+operator never copies an Admin access token into PowerShell.
+
+Generated HLS work is retained under `.video-work/asset-<id>` so an interrupted
+run can continue without encoding again. Both local configuration and work
+outputs are gitignored.
+
 `New-CscaHls.ps1` probes the source video, selects only 360p/480p/720p/1080p
 renditions that do not exceed the source height, aligns keyframes to six-second
 segments, and asks FFmpeg to produce a VOD `master.m3u8`.

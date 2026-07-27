@@ -38,6 +38,8 @@ screenshots/
 .idea/
 *.swp
 *.swo
+tools/video/.local/
+.video-work/
 
 # OS files
 .DS_Store

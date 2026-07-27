@@ -311,6 +311,13 @@ export interface VideoUploadCompleteDto {
   alreadyCompleted: boolean;
 }
 
+export interface VideoHlsFinalizeDto {
+  assetId: number;
+  status: 'ready';
+  durationSeconds: number;
+  variants: HlsVariantDto[];
+}
+
 export interface CreateVideoUploadInput {
   courseId: number;
   lessonId: number;

@@ -9,7 +9,7 @@ import {
   videoContentType,
 } from '@/lib/api/courseMedia';
 
-type UploadStage = 'idle' | 'hashing' | 'uploading' | 'completing' | 'processing' | 'error';
+type UploadStage = 'idle' | 'hashing' | 'uploading' | 'completing' | 'processing' | 'finalizing' | 'ready' | 'error';
 
 export function VideoUploadPanel({
   courseId,
@@ -92,13 +92,32 @@ export function VideoUploadPanel({
     }
   };
 
-  const busy = stage === 'hashing' || stage === 'uploading' || stage === 'completing';
+  const finalizeHls = async () => {
+    if (!videoAssetId || stage === 'finalizing') return;
+    setError('');
+    setStage('finalizing');
+    try {
+      await courseMediaApi.finalizeHls(videoAssetId);
+      setStage('ready');
+    } catch {
+      setError('Chưa tìm thấy đủ dữ liệu HLS trên R2. Hãy chờ công cụ trên máy chạy xong rồi thử lại.');
+      setStage('processing');
+    }
+  };
+
+  const transferBusy = stage === 'hashing' || stage === 'uploading' || stage === 'completing';
+  const busy = transferBusy || stage === 'finalizing';
+  const processingCode = videoAssetId && assetExternalKey
+    ? `${courseId}:${lessonId}:${videoAssetId}:${assetExternalKey}`
+    : '';
   const label = stage === 'hashing'
     ? `Đang tính SHA-256: ${progress}%`
     : stage === 'uploading'
       ? `Đang tải lên: ${progress}%`
       : stage === 'completing'
         ? 'Đang xác minh video...'
+        : stage === 'finalizing'
+          ? 'Đang kiểm tra HLS...'
         : stage === 'processing'
           ? 'Đã tải lên, đang chờ xử lý HLS.'
           : 'Tải video lên';
@@ -120,7 +139,7 @@ export function VideoUploadPanel({
       />
       <span id={`video-help-${lessonId}`} className="sr-only">Chọn một tệp MP4 hoặc MOV không quá 4 GiB.</span>
       {file ? <p className="truncate text-sm text-slate-600">{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MiB</p> : null}
-      {busy ? (
+      {transferBusy ? (
         <div className="h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
           <div className="h-full bg-indigo-600 transition-[width]" style={{ width: `${progress}%` }} />
         </div>
@@ -129,9 +148,40 @@ export function VideoUploadPanel({
         <button type="button" disabled={!file || busy || stage === 'processing'} onClick={upload} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
           {stage === 'error' ? 'Thử tải lại' : label}
         </button>
-        {busy ? <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold">Hủy</button> : null}
+        {transferBusy ? <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold">Hủy</button> : null}
       </div>
-      {stage === 'processing' ? <div role="status" className="space-y-1 text-sm font-semibold text-amber-700"><p>{label}{videoAssetId ? ` Asset #${videoAssetId} đã được tạo.` : ''}</p>{assetExternalKey ? <p className="break-all font-mono text-xs">Khóa xử lý HLS: {assetExternalKey}</p> : null}</div> : null}
+      {stage === 'processing' || stage === 'finalizing' ? (
+        <div role="status" className="space-y-2 text-sm font-semibold text-amber-700">
+          <p>{label}{videoAssetId ? ` Asset #${videoAssetId} đã được tạo.` : ''}</p>
+          {processingCode ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="mb-1 text-xs font-black uppercase tracking-wide">Mã xử lý một chạm</p>
+              <p className="break-all font-mono text-xs">{processingCode}</p>
+              <button
+                type="button"
+                className="mt-2 rounded-md bg-amber-700 px-3 py-1.5 text-xs font-bold text-white"
+                onClick={() => navigator.clipboard.writeText(processingCode)}
+              >
+                Sao chép mã
+              </button>
+            </div>
+          ) : null}
+          <p className="text-xs text-slate-600">Chạy file XU-LY-VIDEO-KHOA-HOC.cmd trên máy. Khi công cụ báo upload xong, bấm nút dưới đây.</p>
+          <button
+            type="button"
+            disabled={stage === 'finalizing'}
+            onClick={finalizeHls}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+          >
+            {stage === 'finalizing' ? 'Đang kiểm tra HLS...' : 'Kiểm tra và hoàn tất video'}
+          </button>
+        </div>
+      ) : null}
+      {stage === 'ready' ? (
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-700">
+          Video đã sẵn sàng để phát trong khóa học.
+        </div>
+      ) : null}
       {error ? <p role="alert" className="text-sm font-semibold text-red-600">{error}</p> : null}
     </div>
   );

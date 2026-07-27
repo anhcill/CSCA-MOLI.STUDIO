@@ -1,0 +1,263 @@
+[CmdletBinding()]
+param(
+  [string]$InputPath,
+  [int]$CourseId,
+  [int]$LessonId,
+  [string]$AssetKey,
+  [int]$AssetId,
+  [string]$ProcessingCode,
+  [switch]$DryRun,
+  [switch]$Configure
+)
+
+$ErrorActionPreference = "Stop"
+$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$encoderPath = Join-Path $PSScriptRoot "New-CscaHls.ps1"
+$publisherPath = Join-Path $PSScriptRoot "Publish-CscaHls.mjs"
+$localDirectory = Join-Path $PSScriptRoot ".local"
+$configPath = Join-Path $localDirectory "video-helper.json"
+$workRoot = Join-Path $repositoryRoot ".video-work"
+
+function Write-Step([string]$Message) {
+  Write-Host ""
+  Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Read-Required([string]$Prompt, [string]$CurrentValue = "") {
+  if (-not [string]::IsNullOrWhiteSpace($CurrentValue)) { return $CurrentValue.Trim() }
+  while ($true) {
+    $value = (Read-Host $Prompt).Trim()
+    if ($value) { return $value }
+    Write-Host "Khong duoc de trong." -ForegroundColor Yellow
+  }
+}
+
+function Read-PositiveId([string]$Prompt, [int]$CurrentValue = 0) {
+  if ($CurrentValue -gt 0) { return $CurrentValue }
+  while ($true) {
+    $value = Read-Host $Prompt
+    $parsed = 0
+    if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) { return $parsed }
+    Write-Host "Hay nhap mot so lon hon 0." -ForegroundColor Yellow
+  }
+}
+
+function Import-ProcessingCode([string]$Value) {
+  $parts = $Value.Trim() -split ":", 4
+  if ($parts.Count -ne 4 -or
+      $parts[0] -notmatch "^[1-9]\d*$" -or
+      $parts[1] -notmatch "^[1-9]\d*$" -or
+      $parts[2] -notmatch "^[1-9]\d*$" -or
+      $parts[3] -notmatch "^[A-Za-z0-9_-]+$") {
+    throw "Ma xu ly mot cham khong hop le."
+  }
+  return [pscustomobject]@{
+    CourseId = [int]$parts[0]
+    LessonId = [int]$parts[1]
+    AssetId = [int]$parts[2]
+    AssetKey = $parts[3]
+  }
+}
+
+function Read-YesNo([string]$Prompt, [bool]$DefaultYes = $true) {
+  $suffix = if ($DefaultYes) { "[Y/n]" } else { "[y/N]" }
+  $answer = (Read-Host "$Prompt $suffix").Trim().ToLowerInvariant()
+  if (-not $answer) { return $DefaultYes }
+  return $answer -in @("y", "yes", "c", "co")
+}
+
+function Select-VideoFile {
+  Add-Type -AssemblyName System.Windows.Forms
+  $dialog = New-Object System.Windows.Forms.OpenFileDialog
+  $dialog.Title = "Chon video khoa hoc"
+  $dialog.Filter = "Video MP4 hoac MOV (*.mp4;*.mov)|*.mp4;*.mov"
+  $dialog.Multiselect = $false
+  if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+    throw "Ban chua chon video."
+  }
+  return $dialog.FileName
+}
+
+function Convert-SecureStringToPlainText([Security.SecureString]$Value) {
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  }
+}
+
+function Test-HttpUrl([string]$Value) {
+  $uri = $null
+  return [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -and
+    $uri.Scheme -in @("http", "https") -and -not [string]::IsNullOrWhiteSpace($uri.Host)
+}
+
+function Save-Configuration {
+  Write-Step "Cau hinh ket noi (chi can lam lan dau)"
+  Write-Host "Lay thong tin R2 trong Cloudflare. Khoa bi mat se duoc Windows ma hoa cho tai khoan hien tai."
+  $endpoint = Read-Required "VIDEO_R2_ENDPOINT"
+  $bucket = Read-Required "VIDEO_R2_BUCKET"
+  $accessKeyId = Read-Required "VIDEO_R2_ACCESS_KEY_ID"
+  $secret = Read-Host "VIDEO_R2_SECRET_ACCESS_KEY" -AsSecureString
+
+  if (-not (Test-HttpUrl $endpoint)) { throw "VIDEO_R2_ENDPOINT khong phai URL hop le." }
+  if ($secret.Length -eq 0) { throw "VIDEO_R2_SECRET_ACCESS_KEY khong duoc de trong." }
+
+  New-Item -ItemType Directory -Force -Path $localDirectory | Out-Null
+  $config = [ordered]@{
+    endpoint = $endpoint.TrimEnd("/")
+    bucket = $bucket
+    accessKeyId = $accessKeyId
+    protectedSecretAccessKey = ConvertFrom-SecureString $secret
+  }
+  $json = $config | ConvertTo-Json
+  [IO.File]::WriteAllText($configPath, $json, (New-Object Text.UTF8Encoding($false)))
+  Write-Host "Da luu cau hinh an toan tai tools\video\.local." -ForegroundColor Green
+  return [pscustomobject]$config
+}
+
+function Get-Configuration {
+  if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+    return Save-Configuration
+  }
+  $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+  if (-not $config.endpoint -or -not $config.bucket -or -not $config.accessKeyId -or
+      -not $config.protectedSecretAccessKey) {
+    throw "File cau hinh video bi thieu thong tin. Chay lai voi -Configure."
+  }
+  return $config
+}
+
+function Resolve-Tool([string]$Name) {
+  $command = Get-Command $Name -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+
+  $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+    [Environment]::GetEnvironmentVariable("Path", "User")
+  $command = Get-Command $Name -ErrorAction SilentlyContinue
+  if (-not $command) {
+    throw "Khong tim thay $Name. Hay dong cua so nay, mo lai va thu lai."
+  }
+  return $command.Source
+}
+
+try {
+  Set-Location $repositoryRoot
+  Write-Host "CSCA - TRO LY XU LY VIDEO KHOA HOC" -ForegroundColor Magenta
+  Write-Host "Cong cu se tu encode, kiem tra va upload R2."
+
+  if ($Configure) {
+    Save-Configuration | Out-Null
+    exit 0
+  }
+
+  Write-Step "Kiem tra cong cu"
+  $ffmpegPath = Resolve-Tool "ffmpeg"
+  $ffprobePath = Resolve-Tool "ffprobe"
+  $nodePath = Resolve-Tool "node"
+  Write-Host "FFmpeg: $ffmpegPath" -ForegroundColor Green
+
+  if (-not $InputPath) { $InputPath = Select-VideoFile }
+  $InputPath = [System.IO.Path]::GetFullPath($InputPath)
+  if (-not (Test-Path -LiteralPath $InputPath -PathType Leaf)) {
+    throw "Khong tim thay video: $InputPath"
+  }
+  if ([IO.Path]::GetExtension($InputPath).ToLowerInvariant() -notin @(".mp4", ".mov")) {
+    throw "Chi ho tro file MP4 hoac MOV."
+  }
+
+  Write-Step "Nhap thong tin ma trang Admin hien thi"
+  if (-not $ProcessingCode -and
+      ($CourseId -le 0 -or $LessonId -le 0 -or $AssetId -le 0 -or -not $AssetKey)) {
+    $ProcessingCode = (Read-Host "Dan MA XU LY MOT CHAM tu trang Admin (Enter de nhap 4 muc rieng)").Trim()
+  }
+  if ($ProcessingCode) {
+    $processing = Import-ProcessingCode $ProcessingCode
+    $CourseId = $processing.CourseId
+    $LessonId = $processing.LessonId
+    $AssetId = $processing.AssetId
+    $AssetKey = $processing.AssetKey
+    Write-Host "Da doc ma: Course #$CourseId, Lesson #$LessonId, Asset #$AssetId" -ForegroundColor Green
+  } else {
+    $CourseId = Read-PositiveId "Course ID" $CourseId
+    $LessonId = Read-PositiveId "Lesson ID" $LessonId
+    $AssetId = Read-PositiveId "Asset ID (so sau chu Asset #)" $AssetId
+    $AssetKey = Read-Required "Khoa xu ly HLS" $AssetKey
+  }
+  if ($AssetKey -notmatch "^[A-Za-z0-9_-]+$") { throw "Khoa xu ly HLS khong hop le." }
+
+  New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
+  $outputDirectory = Join-Path $workRoot "asset-$AssetId"
+  $masterPlaylist = Join-Path $outputDirectory "master.m3u8"
+  $resume = $false
+
+  if (Test-Path -LiteralPath $masterPlaylist -PathType Leaf) {
+    $resume = Read-YesNo "Da co ket qua cua Asset #$AssetId. Dung lai de tiep tuc nhanh hon?"
+    if (-not $resume) {
+      $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+      $outputDirectory = Join-Path $workRoot "asset-$AssetId-$stamp"
+    }
+  }
+
+  if (-not $resume) {
+    Write-Step "Dang chuyen video thanh HLS"
+    Write-Host "Buoc nay co the mat nhieu phut va dung nhieu CPU. Khong dong cua so."
+    & $encoderPath `
+      -InputPath $InputPath `
+      -OutputDirectory $outputDirectory `
+      -FfmpegPath $ffmpegPath `
+      -FfprobePath $ffprobePath
+    if ($LASTEXITCODE -ne 0) { throw "FFmpeg khong hoan tat." }
+  } else {
+    Write-Host "Bo qua encode, dung lai ket qua: $outputDirectory" -ForegroundColor Green
+  }
+
+  Write-Step "Kiem tra tat ca playlist va doan video"
+  $validationArgs = @(
+    $publisherPath,
+    "--directory", $outputDirectory,
+    "--course-id", "$CourseId",
+    "--lesson-id", "$LessonId",
+    "--asset-key", $AssetKey,
+    "--dry-run"
+  )
+  & $nodePath @validationArgs
+  if ($LASTEXITCODE -ne 0) { throw "Ket qua HLS khong hop le." }
+
+  if ($DryRun) {
+    Write-Host "Che do thu: khong upload va khong goi Railway." -ForegroundColor Yellow
+    exit 0
+  }
+
+  $config = Get-Configuration
+  $protectedSecret = ConvertTo-SecureString $config.protectedSecretAccessKey
+  $env:VIDEO_R2_ENDPOINT = $config.endpoint
+  $env:VIDEO_R2_BUCKET = $config.bucket
+  $env:VIDEO_R2_ACCESS_KEY_ID = $config.accessKeyId
+  $env:VIDEO_R2_SECRET_ACCESS_KEY = Convert-SecureStringToPlainText $protectedSecret
+
+  Write-Step "Upload video HLS len R2"
+  $publishArgs = @(
+    $publisherPath,
+    "--directory", $outputDirectory,
+    "--course-id", "$CourseId",
+    "--lesson-id", "$LessonId",
+    "--asset-key", $AssetKey,
+    "--resume"
+  )
+  & $nodePath @publishArgs
+  if ($LASTEXITCODE -ne 0) { throw "Upload R2 khong hoan tat." }
+
+  Write-Step "THANH CONG"
+  Write-Host "Da upload xong Asset #$AssetId." -ForegroundColor Green
+  Write-Host "Quay lai trang Admin va bam 'KIEM TRA VA HOAN TAT VIDEO'." -ForegroundColor Yellow
+  Write-Host "Thu muc tam duoc giu lai de co the khoi phuc: $outputDirectory"
+} catch {
+  Write-Host ""
+  Write-Host "LOI: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "Thu muc da encode (neu co) van duoc giu lai; chay lai se co the tiep tuc." -ForegroundColor Yellow
+  exit 1
+} finally {
+  $env:VIDEO_R2_SECRET_ACCESS_KEY = $null
+}

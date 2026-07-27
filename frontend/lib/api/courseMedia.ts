@@ -3,6 +3,7 @@ import axios from '@/lib/utils/axios';
 import type {
   ApiSuccessEnvelope,
   CreateVideoUploadInput,
+  VideoHlsFinalizeDto,
   VideoUploadCompleteDto,
   VideoUploadSessionDto,
 } from '@/lib/types/courses';
@@ -78,6 +79,14 @@ export const courseMediaApi = {
   async completeUpload(sessionId: string): Promise<VideoUploadCompleteDto> {
     const response = await axios.post<ApiSuccessEnvelope<VideoUploadCompleteDto>>(
       `/admin/course-media/uploads/${encodeURIComponent(sessionId)}/complete`,
+    );
+    return unwrapData(response.data);
+  },
+
+  async finalizeHls(videoAssetId: number): Promise<VideoHlsFinalizeDto> {
+    const response = await axios.post<ApiSuccessEnvelope<VideoHlsFinalizeDto>>(
+      `/admin/course-media/assets/${videoAssetId}/hls/finalize`,
+      { manifestVersion: 'hls-v1' },
     );
     return unwrapData(response.data);
   },
