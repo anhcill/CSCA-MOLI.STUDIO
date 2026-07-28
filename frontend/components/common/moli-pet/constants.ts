@@ -4,8 +4,8 @@ export const SETTINGS_KEY = 'moli_pet_settings_v1';
 export const HIDDEN_UNTIL_KEY = 'moli_pet_hidden_until_v1';
 export const POSITION_KEY = 'moli_pet_position_v2';
 export const SETTINGS_DEFAULTS_VERSION = 5;
-export const PET_FRAME_SIZE = 88;
-export const PET_PANEL_MAX_WIDTH = 372;
+export const PET_FRAME_SIZE = 128;
+export const PET_PANEL_MAX_WIDTH = 408;
 export const PET_PANEL_MARGIN = 12;
 
 export const COLOR_THEMES: Record<PetColor, {
