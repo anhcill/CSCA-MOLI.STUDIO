@@ -352,8 +352,10 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
   const changeQuality = (levelIndex: number) => {
     const hls = hlsRef.current;
     if (!hls) return;
-    pendingPositionRef.current = videoRef.current?.currentTime || 0;
-    hls.currentLevel = levelIndex;
+    // Switch on the next HLS segment boundary. `currentLevel` flushes the
+    // existing buffer and visibly stalls playback, while `nextLevel` keeps the
+    // currently playing fragment intact and changes quality without pausing.
+    hls.nextLevel = levelIndex;
     setSelectedLevel(levelIndex);
   };
 
