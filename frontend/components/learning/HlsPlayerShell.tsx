@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FiMaximize,
   FiMinimize,
+  FiMonitor,
   FiPause,
   FiPlay,
   FiRotateCcw,
@@ -84,7 +85,10 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pictureInPictureSupported, setPictureInPictureSupported] = useState(false);
+  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
   currentLessonIdRef.current = lessonId;
 
   useEffect(() => {
@@ -318,14 +322,24 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
       setDuration(Number.isFinite(video.duration) ? video.duration : 0);
       setVolume(video.volume);
       setMuted(video.muted);
+      setPlaybackRate(video.playbackRate);
     };
     const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
-    const events = ['play', 'pause', 'ended', 'timeupdate', 'durationchange', 'loadedmetadata', 'volumechange'] as const;
+    const events = ['play', 'pause', 'ended', 'timeupdate', 'durationchange', 'loadedmetadata', 'volumechange', 'ratechange'] as const;
     events.forEach((eventName) => video.addEventListener(eventName, syncPlayback));
+    const enterPictureInPicture = () => setIsPictureInPicture(true);
+    const leavePictureInPicture = () => setIsPictureInPicture(false);
+    video.addEventListener('enterpictureinpicture', enterPictureInPicture);
+    video.addEventListener('leavepictureinpicture', leavePictureInPicture);
     document.addEventListener('fullscreenchange', syncFullscreen);
+    setPictureInPictureSupported(
+      document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function',
+    );
     syncPlayback();
     return () => {
       events.forEach((eventName) => video.removeEventListener(eventName, syncPlayback));
+      video.removeEventListener('enterpictureinpicture', enterPictureInPicture);
+      video.removeEventListener('leavepictureinpicture', leavePictureInPicture);
       document.removeEventListener('fullscreenchange', syncFullscreen);
     };
   }, [activeSession, lessonId]);
@@ -377,6 +391,23 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
     video.muted = nextVolume === 0;
   };
 
+  const changePlaybackRate = (nextRate: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.defaultPlaybackRate = nextRate;
+    video.playbackRate = nextRate;
+  };
+
+  const togglePictureInPicture = async () => {
+    const video = videoRef.current;
+    if (!video || !pictureInPictureSupported) return;
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+    } else {
+      await video.requestPictureInPicture();
+    }
+  };
+
   const toggleFullscreen = async () => {
     const player = playerRef.current;
     if (!player) return;
@@ -391,6 +422,63 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
     const safariVideo = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
     safariVideo?.webkitEnterFullscreen?.();
   };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !('mediaSession' in navigator)) return;
+    const mediaSession = navigator.mediaSession;
+    if ('MediaMetadata' in window) {
+      mediaSession.metadata = new MediaMetadata({
+        title: 'Video bài học',
+        artist: 'CSCA',
+        album: 'CSCA Learning',
+      });
+    }
+    const safeAction = (
+      action: MediaSessionAction,
+      handler: MediaSessionActionHandler | null,
+    ) => {
+      try { mediaSession.setActionHandler(action, handler); } catch { /* Unsupported action. */ }
+    };
+    safeAction('play', () => void video.play());
+    safeAction('pause', () => video.pause());
+    safeAction('seekbackward', (details) => seekBy(-(details.seekOffset || 10)));
+    safeAction('seekforward', (details) => seekBy(details.seekOffset || 10));
+    safeAction('seekto', (details) => {
+      if (details.seekTime === undefined) return;
+      if (details.fastSeek && typeof video.fastSeek === 'function') video.fastSeek(details.seekTime);
+      else seekTo(details.seekTime);
+    });
+    const syncMediaSession = () => {
+      mediaSession.playbackState = video.paused ? 'paused' : 'playing';
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        try {
+          mediaSession.setPositionState({
+            duration: video.duration,
+            playbackRate: video.playbackRate,
+            position: Math.min(video.currentTime, video.duration),
+          });
+        } catch { /* Position state is optional. */ }
+      }
+    };
+    video.addEventListener('play', syncMediaSession);
+    video.addEventListener('pause', syncMediaSession);
+    video.addEventListener('timeupdate', syncMediaSession);
+    video.addEventListener('ratechange', syncMediaSession);
+    syncMediaSession();
+    return () => {
+      video.removeEventListener('play', syncMediaSession);
+      video.removeEventListener('pause', syncMediaSession);
+      video.removeEventListener('timeupdate', syncMediaSession);
+      video.removeEventListener('ratechange', syncMediaSession);
+      safeAction('play', null);
+      safeAction('pause', null);
+      safeAction('seekbackward', null);
+      safeAction('seekforward', null);
+      safeAction('seekto', null);
+      mediaSession.metadata = null;
+    };
+  }, [activeSession, lessonId]);
 
   const hasCurrentSession = activeSession?.lessonId === lessonId;
 
@@ -456,6 +544,26 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
           <option value={-1}>Tự động</option>
           {qualities.filter((quality) => availableQualityLabels.size === 0 || availableQualityLabels.has(quality.label)).map((quality) => <option key={quality.levelIndex} value={quality.levelIndex}>{quality.label}</option>)}
         </select>
+        <label htmlFor={`video-speed-${lessonId}`} className="sr-only">Tốc độ phát</label>
+        <select
+          id={`video-speed-${lessonId}`}
+          value={playbackRate}
+          onChange={(event) => changePlaybackRate(Number(event.target.value))}
+          title="Tốc độ phát"
+          className="rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white"
+        >
+          {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => void togglePictureInPicture()}
+          disabled={!pictureInPictureSupported}
+          aria-label={isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền trong cửa sổ nổi'}
+          title={pictureInPictureSupported ? (isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền / cửa sổ nổi') : 'Trình duyệt không hỗ trợ cửa sổ nổi'}
+          className={`rounded-lg p-2 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 ${isPictureInPicture ? 'bg-indigo-600' : ''}`}
+        >
+          <FiMonitor className="h-5 w-5" />
+        </button>
         <button type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} title={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} className="rounded-lg p-2 hover:bg-white/15">
           {isFullscreen ? <FiMinimize className="h-5 w-5" /> : <FiMaximize className="h-5 w-5" />}
         </button>
