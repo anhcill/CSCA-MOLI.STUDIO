@@ -58,8 +58,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
       <button
         type="button"
         onClick={controller.restorePet}
-        className="fixed bottom-5 left-5 z-[65] grid h-12 w-12 place-items-center rounded-full border border-violet-200 text-violet-600 shadow-xl backdrop-blur transition hover:-translate-y-0.5"
-        style={{ backgroundColor: 'rgba(255, 255, 255, 0.96)' }}
+        className="moli-pet-restore fixed bottom-5 left-5 z-[65] grid h-12 w-12 place-items-center rounded-full border border-violet-200 bg-white/95 text-violet-600 shadow-xl backdrop-blur transition hover:-translate-y-0.5"
         aria-label="Hiện MolyPet"
       >
         <FiMessageCircle className="h-5 w-5" />
@@ -77,7 +76,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
     <>
       {open && !minimized && (
         <section
-          className="moli-pet-light fixed z-[90] flex min-h-0 flex-col overflow-hidden rounded-[26px] border border-violet-100/90 bg-white/95 text-slate-800 shadow-[0_24px_70px_rgba(76,57,130,0.22)] backdrop-blur-2xl"
+          className="moli-pet-theme fixed z-[90] flex min-h-0 flex-col overflow-hidden rounded-[26px] border border-violet-100/90 bg-white/95 text-slate-800 shadow-[0_24px_70px_rgba(76,57,130,0.22)] backdrop-blur-2xl"
           style={panelStyle}
           aria-label="Trò chuyện với MolyPet"
         >
@@ -291,11 +290,6 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
           className="group relative h-full w-full cursor-grab touch-none rounded-full outline-none active:cursor-grabbing focus-visible:ring-4 focus-visible:ring-violet-300/70"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
-          <span
-            className="absolute inset-1 rounded-full border border-white/80 shadow-[0_10px_34px_rgba(124,91,200,0.3)] backdrop-blur-md"
-            style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
-          />
-          <span className="absolute inset-3 rounded-full bg-violet-300/30 blur-xl transition group-hover:bg-fuchsia-300/40" />
           <span className="relative block transition-transform duration-300 group-hover:scale-105">
             <PetFace
               color={settings.color}
