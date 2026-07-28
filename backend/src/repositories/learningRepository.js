@@ -103,7 +103,7 @@ async function upsertProgress(input) {
     `INSERT INTO lesson_progress (
        user_id, course_id, lesson_id, status, watched_seconds, max_position_seconds,
        last_position_seconds, completion_pct, attempt_count, started_at, completed_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,NOW(),CASE WHEN $4 = 'completed' THEN NOW() END)
+     ) VALUES ($1,$2,$3,$4::varchar,$5,$6,$7,$8,1,NOW(),CASE WHEN $4::varchar = 'completed' THEN NOW() END)
      ON CONFLICT (user_id, lesson_id) DO UPDATE SET
        status = CASE
          WHEN lesson_progress.status = 'completed' THEN 'completed'

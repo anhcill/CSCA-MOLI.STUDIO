@@ -137,6 +137,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     try {
       await learningApi.completeLesson(lessonId);
       setRoom((current) => current ? updateCompletedLesson(current, lessonId) : current);
+      await refreshCourseProgress();
     } catch {
       setCompleteError('Chưa thể lưu trạng thái hoàn thành. Vui lòng thử lại.');
     } finally {
@@ -198,7 +199,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
               <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-[#efd4b3]">Nhấn ⛶ để xem toàn màn hình</span>
             </div>
 
-            <div className="mx-auto aspect-video w-full min-h-0 bg-black" style={{ maxWidth: 'calc(62vh * 16 / 9)' }}>
+            <div className="aspect-video w-full min-h-0 bg-black">
               {room.lesson.lessonType === 'video' ? (
                 <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} onProgressSaved={refreshCourseProgress} />
               ) : (

@@ -56,12 +56,12 @@ export function LearningSidebar({
       </div>
 
       {!sections.length ? <p className="p-6 text-sm text-[#786e67]">Chưa có bài học.</p> : (
-        <div className="overflow-y-auto lg:max-h-[calc(100vh-250px)]">
+        <div className="space-y-3 overflow-y-auto bg-[#f5efe8] p-3 lg:max-h-[calc(100vh-250px)]">
           {sections.map((section, sectionIndex) => {
             const sectionCompleted = section.lessons.filter((lesson) => lesson.progressStatus === 'completed').length;
             const containsActive = section.lessons.some((lesson) => lesson.id === activeLessonId);
             return (
-              <details key={section.id} open={containsActive || sectionIndex === 0} className="group border-b border-[#e8ded5] last:border-b-0">
+              <details key={section.id} open={containsActive || sectionIndex === 0} className="group overflow-hidden rounded-xl border border-[#ddcbbb] bg-[#fffdf9] shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-[#fcf7f1] px-5 py-4 [&::-webkit-details-marker]:hidden">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs ${sectionCompleted === section.lessons.length && section.lessons.length ? 'bg-[#2f9692] text-white' : 'border border-[#cfb99f] text-[#8e6d50]'}`}>
