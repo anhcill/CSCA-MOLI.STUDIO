@@ -1,14 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { FiCheck, FiDownload, FiExternalLink } from 'react-icons/fi';
+import {
+  FiBookOpen,
+  FiBookmark,
+  FiCheck,
+  FiDownload,
+  FiExternalLink,
+  FiFileText,
+  FiHelpCircle,
+  FiSave,
+} from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
 import type { LearningRoomDto, PlaybackSessionDto } from '@/lib/types/courses';
 import { HlsPlayerShell } from './HlsPlayerShell';
 import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
 import { LearningSidebar } from './LearningSidebar';
+
+type LessonPanel = 'overview' | 'notes' | 'resources' | 'qa';
 
 function updateCompletedLesson(room: LearningRoomDto, lessonId: number): LearningRoomDto {
   const curriculum = room.curriculum.map((section) => ({
@@ -46,6 +57,9 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState('');
   const [requestVersion, setRequestVersion] = useState(0);
+  const [activePanel, setActivePanel] = useState<LessonPanel>('overview');
+  const [note, setNote] = useState('');
+  const [noteSaved, setNoteSaved] = useState(false);
   const courseId = room?.course.id ?? null;
 
   const refreshCourseProgress = useCallback(async () => {
@@ -53,10 +67,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     const progress = await learningApi.getCourseProgress(courseId);
     setRoom((current) => current ? {
       ...current,
-      enrollment: {
-        ...current.enrollment,
-        progress,
-      },
+      enrollment: { ...current.enrollment, progress },
     } : current);
   }, [courseId]);
 
@@ -68,6 +79,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     setSession(null);
     setPlaybackError('');
     setCompleteError('');
+    setActivePanel('overview');
     learningApi.getRoom(courseSlug, lessonId)
       .then(async (nextRoom) => {
         if (!active) return;
@@ -78,12 +90,12 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
           const nextSession = await learningApi.createPlaybackSession(lessonId);
           if (active) setSession(nextSession);
         } catch {
-          if (active) setPlaybackError('Video chưa sẵn sàng hoặc chưa được gắn vào bài học này. Bạn vẫn có thể xem phần nội dung bên dưới.');
+          if (active) setPlaybackError('Video chưa sẵn sàng hoặc chưa được gắn vào bài học này. Bạn vẫn có thể xem nội dung phía dưới.');
         } finally {
           if (active) setPlaybackLoading(false);
         }
       })
-      .catch(() => active && setError('Không thể mở bài học. Quyền truy cập của bạn có thể chưa bao gồm khóa học này hoặc đã hết hạn.'))
+      .catch(() => active && setError('Không thể mở bài học. Quyền truy cập có thể chưa bao gồm khóa học này hoặc đã hết hạn.'))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [courseSlug, lessonId, requestVersion]);
@@ -91,9 +103,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   useEffect(() => {
     if (!courseId) return;
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshCourseProgress().catch(() => undefined);
-      }
+      if (document.visibilityState === 'visible') void refreshCourseProgress().catch(() => undefined);
     };
     window.addEventListener('focus', refreshWhenVisible);
     document.addEventListener('visibilitychange', refreshWhenVisible);
@@ -102,6 +112,23 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [courseId, refreshCourseProgress]);
+
+  useEffect(() => {
+    const key = `csca-lesson-note:${lessonId}`;
+    setNote(window.localStorage.getItem(key) || '');
+    setNoteSaved(false);
+  }, [lessonId]);
+
+  const saveNote = () => {
+    window.localStorage.setItem(`csca-lesson-note:${lessonId}`, note);
+    setNoteSaved(true);
+    window.setTimeout(() => setNoteSaved(false), 1800);
+  };
+
+  const openNotes = () => {
+    setActivePanel('notes');
+    window.setTimeout(() => document.getElementById('lesson-notes')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
 
   const markComplete = async () => {
     if (!room || room.lesson.progressStatus === 'completed') return;
@@ -117,16 +144,29 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     }
   };
 
-  if (loading && !room) return <div aria-label="Đang tải bài học" className="min-h-screen animate-pulse bg-slate-100 dark:bg-slate-950" />;
+  const lessonContext = useMemo(() => {
+    if (!room) return null;
+    const flattened = room.curriculum.flatMap((section, sectionIndex) =>
+      section.lessons.map((lesson, lessonIndex) => ({ lesson, sectionIndex, lessonIndex })),
+    );
+    const currentIndex = flattened.findIndex((item) => item.lesson.id === lessonId);
+    const current = currentIndex >= 0 ? flattened[currentIndex] : null;
+    return {
+      currentLabel: current ? `Bài ${current.sectionIndex + 1}.${current.lessonIndex + 1}` : 'Bài học',
+      previousTitle: currentIndex > 0 ? flattened[currentIndex - 1].lesson.title : null,
+      nextTitle: currentIndex >= 0 && currentIndex < flattened.length - 1 ? flattened[currentIndex + 1].lesson.title : null,
+    };
+  }, [lessonId, room]);
+
+  if (loading && !room) return <div aria-label="Đang tải bài học" className="min-h-screen animate-pulse bg-[#f5efe8]" />;
   if (error || !room) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 p-8 dark:bg-slate-950">
-        <div role="alert" className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-300">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-8">
+        <div role="alert" className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700">
           <p>{error || 'Không tìm thấy bài học.'}</p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={() => setRequestVersion((value) => value + 1)} className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700">Thử lại</button>
+            <button type="button" onClick={() => setRequestVersion((value) => value + 1)} className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Thử lại</button>
             <Link href={`/khoa-hoc/${courseSlug}`} className="rounded-lg border border-red-300 px-4 py-2 font-bold">Xem khóa học</Link>
-            <Link href={`/vip?course=${encodeURIComponent(courseSlug)}`} className="rounded-lg border border-red-300 px-4 py-2 font-bold">Xem gói mở khóa</Link>
           </div>
         </div>
       </div>
@@ -136,72 +176,135 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   const hasBody = Boolean(room.lesson.contentHtml?.trim());
   const isCompleted = room.lesson.progressStatus === 'completed';
   const canManualComplete = room.lesson.lessonType === 'article' || room.lesson.lessonType === 'document';
+  const panelTabs: Array<{ id: LessonPanel; label: string; icon: typeof FiBookOpen }> = [
+    { id: 'overview', label: 'Tổng quan', icon: FiBookOpen },
+    { id: 'notes', label: 'Ghi chú của tôi', icon: FiBookmark },
+    { id: 'resources', label: `Tài liệu (${room.lesson.resources.length})`, icon: FiFileText },
+    { id: 'qa', label: 'Hỏi đáp', icon: FiHelpCircle },
+  ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 text-slate-950 transition-colors dark:bg-slate-950 dark:text-slate-100 lg:h-screen lg:overflow-hidden">
-      <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress.completionPct} />
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <main className="min-h-0 lg:overflow-y-auto">
-          {room.lesson.lessonType === 'video' ? <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} onProgressSaved={refreshCourseProgress} /> : null}
-          <article className="mx-auto max-w-5xl p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  {room.lesson.lessonType === 'video' ? 'Video bài giảng' : room.lesson.lessonType === 'article' ? 'Bài đọc' : room.lesson.lessonType === 'document' ? 'Tài liệu' : 'Bài kiểm tra'}
-                </p>
-                <h2 className="mt-1 text-3xl font-black text-slate-950 dark:text-white">{room.lesson.title}</h2>
-                {room.lesson.summary ? <p className="mt-2 text-slate-500 dark:text-slate-400">{room.lesson.summary}</p> : null}
+    <div className="min-h-screen bg-[#f5efe8] text-[#18243a]">
+      <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress.completionPct} onNotesClick={openNotes} />
+
+      <div className="relative mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start lg:px-8">
+        <main className="min-w-0 space-y-5">
+          <section className="overflow-hidden rounded-2xl border border-[#d6c4b2] bg-[#071329] shadow-[0_22px_55px_-32px_rgba(7,19,41,.75)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-3 text-white">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#49b6ac]">{lessonContext?.currentLabel}</p>
+                <h1 className="mt-1 truncate text-sm font-black sm:text-base">{room.lesson.title}</h1>
+              </div>
+              <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-[#efd4b3]">Nhấn ⛶ để xem toàn màn hình</span>
+            </div>
+
+            <div className="mx-auto aspect-video w-full min-h-0 bg-black" style={{ maxWidth: 'calc(62vh * 16 / 9)' }}>
+              {room.lesson.lessonType === 'video' ? (
+                <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} onProgressSaved={refreshCourseProgress} />
+              ) : (
+                <div className="grid h-full place-items-center p-8 text-center text-slate-300">
+                  <FiFileText className="mx-auto h-10 w-10" />
+                  <p className="mt-3 font-bold">Bài học này sử dụng nội dung bên dưới thay cho video.</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <LearningFooter
+            courseSlug={courseSlug}
+            previousLessonId={room.lesson.previousLessonId}
+            previousLessonTitle={lessonContext?.previousTitle}
+            nextLessonId={room.lesson.nextLessonId}
+            nextLessonTitle={lessonContext?.nextTitle}
+            currentLabel={lessonContext?.currentLabel || 'Bài học'}
+            currentTitle={room.lesson.title}
+          />
+
+          <article className="overflow-hidden rounded-2xl border border-[#dfd0c2] bg-[#fffaf4] shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5d9ce] px-4 sm:px-6">
+              <div className="flex max-w-full gap-1 overflow-x-auto [scrollbar-width:none]">
+                {panelTabs.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActivePanel(id)}
+                    className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-4 text-sm font-bold transition ${activePanel === id ? 'border-[#ad2033] text-[#ad2033]' : 'border-transparent text-[#6f665f] hover:text-[#29354b]'}`}
+                  >
+                    <Icon /> {label}
+                  </button>
+                ))}
               </div>
               {canManualComplete ? (
-                <button
-                  type="button"
-                  onClick={markComplete}
-                  disabled={completing || isCompleted}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${isCompleted ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60'}`}
-                >
+                <button type="button" onClick={markComplete} disabled={completing || isCompleted} className={`my-2 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-black ${isCompleted ? 'bg-[#e2f2ed] text-[#287d70]' : 'bg-[#ad2033] text-white disabled:opacity-60'}`}>
                   <FiCheck /> {isCompleted ? 'Đã hoàn thành' : completing ? 'Đang lưu...' : 'Đánh dấu hoàn thành'}
                 </button>
               ) : isCompleted ? (
-                <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-black text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"><FiCheck /> Đã hoàn thành</span>
+                <span className="my-2 inline-flex items-center gap-2 rounded-lg bg-[#e2f2ed] px-4 py-2 text-sm font-black text-[#287d70]"><FiCheck /> Đã hoàn thành</span>
               ) : null}
             </div>
 
-            {completeError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">{completeError}</p> : null}
+            {completeError ? <p role="alert" className="m-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{completeError}</p> : null}
 
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-              {hasBody ? (
-                <div className="prose prose-slate max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: room.lesson.contentHtml! }} />
-              ) : room.lesson.lessonType === 'quiz' ? (
-                <p>Nội dung bài kiểm tra đang được cập nhật. Hãy quay lại sau hoặc chuyển sang bài tiếp theo.</p>
-              ) : room.lesson.lessonType === 'document' ? (
-                <p>Tài liệu của bài học nằm trong danh sách đính kèm bên dưới.</p>
-              ) : (
-                <p>Nội dung bài học đang được cập nhật.</p>
-              )}
+            <div className="min-h-44 p-6 text-sm leading-7 text-[#5d5854] sm:p-8">
+              {activePanel === 'overview' ? (
+                <>
+                  {room.lesson.summary ? <p className="mb-5 text-base font-semibold text-[#3e4655]">{room.lesson.summary}</p> : null}
+                  {hasBody ? (
+                    <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: room.lesson.contentHtml! }} />
+                  ) : (
+                    <p>Nội dung chi tiết của bài học đang được cập nhật. Bạn có thể xem video và chuyển sang bài tiếp theo.</p>
+                  )}
+                </>
+              ) : null}
+
+              {activePanel === 'notes' ? (
+                <section id="lesson-notes">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-[#202c43]">Ghi chú của tôi</h2>
+                      <p className="text-xs text-[#8b8178]">Ghi chú được lưu trên trình duyệt của thiết bị này.</p>
+                    </div>
+                    <button type="button" onClick={saveNote} className="inline-flex items-center gap-2 rounded-lg bg-[#237e80] px-4 py-2 font-black text-white">
+                      <FiSave /> {noteSaved ? 'Đã lưu' : 'Lưu ghi chú'}
+                    </button>
+                  </div>
+                  <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi lại công thức, ý chính hoặc câu hỏi của bạn..." className="mt-4 min-h-44 w-full rounded-xl border border-[#d9cabc] bg-[#fffdf9] p-4 outline-none focus:border-[#258886] focus:ring-4 focus:ring-[#258886]/10" />
+                </section>
+              ) : null}
+
+              {activePanel === 'resources' ? (
+                room.lesson.resources.length ? (
+                  <ul className="grid gap-3">
+                    {room.lesson.resources.map((resource) => (
+                      <li key={resource.id}>
+                        <a href={resource.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 rounded-xl border border-[#ddcfc2] bg-[#fffdf9] px-4 py-3 font-bold text-[#237879] transition hover:bg-[#f2e9df]">
+                          <span>{resource.title}</span>
+                          {resource.kind === 'file' ? <FiDownload /> : <FiExternalLink />}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p>Chưa có tài liệu đính kèm cho bài học này.</p>
+              ) : null}
+
+              {activePanel === 'qa' ? (
+                <div className="rounded-xl border border-dashed border-[#d7c6b5] bg-[#fffdf9] p-8 text-center">
+                  <FiHelpCircle className="mx-auto h-8 w-8 text-[#a42034]" />
+                  <h2 className="mt-3 text-lg font-black text-[#202c43]">Hỏi đáp bài học</h2>
+                  <p className="mt-1">Khu vực trao đổi với giảng viên sẽ được cập nhật trong giai đoạn tiếp theo.</p>
+                </div>
+              ) : null}
             </div>
-
-            {room.lesson.resources.length ? (
-              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-                <h3 className="font-black text-slate-950 dark:text-white">Tài liệu đính kèm</h3>
-                <ul className="mt-4 grid gap-3">
-                  {room.lesson.resources.map((resource) => (
-                    <li key={resource.id}>
-                      <a href={resource.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3 font-bold text-indigo-700 transition hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-300 dark:hover:bg-indigo-950/40">
-                        <span>{resource.title}</span>
-                        {resource.kind === 'file' ? <FiDownload /> : <FiExternalLink />}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
           </article>
         </main>
-        <div className="min-h-0 lg:block">
-          <LearningSidebar courseSlug={courseSlug} sections={room.curriculum} activeLessonId={lessonId} />
-        </div>
+
+        <LearningSidebar
+          courseSlug={courseSlug}
+          sections={room.curriculum}
+          activeLessonId={lessonId}
+          progressPct={room.enrollment.progress.completionPct}
+        />
       </div>
-      <LearningFooter courseSlug={courseSlug} previousLessonId={room.lesson.previousLessonId} nextLessonId={room.lesson.nextLessonId} />
     </div>
   );
 }

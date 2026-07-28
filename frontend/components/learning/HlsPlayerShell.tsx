@@ -487,14 +487,14 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
   const hasCurrentSession = activeSession?.lessonId === lessonId;
 
   if (loading && !hasCurrentSession) {
-    return <div aria-live="polite" className="flex aspect-video w-full animate-pulse items-center justify-center bg-slate-900 text-slate-300 lg:h-full lg:aspect-auto">Đang tạo phiên phát...</div>;
+    return <div aria-live="polite" className="flex h-full w-full animate-pulse items-center justify-center bg-slate-900 text-slate-300">Đang tạo phiên phát...</div>;
   }
 
   if (!activeSession || !hasCurrentSession) {
-    return <div role="alert" className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100 lg:h-full lg:aspect-auto"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
+    return <div role="alert" className="flex h-full w-full flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
   }
 
-  return <div ref={playerRef} className="group relative aspect-video w-full overflow-hidden bg-black lg:h-full lg:aspect-auto">
+  return <div ref={playerRef} className="group relative h-full w-full overflow-hidden bg-black">
     <video
       ref={videoRef}
       playsInline
@@ -503,7 +503,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       aria-label="Video bài học"
       onClick={togglePlayback}
     />
-    <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/85 to-transparent px-3 pb-3 pt-10 text-white sm:px-4">
+    <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/90 to-transparent px-2.5 pb-2.5 pt-9 text-white sm:px-4 sm:pb-3 sm:pt-10">
       <label htmlFor={`video-progress-${lessonId}`} className="sr-only">Vị trí phát video</label>
       <input
         id={`video-progress-${lessonId}`}
@@ -513,9 +513,9 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
         step={0.1}
         value={Math.min(currentTime, duration || 0)}
         onChange={(event) => seekTo(Number(event.target.value))}
-        className="mb-2 h-1.5 w-full cursor-pointer accent-indigo-500"
+        className="mb-2 h-1.5 w-full cursor-pointer accent-[#34a9a4]"
       />
-      <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
         <button type="button" onClick={togglePlayback} aria-label={isPlaying ? 'Tạm dừng' : 'Phát video'} title={isPlaying ? 'Tạm dừng' : 'Phát video'} className="rounded-lg p-2 hover:bg-white/15">
           {isPlaying ? <FiPause className="h-5 w-5" /> : <FiPlay className="h-5 w-5" />}
         </button>
@@ -542,7 +542,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
         <span className="hidden min-w-24 whitespace-nowrap text-xs font-semibold tabular-nums text-white/90 sm:inline">
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>
-        <div className="min-w-0 flex-1" />
+        <div className="hidden min-w-0 flex-1 sm:block" />
         <label htmlFor={`video-quality-${lessonId}`} className="sr-only">Chất lượng video</label>
         <select id={`video-quality-${lessonId}`} value={selectedLevel} onChange={(event) => changeQuality(Number(event.target.value))} disabled={nativeHls || qualities.length === 0} title={nativeHls ? 'Safari tự động chọn chất lượng phù hợp' : 'Chọn chất lượng video'} className="max-w-24 rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-70">
           <option value={-1}>Tự động</option>
@@ -564,7 +564,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
           disabled={!pictureInPictureSupported}
           aria-label={isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền trong cửa sổ nổi'}
           title={pictureInPictureSupported ? (isPictureInPicture ? 'Đóng cửa sổ nổi' : 'Phát nền / cửa sổ nổi') : 'Trình duyệt không hỗ trợ cửa sổ nổi'}
-          className={`rounded-lg p-2 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 ${isPictureInPicture ? 'bg-indigo-600' : ''}`}
+          className={`rounded-lg p-2 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 ${isPictureInPicture ? 'bg-[#23858a]' : ''}`}
         >
           <FiMonitor className="h-5 w-5" />
         </button>
@@ -574,7 +574,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '',
       </div>
     </div>
     {!isPlaying && currentTime === 0 && !playerError ? (
-      <button type="button" onClick={togglePlayback} aria-label="Phát video" className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/65 p-5 text-white shadow-xl transition hover:scale-105 hover:bg-indigo-600">
+      <button type="button" onClick={togglePlayback} aria-label="Phát video" className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/65 p-5 text-white shadow-xl transition hover:scale-105 hover:bg-[#a82034]">
         <FiPlay className="h-8 w-8 translate-x-0.5" />
       </button>
     ) : null}
