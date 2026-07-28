@@ -172,7 +172,7 @@ function MaterialRow({ material }: { material: Material }) {
 
   return (
     <article className="border-b border-slate-200 last:border-b-0">
-      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5 md:grid-cols-[76px_minmax(0,1fr)] md:items-center xl:grid-cols-[76px_minmax(0,1fr)_190px_110px_44px_184px]">
+      <div className="grid gap-4 px-4 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 sm:px-5 md:grid-cols-[76px_minmax(0,1fr)] md:items-center xl:grid-cols-[76px_minmax(0,1fr)_190px_110px_44px_184px]">
         <button
           type="button"
           onClick={() => locked ? setShowVipModal(true) : (hasContent || hasImages) ? setExpanded((value) => !value) : hasFile ? window.open(pdfUrl, '_blank', 'noopener,noreferrer') : undefined}
