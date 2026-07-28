@@ -83,10 +83,15 @@ function mapCatalogItem(row) {
   const course = mapCourse(row);
   const totalLessons = toFiniteNumber(row.total_required);
   const completedLessons = toFiniteNumber(row.completed_required);
+  const partialCompletionPct = row.course_completion_pct == null
+    ? null
+    : toFiniteNumber(row.course_completion_pct);
   const progress = row.enrollment_id ? {
     completedLessons,
     totalLessons,
-    completionPct: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0,
+    completionPct: partialCompletionPct == null
+      ? (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0)
+      : Math.min(100, Math.max(0, Math.round(partialCompletionPct * 100) / 100)),
     lastLessonId: null,
     lastLessonTitle: null,
     lastPositionSeconds: 0,
@@ -110,13 +115,18 @@ async function mapEnrollmentDto(enrollment, course) {
   const row = await repository.getCourseProgress(enrollment.user_id, course.id);
   const totalLessons = toFiniteNumber(row?.required_lessons);
   const completedLessons = toFiniteNumber(row?.completed_lessons);
+  const partialCompletionPct = row?.course_completion_pct == null
+    ? null
+    : toFiniteNumber(row.course_completion_pct);
   return {
     ...mapEnrollment(enrollment),
     courseSlug: course.slug,
     progress: {
       completedLessons,
       totalLessons,
-      completionPct: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0,
+      completionPct: partialCompletionPct == null
+        ? (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0)
+        : Math.min(100, Math.max(0, Math.round(partialCompletionPct * 100) / 100)),
       lastLessonId: null,
       lastLessonTitle: null,
       lastPositionSeconds: 0,
@@ -180,6 +190,7 @@ async function getCourseLanding(slug, user) {
       enrollment_id: enrollment?.id,
       completed_required: completedLessons,
       total_required: totalLessons,
+      course_completion_pct: progressRow?.course_completion_pct,
     }),
     descriptionHtml: row.description || "",
     outcomes: metadata.outcomes.map((item) => item.content),

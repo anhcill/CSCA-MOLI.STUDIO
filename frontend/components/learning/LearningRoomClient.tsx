@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FiCheck, FiDownload, FiExternalLink } from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
@@ -46,6 +46,19 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState('');
   const [requestVersion, setRequestVersion] = useState(0);
+  const courseId = room?.course.id ?? null;
+
+  const refreshCourseProgress = useCallback(async () => {
+    if (!courseId) return;
+    const progress = await learningApi.getCourseProgress(courseId);
+    setRoom((current) => current ? {
+      ...current,
+      enrollment: {
+        ...current.enrollment,
+        progress,
+      },
+    } : current);
+  }, [courseId]);
 
   useEffect(() => {
     let active = true;
@@ -74,6 +87,21 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [courseSlug, lessonId, requestVersion]);
+
+  useEffect(() => {
+    if (!courseId) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshCourseProgress().catch(() => undefined);
+      }
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [courseId, refreshCourseProgress]);
 
   const markComplete = async () => {
     if (!room || room.lesson.progressStatus === 'completed') return;
@@ -114,7 +142,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
       <LearningHeader courseSlug={courseSlug} courseTitle={room.course.title} progressPct={room.enrollment.progress.completionPct} />
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_380px]">
         <main className="min-h-0 lg:overflow-y-auto">
-          {room.lesson.lessonType === 'video' ? <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} /> : null}
+          {room.lesson.lessonType === 'video' ? <HlsPlayerShell lessonId={lessonId} session={session} loading={playbackLoading} error={playbackError} onProgressSaved={refreshCourseProgress} /> : null}
           <article className="mx-auto max-w-5xl p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>

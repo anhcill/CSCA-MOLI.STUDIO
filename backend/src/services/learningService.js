@@ -7,10 +7,15 @@ const { mapCourse, mapEnrollment, mapLesson, mapProgress, toFiniteNumber } = req
 function progressSummary(row) {
   const totalLessons = toFiniteNumber(row?.total_lessons ?? row?.progress_total_lessons);
   const completedLessons = toFiniteNumber(row?.completed_lessons);
+  const partialCompletionPct = row?.course_completion_pct == null
+    ? null
+    : toFiniteNumber(row.course_completion_pct);
   return {
     completedLessons,
     totalLessons,
-    completionPct: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0,
+    completionPct: partialCompletionPct == null
+      ? (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 10000) / 100 : 0)
+      : Math.min(100, Math.max(0, Math.round(partialCompletionPct * 100) / 100)),
     lastLessonId: row?.last_lesson_id == null ? null : toFiniteNumber(row.last_lesson_id),
     lastLessonTitle: row?.last_lesson_title || null,
     lastPositionSeconds: toFiniteNumber(row?.last_position_seconds ?? row?.progress_last_position_seconds),

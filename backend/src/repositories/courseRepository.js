@@ -24,15 +24,22 @@ async function listPublished({ userId = null, subjectCode = null, accessType = n
     `SELECT ${COURSE_COLUMNS}, COUNT(*) OVER()::int AS total_count,
        e.id AS enrollment_id, e.status AS enrollment_status,
        COALESCE(progress.completed_required, 0)::int AS completed_required,
-       COALESCE(progress.total_required, 0)::int AS total_required
+       COALESCE(progress.total_required, 0)::int AS total_required,
+       COALESCE(progress.course_completion_pct, 0)::numeric AS course_completion_pct
      FROM courses c
      LEFT JOIN course_enrollments e
        ON e.course_id = c.id AND e.user_id = $1
      LEFT JOIN LATERAL (
        SELECT
          COUNT(*) FILTER (WHERE l.is_required)::int AS total_required,
-         COUNT(*) FILTER (WHERE l.is_required AND lp.status = 'completed')::int AS completed_required
+         COUNT(*) FILTER (WHERE l.is_required AND lp.status = 'completed')::int AS completed_required,
+         CASE WHEN COUNT(*) FILTER (WHERE l.is_required) > 0
+           THEN SUM(CASE WHEN l.is_required THEN COALESCE(lp.completion_pct, 0) ELSE 0 END)
+             / COUNT(*) FILTER (WHERE l.is_required)
+           ELSE 0 END AS course_completion_pct
        FROM course_lessons l
+       JOIN course_sections s
+         ON s.id = l.section_id AND s.course_id = l.course_id AND s.is_published = TRUE
        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
        WHERE l.course_id = c.id AND l.is_published = TRUE
      ) progress ON TRUE
@@ -204,9 +211,17 @@ async function getCourseProgress(userId, courseId) {
     `SELECT
        COUNT(*) FILTER (WHERE l.is_required)::int AS required_lessons,
        COUNT(*) FILTER (WHERE l.is_required AND lp.status = 'completed')::int AS completed_lessons,
+       CASE WHEN COUNT(*) FILTER (WHERE l.is_required) > 0
+         THEN SUM(CASE WHEN l.is_required THEN COALESCE(lp.completion_pct, 0) ELSE 0 END)
+           / COUNT(*) FILTER (WHERE l.is_required)
+         ELSE 0 END AS course_completion_pct,
        COALESCE(MAX(lp.updated_at), e.updated_at) AS last_activity_at
      FROM course_enrollments e
      LEFT JOIN course_lessons l ON l.course_id = e.course_id AND l.is_published = TRUE
+       AND EXISTS (
+         SELECT 1 FROM course_sections s
+         WHERE s.id = l.section_id AND s.course_id = l.course_id AND s.is_published = TRUE
+       )
      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = e.user_id
      WHERE e.user_id = $1 AND e.course_id = $2
      GROUP BY e.id`,

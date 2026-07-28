@@ -12,6 +12,7 @@ async function listUserEnrollments(userId) {
        c.total_lessons, c.total_duration_seconds, c.published_at, c.content_updated_at,
        COALESCE(p.completed_lessons, 0)::int AS completed_lessons,
        COALESCE(p.total_lessons, 0)::int AS progress_total_lessons,
+       COALESCE(p.course_completion_pct, 0)::numeric AS course_completion_pct,
        p.last_lesson_id, p.last_lesson_title,
        COALESCE(p.last_position_seconds, 0)::int AS progress_last_position_seconds,
        p.last_activity_at
@@ -21,11 +22,17 @@ async function listUserEnrollments(userId) {
        SELECT
          COUNT(*) FILTER (WHERE l.is_required)::int AS total_lessons,
          COUNT(*) FILTER (WHERE l.is_required AND lp.status = 'completed')::int AS completed_lessons,
+         CASE WHEN COUNT(*) FILTER (WHERE l.is_required) > 0
+           THEN SUM(CASE WHEN l.is_required THEN COALESCE(lp.completion_pct, 0) ELSE 0 END)
+             / COUNT(*) FILTER (WHERE l.is_required)
+           ELSE 0 END AS course_completion_pct,
          recent.lesson_id AS last_lesson_id,
          recent.lesson_title AS last_lesson_title,
          recent.last_position_seconds,
          recent.updated_at AS last_activity_at
        FROM course_lessons l
+       JOIN course_sections s
+         ON s.id = l.section_id AND s.course_id = l.course_id AND s.is_published = TRUE
        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = e.user_id
        LEFT JOIN LATERAL (
          SELECT lp2.lesson_id, l2.title AS lesson_title, lp2.last_position_seconds, lp2.updated_at
@@ -130,10 +137,16 @@ async function getCourseProgress(userId, courseId) {
   const result = await db.query(
     `SELECT COUNT(*) FILTER (WHERE l.is_required)::int AS total_lessons,
        COUNT(*) FILTER (WHERE l.is_required AND lp.status = 'completed')::int AS completed_lessons,
+       CASE WHEN COUNT(*) FILTER (WHERE l.is_required) > 0
+         THEN SUM(CASE WHEN l.is_required THEN COALESCE(lp.completion_pct, 0) ELSE 0 END)
+           / COUNT(*) FILTER (WHERE l.is_required)
+         ELSE 0 END AS course_completion_pct,
        recent.lesson_id AS last_lesson_id, recent.lesson_title AS last_lesson_title,
        COALESCE(recent.last_position_seconds, 0)::int AS last_position_seconds,
        recent.updated_at AS last_activity_at
      FROM course_lessons l
+     JOIN course_sections s
+       ON s.id = l.section_id AND s.course_id = l.course_id AND s.is_published = TRUE
      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.user_id = $1
      LEFT JOIN LATERAL (
        SELECT lp2.lesson_id, l2.title AS lesson_title, lp2.last_position_seconds, lp2.updated_at

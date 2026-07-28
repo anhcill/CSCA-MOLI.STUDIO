@@ -26,6 +26,7 @@ type PlayerProps = {
   session: PlaybackSessionDto | null;
   loading?: boolean;
   error?: string;
+  onProgressSaved?: () => Promise<void> | void;
 };
 
 type QualityOption = { levelIndex: number; height: number; label: string };
@@ -56,7 +57,7 @@ function formatPlaybackTime(value: number): string {
     : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function HlsPlayerShell({ lessonId, session, loading = false, error = '' }: PlayerProps) {
+export function HlsPlayerShell({ lessonId, session, loading = false, error = '', onProgressSaved }: PlayerProps) {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -256,6 +257,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
       { positionSeconds, watchedDeltaSeconds },
       { keepalive },
     ).then(async (progress) => {
+      void Promise.resolve(onProgressSaved?.()).catch(() => undefined);
       if (currentLessonIdRef.current === requestLessonId) {
         watchedDeltaSecondsRef.current = Math.max(0, watchedDeltaSecondsRef.current - watchedDeltaSeconds);
         if (watchedDeltaSecondsRef.current >= 1) progressDirtyRef.current = true;
@@ -274,7 +276,7 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
     });
     progressRequestRef.current = request;
     return request;
-  }, [lessonId]);
+  }, [lessonId, onProgressSaved]);
 
   useEffect(() => {
     const video = videoRef.current;
