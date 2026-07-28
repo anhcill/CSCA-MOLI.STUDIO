@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { FiArrowLeft, FiBookmark, FiChevronRight, FiCloud } from 'react-icons/fi';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 
 export function LearningHeader({
   courseSlug,
@@ -39,6 +40,9 @@ export function LearningHeader({
               <div className="h-full rounded-full bg-gradient-to-r from-[#23858a] to-[#58b8a9]" style={{ width: `${progress}%` }} />
             </div>
           </div>
+          <span className="rounded-full border border-[#b98a64]/70 bg-white/5 [&_button]:rounded-full [&_button]:text-[#f6dfc1] [&_button:hover]:bg-white/10">
+            <ThemeToggle />
+          </span>
           <button type="button" onClick={onNotesClick} className="inline-flex items-center gap-2 rounded-full border border-[#b98a64]/80 px-4 py-2.5 text-sm font-black text-[#f6dfc1] transition hover:bg-white/5">
             <FiBookmark /><span className="hidden sm:inline">Ghi chú của tôi</span>
           </button>
