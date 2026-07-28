@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FiArrowLeft, FiArrowRight, FiRefreshCw } from 'react-icons/fi';
+import { FiArrowLeft, FiArrowRight, FiBookOpen, FiGrid, FiRefreshCw } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseCatalogDto, CourseCatalogQuery } from '@/lib/types/courses';
 import { CourseFilters } from './CourseFilters';
@@ -29,21 +29,45 @@ export function CourseCatalogClient() {
 
   return (
     <section aria-label="Danh sách khóa học">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">Thư viện bài giảng</p><h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white sm:text-4xl">Khóa học dành cho bạn</h2></div>
-        <p className="rounded-full bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">{loading ? 'Đang cập nhật...' : `${catalog?.totalItems ?? 0} khóa học`}</p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4 px-2">
+        <div className="flex items-center gap-4">
+          <span className="grid h-12 w-12 place-items-center rounded-xl border border-red-200 bg-red-50 text-xl text-[#a9182b]">
+            <FiBookOpen />
+          </span>
+          <div>
+            <p className="font-sans text-sm font-black uppercase tracking-[.15em] text-[#8f2633]">Thư viện bài giảng</p>
+            <h2 className="mt-1 text-sm font-medium text-[#746b64]">Tiếp tục hành trình học tập của bạn</h2>
+          </div>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#dccdbf] bg-[#fffaf5] px-4 py-2 text-sm font-bold text-[#594b41]">
+          <FiGrid /> {loading ? 'Đang cập nhật...' : `${catalog?.totalItems ?? 0} khóa học`}
+        </div>
       </div>
+
       <CourseFilters value={query} onChange={setQuery} />
+
       {error ? (
-        <div role="alert" className="mt-8 rounded-[1.75rem] border border-red-200 bg-red-50 p-8 text-center text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-300"><p className="font-bold">{error}</p><button type="button" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 font-bold text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600" onClick={() => setRequestVersion((value) => value + 1)}><FiRefreshCw /> Thử lại</button></div>
+        <div role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700">
+          <p className="font-bold">{error}</p>
+          <button type="button" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#a9182b] px-4 py-2 font-bold text-white" onClick={() => setRequestVersion((value) => value + 1)}>
+            <FiRefreshCw /> Thử lại
+          </button>
+        </div>
       ) : (
-        <div className="mt-8" aria-live="polite" aria-busy={loading}>{loading ? <CourseGridSkeleton /> : <CourseGrid courses={catalog?.items ?? []} />}</div>
+        <div className="mt-4" aria-live="polite" aria-busy={loading}>
+          {loading ? <CourseGridSkeleton /> : <CourseGrid courses={catalog?.items ?? []} />}
+        </div>
       )}
+
       {!loading && !error && catalog && catalog.totalPages > 1 ? (
-        <nav aria-label="Phân trang khóa học" className="mt-10 flex items-center justify-center gap-3">
-          <button type="button" disabled={catalog.page <= 1} onClick={() => setQuery((value) => ({ ...value, page: catalog.page - 1 }))} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-bold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><FiArrowLeft /> Trang trước</button>
-          <span className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white">{catalog.page} / {catalog.totalPages}</span>
-          <button type="button" disabled={catalog.page >= catalog.totalPages} onClick={() => setQuery((value) => ({ ...value, page: catalog.page + 1 }))} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-bold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Trang sau <FiArrowRight /></button>
+        <nav aria-label="Phân trang khóa học" className="mt-8 flex items-center justify-center gap-3">
+          <button type="button" disabled={catalog.page <= 1} onClick={() => setQuery((value) => ({ ...value, page: catalog.page - 1 }))} className="inline-flex items-center gap-2 rounded-xl border border-[#d9c9ba] bg-[#fffaf4] px-4 py-2.5 font-bold text-[#4b3a30] disabled:opacity-40">
+            <FiArrowLeft /> Trang trước
+          </button>
+          <span className="rounded-xl bg-[#071228] px-4 py-2.5 text-sm font-black text-white">{catalog.page} / {catalog.totalPages}</span>
+          <button type="button" disabled={catalog.page >= catalog.totalPages} onClick={() => setQuery((value) => ({ ...value, page: catalog.page + 1 }))} className="inline-flex items-center gap-2 rounded-xl border border-[#d9c9ba] bg-[#fffaf4] px-4 py-2.5 font-bold text-[#4b3a30] disabled:opacity-40">
+            Trang sau <FiArrowRight />
+          </button>
         </nav>
       ) : null}
     </section>

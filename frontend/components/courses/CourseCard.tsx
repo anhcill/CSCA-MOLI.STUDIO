@@ -1,14 +1,20 @@
 import Link from 'next/link';
-import { FiArrowUpRight, FiBookOpen, FiClock, FiPlay, FiUsers } from 'react-icons/fi';
+import {
+  FiArrowRight,
+  FiBookOpen,
+  FiClock,
+  FiPlay,
+  FiUsers,
+} from 'react-icons/fi';
 import type { CourseCatalogItemDto, CscaSubjectCode } from '@/lib/types/courses';
 
 const levelLabels = { basic: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' };
-const subjectMeta: Record<CscaSubjectCode, { label: string; gradient: string; accent: string }> = {
-  MATH: { label: 'Toán CSCA', gradient: 'from-blue-600 via-indigo-600 to-violet-700', accent: 'text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300' },
-  PHYSICS: { label: 'Vật lý CSCA', gradient: 'from-cyan-600 via-sky-600 to-blue-700', accent: 'text-cyan-700 bg-cyan-50 dark:bg-cyan-950/50 dark:text-cyan-300' },
-  CHEMISTRY: { label: 'Hóa học CSCA', gradient: 'from-emerald-600 via-teal-600 to-cyan-700', accent: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300' },
-  CHINESE_SCI: { label: 'Trung văn Tự nhiên', gradient: 'from-rose-500 via-pink-600 to-violet-700', accent: 'text-rose-700 bg-rose-50 dark:bg-rose-950/50 dark:text-rose-300' },
-  CHINESE_SOC: { label: 'Trung văn Xã hội', gradient: 'from-amber-500 via-orange-600 to-rose-600', accent: 'text-orange-700 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-300' },
+const subjectMeta: Record<CscaSubjectCode, { label: string; cover: string }> = {
+  MATH: { label: 'Toán CSCA', cover: '/images/banner/campus-01.jpg' },
+  PHYSICS: { label: 'Vật lý CSCA', cover: '/images/banner/campus-07.jpg' },
+  CHEMISTRY: { label: 'Hóa học CSCA', cover: '/images/banner/campus-04.jpg' },
+  CHINESE_SCI: { label: 'Trung văn Tự nhiên', cover: '/images/banner/campus-09.jpg' },
+  CHINESE_SOC: { label: 'Trung văn Xã hội', cover: '/images/banner/campus-12.jpg' },
 };
 
 type CatalogItemWithPackages = CourseCatalogItemDto & {
@@ -33,46 +39,116 @@ function durationLabel(seconds: number) {
   return hours ? `${hours}g ${minutes ? `${minutes}p` : ''}`.trim() : `${Math.max(1, minutes)} phút`;
 }
 
-export function CourseCard({ course }: { course: CourseCatalogItemDto }) {
-  const subject = subjectMeta[course.subjectCode];
-  const progress = Math.min(100, Math.max(0, course.progress?.completionPct ?? 0));
+function learningHref(course: CourseCatalogItemDto) {
+  const lessonId = course.progress?.lastLessonId;
+  return lessonId ? `/hoc/${course.slug}/bai-hoc/${lessonId}` : `/khoa-hoc/${course.slug}`;
+}
 
+function StatusBadges({ course }: { course: CourseCatalogItemDto }) {
   return (
-    <Link href={`/khoa-hoc/${course.slug}`} className="group flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.06)] transition duration-300 hover:-translate-y-1.5 hover:border-indigo-200 hover:shadow-[0_24px_55px_rgba(79,70,229,0.14)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600 dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_12px_35px_rgba(0,0,0,0.2)] dark:hover:border-indigo-700 dark:hover:shadow-[0_24px_55px_rgba(49,46,129,0.22)]">
-      <div className={`relative aspect-[16/9] overflow-hidden bg-gradient-to-br ${subject.gradient}`}>
-        {course.thumbnailUrl ? <img src={course.thumbnailUrl} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/5 to-transparent" />
-        <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2">
-          <span className="max-w-[75%] truncate rounded-full border border-white/50 bg-white/95 px-3 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm">{accessLabel(course)}</span>
-          <div className="flex gap-1.5">{course.isNew ? <span className="rounded-full bg-emerald-400 px-2.5 py-1.5 text-[10px] font-black text-emerald-950 shadow-sm">MỚI</span> : null}{course.isHot ? <span className="rounded-full bg-orange-400 px-2.5 py-1.5 text-[10px] font-black text-orange-950 shadow-sm">HOT</span> : null}</div>
-        </div>
-        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3 text-white">
-          <span className="rounded-lg bg-slate-950/35 px-2.5 py-1 text-xs font-bold backdrop-blur-md">{levelLabels[course.level]}</span>
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-indigo-700 shadow-lg transition group-hover:scale-110"><FiPlay className="ml-0.5" fill="currentColor" /></span>
-        </div>
+    <div className="flex flex-wrap gap-2">
+      <span className={`rounded-full px-3 py-1 text-[11px] font-black text-white shadow ${course.progress ? 'bg-[#ad2335]' : 'bg-[#173654]'}`}>
+        {accessLabel(course)}
+      </span>
+      {course.isNew ? <span className="rounded-full bg-[#3e8c77] px-3 py-1 text-[11px] font-black text-white shadow">MỚI</span> : null}
+      {course.isHot ? <span className="rounded-full bg-[#c38224] px-3 py-1 text-[11px] font-black text-white shadow">HOT</span> : null}
+    </div>
+  );
+}
+
+function CourseMetrics({ course, bordered = false }: { course: CourseCatalogItemDto; bordered?: boolean }) {
+  return (
+    <div className={`grid grid-cols-3 text-xs text-[#615850] ${bordered ? 'rounded-xl border border-[#e0d4c9] bg-[#fffdf9] py-3' : 'border-t border-[#e8ddd4] pt-4'}`}>
+      <span className="flex items-center justify-center gap-1.5 px-2 text-center font-bold"><FiBookOpen className="text-[#2b8b8d]" /> {course.totalLessons} bài</span>
+      <span className="flex items-center justify-center gap-1.5 border-x border-[#e5d9ce] px-2 text-center font-bold"><FiClock className="text-[#2b8b8d]" /> {durationLabel(course.totalDurationSeconds)}</span>
+      <span className="flex items-center justify-center gap-1.5 px-2 text-center font-bold"><FiUsers className="text-[#2b8b8d]" /> {course.enrolledCount.toLocaleString('vi-VN')}</span>
+    </div>
+  );
+}
+
+function ProgressBar({ course }: { course: CourseCatalogItemDto }) {
+  if (!course.progress) return null;
+  const progress = Math.min(100, Math.max(0, course.progress.completionPct));
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex justify-between text-xs font-bold text-[#736960]">
+        <span>Tiến độ của bạn</span>
+        <span className="text-[#247d7e]">{Math.round(progress)}% đã hoàn thành</span>
       </div>
-
-      <div className="flex flex-1 flex-col p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wider ${subject.accent}`}>{subject.label}</span>
-          <span className="text-sm font-black text-amber-500">★ {course.ratingAvg.toFixed(1)} <span className="font-semibold text-slate-400 dark:text-slate-500">({course.ratingCount})</span></span>
-        </div>
-        <h2 className="mt-4 line-clamp-2 text-xl font-black leading-snug text-slate-950 transition group-hover:text-indigo-700 dark:text-white dark:group-hover:text-indigo-300">{course.title}</h2>
-        <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500 dark:text-slate-400">{course.shortDescription}</p>
-
-        <div className="mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 text-center text-xs font-bold text-slate-500 dark:bg-slate-950/80 dark:text-slate-400">
-          <span className="flex items-center justify-center gap-1"><FiBookOpen className="text-indigo-500" /> {course.totalLessons} bài</span>
-          <span className="flex items-center justify-center gap-1"><FiClock className="text-indigo-500" /> {durationLabel(course.totalDurationSeconds)}</span>
-          <span className="flex items-center justify-center gap-1"><FiUsers className="text-indigo-500" /> {course.enrolledCount.toLocaleString('vi-VN')}</span>
-        </div>
-
-        {course.progress ? <div className="mt-5"><div className="mb-2 flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400"><span>Tiến độ của bạn</span><span className="text-indigo-700 dark:text-indigo-300">{Math.round(progress)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-indigo-600" style={{ width: `${progress}%` }} /></div></div> : null}
-
-        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-5 text-sm dark:border-slate-800">
-          <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-black text-white">M</span><span className="font-bold text-slate-600 dark:text-slate-300">{course.instructor?.displayName || 'MOLI.STUDIO'}</span></div>
-          <span className="flex items-center gap-1 font-black text-indigo-700 dark:text-indigo-300">Xem khóa học <FiArrowUpRight /></span>
-        </div>
+      <div className="h-2 overflow-hidden rounded-full bg-[#e8e0d9]" role="progressbar" aria-label={`Tiến độ ${course.title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+        <div className="h-full rounded-full bg-gradient-to-r from-[#236c73] to-[#5ea39a]" style={{ width: `${progress}%` }} />
       </div>
-    </Link>
+    </div>
+  );
+}
+
+export function CourseCard({ course, variant = 'compact' }: { course: CourseCatalogItemDto; variant?: 'wide' | 'featured' | 'compact' }) {
+  const subject = subjectMeta[course.subjectCode];
+  const cover = course.thumbnailUrl || subject.cover;
+  const detailHref = `/khoa-hoc/${course.slug}`;
+  const continueHref = learningHref(course);
+
+  if (variant === 'wide') {
+    return (
+      <article className="overflow-hidden rounded-2xl border border-[#d8c8b9] bg-[#fffaf5] shadow-[0_18px_42px_-30px_rgba(48,33,23,.65)]">
+        <div className="grid lg:grid-cols-[42%_1fr]">
+          <Link href={continueHref} className="group relative min-h-64 overflow-hidden bg-[#0a1830] lg:min-h-[330px]">
+            <img src={cover} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#061229]/90 via-transparent to-[#061229]/5" />
+            <div className="absolute left-5 top-5"><StatusBadges course={course} /></div>
+            <span className="absolute bottom-5 left-5 inline-flex items-center gap-3 rounded-full border border-white/35 bg-[#071228]/70 py-2 pl-2 pr-5 font-black text-white backdrop-blur">
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-[#9f1e31] shadow-lg"><FiPlay className="ml-0.5" fill="currentColor" /></span>
+              {course.progress ? 'Tiếp tục học' : 'Xem giới thiệu'}
+            </span>
+          </Link>
+
+          <div className="grid lg:grid-cols-[1fr_210px]">
+            <div className="p-6 sm:p-8">
+              <span className="text-xs font-black uppercase tracking-[.12em] text-[#247d7e]">▰ {subject.label}</span>
+              <h3 className="mt-3 font-sans text-2xl font-black leading-tight text-[#16233b] sm:text-3xl">{course.title}</h3>
+              <p className="mt-2 text-sm font-bold text-[#c77715]">★ {course.ratingAvg.toFixed(1)} <span className="font-medium text-[#7e746d]">({course.ratingCount} đánh giá)</span></p>
+              <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#665d56]">{course.shortDescription || 'Lộ trình học có hệ thống, giải thích dễ hiểu và bám sát mục tiêu kỳ thi CSCA.'}</p>
+              <div className="mt-5"><CourseMetrics course={course} bordered /></div>
+              <ProgressBar course={course} />
+            </div>
+
+            <div className="flex flex-col justify-center gap-3 border-t border-[#e4d8ce] p-6 lg:border-l lg:border-t-0">
+              <p className="text-center font-sans text-4xl font-black text-[#b9aa9d]">勤学</p>
+              <Link href={continueHref} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#af1f33] px-4 py-3 text-sm font-black text-white shadow transition hover:bg-[#92172a]">
+                {course.progress ? 'Tiếp tục học' : 'Bắt đầu học'} <FiArrowRight />
+              </Link>
+              <Link href={detailHref} className="inline-flex items-center justify-center rounded-lg border border-[#d8c9bd] bg-[#fffdf9] px-4 py-3 text-sm font-black text-[#28334a] transition hover:border-[#aa7652]">
+                Xem chi tiết
+              </Link>
+              <p className="text-center text-xs text-[#8a7e74]">{levelLabels[course.level]} · Cập nhật liên tục</p>
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  const featured = variant === 'featured';
+  return (
+    <article className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-[#fffaf5] shadow-[0_16px_38px_-30px_rgba(48,33,23,.65)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_46px_-28px_rgba(48,33,23,.6)] ${featured ? 'border-[#152b48] bg-[#0c1d37] text-white md:col-span-2 xl:col-span-2' : 'border-[#ded0c3]'}`}>
+      <Link href={detailHref} className={`relative overflow-hidden ${featured ? 'aspect-[16/8]' : 'aspect-[16/9]'}`}>
+        <img src={cover} alt={`Ảnh bìa ${course.title}`} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+        <div className={`absolute inset-0 ${featured ? 'bg-gradient-to-t from-[#07152d]/80 via-transparent to-transparent' : 'bg-gradient-to-t from-black/35 to-transparent'}`} />
+        <div className="absolute left-4 top-4"><StatusBadges course={course} /></div>
+        <span className="absolute bottom-4 right-4 grid h-11 w-11 place-items-center rounded-full bg-white text-[#a51f32] shadow-lg"><FiPlay className="ml-0.5" fill="currentColor" /></span>
+      </Link>
+
+      <div className="flex flex-1 flex-col p-5">
+        <span className={`text-[11px] font-black uppercase tracking-[.1em] ${featured ? 'text-emerald-300' : 'text-[#257d7e]'}`}>{subject.label}</span>
+        <h3 className={`mt-2 line-clamp-2 font-sans text-xl font-black leading-snug ${featured ? 'text-white' : 'text-[#17243d]'}`}>{course.title}</h3>
+        <p className={`mt-2 text-sm font-bold ${featured ? 'text-amber-300' : 'text-[#c77715]'}`}>★ {course.ratingAvg.toFixed(1)} <span className={`font-medium ${featured ? 'text-slate-400' : 'text-[#8b8077]'}`}>({course.ratingCount})</span></p>
+        <p className={`mt-3 line-clamp-2 min-h-10 text-sm leading-5 ${featured ? 'text-slate-300' : 'text-[#6f665f]'}`}>{course.shortDescription}</p>
+        <div className={`mt-5 ${featured ? '[&_span]:text-slate-300 [&>div]:border-white/15' : ''}`}><CourseMetrics course={course} /></div>
+        <ProgressBar course={course} />
+        <Link href={course.progress ? continueHref : detailHref} className={`mt-5 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${featured ? 'bg-[#ad1f33] text-white hover:bg-[#941629]' : 'border border-[#d8c9bd] text-[#243149] hover:border-[#a97752]'}`}>
+          {course.progress ? 'Tiếp tục học' : 'Xem chi tiết'} <FiArrowRight />
+        </Link>
+      </div>
+    </article>
   );
 }
