@@ -75,7 +75,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showPwaPrompt = !isAuth && !isChat;
   const showUpdateToast = !isChat;
-  const moliPetPosition = 'right';
+  const moliPetPosition = 'left';
 
   // Register service worker + detect updates
   const { updateAvailable, updateVersion, activateUpdate } = useServiceWorker();
