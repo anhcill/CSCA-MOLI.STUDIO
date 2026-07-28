@@ -357,10 +357,12 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
     const panelAvailableHeight = openPanelBelowPet
       ? viewportHeight - (panelTop ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN
       : viewportHeight - (panelBottom ?? PET_PANEL_MARGIN) - PET_PANEL_MARGIN;
+    const desktopPanelHeight = Math.max(180, Math.min(620, panelAvailableHeight));
     const desktopPanelStyle = {
       left: panelLeft,
       width: panelWidth,
-      maxHeight: Math.max(180, panelAvailableHeight),
+      height: desktopPanelHeight,
+      maxHeight: desktopPanelHeight,
       ...(openPanelBelowPet ? { top: panelTop } : { bottom: panelBottom }),
     };
     const mobilePanelStyle = {

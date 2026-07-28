@@ -433,6 +433,7 @@ function MolyRiggedPet({
   waving,
   modelSrc,
   modelLabel,
+  previewSrc,
 }: {
   color: PetColor;
   mood: PetMood;
@@ -441,6 +442,7 @@ function MolyRiggedPet({
   waving: boolean;
   modelSrc: string;
   modelLabel: string;
+  previewSrc: string;
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const liveStateRef = useRef({ mood, walking, facing, waving });
@@ -578,7 +580,6 @@ function MolyRiggedPet({
       if (reduceMotion) return 'static';
       if (state.waving) return 'gesture-positive';
       if (state.walking) return 'walk';
-      if (state.mood === 'happy') return 'dance';
       if (state.mood === 'focus') return 'static';
       return 'idle';
     };
@@ -587,7 +588,11 @@ function MolyRiggedPet({
       const nextAction = actions.get(name) ?? actions.get('idle') ?? actions.get('static');
       if (!nextAction) return;
       const nextName = nextAction.getClip().name;
-      const speed = liveStateRef.current.mood === 'sleepy' && name === 'idle' ? 0.48 : 1;
+      const speed = name === 'idle'
+        ? liveStateRef.current.mood === 'sleepy'
+          ? 0.4
+          : 0.62
+        : 0.85;
 
       if (nextName === currentClipName) {
         nextAction.setEffectiveTimeScale(speed);
@@ -628,11 +633,16 @@ function MolyRiggedPet({
   return (
     <div className="relative h-20 w-20">
       <div
-        className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+        className={`pointer-events-none absolute inset-1 grid place-items-center transition-opacity duration-200 ${
           loaded && !loadFailed ? 'opacity-0' : 'opacity-100'
         }`}
       >
-        <MolyReferencePet variant="moly-chibi" walking={walking} facing={facing} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={previewSrc}
+          alt=""
+          className="h-16 w-16 object-contain"
+        />
       </div>
       <div
         ref={mountRef}
@@ -665,11 +675,9 @@ export function PetFace({
   const riggedPet = RIGGED_PET_MODELS[variant];
 
   if (riggedPet) {
+    const previewSrc = PET_VARIANTS[variant].preview || '/models/moli-pet/previews/panda.png';
     return (
       <div className="relative h-20 w-20">
-        <div className="pointer-events-none absolute inset-[-14px] opacity-45">
-          <Lottie animationData={sparkleAnimation} loop autoplay />
-        </div>
         <MolyRiggedPet
           color={color}
           mood={mood}
@@ -678,6 +686,7 @@ export function PetFace({
           waving={waving}
           modelSrc={riggedPet.src}
           modelLabel={riggedPet.label}
+          previewSrc={previewSrc}
         />
       </div>
     );

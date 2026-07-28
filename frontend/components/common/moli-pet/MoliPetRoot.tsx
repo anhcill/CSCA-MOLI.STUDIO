@@ -58,7 +58,8 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
       <button
         type="button"
         onClick={controller.restorePet}
-        className="fixed bottom-5 left-5 z-[65] grid h-12 w-12 place-items-center rounded-full border border-violet-200 bg-white/95 text-violet-600 shadow-xl backdrop-blur transition hover:-translate-y-0.5"
+        className="fixed bottom-5 left-5 z-[65] grid h-12 w-12 place-items-center rounded-full border border-violet-200 text-violet-600 shadow-xl backdrop-blur transition hover:-translate-y-0.5"
+        style={{ backgroundColor: 'rgba(255, 255, 255, 0.96)' }}
         aria-label="Hiện MolyPet"
       >
         <FiMessageCircle className="h-5 w-5" />
@@ -76,11 +77,11 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
     <>
       {open && !minimized && (
         <section
-          className="fixed z-[90] flex min-h-[360px] flex-col overflow-hidden rounded-[26px] border border-violet-100/90 bg-white/95 text-slate-800 shadow-[0_24px_70px_rgba(76,57,130,0.22)] backdrop-blur-2xl"
+          className="moli-pet-light fixed z-[90] flex min-h-0 flex-col overflow-hidden rounded-[26px] border border-violet-100/90 bg-white/95 text-slate-800 shadow-[0_24px_70px_rgba(76,57,130,0.22)] backdrop-blur-2xl"
           style={panelStyle}
           aria-label="Trò chuyện với MolyPet"
         >
-          <header className="relative flex min-h-[68px] items-center gap-3 border-b border-violet-100/80 px-4">
+          <header className="relative flex min-h-[68px] shrink-0 items-center gap-2 border-b border-violet-100/80 px-4">
             <span className="relative flex h-3 w-3">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
               <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
@@ -108,10 +109,19 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             >
               <FiX className="h-5 w-5" />
             </button>
+            <button
+              type="button"
+              onClick={controller.hideForDay}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-violet-50 hover:text-violet-700"
+              aria-label="Ẩn MolyPet hôm nay"
+              title="Ẩn pet hôm nay"
+            >
+              <FiEyeOff className="h-[18px] w-[18px]" />
+            </button>
           </header>
 
           {settingsOpen && (
-            <div className="border-b border-violet-100 bg-violet-50/70 p-3">
+            <div className="moli-pet-soft shrink-0 border-b border-violet-100 bg-violet-50/70 p-3">
               <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-violet-500">
                 Chọn người bạn đồng hành
               </p>
@@ -129,8 +139,8 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
                       }}
                       className={`flex min-w-0 flex-col items-center rounded-2xl border p-2 transition ${
                         active
-                          ? 'border-violet-400 bg-white shadow-[0_7px_18px_rgba(124,91,200,0.16)]'
-                          : 'border-transparent bg-white/70 hover:border-violet-200 hover:bg-white'
+                          ? 'moli-pet-white border-violet-400 bg-white shadow-[0_7px_18px_rgba(124,91,200,0.16)]'
+                          : 'moli-pet-white border-transparent bg-white/70 hover:border-violet-200 hover:bg-white'
                       }`}
                       aria-pressed={active}
                     >
@@ -165,10 +175,10 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
-                className={`max-w-[88%] rounded-[19px] px-3.5 py-3 ${
+                className={`min-w-0 max-w-[88%] break-words rounded-[19px] px-3.5 py-3 [overflow-wrap:anywhere] ${
                   message.role === 'user'
                     ? 'ml-auto rounded-br-md bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-md'
-                    : 'mr-auto rounded-bl-md border border-violet-100 bg-violet-50/60 text-slate-700'
+                    : 'moli-pet-soft mr-auto rounded-bl-md border border-violet-100 bg-violet-50/60 text-slate-700'
                 }`}
               >
                 {message.imageDataUrl && (
@@ -189,7 +199,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             ))}
 
             {loading && (
-              <div className="mr-auto flex gap-1.5 rounded-2xl rounded-bl-md border border-violet-100 bg-white px-4 py-3">
+              <div className="moli-pet-white mr-auto flex gap-1.5 rounded-2xl rounded-bl-md border border-violet-100 bg-white px-4 py-3">
                 <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.2s]" />
                 <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.1s]" />
                 <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400" />
@@ -197,9 +207,9 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
             )}
           </div>
 
-          <div className="border-t border-violet-100/80 p-3">
+          <div className="shrink-0 border-t border-violet-100/80 p-3">
             {messages.length <= 1 && (
-              <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+              <div className="hide-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                 {QUICK_PROMPTS.map((prompt) => (
                   <button
                     key={prompt}
@@ -225,7 +235,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
 
             <form
               onSubmit={submit}
-              className="flex items-center gap-2 rounded-[18px] border border-violet-100 bg-white p-1.5 shadow-sm focus-within:border-violet-300 focus-within:ring-4 focus-within:ring-violet-100"
+              className="moli-pet-white flex items-center gap-2 rounded-[18px] border border-violet-100 bg-white p-1.5 shadow-sm focus-within:border-violet-300 focus-within:ring-4 focus-within:ring-violet-100"
             >
               <span
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-400"
@@ -281,7 +291,11 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
           className="group relative h-full w-full cursor-grab touch-none rounded-full outline-none active:cursor-grabbing focus-visible:ring-4 focus-visible:ring-violet-300/70"
           aria-label={open ? 'Đóng MolyPet' : 'Mở MolyPet'}
         >
-          <span className="absolute inset-3 rounded-full bg-violet-300/20 blur-xl transition group-hover:bg-fuchsia-300/30" />
+          <span
+            className="absolute inset-1 rounded-full border border-white/80 shadow-[0_10px_34px_rgba(124,91,200,0.3)] backdrop-blur-md"
+            style={{ backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+          />
+          <span className="absolute inset-3 rounded-full bg-violet-300/30 blur-xl transition group-hover:bg-fuchsia-300/40" />
           <span className="relative block transition-transform duration-300 group-hover:scale-105">
             <PetFace
               color={settings.color}
@@ -289,7 +303,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
               mood={petMood}
               walking={walking || dragging}
               facing={facing}
-              waving={!open}
+              waving={false}
             />
           </span>
         </button>

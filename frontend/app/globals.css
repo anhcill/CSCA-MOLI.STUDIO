@@ -332,6 +332,41 @@ body {
   color: rgb(100 116 139);
 }
 
+/* Keep MolyPet bright and readable inside dark pages. */
+:where(.dark) .moli-pet-light {
+  color-scheme: light;
+  background-color: rgb(255 255 255 / 0.97);
+  border-color: rgb(237 233 254);
+  color: rgb(30 41 59);
+}
+
+:where(.dark) .moli-pet-light .moli-pet-white {
+  background-color: rgb(255 255 255 / 0.96);
+  border-color: rgb(237 233 254);
+  color: rgb(51 65 85);
+}
+
+:where(.dark) .moli-pet-light .moli-pet-soft {
+  background-color: rgb(245 243 255 / 0.92);
+  border-color: rgb(237 233 254);
+  color: rgb(71 85 105);
+}
+
+:where(.dark) .moli-pet-light .text-slate-900 {
+  color: rgb(15 23 42);
+}
+
+:where(.dark) .moli-pet-light .text-slate-800,
+:where(.dark) .moli-pet-light .text-slate-700,
+:where(.dark) .moli-pet-light .text-slate-600 {
+  color: rgb(51 65 85);
+}
+
+:where(.dark) .moli-pet-light .text-slate-500,
+:where(.dark) .moli-pet-light .text-slate-400 {
+  color: rgb(100 116 139);
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
