@@ -2,6 +2,16 @@
 
 import Hls, { ErrorTypes, Events, type ErrorData, type Level } from 'hls.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FiMaximize,
+  FiMinimize,
+  FiPause,
+  FiPlay,
+  FiRotateCcw,
+  FiRotateCw,
+  FiVolume2,
+  FiVolumeX,
+} from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
 import type { PlaybackSessionDto } from '@/lib/types/courses';
 
@@ -34,7 +44,19 @@ function qualityOptions(levels: Level[]): QualityOption[] {
     .map(([height, levelIndex]) => ({ levelIndex, height, label: `${height}p` }));
 }
 
+function formatPlaybackTime(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return '0:00';
+  const totalSeconds = Math.floor(value);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    : `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function HlsPlayerShell({ lessonId, session, loading = false, error = '' }: PlayerProps) {
+  const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const refreshPromiseRef = useRef<Promise<PlaybackSessionDto> | null>(null);
@@ -57,6 +79,12 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
   const [qualities, setQualities] = useState<QualityOption[]>([]);
   const [selectedLevel, setSelectedLevel] = useState(-1);
   const [nativeHls, setNativeHls] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   currentLessonIdRef.current = lessonId;
 
   useEffect(() => {
@@ -281,6 +309,27 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
     };
   }, [flushProgress]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const syncPlayback = () => {
+      setIsPlaying(!video.paused && !video.ended);
+      setCurrentTime(Number.isFinite(video.currentTime) ? video.currentTime : 0);
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+      setVolume(video.volume);
+      setMuted(video.muted);
+    };
+    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
+    const events = ['play', 'pause', 'ended', 'timeupdate', 'durationchange', 'loadedmetadata', 'volumechange'] as const;
+    events.forEach((eventName) => video.addEventListener(eventName, syncPlayback));
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    syncPlayback();
+    return () => {
+      events.forEach((eventName) => video.removeEventListener(eventName, syncPlayback));
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+    };
+  }, [activeSession, lessonId]);
+
   const availableQualityLabels = useMemo(
     () => new Set<string>(activeSession?.variants.filter((item) => item.isReady).map((item) => item.resolution) ?? []),
     [activeSession],
@@ -294,25 +343,129 @@ export function HlsPlayerShell({ lessonId, session, loading = false, error = '' 
     setSelectedLevel(levelIndex);
   };
 
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      void video.play().catch(() => setPlayerError('Trình duyệt chưa cho phép phát video. Hãy bấm phát lại.'));
+    } else {
+      video.pause();
+    }
+  };
+
+  const seekBy = (seconds: number) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
+    video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + seconds));
+  };
+
+  const seekTo = (seconds: number) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
+    video.currentTime = Math.min(video.duration, Math.max(0, seconds));
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (video) video.muted = !video.muted;
+  };
+
+  const changeVolume = (nextVolume: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = nextVolume;
+    video.muted = nextVolume === 0;
+  };
+
+  const toggleFullscreen = async () => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (player.requestFullscreen) {
+      await player.requestFullscreen();
+      return;
+    }
+    const safariVideo = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    safariVideo?.webkitEnterFullscreen?.();
+  };
+
   const hasCurrentSession = activeSession?.lessonId === lessonId;
 
   if (loading && !hasCurrentSession) {
-    return <div aria-live="polite" className="flex aspect-video animate-pulse items-center justify-center bg-slate-900 text-slate-300">Đang tạo phiên phát...</div>;
+    return <div aria-live="polite" className="flex aspect-video w-full animate-pulse items-center justify-center bg-slate-900 text-slate-300 lg:h-full lg:aspect-auto">Đang tạo phiên phát...</div>;
   }
 
   if (!activeSession || !hasCurrentSession) {
-    return <div role="alert" className="flex aspect-video flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
+    return <div role="alert" className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-amber-100 lg:h-full lg:aspect-auto"><p>{playerError || 'Video chưa sẵn sàng.'}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">{refreshing ? 'Đang thử lại...' : 'Thử lại'}</button></div>;
   }
 
-  return <div className="relative aspect-video bg-black">
-    <video ref={videoRef} controls playsInline preload="metadata" className="h-full w-full" aria-label="Video bài học" />
-    <div className="absolute right-3 top-3 flex items-center gap-2 rounded-lg bg-black/70 p-2 text-sm text-white">
-      <label htmlFor={`video-quality-${lessonId}`} className="sr-only">Chất lượng video</label>
-      <select id={`video-quality-${lessonId}`} value={selectedLevel} onChange={(event) => changeQuality(Number(event.target.value))} disabled={nativeHls || qualities.length === 0} title={nativeHls ? 'Safari tự động chọn chất lượng phù hợp' : 'Chọn chất lượng video'} className="rounded border border-white/30 bg-slate-950 px-2 py-1 text-white disabled:opacity-70">
-        <option value={-1}>Tự động</option>
-        {qualities.filter((quality) => availableQualityLabels.size === 0 || availableQualityLabels.has(quality.label)).map((quality) => <option key={quality.levelIndex} value={quality.levelIndex}>{quality.label}</option>)}
-      </select>
+  return <div ref={playerRef} className="group relative aspect-video w-full overflow-hidden bg-black lg:h-full lg:aspect-auto">
+    <video
+      ref={videoRef}
+      playsInline
+      preload="metadata"
+      className="h-full w-full cursor-pointer object-contain"
+      aria-label="Video bài học"
+      onClick={togglePlayback}
+    />
+    <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/85 to-transparent px-3 pb-3 pt-10 text-white sm:px-4">
+      <label htmlFor={`video-progress-${lessonId}`} className="sr-only">Vị trí phát video</label>
+      <input
+        id={`video-progress-${lessonId}`}
+        type="range"
+        min={0}
+        max={duration || 0}
+        step={0.1}
+        value={Math.min(currentTime, duration || 0)}
+        onChange={(event) => seekTo(Number(event.target.value))}
+        className="mb-2 h-1.5 w-full cursor-pointer accent-indigo-500"
+      />
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <button type="button" onClick={togglePlayback} aria-label={isPlaying ? 'Tạm dừng' : 'Phát video'} title={isPlaying ? 'Tạm dừng' : 'Phát video'} className="rounded-lg p-2 hover:bg-white/15">
+          {isPlaying ? <FiPause className="h-5 w-5" /> : <FiPlay className="h-5 w-5" />}
+        </button>
+        <button type="button" onClick={() => seekBy(-10)} aria-label="Tua lùi 10 giây" title="Tua lùi 10 giây" className="relative rounded-lg p-2 hover:bg-white/15">
+          <FiRotateCcw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
+        </button>
+        <button type="button" onClick={() => seekBy(10)} aria-label="Tua tới 10 giây" title="Tua tới 10 giây" className="relative rounded-lg p-2 hover:bg-white/15">
+          <FiRotateCw className="h-5 w-5" /><span className="absolute inset-0 flex items-center justify-center pt-0.5 text-[8px] font-black">10</span>
+        </button>
+        <button type="button" onClick={toggleMute} aria-label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'} title={muted ? 'Bật âm thanh' : 'Tắt âm thanh'} className="rounded-lg p-2 hover:bg-white/15">
+          {muted || volume === 0 ? <FiVolumeX className="h-5 w-5" /> : <FiVolume2 className="h-5 w-5" />}
+        </button>
+        <label htmlFor={`video-volume-${lessonId}`} className="sr-only">Âm lượng</label>
+        <input
+          id={`video-volume-${lessonId}`}
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={muted ? 0 : volume}
+          onChange={(event) => changeVolume(Number(event.target.value))}
+          className="hidden h-1 w-20 cursor-pointer accent-white sm:block"
+        />
+        <span className="hidden min-w-24 whitespace-nowrap text-xs font-semibold tabular-nums text-white/90 sm:inline">
+          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+        </span>
+        <div className="min-w-0 flex-1" />
+        <label htmlFor={`video-quality-${lessonId}`} className="sr-only">Chất lượng video</label>
+        <select id={`video-quality-${lessonId}`} value={selectedLevel} onChange={(event) => changeQuality(Number(event.target.value))} disabled={nativeHls || qualities.length === 0} title={nativeHls ? 'Safari tự động chọn chất lượng phù hợp' : 'Chọn chất lượng video'} className="max-w-24 rounded-lg border border-white/30 bg-black/70 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-70">
+          <option value={-1}>Tự động</option>
+          {qualities.filter((quality) => availableQualityLabels.size === 0 || availableQualityLabels.has(quality.label)).map((quality) => <option key={quality.levelIndex} value={quality.levelIndex}>{quality.label}</option>)}
+        </select>
+        <button type="button" onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} title={isFullscreen ? 'Thoát toàn màn hình' : 'Phóng to toàn màn hình'} className="rounded-lg p-2 hover:bg-white/15">
+          {isFullscreen ? <FiMinimize className="h-5 w-5" /> : <FiMaximize className="h-5 w-5" />}
+        </button>
+      </div>
     </div>
+    {!isPlaying && currentTime === 0 && !playerError ? (
+      <button type="button" onClick={togglePlayback} aria-label="Phát video" className="absolute left-1/2 top-1/2 z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/65 p-5 text-white shadow-xl transition hover:scale-105 hover:bg-indigo-600">
+        <FiPlay className="h-8 w-8 translate-x-0.5" />
+      </button>
+    ) : null}
     {refreshing ? <div aria-live="polite" className="absolute left-3 top-3 rounded bg-black/70 px-3 py-2 text-sm text-white">Đang làm mới phiên phát...</div> : null}
     {playerError ? <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 p-8 text-center text-amber-100"><p>{playerError}</p><button type="button" onClick={() => void refreshSession().catch(() => undefined)} disabled={refreshing} className="rounded-lg bg-white px-4 py-2 font-bold text-slate-900 disabled:opacity-60">Thử lại</button></div> : null}
   </div>;
