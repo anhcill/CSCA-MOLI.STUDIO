@@ -10,6 +10,7 @@ import {
   FiTrendingUp,
 } from 'react-icons/fi';
 import { CourseCatalogClient } from '@/components/courses/CourseCatalogClient';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 
 export const metadata: Metadata = {
   title: 'Khóa học CSCA',
@@ -33,25 +34,30 @@ const stats = [
 
 export default function CoursesPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f7f3ed] pb-20 text-[#15213a]">
+    <main className="relative min-h-screen overflow-hidden bg-[#f7f3ed] pb-20 text-[#15213a] transition-colors duration-300 dark:bg-[#050d1d] dark:text-[#f5ead9]">
       <div className="pointer-events-none absolute inset-0 opacity-70 [background-image:radial-gradient(circle_at_8%_8%,rgba(169,113,65,.10),transparent_22%),radial-gradient(circle_at_92%_22%,rgba(24,93,97,.08),transparent_24%)]" />
-      <div className="pointer-events-none absolute left-0 top-20 h-72 w-72 rounded-full border border-[#b58a61]/10" />
-      <div className="pointer-events-none absolute right-[-7rem] top-10 h-[28rem] w-[28rem] rounded-full border border-[#b58a61]/10" />
+      <div className="pointer-events-none absolute left-0 top-20 h-72 w-72 rounded-full border border-[#b58a61]/10 dark:border-[#d8b58c]/10" />
+      <div className="pointer-events-none absolute right-[-7rem] top-10 h-[28rem] w-[28rem] rounded-full border border-[#b58a61]/10 dark:border-[#d8b58c]/10" />
 
       <div className="relative mx-auto max-w-[1460px] px-4 pt-5 sm:px-6 lg:px-8">
         <nav className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full border border-[#b89170] bg-[#fffaf4]/90 px-5 py-2.5 text-sm font-black text-[#4f3629] shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-full border border-[#b89170] bg-[#fffaf4]/90 px-5 py-2.5 text-sm font-black text-[#4f3629] shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-[#8c6b4f] dark:bg-[#0b172b]/90 dark:text-[#f1d5b2] dark:hover:bg-[#12213a]"
           >
             <FiArrowLeft aria-hidden="true" /> Về trang chủ
           </Link>
-          <Link
-            href="/hoc"
-            className="inline-flex items-center gap-2 rounded-full border border-[#b89170]/70 bg-[#071228] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#e5c49f]"
-          >
-            <FiBookOpen aria-hidden="true" /> Khóa học của tôi
-          </Link>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-[#d8c6b5] bg-[#fffaf4]/90 dark:border-[#33425b] dark:bg-[#0b172b] [&_button]:rounded-full [&_button]:text-[#66574b] dark:[&_button]:text-[#f0d1a9]">
+              <ThemeToggle />
+            </span>
+            <Link
+              href="/hoc"
+              className="inline-flex items-center gap-2 rounded-full border border-[#b89170]/70 bg-[#071228] px-5 py-2.5 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#e5c49f] dark:bg-[#13233c]"
+            >
+              <FiBookOpen aria-hidden="true" /> Khóa học của tôi
+            </Link>
+          </div>
         </nav>
 
         <section
@@ -104,16 +110,16 @@ export default function CoursesPage() {
           <CourseCatalogClient />
         </div>
 
-        <section className="mt-8 grid overflow-hidden rounded-2xl border border-[#ddcfc0] bg-[#fffaf4]/90 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-8 grid overflow-hidden rounded-2xl border border-[#ddcfc0] bg-[#fffaf4]/90 shadow-sm backdrop-blur transition-colors dark:border-[#27364e] dark:bg-[#0b172b]/95 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ['Lộ trình cá nhân hóa', 'Học đúng hướng, tiết kiệm thời gian'],
             ['Theo dõi đa thiết bị', 'Tiếp tục đúng bài và vị trí đang xem'],
             ['Hỗ trợ trong quá trình học', 'Giải đáp và cập nhật nội dung liên tục'],
             ['Bám sát cấu trúc CSCA', 'Kiến thức được tổ chức theo từng mục tiêu'],
           ].map(([title, text], index) => (
-            <div key={title} className={`px-6 py-5 ${index ? 'border-t border-[#eadfd4] sm:border-l sm:border-t-0' : ''}`}>
-              <p className="font-sans text-lg font-black text-[#1a2943]">{title}</p>
-              <p className="mt-1 text-sm leading-6 text-[#71675f]">{text}</p>
+            <div key={title} className={`px-6 py-5 ${index ? 'border-t border-[#eadfd4] dark:border-[#27364e] sm:border-l sm:border-t-0' : ''}`}>
+              <p className="font-sans text-lg font-black text-[#1a2943] dark:text-[#f4dfc2]">{title}</p>
+              <p className="mt-1 text-sm leading-6 text-[#71675f] dark:text-slate-400">{text}</p>
             </div>
           ))}
         </section>

@@ -17,6 +17,7 @@ import type { LearningRoomDto, PlaybackSessionDto } from '@/lib/types/courses';
 import { HlsPlayerShell } from './HlsPlayerShell';
 import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
+import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
 
 type LessonPanel = 'overview' | 'notes' | 'resources' | 'qa';
@@ -159,7 +160,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     };
   }, [lessonId, room]);
 
-  if (loading && !room) return <div aria-label="Đang tải bài học" className="min-h-screen animate-pulse bg-[#f5efe8]" />;
+  if (loading && !room) return <LearningRoomLoading />;
   if (error || !room) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-8">
