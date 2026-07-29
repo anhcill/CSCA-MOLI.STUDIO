@@ -11,6 +11,7 @@ interface SettingsData {
     exam_date?: string;
     public_ai_provider?: Provider;
     public_ai_9router_model?: string;
+    public_ai_free_9router_model?: string;
     public_ai_beeknoee_model?: string;
     public_ai_fallback_provider?: Provider;
     admin_question_review_model?: string;
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS: Required<SettingsData> = {
     exam_date: '',
     public_ai_provider: '9router',
     public_ai_9router_model: 'ag/claude-sonnet-4-6',
+    public_ai_free_9router_model: 'ag/gemini-3-flash-agent',
     public_ai_beeknoee_model: 'gpt-5.4-mini',
     public_ai_fallback_provider: 'beeknoee',
     admin_question_review_model: 'cx/gpt-5.5',
@@ -197,7 +199,7 @@ export default function AdminSettingsPage() {
                         </label>
 
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model</span>
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model VIP/Pre & lượt Xu</span>
                             <select
                                 value={settings.public_ai_9router_model}
                                 onChange={(event) => patchSettings({ public_ai_9router_model: event.target.value })}
@@ -205,6 +207,17 @@ export default function AdminSettingsPage() {
                             >
                                 <option value="ag/claude-sonnet-4-6">ag/claude-sonnet-4-6</option>
                                 <option value="cx/gpt-5.4-mini">cx/gpt-5.4-mini</option>
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">9Router model Free</span>
+                            <select
+                                value={settings.public_ai_free_9router_model}
+                                onChange={(event) => patchSettings({ public_ai_free_9router_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                <option value="ag/gemini-3-flash-agent">ag/gemini-3-flash-agent</option>
                             </select>
                         </label>
 

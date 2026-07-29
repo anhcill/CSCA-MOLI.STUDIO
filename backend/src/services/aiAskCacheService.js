@@ -67,6 +67,7 @@ function normalizeExplicitCacheContext(cacheContext = {}) {
 
   return {
     mode: compactText(cacheContext.mode || 'ask', 40),
+    ai_tier: compactText(cacheContext.aiTier || cacheContext.ai_tier, 20),
     exam_id: cacheContext.examId ?? cacheContext.exam_id ?? null,
     question_id: questionId,
     question_number: questionNumber,
@@ -139,6 +140,7 @@ function buildAskCacheKey({ question, context, cacheContext }) {
     context: explicitContext ? null : {
       examTitle: context?.examTitle || '',
       subjectName: context?.subjectName || '',
+      aiTier: context?.aiTier || '',
       questions: getRelevantQuestionsForCache(question, context),
     },
   };

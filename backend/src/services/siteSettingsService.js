@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
   exam_date: "2026-06-10T08:00:00",
   public_ai_provider: "9router",
   public_ai_9router_model: "ag/claude-sonnet-4-6",
+  public_ai_free_9router_model: "ag/gemini-3-flash-agent",
   public_ai_beeknoee_model: "gpt-5.4-mini",
   public_ai_fallback_provider: "beeknoee",
   admin_question_review_model: "cx/gpt-5.5",

@@ -5,6 +5,7 @@ const { canUseAIFeatures } = require('../middleware/authMiddleware');
 const coinService = require('../services/coinService');
 const dailyGiftLetterService = require('../services/dailyGiftLetterService');
 const aiAskCacheService = require('../services/aiAskCacheService');
+const { getSettings, DEFAULT_SETTINGS } = require('../services/siteSettingsService');
 const ExamAttempt = require('../models/ExamAttempt');
 
 // ─── Per-user cooldown ──────────────────────────────────────────────────────────────
@@ -31,6 +32,20 @@ const INSIGHT_TYPES = {
   examAnalysis: 'exam_analysis',
   wrongAnswerExplanations: 'wrong_answer_explanations',
 };
+
+async function getUserAIRouting(user) {
+  if (canUseAIFeatures(user)) {
+    return { aiTier: 'premium', aiProvider: null, aiModel: null };
+  }
+
+  const settings = await getSettings(['public_ai_free_9router_model'])
+    .catch(() => DEFAULT_SETTINGS);
+  return {
+    aiTier: 'free',
+    aiProvider: '9router',
+    aiModel: settings.public_ai_free_9router_model || 'ag/gemini-3-flash-agent',
+  };
+}
 
 function normalizeAiImageDataUrl(value) {
   if (!value) return { ok: true, value: null };
@@ -819,10 +834,6 @@ async function askAI(req, res) {
   try {
     const userId = req.user.id;
 
-    if (!canUseAIFeatures(req.user)) {
-      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
-    }
-
     const { question, attemptId, conversationHistory, imageDataUrl, cacheContext } = req.body;
     const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
     if (!imageCheck.ok) {
@@ -841,8 +852,13 @@ async function askAI(req, res) {
     if (attemptId) {
       context = await getAttemptAIContext(userId, attemptId);
     }
+    const aiRouting = await getUserAIRouting(req.user);
+    Object.assign(context, aiRouting, { userId });
     context.conversationHistory = conversationHistory;
     context.imageDataUrl = imageCheck.value;
+    const tieredCacheContext = cacheContext && typeof cacheContext === 'object'
+      ? { ...cacheContext, aiTier: aiRouting.aiTier }
+      : cacheContext;
 
     const useAskCache = aiAskCacheService.shouldUseAskCache({
       imageDataUrl: imageCheck.value,
@@ -850,7 +866,11 @@ async function askAI(req, res) {
     });
     if (useAskCache) {
       try {
-        const cached = await aiAskCacheService.getCachedAskAnswer({ question, context, cacheContext });
+        const cached = await aiAskCacheService.getCachedAskAnswer({
+          question,
+          context,
+          cacheContext: tieredCacheContext,
+        });
         if (cached) {
           const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
           return res.json({
@@ -901,7 +921,7 @@ async function askAI(req, res) {
       await aiAskCacheService.saveAskAnswer({
         question,
         context,
-        cacheContext,
+        cacheContext: tieredCacheContext,
         answer: result.answer,
         userId,
         attemptId,
@@ -1462,10 +1482,6 @@ async function askAIStream(req, res) {
   try {
     const userId = req.user.id;
 
-    if (!canUseAIFeatures(req.user)) {
-      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
-    }
-
     const { question, attemptId, conversationHistory, imageDataUrl } = req.body;
     const imageCheck = normalizeAiImageDataUrl(imageDataUrl);
     if (!imageCheck.ok) {
@@ -1504,6 +1520,7 @@ async function askAIStream(req, res) {
     if (attemptId) {
       context = await getAttemptAIContext(userId, attemptId);
     }
+    Object.assign(context, await getUserAIRouting(req.user), { userId });
     context.conversationHistory = conversationHistory;
     context.imageDataUrl = imageCheck.value;
 
@@ -1608,18 +1625,19 @@ async function teachGrammar(req, res) {
   try {
     const userId = req.user.id;
 
-    if (!canUseAIFeatures(req.user)) {
-      return res.status(403).json({ success: false, message: 'Cần nâng cấp Premium hoặc VIP để sử dụng tính năng này.', code: 'PREMIUM_REQUIRED' });
-    }
-
     const { question, topic, wrongAnswer, correctAnswer, userLevel, cacheContext } = req.body;
+    const aiRouting = await getUserAIRouting(req.user);
+    const tieredCacheContext = {
+      ...(cacheContext && typeof cacheContext === 'object' ? cacheContext : {}),
+      aiTier: aiRouting.aiTier,
+    };
 
     try {
       const cached = await aiAskCacheService.getCachedAskAnswer({
         question,
         context: { subjectName: topic || '', examTitle: '' },
         cacheContext: {
-          ...(cacheContext || {}),
+          ...tieredCacheContext,
           mode: 'theory',
           topic,
         },
@@ -1653,6 +1671,8 @@ async function teachGrammar(req, res) {
       wrongAnswer,
       correctAnswer,
       userLevel,
+      ...aiRouting,
+      userId,
     });
 
     if (result?.success !== false) {
@@ -1660,7 +1680,7 @@ async function teachGrammar(req, res) {
         question,
         context: { subjectName: topic || '', examTitle: '' },
         cacheContext: {
-          ...(cacheContext || {}),
+          ...tieredCacheContext,
           mode: 'theory',
           topic,
         },

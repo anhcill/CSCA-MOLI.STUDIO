@@ -10,6 +10,7 @@ const ADMIN_KEYS = [
   "exam_date",
   "public_ai_provider",
   "public_ai_9router_model",
+  "public_ai_free_9router_model",
   "public_ai_beeknoee_model",
   "public_ai_fallback_provider",
   "admin_question_review_model",
@@ -72,6 +73,12 @@ async function updateSettings(req, res) {
       next.public_ai_9router_model = normalizeModel(
         req.body.public_ai_9router_model,
         DEFAULT_SETTINGS.public_ai_9router_model,
+      );
+    }
+    if (req.body.public_ai_free_9router_model !== undefined) {
+      next.public_ai_free_9router_model = normalizeModel(
+        req.body.public_ai_free_9router_model,
+        DEFAULT_SETTINGS.public_ai_free_9router_model,
       );
     }
     if (req.body.public_ai_beeknoee_model !== undefined) {

@@ -12,6 +12,8 @@ interface ReviewAIButtonsProps {
 }
 
 export default function ReviewAIButtons({ status, disabled = false, onOpen, className = '' }: ReviewAIButtonsProps) {
+  if (status === 'correct') return null;
+
   const disabledClass = disabled
     ? 'cursor-not-allowed text-slate-400 dark:text-slate-500'
     : '';

@@ -641,6 +641,7 @@ async function callDeepSeekAI(prompt, options = {}) {
 const PUBLIC_AI_SETTING_KEYS = [
   'public_ai_provider',
   'public_ai_9router_model',
+  'public_ai_free_9router_model',
   'public_ai_beeknoee_model',
   'public_ai_fallback_provider',
 ];
@@ -1576,7 +1577,15 @@ async function askAI(question, context = {}) {
 
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
-  const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;
+  const useDeepSeekChat = !context.aiModel && isDeepSeekConfigured() && !context.imageDataUrl;
+  const publicOptions = {
+    provider: context.aiProvider,
+    model: context.aiModel,
+    temperature: 0.5,
+    maxTokens: BEE.chatMaxTokens || 2200,
+    feature: 'chat',
+    _userId: context.userId,
+  };
 
   try {
     const response = useDeepSeekChat
@@ -1588,7 +1597,7 @@ async function askAI(question, context = {}) {
         thinking: DEEPSEEK.chatThinking || 'disabled',
         feature: 'chat',
       })
-      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
+      : await callPublicAIMessages(messages, publicOptions);
     return {
       answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
       timestamp: new Date().toISOString(),
@@ -1598,7 +1607,7 @@ async function askAI(question, context = {}) {
     if (useDeepSeekChat) {
       console.warn('DeepSeek askAI failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
-        const response = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
+        const response = await callPublicAIMessages(messages, publicOptions);
         return {
           answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
           timestamp: new Date().toISOString(),
@@ -1628,7 +1637,15 @@ async function askAIStream(question, context = {}, res) {
 
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
-  const useDeepSeekChat = isDeepSeekConfigured() && !context.imageDataUrl;
+  const useDeepSeekChat = !context.aiModel && isDeepSeekConfigured() && !context.imageDataUrl;
+  const publicOptions = {
+    provider: context.aiProvider,
+    model: context.aiModel,
+    temperature: 0.5,
+    maxTokens: BEE.chatMaxTokens || 2200,
+    feature: 'chat',
+    _userId: context.userId,
+  };
 
   try {
     const answer = useDeepSeekChat
@@ -1640,7 +1657,7 @@ async function askAIStream(question, context = {}, res) {
         thinking: DEEPSEEK.chatThinking || 'disabled',
         feature: 'chat',
       })
-      : await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
+      : await callPublicAIMessages(messages, publicOptions);
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
@@ -1649,7 +1666,7 @@ async function askAIStream(question, context = {}, res) {
     if (useDeepSeekChat) {
       console.warn('DeepSeek stream failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
-        const answer = await callPublicAIMessages(messages, { temperature: 0.5, maxTokens: BEE.chatMaxTokens || 2200, feature: 'chat' });
+        const answer = await callPublicAIMessages(messages, publicOptions);
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -2127,7 +2144,16 @@ TRẢ VỀ JSON:
  * AI tạo bài giảng ngắn về ngữ pháp/kiến thức liên quan đến câu hỏi sai
  * @param {Object} params - { question, topic, wrongAnswer, correctAnswer, userLevel }
  */
-async function teachGrammar({ question, topic, wrongAnswer, correctAnswer, userLevel = 'beginner' }) {
+async function teachGrammar({
+  question,
+  topic,
+  wrongAnswer,
+  correctAnswer,
+  userLevel = 'beginner',
+  aiProvider,
+  aiModel,
+  userId,
+}) {
   const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
   const levelText = levelMap[userLevel] || 'sơ cấp';
   const lessonMaxTokens = DEEPSEEK.lessonMaxTokens || Math.min(BEE.lessonMaxTokens || 1600, 1800);
@@ -2173,7 +2199,15 @@ JSON schema:
 }`;
 
   try {
-    const raw = isDeepSeekConfigured()
+    const publicOptions = {
+      provider: aiProvider,
+      model: aiModel,
+      temperature: 0.25,
+      maxTokens: lessonMaxTokens,
+      feature: 'lesson',
+      _userId: userId,
+    };
+    const raw = !aiModel && isDeepSeekConfigured()
       ? await callDeepSeekAI(prompt, {
         model: DEEPSEEK.lessonModel || 'deepseek-v4-flash',
         temperature: 0.25,
@@ -2182,7 +2216,7 @@ JSON schema:
         thinking: DEEPSEEK.lessonThinking || 'disabled',
         feature: 'lesson',
       })
-      : await callPublicAI(prompt, { temperature: 0.25, maxTokens: lessonMaxTokens, feature: 'lesson' });
+      : await callPublicAI(prompt, publicOptions);
     const ai = parseAIMaybeJSON(raw);
 
     if (!ai) throw new Error('Parse failed');
@@ -2190,10 +2224,17 @@ JSON schema:
     return normalizeGrammarLesson(ai);
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
-    if (isDeepSeekConfigured()) {
+    if (!aiModel && isDeepSeekConfigured()) {
       console.warn('DeepSeek teachGrammar failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
-        const raw = await callPublicAI(prompt, { temperature: 0.25, maxTokens: Math.min(BEE.lessonMaxTokens || 1800, 2200) });
+        const raw = await callPublicAI(prompt, {
+          provider: aiProvider,
+          model: aiModel,
+          temperature: 0.25,
+          maxTokens: Math.min(BEE.lessonMaxTokens || 1800, 2200),
+          feature: 'lesson',
+          _userId: userId,
+        });
         const ai = parseAIMaybeJSON(raw);
         if (ai) return normalizeGrammarLesson(ai);
       } catch (fallbackError) {
