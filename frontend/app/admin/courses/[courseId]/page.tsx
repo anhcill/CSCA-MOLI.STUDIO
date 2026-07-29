@@ -32,12 +32,12 @@ export default function EditCoursePage({ params }: { params: Promise<{ courseId:
 
   return (
     <AdminLayout title="Chỉnh sửa khóa học" description={course?.title || 'CSCA Learning'}>
-      {loading ? <div className="h-96 animate-pulse rounded-3xl bg-slate-200" aria-label="Đang tải khóa học" /> : error || !course ? (
-        <div role="alert" className="rounded-2xl bg-red-50 p-6 text-red-700"><p>{error || 'Không có dữ liệu.'}</p><button onClick={() => void load()} className="mt-3 rounded-lg border border-red-300 px-4 py-2 font-bold">Thử lại</button></div>
+      {loading ? <div className="h-96 animate-pulse rounded-3xl bg-slate-200 dark:bg-slate-800" aria-label="Đang tải khóa học" /> : error || !course ? (
+        <div role="alert" className="rounded-2xl bg-red-50 p-6 text-red-700 dark:bg-red-950/30 dark:text-red-300"><p>{error || 'Không có dữ liệu.'}</p><button onClick={() => void load()} className="mt-3 rounded-lg border border-red-300 px-4 py-2 font-bold dark:border-red-700">Thử lại</button></div>
       ) : <>
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold uppercase">{course.status}</span>
-          <Link href={`/admin/courses/${course.id}/curriculum`} className="rounded-xl bg-slate-900 px-4 py-2 font-bold text-white">Xây chương trình học</Link>
+          <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold uppercase dark:bg-slate-800 dark:text-slate-200">{course.status}</span>
+          <Link href={`/admin/courses/${course.id}/curriculum`} className="rounded-xl bg-slate-900 px-4 py-2 font-bold text-white dark:bg-slate-700 dark:hover:bg-slate-600">Xây chương trình học</Link>
           {course.status !== 'published' ? <button type="button" disabled={publishing} onClick={() => void publish()} className="rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white disabled:opacity-50">{publishing ? 'Đang xuất bản...' : 'Xuất bản'}</button> : null}
         </div>
         {publishError ? <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{publishError}</p> : null}
