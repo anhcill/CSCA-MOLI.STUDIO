@@ -27,9 +27,13 @@ launcher. Admin can then open the helper with the processing code already
 attached by clicking `Mo cong cu xu ly tren may`. No administrator elevation is
 required; the copy button remains available as a fallback.
 
-`New-CscaHls.ps1` probes the source video, selects only 360p/480p/720p/1080p
-renditions that do not exceed the source height, aligns keyframes to six-second
-segments, and asks FFmpeg to produce a VOD `master.m3u8`.
+Before encoding, the Windows wizard shows the resolutions supported by the
+source and lets the operator choose one or more renditions. For example, a
+1080p source can be published as only 1080p, or as 480p + 720p, without
+generating 360p. Pressing Enter keeps the original behavior and generates every
+supported rendition. `New-CscaHls.ps1` never upscales beyond the source height,
+aligns keyframes to six-second segments, and asks FFmpeg to produce a VOD
+`master.m3u8`.
 
 Preview the generated FFmpeg command without encoding:
 
@@ -41,6 +45,12 @@ Encode locally (never on the Express API process):
 
 ```powershell
 .\tools\video\New-CscaHls.ps1 -InputPath .\lesson.mp4 -OutputDirectory .\out
+```
+
+Choose renditions directly for non-interactive use:
+
+```powershell
+.\tools\video\New-CscaHls.ps1 -InputPath .\lesson.mp4 -OutputDirectory .\out -Renditions 480p,720p
 ```
 
 Requirements: `ffmpeg` and `ffprobe` available on `PATH`. The script does not

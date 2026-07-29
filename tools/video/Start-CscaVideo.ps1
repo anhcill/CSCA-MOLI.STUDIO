@@ -7,6 +7,7 @@ param(
   [int]$AssetId,
   [string]$ProcessingCode,
   [string]$LaunchUri,
+  [ValidateSet("360p", "480p", "720p", "1080p")][string[]]$Renditions,
   [switch]$DryRun,
   [switch]$Configure
 )
@@ -77,6 +78,56 @@ function Select-VideoFile {
     throw "Ban chua chon video."
   }
   return $dialog.FileName
+}
+
+function Get-SourceVideoHeight([string]$VideoPath, [string]$ProbePath) {
+  $heightText = & $ProbePath -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 $VideoPath
+  if ($LASTEXITCODE -ne 0) { throw "Khong doc duoc do phan giai video." }
+  $height = 0
+  if (-not [int]::TryParse(($heightText | Select-Object -First 1), [ref]$height) -or $height -le 0) {
+    throw "Video khong co luong hinh hop le."
+  }
+  return $height
+}
+
+function Select-VideoRenditions([int]$SourceHeight) {
+  $allProfiles = @(
+    [pscustomobject]@{ Name = "360p"; Height = 360 },
+    [pscustomobject]@{ Name = "480p"; Height = 480 },
+    [pscustomobject]@{ Name = "720p"; Height = 720 },
+    [pscustomobject]@{ Name = "1080p"; Height = 1080 }
+  )
+  $available = @($allProfiles | Where-Object { $_.Height -le $SourceHeight })
+  if (-not $available) {
+    throw "Video nguon ${SourceHeight}p thap hon muc toi thieu 360p."
+  }
+
+  Write-Step "Chon chat luong can xuat"
+  Write-Host "Video nguon: ${SourceHeight}p. Chi cac muc khong vuot qua video nguon moi duoc chon."
+  for ($index = 0; $index -lt $available.Count; $index++) {
+    Write-Host "  [$($index + 1)] $($available[$index].Name)"
+  }
+  Write-Host "Co the chon mot hoac nhieu muc. Vi du: 2,3"
+
+  while ($true) {
+    $answer = (Read-Host "Nhap so chat luong (Enter = tat ca muc tren)").Trim()
+    if (-not $answer) { return @($available.Name) }
+
+    $selected = [System.Collections.Generic.List[string]]::new()
+    $valid = $true
+    foreach ($token in ($answer -split "[,\s]+")) {
+      if (-not $token) { continue }
+      $choice = 0
+      if (-not [int]::TryParse($token, [ref]$choice) -or $choice -lt 1 -or $choice -gt $available.Count) {
+        $valid = $false
+        break
+      }
+      $name = $available[$choice - 1].Name
+      if (-not $selected.Contains($name)) { $selected.Add($name) }
+    }
+    if ($valid -and $selected.Count -gt 0) { return @($selected) }
+    Write-Host "Lua chon khong hop le. Hay nhap cac so trong danh sach, cach nhau bang dau phay." -ForegroundColor Yellow
+  }
 }
 
 function Convert-SecureStringToPlainText([Security.SecureString]$Value) {
@@ -209,13 +260,24 @@ try {
   }
 
   if (-not $resume) {
+    $sourceHeight = Get-SourceVideoHeight $InputPath $ffprobePath
+    if (-not $Renditions -or $Renditions.Count -eq 0) {
+      $Renditions = Select-VideoRenditions $sourceHeight
+    }
+    $invalidRenditions = @($Renditions | Where-Object { [int]($_ -replace "p$", "") -gt $sourceHeight })
+    if ($invalidRenditions.Count -gt 0) {
+      throw "Khong the xuat $(($invalidRenditions) -join ', ') tu video nguon ${sourceHeight}p."
+    }
+    Write-Host "Se xuat: $(($Renditions) -join ', ')" -ForegroundColor Green
+
     Write-Step "Dang chuyen video thanh HLS"
     Write-Host "Buoc nay co the mat nhieu phut va dung nhieu CPU. Khong dong cua so."
     & $encoderPath `
       -InputPath $InputPath `
       -OutputDirectory $outputDirectory `
       -FfmpegPath $ffmpegPath `
-      -FfprobePath $ffprobePath
+      -FfprobePath $ffprobePath `
+      -Renditions $Renditions
     if ($LASTEXITCODE -ne 0) { throw "FFmpeg khong hoan tat." }
   } else {
     Write-Host "Bo qua encode, dung lai ket qua: $outputDirectory" -ForegroundColor Green
