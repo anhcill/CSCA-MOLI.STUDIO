@@ -75,8 +75,9 @@ class EmailService {
     const safeActionUrl = actionUrl ? this.escapeHtml(actionUrl) : '';
     const safeActionLabel = this.escapeHtml(actionLabel || 'Xem thông tin');
 
-    // Keep admin announcements closer to a personal letter than a marketing
-    // newsletter. Gmail still makes the final inbox-category decision.
+    // Keep campaign emails close to a simple study-abroad letter. The layout
+    // uses table-based, inline styles so it remains stable in Gmail and mobile
+    // clients without loading external images.
     return `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -84,27 +85,70 @@ class EmailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${this.escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,'Segoe UI',sans-serif;color:#1f2937">
-  <div style="max-width:620px;margin:0 auto;padding:28px 22px">
-    <p style="margin:0 0 22px;font-size:16px;line-height:1.7">Chào bạn,</p>
-    <div style="font-size:15px;line-height:1.75;color:#374151">${safeContent}</div>
-    ${safeCode ? `
-      <div style="margin:24px 0;padding:16px;border:1px solid #d1d5db;border-radius:8px">
-        <span style="font-size:14px;color:#4b5563">Mã dành cho bạn: </span>
-        <strong style="font-family:Consolas,monospace;font-size:17px;color:#111827">${safeCode}</strong>
-      </div>` : ''}
-    ${safeActionUrl ? `
-      <p style="margin:22px 0;font-size:15px;line-height:1.7">
-        <a href="${safeActionUrl}" style="color:#2563eb;text-decoration:underline">${safeActionLabel}</a>
-      </p>` : ''}
-    <p style="margin:26px 0 0;font-size:15px;line-height:1.7">
-      Thân mến,<br>
-      <strong>Đội ngũ MOLY.STUDIO</strong>
-    </p>
-    <p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.6">
-      Đây là thông báo được gửi từ tài khoản MOLY.STUDIO của bạn.
-    </p>
-  </div>
+<body style="margin:0;padding:0;background:#f4f0e7;font-family:Arial,'Segoe UI',sans-serif;color:#172033">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${this.escapeHtml(subject)} — Thông báo mới từ MOLY.STUDIO.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f4f0e7;padding:28px 12px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;background:#fffdf8;border:1px solid #ded6c8;border-top:6px solid #b4232e;border-radius:14px;overflow:hidden">
+          <tr>
+            <td style="padding:24px 28px 20px;border-bottom:1px solid #e8e0d3">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="width:48px;vertical-align:middle">
+                    <div style="width:42px;height:42px;border-radius:50%;background:#b4232e;color:#fffdf8;text-align:center;line-height:42px;font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:bold">学</div>
+                  </td>
+                  <td style="vertical-align:middle">
+                    <p style="margin:0;color:#172033;font-size:16px;line-height:1.2;font-weight:900;letter-spacing:.4px">MOLY.STUDIO</p>
+                    <p style="margin:4px 0 0;color:#8a7760;font-size:11px;line-height:1.3;font-weight:bold;letter-spacing:1.2px">CSCA · DU HỌC TRUNG QUỐC</p>
+                  </td>
+                  <td align="right" style="vertical-align:middle">
+                    <span style="display:inline-block;border:1px solid #ddcdb8;border-radius:999px;padding:6px 10px;color:#9d2933;font-family:Georgia,'Times New Roman',serif;font-size:12px;font-weight:bold">留学</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 28px 30px">
+              <p style="margin:0 0 10px;color:#9d2933;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">Thông báo dành cho bạn</p>
+              <h1 style="margin:0 0 24px;color:#172033;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.28;font-weight:bold">${this.escapeHtml(subject)}</h1>
+              <div style="width:42px;height:3px;margin:0 0 24px;background:#b4232e"></div>
+              <p style="margin:0 0 18px;font-size:15px;line-height:1.75;color:#344054">Chào bạn,</p>
+              <div style="font-size:15px;line-height:1.8;color:#475467">${safeContent}</div>
+              ${safeCode ? `
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 0;background:#faf4e8;border:1px dashed #c69a68;border-radius:10px">
+                  <tr>
+                    <td style="padding:16px 18px">
+                      <p style="margin:0 0 7px;color:#8a7760;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase">Mã dành cho bạn</p>
+                      <p style="margin:0;color:#9d2933;font-family:Consolas,'Courier New',monospace;font-size:21px;font-weight:900;letter-spacing:2px">${safeCode}</p>
+                    </td>
+                  </tr>
+                </table>` : ''}
+              ${safeActionUrl ? `
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 0">
+                  <tr>
+                    <td style="border-radius:8px;background:#b4232e">
+                      <a href="${safeActionUrl}" style="display:inline-block;padding:13px 22px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900">${safeActionLabel} &nbsp;→</a>
+                    </td>
+                  </tr>
+                </table>` : ''}
+              <p style="margin:30px 0 0;padding-top:22px;border-top:1px solid #e8e0d3;font-size:14px;line-height:1.7;color:#475467">
+                Thân mến,<br>
+                <strong style="color:#172033">Đội ngũ MOLY.STUDIO</strong>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px;background:#172033;text-align:center">
+              <p style="margin:0;color:#d6d0c5;font-size:11px;line-height:1.6">Đồng hành cùng bạn trên hành trình CSCA và du học Trung Quốc.</p>
+              <p style="margin:4px 0 0;color:#8e98a8;font-size:10px;line-height:1.5">Đây là email thông báo từ tài khoản MOLY.STUDIO của bạn.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
   }

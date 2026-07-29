@@ -211,21 +211,49 @@ export default function EmailCampaignPage() {
         </div>
 
         <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 text-white">
-              <p className="flex items-center gap-2 text-sm font-bold"><FiMail /> {channel === 'notification' ? 'Xem trước thông báo' : 'Xem trước email'}</p>
-              <h3 className="mt-2 text-xl font-black">{subject || 'Tiêu đề thông báo'}</h3>
-            </div>
-            <div className="p-5">
-              <div className="mb-5 rounded-xl bg-violet-50 p-5 text-center">
-                <FiGift className="mx-auto mb-2 text-3xl text-violet-600" />
-                <p className="font-black text-violet-900">Ưu đãi dành cho bạn</p>
+          {channel === 'email' ? (
+            <section className="overflow-hidden rounded-2xl border border-[#ded6c8] border-t-[6px] border-t-[#b4232e] bg-[#fffdf8] shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#e8e0d3] px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#b4232e] font-serif text-xl font-bold text-[#fffdf8]">学</span>
+                  <div>
+                    <p className="text-sm font-black tracking-wide text-[#172033]">MOLY.STUDIO</p>
+                    <p className="text-[10px] font-bold tracking-[.14em] text-[#8a7760]">CSCA · DU HỌC TRUNG QUỐC</p>
+                  </div>
+                </div>
+                <span className="rounded-full border border-[#ddcdb8] px-2.5 py-1 font-serif text-xs font-bold text-[#9d2933]">留学</span>
               </div>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">{content.trim() || 'Nội dung ưu đãi sẽ hiển thị tại đây.'}</p>
-              {discountCode && <div className="mx-auto my-5 w-fit rounded-xl border-2 border-dashed border-violet-500 bg-violet-50 px-5 py-3 font-mono text-lg font-black tracking-widest text-violet-700">{discountCode}</div>}
-              {actionUrl && <div className="mt-5 rounded-full bg-violet-600 px-5 py-3 text-center text-sm font-bold text-white">{actionLabel || 'Nhận ưu đãi ngay'}</div>}
-            </div>
-          </section>
+              <div className="p-6">
+                <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#9d2933]">Thông báo dành cho bạn</p>
+                <h3 className="mt-2 font-serif text-2xl font-bold leading-tight text-[#172033]">{subject || 'Tiêu đề thông báo'}</h3>
+                <div className="my-5 h-[3px] w-10 bg-[#b4232e]" />
+                <p className="mb-3 text-sm text-[#344054]">Chào bạn,</p>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[#475467]">{content.trim() || 'Nội dung thông báo sẽ hiển thị tại đây.'}</p>
+                {discountCode && (
+                  <div className="mt-5 rounded-lg border border-dashed border-[#c69a68] bg-[#faf4e8] px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#8a7760]">Mã dành cho bạn</p>
+                    <p className="mt-1 font-mono text-xl font-black tracking-widest text-[#9d2933]">{discountCode}</p>
+                  </div>
+                )}
+                {actionUrl && <div className="mt-5 w-fit rounded-lg bg-[#b4232e] px-5 py-3 text-sm font-bold text-white">{actionLabel || 'Xem thông tin'} &nbsp;→</div>}
+                <p className="mt-6 border-t border-[#e8e0d3] pt-5 text-sm leading-6 text-[#475467]">Thân mến,<br /><strong className="text-[#172033]">Đội ngũ MOLY.STUDIO</strong></p>
+              </div>
+              <div className="bg-[#172033] px-5 py-4 text-center">
+                <p className="text-[10px] leading-5 text-[#d6d0c5]">Đồng hành cùng bạn trên hành trình CSCA và du học Trung Quốc.</p>
+              </div>
+            </section>
+          ) : (
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 text-white">
+                <p className="flex items-center gap-2 text-sm font-bold"><FiMail /> Xem trước thông báo</p>
+                <h3 className="mt-2 text-xl font-black">{subject || 'Tiêu đề thông báo'}</h3>
+              </div>
+              <div className="p-5">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">{content.trim() || 'Nội dung thông báo sẽ hiển thị tại đây.'}</p>
+                {discountCode && <div className="mx-auto my-5 w-fit rounded-xl border-2 border-dashed border-violet-500 bg-violet-50 px-5 py-3 font-mono text-lg font-black tracking-widest text-violet-700">{discountCode}</div>}
+              </div>
+            </section>
+          )}
           {notice && <div className={`rounded-xl border p-4 text-sm font-medium ${notice.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>{notice.text}</div>}
           <button type="submit" disabled={!canSend}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 font-bold text-white shadow-lg shadow-violet-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
