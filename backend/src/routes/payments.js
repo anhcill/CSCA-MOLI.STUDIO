@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const axios = require('axios');
+const QRCode = require('qrcode');
+const { PayOS } = require('@payos/node');
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const emailService = require('../services/emailService');
@@ -126,75 +128,106 @@ function getClientIp(req) {
   );
 }
 
-function timingSafeEqualString(a = '', b = '') {
-  const aBuf = Buffer.from(String(a));
-  const bBuf = Buffer.from(String(b));
-  return aBuf.length === bBuf.length && crypto.timingSafeEqual(aBuf, bBuf);
+function getPayOSConfig() {
+  const clientId = String(process.env.PAYOS_CLIENT_ID || '').trim();
+  const apiKey = String(process.env.PAYOS_API_KEY || '').trim();
+  const checksumKey = String(process.env.PAYOS_CHECKSUM_KEY || '').trim();
+  if (!clientId || !apiKey || !checksumKey) return null;
+
+  const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const railwayDomain = String(process.env.RAILWAY_PUBLIC_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const backendUrl = String(
+    process.env.BACKEND_URL ||
+    process.env.API_URL ||
+    (railwayDomain ? `https://${railwayDomain}` : 'http://localhost:5000')
+  ).replace(/\/+$/, '');
+
+  return {
+    clientId,
+    apiKey,
+    checksumKey,
+    frontendUrl,
+    backendUrl,
+    apiBaseUrl: String(process.env.PAYOS_API_BASE_URL || 'https://api-merchant.payos.vn').replace(/\/+$/, ''),
+  };
 }
 
-function verifySePayApiKey(authHeader, apiKeyHeader) {
-  const expectedKey = process.env.SEPAY_API_KEY;
-  if (!expectedKey) {
-    return { ok: false, status: 503, message: 'SePay webhook is not configured' };
+function createPayOSClient(config = getPayOSConfig()) {
+  if (!config) return null;
+  return new PayOS({
+    clientId: config.clientId,
+    apiKey: config.apiKey,
+    checksumKey: config.checksumKey,
+    baseURL: config.apiBaseUrl,
+    timeout: 15000,
+    maxRetries: 2,
+    logLevel: 'error',
+  });
+}
+
+function getPayOSMeta(transaction) {
+  const meta = getStoredPaymentMeta(transaction);
+  return {
+    provider: meta.paymentProvider,
+    orderCode: Number.parseInt(meta.payosOrderCode, 10),
+    payment: meta.payosPayment || null,
+  };
+}
+
+async function buildPayOSBankResponse(transaction, paymentData) {
+  if (!paymentData?.qrCode) return null;
+  const qrUrl = await QRCode.toDataURL(paymentData.qrCode, {
+    width: 420,
+    margin: 1,
+    errorCorrectionLevel: 'M',
+  });
+  return {
+    bankCode: paymentData.bin === '970422' ? 'MB' : (paymentData.bin || 'Ngân hàng'),
+    accountNumber: paymentData.accountNumber || '',
+    accountName: paymentData.accountName || '',
+    amount: Number(paymentData.amount || transaction.amount || 0),
+    content: paymentData.description || `CSCA${transaction.id}`,
+    qrUrl,
+    checkoutUrl: paymentData.checkoutUrl || null,
+    expiresAt: paymentData.expiredAt || null,
+  };
+}
+
+async function createPayOSPaymentRequest(transaction, packageName) {
+  const config = getPayOSConfig();
+  if (!config) {
+    const error = new Error('payOS chưa được cấu hình.');
+    error.code = 'PAYOS_NOT_CONFIGURED';
+    throw error;
   }
 
-  const prefix = 'Apikey ';
-  const header = String(authHeader || '');
-  const directKey = String(apiKeyHeader || '');
-  if (directKey && timingSafeEqualString(directKey, expectedKey)) {
-    return { ok: true };
-  }
+  const orderCode = Number(transaction.id);
+  const description = `CSCA${orderCode}`.slice(0, 9);
+  const returnUrl = `${config.frontendUrl}/checkout/success?orderId=${encodeURIComponent(transaction.transaction_code)}`;
+  const cancelUrl = `${config.frontendUrl}/checkout/success?orderId=${encodeURIComponent(transaction.transaction_code)}&cancel=true`;
+  const body = {
+    amount: Number(transaction.amount),
+    cancelUrl,
+    description,
+    orderCode,
+    returnUrl,
+    items: [{
+      name: String(packageName || transaction.package_name || 'Gói MOLI.STUDIO').slice(0, 100),
+      quantity: 1,
+      price: Number(transaction.amount),
+    }],
+    expiredAt: Math.floor(Date.now() / 1000) + (5 * 60),
+  };
 
-  if (!header.toLowerCase().startsWith(prefix.toLowerCase())) {
-    return { ok: false, status: 401, message: 'Unauthorized' };
-  }
-
-  const providedKey = header.slice(prefix.length);
-  if (!timingSafeEqualString(providedKey, expectedKey)) {
-    return { ok: false, status: 401, message: 'Unauthorized' };
-  }
-
-  return { ok: true };
-}
-
-function normalizeBankAccount(value) {
-  return String(value || '').replace(/\D/g, '');
-}
-
-function normalizePaymentCode(value) {
-  return String(value || '').trim().toUpperCase();
-}
-
-function buildSePaySearchText(payload) {
-  return [
-    payload?.content,
-    payload?.description,
-    payload?.code,
-    payload?.referenceCode,
-    payload?.transactionContent,
-    payload?.transactionCode,
-  ]
-    .filter(Boolean)
-    .map(value => String(value))
-    .join(' ')
-    .trim();
-}
-
-function extractBankTransferOrderCode(value) {
-  const match = String(value || '').toUpperCase().match(/CSCA\d+T\d{8,}/);
-  return match?.[0] || '';
-}
-
-function getBankConfig() {
-  const bankCode = process.env.BANK_CODE;
-  const accountNumber = process.env.BANK_ACCOUNT_NUMBER;
-  const accountName = process.env.BANK_ACCOUNT_NAME;
-
-  if (!bankCode || !accountNumber || !accountName) {
-    return null;
-  }
-
-  return { bankCode, accountNumber, accountName };
+  const paymentData = await createPayOSClient(config).paymentRequests.create(body);
+  const meta = {
+    ...getStoredPaymentMeta(transaction),
+    paymentProvider: 'payos',
+    payosOrderCode: orderCode,
+    payosPayment: paymentData,
+  };
+  await Transaction.updateField(transaction.id, 'raw_response', JSON.stringify(meta));
+  return paymentData;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -403,27 +436,23 @@ async function buildExistingPaymentResponse(transaction) {
   }
 
   if (transaction.payment_method === 'bank_transfer') {
-    const bankConfig = getBankConfig();
-    if (!bankConfig) {
+    const payos = getPayOSMeta(transaction);
+    if (payos.provider !== 'payos' || !payos.payment) {
       return {
         success: false,
         status: 500,
-        message: 'Thanh toán chuyển khoản chưa được cấu hình.',
+        message: 'Không tìm thấy thông tin thanh toán payOS. Vui lòng tạo lại đơn.',
       };
     }
+    const bank = await buildPayOSBankResponse(transaction, payos.payment);
 
     return {
       success: true,
       payment_method: 'bank_transfer',
+      payment_provider: 'payos',
       orderId: transaction.transaction_code,
-      bank: {
-        bankCode: bankConfig.bankCode,
-        accountNumber: bankConfig.accountNumber,
-        accountName: bankConfig.accountName,
-        amount: Number(transaction.amount || 0),
-        content: transaction.transaction_code,
-        qrUrl: `https://img.vietqr.io/image/${bankConfig.bankCode}-${bankConfig.accountNumber}-compact2.png?amount=${Number(transaction.amount || 0)}&addInfo=${encodeURIComponent(transaction.transaction_code)}&accountName=${encodeURIComponent(bankConfig.accountName)}`,
-      },
+      payUrl: payos.payment.checkoutUrl || null,
+      bank,
       appliedCoupon: buildAppliedCouponFromTransaction(transaction),
       appliedCoins: buildAppliedCoinsFromTransaction(transaction),
     };
@@ -528,7 +557,7 @@ async function getPaymentUser(userId) {
     );
     return userRes.rows[0] || null;
   } catch (err) {
-    console.error('[SePay] Full payment user lookup failed, using fallback:', err.message);
+    console.error('[Payment] Full payment user lookup failed, using fallback:', err.message);
     const fallbackRes = await db.query(
       `SELECT id, email, username, full_name, vip_expires_at, vip_package_id, vip_allowed_subjects
        FROM users
@@ -550,7 +579,7 @@ async function markTransactionCompletedFallback(transaction, payload) {
       [JSON.stringify(payload || {}), transaction.id]
     );
   } catch (err) {
-    console.error('[SePay] Fallback transaction completion failed, using status-only update:', err.message);
+    console.error('[Payment] Fallback transaction completion failed, using status-only update:', err.message);
     await Transaction.updateStatus(transaction.id, 'completed');
   }
 }
@@ -602,7 +631,7 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
     throw new Error(`Payment user not found: ${transaction.user_id}`);
   }
 
-  const sepayTransId = providerPayload.referenceCode || providerPayload.reference_number || providerPayload.id?.toString() || `SEPAY_${Date.now()}`;
+  const providerTransId = providerPayload.reference || providerPayload.referenceCode || providerPayload.reference_number || providerPayload.id?.toString() || `PAYOS_${Date.now()}`;
   const payload = {
     ...getStoredPaymentMeta(transaction),
     ...(providerPayload || {}),
@@ -611,8 +640,8 @@ async function completeClaimedBankTransfer(transaction, providerPayload = {}) {
   try {
     await Transaction.updateComplete(transaction.id, {
       status: 'completed',
-      payment_channel: 'bank_transfer',
-      trans_id: sepayTransId,
+      payment_channel: 'payos',
+      trans_id: providerTransId,
       raw_response: payload,
       paid_at: new Date(),
       vip_expires_at: updatedUser?.vip_expires_at || null,
@@ -696,84 +725,29 @@ async function completeZeroAmountTransaction(transaction, providerPayload = {}) 
   return { updatedUser, tier: entitlement.tier };
 }
 
-function getSePayApiToken() {
-  return process.env.SEPAY_API_TOKEN || process.env.SEPAY_API_KEY || '';
-}
+async function getPayOSPaymentRequest(transaction) {
+  const config = getPayOSConfig();
+  const payos = getPayOSMeta(transaction);
+  if (!config || payos.provider !== 'payos' || !payos.orderCode) return null;
 
-function mapSePayApiTransactionToWebhookPayload(row) {
-  return {
-    id: row.id,
-    referenceCode: row.reference_number,
-    transferType: row.transfer_type || 'in',
-    transferAmount: Number(row.amount_in || 0),
-    accountNumber: row.va || row.account_number,
-    content: row.transaction_content || row.code || row.reference_number,
-    description: row.transaction_content,
-    code: row.code,
-    bankBrandName: row.bank_brand_name,
-    bankAccountId: row.bank_account_id,
-    vaId: row.va_id,
-    source: 'sepay_api_reconcile',
-  };
-}
-
-function isMatchingSePayApiTransaction(row, transaction) {
-  const searchText = buildSePaySearchText({
-    content: row.transaction_content,
-    description: row.transaction_content,
-    code: row.code,
-    referenceCode: row.reference_number,
-  }).toUpperCase();
-  if (!searchText.includes(String(transaction.transaction_code || '').toUpperCase())) return false;
-
-  const amountIn = Number(row.amount_in || 0);
-  if (!Number.isFinite(amountIn) || amountIn < Number(transaction.amount)) return false;
-
-  const bankConfig = getBankConfig();
-  if (bankConfig) {
-    const expectedAccount = normalizeBankAccount(bankConfig.accountNumber);
-    const receivedAccount = normalizeBankAccount(row.va || row.account_number);
-    if (receivedAccount && expectedAccount && receivedAccount !== expectedAccount) return false;
-
-    const expectedBank = String(bankConfig.bankCode || '').toUpperCase();
-    const receivedBank = String(row.bank_brand_name || '').toUpperCase();
-    if (receivedBank && expectedBank && receivedBank !== expectedBank) return false;
-  }
-
-  return String(row.transfer_type || 'in').toLowerCase() === 'in';
-}
-
-async function findSePayApiTransaction(transaction) {
-  const token = getSePayApiToken();
-  if (!token) return null;
-
-  const response = await axios.get('https://userapi.sepay.vn/v2/transactions', {
-    params: {
-      q: transaction.transaction_code,
-      transfer_type: 'in',
-      amount_in_min: Number(transaction.amount),
-      amount_in_max: Number(transaction.amount),
-      per_page: 5,
-    },
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+  return createPayOSClient(config).paymentRequests.get(payos.orderCode, {
     timeout: 10000,
+    maxRetries: 1,
   });
-
-  const rows = Array.isArray(response.data?.data) ? response.data.data : [];
-  return rows.find(row => isMatchingSePayApiTransaction(row, transaction)) || null;
 }
 
-async function reconcilePendingBankTransfer(transaction) {
+async function reconcilePendingPayOSPayment(transaction) {
   if (!transaction || transaction.status !== 'pending' || transaction.payment_method !== 'bank_transfer') {
     return transaction;
   }
 
   try {
-    const sepayTransaction = await findSePayApiTransaction(transaction);
-    if (!sepayTransaction) return transaction;
+    const payment = await getPayOSPaymentRequest(transaction);
+    if (!payment || payment.status !== 'PAID') return transaction;
+    if (Number(payment.amountPaid || payment.amount || 0) < Number(transaction.amount)) {
+      console.warn(`[payOS] Reconcile amount mismatch for transaction ${transaction.id}`);
+      return transaction;
+    }
 
     const claimedTransaction = await Transaction.claimPending(transaction.id);
     if (!claimedTransaction) {
@@ -781,17 +755,23 @@ async function reconcilePendingBankTransfer(transaction) {
     }
 
     try {
-      await completeClaimedBankTransfer(
-        claimedTransaction,
-        mapSePayApiTransactionToWebhookPayload(sepayTransaction)
-      );
+      const latestPayment = Array.isArray(payment.transactions) && payment.transactions.length
+        ? payment.transactions[payment.transactions.length - 1]
+        : {};
+      await completeClaimedBankTransfer(claimedTransaction, {
+        ...latestPayment,
+        orderCode: payment.orderCode,
+        paymentLinkId: payment.id,
+        amount: payment.amountPaid || payment.amount,
+        source: 'payos_api_reconcile',
+      });
     } catch (processErr) {
       await Transaction.updateStatus(claimedTransaction.id, 'pending');
       throw processErr;
     }
     return await Transaction.findByTransactionCode(transaction.transaction_code);
   } catch (err) {
-    console.error('[SePay] API reconcile failed:', err.message);
+    console.error('[payOS] API reconcile failed:', err.message);
     return transaction;
   }
 }
@@ -1066,27 +1046,28 @@ router.post('/create', authenticate, async (req, res) => {
     }
 
     if (payment_method === 'bank_transfer') {
-      const bankConfig = getBankConfig();
-      if (!bankConfig) {
-        console.error('[Payment] Missing BANK_CODE, BANK_ACCOUNT_NUMBER, or BANK_ACCOUNT_NAME');
-        return res.status(500).json({
+      let payosPayment;
+      try {
+        payosPayment = await createPayOSPaymentRequest(transaction, pkg.name);
+      } catch (payosErr) {
+        console.error('[payOS] Create payment failed:', payosErr.response?.data?.desc || payosErr.message);
+        await Transaction.updateStatus(transaction.id, 'failed').catch(() => {});
+        return res.status(payosErr.code === 'PAYOS_NOT_CONFIGURED' ? 503 : 502).json({
           success: false,
-          message: 'Thanh toán chuyển khoản chưa được cấu hình.',
+          message: payosErr.code === 'PAYOS_NOT_CONFIGURED'
+            ? 'Thanh toán payOS chưa được cấu hình.'
+            : 'Không tạo được mã thanh toán payOS. Vui lòng thử lại.',
         });
       }
+      const bank = await buildPayOSBankResponse(transaction, payosPayment);
 
       return res.json({
         success: true,
         payment_method: 'bank_transfer',
+        payment_provider: 'payos',
         orderId,
-        bank: {
-          bankCode: bankConfig.bankCode,
-          accountNumber: bankConfig.accountNumber,
-          accountName: bankConfig.accountName,
-          amount: finalAmount,
-          content: orderId,
-          qrUrl: `https://img.vietqr.io/image/${bankConfig.bankCode}-${bankConfig.accountNumber}-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(orderId)}&accountName=${encodeURIComponent(bankConfig.accountName)}`,
-        },
+        payUrl: payosPayment.checkoutUrl || null,
+        bank,
         appliedCoupon: appliedCoupon ? {
           code: appliedCoupon.code,
           discount_amount: discountAmount,
@@ -1378,7 +1359,7 @@ router.post('/verify-return', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Thiếu orderId.' });
     }
 
-    const transaction = await Transaction.findByTransactionCode(orderId);
+    let transaction = await Transaction.findByTransactionCode(orderId);
 
     if (!transaction) {
       return res.json({ success: false, status: 'not_found' });
@@ -1386,6 +1367,10 @@ router.post('/verify-return', authenticate, async (req, res) => {
 
     if (transaction.user_id !== req.user.id) {
       return res.json({ success: false, status: 'unauthorized' });
+    }
+
+    if (transaction.status === 'pending' && transaction.payment_method === 'bank_transfer') {
+      transaction = await reconcilePendingPayOSPayment(transaction);
     }
 
     if (transaction.status === 'completed') {
@@ -1403,7 +1388,7 @@ router.post('/verify-return', authenticate, async (req, res) => {
     }
 
     // [BẢO MẬT] Bỏ việc tin tưởng resultCode từ frontend để tự động hoàn thành thanh toán.
-    // Việc cập nhật trạng thái thanh toán CHỈ ĐƯỢC PHÉP thông qua Webhook (IPN) từ MoMo/VNPay.
+    // Việc cập nhật trạng thái thanh toán chỉ được phép qua webhook hoặc API đối soát nhà cung cấp.
     // Frontend sẽ poll API này để chờ trạng thái chuyển từ pending sang completed.
     
     return res.json({ success: true, status: transaction.status });
@@ -1414,137 +1399,61 @@ router.post('/verify-return', authenticate, async (req, res) => {
 });
 
 /**
- * @route POST /api/payments/sepay-webhook
- * @desc Nhận webhook từ SePay khi có giao dịch chuyển khoản vào
- * @access Public (xác thực qua apikey header)
+ * @route POST /api/payments/payos-webhook
+ * @desc Nhận webhook thanh toán từ payOS
+ * @access Public (xác thực bằng HMAC SHA-256)
  */
-router.post('/sepay-webhook', async (req, res) => {
+router.post('/payos-webhook', async (req, res) => {
   try {
-    const authResult = verifySePayApiKey(
-      req.headers.authorization,
-      req.headers['x-api-key'] || req.headers['x-sepay-api-key']
-    );
-    if (!authResult.ok) {
-      console.warn(`[SePay] Webhook rejected: ${authResult.message}`);
-      return res.status(authResult.status).json({ success: false, message: authResult.message });
+    const config = getPayOSConfig();
+    if (!config) {
+      console.error('[payOS] Webhook received while payOS is not configured');
+      return res.status(503).json({ success: false, message: 'payOS is not configured' });
     }
 
-    const {
-      transferAmount,
-      content,
-      description,
-      transferType,
-      accountNumber,
-      code,
-      id,
-      referenceCode,
-    } = req.body;
-
-    console.log('[SePay] Webhook received:', {
-      id,
-      referenceCode,
-      accountNumber,
-      transferType,
-      transferAmount,
-      code,
-      descriptionLength: String(description || '').length,
-      contentLength: String(content || '').length,
-    });
-
-    const normalizedTransferType = String(transferType || '').toLowerCase();
-    if (normalizedTransferType && !['in', 'credit'].includes(normalizedTransferType)) {
-      return res.json({ success: true, message: 'Ignored - not incoming transfer' });
+    let webhookData;
+    try {
+      webhookData = await createPayOSClient(config).webhooks.verify(req.body);
+    } catch (_signatureError) {
+      console.warn('[payOS] Webhook signature rejected');
+      return res.status(401).json({ success: false, message: 'Invalid signature' });
     }
 
-    const bankConfig = getBankConfig();
-    if (!bankConfig) {
-      console.error('[SePay] Missing BANK_CODE, BANK_ACCOUNT_NUMBER, or BANK_ACCOUNT_NAME');
-      return res.status(503).json({ success: false, message: 'Bank transfer is not configured' });
+    // payOS gửi dữ liệu mẫu khi xác nhận URL webhook. Trả 200 nếu chữ ký hợp lệ.
+    if (req.body?.code !== '00' || req.body?.success !== true || webhookData?.code !== '00') {
+      return res.json({ success: true, message: 'Webhook verified; non-success event ignored' });
     }
 
-    const expectedAccount = normalizeBankAccount(bankConfig.accountNumber);
-    const receivedAccount = normalizeBankAccount(accountNumber);
-    if (receivedAccount && receivedAccount !== expectedAccount) {
-      console.warn('[SePay] Webhook: accountNumber mismatch');
-      return res.json({ success: true, message: 'Ignored - account mismatch' });
-    }
-    if (!receivedAccount) {
-      console.warn('[SePay] Webhook: accountNumber missing, continuing with API key + order code + amount verification');
+    const orderCode = Number.parseInt(webhookData.orderCode, 10);
+    if (!Number.isFinite(orderCode) || orderCode <= 0) {
+      return res.json({ success: true, message: 'Webhook test acknowledged' });
     }
 
-    const receivedAmount = parseInt(transferAmount, 10);
-    if (isNaN(receivedAmount) || receivedAmount <= 0) {
-      console.warn('[SePay] Invalid transferAmount:', transferAmount);
-      return res.json({ success: true, message: 'Invalid amount' });
-    }
-
-    const searchText = buildSePaySearchText(req.body);
-    const normalizedSearchText = normalizePaymentCode(searchText);
-    const extractedOrderCode = extractBankTransferOrderCode(searchText);
-    if (!normalizedSearchText || normalizedSearchText.length < 5) {
-      console.warn('[SePay] Webhook: Empty or too short payment content');
-      return res.json({ success: true, message: 'Invalid content' });
-    }
-
-    if (id || referenceCode) {
-      const duplicateRes = await db.query(
-        `SELECT id FROM transactions
-         WHERE payment_channel = 'bank_transfer'
-           AND status = 'completed'
-           AND (
-             ($1::text IS NOT NULL AND raw_response->>'id' = $1::text)
-             OR ($2::text IS NOT NULL AND raw_response->>'referenceCode' = $2::text)
-           )
-         LIMIT 1`,
-        [id ? String(id) : null, referenceCode ? String(referenceCode) : null]
-      );
-      if (duplicateRes.rows[0]) {
-        return res.json({ success: true, message: 'Duplicate webhook ignored' });
-      }
-    }
-
-    let transaction = null;
-    if (extractedOrderCode) {
-      const txRes = await db.query(
-        `SELECT * FROM transactions
-         WHERE UPPER(transaction_code) = $1
-           AND status = 'pending'
-           AND payment_method = 'bank_transfer'
-         LIMIT 1`,
-        [extractedOrderCode]
-      );
-      transaction = txRes.rows[0] || null;
-    }
-
+    let transaction = await Transaction.findById(orderCode);
     if (!transaction) {
-      const likeRes = await db.query(
-        `SELECT * FROM transactions
-         WHERE $1 ILIKE '%' || transaction_code || '%'
-           AND status = 'pending'
-           AND payment_method = 'bank_transfer'
-          ORDER BY created_at DESC
-          LIMIT 1`,
-        [searchText]
-      );
-      transaction = likeRes.rows[0];
+      // Dữ liệu mẫu của payOS thường dùng orderCode không tồn tại.
+      return res.json({ success: true, message: 'Unknown/test order acknowledged' });
     }
 
-    if (!transaction) {
-      console.warn('[SePay] Webhook: No matching transaction', {
-        extractedOrderCode,
-        searchText: searchText.slice(0, 200),
-      });
-      return res.json({ success: true, message: 'No matching transaction' });
+    const payos = getPayOSMeta(transaction);
+    if (
+      transaction.payment_method !== 'bank_transfer' ||
+      payos.provider !== 'payos' ||
+      payos.orderCode !== orderCode
+    ) {
+      console.warn(`[payOS] Webhook order ${orderCode} does not belong to payOS`);
+      return res.json({ success: true, message: 'Order provider mismatch' });
     }
 
-    // Kiểm tra số tiền: thiếu tiền thì reject; chuyển thừa vẫn kích hoạt theo đơn pending.
+    if (transaction.status === 'completed') {
+      return res.json({ success: true, message: 'Duplicate webhook ignored' });
+    }
+
+    const receivedAmount = Number(webhookData.amount);
     const expectedAmount = Number(transaction.amount);
-    if (receivedAmount < expectedAmount) {
-      console.warn(`[SePay] Amount mismatch: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
+    if (!Number.isFinite(receivedAmount) || receivedAmount < expectedAmount) {
+      console.warn(`[payOS] Amount mismatch: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
       return res.json({ success: true, message: 'Amount mismatch' });
-    }
-    if (receivedAmount > expectedAmount) {
-      console.warn(`[SePay] Overpaid: expected ${expectedAmount}, got ${receivedAmount} for tx ${transaction.id}`);
     }
 
     const claimedTransaction = await Transaction.claimPending(transaction.id);
@@ -1554,18 +1463,25 @@ router.post('/sepay-webhook', async (req, res) => {
     transaction = claimedTransaction;
 
     try {
-      await completeClaimedBankTransfer(transaction, req.body);
+      await completeClaimedBankTransfer(transaction, {
+        ...webhookData,
+        source: 'payos_webhook',
+      });
     } catch (processErr) {
       await Transaction.updateStatus(transaction.id, 'pending');
       throw processErr;
     }
 
     return res.json({ success: true });
-
   } catch (err) {
-    console.error('[SePay] Webhook error:', err);
-    return res.status(200).json({ success: false, message: 'Internal error' });
+    console.error('[payOS] Webhook error:', err.message);
+    // Trả non-2xx để payOS retry, tránh mất sự kiện khi DB tạm lỗi.
+    return res.status(500).json({ success: false, message: 'Internal error' });
   }
+});
+
+router.post('/sepay-webhook', (_req, res) => {
+  return res.status(410).json({ success: false, message: 'SePay has been replaced by payOS' });
 });
 
 /**
@@ -1590,7 +1506,7 @@ router.get('/check-status', authenticate, async (req, res) => {
     if (transaction.user_id !== req.user.id) return res.json({ success: false, status: 'unauthorized' });
 
     if (transaction.status === 'pending' && transaction.payment_method === 'bank_transfer') {
-      transaction = await reconcilePendingBankTransfer(transaction);
+      transaction = await reconcilePendingPayOSPayment(transaction);
     }
 
     if (transaction.status === 'completed') {
