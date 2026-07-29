@@ -7,6 +7,7 @@ param(
   [int]$AssetId,
   [string]$ProcessingCode,
   [string]$LaunchUri,
+  [int]$CleanupAssetId,
   [ValidateSet("360p", "480p", "720p", "1080p")][string[]]$Renditions,
   [switch]$DryRun,
   [switch]$Configure
@@ -66,6 +67,63 @@ function Read-YesNo([string]$Prompt, [bool]$DefaultYes = $true) {
   $answer = (Read-Host "$Prompt $suffix").Trim().ToLowerInvariant()
   if (-not $answer) { return $DefaultYes }
   return $answer -in @("y", "yes", "c", "co")
+}
+
+function Remove-LocalAssetWork([int]$TargetAssetId) {
+  if ($TargetAssetId -le 0) { throw "Asset ID can don khong hop le." }
+
+  $resolvedWorkRoot = [IO.Path]::GetFullPath($workRoot)
+  if (-not (Test-Path -LiteralPath $resolvedWorkRoot -PathType Container)) {
+    Write-Host "May nay chua co thu muc HLS tam de don." -ForegroundColor Green
+    return
+  }
+
+  $expectedName = "asset-$TargetAssetId"
+  $expectedPrefix = "$expectedName-"
+  $targets = @(
+    Get-ChildItem -LiteralPath $resolvedWorkRoot -Directory -Force |
+      Where-Object {
+        $_.Name -eq $expectedName -or $_.Name.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase)
+      }
+  )
+
+  if ($targets.Count -eq 0) {
+    Write-Host "Khong tim thay file HLS tam cua Asset #$TargetAssetId tren may nay." -ForegroundColor Green
+    return
+  }
+
+  $totalBytes = [int64]0
+  foreach ($target in $targets) {
+    if (($target.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "Tu choi don lien ket thu muc: $($target.FullName)"
+    }
+
+    $resolvedTarget = [IO.Path]::GetFullPath($target.FullName)
+    $targetParent = [IO.Path]::GetDirectoryName($resolvedTarget)
+    if (-not [string]::Equals($targetParent, $resolvedWorkRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        $target.Name -notmatch "^asset-$TargetAssetId(?:-\d{8}-\d{6})?$") {
+      throw "Tu choi xoa duong dan khong an toan: $resolvedTarget"
+    }
+
+    $targetBytes = [int64]((
+      Get-ChildItem -LiteralPath $resolvedTarget -File -Recurse -Force |
+        Measure-Object -Property Length -Sum
+    ).Sum)
+    $totalBytes += $targetBytes
+    Write-Host ("  {0} ({1:N1} MiB)" -f $resolvedTarget, ($targetBytes / 1MB))
+  }
+
+  Write-Host ""
+  Write-Host "Chi xoa file HLS tam tren may. Video tren R2 va du lieu khoa hoc se duoc giu nguyen." -ForegroundColor Yellow
+  if (-not (Read-YesNo ("Xoa {0} thu muc, giai phong khoang {1:N1} MiB? Khong the khoi phuc." -f $targets.Count, ($totalBytes / 1MB)) $false)) {
+    Write-Host "Da huy, khong co file nao bi xoa." -ForegroundColor Yellow
+    return
+  }
+
+  foreach ($target in $targets) {
+    Remove-Item -LiteralPath $target.FullName -Recurse -Force
+  }
+  Write-Host ("Da xoa {0} thu muc HLS tam cua Asset #{1}, giai phong khoang {2:N1} MiB." -f $targets.Count, $TargetAssetId, ($totalBytes / 1MB)) -ForegroundColor Green
 }
 
 function Select-VideoFile {
@@ -200,10 +258,20 @@ try {
   Write-Host "Cong cu se tu encode, kiem tra va upload R2."
 
   if ($LaunchUri) {
-    if ($LaunchUri -notmatch "^csca-video:(.+)$") {
+    $decodedLaunchUri = [Uri]::UnescapeDataString($LaunchUri).Trim()
+    if ($decodedLaunchUri -match "^csca-video:cleanup:([1-9]\d*)/?$") {
+      $CleanupAssetId = [int]$Matches[1]
+    } elseif ($decodedLaunchUri -match "^csca-video:(.+)$") {
+      $ProcessingCode = $Matches[1].Trim()
+    } else {
       throw "Lien ket mo cong cu khong hop le."
     }
-    $ProcessingCode = [Uri]::UnescapeDataString($Matches[1]).Trim()
+  }
+
+  if ($CleanupAssetId -gt 0) {
+    Write-Step "Don file HLS tam cua Asset #$CleanupAssetId"
+    Remove-LocalAssetWork $CleanupAssetId
+    exit 0
   }
 
   if ($Configure) {

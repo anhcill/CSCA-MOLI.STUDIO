@@ -197,16 +197,26 @@ export function VideoUploadPanel({
         </button>
         {transferBusy ? <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold">Hủy</button> : null}
         {existingAssetId ? (
-          <button
-            type="button"
-            disabled={busy || deleting}
-            onClick={() => void deleteVideo()}
-            className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
-          >
-            {deleting ? 'Đang xóa khỏi R2...' : 'Xóa video và dữ liệu R2'}
-          </button>
+          <>
+            <a
+              href={`csca-video:cleanup:${existingAssetId}`}
+              title="Chỉ xóa HLS tạm trong .video-work trên máy, không xóa video trên R2"
+              className="rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700"
+            >
+              Dọn HLS tạm trên máy
+            </a>
+            <button
+              type="button"
+              disabled={busy || deleting}
+              onClick={() => void deleteVideo()}
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
+            >
+              {deleting ? 'Đang xóa khỏi R2...' : 'Xóa video và dữ liệu R2'}
+            </button>
+          </>
         ) : null}
       </div>
+      {existingAssetId ? <p className="text-xs font-semibold text-slate-500">“Dọn HLS tạm trên máy” chỉ giải phóng thư mục .video-work; video trên R2 và khóa học vẫn được giữ nguyên.</p> : null}
       {stage === 'processing' || stage === 'finalizing' ? (
         <div role="status" className="space-y-2 text-sm font-semibold text-amber-700">
           <p>{label}{videoAssetId ? ` Asset #${videoAssetId} đã được tạo.` : ''}</p>

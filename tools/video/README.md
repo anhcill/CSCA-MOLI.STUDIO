@@ -19,7 +19,10 @@ operator never copies an Admin access token into PowerShell.
 
 Generated HLS work is retained under `.video-work/asset-<id>` so an interrupted
 run can continue without encoding again. Both local configuration and work
-outputs are gitignored.
+outputs are gitignored. After the video has been finalized and playback has
+been checked, Admin's `Don HLS tam tren may` button opens the desktop helper,
+shows the matching local folders and their size, and asks for confirmation
+before deleting them. This cleanup never deletes the R2 objects or course data.
 
 For a no-copy workflow on Windows, run `DANG-KY-CONG-CU-VIDEO.cmd` once. It
 registers the per-user `csca-video:` URL protocol and points it at the repository
