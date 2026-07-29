@@ -4,6 +4,8 @@ const emailPreferenceController = require('../controllers/emailPreferenceControl
 
 const router = express.Router();
 
+router.post('/brevo-events', emailPreferenceController.brevoEvents);
+
 const unsubscribeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 30,

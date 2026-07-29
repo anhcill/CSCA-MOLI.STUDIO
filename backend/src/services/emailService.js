@@ -10,7 +10,8 @@ class EmailService {
     this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
     this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.senderEmail;
     this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.senderName;
-    this.replyToEmail = process.env.EMAIL_REPLY_TO || this.marketingSenderEmail;
+    this.replyToEmail = process.env.EMAIL_REPLY_TO || '';
+    this.marketingListId = Number.parseInt(process.env.BREVO_MARKETING_LIST_ID || '', 10);
     this.baseUrl = 'https://api.brevo.com/v3';
 
     this.client = axios.create({
@@ -46,40 +47,100 @@ class EmailService {
 
   async sendCampaignBatch({ recipients, subject, html, text }) {
     if (!this.apiKey) throw new Error('BREVO_API_KEY not configured');
-    const validRecipients = (recipients || []).filter(item => item?.email);
+    if (!Number.isInteger(this.marketingListId) || this.marketingListId <= 0) {
+      throw new Error('BREVO_MARKETING_LIST_ID not configured');
+    }
+
+    const uniqueRecipients = new Map();
+    (recipients || []).forEach(recipient => {
+      const email = String(recipient?.email || '').trim();
+      if (!email) return;
+      uniqueRecipients.set(email.toLowerCase(), {
+        email,
+        name: String(recipient?.name || email).trim().slice(0, 200),
+      });
+    });
+    const validRecipients = [...uniqueRecipients.values()];
     if (!validRecipients.length) throw new Error('No valid recipients');
 
-    const requestedBatchSize = Number.parseInt(process.env.EMAIL_CAMPAIGN_BATCH_SIZE || '100', 10);
-    const batchSize = Math.min(Math.max(requestedBatchSize || 100, 1), 200);
-    const requestedDelay = Number.parseInt(process.env.EMAIL_CAMPAIGN_BATCH_DELAY_MS || '750', 10);
-    const batchDelayMs = Math.min(Math.max(requestedDelay || 0, 0), 5000);
+    // A Brevo marketing campaign supplies Gmail's standards-compliant
+    // unsubscribe handling. Transactional notifications continue to use
+    // /smtp/email through _send().
+    await this._replaceMarketingList(validRecipients);
 
-    let sent = 0;
-    for (let index = 0; index < validRecipients.length; index += batchSize) {
-      const chunk = validRecipients.slice(index, index + batchSize);
-      await this.client.post('/smtp/email', {
-        sender: { email: this.marketingSenderEmail, name: this.marketingSenderName },
-        replyTo: { email: this.replyToEmail, name: this.marketingSenderName },
-        subject,
-        htmlContent: html,
-        textContent: text || subject,
-        tags: ['admin-marketing-campaign'],
-        // One recipient per version prevents exposing the audience list.
-        messageVersions: chunk.map(recipient => ({
-          to: [{ email: recipient.email, name: recipient.name || recipient.email }],
-          // Explicitly repeat these fields for every version. Brevo does not
-          // reliably inherit the global values for custom-HTML batch sends.
-          subject,
-          htmlContent: recipient.html || html,
-          textContent: recipient.text || text || subject,
-        })),
-      });
-      sent += chunk.length;
-      if (batchDelayMs && sent < validRecipients.length) {
-        await new Promise(resolve => setTimeout(resolve, batchDelayMs));
-      }
+    const campaignPayload = {
+      name: `Admin campaign ${new Date().toISOString()} - ${subject}`.slice(0, 200),
+      sender: {
+        email: this.marketingSenderEmail,
+        name: this.marketingSenderName,
+      },
+      subject,
+      previewText: subject,
+      htmlContent: html,
+      recipients: { listIds: [this.marketingListId] },
+    };
+    if (this.replyToEmail) {
+      campaignPayload.replyTo = this.replyToEmail;
     }
-    return { sent };
+
+    const campaign = await this.client.post('/emailCampaigns', campaignPayload);
+    const campaignId = Number(campaign?.data?.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) {
+      throw new Error('Brevo did not return a campaign ID');
+    }
+
+    await this.client.post(`/emailCampaigns/${campaignId}/sendNow`);
+    return {
+      sent: validRecipients.length,
+      campaignId,
+      listId: this.marketingListId,
+    };
+  }
+
+  async _replaceMarketingList(recipients) {
+    try {
+      const removal = await this.client.post(
+        `/contacts/lists/${this.marketingListId}/contacts/remove`,
+        { all: true }
+      );
+      await this._waitForProcess(removal?.data?.processId);
+    } catch (error) {
+      const message = String(error?.response?.data?.message || '');
+      const alreadyEmpty = error?.response?.status === 400
+        && message.includes('Contacts already removed from list');
+      if (!alreadyEmpty) throw error;
+    }
+
+    const imported = await this.client.post('/contacts/import', {
+      jsonBody: recipients.map(recipient => ({
+        email: recipient.email,
+        attributes: {
+          FIRSTNAME: recipient.name,
+        },
+      })),
+      listIds: [this.marketingListId],
+      updateExistingContacts: true,
+      emptyContactsAttributes: false,
+      disableNotification: true,
+    });
+    await this._waitForProcess(imported?.data?.processId);
+  }
+
+  async _waitForProcess(processId) {
+    if (!processId) return;
+    const deadline = Date.now() + 60000;
+
+    while (Date.now() < deadline) {
+      const process = await this.client.get(`/processes/${processId}`);
+      const status = String(process?.data?.status || '').toLowerCase();
+      if (status === 'completed') return;
+      if (['failed', 'error'].includes(status)) {
+        throw new Error(`Brevo process ${processId} failed`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    throw new Error(`Brevo process ${processId} timed out`);
   }
 
   buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl, recipientName }) {

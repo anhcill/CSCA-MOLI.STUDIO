@@ -79,39 +79,46 @@ const AdminCampaignController = {
       const text = [content, discountCode ? `Mã ưu đãi: ${discountCode}` : '', actionUrl]
         .filter(Boolean).join('\n\n');
       const recipients = result.rows.map(recipient => ({
-        ...recipient,
-        html: emailService.buildAdminCampaignEmail({
-          subject,
-          content,
-          discountCode,
-          actionLabel,
-          actionUrl,
-          recipientName: recipient.name,
-        }),
-        text: `Chào ${recipient.name || 'bạn'},\n\n${text}`,
+        email: recipient.email,
+        name: recipient.name,
       }));
+      const html = emailService.buildAdminCampaignEmail({
+        subject,
+        content,
+        discountCode,
+        actionLabel,
+        actionUrl,
+        recipientName: '{{contact.FIRSTNAME}}',
+      });
       const delivery = await emailService.sendCampaignBatch({
         recipients,
         subject,
-        html: recipients[0].html,
-        text,
+        html,
+        text: `Chào {{contact.FIRSTNAME}},\n\n${text}`,
       });
 
       await UserActivity.log(req.user.id, 'admin.send_email_campaign', {
         mode,
         targetUserId: mode === 'single' ? userId : null,
         recipientCount: delivery.sent,
+        brevoCampaignId: delivery.campaignId,
         subject,
         discountCode: discountCode || null,
       });
       return res.json({
         success: true,
-        message: `Đã gửi email thành công đến ${delivery.sent} người nhận`,
-        data: { sent: delivery.sent },
+        message: `Brevo đã nhận chiến dịch gửi đến ${delivery.sent} người nhận`,
+        data: {
+          sent: delivery.sent,
+          campaignId: delivery.campaignId,
+        },
       });
     } catch (error) {
       console.error('[admin campaign send]', error?.response?.data || error);
-      const configMissing = error.message === 'BREVO_API_KEY not configured';
+      const configMissing = [
+        'BREVO_API_KEY not configured',
+        'BREVO_MARKETING_LIST_ID not configured',
+      ].includes(error.message);
       return res.status(configMissing ? 503 : 500).json({
         success: false,
         message: configMissing ? 'Hệ thống gửi email chưa được cấu hình' : 'Gửi email thất bại. Vui lòng thử lại.',
