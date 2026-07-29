@@ -52,6 +52,8 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   const [room, setRoom] = useState<LearningRoomDto | null>(null);
   const [session, setSession] = useState<PlaybackSessionDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const [loadStage, setLoadStage] = useState('Đang kết nối tới lớp học');
   const [error, setError] = useState('');
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
@@ -75,6 +77,8 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadProgress(null);
+    setLoadStage('Đang tải nội dung bài học');
     setError('');
     setRoom(null);
     setSession(null);
@@ -85,13 +89,27 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
       .then(async (nextRoom) => {
         if (!active) return;
         setRoom(nextRoom);
-        if (nextRoom.lesson.lessonType !== 'video') return;
+        if (nextRoom.lesson.lessonType !== 'video') {
+          setLoadProgress(100);
+          setLoadStage('Bài học đã sẵn sàng');
+          return;
+        }
+        setLoadProgress(50);
+        setLoadStage('Đang chuẩn bị phiên phát video');
         setPlaybackLoading(true);
         try {
           const nextSession = await learningApi.createPlaybackSession(lessonId);
-          if (active) setSession(nextSession);
+          if (active) {
+            setSession(nextSession);
+            setLoadProgress(100);
+            setLoadStage('Video đã sẵn sàng');
+          }
         } catch {
-          if (active) setPlaybackError('Video chưa sẵn sàng hoặc chưa được gắn vào bài học này. Bạn vẫn có thể xem nội dung phía dưới.');
+          if (active) {
+            setPlaybackError('Video chưa sẵn sàng hoặc chưa được gắn vào bài học này. Bạn vẫn có thể xem nội dung phía dưới.');
+            setLoadProgress(100);
+            setLoadStage('Nội dung bài học đã sẵn sàng');
+          }
         } finally {
           if (active) setPlaybackLoading(false);
         }
@@ -160,7 +178,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     };
   }, [lessonId, room]);
 
-  if (loading && !room) return <LearningRoomLoading />;
+  if (loading) return <LearningRoomLoading progress={loadProgress} stage={loadStage} />;
   if (error || !room) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5efe8] p-8 dark:bg-[#050d1d]">
