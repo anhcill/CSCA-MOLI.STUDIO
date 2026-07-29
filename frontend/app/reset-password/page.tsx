@@ -135,7 +135,7 @@ function ResetPasswordForm() {
                                             onChange={e => setNewPassword(e.target.value)}
                                             placeholder="Ít nhất 8 ký tự"
                                             autoFocus
-                                            className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900"
+                                            className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-10 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-slate-400"
                                         />
                                         <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                                             {showPw ? <FiEyeOff size={15} /> : <FiEye size={15} />}
@@ -163,7 +163,7 @@ function ResetPasswordForm() {
                                             value={confirm}
                                             onChange={e => setConfirm(e.target.value)}
                                             placeholder="Nhập lại mật khẩu"
-                                            className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 text-gray-900"
+                                            className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-10 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-slate-400"
                                         />
                                         <button type="button" onClick={() => setShowConfirm(p => !p)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                                             {showConfirm ? <FiEyeOff size={15} /> : <FiEye size={15} />}

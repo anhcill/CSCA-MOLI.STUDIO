@@ -332,6 +332,33 @@ body {
   color: rgb(100 116 139);
 }
 
+/*
+ * Native text controls default to a white background. Legacy forms that only
+ * declare a text utility therefore became white-on-white after the global
+ * dark text remapping above. Give only controls without an explicit Tailwind
+ * background a safe dark surface, while leaving checkboxes, files, ranges and
+ * deliberately styled/transparent fields untouched.
+ */
+:where(.dark) input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]):not([class*="bg-"]),
+:where(.dark) textarea:not([class*="bg-"]),
+:where(.dark) select:not([class*="bg-"]) {
+  color-scheme: dark;
+  background-color: rgb(15 23 42);
+  border-color: rgb(71 85 105);
+  caret-color: rgb(226 232 240);
+}
+
+:where(.dark) input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]):not([class*="bg-"])::placeholder,
+:where(.dark) textarea:not([class*="bg-"])::placeholder {
+  color: rgb(100 116 139);
+  opacity: 1;
+}
+
+:where(.dark) select:not([class*="bg-"]) option {
+  background-color: rgb(15 23 42);
+  color: rgb(226 232 240);
+}
+
 /* MolyPet follows the site theme with a higher-contrast dark palette. */
 :where(.dark) .moli-pet-theme {
   color-scheme: dark;
