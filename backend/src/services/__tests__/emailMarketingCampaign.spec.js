@@ -142,4 +142,50 @@ describe('EmailService marketing campaigns', () => {
       expect.any(Object)
     );
   });
+
+  test('sends academic notices through the transactional sender', async () => {
+    process.env = {
+      ...originalEnv,
+      BREVO_API_KEY: 'test-key',
+      EMAIL_SENDER: 'notification@molystudio.online',
+      EMAIL_SENDER_NAME: 'CSCA Moly Notifications',
+    };
+
+    const client = {
+      get: jest.fn(),
+      post: jest.fn().mockResolvedValue({ data: { messageId: 'test-id' } }),
+    };
+    jest.doMock('axios', () => ({
+      create: jest.fn(() => client),
+    }));
+
+    const emailService = require('../emailService');
+    await expect(emailService.sendTransactionalBatch({
+      recipients: [{
+        email: 'student@example.com',
+        name: 'Học sinh',
+        html: '<html><body>Thông báo riêng</body></html>',
+        text: 'Thông báo riêng',
+      }],
+      subject: 'Lịch học mới',
+      html: '<html><body>Thông báo</body></html>',
+      text: 'Thông báo',
+    })).resolves.toEqual({ sent: 1 });
+
+    expect(client.post).toHaveBeenCalledWith('/smtp/email', {
+      sender: {
+        email: 'notification@molystudio.online',
+        name: 'CSCA Moly Notifications',
+      },
+      subject: 'Lịch học mới',
+      htmlContent: '<html><body>Thông báo</body></html>',
+      textContent: 'Thông báo',
+      messageVersions: [{
+        to: [{ email: 'student@example.com', name: 'Học sinh' }],
+        subject: 'Lịch học mới',
+        htmlContent: '<html><body>Thông báo riêng</body></html>',
+        textContent: 'Thông báo riêng',
+      }],
+    });
+  });
 });

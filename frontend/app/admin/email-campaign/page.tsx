@@ -11,8 +11,10 @@ const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
 export default function EmailCampaignPage() {
   const [channel, setChannel] = useState<'notification' | 'email'>('email');
+  const [emailType, setEmailType] = useState<'transactional' | 'marketing'>('transactional');
   const [mode, setMode] = useState<'all' | 'single'>('all');
   const [activeUsers, setActiveUsers] = useState(0);
+  const [transactionalUsers, setTransactionalUsers] = useState(0);
   const [activeAccounts, setActiveAccounts] = useState(0);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Recipient[]>([]);
@@ -21,7 +23,7 @@ export default function EmailCampaignPage() {
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
   const [discountCode, setDiscountCode] = useState('');
-  const [actionLabel, setActionLabel] = useState('Nhận ưu đãi ngay');
+  const [actionLabel, setActionLabel] = useState('Xem thông báo');
   const [actionUrl, setActionUrl] = useState('');
   const [sending, setSending] = useState(false);
   const [sentSuccessfully, setSentSuccessfully] = useState(false);
@@ -31,6 +33,7 @@ export default function EmailCampaignPage() {
     adminApi.getEmailAudienceStats()
       .then(response => {
         setActiveUsers(Number(response.data.active_users) || 0);
+        setTransactionalUsers(Number(response.data.transactional_users) || 0);
         setActiveAccounts(Number(response.data.active_accounts) || 0);
       })
       .catch(() => setNotice({ ok: false, text: 'Không thể lấy số lượng người nhận.' }));
@@ -58,7 +61,9 @@ export default function EmailCampaignPage() {
   }, [mode, query]);
 
   const recipientCount = mode === 'all'
-    ? (channel === 'notification' ? activeAccounts : activeUsers)
+    ? (channel === 'notification'
+        ? activeAccounts
+        : emailType === 'transactional' ? transactionalUsers : activeUsers)
     : selected ? 1 : 0;
   const canSend = subject.trim().length >= 3 && content.trim().length >= 3
     && recipientCount > 0 && !sending && !sentSuccessfully;
@@ -67,7 +72,7 @@ export default function EmailCampaignPage() {
     setSubject('');
     setContent('');
     setDiscountCode('');
-    setActionLabel('Nhận ưu đãi ngay');
+    setActionLabel(emailType === 'transactional' ? 'Xem thông báo' : 'Nhận ưu đãi ngay');
     setActionUrl('');
     setSelected(null);
     setQuery('');
@@ -76,13 +81,21 @@ export default function EmailCampaignPage() {
     setSentSuccessfully(false);
   }
 
+  function selectEmailType(type: 'transactional' | 'marketing') {
+    setEmailType(type);
+    setDiscountCode('');
+    setActionLabel(type === 'transactional' ? 'Xem thông báo' : 'Nhận ưu đãi ngay');
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSend) return;
     const target = mode === 'all'
       ? `${recipientCount.toLocaleString('vi-VN')} người dùng đang hoạt động`
       : selected?.email;
-    const itemName = channel === 'notification' ? 'thông báo' : 'email';
+    const itemName = channel === 'notification'
+      ? 'thông báo'
+      : emailType === 'transactional' ? 'email học tập' : 'email marketing';
     if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}? Hành động này không thể hoàn tác.`)) return;
 
     setSending(true);
@@ -99,10 +112,11 @@ export default function EmailCampaignPage() {
           })
         : await adminApi.sendEmailCampaign({
             mode,
+            deliveryType: emailType,
             userId: selected?.id,
             subject: subject.trim(),
             content: content.trim(),
-            discountCode: discountCode.trim(),
+            discountCode: emailType === 'marketing' ? discountCode.trim() : '',
             actionLabel: actionLabel.trim(),
             actionUrl: actionUrl.trim(),
           });
@@ -138,6 +152,28 @@ export default function EmailCampaignPage() {
             <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-bold ${channel === 'email' ? 'bg-red-50 text-[#9d2933] dark:bg-red-950/30 dark:text-red-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300'}`}>
               Đang chọn: {channel === 'email' ? 'EMAIL — người nhận sẽ nhận thư trong hộp thư' : 'THÔNG BÁO HỆ THỐNG — chỉ hiện ở biểu tượng chuông'}
             </p>
+            {channel === 'email' && (
+              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+                <h3 className="mb-2 text-sm font-bold text-slate-900 dark:text-white">Loại email</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button type="button" disabled={sentSuccessfully} onClick={() => selectEmailType('transactional')}
+                    className={`rounded-xl border p-4 text-left transition ${emailType === 'transactional' ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100 dark:bg-emerald-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <span className="block font-bold text-slate-900 dark:text-white">Thông báo học tập</span>
+                    <span className="mt-1 block text-sm text-slate-500">Bài học, lịch học, kết quả — ưu tiên tab Chính</span>
+                  </button>
+                  <button type="button" disabled={sentSuccessfully} onClick={() => selectEmailType('marketing')}
+                    className={`rounded-xl border p-4 text-left transition ${emailType === 'marketing' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-100 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <span className="block font-bold text-slate-900 dark:text-white">Ưu đãi / marketing</span>
+                    <span className="mt-1 block text-sm text-slate-500">Khuyến mãi, mã giảm giá — có hủy đăng ký</span>
+                  </button>
+                </div>
+                <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${emailType === 'transactional' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'}`}>
+                  {emailType === 'transactional'
+                    ? 'Chỉ dùng cho thông tin cần thiết liên quan trực tiếp đến việc học; không chèn ưu đãi.'
+                    : 'Brevo Marketing Campaign sẽ tự quản lý hủy đăng ký và Gmail có thể xếp vào tab Quảng cáo.'}
+                </p>
+              </div>
+            )}
           </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
@@ -189,17 +225,23 @@ export default function EmailCampaignPage() {
             <div className="space-y-4">
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tiêu đề *
                 <input value={subject} maxLength={160} onChange={e => setSubject(e.target.value)}
-                  placeholder="Ví dụ: Ưu đãi 30% dành riêng cho bạn" className={field} />
+                  placeholder={channel === 'email' && emailType === 'transactional'
+                    ? 'Ví dụ: Lịch học tuần này đã được cập nhật'
+                    : 'Ví dụ: Ưu đãi 30% dành riêng cho bạn'} className={field} />
               </label>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Nội dung *
                 <textarea value={content} maxLength={10000} rows={9} onChange={e => setContent(cleanCopiedContent(e.target.value))}
-                  placeholder="Nhập nội dung, thời hạn và điều kiện áp dụng..." className={`${field} resize-y leading-6`} />
+                  placeholder={channel === 'email' && emailType === 'transactional'
+                    ? 'Nhập nội dung học tập cần thông báo cho học sinh...'
+                    : 'Nhập nội dung, thời hạn và điều kiện áp dụng...'} className={`${field} resize-y leading-6`} />
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Mã ưu đãi
-                  <input value={discountCode} maxLength={80} onChange={e => setDiscountCode(e.target.value.toUpperCase())}
-                    placeholder="MOLY30" className={`${field} font-mono`} />
-                </label>
+                {(channel === 'notification' || emailType === 'marketing') && (
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Mã ưu đãi
+                    <input value={discountCode} maxLength={80} onChange={e => setDiscountCode(e.target.value.toUpperCase())}
+                      placeholder="MOLY30" className={`${field} font-mono`} />
+                  </label>
+                )}
                 {channel === 'email' && <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tên nút
                   <input value={actionLabel} maxLength={80} onChange={e => setActionLabel(e.target.value)} className={field} />
                 </label>}
@@ -265,7 +307,7 @@ export default function EmailCampaignPage() {
               : sentSuccessfully
                 ? 'Đã gửi — nút đã khóa'
                 : channel === 'email'
-                  ? `Gửi EMAIL đến ${recipientCount.toLocaleString('vi-VN')} người nhận`
+                  ? `Gửi ${emailType === 'transactional' ? 'THÔNG BÁO HỌC TẬP' : 'EMAIL MARKETING'} đến ${recipientCount.toLocaleString('vi-VN')} người nhận`
                   : `Gửi THÔNG BÁO CHUÔNG đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
           </button>
           {sentSuccessfully && (
@@ -277,7 +319,9 @@ export default function EmailCampaignPage() {
           <p className="text-center text-xs leading-5 text-slate-500">
             {channel === 'notification'
               ? 'Thông báo sẽ xuất hiện tại biểu tượng chuông của tài khoản người nhận.'
-              : 'Hệ thống hỏi xác nhận lần cuối trước khi gửi. Người nhận không nhìn thấy email của nhau.'}
+              : emailType === 'transactional'
+                ? 'Gửi riêng qua notification@molystudio.online. Không dùng nội dung quảng cáo trong loại email này.'
+                : 'Gửi qua Brevo Marketing Campaign với cơ chế hủy đăng ký chuẩn. Người nhận không nhìn thấy email của nhau.'}
           </p>
         </div>
       </form>

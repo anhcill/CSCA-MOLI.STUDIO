@@ -184,12 +184,17 @@ export const adminApi = {
         const response = await axios.get('/admin/email-campaign/audience');
         return response.data as {
             success: boolean;
-            data: { active_users: number; active_accounts: number };
+            data: {
+                active_users: number;
+                transactional_users: number;
+                active_accounts: number;
+            };
         };
     },
 
     async sendEmailCampaign(payload: {
         mode: 'all' | 'single';
+        deliveryType: 'transactional' | 'marketing';
         userId?: number;
         subject: string;
         content: string;
@@ -217,7 +222,11 @@ export const adminApi = {
         return response.data as {
             success: boolean;
             message: string;
-            data: { sent: number };
+            data: {
+                sent: number;
+                campaignId?: number | null;
+                deliveryType: 'transactional' | 'marketing';
+            };
         };
     }
 };

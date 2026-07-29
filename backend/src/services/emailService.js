@@ -97,6 +97,47 @@ class EmailService {
     };
   }
 
+  async sendTransactionalBatch({ recipients, subject, html, text }) {
+    if (!this.apiKey) throw new Error('BREVO_API_KEY not configured');
+
+    const uniqueRecipients = new Map();
+    (recipients || []).forEach(recipient => {
+      const email = String(recipient?.email || '').trim();
+      if (!email) return;
+      uniqueRecipients.set(email.toLowerCase(), {
+        ...recipient,
+        email,
+        name: String(recipient?.name || email).trim().slice(0, 200),
+      });
+    });
+    const validRecipients = [...uniqueRecipients.values()];
+    if (!validRecipients.length) throw new Error('No valid recipients');
+
+    const batchSize = 50;
+    let sent = 0;
+    for (let index = 0; index < validRecipients.length; index += batchSize) {
+      const chunk = validRecipients.slice(index, index + batchSize);
+      await this.client.post('/smtp/email', {
+        sender: { email: this.senderEmail, name: this.senderName },
+        subject,
+        htmlContent: html,
+        textContent: text || subject,
+        messageVersions: chunk.map(recipient => ({
+          to: [{ email: recipient.email, name: recipient.name }],
+          subject,
+          htmlContent: recipient.html || html,
+          textContent: recipient.text || text || subject,
+        })),
+      });
+      sent += chunk.length;
+      if (sent < validRecipients.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    return { sent };
+  }
+
   async _replaceMarketingList(recipients) {
     try {
       const removal = await this.client.post(
