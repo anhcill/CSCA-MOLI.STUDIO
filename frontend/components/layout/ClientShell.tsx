@@ -8,6 +8,7 @@ import MoliPet from '@/components/common/MoliPet';
 import DailyGiftBox from '@/components/daily-gift/DailyGiftBox';
 import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
 import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt';
+import NotificationPermissionPrompt from '@/components/pwa/NotificationPermissionPrompt';
 import UpdateToast from '@/components/pwa/UpdateToast';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -74,6 +75,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showDailyGift = showMoliPet && isAuthenticated;
   const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showPwaPrompt = !isAuth && !isChat;
+  const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = !isChat;
   const moliPetPosition = 'left';
 
@@ -86,6 +88,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
       {mounted && showPwaPrompt && <PWAInstallPrompt />}
+      {mounted && showNotificationPrompt && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast
           visible={updateAvailable}
