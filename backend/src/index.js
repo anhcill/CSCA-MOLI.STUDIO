@@ -244,6 +244,7 @@ app.use("/api/rank", require("./routes/rank")); // Ranked battles
 app.use("/api/wallet", require("./routes/wallet")); // Coin wallet
 app.use("/api/unlocks", require("./routes/unlocks")); // Coin unlocks
 app.use("/api/notifications", require("./routes/notifications")); // Notifications
+app.use("/api/email/preferences", require("./routes/emailPreferences")); // Marketing email preferences
 app.use("/api/payments", require("./routes/payments")); // MoMo & Payments
 app.use("/api/vip", require("./routes/vipPackageRoutes")); // VIP Packages
 app.use("/api/coupons", require("./routes/couponRoutes")); // Coupons (validate & apply)

@@ -9,11 +9,18 @@ const AdminCampaignController = {
     try {
       const result = await pool.query(
         `SELECT
-         COUNT(*) FILTER (WHERE is_active IS DISTINCT FROM FALSE)::int AS active_accounts,
+         COUNT(*) FILTER (WHERE u.is_active IS DISTINCT FROM FALSE)::int AS active_accounts,
          COUNT(*) FILTER (
-           WHERE is_active IS DISTINCT FROM FALSE AND email IS NOT NULL AND email <> ''
+           WHERE u.is_active IS DISTINCT FROM FALSE
+             AND u.email IS NOT NULL
+             AND u.email <> ''
+             AND u.email_verified IS TRUE
+             AND COALESCE(ep.marketing_enabled, TRUE) IS TRUE
+             AND es.email IS NULL
          )::int AS active_users
-         FROM users`
+         FROM users u
+         LEFT JOIN user_email_preferences ep ON ep.user_id = u.id
+         LEFT JOIN email_suppressions es ON LOWER(es.email) = LOWER(u.email)`
       );
       return res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -48,27 +55,46 @@ const AdminCampaignController = {
       }
 
       const params = [];
-      let where = `email IS NOT NULL AND email <> '' AND is_active IS DISTINCT FROM FALSE`;
+      let where = `u.email IS NOT NULL AND u.email <> '' AND u.is_active IS DISTINCT FROM FALSE`;
       if (mode === 'single') {
         params.push(userId);
-        where += ' AND id = $1';
+        where += ' AND u.id = $1';
       }
       const result = await pool.query(
-        `SELECT id, email, COALESCE(NULLIF(full_name, ''), username, email) AS name
-         FROM users WHERE ${where} ORDER BY id`,
+        `SELECT u.id, u.email, COALESCE(NULLIF(u.full_name, ''), u.username, u.email) AS name
+         FROM users u
+         LEFT JOIN user_email_preferences ep ON ep.user_id = u.id
+         LEFT JOIN email_suppressions es ON LOWER(es.email) = LOWER(u.email)
+         WHERE ${where}
+           AND u.email_verified IS TRUE
+           AND COALESCE(ep.marketing_enabled, TRUE) IS TRUE
+           AND es.email IS NULL
+         ORDER BY u.id`,
         params
       );
       if (!result.rows.length) {
         return res.status(404).json({ success: false, message: 'Không tìm thấy người nhận hợp lệ' });
       }
 
-      const html = emailService.buildAdminCampaignEmail({
-        subject, content, discountCode, actionLabel, actionUrl,
-      });
       const text = [content, discountCode ? `Mã ưu đãi: ${discountCode}` : '', actionUrl]
         .filter(Boolean).join('\n\n');
+      const recipients = result.rows.map(recipient => ({
+        ...recipient,
+        html: emailService.buildAdminCampaignEmail({
+          subject,
+          content,
+          discountCode,
+          actionLabel,
+          actionUrl,
+          recipientName: recipient.name,
+        }),
+        text: `Chào ${recipient.name || 'bạn'},\n\n${text}`,
+      }));
       const delivery = await emailService.sendCampaignBatch({
-        recipients: result.rows, subject, html, text,
+        recipients,
+        subject,
+        html: recipients[0].html,
+        text,
       });
 
       await UserActivity.log(req.user.id, 'admin.send_email_campaign', {

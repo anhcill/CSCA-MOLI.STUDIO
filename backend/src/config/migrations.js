@@ -1120,6 +1120,7 @@ async function runOptimizations() {
       "046_device_login_requests.sql",
       "051_device_replacement_hardening.sql",
       "052_admin_user_notifications.sql",
+      "056_email_deliverability_controls.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",

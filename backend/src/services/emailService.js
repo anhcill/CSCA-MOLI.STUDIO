@@ -8,6 +8,9 @@ class EmailService {
     this.apiKey = process.env.BREVO_API_KEY;
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
     this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
+    this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.senderEmail;
+    this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.senderName;
+    this.replyToEmail = process.env.EMAIL_REPLY_TO || this.marketingSenderEmail;
     this.baseUrl = 'https://api.brevo.com/v3';
 
     this.client = axios.create({
@@ -46,33 +49,44 @@ class EmailService {
     const validRecipients = (recipients || []).filter(item => item?.email);
     if (!validRecipients.length) throw new Error('No valid recipients');
 
+    const requestedBatchSize = Number.parseInt(process.env.EMAIL_CAMPAIGN_BATCH_SIZE || '100', 10);
+    const batchSize = Math.min(Math.max(requestedBatchSize || 100, 1), 200);
+    const requestedDelay = Number.parseInt(process.env.EMAIL_CAMPAIGN_BATCH_DELAY_MS || '750', 10);
+    const batchDelayMs = Math.min(Math.max(requestedDelay || 0, 0), 5000);
+
     let sent = 0;
-    for (let index = 0; index < validRecipients.length; index += 1000) {
-      const chunk = validRecipients.slice(index, index + 1000);
+    for (let index = 0; index < validRecipients.length; index += batchSize) {
+      const chunk = validRecipients.slice(index, index + batchSize);
       await this.client.post('/smtp/email', {
-        sender: { email: this.senderEmail, name: this.senderName },
+        sender: { email: this.marketingSenderEmail, name: this.marketingSenderName },
+        replyTo: { email: this.replyToEmail, name: this.marketingSenderName },
         subject,
         htmlContent: html,
         textContent: text || subject,
+        tags: ['admin-marketing-campaign'],
         // One recipient per version prevents exposing the audience list.
         messageVersions: chunk.map(recipient => ({
           to: [{ email: recipient.email, name: recipient.name || recipient.email }],
           // Explicitly repeat these fields for every version. Brevo does not
           // reliably inherit the global values for custom-HTML batch sends.
           subject,
-          htmlContent: html,
-          textContent: text || subject,
+          htmlContent: recipient.html || html,
+          textContent: recipient.text || text || subject,
         })),
       });
       sent += chunk.length;
+      if (batchDelayMs && sent < validRecipients.length) {
+        await new Promise(resolve => setTimeout(resolve, batchDelayMs));
+      }
     }
     return { sent };
   }
 
-  buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl }) {
+  buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl, recipientName }) {
     const safeContent = this.escapeHtml(content).replace(/\r?\n/g, '<br>');
     const safeCode = discountCode ? this.escapeHtml(discountCode) : '';
     const safeActionUrl = actionUrl ? this.escapeHtml(actionUrl) : '';
+    const safeRecipientName = this.escapeHtml(recipientName || 'bạn');
     const safeActionLabel = this.escapeHtml(actionLabel || 'Xem thông tin');
 
     // Keep campaign emails close to a simple study-abroad letter. The layout
@@ -114,7 +128,7 @@ class EmailService {
               <p style="margin:0 0 10px;color:#9d2933;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">Thông báo dành cho bạn</p>
               <h1 style="margin:0 0 24px;color:#172033;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.28;font-weight:bold">${this.escapeHtml(subject)}</h1>
               <div style="width:42px;height:3px;margin:0 0 24px;background:#b4232e"></div>
-              <p style="margin:0 0 18px;font-size:15px;line-height:1.75;color:#344054">Chào bạn,</p>
+              <p style="margin:0 0 18px;font-size:15px;line-height:1.75;color:#344054">Chào ${safeRecipientName},</p>
               <div style="font-size:15px;line-height:1.8;color:#475467">${safeContent}</div>
               ${safeCode ? `
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 0;background:#faf4e8;border:1px dashed #c69a68;border-radius:10px">
