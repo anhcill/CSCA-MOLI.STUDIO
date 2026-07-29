@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { FiCheckCircle, FiGift, FiMail, FiSearch, FiSend, FiUsers } from 'react-icons/fi';
+import { FiBell, FiCheckCircle, FiGift, FiMail, FiSearch, FiSend, FiUsers } from 'react-icons/fi';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { adminApi } from '@/lib/api/admin';
 
@@ -10,7 +10,7 @@ type Recipient = { id: number; full_name: string; email: string };
 const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
 export default function EmailCampaignPage() {
-  const [channel, setChannel] = useState<'notification' | 'email'>('notification');
+  const [channel, setChannel] = useState<'notification' | 'email'>('email');
   const [mode, setMode] = useState<'all' | 'single'>('all');
   const [activeUsers, setActiveUsers] = useState(0);
   const [activeAccounts, setActiveAccounts] = useState(0);
@@ -126,15 +126,18 @@ export default function EmailCampaignPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <button type="button" disabled={sentSuccessfully} onClick={() => setChannel('notification')}
                 className={`rounded-xl border p-4 text-left transition ${channel === 'notification' ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100 dark:bg-violet-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
-                <span className="block font-bold text-slate-900 dark:text-white">Thông báo hệ thống</span>
+                <span className="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><FiBell /> Thông báo hệ thống</span>
                 <span className="mt-1 block text-sm text-slate-500">Hiện ở chuông thông báo, không gửi mail</span>
               </button>
               <button type="button" disabled={sentSuccessfully} onClick={() => setChannel('email')}
-                className={`rounded-xl border p-4 text-left transition ${channel === 'email' ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-100 dark:bg-violet-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
-                <span className="block font-bold text-slate-900 dark:text-white">Email</span>
-                <span className="mt-1 block text-sm text-slate-500">Gửi qua email đã đăng ký</span>
+                className={`rounded-xl border p-4 text-left transition ${channel === 'email' ? 'border-[#b4232e] bg-[#fff7ed] ring-2 ring-red-100 dark:bg-red-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                <span className="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><FiMail /> Email</span>
+                <span className="mt-1 block text-sm text-slate-500">Gửi thư thật đến hộp thư đã đăng ký</span>
               </button>
             </div>
+            <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-bold ${channel === 'email' ? 'bg-red-50 text-[#9d2933] dark:bg-red-950/30 dark:text-red-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300'}`}>
+              Đang chọn: {channel === 'email' ? 'EMAIL — người nhận sẽ nhận thư trong hộp thư' : 'THÔNG BÁO HỆ THỐNG — chỉ hiện ở biểu tượng chuông'}
+            </p>
           </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
@@ -256,12 +259,14 @@ export default function EmailCampaignPage() {
           )}
           {notice && <div className={`rounded-xl border p-4 text-sm font-medium ${notice.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}>{notice.text}</div>}
           <button type="submit" disabled={!canSend}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-4 font-bold text-white shadow-lg shadow-violet-200 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 font-bold text-white shadow-lg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 ${channel === 'email' ? 'bg-[#b4232e] shadow-red-200' : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 shadow-violet-200'}`}>
             <FiSend /> {sending
               ? 'Đang gửi...'
               : sentSuccessfully
                 ? 'Đã gửi — nút đã khóa'
-                : `Gửi đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
+                : channel === 'email'
+                  ? `Gửi EMAIL đến ${recipientCount.toLocaleString('vi-VN')} người nhận`
+                  : `Gửi THÔNG BÁO CHUÔNG đến ${recipientCount.toLocaleString('vi-VN')} người nhận`}
           </button>
           {sentSuccessfully && (
             <button type="button" onClick={startNewEmail}
