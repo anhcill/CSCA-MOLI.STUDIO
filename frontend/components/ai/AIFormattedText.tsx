@@ -45,6 +45,9 @@ function normalizeLooseLatexCommands(value: string) {
     .replace(/\\{1,2}geq?\b/g, '≥')
     .replace(/\\{1,2}ne(q)?\b/g, '≠')
     .replace(/\\{1,2}in\b/g, '∈')
+    .replace(/\\{1,2}cup\b/g, '∪')
+    .replace(/\\{1,2}cap\b/g, '∩')
+    .replace(/\\{1,2}setminus\b/g, '∖')
     .replace(/\\{1,2}mathbb\{Z\}/g, 'ℤ')
     .replace(/\\{1,2}mathbb\{R\}/g, 'ℝ')
     .replace(/\\{1,2}mathbb\{N\}/g, 'ℕ');
