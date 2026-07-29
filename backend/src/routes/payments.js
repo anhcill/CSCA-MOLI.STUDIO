@@ -174,6 +174,13 @@ function getPayOSMeta(transaction) {
   };
 }
 
+function isPayOSPaymentExpired(payment) {
+  if (!payment) return false;
+  if (String(payment.status || '').toUpperCase() === 'EXPIRED') return true;
+  const expiredAt = Number(payment.expiredAt);
+  return Number.isFinite(expiredAt) && expiredAt > 0 && expiredAt <= Math.floor(Date.now() / 1000);
+}
+
 async function buildPayOSBankResponse(transaction, paymentData) {
   if (!paymentData?.qrCode) return null;
   const qrUrl = await QRCode.toDataURL(paymentData.qrCode, {
@@ -815,7 +822,43 @@ router.post('/create', authenticate, async (req, res) => {
 
     // ── Idempotency: tránh tạo transaction trùng khi bấm thanh toán nhiều lần ──
     if (idemKey) {
-      const existingTx = await Transaction.findByIdempotencyKey(userId, idemKey);
+      let existingTx = await Transaction.findByIdempotencyKey(userId, idemKey);
+      if (
+        existingTx?.payment_method === 'bank_transfer' &&
+        existingTx.status === 'pending'
+      ) {
+        const existingPayOS = getPayOSMeta(existingTx);
+
+        if (existingPayOS.provider === 'payos' && isPayOSPaymentExpired(existingPayOS.payment)) {
+          // Cho phép tạo orderCode mới sau khi QR payOS cũ hết hạn.
+          await Transaction.updateStatus(existingTx.id, 'failed');
+          existingTx = null;
+        } else if (existingPayOS.provider !== 'payos' || !existingPayOS.payment) {
+          // Nâng cấp đơn pending được tạo từ luồng SePay cũ sang payOS.
+          try {
+            const migratedPayment = await createPayOSPaymentRequest(
+              existingTx,
+              existingTx.package_name
+            );
+            existingTx = {
+              ...existingTx,
+              raw_response: {
+                ...getStoredPaymentMeta(existingTx),
+                paymentProvider: 'payos',
+                payosOrderCode: Number(existingTx.id),
+                payosPayment: migratedPayment,
+              },
+            };
+          } catch (migrationError) {
+            console.error('[payOS] Legacy payment migration failed:', migrationError.message);
+            return res.status(502).json({
+              success: false,
+              message: 'Không tạo được mã thanh toán payOS. Vui lòng thử lại.',
+            });
+          }
+        }
+      }
+
       if (existingTx) {
         const existingResponse = await buildExistingPaymentResponse(existingTx);
         if (existingResponse.success === false) {
