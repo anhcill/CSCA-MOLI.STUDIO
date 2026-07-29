@@ -95,24 +95,24 @@ function Ribbon({ rank, colorClass }: { rank: number; colorClass: string }) {
 function getRankTone(rank: number) {
   if (rank === 1) {
     return {
-      badgeColor: 'bg-[#FFC524]',
-      shell: 'border-[#FFE899] dark:border-amber-700/30 bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] dark:from-[#3a2f15]/20 dark:via-slate-900 dark:to-slate-900 shadow-md shadow-amber-100/50 dark:shadow-none',
-      score: 'bg-[#FFB800] text-white',
+      badgeColor: 'bg-[#FFC524] dark:bg-amber-500/80',
+      shell: 'border-[#FFE899] dark:border-amber-500/30 bg-gradient-to-b from-[#FFFDF3] via-white to-[#FFF9E6] dark:from-slate-800 dark:via-slate-800/95 dark:to-slate-900 shadow-md shadow-amber-100/50 dark:shadow-none',
+      score: 'bg-[#FFB800] text-white dark:bg-amber-400/15 dark:text-amber-300 dark:ring-1 dark:ring-amber-400/30',
       wreathColor: 'text-[#F5D06E] dark:text-[#d4af37]',
     };
   }
   if (rank === 2) {
     return {
-      badgeColor: 'bg-[#4FA2FF]',
-      shell: 'border-[#D0E7FF] dark:border-blue-700/30 bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] dark:from-[#1b2b48]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-blue-100/40 dark:shadow-none',
-      score: 'bg-[#3B82F6] text-white',
+      badgeColor: 'bg-[#4FA2FF] dark:bg-sky-500/80',
+      shell: 'border-[#D0E7FF] dark:border-sky-500/30 bg-gradient-to-b from-[#F5FAFF] via-white to-[#EBF5FF] dark:from-slate-800 dark:via-slate-800/95 dark:to-slate-900 shadow-sm shadow-blue-100/40 dark:shadow-none',
+      score: 'bg-[#3B82F6] text-white dark:bg-sky-400/15 dark:text-sky-300 dark:ring-1 dark:ring-sky-400/30',
       wreathColor: 'text-[#9ECBFF] dark:text-[#4a90e2]',
     };
   }
   return {
-    badgeColor: 'bg-[#FF7894]',
-    shell: 'border-[#FFE4E6] dark:border-rose-700/30 bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] dark:from-[#3b1c24]/20 dark:via-slate-900 dark:to-slate-900 shadow-sm shadow-rose-100/40 dark:shadow-none',
-    score: 'bg-[#EC4899] text-white',
+    badgeColor: 'bg-[#FF7894] dark:bg-rose-500/80',
+    shell: 'border-[#FFE4E6] dark:border-rose-500/30 bg-gradient-to-b from-[#FFF5F6] via-white to-[#FFEBEF] dark:from-slate-800 dark:via-slate-800/95 dark:to-slate-900 shadow-sm shadow-rose-100/40 dark:shadow-none',
+    score: 'bg-[#EC4899] text-white dark:bg-rose-400/15 dark:text-rose-300 dark:ring-1 dark:ring-rose-400/30',
     wreathColor: 'text-[#FFA1B5] dark:text-[#d04a6b]',
   };
 }
@@ -204,8 +204,8 @@ export default function OfficialExamLeaderboard({
   const restEntries = entries.slice(3);
 
   return (
-    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} ${inkResultSoftPanel} ${className} transition-colors duration-300`}>
-      <div className={`border-b border-[#ead9bd]/70 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
+    <section className={`overflow-hidden ${compact ? 'rounded-2xl' : 'rounded-[2rem]'} ${inkResultSoftPanel} ${className} transition-colors duration-300 dark:border-slate-700 dark:bg-slate-950/90 dark:shadow-[0_18px_55px_rgba(0,0,0,0.3)]`}>
+      <div className={`border-b border-[#ead9bd]/70 bg-[#fffaf2]/72 dark:border-slate-700 dark:bg-slate-900/95 ${compact ? 'p-4' : 'p-5 md:p-6'}`}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-violet-100 dark:border-violet-900/30 bg-violet-50 dark:bg-violet-950/20 px-3 py-1 text-[11px] font-extrabold uppercase text-violet-700 dark:text-violet-400">
@@ -217,19 +217,19 @@ export default function OfficialExamLeaderboard({
               </span>
               Bảng vàng thành tích
             </h2>
-            <p className={`mt-1 max-w-2xl text-xs font-bold ${inkResultMuted}`}>
+            <p className={`mt-1 max-w-2xl text-xs font-bold dark:text-slate-400 ${inkResultMuted}`}>
               {description || `Vinh danh những bài làm nổi bật nhất của ${examTitle || 'đề hiện tại'}.`}
             </p>
           </div>
           
           <div className="flex gap-2 self-start md:self-auto">
-            <div className="rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
-              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase ${inkResultMuted}`}><FiUsers size={10} /> Thí sinh</p>
-              <p className={`text-lg font-black mt-0.5 ${inkResultTitle}`}>{entries.length}</p>
+            <div className="min-w-[90px] rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 px-3 py-2 text-center dark:border-slate-700 dark:bg-slate-800/80">
+              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase dark:text-slate-400 ${inkResultMuted}`}><FiUsers size={10} /> Thí sinh</p>
+              <p className={`mt-0.5 text-lg font-black dark:text-slate-100 ${inkResultTitle}`}>{entries.length}</p>
             </div>
-            <div className="rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 dark:border-slate-800 dark:bg-slate-900 px-3 py-2 text-center min-w-[90px]">
-              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase ${inkResultMuted}`}><FiAward size={10} /> Phạm vi</p>
-              <p className={`text-xs font-black mt-1.5 truncate max-w-[80px] ${inkResultTitle}`} title={scopeLabel}>{scopeLabel}</p>
+            <div className="min-w-[90px] rounded-xl border border-[#ead9bd]/75 bg-[#fffaf2]/72 px-3 py-2 text-center dark:border-slate-700 dark:bg-slate-800/80">
+              <p className={`flex items-center justify-center gap-1 text-[9px] font-black uppercase dark:text-slate-400 ${inkResultMuted}`}><FiAward size={10} /> Phạm vi</p>
+              <p className={`mt-1.5 max-w-[80px] truncate text-xs font-black dark:text-slate-100 ${inkResultTitle}`} title={scopeLabel}>{scopeLabel}</p>
             </div>
           </div>
         </div>
@@ -242,8 +242,8 @@ export default function OfficialExamLeaderboard({
       ) : entries.length === 0 ? (
         <div className={`flex flex-col items-center justify-center text-center bg-[#fffaf2]/72 dark:bg-slate-900 ${compact ? 'min-h-[200px] p-6' : 'min-h-[260px] p-8'}`}>
           <FiTrendingUp size={36} className="mb-2 text-slate-300 dark:text-slate-700" />
-          <p className={`text-base font-black ${inkResultTitle}`}>{emptyTitle}</p>
-          <p className={`mt-1 max-w-md text-xs font-bold ${inkResultMuted}`}>
+          <p className={`text-base font-black dark:text-slate-100 ${inkResultTitle}`}>{emptyTitle}</p>
+          <p className={`mt-1 max-w-md text-xs font-bold dark:text-slate-400 ${inkResultMuted}`}>
             {emptyDescription}
           </p>
         </div>
@@ -258,7 +258,7 @@ export default function OfficialExamLeaderboard({
 
           {/* Table list for 4+ */}
           {restEntries.length > 0 && (
-            <div className="overflow-hidden rounded-[24px] border border-[#ead9bd]/80 bg-[#fffaf2]/78 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900">
+            <div className="overflow-hidden rounded-[24px] border border-[#ead9bd]/80 bg-[#fffaf2]/78 shadow-sm backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/80">
               <table className="w-full table-fixed border-collapse text-left">
                 <colgroup>
                   <col className="w-[8%]" />

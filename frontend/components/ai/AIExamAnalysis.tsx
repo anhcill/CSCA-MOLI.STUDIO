@@ -121,7 +121,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
     if (!analysis) return null;
 
     return (
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border border-purple-200 overflow-hidden shadow-sm dark:from-violet-950/25 dark:to-sky-950/20 dark:border-violet-900/60">
+        <div className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 dark:bg-none">
             {/* Header */}
             <button
                 onClick={() => setExpanded(!expanded)}
@@ -150,7 +150,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* So sánh với lần trước */}
                     {previousAttempt && (
-                        <div className={`rounded-xl p-4 border flex items-center gap-4 dark:bg-gray-900/70 dark:border-gray-800 ${
+                        <div className={`flex items-center gap-4 rounded-xl border p-4 dark:border-slate-700 dark:bg-slate-800/80 ${
                             previousAttempt.delta > 0 ? 'bg-emerald-50 border-emerald-200' :
                             previousAttempt.delta < 0 ? 'bg-red-50 border-red-200' :
                             'bg-gray-50 border-gray-200'
@@ -191,7 +191,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
 
                     {/* Grade + Summary */}
                     {analysis.grade && (
-                        <div className={`rounded-xl p-5 border dark:bg-gray-900/70 dark:border-gray-800 ${
+                        <div className={`rounded-xl border p-5 dark:border-slate-700 dark:bg-slate-800/80 ${
                             analysis.gradeColor === 'emerald' ? 'bg-emerald-50 border-emerald-200' :
                             analysis.gradeColor === 'blue'  ? 'bg-blue-50 border-blue-200' :
                             analysis.gradeColor === 'amber'  ? 'bg-amber-50 border-amber-200' :
@@ -201,10 +201,10 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                 {analysis.gradeColor === 'emerald' && <FiCheckCircle className="text-emerald-600" size={20} />}
                                 {analysis.gradeColor === 'red' && <FiAlertCircle className="text-red-600" size={20} />}
                                 <span className={`font-bold text-xl ${
-                                    analysis.gradeColor === 'emerald' ? 'text-emerald-800' :
-                                    analysis.gradeColor === 'blue'  ? 'text-blue-800'  :
-                                    analysis.gradeColor === 'amber'  ? 'text-amber-800'  :
-                                    'text-red-800'
+                                    analysis.gradeColor === 'emerald' ? 'text-emerald-800 dark:text-emerald-300' :
+                                    analysis.gradeColor === 'blue'  ? 'text-blue-800 dark:text-blue-300'  :
+                                    analysis.gradeColor === 'amber'  ? 'text-amber-800 dark:text-amber-300'  :
+                                    'text-red-800 dark:text-red-300'
                                 }`}>{analysis.grade}</span>
                             </div>
                             {analysis.summary && (
@@ -226,7 +226,7 @@ export default function AIExamAnalysis({ attemptId, aiAnalysis, aiLoading, onRef
                                     const color = level === 'easy' ? 'green' : level === 'hard' ? 'red' : 'amber';
                                     const label = level === 'easy' ? 'Dễ' : level === 'hard' ? 'Khó' : 'TB';
                                     return (
-                                        <div key={level} className={`bg-${color}-50 border border-${color}-200 rounded-xl p-3 dark:bg-gray-900/80 dark:border-gray-800`}>
+                                        <div key={level} className={`bg-${color}-50 border border-${color}-200 rounded-xl p-3 dark:bg-slate-800/80 dark:border-slate-700`}>
                                             <p className={`text-xs text-${color}-600 font-semibold mb-1`}>{label}</p>
                                             <p className={`text-2xl font-black text-${color}-700`}>{d.rate}%</p>
                                             <p className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{d.correct}/{d.total} câu</p>

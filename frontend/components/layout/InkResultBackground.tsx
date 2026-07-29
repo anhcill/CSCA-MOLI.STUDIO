@@ -3,17 +3,17 @@ import type { ReactNode } from 'react';
 export const INK_RESULT_BACKGROUND_SRC = '/images/exam-result-ink-bg-20260705c.png';
 
 export const inkResultPanel =
-  'border border-[#e8d5b8]/85 bg-[#fffaf2]/88 shadow-[0_22px_70px_rgba(129,77,33,0.16)] backdrop-blur-md';
+  'border border-[#e8d5b8]/85 bg-[#fffaf2]/88 shadow-[0_22px_70px_rgba(129,77,33,0.16)] backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/94 dark:shadow-[0_22px_70px_rgba(0,0,0,0.32)]';
 
 export const inkResultSoftPanel =
-  'border border-[#ead9bd]/80 bg-[#fffaf2]/76 shadow-[0_14px_45px_rgba(129,77,33,0.12)] backdrop-blur-md';
+  'border border-[#ead9bd]/80 bg-[#fffaf2]/76 shadow-[0_14px_45px_rgba(129,77,33,0.12)] backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/88 dark:shadow-[0_14px_45px_rgba(0,0,0,0.26)]';
 
 export const inkResultButtonPanel =
-  'border border-[#ead9bd]/75 bg-[#fffaf2]/68 shadow-[0_10px_30px_rgba(129,77,33,0.10)] backdrop-blur-md';
+  'border border-[#ead9bd]/75 bg-[#fffaf2]/68 shadow-[0_10px_30px_rgba(129,77,33,0.10)] backdrop-blur-md dark:border-slate-700 dark:bg-slate-800/82 dark:shadow-none dark:hover:border-slate-600 dark:hover:bg-slate-800';
 
-export const inkResultTitle = 'text-[#4f3521]';
-export const inkResultMuted = 'text-[#8b7866]';
-export const inkResultScore = 'text-[#d52a1e]';
+export const inkResultTitle = 'text-[#4f3521] dark:text-slate-100';
+export const inkResultMuted = 'text-[#8b7866] dark:text-slate-400';
+export const inkResultScore = 'text-[#d52a1e] dark:text-rose-400';
 
 type InkScoreMarkProps = {
   value: string | number;
@@ -84,12 +84,12 @@ type InkResultBackgroundProps = {
 
 export default function InkResultBackground({ children, className = '' }: InkResultBackgroundProps) {
   return (
-    <div className={`relative min-h-screen overflow-x-hidden bg-[#fbf3e8] text-slate-900 ${className}`}>
+    <div className={`relative min-h-screen overflow-x-hidden bg-[#fbf3e8] text-slate-900 dark:bg-slate-950 dark:text-slate-100 ${className}`}>
       <div
-        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat dark:opacity-[0.08] dark:mix-blend-luminosity"
         style={{ backgroundImage: `url(${INK_RESULT_BACKGROUND_SRC})` }}
       />
-      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-[#fff7ee]/12 to-[#fff7ee]/66" />
+      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white/40 via-[#fff7ee]/12 to-[#fff7ee]/66 dark:from-slate-950/80 dark:via-slate-950/70 dark:to-slate-950/90" />
       <div className="relative z-10">{children}</div>
     </div>
   );

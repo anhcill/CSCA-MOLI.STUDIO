@@ -392,14 +392,14 @@ function VocabularyContent() {
                 {Object.entries(groupedTopics).map(([subject, subjectTopics]) => {
                   const meta = getMeta(subject);
                   return (
-                    <div key={subject} className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-gray-100">
+                    <div key={subject} className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-8">
                       <div className="flex items-center gap-4 mb-6">
                         <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${meta.color} flex items-center justify-center text-3xl shadow-lg`}>
                           {meta.icon}
                         </div>
                         <div>
-                          <h2 className="text-2xl font-black text-gray-900">{subjectLabel(subject)}</h2>
-                          <p className="text-gray-500 text-sm mt-1">{format('vocab.topicsCount', { count: subjectTopics.length })}</p>
+                          <h2 className="text-2xl font-black text-gray-900 dark:text-slate-100">{subjectLabel(subject)}</h2>
+                          <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{format('vocab.topicsCount', { count: subjectTopics.length })}</p>
                         </div>
                       </div>
                       
@@ -408,11 +408,11 @@ function VocabularyContent() {
                           <button
                             key={topicItem.topic}
                             onClick={() => openTopic(topicItem.topic, topicItem.subject)}
-                            className="group relative bg-gray-50 rounded-2xl p-5 border-2 border-transparent hover:border-cyan-400 hover:bg-white hover:shadow-xl transition-all text-left overflow-hidden flex flex-col h-full"
+                            className="group relative flex h-full flex-col overflow-hidden rounded-2xl border-2 border-transparent bg-gray-50 p-5 text-left transition-all hover:border-cyan-400 hover:bg-white hover:shadow-xl dark:border-slate-700 dark:bg-slate-800/70 dark:hover:border-cyan-500/70 dark:hover:bg-slate-800 dark:hover:shadow-black/20"
                           >
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/40 to-transparent rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-500" />
+                            <div className="absolute right-0 top-0 -mr-10 -mt-10 h-24 w-24 rounded-full bg-gradient-to-br from-white/40 to-transparent transition-transform duration-500 group-hover:scale-150 dark:from-slate-600/35" />
                             
-                            <h3 className="font-bold text-gray-900 text-lg mb-4 pr-6 leading-tight relative z-10">
+                            <h3 className="relative z-10 mb-4 pr-6 text-lg font-bold leading-tight text-gray-900 dark:text-slate-100">
                               {topicItem.topic}
                             </h3>
                             
@@ -420,7 +420,7 @@ function VocabularyContent() {
                               <span className="text-sm text-cyan-600 font-bold group-hover:text-cyan-700">
                                 {t('vocab.startLearning')}
                               </span>
-                              <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 transition-colors group-hover:bg-cyan-500 group-hover:text-white dark:bg-slate-700 dark:text-cyan-400">
                                 <FiChevronRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
                               </div>
                             </div>

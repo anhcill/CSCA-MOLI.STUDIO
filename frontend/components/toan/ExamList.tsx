@@ -690,7 +690,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
         {/* ── Left column: Stats + Recommendation ──────────────── */}
         <div className="flex flex-col gap-5">
           {/* Stats overview card */}
-          <div className="rounded-2xl border border-rose-100/80 bg-white/75 p-5 shadow-[0_8px_28px_rgba(127,29,29,0.06)] backdrop-blur-xl">
+          <div className="rounded-2xl border border-rose-100/80 bg-white/75 p-5 shadow-[0_8px_28px_rgba(127,29,29,0.06)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/90 dark:shadow-black/20">
             <div className="mb-5 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
                 <FiBarChart2 />
@@ -698,8 +698,8 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
               <h3 className="text-base font-black text-slate-900">{t('examList.progressOverview')}</h3>
             </div>
             <div className="flex flex-col items-center gap-5 sm:flex-row">
-              <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-[conic-gradient(#dc2626_var(--progress),#fee2e2_0)]" style={{ ['--progress' as string]: `${progressStats.completion}%` }}>
-                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+              <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-[conic-gradient(#dc2626_var(--progress),#fee2e2_0)] dark:bg-[conic-gradient(#ef4444_var(--progress),#334155_0)]" style={{ ['--progress' as string]: `${progressStats.completion}%` }}>
+                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner dark:bg-slate-900">
                   <span className="text-3xl font-black text-slate-900">{progressStats.completion}%</span>
                   <span className="text-xs font-bold text-slate-400">{t('examList.setProgress')}</span>
                 </div>
@@ -713,7 +713,7 @@ export default function ExamList({ subjectCode = '', subjectSlug }: ExamListProp
             </div>
 
             {/* Recommendation */}
-            <div className="mt-5 rounded-2xl border border-red-100/80 bg-gradient-to-r from-red-50/90 to-rose-50/80 p-4">
+            <div className="mt-5 rounded-2xl border border-red-100/80 bg-gradient-to-r from-red-50/90 to-rose-50/80 p-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-800/90">
               <div className="flex items-center gap-3">
                 <FiTarget className="text-3xl text-red-600" />
                 <div>
