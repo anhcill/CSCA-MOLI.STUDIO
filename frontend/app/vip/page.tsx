@@ -8,7 +8,6 @@ import { FaCheckCircle, FaStar, FaCrown, FaVideo } from 'react-icons/fa';
 import { FiArrowLeft, FiLoader, FiTag, FiX, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
 
-const PREVIOUS_ROUTE_KEY = 'moli:previousRoute';
 
 interface VipPackage {
   id: number;
@@ -50,6 +49,23 @@ interface Discount {
   final_amount: number;
   package_id: number;
   subject_code?: string | null;
+}
+
+type ComparisonValue = boolean | string;
+
+function ComparisonCell({ value, tier }: { value: ComparisonValue; tier: 'free' | 'vip' | 'pre' }) {
+  if (typeof value === 'boolean') {
+    return value
+      ? <span className="font-bold text-emerald-500">✓</span>
+      : <span className="font-bold text-gray-300">—</span>;
+  }
+
+  const color = tier === 'free'
+    ? 'bg-slate-100 text-slate-600'
+    : tier === 'vip'
+      ? 'bg-indigo-50 text-indigo-700'
+      : 'bg-amber-50 text-amber-700';
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black leading-tight ${color}`}>{value}</span>;
 }
 
 function deriveColor(pkg: VipPackage) {
@@ -290,23 +306,7 @@ export default function VipPricingPage() {
   const { isVip, tier: userTier } = mounted && user ? getVipDisplay(user) : { isVip: false, tier: 'basic' as const };
 
   const handleBack = () => {
-    if (typeof window !== 'undefined') {
-      const storedRoute = sessionStorage.getItem(PREVIOUS_ROUTE_KEY);
-      if (storedRoute?.startsWith('/') && !storedRoute.startsWith('//') && !storedRoute.startsWith('/vip')) {
-        router.push(storedRoute);
-        return;
-      }
-
-      try {
-        const referrerUrl = document.referrer ? new URL(document.referrer) : null;
-        if (referrerUrl && referrerUrl.origin === window.location.origin && referrerUrl.pathname !== '/vip') {
-          router.push(`${referrerUrl.pathname}${referrerUrl.search}${referrerUrl.hash}`);
-          return;
-        }
-      } catch (_) {}
-    }
-
-    router.push('/');
+    router.replace('/');
   };
 
   return (
@@ -474,31 +474,33 @@ export default function VipPricingPage() {
                 {([
                   { feat: 'Đề thi cơ bản', free: true, vip: true, pre: true },
                   { feat: 'Đề thi cao cấp (VIP/Pre)', free: false, vip: true, pre: true },
-                  { feat: 'Phân tích bài thi bằng AI', free: false, vip: true, pre: true },
-                  { feat: 'Gợi ý đề thi phù hợp (AI)', free: false, vip: true, pre: true },
-                  { feat: 'Phân tích tiến bộ (AI)', free: false, vip: true, pre: true },
+                  { feat: 'Trợ lý & phân tích bằng AI', free: 'AI cơ bản', vip: 'AI cao cấp', pre: 'AI cao cấp' },
+                  { feat: 'Gợi ý học tập bằng AI', free: 'Gợi ý cơ bản', vip: 'Cá nhân hóa', pre: 'Cá nhân hóa' },
+                  { feat: 'Phân tích tiến bộ bằng AI', free: 'Tổng quan', vip: 'Chuyên sâu', pre: 'Chuyên sâu' },
                   { feat: 'Video giải đề chi tiết', free: false, vip: false, pre: true },
                   { feat: 'Hỏi đáp 1-1 với giảng viên', free: false, vip: false, pre: true },
                   { feat: 'Theo dõi lịch sử thi', free: true, vip: true, pre: true },
                   { feat: 'Bảng xếp hạng', free: true, vip: true, pre: true },
                   { feat: 'Hỗ trợ ưu tiên', free: false, vip: false, pre: true },
-                ] as { feat: string; free: boolean; vip: boolean; pre: boolean }[]).map((row, i) => (
+                ] as { feat: string; free: ComparisonValue; vip: ComparisonValue; pre: ComparisonValue }[]).map((row, i) => (
                   <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                     <td className="px-5 py-3 font-medium text-gray-700">{row.feat}</td>
                     <td className="text-center px-3 py-3">
-                      {row.free ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                      <ComparisonCell value={row.free} tier="free" />
                     </td>
                     <td className="text-center px-3 py-3">
-                      {row.vip ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                      <ComparisonCell value={row.vip} tier="vip" />
                     </td>
                     <td className="text-center px-3 py-3">
-                      {row.pre ? <span className="text-emerald-500 font-bold">✓</span> : <span className="text-gray-300 font-bold">—</span>}
+                      <ComparisonCell value={row.pre} tier="pre" />
                     </td>
                   </tr>
                 ))}
 
                 {/* Dynamic features from DB if any */}
-                {comparisonFeatures.length > 0 && comparisonFeatures.map((feat) => (
+                {comparisonFeatures.length > 0 && comparisonFeatures
+                  .filter(feat => !/\bAI\b/i.test(String(feat.feature_name || '')))
+                  .map((feat) => (
                   <tr key={`db-${feat.id}`} className="bg-white">
                     <td className="px-5 py-3 font-medium text-gray-700">{feat.feature_name}</td>
                     <td className="text-center px-3 py-3">
