@@ -138,6 +138,11 @@ router.get(
 	authorizePermission("admin.super"),
 	adminBackupController.download,
 );
+router.delete(
+	"/backups/:fileName",
+	authorizePermission("admin.super"),
+	adminBackupController.remove,
+);
 router.post(
 	"/notification-campaign/send",
 	authorizePermission("admin.super"),

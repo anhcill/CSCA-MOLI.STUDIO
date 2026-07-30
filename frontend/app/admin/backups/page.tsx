@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { FiAlertTriangle, FiCheckCircle, FiDatabase, FiDownload, FiFolder, FiHardDrive, FiRefreshCw } from 'react-icons/fi';
+import { FiAlertTriangle, FiCheckCircle, FiDatabase, FiDownload, FiFolder, FiHardDrive, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { adminApi, type DatabaseBackupStatus } from '@/lib/api/admin';
 
@@ -27,6 +27,7 @@ export default function AdminBackupsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -78,6 +79,26 @@ export default function AdminBackupsPage() {
       setError(requestError.response?.data?.message || 'Không thể tải file sao lưu.');
     } finally {
       setDownloading(null);
+    }
+  };
+
+  const deleteBackup = async (fileName: string) => {
+    const confirmed = window.confirm(
+      `Xóa vĩnh viễn file ${fileName} khỏi Railway? Hãy chắc chắn bạn đã tải file về máy.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeleting(fileName);
+      setMessage('');
+      setError('');
+      const response = await adminApi.deleteDatabaseBackup(fileName);
+      setMessage(response.message);
+      await loadBackups();
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.message || 'Không thể xóa bản sao lưu.');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -176,9 +197,14 @@ export default function AdminBackupsPage() {
                       <td className="px-5 py-4 text-slate-500 dark:text-slate-400">{formatDate(backup.createdAt)}</td>
                       <td className="px-5 py-4 text-slate-500 dark:text-slate-400">{formatBytes(backup.size)}</td>
                       <td className="px-5 py-4 text-right">
-                        <button type="button" onClick={() => downloadBackup(backup.fileName)} disabled={downloading === backup.fileName} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-600 transition hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/30">
-                          <FiDownload /> {downloading === backup.fileName ? 'Đang tải…' : 'Tải xuống'}
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button type="button" onClick={() => downloadBackup(backup.fileName)} disabled={downloading === backup.fileName || deleting === backup.fileName} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-600 transition hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/30">
+                            <FiDownload /> {downloading === backup.fileName ? 'Đang tải…' : 'Tải xuống'}
+                          </button>
+                          <button type="button" onClick={() => deleteBackup(backup.fileName)} disabled={deleting === backup.fileName || downloading === backup.fileName} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30">
+                            <FiTrash2 /> {deleting === backup.fileName ? 'Đang xóa…' : 'Xóa'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

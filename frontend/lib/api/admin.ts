@@ -216,6 +216,15 @@ export const adminApi = {
         return response.data as Blob;
     },
 
+    async deleteDatabaseBackup(fileName: string) {
+        const response = await axios.delete(`/admin/backups/${encodeURIComponent(fileName)}`);
+        return response.data as {
+            success: boolean;
+            message: string;
+            data: { fileName: string; size: number };
+        };
+    },
+
     async getEmailAudienceStats() {
         const response = await axios.get('/admin/email-campaign/audience');
         return response.data as {

@@ -48,4 +48,32 @@ async function download(req, res) {
   }
 }
 
-module.exports = { getStatus, create, download };
+async function remove(req, res) {
+  try {
+    const backup = await databaseBackupService.deleteBackup(req.params.fileName);
+    await UserActivity.log(req.user.id, "database_backup_deleted", {
+      fileName: backup.fileName,
+      size: backup.size,
+      ip: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    return res.json({
+      success: true,
+      message: "Đã xóa bản sao lưu khỏi máy chủ.",
+      data: backup,
+    });
+  } catch (error) {
+    console.error("[Database backup] Delete error:", error.message);
+    const status = error.code === "INVALID_BACKUP_FILE"
+      ? 400
+      : error.code === "BACKUP_NOT_FOUND"
+        ? 404
+        : 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Không thể xóa bản sao lưu.",
+    });
+  }
+}
+
+module.exports = { getStatus, create, download, remove };

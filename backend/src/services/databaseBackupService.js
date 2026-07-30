@@ -228,6 +228,33 @@ function getBackupFilePath(fileName) {
   return resolved;
 }
 
+async function deleteBackup(fileName) {
+  const filePath = getBackupFilePath(fileName);
+  if (!filePath) {
+    const error = new Error("Tên file sao lưu không hợp lệ.");
+    error.code = "INVALID_BACKUP_FILE";
+    throw error;
+  }
+
+  try {
+    const stats = await fsPromises.stat(filePath);
+    if (!stats.isFile()) {
+      const error = new Error("Không tìm thấy file sao lưu.");
+      error.code = "BACKUP_NOT_FOUND";
+      throw error;
+    }
+    await fsPromises.unlink(filePath);
+    return { fileName, size: stats.size };
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      const notFoundError = new Error("Không tìm thấy file sao lưu.");
+      notFoundError.code = "BACKUP_NOT_FOUND";
+      throw notFoundError;
+    }
+    throw error;
+  }
+}
+
 async function getStatus() {
   const connection = getConnectionConfig();
   const directory = await ensureBackupDirectory();
@@ -255,6 +282,7 @@ async function getStatus() {
 
 module.exports = {
   createBackup,
+  deleteBackup,
   getBackupFilePath,
   getStatus,
   isBackupFileName,
