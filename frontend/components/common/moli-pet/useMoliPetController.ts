@@ -2,8 +2,8 @@
 
 import { type ClipboardEvent as ReactClipboardEvent, type FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import axios from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
+import { authFetch } from '@/lib/utils/authFetch';
 import { getClipboardImageFile, preparePastedChatImage, type PastedChatImage } from '@/lib/utils/chatImagePaste';
 import {
   HIDDEN_UNTIL_KEY,
@@ -280,28 +280,84 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
 
     try {
       setLoading(true);
-      const response = await axios.post('/ai/moli-pet', {
-        message: messageText,
-        imageDataUrl: imageSnapshot?.dataUrl,
-        page: pathname,
-        pageType: studyContext.pageType,
-        subject: studyContext.subject,
-        routeHint,
-        localTime: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', weekday: 'long' }),
-        petName: settings.name,
-        mood: settings.mood,
-        conversationHistory: nextMessages.slice(-6).map((item) => ({
-          role: item.role,
-          content: item.content,
-        })),
+      const response = await authFetch('/api/ai/moli-pet', {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream' },
+        body: JSON.stringify({
+          message: messageText,
+          imageDataUrl: imageSnapshot?.dataUrl,
+          page: pathname,
+          pageType: studyContext.pageType,
+          subject: studyContext.subject,
+          routeHint,
+          localTime: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', weekday: 'long' }),
+          petName: settings.name,
+          mood: settings.mood,
+          conversationHistory: nextMessages.slice(-6).map((item) => ({
+            role: item.role,
+            content: item.content,
+          })),
+        }),
       });
 
-      setMessages((current) => [
-        ...current,
-        { role: 'assistant', content: response.data?.answer || `${settings.name} nghe rồi nè.` },
-      ]);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const requestError = new Error(errorData?.answer || errorData?.message || `${settings.name} bị nghẽn xíu. Bạn thử lại sau nha.`);
+        (requestError as any).retryAfter = errorData?.retryAfter;
+        throw requestError;
+      }
+      if (!response.body) throw new Error('Không nhận được phản hồi từ Moly.');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = '';
+      let fullContent = '';
+      let streamDone = false;
+
+      const showStreamedContent = (content: string) => {
+        setMessages((current) => {
+          const lastMessage = current[current.length - 1];
+          if (lastMessage?.role === 'assistant') {
+            return [...current.slice(0, -1), { ...lastMessage, content }];
+          }
+          return [...current, { role: 'assistant', content }];
+        });
+      };
+
+      while (!streamDone) {
+        const { value, done } = await reader.read();
+        if (value) pending += decoder.decode(value, { stream: !done });
+        if (done) pending += decoder.decode();
+        const lines = pending.split(/\r?\n/);
+        pending = done ? '' : (lines.pop() || '');
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          if (payload === '[DONE]') {
+            streamDone = true;
+            break;
+          }
+          let parsed: any;
+          try {
+            parsed = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          if (parsed?.error) throw new Error(String(parsed.error));
+          const content = parsed?.choices?.[0]?.delta?.content;
+          if (typeof content === 'string' && content) {
+            fullContent += content;
+            showStreamedContent(fullContent);
+          }
+        }
+        if (done) break;
+      }
+
+      if (!fullContent.trim()) throw new Error(`${settings.name} chưa trả lời được. Bạn thử lại nhé.`);
     } catch (error: any) {
-      const retryAfter = Number(error?.response?.data?.retryAfter || 0);
+      const retryAfter = Number(error?.retryAfter || error?.response?.data?.retryAfter || 0);
       if (Number.isFinite(retryAfter) && retryAfter > 0) {
         setCooldownUntil(Date.now() + retryAfter * 1000);
       }
@@ -309,7 +365,7 @@ export function useMoliPetController({ defaultPosition = 'left' }: MoliPetProps)
         ...current,
         {
           role: 'assistant',
-          content: error?.response?.data?.answer || error?.response?.data?.message || `${settings.name} bị nghẽn xíu. Bạn thử lại sau nha.`,
+          content: error?.response?.data?.answer || error?.response?.data?.message || error?.message || `${settings.name} bị nghẽn xíu. Bạn thử lại sau nha.`,
         },
       ]);
     } finally {

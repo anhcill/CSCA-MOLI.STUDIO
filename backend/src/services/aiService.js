@@ -2280,6 +2280,7 @@ module.exports = {
   askAI,
   askAIStream,
   askMoliPet: (...args) => getMoliPetAIService().askMoliPet(...args),
+  streamMoliPet: (...args) => getMoliPetAIService().streamMoliPet(...args),
   generateDailyGiftLetter: (...args) => getMoliPetAIService().generateDailyGiftLetter(...args),
   getDailyGiftFallback: (...args) => getMoliPetAIService().getDailyGiftFallback(...args),
   analyzeProgress,

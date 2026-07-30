@@ -1016,7 +1016,7 @@ async function askMoliPet(req, res) {
     const safeRouteHint = String(routeHint || '').trim().slice(0, 240);
     const safeLocalTime = String(localTime || '').trim().slice(0, 80);
 
-    const result = await aiService.askMoliPet(trimmedMessage, {
+    const petContext = {
       petName: safePetName,
       userName: displayName,
       page: safePage,
@@ -1027,7 +1027,35 @@ async function askMoliPet(req, res) {
       mood: safeMood,
       conversationHistory: normalizeMoliPetHistory(conversationHistory),
       imageDataUrl: imageCheck.value,
-    });
+    };
+
+    const wantsStream = String(req.get('accept') || '').includes('text/event-stream');
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+
+      await aiService.streamMoliPet(trimmedMessage, petContext, (content) => {
+        if (res.destroyed || res.writableEnded) {
+          const disconnectError = new Error('MOLI_PET_CLIENT_DISCONNECTED');
+          disconnectError.code = 'CLIENT_DISCONNECTED';
+          throw disconnectError;
+        }
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+        res.flush?.();
+      });
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ quota: { limit: petLimit.limit, remaining: petLimit.remaining } })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.flush?.();
+        res.end();
+      }
+      return;
+    }
+
+    const result = await aiService.askMoliPet(trimmedMessage, petContext);
 
     return res.json({
       success: true,
@@ -1041,6 +1069,15 @@ async function askMoliPet(req, res) {
     });
   } catch (error) {
     console.error('askMoliPet error:', error);
+    if (res.headersSent) {
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: 'Moly bị ngắt kết nối. Bạn thử lại nhé.' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.flush?.();
+        res.end();
+      }
+      return;
+    }
     if (error.message === 'RATE_LIMITED') {
       return res.status(429).json({
         success: false,

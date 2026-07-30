@@ -197,7 +197,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
               </div>
             ))}
 
-            {loading && (
+            {loading && messages[messages.length - 1]?.role !== 'assistant' && (
               <div className="moli-pet-white mr-auto flex gap-1.5 rounded-2xl rounded-bl-md border border-violet-100 bg-white px-4 py-3">
                 <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.2s]" />
                 <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.1s]" />

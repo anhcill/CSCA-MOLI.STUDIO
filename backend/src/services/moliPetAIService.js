@@ -111,7 +111,7 @@ async function callProvider(provider, messages, options = {}) {
     {
       model,
       messages,
-      max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 8192,
+      max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 3000,
       temperature: options.temperature ?? 0.35,
     },
     {
@@ -146,6 +146,134 @@ async function callMoliMessages(messages, options = {}) {
     } catch (error) {
       lastError = error;
       console.warn(`Moli pet AI ${provider} failed:`, error.message);
+    }
+  }
+
+  throw lastError || new Error('MOLI_PET_AI_FAILED');
+}
+
+async function callProviderStream(provider, messages, options = {}, onDelta) {
+  const config = getProviderConfig(provider);
+  if (!config.baseUrl || !config.apiKey) throw new Error(`${provider.toUpperCase()}_NOT_CONFIGURED`);
+  const startedAt = Date.now();
+  const model = options.model || config.model;
+  let emittedText = false;
+
+  try {
+    const response = await axios.post(
+      getChatCompletionsUrl(config.baseUrl),
+      {
+        model,
+        messages,
+        max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 3000,
+        temperature: options.temperature ?? 0.35,
+        stream: true,
+      },
+      {
+        timeout: Math.min(options.timeout || config.timeout || 45000, 45000),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        responseType: 'stream',
+      },
+    );
+
+    const result = await new Promise((resolve, reject) => {
+      let buffer = '';
+      let rawResponse = '';
+      let fullText = '';
+      let usage = null;
+      let settled = false;
+
+      const rejectOnce = (error) => {
+        if (settled) return;
+        settled = true;
+        error.moliStreamStarted = emittedText;
+        reject(error);
+      };
+      const pushText = (value) => {
+        const text = typeof value === 'string' ? value : '';
+        if (!text) return;
+        emittedText = true;
+        fullText += text;
+        onDelta(text);
+      };
+      const processLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) return;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') return;
+        try {
+          const chunk = JSON.parse(payload);
+          if (chunk?.error) {
+            throw new Error(typeof chunk.error === 'string' ? chunk.error : chunk.error.message || 'MOLI_PET_STREAM_FAILED');
+          }
+          usage = chunk?.usage || usage;
+          pushText(chunk?.choices?.[0]?.delta?.content || chunk?.choices?.[0]?.message?.content || '');
+        } catch (error) {
+          if (error instanceof SyntaxError) return;
+          throw error;
+        }
+      };
+
+      response.data.on('data', (chunk) => {
+        if (settled) return;
+        try {
+          const text = chunk.toString('utf8');
+          rawResponse += text;
+          buffer += text;
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          lines.forEach(processLine);
+        } catch (error) {
+          response.data.destroy();
+          rejectOnce(error);
+        }
+      });
+      response.data.on('end', () => {
+        if (settled) return;
+        try {
+          if (buffer) processLine(buffer);
+          if (!fullText) pushText(extractOpenAICompatibleText(rawResponse));
+          if (!fullText) throw new Error(`${provider.toUpperCase()}_EMPTY_RESPONSE`);
+          settled = true;
+          resolve({ text: fullText, usage });
+        } catch (error) {
+          rejectOnce(error);
+        }
+      });
+      response.data.on('error', rejectOnce);
+    });
+
+    if (result.usage) {
+      aiUsageService.logUsageFromResponse({ usage: result.usage }, {
+        provider,
+        model,
+        feature: options.feature || 'moli_pet',
+        durationMs: Date.now() - startedAt,
+      });
+    }
+    return { text: result.text, model, provider };
+  } catch (error) {
+    error.moliStreamStarted = error.moliStreamStarted || emittedText;
+    throw error;
+  }
+}
+
+async function callMoliMessagesStream(messages, options = {}, onDelta) {
+  const primary = String(MOLI.provider || '9router').trim().toLowerCase();
+  const fallback = String(MOLI.fallbackProvider || 'beeknoee').trim().toLowerCase();
+  const providers = [...new Set([primary, fallback].filter(value => ['9router', 'beeknoee'].includes(value)))];
+  let lastError = null;
+
+  for (const provider of providers) {
+    try {
+      return await callProviderStream(provider, messages, options, onDelta);
+    } catch (error) {
+      lastError = error;
+      console.warn(`Moli pet AI ${provider} stream failed:`, error.message);
+      if (error.moliStreamStarted) throw error;
     }
   }
 
@@ -260,10 +388,7 @@ async function askMoliPet(message, context = {}) {
       [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image carefully. Answer naturally, cutely but not in a template, and keep every academic detail accurate.')],
       {
         temperature: 0.58,
-        // Agent models can spend a large part of this budget on internal reasoning.
-        // Keep the prompt concise, but leave enough room for the visible answer to
-        // finish instead of cutting off mid-sentence.
-        maxTokens: Math.max(MOLI.maxTokens || BEE.petChatMaxTokens || 8192, 8192),
+        maxTokens: 3000,
       },
     );
     return {
@@ -279,6 +404,18 @@ async function askMoliPet(message, context = {}) {
       error: true,
     };
   }
+}
+
+async function streamMoliPet(message, context = {}, onDelta) {
+  const prompt = buildMoliPetPrompt(message, context);
+  return callMoliMessagesStream(
+    [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image carefully. Answer naturally, cutely but not in a template, and keep every academic detail accurate.')],
+    {
+      temperature: 0.58,
+      maxTokens: 3000,
+    },
+    onDelta,
+  );
 }
 
 function getDailyGiftFallback(giftDate = '') {
@@ -415,6 +552,7 @@ async function generateDailyGiftLetter(giftDate, context = {}) {
 
 module.exports = {
   askMoliPet,
+  streamMoliPet,
   generateDailyGiftLetter,
   getDailyGiftFallback,
 };
