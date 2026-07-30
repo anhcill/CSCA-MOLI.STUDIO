@@ -111,7 +111,7 @@ async function callProvider(provider, messages, options = {}) {
     {
       model,
       messages,
-      max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 700,
+      max_tokens: options.maxTokens || MOLI.maxTokens || BEE.petChatMaxTokens || 8192,
       temperature: options.temperature ?? 0.35,
     },
     {
@@ -260,7 +260,10 @@ async function askMoliPet(message, context = {}) {
       [buildVisionUserMessage(prompt, context.imageDataUrl, 'User pasted an image into MolyPet chat. Read the image carefully. Answer naturally, cutely but not in a template, and keep every academic detail accurate.')],
       {
         temperature: 0.58,
-        maxTokens: Math.min(MOLI.maxTokens || BEE.petChatMaxTokens || 1200, 1600),
+        // Agent models can spend a large part of this budget on internal reasoning.
+        // Keep the prompt concise, but leave enough room for the visible answer to
+        // finish instead of cutting off mid-sentence.
+        maxTokens: Math.max(MOLI.maxTokens || BEE.petChatMaxTokens || 8192, 8192),
       },
     );
     return {
