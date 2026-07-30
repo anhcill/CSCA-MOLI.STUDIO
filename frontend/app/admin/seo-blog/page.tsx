@@ -254,15 +254,24 @@ export default function Page() {
       setNotice("Hãy lưu bản nháp trước.");
       return;
     }
+    const scheduledAt = draft.scheduled_at;
     if (k === "delete" && !confirm("Xóa vĩnh viễn bài này?")) return;
+    if (k === "schedule" && !scheduledAt) {
+      setNotice("Hãy chọn ngày giờ trước khi đặt lịch.");
+      return;
+    }
     setBusy(true);
     try {
+      if (k !== "delete") {
+        const saved = await seoBlogApi.update(draft.id, payload());
+        setDraft(saved);
+        showPostImmediately(saved);
+      }
       if (k === "publish") await seoBlogApi.publish(draft.id);
-      if (k === "schedule") {
-        if (!draft.scheduled_at) throw 0;
+      if (k === "schedule" && scheduledAt) {
         await seoBlogApi.schedule(
           draft.id,
-          new Date(draft.scheduled_at).toISOString(),
+          new Date(scheduledAt).toISOString(),
         );
       }
       if (k === "archive") await seoBlogApi.archive(draft.id);
@@ -707,15 +716,17 @@ export default function Page() {
                       Lưu nháp
                     </button>
                     <button
+                      disabled={busy}
                       onClick={() => act("schedule")}
-                      className="flex items-center justify-center gap-1 rounded-xl bg-slate-800 p-2 text-sm text-white"
+                      className="flex items-center justify-center gap-1 rounded-xl bg-slate-800 p-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FiCalendar />
                       Đặt lịch
                     </button>
                     <button
+                      disabled={busy}
                       onClick={() => act("publish")}
-                      className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-2.5 text-sm text-white"
+                      className="col-span-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-2.5 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <FiSend />
                       Đăng ngay
@@ -723,8 +734,9 @@ export default function Page() {
                     {draft.id && (
                       <>
                         <button
+                          disabled={busy}
                           onClick={() => act("archive")}
-                          className="flex justify-center gap-1 p-2 text-xs"
+                          className="flex justify-center gap-1 p-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <FiArchive />
                           Lưu trữ
