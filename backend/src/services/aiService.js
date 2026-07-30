@@ -1577,10 +1577,11 @@ async function askAI(question, context = {}) {
 
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
-  const useDeepSeekChat = !context.aiModel && isDeepSeekConfigured() && !context.imageDataUrl;
+  const isDeepSeekRoute = context.aiProvider === 'deepseek' || (!context.aiProvider && !context.aiModel);
+  const useDeepSeekChat = isDeepSeekRoute && isDeepSeekConfigured() && !context.imageDataUrl;
   const publicOptions = {
-    provider: context.aiProvider,
-    model: context.aiModel,
+    provider: isDeepSeekRoute ? context.aiFallbackProvider : context.aiProvider,
+    model: isDeepSeekRoute ? context.aiFallbackModel : context.aiModel,
     temperature: 0.5,
     maxTokens: BEE.chatMaxTokens || 2200,
     feature: 'chat',
@@ -1590,7 +1591,7 @@ async function askAI(question, context = {}) {
   try {
     const response = useDeepSeekChat
       ? await callDeepSeekMessages(messages, {
-        model: DEEPSEEK.chatModel || 'deepseek-v4-pro',
+        model: context.aiModel || DEEPSEEK.chatModel || 'deepseek-v4-pro',
         temperature: 0.35,
         maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
@@ -1637,10 +1638,11 @@ async function askAIStream(question, context = {}, res) {
 
   const prompt = buildAIChatPrompt(question, context);
   const messages = [buildVisionUserMessage(prompt, context.imageDataUrl)];
-  const useDeepSeekChat = !context.aiModel && isDeepSeekConfigured() && !context.imageDataUrl;
+  const isDeepSeekRoute = context.aiProvider === 'deepseek' || (!context.aiProvider && !context.aiModel);
+  const useDeepSeekChat = isDeepSeekRoute && isDeepSeekConfigured() && !context.imageDataUrl;
   const publicOptions = {
-    provider: context.aiProvider,
-    model: context.aiModel,
+    provider: isDeepSeekRoute ? context.aiFallbackProvider : context.aiProvider,
+    model: isDeepSeekRoute ? context.aiFallbackModel : context.aiModel,
     temperature: 0.5,
     maxTokens: BEE.chatMaxTokens || 2200,
     feature: 'chat',
@@ -1650,7 +1652,7 @@ async function askAIStream(question, context = {}, res) {
   try {
     const answer = useDeepSeekChat
       ? await callDeepSeekMessages(messages, {
-        model: DEEPSEEK.chatModel || 'deepseek-v4-pro',
+        model: context.aiModel || DEEPSEEK.chatModel || 'deepseek-v4-pro',
         temperature: 0.35,
         maxTokens: DEEPSEEK.chatMaxTokens || BEE.chatMaxTokens || 2200,
         timeout: DEEPSEEK.timeout || 50000,
@@ -2152,6 +2154,8 @@ async function teachGrammar({
   userLevel = 'beginner',
   aiProvider,
   aiModel,
+  aiFallbackProvider,
+  aiFallbackModel,
   userId,
 }) {
   const levelMap = { beginner: 'sơ cấp', intermediate: 'trung cấp', advanced: 'nâng cao' };
@@ -2199,17 +2203,18 @@ JSON schema:
 }`;
 
   try {
+    const isDeepSeekRoute = aiProvider === 'deepseek' || (!aiProvider && !aiModel);
     const publicOptions = {
-      provider: aiProvider,
-      model: aiModel,
+      provider: isDeepSeekRoute ? aiFallbackProvider : aiProvider,
+      model: isDeepSeekRoute ? aiFallbackModel : aiModel,
       temperature: 0.25,
       maxTokens: lessonMaxTokens,
       feature: 'lesson',
       _userId: userId,
     };
-    const raw = !aiModel && isDeepSeekConfigured()
+    const raw = isDeepSeekRoute && isDeepSeekConfigured()
       ? await callDeepSeekAI(prompt, {
-        model: DEEPSEEK.lessonModel || 'deepseek-v4-flash',
+        model: aiModel || DEEPSEEK.lessonModel || 'deepseek-v4-flash',
         temperature: 0.25,
         maxTokens: lessonMaxTokens,
         timeout: DEEPSEEK.timeout || 50000,
@@ -2224,12 +2229,12 @@ JSON schema:
     return normalizeGrammarLesson(ai);
   } catch (err) {
     if (err.message === 'RATE_LIMITED') throw err;
-    if (!aiModel && isDeepSeekConfigured()) {
+    if (isDeepSeekRoute && isDeepSeekConfigured()) {
       console.warn('DeepSeek teachGrammar failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
         const raw = await callPublicAI(prompt, {
-          provider: aiProvider,
-          model: aiModel,
+          provider: aiFallbackProvider,
+          model: aiFallbackModel,
           temperature: 0.25,
           maxTokens: Math.min(BEE.lessonMaxTokens || 1800, 2200),
           feature: 'lesson',

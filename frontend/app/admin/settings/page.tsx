@@ -5,11 +5,13 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { FiCalendar, FiCheckCircle, FiCpu, FiSave, FiSettings } from 'react-icons/fi';
 import axiosInstance from '@/lib/utils/axios';
 
-type Provider = '9router' | 'beeknoee';
+type Provider = 'deepseek' | '9router' | 'beeknoee';
 
 interface SettingsData {
     exam_date?: string;
     public_ai_provider?: Provider;
+    premium_ai_provider?: Provider;
+    premium_ai_deepseek_model?: string;
     public_ai_9router_model?: string;
     public_ai_free_9router_model?: string;
     public_ai_beeknoee_model?: string;
@@ -21,6 +23,8 @@ interface SettingsData {
 const DEFAULT_SETTINGS: Required<SettingsData> = {
     exam_date: '',
     public_ai_provider: '9router',
+    premium_ai_provider: 'deepseek',
+    premium_ai_deepseek_model: 'deepseek-v4-pro',
     public_ai_9router_model: 'ag/claude-sonnet-4-6',
     public_ai_free_9router_model: 'ag/gemini-3-flash-agent',
     public_ai_beeknoee_model: 'gpt-5.4-mini',
@@ -32,6 +36,13 @@ const DEFAULT_SETTINGS: Required<SettingsData> = {
 const QUESTION_REVIEW_MODEL_OPTIONS = [
     { value: 'cx/gpt-5.5', label: 'cx/gpt-5.5' },
     { value: 'ag/claude-opus-4-6-thinking', label: 'ag/claude-opus-4-6-thinking' },
+];
+
+const DEEPSEEK_MODEL_OPTIONS = [
+    'deepseek-v4-pro',
+    'deepseek-v4-flash',
+    'deepseek-chat',
+    'deepseek-reasoner',
 ];
 
 const renderQuestionReviewModelOptions = (currentValue: string) => (
@@ -169,18 +180,19 @@ export default function AdminSettingsPage() {
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI người dùng</h2>
-                            <p className="text-xs text-gray-500 dark:text-slate-400">Đổi nhanh giữa 9Router và Beeknoee khi cần chữa cháy</p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">VIP/Premium mặc định dùng DeepSeek; có thể chuyển nhanh sang 9Router hoặc Beeknoee</p>
                         </div>
                     </div>
 
                     <div className="grid gap-5 p-6 md:grid-cols-2">
                         <label className="space-y-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Provider đang dùng</span>
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Provider VIP/Premium</span>
                             <select
-                                value={settings.public_ai_provider}
-                                onChange={(event) => patchSettings({ public_ai_provider: event.target.value as Provider })}
+                                value={settings.premium_ai_provider}
+                                onChange={(event) => patchSettings({ premium_ai_provider: event.target.value as Provider })}
                                 className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
                             >
+                                <option value="deepseek">DeepSeek (Railway keys)</option>
                                 <option value="9router">9Router production</option>
                                 <option value="beeknoee">Beeknoee fallback</option>
                             </select>
@@ -207,6 +219,22 @@ export default function AdminSettingsPage() {
                             >
                                 <option value="ag/claude-sonnet-4-6">ag/claude-sonnet-4-6</option>
                                 <option value="cx/gpt-5.4-mini">cx/gpt-5.4-mini</option>
+                            </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">DeepSeek model VIP/Premium</span>
+                            <select
+                                value={settings.premium_ai_deepseek_model}
+                                onChange={(event) => patchSettings({ premium_ai_deepseek_model: event.target.value })}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+                            >
+                                {settings.premium_ai_deepseek_model && !DEEPSEEK_MODEL_OPTIONS.includes(settings.premium_ai_deepseek_model) && (
+                                    <option value={settings.premium_ai_deepseek_model}>{settings.premium_ai_deepseek_model}</option>
+                                )}
+                                {DEEPSEEK_MODEL_OPTIONS.map((model) => (
+                                    <option key={model} value={model}>{model}</option>
+                                ))}
                             </select>
                         </label>
 

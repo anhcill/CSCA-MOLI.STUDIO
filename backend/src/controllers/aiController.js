@@ -34,12 +34,36 @@ const INSIGHT_TYPES = {
 };
 
 async function getUserAIRouting(user) {
+  const settings = await getSettings([
+    'premium_ai_provider',
+    'premium_ai_deepseek_model',
+    'public_ai_9router_model',
+    'public_ai_free_9router_model',
+    'public_ai_beeknoee_model',
+    'public_ai_fallback_provider',
+  ]).catch(() => DEFAULT_SETTINGS);
+
   if (canUseAIFeatures(user)) {
-    return { aiTier: 'premium', aiProvider: null, aiModel: null };
+    const provider = ['deepseek', '9router', 'beeknoee'].includes(settings.premium_ai_provider)
+      ? settings.premium_ai_provider
+      : 'deepseek';
+    const fallbackProvider = ['9router', 'beeknoee'].includes(settings.public_ai_fallback_provider)
+      ? settings.public_ai_fallback_provider
+      : 'beeknoee';
+    const models = {
+      deepseek: settings.premium_ai_deepseek_model || 'deepseek-v4-pro',
+      '9router': settings.public_ai_9router_model || 'ag/claude-sonnet-4-6',
+      beeknoee: settings.public_ai_beeknoee_model || 'gpt-5.4-mini',
+    };
+    return {
+      aiTier: 'premium',
+      aiProvider: provider,
+      aiModel: models[provider],
+      aiFallbackProvider: fallbackProvider,
+      aiFallbackModel: models[fallbackProvider],
+    };
   }
 
-  const settings = await getSettings(['public_ai_free_9router_model'])
-    .catch(() => DEFAULT_SETTINGS);
   return {
     aiTier: 'free',
     aiProvider: '9router',

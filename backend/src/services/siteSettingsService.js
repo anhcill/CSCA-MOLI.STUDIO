@@ -3,6 +3,8 @@ const db = require("../config/database");
 const DEFAULT_SETTINGS = {
   exam_date: "2026-06-10T08:00:00",
   public_ai_provider: "9router",
+  premium_ai_provider: "deepseek",
+  premium_ai_deepseek_model: "deepseek-v4-pro",
   public_ai_9router_model: "ag/claude-sonnet-4-6",
   public_ai_free_9router_model: "ag/gemini-3-flash-agent",
   public_ai_beeknoee_model: "gpt-5.4-mini",

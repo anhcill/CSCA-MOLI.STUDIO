@@ -9,6 +9,8 @@ const PUBLIC_KEYS = ["exam_date"];
 const ADMIN_KEYS = [
   "exam_date",
   "public_ai_provider",
+  "premium_ai_provider",
+  "premium_ai_deepseek_model",
   "public_ai_9router_model",
   "public_ai_free_9router_model",
   "public_ai_beeknoee_model",
@@ -21,9 +23,10 @@ ensureSettingsTable().catch((error) => {
   console.error("initSettings error:", error.message);
 });
 
-function normalizeProvider(value, fallback = "9router") {
+function normalizeProvider(value, fallback = "9router", allowDeepSeek = false) {
   const provider = String(value || "").trim().toLowerCase();
-  return ["9router", "beeknoee"].includes(provider) ? provider : fallback;
+  const allowed = allowDeepSeek ? ["deepseek", "9router", "beeknoee"] : ["9router", "beeknoee"];
+  return allowed.includes(provider) ? provider : fallback;
 }
 
 function normalizeModel(value, fallback) {
@@ -66,6 +69,9 @@ async function updateSettings(req, res) {
     if (req.body.public_ai_provider !== undefined) {
       next.public_ai_provider = normalizeProvider(req.body.public_ai_provider);
     }
+    if (req.body.premium_ai_provider !== undefined) {
+      next.premium_ai_provider = normalizeProvider(req.body.premium_ai_provider, "deepseek", true);
+    }
     if (req.body.public_ai_fallback_provider !== undefined) {
       next.public_ai_fallback_provider = normalizeProvider(req.body.public_ai_fallback_provider, "beeknoee");
     }
@@ -85,6 +91,12 @@ async function updateSettings(req, res) {
       next.public_ai_beeknoee_model = normalizeModel(
         req.body.public_ai_beeknoee_model,
         DEFAULT_SETTINGS.public_ai_beeknoee_model,
+      );
+    }
+    if (req.body.premium_ai_deepseek_model !== undefined) {
+      next.premium_ai_deepseek_model = normalizeModel(
+        req.body.premium_ai_deepseek_model,
+        DEFAULT_SETTINGS.premium_ai_deepseek_model,
       );
     }
     if (req.body.admin_question_review_model !== undefined) {
