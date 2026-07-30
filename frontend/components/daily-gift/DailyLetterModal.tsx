@@ -255,6 +255,7 @@ export default function DailyLetterModal({
           role="dialog"
           aria-modal="true"
           aria-label="Thư hôm nay"
+          style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}
         >
           {/* Close Button X */}
           <button
@@ -286,7 +287,7 @@ export default function DailyLetterModal({
               </h2>
 
               {/* Subtitle */}
-              <p className="mt-2 max-w-xs text-xs sm:text-sm text-slate-500 leading-relaxed font-serif italic">
+              <p className="mt-2 max-w-sm text-xs sm:text-sm text-slate-500 leading-relaxed italic">
                 “Có những ngày trái tim chỉ muốn nghe một bản nhạc buồn và thở chậm lại.”
               </p>
 
