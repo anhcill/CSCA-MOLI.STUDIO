@@ -412,11 +412,21 @@ export default function DailyLetterModal({
                     Chúc bạn có một ngày nhẹ nhàng, học tập hiệu quả và tìm thấy niềm vui trong những điều nhỏ bé.
                   </p>
 
+                  <p>
+                    Hẹn bạn lúc <strong className="text-[#A84F6B]">20:00 tối nay</strong> để cùng đón chờ bài hát mới của <strong className="text-[#A84F6B]">W/n – MV 3107</strong>.
+                  </p>
+
+                  <p>
+                    Đừng quên dành thời gian cổ vũ và đón xem <strong className="text-[#A84F6B]">đội tuyển bóng đá Việt Nam</strong> nhé.
+                    <br />
+                    Chúc đội tuyển thi đấu thật tự tin và mang về nhiều cảm xúc đẹp cho người hâm mộ.
+                  </p>
+
                   <p className="font-semibold text-[#A65375]">
                     Rồi ngày mai sẽ dịu hơn.
                   </p>
 
-                  {/* Today's notice appears before the closing signature. */}
+                  {/* Product notice appears below the main letter and before the signature. */}
                   <div className="mt-5 rounded-2xl bg-[#FFF1ED] p-4 border border-[#F0D6CE] text-sm">
                     <p className="font-bold text-[#573945] flex items-center gap-2 mb-2">
                       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F7DDE2]">
@@ -424,16 +434,10 @@ export default function DailyLetterModal({
                       </span>
                       Thông báo từ MOLY.STUDIO:
                     </p>
-                    <div className="space-y-2 text-[#755D66] leading-6">
-                      <p>
-                        Hẹn bạn lúc <strong className="text-[#A84F6B]">20:00 tối nay</strong> để cùng đón xem <strong className="text-[#A84F6B]">MV 3107</strong>.
-                        Một món quà âm nhạc nhỏ đang chờ bạn!
-                      </p>
-                      <p>
-                        Đừng quên dành thời gian cổ vũ và đón xem <strong className="text-[#A84F6B]">đội tuyển bóng đá Việt Nam</strong> nhé.
-                        Chúc đội tuyển thi đấu thật tự tin và mang về nhiều cảm xúc đẹp cho người hâm mộ.
-                      </p>
-                    </div>
+                    <p className="text-[#755D66] leading-6">
+                      Hôm nay, MOLY đã cập nhật thêm một số đề luyện tập miễn phí mới dành cho bạn.
+                      Khi cảm thấy sẵn sàng, bạn có thể mở đề, ôn lại kiến thức và tiến thêm một bước nhỏ đến mục tiêu của mình.
+                    </p>
                   </div>
 
                   <div className="pt-2 text-right text-sm font-semibold text-[#705762]">
