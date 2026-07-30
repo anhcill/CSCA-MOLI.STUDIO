@@ -1198,11 +1198,11 @@ export default function ExamPage() {
 
              {/* Question Attachments */}
              {currentQuestion.image_url && (
-                <div className="mb-10 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center p-4">
+                <div className="mb-10 flex items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-600 dark:bg-white">
                   <img
                     src={currentQuestion.image_url}
                     alt="Phụ lục câu hỏi"
-                    className="max-w-full max-h-[400px] object-contain rounded-xl mix-blend-multiply"
+                    className="max-h-[400px] max-w-full rounded-xl bg-white object-contain"
                   />
                 </div>
               )}
