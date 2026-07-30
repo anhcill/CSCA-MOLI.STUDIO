@@ -116,13 +116,15 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
               artistName="W/n"
             />
           ) : (
-            <GiftLetterModal
-              letter={dailyGift.letter}
-              studentName={displayName}
-              accepting={dailyGift.accepting}
-              onAccept={handleAccept}
-              onClose={() => setOpen(false)}
-            />
+            dailyGift.letter && (
+              <GiftLetterModal
+                letter={dailyGift.letter}
+                studentName={displayName}
+                accepting={dailyGift.accepting}
+                onAccept={handleAccept}
+                onClose={() => setOpen(false)}
+              />
+            )
           )
         )}
       </AnimatePresence>
