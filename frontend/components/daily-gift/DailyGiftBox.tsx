@@ -37,7 +37,9 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
   const isSpecialDay = isSpecialLetterDay();
 
-  if (!dailyGift.shouldShow || !dailyGift.letter) return null;
+  // On normal days, hide if already opened today or no letter.
+  // On special letter days, ALWAYS show the floating button so user can open & listen to music.
+  if (!isSpecialDay && (!dailyGift.shouldShow || !dailyGift.letter)) return null;
 
   const handleAccept = async () => {
     await dailyGift.markOpened();
