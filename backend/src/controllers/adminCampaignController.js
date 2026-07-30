@@ -27,7 +27,6 @@ const AdminCampaignController = {
            WHERE u.is_active IS DISTINCT FROM FALSE
              AND u.email IS NOT NULL
              AND u.email <> ''
-             AND u.email_verified IS TRUE
              AND COALESCE(ep.marketing_enabled, TRUE) IS TRUE
              AND marketing_es.email IS NULL
          )::int AS active_users,
@@ -35,7 +34,6 @@ const AdminCampaignController = {
            WHERE u.is_active IS DISTINCT FROM FALSE
              AND u.email IS NOT NULL
              AND u.email <> ''
-             AND u.email_verified IS TRUE
              AND delivery_es.email IS NULL
          )::int AS transactional_users
          FROM users u
@@ -106,7 +104,6 @@ const AdminCampaignController = {
             OR es.reason IN ('hard_bounce', 'complaint')
           )
          WHERE ${where}
-           AND u.email_verified IS TRUE
            AND (
              ${deliveryTypeParam} = 'transactional'
              OR COALESCE(ep.marketing_enabled, TRUE) IS TRUE
