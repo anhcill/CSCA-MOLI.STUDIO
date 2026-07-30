@@ -250,7 +250,7 @@ export default function DailyLetterModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 15 }}
           transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-          className="relative z-10 flex flex-col w-full max-w-md sm:max-w-lg max-h-[90vh] sm:max-h-[87vh] overflow-hidden rounded-[28px] bg-[#FFF8F3] shadow-[0_24px_80px_rgba(69,36,49,0.28)] border border-[#E8D3CA]"
+          className="relative z-10 flex flex-col w-[calc(100%_-_12px)] max-w-md sm:max-w-xl max-h-[96vh] sm:max-h-[92vh] overflow-hidden rounded-[26px] bg-[#FFF8F3] shadow-[0_24px_80px_rgba(69,36,49,0.28)] border border-[#E8D3CA]"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -352,17 +352,17 @@ export default function DailyLetterModal({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="flex flex-col h-full overflow-hidden p-4 sm:p-5"
+              className="flex flex-col h-full overflow-hidden px-3 py-3.5 sm:p-5"
             >
               {/* Header (Shrink-0) */}
-              <div className="text-center mb-4 shrink-0">
+              <div className="text-center mb-2.5 shrink-0">
                 <span className="text-[10px] font-black uppercase tracking-[0.24em] text-[#BE6A80]">
                   Thư hôm nay
                 </span>
                 <h3 className="mt-1 text-xl sm:text-2xl font-black text-[#402A34]">
                   Mở thư ra rồi...
                 </h3>
-                <p className="mx-auto mt-1.5 max-w-sm px-4 text-[13px] sm:text-sm leading-5 text-[#896D78] italic">
+                <p className="mx-auto mt-1 max-w-md px-8 text-[12px] sm:text-sm leading-[18px] text-[#896D78] italic">
                   “Có những ngày trái tim chỉ muốn nghe một bản nhạc buồn và thở chậm lại.”
                 </p>
               </div>
@@ -372,13 +372,13 @@ export default function DailyLetterModal({
                 ref={letterScrollRef}
                 onWheel={handleUserScroll}
                 onTouchStart={handleUserScroll}
-                className="relative flex-1 min-h-0 rounded-[22px] bg-[#FFFEFC] p-5 sm:p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_28px_rgba(93,57,68,0.07)] border border-[#EBDCD6] overflow-y-auto hide-scrollbar"
+                className="relative flex-1 min-h-0 rounded-[20px] bg-[#FFFEFC] px-4 py-4 sm:px-6 sm:py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_28px_rgba(93,57,68,0.07)] border border-[#EBDCD6] overflow-y-auto hide-scrollbar"
                 style={{
                   fontFamily: '"Segoe UI", Arial, sans-serif',
                   backgroundImage: 'radial-gradient(circle at 15% 10%, rgba(220, 150, 165, 0.06), transparent 28%), radial-gradient(circle at 85% 90%, rgba(180, 135, 170, 0.05), transparent 30%)',
                 }}
               >
-                <div className="space-y-5 text-[15px] sm:text-base text-[#503C45] leading-7 sm:leading-8 tracking-normal">
+                <div className="space-y-3.5 text-[15px] sm:text-base text-[#503C45] leading-6 sm:leading-7 tracking-normal">
                   <p className="font-bold text-[#C65372] text-base sm:text-lg">
                     Gửi <span className="underline decoration-[#E5A6B6] underline-offset-4">{userName}</span> thương mến,
                   </p>
@@ -415,23 +415,29 @@ export default function DailyLetterModal({
                     Rồi ngày mai sẽ dịu hơn.
                   </p>
 
-                  <div className="pt-2 text-right text-sm font-semibold text-[#705762]">
-                    <p>Thương mến,</p>
-                    <p className="font-bold text-[#C65372] text-base sm:text-lg">MOLY.STUDIO 💌</p>
-                  </div>
-
-                  {/* Keep the product notice at the very end of the letter. */}
-                  <div className="mt-7 rounded-2xl bg-[#FFF1ED] p-4 border border-[#F0D6CE] text-sm">
+                  {/* Today's notice appears before the closing signature. */}
+                  <div className="mt-5 rounded-2xl bg-[#FFF1ED] p-4 border border-[#F0D6CE] text-sm">
                     <p className="font-bold text-[#573945] flex items-center gap-2 mb-2">
                       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F7DDE2]">
                         <FaBookOpen className="text-[#B95974]" size={13} />
                       </span>
                       Thông báo từ MOLY.STUDIO:
                     </p>
-                    <p className="text-[#755D66] leading-6">
-                      Hôm nay, MOLY cũng đã cập nhật thêm một số đề luyện tập miễn phí mới dành cho bạn.
-                      Khi cảm thấy sẵn sàng, bạn có thể mở đề, ôn lại kiến thức và tiến thêm một bước nhỏ đến mục tiêu của mình.
-                    </p>
+                    <div className="space-y-2 text-[#755D66] leading-6">
+                      <p>
+                        Hẹn bạn lúc <strong className="text-[#A84F6B]">20:00 tối nay</strong> để cùng đón xem <strong className="text-[#A84F6B]">MV 3107</strong>.
+                        Một món quà âm nhạc nhỏ đang chờ bạn!
+                      </p>
+                      <p>
+                        Đừng quên dành thời gian cổ vũ và đón xem <strong className="text-[#A84F6B]">đội tuyển bóng đá Việt Nam</strong> nhé.
+                        Chúc đội tuyển thi đấu thật tự tin và mang về nhiều cảm xúc đẹp cho người hâm mộ.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 text-right text-sm font-semibold text-[#705762]">
+                    <p>Thương mến,</p>
+                    <p className="font-bold text-[#C65372] text-base sm:text-lg">MOLY.STUDIO 💌</p>
                   </div>
                 </div>
               </div>
