@@ -9,8 +9,10 @@ class EmailService {
     this.criticalApiKey = process.env.BREVO_CRITICAL_API_KEY || this.apiKey;
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
     this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
-    this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.senderEmail;
-    this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.senderName;
+    this.criticalSenderEmail = process.env.EMAIL_CRITICAL_SENDER || this.senderEmail;
+    this.criticalSenderName = process.env.EMAIL_CRITICAL_SENDER_NAME || this.senderName;
+    this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.criticalSenderEmail;
+    this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.criticalSenderName;
     this.replyToEmail = process.env.EMAIL_REPLY_TO || '';
     this.marketingListId = Number.parseInt(process.env.BREVO_MARKETING_LIST_ID || '', 10);
     this.baseUrl = 'https://api.brevo.com/v3';
@@ -36,6 +38,8 @@ class EmailService {
     const useCriticalAccount = account === 'critical';
     const apiKey = useCriticalAccount ? this.criticalApiKey : this.apiKey;
     const client = useCriticalAccount ? this.criticalClient : this.client;
+    const senderEmail = useCriticalAccount ? this.criticalSenderEmail : this.senderEmail;
+    const senderName = useCriticalAccount ? this.criticalSenderName : this.senderName;
     if (!apiKey) {
       const variableName = useCriticalAccount ? 'BREVO_CRITICAL_API_KEY' : 'BREVO_API_KEY';
       console.warn(`${variableName} not configured, email skipped:`, subject);
@@ -44,7 +48,7 @@ class EmailService {
 
     try {
       await client.post('/smtp/email', {
-        sender: { email: this.senderEmail, name: this.senderName },
+        sender: { email: senderEmail, name: senderName },
         to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
         subject,
         htmlContent: html,

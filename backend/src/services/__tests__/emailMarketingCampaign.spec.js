@@ -195,6 +195,7 @@ describe('EmailService marketing campaigns', () => {
       BREVO_API_KEY: 'default-key',
       BREVO_CRITICAL_API_KEY: 'critical-key',
       EMAIL_SENDER: 'notification@molystudio.online',
+      EMAIL_CRITICAL_SENDER: 'security@example.com',
     };
 
     const defaultClient = {
@@ -232,6 +233,7 @@ describe('EmailService marketing campaigns', () => {
     expect(criticalClient.post).toHaveBeenCalledWith(
       '/smtp/email',
       expect.objectContaining({
+        sender: expect.objectContaining({ email: 'security@example.com' }),
         subject: '🔐 Mã OTP MOLY - 123456',
       })
     );
