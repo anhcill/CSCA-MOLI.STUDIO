@@ -243,6 +243,7 @@ export const adminApi = {
             success: boolean;
             data: {
                 updatedAt: string;
+                criticalReserve: number;
                 accounts: Array<{
                     id: 'default' | 'critical';
                     label: string;
@@ -256,6 +257,34 @@ export const adminApi = {
                     error?: string;
                 }>;
             };
+        };
+    },
+
+    async getEmailSendLogs() {
+        const response = await axios.get('/admin/email-campaign/logs');
+        return response.data as {
+            success: boolean;
+            data: Array<{
+                id: number;
+                action: string;
+                created_at: string;
+                admin_name: string;
+                metadata: {
+                    subject?: string;
+                    deliveryType?: string;
+                    recipientCount?: number;
+                    status?: string;
+                    errorMessage?: string;
+                    reserveCritical?: number;
+                    accountBreakdown?: Array<{
+                        id: 'default' | 'critical';
+                        sent: number;
+                        campaignId?: number;
+                        quotaBefore?: number | null;
+                        projectedAfter?: number | null;
+                    }>;
+                };
+            }>;
         };
     },
 

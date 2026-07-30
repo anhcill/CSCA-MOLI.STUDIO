@@ -121,6 +121,11 @@ router.get(
 	authorizePermission("admin.super"),
 	adminCampaignController.getEmailQuota,
 );
+router.get(
+	"/email-campaign/logs",
+	authorizePermission("admin.super"),
+	adminCampaignController.getEmailSendLogs,
+);
 router.post(
 	"/email-campaign/send",
 	authorizePermission("admin.super"),

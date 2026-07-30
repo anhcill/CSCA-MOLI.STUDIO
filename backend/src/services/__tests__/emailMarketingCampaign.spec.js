@@ -39,7 +39,11 @@ describe('EmailService marketing campaigns', () => {
       html: '<html><body>Xin chào</body></html>',
     });
 
-    expect(result).toEqual({ sent: 2, campaignId: 99, listId: 4 });
+    expect(result).toEqual(expect.objectContaining({
+      sent: 2,
+      campaignId: 99,
+      campaignIds: [99],
+    }));
     expect(client.post).toHaveBeenNthCalledWith(
       1,
       '/contacts/lists/4/contacts/remove',
@@ -78,7 +82,7 @@ describe('EmailService marketing campaigns', () => {
       })
     );
     expect(client.post).toHaveBeenNthCalledWith(4, '/emailCampaigns/99/sendNow');
-    expect(client.get).toHaveBeenCalledTimes(2);
+    expect(client.get).toHaveBeenCalledTimes(4);
   });
 
   test('refuses bulk sending when no Brevo marketing list is configured', async () => {
@@ -135,7 +139,7 @@ describe('EmailService marketing campaigns', () => {
       recipients: [{ email: 'student@example.com', name: 'Học sinh' }],
       subject: 'Thông báo',
       html: '<html><body>Thông báo</body></html>',
-    })).resolves.toEqual({ sent: 1, campaignId: 100, listId: 4 });
+    })).resolves.toEqual(expect.objectContaining({ sent: 1, campaignId: 100 }));
     expect(client.post).toHaveBeenNthCalledWith(
       2,
       '/contacts/import',
@@ -170,7 +174,7 @@ describe('EmailService marketing campaigns', () => {
       subject: 'Lịch học mới',
       html: '<html><body>Thông báo</body></html>',
       text: 'Thông báo',
-    })).resolves.toEqual({ sent: 1 });
+    })).resolves.toEqual(expect.objectContaining({ sent: 1 }));
 
     expect(client.post).toHaveBeenCalledWith('/smtp/email', {
       sender: {
@@ -237,6 +241,53 @@ describe('EmailService marketing campaigns', () => {
         subject: '🔐 Mã OTP MOLY - 123456',
       })
     );
+  });
+
+  test('splits an admin batch across both accounts while preserving critical reserve', async () => {
+    process.env = {
+      ...originalEnv,
+      BREVO_API_KEY: 'default-key',
+      BREVO_CRITICAL_API_KEY: 'critical-key',
+      BREVO_CRITICAL_RESERVE: '1',
+    };
+
+    const defaultClient = {
+      get: jest.fn().mockResolvedValue({
+        data: { plan: [{ type: 'free', credits: 2, creditsType: 'sendLimit' }] },
+      }),
+      post: jest.fn().mockResolvedValue({ data: { messageIds: ['d1', 'd2'] } }),
+    };
+    const criticalClient = {
+      get: jest.fn().mockResolvedValue({
+        data: { plan: [{ type: 'free', credits: 5, creditsType: 'sendLimit' }] },
+      }),
+      post: jest.fn().mockResolvedValue({ data: { messageIds: ['c1', 'c2'] } }),
+    };
+    jest.doMock('axios', () => ({
+      create: jest.fn(config => (
+        config.headers['api-key'] === 'critical-key' ? criticalClient : defaultClient
+      )),
+    }));
+
+    const emailService = require('../emailService');
+    const result = await emailService.sendTransactionalBatch({
+      recipients: [1, 2, 3, 4].map(index => ({
+        email: `student${index}@example.com`,
+        name: `Student ${index}`,
+      })),
+      subject: 'Lịch học',
+      html: '<p>Lịch học</p>',
+      text: 'Lịch học',
+    });
+
+    expect(result.sent).toBe(4);
+    expect(result.reserveCritical).toBe(1);
+    expect(result.accounts).toEqual([
+      expect.objectContaining({ id: 'default', sent: 2, quotaBefore: 2, projectedAfter: 0 }),
+      expect.objectContaining({ id: 'critical', sent: 2, quotaBefore: 5, projectedAfter: 3 }),
+    ]);
+    expect(defaultClient.post).toHaveBeenCalledTimes(1);
+    expect(criticalClient.post).toHaveBeenCalledTimes(1);
   });
 
   test('returns quota for both Brevo accounts without exposing account details', async () => {

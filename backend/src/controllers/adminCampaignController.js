@@ -5,6 +5,24 @@ const UserActivity = require('../models/UserActivity');
 const cleanText = (value, max) => String(value || '').trim().slice(0, max);
 
 const AdminCampaignController = {
+  async getEmailSendLogs(req, res) {
+    try {
+      const result = await pool.query(
+        `SELECT ua.id, ua.action, ua.metadata, ua.created_at,
+                COALESCE(NULLIF(u.full_name, ''), u.username, u.email) AS admin_name
+         FROM user_activities ua
+         JOIN users u ON u.id = ua.user_id
+         WHERE ua.action IN ('admin.send_email_campaign', 'admin.send_email_campaign_failed')
+         ORDER BY ua.created_at DESC
+         LIMIT 30`
+      );
+      return res.json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error('[admin email logs]', error);
+      return res.status(500).json({ success: false, message: 'Không thể lấy lịch sử gửi email' });
+    }
+  },
+
   async getEmailQuota(req, res) {
     try {
       const data = await emailService.getQuotaStatus();
@@ -166,6 +184,10 @@ const AdminCampaignController = {
         targetUserId: mode === 'single' ? userId : null,
         recipientCount: delivery.sent,
         brevoCampaignId: delivery.campaignId,
+        brevoCampaignIds: delivery.campaignIds || [],
+        accountBreakdown: delivery.accounts || [],
+        reserveCritical: delivery.reserveCritical ?? null,
+        status: 'accepted',
         subject,
         discountCode: discountCode || null,
       });
@@ -177,19 +199,36 @@ const AdminCampaignController = {
         data: {
           sent: delivery.sent,
           campaignId: delivery.campaignId || null,
+          campaignIds: delivery.campaignIds || [],
+          accounts: delivery.accounts || [],
           deliveryType,
         },
       });
     } catch (error) {
       console.error('[admin campaign send]', error?.response?.data || error);
+      await UserActivity.log(req.user?.id, 'admin.send_email_campaign_failed', {
+        mode: req.body?.mode === 'single' ? 'single' : 'all',
+        deliveryType: req.body?.deliveryType === 'transactional' ? 'transactional' : 'marketing',
+        subject: cleanText(req.body?.subject, 160),
+        status: 'failed',
+        errorCode: error.code || null,
+        errorMessage: error?.response?.data?.message || error.message,
+        quota: error.details || null,
+      });
       const configMissing = [
         'BREVO_API_KEY not configured',
         'BREVO_CRITICAL_API_KEY not configured',
         'BREVO_MARKETING_LIST_ID not configured',
       ].includes(error.message);
-      return res.status(configMissing ? 503 : 500).json({
+      const quotaInsufficient = error.code === 'BREVO_QUOTA_INSUFFICIENT';
+      return res.status(configMissing ? 503 : quotaInsufficient ? 409 : 500).json({
         success: false,
-        message: configMissing ? 'Hệ thống gửi email chưa được cấu hình' : 'Gửi email thất bại. Vui lòng thử lại.',
+        message: configMissing
+          ? 'Hệ thống gửi email chưa được cấu hình'
+          : quotaInsufficient
+            ? error.message
+            : 'Gửi email thất bại. Vui lòng thử lại.',
+        data: quotaInsufficient ? error.details : undefined,
       });
     }
   },

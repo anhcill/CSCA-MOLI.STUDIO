@@ -17,6 +17,27 @@ type EmailQuotaAccount = {
   usedToday?: number | null;
   error?: string;
 };
+type EmailSendLog = {
+  id: number;
+  action: string;
+  created_at: string;
+  admin_name: string;
+  metadata: {
+    subject?: string;
+    deliveryType?: string;
+    recipientCount?: number;
+    status?: string;
+    errorMessage?: string;
+    reserveCritical?: number;
+    accountBreakdown?: Array<{
+      id: 'default' | 'critical';
+      sent: number;
+      campaignId?: number;
+      quotaBefore?: number | null;
+      projectedAfter?: number | null;
+    }>;
+  };
+};
 
 const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
@@ -41,16 +62,28 @@ export default function EmailCampaignPage() {
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [quotaAccounts, setQuotaAccounts] = useState<EmailQuotaAccount[]>([]);
   const [quotaLoading, setQuotaLoading] = useState(true);
+  const [criticalReserve, setCriticalReserve] = useState(50);
+  const [emailLogs, setEmailLogs] = useState<EmailSendLog[]>([]);
 
   async function loadQuota() {
     setQuotaLoading(true);
     try {
       const response = await adminApi.getEmailQuota();
       setQuotaAccounts(response.data.accounts || []);
+      setCriticalReserve(Number(response.data.criticalReserve) || 0);
     } catch {
       setQuotaAccounts([]);
     } finally {
       setQuotaLoading(false);
+    }
+  }
+
+  async function loadEmailLogs() {
+    try {
+      const response = await adminApi.getEmailSendLogs();
+      setEmailLogs(response.data || []);
+    } catch {
+      setEmailLogs([]);
     }
   }
 
@@ -63,6 +96,7 @@ export default function EmailCampaignPage() {
       })
       .catch(() => setNotice({ ok: false, text: 'Không thể lấy số lượng người nhận.' }));
     loadQuota();
+    loadEmailLogs();
   }, []);
 
   useEffect(() => {
@@ -122,7 +156,15 @@ export default function EmailCampaignPage() {
     const itemName = channel === 'notification'
       ? 'thông báo'
       : emailType === 'transactional' ? 'email học tập' : 'email marketing';
-    if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}? Hành động này không thể hoàn tác.`)) return;
+    const defaultRemaining = quotaAccounts.find(account => account.id === 'default')?.remaining || 0;
+    const criticalRemaining = quotaAccounts.find(account => account.id === 'critical')?.remaining || 0;
+    const defaultShare = Math.min(recipientCount, defaultRemaining);
+    const criticalShare = Math.max(0, recipientCount - defaultShare);
+    const criticalAfter = Math.max(0, criticalRemaining - criticalShare);
+    const allocation = channel === 'email' && mode === 'all'
+      ? `\n\nPhân bổ dự kiến:\n• Tài khoản 1: ${defaultShare} email\n• Tài khoản 2: ${criticalShare} email\n• Tài khoản 2 còn khoảng ${criticalAfter} lượt (mức dự phòng: ${criticalReserve})`
+      : '';
+    if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}?${allocation}\n\nHành động này không thể hoàn tác.`)) return;
 
     setSending(true);
     setNotice(null);
@@ -149,6 +191,7 @@ export default function EmailCampaignPage() {
       setNotice({ ok: true, text: response.message });
       setSentSuccessfully(true);
       loadQuota();
+      loadEmailLogs();
     } catch (error: any) {
       setNotice({ ok: false, text: error?.response?.data?.message || 'Gửi thất bại.' });
     } finally {
@@ -424,6 +467,65 @@ export default function EmailCampaignPage() {
           </p>
         </div>
       </form>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-slate-900 dark:text-white">Lịch sử gửi email</h2>
+            <p className="mt-1 text-xs text-slate-500">Log phân bổ quota và kết quả Brevo gần nhất.</p>
+          </div>
+          <button type="button" onClick={loadEmailLogs}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+            <FiRefreshCw /> Làm mới
+          </button>
+        </div>
+        {emailLogs.length === 0 ? (
+          <p className="text-sm text-slate-500">Chưa có log gửi email.</p>
+        ) : (
+          <div className="space-y-3">
+            {emailLogs.slice(0, 15).map(log => {
+              const failed = log.action.endsWith('_failed') || log.metadata?.status === 'failed';
+              return (
+                <div key={log.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white">{log.metadata?.subject || 'Email không có tiêu đề'}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {new Date(log.created_at).toLocaleString('vi-VN')} · {log.admin_name || 'Admin'} · {log.metadata?.deliveryType || 'email'}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                      failed
+                        ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    }`}>
+                      {failed ? 'Thất bại' : `${Number(log.metadata?.recipientCount || 0).toLocaleString('vi-VN')} đã giao Brevo`}
+                    </span>
+                  </div>
+                  {failed ? (
+                    <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-300">
+                      {log.metadata?.errorMessage || 'Không xác định được lỗi.'}
+                    </p>
+                  ) : (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {(log.metadata?.accountBreakdown || []).map(account => (
+                        <div key={`${log.id}-${account.id}`} className="rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800">
+                          <p className="font-bold text-slate-800 dark:text-slate-100">
+                            {account.id === 'default' ? 'Tài khoản 1' : 'Tài khoản 2'}: {account.sent.toLocaleString('vi-VN')} email
+                          </p>
+                          <p className="mt-1 text-slate-500">
+                            Quota {account.quotaBefore ?? '—'} → {account.projectedAfter ?? '—'}
+                            {account.campaignId ? ` · Campaign #${account.campaignId}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </AdminLayout>
   );
 }

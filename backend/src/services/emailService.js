@@ -15,6 +15,18 @@ class EmailService {
     this.marketingSenderName = process.env.EMAIL_MARKETING_SENDER_NAME || this.criticalSenderName;
     this.replyToEmail = process.env.EMAIL_REPLY_TO || '';
     this.marketingListId = Number.parseInt(process.env.BREVO_MARKETING_LIST_ID || '', 10);
+    this.defaultMarketingListId = Number.parseInt(
+      process.env.BREVO_DEFAULT_MARKETING_LIST_ID || '',
+      10
+    );
+    this.criticalMarketingListId = Number.parseInt(
+      process.env.BREVO_CRITICAL_MARKETING_LIST_ID || process.env.BREVO_MARKETING_LIST_ID || '',
+      10
+    );
+    this.criticalReserve = Math.max(
+      0,
+      Number.parseInt(process.env.BREVO_CRITICAL_RESERVE || '50', 10) || 0
+    );
     this.baseUrl = 'https://api.brevo.com/v3';
 
     this.client = this._createClient(this.apiKey);
@@ -62,60 +74,97 @@ class EmailService {
   }
 
   async sendCampaignBatch({ recipients, subject, html, text }) {
-    if (!this.criticalApiKey) throw new Error('BREVO_CRITICAL_API_KEY not configured');
-    if (!Number.isInteger(this.marketingListId) || this.marketingListId <= 0) {
+    const validRecipients = this._dedupeRecipients(recipients);
+    if (!validRecipients.length) throw new Error('No valid recipients');
+
+    const accountConfigs = {
+      default: {
+        id: 'default',
+        client: this.client,
+        listId: this.defaultMarketingListId,
+        senderEmail: this.senderEmail,
+        senderName: this.senderName,
+      },
+      critical: {
+        id: 'critical',
+        client: this.criticalClient,
+        listId: this.criticalMarketingListId,
+        senderEmail: this.marketingSenderEmail,
+        senderName: this.marketingSenderName,
+      },
+    };
+    const availableAccountIds = Object.values(accountConfigs)
+      .filter(config => Number.isInteger(config.listId) && config.listId > 0)
+      .map(config => config.id);
+    if (!availableAccountIds.length) {
       throw new Error('BREVO_MARKETING_LIST_ID not configured');
     }
 
-    const uniqueRecipients = new Map();
-    (recipients || []).forEach(recipient => {
-      const email = String(recipient?.email || '').trim();
-      if (!email) return;
-      uniqueRecipients.set(email.toLowerCase(), {
-        email,
-        name: String(recipient?.name || email).trim().slice(0, 200),
-      });
-    });
-    const validRecipients = [...uniqueRecipients.values()];
-    if (!validRecipients.length) throw new Error('No valid recipients');
-
-    // A Brevo marketing campaign supplies Gmail's standards-compliant
-    // unsubscribe handling. Transactional notifications continue to use
-    // /smtp/email through _send().
-    await this._replaceMarketingList(validRecipients);
-
-    const campaignPayload = {
-      name: `Admin campaign ${new Date().toISOString()} - ${subject}`.slice(0, 200),
-      sender: {
-        email: this.marketingSenderEmail,
-        name: this.marketingSenderName,
-      },
-      subject,
-      previewText: subject,
-      htmlContent: html,
-      recipients: { listIds: [this.marketingListId] },
-    };
-    if (this.replyToEmail) {
-      campaignPayload.replyTo = this.replyToEmail;
+    const allocation = await this._allocateBulkRecipients(validRecipients, availableAccountIds);
+    const accounts = [];
+    for (const part of allocation.parts) {
+      const config = accountConfigs[part.id];
+      accounts.push(await this._sendMarketingPart({
+        ...config,
+        recipients: part.recipients,
+        subject,
+        html,
+        text,
+        quotaBefore: part.quotaBefore,
+        projectedAfter: part.projectedAfter,
+      }));
     }
 
-    const campaign = await this.criticalClient.post('/emailCampaigns', campaignPayload);
-    const campaignId = Number(campaign?.data?.id);
-    if (!Number.isInteger(campaignId) || campaignId <= 0) {
-      throw new Error('Brevo did not return a campaign ID');
-    }
-
-    await this.criticalClient.post(`/emailCampaigns/${campaignId}/sendNow`);
     return {
       sent: validRecipients.length,
-      campaignId,
-      listId: this.marketingListId,
+      campaignId: accounts[0]?.campaignId || null,
+      campaignIds: accounts.map(account => account.campaignId),
+      accounts,
+      reserveCritical: this.criticalReserve,
     };
   }
 
   async sendTransactionalBatch({ recipients, subject, html, text }) {
     if (!this.apiKey) throw new Error('BREVO_API_KEY not configured');
 
+    const validRecipients = this._dedupeRecipients(recipients);
+    if (!validRecipients.length) throw new Error('No valid recipients');
+
+    const allocation = await this._allocateBulkRecipients(validRecipients, ['default', 'critical']);
+    const configs = {
+      default: {
+        client: this.client,
+        senderEmail: this.senderEmail,
+        senderName: this.senderName,
+      },
+      critical: {
+        client: this.criticalClient,
+        senderEmail: this.criticalSenderEmail,
+        senderName: this.criticalSenderName,
+      },
+    };
+    const accounts = [];
+    for (const part of allocation.parts) {
+      accounts.push(await this._sendTransactionalPart({
+        id: part.id,
+        ...configs[part.id],
+        recipients: part.recipients,
+        subject,
+        html,
+        text,
+        quotaBefore: part.quotaBefore,
+        projectedAfter: part.projectedAfter,
+      }));
+    }
+
+    return {
+      sent: validRecipients.length,
+      accounts,
+      reserveCritical: this.criticalReserve,
+    };
+  }
+
+  _dedupeRecipients(recipients) {
     const uniqueRecipients = new Map();
     (recipients || []).forEach(recipient => {
       const email = String(recipient?.email || '').trim();
@@ -126,15 +175,82 @@ class EmailService {
         name: String(recipient?.name || email).trim().slice(0, 200),
       });
     });
-    const validRecipients = [...uniqueRecipients.values()];
-    if (!validRecipients.length) throw new Error('No valid recipients');
+    return [...uniqueRecipients.values()];
+  }
 
+  async _allocateBulkRecipients(recipients, availableAccountIds) {
+    const quota = await this.getQuotaStatus();
+    const byId = Object.fromEntries(quota.accounts.map(account => [account.id, account]));
+    const distinctCritical = this.criticalApiKey && this.criticalApiKey !== this.apiKey;
+    const order = distinctCritical
+      ? ['default', 'critical']
+      : [availableAccountIds.includes('default') ? 'default' : 'critical'];
+    const capacities = {};
+    order.forEach(id => {
+      const account = byId[id];
+      if (!availableAccountIds.includes(id) || account?.status !== 'ok') {
+        capacities[id] = 0;
+        return;
+      }
+      const rawRemaining = account.remaining === null || account.remaining === undefined
+        ? recipients.length
+        : Math.max(0, account.remaining);
+      capacities[id] = id === 'critical' && distinctCritical
+        ? Math.max(0, rawRemaining - this.criticalReserve)
+        : rawRemaining;
+    });
+
+    const totalCapacity = Object.values(capacities).reduce((sum, value) => sum + value, 0);
+    if (totalCapacity < recipients.length) {
+      const error = new Error(
+        `Brevo chỉ còn ${totalCapacity} lượt có thể dùng cho gửi hàng loạt, cần ${recipients.length}`
+      );
+      error.code = 'BREVO_QUOTA_INSUFFICIENT';
+      error.details = {
+        requested: recipients.length,
+        available: totalCapacity,
+        reserveCritical: this.criticalReserve,
+        accounts: quota.accounts,
+      };
+      throw error;
+    }
+
+    const parts = [];
+    let offset = 0;
+    order.forEach(id => {
+      const count = Math.min(capacities[id] || 0, recipients.length - offset);
+      if (count <= 0) return;
+      const quotaBefore = byId[id]?.remaining ?? null;
+      parts.push({
+        id,
+        recipients: recipients.slice(offset, offset + count),
+        quotaBefore,
+        projectedAfter: quotaBefore === null ? null : Math.max(0, quotaBefore - count),
+      });
+      offset += count;
+    });
+    return { parts, quotaBefore: quota.accounts, reserveCritical: this.criticalReserve };
+  }
+
+  async _sendTransactionalPart({
+    id,
+    client,
+    senderEmail,
+    senderName,
+    recipients,
+    subject,
+    html,
+    text,
+    quotaBefore,
+    projectedAfter,
+  }) {
     const batchSize = 50;
     let sent = 0;
-    for (let index = 0; index < validRecipients.length; index += batchSize) {
-      const chunk = validRecipients.slice(index, index + batchSize);
-      await this.client.post('/smtp/email', {
-        sender: { email: this.senderEmail, name: this.senderName },
+    const messageIds = [];
+    for (let index = 0; index < recipients.length; index += batchSize) {
+      const chunk = recipients.slice(index, index + batchSize);
+      const response = await client.post('/smtp/email', {
+        sender: { email: senderEmail, name: senderName },
         subject,
         htmlContent: html,
         textContent: text || subject,
@@ -145,22 +261,62 @@ class EmailService {
           textContent: recipient.text || text || subject,
         })),
       });
+      if (response?.data?.messageId) messageIds.push(response.data.messageId);
+      if (Array.isArray(response?.data?.messageIds)) messageIds.push(...response.data.messageIds);
       sent += chunk.length;
-      if (sent < validRecipients.length) {
+      if (sent < recipients.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
-
-    return { sent };
+    return { id, sent, messageIds, quotaBefore, projectedAfter };
   }
 
-  async _replaceMarketingList(recipients) {
+  async _sendMarketingPart({
+    id,
+    client,
+    listId,
+    senderEmail,
+    senderName,
+    recipients,
+    subject,
+    html,
+    quotaBefore,
+    projectedAfter,
+  }) {
+    await this._replaceMarketingList(recipients, client, listId);
+    const campaignPayload = {
+      name: `Admin campaign ${new Date().toISOString()} - ${subject}`.slice(0, 200),
+      sender: { email: senderEmail, name: senderName },
+      subject,
+      previewText: subject,
+      htmlContent: html,
+      recipients: { listIds: [listId] },
+    };
+    if (this.replyToEmail) campaignPayload.replyTo = this.replyToEmail;
+
+    const campaign = await client.post('/emailCampaigns', campaignPayload);
+    const campaignId = Number(campaign?.data?.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) {
+      throw new Error('Brevo did not return a campaign ID');
+    }
+    await client.post(`/emailCampaigns/${campaignId}/sendNow`);
+    return {
+      id,
+      sent: recipients.length,
+      campaignId,
+      listId,
+      quotaBefore,
+      projectedAfter,
+    };
+  }
+
+  async _replaceMarketingList(recipients, client, listId) {
     try {
-      const removal = await this.criticalClient.post(
-        `/contacts/lists/${this.marketingListId}/contacts/remove`,
+      const removal = await client.post(
+        `/contacts/lists/${listId}/contacts/remove`,
         { all: true }
       );
-      await this._waitForProcess(removal?.data?.processId, this.criticalClient);
+      await this._waitForProcess(removal?.data?.processId, client);
     } catch (error) {
       const message = String(error?.response?.data?.message || '');
       const alreadyEmpty = error?.response?.status === 400
@@ -168,19 +324,19 @@ class EmailService {
       if (!alreadyEmpty) throw error;
     }
 
-    const imported = await this.criticalClient.post('/contacts/import', {
+    const imported = await client.post('/contacts/import', {
       jsonBody: recipients.map(recipient => ({
         email: recipient.email,
         attributes: {
           FIRSTNAME: recipient.name,
         },
       })),
-      listIds: [this.marketingListId],
+      listIds: [listId],
       updateExistingContacts: true,
       emptyContactsAttributes: false,
       disableNotification: true,
     });
-    await this._waitForProcess(imported?.data?.processId, this.criticalClient);
+    await this._waitForProcess(imported?.data?.processId, client);
   }
 
   async _waitForProcess(processId, client = this.client) {
@@ -257,6 +413,7 @@ class EmailService {
 
     return {
       updatedAt: new Date().toISOString(),
+      criticalReserve: this.criticalReserve,
       accounts: [defaultAccount, criticalAccount],
     };
   }
