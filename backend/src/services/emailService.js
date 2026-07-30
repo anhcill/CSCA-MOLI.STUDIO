@@ -6,6 +6,7 @@ const axios = require('axios');
 class EmailService {
   constructor() {
     this.apiKey = process.env.BREVO_API_KEY;
+    this.criticalApiKey = process.env.BREVO_CRITICAL_API_KEY || this.apiKey;
     this.senderEmail = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
     this.senderName = process.env.EMAIL_SENDER_NAME || 'MOLY.STUDIO';
     this.marketingSenderEmail = process.env.EMAIL_MARKETING_SENDER || this.senderEmail;
@@ -14,24 +15,35 @@ class EmailService {
     this.marketingListId = Number.parseInt(process.env.BREVO_MARKETING_LIST_ID || '', 10);
     this.baseUrl = 'https://api.brevo.com/v3';
 
-    this.client = axios.create({
+    this.client = this._createClient(this.apiKey);
+    this.criticalClient = this.criticalApiKey === this.apiKey
+      ? this.client
+      : this._createClient(this.criticalApiKey);
+  }
+
+  _createClient(apiKey) {
+    return axios.create({
       baseURL: this.baseUrl,
       headers: {
-        'api-key': this.apiKey,
+        'api-key': apiKey,
         'Content-Type': 'application/json',
       },
       timeout: 15000,
     });
   }
 
-  async _send({ to, subject, html, text }) {
-    if (!this.apiKey) {
-      console.warn('BREVO_API_KEY not configured, email skipped:', subject);
+  async _send({ to, subject, html, text, account = 'default' }) {
+    const useCriticalAccount = account === 'critical';
+    const apiKey = useCriticalAccount ? this.criticalApiKey : this.apiKey;
+    const client = useCriticalAccount ? this.criticalClient : this.client;
+    if (!apiKey) {
+      const variableName = useCriticalAccount ? 'BREVO_CRITICAL_API_KEY' : 'BREVO_API_KEY';
+      console.warn(`${variableName} not configured, email skipped:`, subject);
       return;
     }
 
     try {
-      await this.client.post('/smtp/email', {
+      await client.post('/smtp/email', {
         sender: { email: this.senderEmail, name: this.senderName },
         to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
         subject,
@@ -46,7 +58,7 @@ class EmailService {
   }
 
   async sendCampaignBatch({ recipients, subject, html, text }) {
-    if (!this.apiKey) throw new Error('BREVO_API_KEY not configured');
+    if (!this.criticalApiKey) throw new Error('BREVO_CRITICAL_API_KEY not configured');
     if (!Number.isInteger(this.marketingListId) || this.marketingListId <= 0) {
       throw new Error('BREVO_MARKETING_LIST_ID not configured');
     }
@@ -83,13 +95,13 @@ class EmailService {
       campaignPayload.replyTo = this.replyToEmail;
     }
 
-    const campaign = await this.client.post('/emailCampaigns', campaignPayload);
+    const campaign = await this.criticalClient.post('/emailCampaigns', campaignPayload);
     const campaignId = Number(campaign?.data?.id);
     if (!Number.isInteger(campaignId) || campaignId <= 0) {
       throw new Error('Brevo did not return a campaign ID');
     }
 
-    await this.client.post(`/emailCampaigns/${campaignId}/sendNow`);
+    await this.criticalClient.post(`/emailCampaigns/${campaignId}/sendNow`);
     return {
       sent: validRecipients.length,
       campaignId,
@@ -140,11 +152,11 @@ class EmailService {
 
   async _replaceMarketingList(recipients) {
     try {
-      const removal = await this.client.post(
+      const removal = await this.criticalClient.post(
         `/contacts/lists/${this.marketingListId}/contacts/remove`,
         { all: true }
       );
-      await this._waitForProcess(removal?.data?.processId);
+      await this._waitForProcess(removal?.data?.processId, this.criticalClient);
     } catch (error) {
       const message = String(error?.response?.data?.message || '');
       const alreadyEmpty = error?.response?.status === 400
@@ -152,7 +164,7 @@ class EmailService {
       if (!alreadyEmpty) throw error;
     }
 
-    const imported = await this.client.post('/contacts/import', {
+    const imported = await this.criticalClient.post('/contacts/import', {
       jsonBody: recipients.map(recipient => ({
         email: recipient.email,
         attributes: {
@@ -164,15 +176,15 @@ class EmailService {
       emptyContactsAttributes: false,
       disableNotification: true,
     });
-    await this._waitForProcess(imported?.data?.processId);
+    await this._waitForProcess(imported?.data?.processId, this.criticalClient);
   }
 
-  async _waitForProcess(processId) {
+  async _waitForProcess(processId, client = this.client) {
     if (!processId) return;
     const deadline = Date.now() + 60000;
 
     while (Date.now() < deadline) {
-      const process = await this.client.get(`/processes/${processId}`);
+      const process = await client.get(`/processes/${processId}`);
       const status = String(process?.data?.status || '').toLowerCase();
       if (status === 'completed') return;
       if (['failed', 'error'].includes(status)) {
@@ -182,6 +194,67 @@ class EmailService {
     }
 
     throw new Error(`Brevo process ${processId} timed out`);
+  }
+
+  async getQuotaStatus() {
+    const loadAccount = async ({ id, label, apiKey, client }) => {
+      if (!apiKey) {
+        return { id, label, configured: false, status: 'missing' };
+      }
+
+      try {
+        const response = await client.get('/account');
+        const plans = Array.isArray(response?.data?.plan) ? response.data.plan : [];
+        const sendingPlan = plans.find(plan => plan?.creditsType === 'sendLimit') || plans[0] || {};
+        const planType = String(sendingPlan.type || 'unknown').toLowerCase();
+        const remaining = Number.isFinite(Number(sendingPlan.credits))
+          ? Number(sendingPlan.credits)
+          : null;
+        const dailyLimit = planType === 'free' ? 300 : null;
+
+        return {
+          id,
+          label,
+          configured: true,
+          status: 'ok',
+          planType,
+          creditsType: sendingPlan.creditsType || null,
+          remaining,
+          dailyLimit,
+          usedToday: dailyLimit !== null && remaining !== null
+            ? Math.max(0, dailyLimit - remaining)
+            : null,
+        };
+      } catch (error) {
+        return {
+          id,
+          label,
+          configured: true,
+          status: 'error',
+          error: error?.response?.data?.message || 'Không thể đọc quota Brevo',
+        };
+      }
+    };
+
+    const [defaultAccount, criticalAccount] = await Promise.all([
+      loadAccount({
+        id: 'default',
+        label: 'Học tập & hệ thống',
+        apiKey: this.apiKey,
+        client: this.client,
+      }),
+      loadAccount({
+        id: 'critical',
+        label: 'Xác minh, OTP, VIP & marketing',
+        apiKey: this.criticalApiKey,
+        client: this.criticalClient,
+      }),
+    ]);
+
+    return {
+      updatedAt: new Date().toISOString(),
+      accounts: [defaultAccount, criticalAccount],
+    };
   }
 
   buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl, recipientName }) {
@@ -514,6 +587,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: '📧 Xác nhận email MOLY.STUDIO',
+      account: 'critical',
       html: this._wrapper({
         title: 'Xác nhận email',
         emoji: '📧',
@@ -575,6 +649,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: `🔐 Mã OTP MOLY - ${otp}`,
+      account: 'critical',
       html: this._wrapper({
         title: 'Mã xác thực MOLY',
         emoji: '🔐',
@@ -596,6 +671,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: '🔐 Đặt lại mật khẩu MOLY.STUDIO',
+      account: 'critical',
       html: this._wrapper({
         title: 'Đặt lại mật khẩu',
         emoji: '🔐',
@@ -623,6 +699,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: `⏰ Gói MOLY sắp hết hạn - còn ${daysLeft} ngày`,
+      account: 'critical',
       html: this._wrapper({
         title: 'Gói sắp hết hạn',
         emoji: '⏰',
@@ -653,6 +730,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: `✨ ${packageName} đã kích hoạt, học thôi ${name || ''}!`,
+      account: 'critical',
       html: this._wrapper({
         title: 'Gói đã kích hoạt',
         emoji: '✨',
@@ -680,6 +758,7 @@ class EmailService {
     await this._send({
       to: email,
       subject: '📅 Gói MOLY đã hết hạn',
+      account: 'critical',
       html: this._wrapper({
         title: 'Gói đã hết hạn',
         emoji: '📅',

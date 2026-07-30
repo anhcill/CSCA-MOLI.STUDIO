@@ -237,6 +237,28 @@ export const adminApi = {
         };
     },
 
+    async getEmailQuota() {
+        const response = await axios.get('/admin/email-campaign/quota');
+        return response.data as {
+            success: boolean;
+            data: {
+                updatedAt: string;
+                accounts: Array<{
+                    id: 'default' | 'critical';
+                    label: string;
+                    configured: boolean;
+                    status: 'ok' | 'missing' | 'error';
+                    planType?: string;
+                    creditsType?: string | null;
+                    remaining?: number | null;
+                    dailyLimit?: number | null;
+                    usedToday?: number | null;
+                    error?: string;
+                }>;
+            };
+        };
+    },
+
     async sendEmailCampaign(payload: {
         mode: 'all' | 'single';
         deliveryType: 'transactional' | 'marketing';

@@ -5,6 +5,19 @@ const UserActivity = require('../models/UserActivity');
 const cleanText = (value, max) => String(value || '').trim().slice(0, max);
 
 const AdminCampaignController = {
+  async getEmailQuota(req, res) {
+    try {
+      const data = await emailService.getQuotaStatus();
+      return res.json({ success: true, data });
+    } catch (error) {
+      console.error('[admin email quota]', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Không thể lấy quota gửi email',
+      });
+    }
+  },
+
   async getAudienceStats(req, res) {
     try {
       const result = await pool.query(
@@ -174,6 +187,7 @@ const AdminCampaignController = {
       console.error('[admin campaign send]', error?.response?.data || error);
       const configMissing = [
         'BREVO_API_KEY not configured',
+        'BREVO_CRITICAL_API_KEY not configured',
         'BREVO_MARKETING_LIST_ID not configured',
       ].includes(error.message);
       return res.status(configMissing ? 503 : 500).json({

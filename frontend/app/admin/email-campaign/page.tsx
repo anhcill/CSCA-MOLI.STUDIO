@@ -1,11 +1,22 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { FiBell, FiCheckCircle, FiGift, FiMail, FiSearch, FiSend, FiUsers } from 'react-icons/fi';
+import { FiBell, FiCheckCircle, FiGift, FiMail, FiRefreshCw, FiSearch, FiSend, FiUsers } from 'react-icons/fi';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { adminApi } from '@/lib/api/admin';
 
 type Recipient = { id: number; full_name: string; email: string };
+type EmailQuotaAccount = {
+  id: 'default' | 'critical';
+  label: string;
+  configured: boolean;
+  status: 'ok' | 'missing' | 'error';
+  planType?: string;
+  remaining?: number | null;
+  dailyLimit?: number | null;
+  usedToday?: number | null;
+  error?: string;
+};
 
 const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
@@ -28,6 +39,20 @@ export default function EmailCampaignPage() {
   const [sending, setSending] = useState(false);
   const [sentSuccessfully, setSentSuccessfully] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [quotaAccounts, setQuotaAccounts] = useState<EmailQuotaAccount[]>([]);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+
+  async function loadQuota() {
+    setQuotaLoading(true);
+    try {
+      const response = await adminApi.getEmailQuota();
+      setQuotaAccounts(response.data.accounts || []);
+    } catch {
+      setQuotaAccounts([]);
+    } finally {
+      setQuotaLoading(false);
+    }
+  }
 
   useEffect(() => {
     adminApi.getEmailAudienceStats()
@@ -37,6 +62,7 @@ export default function EmailCampaignPage() {
         setActiveAccounts(Number(response.data.active_accounts) || 0);
       })
       .catch(() => setNotice({ ok: false, text: 'Không thể lấy số lượng người nhận.' }));
+    loadQuota();
   }, []);
 
   useEffect(() => {
@@ -122,6 +148,7 @@ export default function EmailCampaignPage() {
           });
       setNotice({ ok: true, text: response.message });
       setSentSuccessfully(true);
+      loadQuota();
     } catch (error: any) {
       setNotice({ ok: false, text: error?.response?.data?.message || 'Gửi thất bại.' });
     } finally {
@@ -135,6 +162,78 @@ export default function EmailCampaignPage() {
     <AdminLayout title="Gửi thông báo" description="Gửi qua chuông trong hệ thống hoặc qua email">
       <form onSubmit={submit} className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,.85fr)]">
         <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-white">Quota gửi email hôm nay</h2>
+                <p className="mt-1 text-xs text-slate-500">Số liệu trực tiếp từ từng tài khoản Brevo.</p>
+              </div>
+              <button type="button" onClick={loadQuota} disabled={quotaLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                <FiRefreshCw className={quotaLoading ? 'animate-spin' : ''} /> Làm mới
+              </button>
+            </div>
+            {quotaLoading && quotaAccounts.length === 0 ? (
+              <p className="text-sm text-slate-500">Đang đọc quota Brevo...</p>
+            ) : quotaAccounts.length === 0 ? (
+              <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                Không thể đọc quota. Kiểm tra API key hoặc Authorized IPs trong Brevo.
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {quotaAccounts.map(account => {
+                  const remaining = account.remaining ?? null;
+                  const dailyLimit = account.dailyLimit ?? null;
+                  const percent = remaining !== null && dailyLimit
+                    ? Math.max(0, Math.min(100, (remaining / dailyLimit) * 100))
+                    : 0;
+                  return (
+                    <div key={account.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white">{account.label}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {account.id === 'critical'
+                              ? 'Xác minh · OTP · Reset · VIP · Marketing'
+                              : 'Học tập · Thanh toán · Hệ thống'}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                          account.status === 'ok'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                        }`}>
+                          {account.status === 'ok' ? account.planType || 'OK' : account.status}
+                        </span>
+                      </div>
+                      {account.status === 'ok' ? (
+                        <>
+                          <div className="mt-4 flex items-end justify-between">
+                            <p className="text-3xl font-black text-slate-900 dark:text-white">
+                              {remaining === null ? '—' : remaining.toLocaleString('vi-VN')}
+                            </p>
+                            <p className="pb-1 text-xs font-semibold text-slate-500">
+                              {dailyLimit ? `/ ${dailyLimit} lượt còn lại` : 'lượt còn lại'}
+                            </p>
+                          </div>
+                          {dailyLimit && remaining !== null && (
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                              <div className={`h-full rounded-full ${percent <= 20 ? 'bg-red-500' : percent <= 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${percent}%` }} />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="mt-4 text-xs font-semibold text-red-600 dark:text-red-300">
+                          {account.error || 'API key chưa được cấu hình.'}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="mb-3 font-bold text-slate-900 dark:text-white">Kênh gửi</h2>
             <div className="grid gap-3 sm:grid-cols-2">

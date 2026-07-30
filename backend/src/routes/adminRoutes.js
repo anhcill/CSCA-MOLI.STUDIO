@@ -116,6 +116,11 @@ router.get(
 	authorizePermission("admin.super"),
 	adminCampaignController.getAudienceStats,
 );
+router.get(
+	"/email-campaign/quota",
+	authorizePermission("admin.super"),
+	adminCampaignController.getEmailQuota,
+);
 router.post(
 	"/email-campaign/send",
 	authorizePermission("admin.super"),

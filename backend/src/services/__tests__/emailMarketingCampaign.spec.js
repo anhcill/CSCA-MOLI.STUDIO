@@ -188,4 +188,103 @@ describe('EmailService marketing campaigns', () => {
       }],
     });
   });
+
+  test('routes OTP and VIP email through the critical account', async () => {
+    process.env = {
+      ...originalEnv,
+      BREVO_API_KEY: 'default-key',
+      BREVO_CRITICAL_API_KEY: 'critical-key',
+      EMAIL_SENDER: 'notification@molystudio.online',
+    };
+
+    const defaultClient = {
+      get: jest.fn(),
+      post: jest.fn().mockResolvedValue({ data: { messageId: 'default-id' } }),
+    };
+    const criticalClient = {
+      get: jest.fn(),
+      post: jest.fn().mockResolvedValue({ data: { messageId: 'critical-id' } }),
+    };
+    jest.doMock('axios', () => ({
+      create: jest.fn(config => (
+        config.headers['api-key'] === 'critical-key' ? criticalClient : defaultClient
+      )),
+    }));
+
+    const emailService = require('../emailService');
+    await emailService.sendWelcomeEmail('student@example.com', 'Học sinh');
+    await emailService.sendOtpEmail({
+      email: 'student@example.com',
+      name: 'Học sinh',
+      otp: '123456',
+      reason: 'login',
+    });
+    await emailService.sendVipActivatedEmail({
+      email: 'student@example.com',
+      name: 'Học sinh',
+      packageName: 'VIP',
+      durationDays: 30,
+      expiresAt: new Date('2026-08-30T00:00:00.000Z'),
+    });
+
+    expect(defaultClient.post).toHaveBeenCalledTimes(1);
+    expect(criticalClient.post).toHaveBeenCalledTimes(2);
+    expect(criticalClient.post).toHaveBeenCalledWith(
+      '/smtp/email',
+      expect.objectContaining({
+        subject: '🔐 Mã OTP MOLY - 123456',
+      })
+    );
+  });
+
+  test('returns quota for both Brevo accounts without exposing account details', async () => {
+    process.env = {
+      ...originalEnv,
+      BREVO_API_KEY: 'default-key',
+      BREVO_CRITICAL_API_KEY: 'critical-key',
+    };
+
+    const defaultClient = {
+      get: jest.fn().mockResolvedValue({
+        data: {
+          email: 'private@example.com',
+          plan: [{ type: 'free', credits: 172, creditsType: 'sendLimit' }],
+        },
+      }),
+      post: jest.fn(),
+    };
+    const criticalClient = {
+      get: jest.fn().mockResolvedValue({
+        data: {
+          email: 'other-private@example.com',
+          plan: [{ type: 'free', credits: 300, creditsType: 'sendLimit' }],
+        },
+      }),
+      post: jest.fn(),
+    };
+    jest.doMock('axios', () => ({
+      create: jest.fn(config => (
+        config.headers['api-key'] === 'critical-key' ? criticalClient : defaultClient
+      )),
+    }));
+
+    const emailService = require('../emailService');
+    const result = await emailService.getQuotaStatus();
+
+    expect(result.accounts).toEqual([
+      expect.objectContaining({
+        id: 'default',
+        remaining: 172,
+        dailyLimit: 300,
+        usedToday: 128,
+      }),
+      expect.objectContaining({
+        id: 'critical',
+        remaining: 300,
+        dailyLimit: 300,
+        usedToday: 0,
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain('private@example.com');
+  });
 });
