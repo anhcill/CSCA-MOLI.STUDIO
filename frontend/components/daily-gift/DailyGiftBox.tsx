@@ -6,6 +6,7 @@ import { FaGift, FaHeart, FaMagic, FaStar } from 'react-icons/fa';
 import { useAuthStore } from '@/lib/store/authStore';
 import { useDailyGift } from '@/hooks/useDailyGift';
 import GiftLetterModal from './GiftLetterModal';
+import DailyLetterModal from './DailyLetterModal';
 
 interface DailyGiftBoxProps {
   enabled?: boolean;
@@ -22,6 +23,19 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
   const [open, setOpen] = useState(false);
   const dailyGift = useDailyGift(enabled && isAuthenticated);
   const displayName = user?.display_name || user?.full_name || user?.username || '';
+
+  // Check if today is the special "Thư Hôm Nay" day (e.g. 2026-07-31)
+  const isSpecialLetterDay = () => {
+    const today = new Date();
+    // 2026-07-31 or current system date check
+    return (
+      today.getFullYear() === 2026 &&
+      today.getMonth() === 6 && // 0-indexed July = 6
+      today.getDate() === 31
+    );
+  };
+
+  const isSpecialDay = isSpecialLetterDay();
 
   if (!dailyGift.shouldShow || !dailyGift.letter) return null;
 
@@ -58,7 +72,7 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
           <motion.button
             type="button"
-            aria-label="Mở quà học tập hôm nay"
+            aria-label="Mở thư quà học tập hôm nay"
             onClick={() => setOpen(true)}
             className="group absolute inset-x-0 bottom-0 mx-auto flex h-[68px] w-[68px] items-center justify-center rounded-[22px] border border-rose-100 bg-gradient-to-br from-rose-100 via-pink-100 to-sky-100 shadow-[0_18px_45px_rgba(244,114,182,0.35)] outline-none ring-4 ring-white/70 transition-colors hover:from-rose-200 hover:via-pink-100 hover:to-cyan-100 focus-visible:ring-4 focus-visible:ring-rose-300 sm:h-[88px] sm:w-[88px] sm:rounded-[24px]"
             animate={{
@@ -87,7 +101,7 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
               <FaGift size={26} className="drop-shadow-sm transition-transform duration-300 group-hover:scale-110 sm:size-[30px]" />
             </span>
             <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100 bg-white px-2.5 py-1 text-[10px] font-extrabold text-rose-500 shadow-md sm:px-3 sm:text-[11px]">
-              Quà hôm nay
+              {isSpecialDay ? 'Thư hôm nay 💌' : 'Quà hôm nay'}
             </span>
           </motion.button>
         </div>
@@ -95,15 +109,28 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
 
       <AnimatePresence>
         {open && (
-          <GiftLetterModal
-            letter={dailyGift.letter}
-            studentName={displayName}
-            accepting={dailyGift.accepting}
-            onAccept={handleAccept}
-            onClose={() => setOpen(false)}
-          />
+          isSpecialDay ? (
+            <DailyLetterModal
+              isOpen={open}
+              onClose={() => setOpen(false)}
+              userName={displayName || 'bạn'}
+              audioSrc="https://res.cloudinary.com/dvrgrmais/video/upload/v1785448506/moly-studio/audio/thu-hom-nay.mp3"
+              coverSrc="https://res.cloudinary.com/dvrgrmais/image/upload/v1785448822/moly-studio/images/thu-hom-nay-cover.jpg"
+              songTitle="id 072019"
+              artistName="W/n"
+            />
+          ) : (
+            <GiftLetterModal
+              letter={dailyGift.letter}
+              studentName={displayName}
+              accepting={dailyGift.accepting}
+              onAccept={handleAccept}
+              onClose={() => setOpen(false)}
+            />
+          )
         )}
       </AnimatePresence>
     </>
   );
 }
+
