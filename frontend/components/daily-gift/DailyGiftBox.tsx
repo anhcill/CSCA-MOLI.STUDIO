@@ -49,13 +49,13 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
   return (
     <>
       <div className="fixed bottom-[max(5.25rem,calc(env(safe-area-inset-bottom)+4.75rem))] right-3 z-[9996] sm:bottom-28 sm:right-6">
-        <div className="relative h-20 w-20 sm:h-28 sm:w-28">
+        <div className="relative h-16 w-16 sm:h-20 sm:w-20">
           {FLOATING_DECOR.map(({ Icon, className, delay }) => (
             <motion.span
               key={className}
               className={`pointer-events-none absolute ${className}`}
               animate={{
-                y: [8, -18, -30],
+                y: [6, -14, -24],
                 opacity: [0, 1, 0],
                 scale: [0.7, 1, 0.9],
                 rotate: [-8, 10, -4],
@@ -68,7 +68,7 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
                 ease: 'easeOut',
               }}
             >
-              <Icon size={15} />
+              <Icon size={13} />
             </motion.span>
           ))}
 
@@ -76,33 +76,27 @@ export default function DailyGiftBox({ enabled = true }: DailyGiftBoxProps) {
             type="button"
             aria-label="Mở thư quà học tập hôm nay"
             onClick={() => setOpen(true)}
-            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[68px] w-[68px] items-center justify-center rounded-[22px] border border-rose-100 bg-gradient-to-br from-rose-100 via-pink-100 to-sky-100 shadow-[0_18px_45px_rgba(244,114,182,0.35)] outline-none ring-4 ring-white/70 transition-colors hover:from-rose-200 hover:via-pink-100 hover:to-cyan-100 focus-visible:ring-4 focus-visible:ring-rose-300 sm:h-[88px] sm:w-[88px] sm:rounded-[24px]"
+            className="group absolute inset-x-0 bottom-0 mx-auto flex h-[52px] w-[52px] sm:h-[60px] sm:w-[60px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#F45C7A] via-[#E84E6E] to-[#A96FD4] text-white shadow-[0_8px_25px_rgba(244,92,122,0.4)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-rose-400"
             animate={{
-              y: [0, -5, 0],
-              rotate: [0, -4, 4, -2, 0],
-              scale: [1, 1.03, 1],
-              boxShadow: [
-                '0 18px 45px rgba(244,114,182,0.28)',
-                '0 18px 55px rgba(56,189,248,0.35)',
-                '0 18px 45px rgba(244,114,182,0.28)',
-              ],
+              y: [0, -4, 0],
+              rotate: [0, -3, 3, -1, 0],
+              scale: [1, 1.02, 1],
             }}
             transition={{
               duration: 3,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
-            whileHover={{ scale: 1.08, rotate: 0 }}
-            whileTap={{ scale: 0.94 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
           >
-            <span className="absolute inset-2 rounded-[20px] border border-white/70 bg-white/35" />
-            <span className="absolute left-1/2 top-1 h-3 w-11 -translate-x-1/2 rounded-full bg-rose-300/80" />
-            <span className="absolute left-1/2 top-2 h-[56px] w-3.5 -translate-x-1/2 rounded-full bg-rose-400/80 sm:h-[72px] sm:w-4" />
-            <span className="absolute left-2 top-1/2 h-3.5 w-[52px] -translate-y-1/2 rounded-full bg-rose-400/80 sm:h-4 sm:w-[72px]" />
-            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white/85 text-rose-500 shadow-inner sm:h-14 sm:w-14">
-              <FaGift size={26} className="drop-shadow-sm transition-transform duration-300 group-hover:scale-110 sm:size-[30px]" />
-            </span>
-            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100 bg-white px-2.5 py-1 text-[10px] font-extrabold text-rose-500 shadow-md sm:px-3 sm:text-[11px]">
+            {/* Gift Box Icon centered cleanly */}
+            <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur-xs">
+              <FaGift size={22} className="drop-shadow-xs transition-transform duration-300 group-hover:scale-110 sm:size-[24px]" />
+            </div>
+
+            {/* Bottom Label Badge */}
+            <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-rose-100/80 bg-white/95 px-2.5 py-0.5 text-[10px] font-extrabold text-[#F45C7A] shadow-md sm:px-3 sm:text-[11px]">
               {isSpecialDay ? 'Thư hôm nay 💌' : 'Quà hôm nay'}
             </span>
           </motion.button>
