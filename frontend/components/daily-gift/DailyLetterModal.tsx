@@ -11,7 +11,6 @@ import {
   FaMusic,
   FaHeart,
   FaBookOpen,
-  FaArrowDown,
 } from 'react-icons/fa';
 
 export interface DailyLetterModalProps {
@@ -84,23 +83,30 @@ export default function DailyLetterModal({
     onClose();
   }, [onClose]);
 
-  // Slow smooth auto-scroll letter down when opened & playing
+  // Gently move the letter independently from audio playback. Readers can
+  // still scroll back without being snapped to another place in the letter.
   useEffect(() => {
-    if (!isOpened || userInteracted || !letterScrollRef.current) return;
+    if (!isOpened || userInteracted) return;
 
-    const interval = setInterval(() => {
-      if (letterScrollRef.current && !userInteracted) {
-        const { scrollTop, scrollHeight, clientHeight } = letterScrollRef.current;
-        if (scrollTop + clientHeight < scrollHeight - 2) {
-          letterScrollRef.current.scrollTop += 0.5; // slow smooth scroll
-        }
+    let animationFrame = 0;
+    let previousTime = window.performance.now();
+    const scrollSpeed = 16; // pixels per second
+    const gentlyScrollLetter = (now: number) => {
+      const letter = letterScrollRef.current;
+      if (letter) {
+        const maxScroll = Math.max(0, letter.scrollHeight - letter.clientHeight);
+        const elapsedSeconds = Math.min(0.1, (now - previousTime) / 1000);
+        letter.scrollTop = Math.min(maxScroll, letter.scrollTop + scrollSpeed * elapsedSeconds);
       }
-    }, 45);
+      previousTime = now;
+      animationFrame = window.requestAnimationFrame(gentlyScrollLetter);
+    };
+    animationFrame = window.requestAnimationFrame(gentlyScrollLetter);
 
-    return () => clearInterval(interval);
-  }, [isOpened, isPlaying, userInteracted]);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isOpened, userInteracted]);
 
-  // Handle manual scroll by user - pause auto-scroll for 5 seconds
+  // Give readers enough time to review an earlier paragraph before resuming.
   const handleUserScroll = () => {
     setUserInteracted(true);
 
@@ -110,7 +116,7 @@ export default function DailyLetterModal({
 
     userInteractionTimerRef.current = setTimeout(() => {
       setUserInteracted(false);
-    }, 5000);
+    }, 12000);
   };
 
   // Handle Play/Pause
@@ -244,8 +250,7 @@ export default function DailyLetterModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 15 }}
           transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-          className="relative z-10 flex flex-col w-full max-w-md sm:max-w-lg max-h-[88vh] sm:max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl border border-[rgba(180,120,130,0.18)]"
-          style={{ backgroundColor: '#FFF9F5' }}
+          className="relative z-10 flex flex-col w-full max-w-md sm:max-w-lg max-h-[90vh] sm:max-h-[87vh] overflow-hidden rounded-[28px] bg-[#FFF8F3] shadow-[0_24px_80px_rgba(69,36,49,0.28)] border border-[#E8D3CA]"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -256,7 +261,7 @@ export default function DailyLetterModal({
             type="button"
             onClick={handleCloseModal}
             aria-label="Đóng popup"
-            className="absolute top-3.5 right-3.5 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-slate-200/50 text-[#172033]/60 transition-all hover:bg-slate-300/60 hover:text-[#172033] focus:outline-none"
+            className="absolute top-3.5 right-3.5 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-[#F1E5E1] text-[#765D67] transition-all hover:bg-[#E8D3D0] hover:text-[#442D37] focus:outline-none"
           >
             <FaTimes size={14} />
           </button>
@@ -325,8 +330,8 @@ export default function DailyLetterModal({
 
               {/* Music Badge Notice */}
               <div className="mb-4 inline-flex items-center gap-1.5 rounded-xl bg-slate-100/80 px-3 py-1 text-xs text-slate-600 border border-slate-200/50">
-                <FaMusic className="text-[#A96FD4] animate-bounce" size={12} />
-                <span className="font-medium text-[#172033]">Bật nhạc khi mở thư</span>
+                <FaMusic className="text-[#B85E7A] animate-bounce" size={12} />
+                <span className="font-medium text-[#4B3440]">Bật nhạc khi mở thư</span>
                 <span className="text-slate-400">•</span>
                 <span className="text-slate-500 italic">Bản nhạc buồn nhẹ nhàng</span>
               </div>
@@ -336,7 +341,7 @@ export default function DailyLetterModal({
                 type="button"
                 onClick={handleOpenLetter}
                 disabled={isOpening}
-                className="w-full max-w-xs rounded-2xl bg-gradient-to-r from-[#F45C7A] via-[#A96FD4] to-[#4D8FE8] px-6 py-3 text-sm sm:text-base font-bold text-white shadow-lg shadow-pink-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-75"
+                className="w-full max-w-xs rounded-2xl bg-gradient-to-r from-[#D85F7B] via-[#BE648A] to-[#8B668F] px-6 py-3 text-sm sm:text-base font-bold text-white shadow-lg shadow-[#A84F6B]/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-75"
               >
                 {isOpening ? 'Đang mở thư...' : 'Mở thư'}
               </button>
@@ -350,11 +355,14 @@ export default function DailyLetterModal({
               className="flex flex-col h-full overflow-hidden p-4 sm:p-5"
             >
               {/* Header (Shrink-0) */}
-              <div className="text-center mb-3 shrink-0">
-                <h3 className="text-lg sm:text-xl font-black text-[#172033]">
+              <div className="text-center mb-4 shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.24em] text-[#BE6A80]">
+                  Thư hôm nay
+                </span>
+                <h3 className="mt-1 text-xl sm:text-2xl font-black text-[#402A34]">
                   Mở thư ra rồi...
                 </h3>
-                <p className="mt-0.5 text-xs text-slate-500 font-serif italic">
+                <p className="mx-auto mt-1.5 max-w-sm px-4 text-[13px] sm:text-sm leading-5 text-[#896D78] italic">
                   “Có những ngày trái tim chỉ muốn nghe một bản nhạc buồn và thở chậm lại.”
                 </p>
               </div>
@@ -364,23 +372,15 @@ export default function DailyLetterModal({
                 ref={letterScrollRef}
                 onWheel={handleUserScroll}
                 onTouchStart={handleUserScroll}
-                className="relative flex-1 min-h-0 rounded-2xl bg-white/90 p-4 sm:p-5 shadow-inner border border-[rgba(180,120,130,0.18)] overflow-y-auto hide-scrollbar scroll-smooth"
+                className="relative flex-1 min-h-0 rounded-[22px] bg-[#FFFEFC] p-5 sm:p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_28px_rgba(93,57,68,0.07)] border border-[#EBDCD6] overflow-y-auto hide-scrollbar"
                 style={{
-                  fontFamily: '"Georgia", "Merriweather", "Noto Serif", serif',
+                  fontFamily: '"Segoe UI", Arial, sans-serif',
+                  backgroundImage: 'radial-gradient(circle at 15% 10%, rgba(220, 150, 165, 0.06), transparent 28%), radial-gradient(circle at 85% 90%, rgba(180, 135, 170, 0.05), transparent 30%)',
                 }}
               >
-                {/* Auto-scroll Notice Indicator */}
-                {!userInteracted && isPlaying && (
-                  <div className="sticky top-0 right-0 z-10 flex items-center justify-end">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-pink-50/90 px-2.5 py-0.5 text-[10px] font-medium text-pink-600 shadow-xs border border-pink-100">
-                      Chữ tự động trôi chậm <FaArrowDown size={8} className="animate-bounce" />
-                    </span>
-                  </div>
-                )}
-
-                <div className="space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed tracking-wide italic">
-                  <p className="font-semibold not-italic text-[#F45C7A] text-sm sm:text-base">
-                    Gửi <span className="underline decoration-pink-300 font-serif">{userName}</span> thương mến,
+                <div className="space-y-5 text-[15px] sm:text-base text-[#503C45] leading-7 sm:leading-8 tracking-normal">
+                  <p className="font-bold text-[#C65372] text-base sm:text-lg">
+                    Gửi <span className="underline decoration-[#E5A6B6] underline-offset-4">{userName}</span> thương mến,
                   </p>
 
                   <p>
@@ -401,18 +401,6 @@ export default function DailyLetterModal({
                     nghỉ ngơi vài phút rồi hãy tiếp tục hành trình của mình.
                   </p>
 
-                  {/* Gentle MOLY Notice Styling */}
-                  <div className="my-3 rounded-xl bg-[#FFF9F5] p-3 border-l-2 border-[#F45C7A] text-xs not-italic">
-                    <p className="font-semibold text-[#172033] flex items-center gap-1.5 mb-1 font-sans">
-                      <FaBookOpen className="text-[#4D8FE8]" size={12} />
-                      Thông báo từ MOLY.STUDIO:
-                    </p>
-                    <p className="text-slate-600 leading-normal font-sans">
-                      Hôm nay, MOLY cũng đã cập nhật thêm một số đề luyện tập miễn phí mới dành cho bạn.
-                      Khi cảm thấy sẵn sàng, bạn có thể mở đề, ôn lại kiến thức và tiến thêm một bước nhỏ đến mục tiêu của mình.
-                    </p>
-                  </div>
-
                   <p>
                     Không cần phải đi thật nhanh.
                     <br />
@@ -423,19 +411,33 @@ export default function DailyLetterModal({
                     Chúc bạn có một ngày nhẹ nhàng, học tập hiệu quả và tìm thấy niềm vui trong những điều nhỏ bé.
                   </p>
 
-                  <p className="font-semibold not-italic text-[#A96FD4]">
+                  <p className="font-semibold text-[#A65375]">
                     Rồi ngày mai sẽ dịu hơn.
                   </p>
 
-                  <div className="pt-2 text-right text-xs font-semibold not-italic text-slate-600 font-sans">
+                  <div className="pt-2 text-right text-sm font-semibold text-[#705762]">
                     <p>Thương mến,</p>
-                    <p className="font-bold text-[#F45C7A] text-sm sm:text-base">MOLY.STUDIO 💌</p>
+                    <p className="font-bold text-[#C65372] text-base sm:text-lg">MOLY.STUDIO 💌</p>
+                  </div>
+
+                  {/* Keep the product notice at the very end of the letter. */}
+                  <div className="mt-7 rounded-2xl bg-[#FFF1ED] p-4 border border-[#F0D6CE] text-sm">
+                    <p className="font-bold text-[#573945] flex items-center gap-2 mb-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F7DDE2]">
+                        <FaBookOpen className="text-[#B95974]" size={13} />
+                      </span>
+                      Thông báo từ MOLY.STUDIO:
+                    </p>
+                    <p className="text-[#755D66] leading-6">
+                      Hôm nay, MOLY cũng đã cập nhật thêm một số đề luyện tập miễn phí mới dành cho bạn.
+                      Khi cảm thấy sẵn sàng, bạn có thể mở đề, ôn lại kiến thức và tiến thêm một bước nhỏ đến mục tiêu của mình.
+                    </p>
                   </div>
                 </div>
               </div>
 
               {/* Music Player Box (Shrink-0) */}
-              <div className="mt-3 shrink-0 rounded-2xl bg-gradient-to-r from-slate-900 to-[#172033] p-3 text-white shadow-md">
+              <div className="mt-3 shrink-0 rounded-[20px] bg-gradient-to-br from-[#49313E] via-[#3E3040] to-[#303A4C] p-3.5 text-white shadow-[0_10px_28px_rgba(62,40,52,0.2)] border border-white/10">
                 <div className="flex items-center gap-2.5">
                   <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/20 shadow">
                     <img
@@ -452,14 +454,14 @@ export default function DailyLetterModal({
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="text-xs sm:text-sm font-bold truncate text-pink-200">
+                      <h4 className="text-xs sm:text-sm font-bold truncate text-[#FFD8E1]">
                         {songTitle}
                       </h4>
-                      <span className="rounded bg-rose-500/30 px-1 py-0.2 text-[9px] font-semibold text-rose-300">
+                      <span className="rounded bg-[#C45A78]/30 px-1.5 py-0.5 text-[9px] font-semibold text-[#FFB6C9]">
                         3107
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-300 truncate">{artistName}</p>
+                    <p className="text-[11px] text-[#D8C9D1] truncate">{artistName}</p>
 
                     {audioError && (
                       <button
@@ -476,7 +478,7 @@ export default function DailyLetterModal({
                     type="button"
                     onClick={togglePlay}
                     aria-label={isPlaying ? 'Tạm dừng nhạc' : 'Phát nhạc'}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#F45C7A] to-[#A96FD4] text-white shadow hover:scale-105 active:scale-95 transition-transform"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#E36986] to-[#B35E8D] text-white shadow-lg shadow-[#2A1720]/20 hover:scale-105 active:scale-95 transition-transform"
                   >
                     {isPlaying ? <FaPause size={12} /> : <FaPlay size={12} className="ml-0.5" />}
                   </button>
@@ -493,7 +495,7 @@ export default function DailyLetterModal({
                     max={duration || 100}
                     value={currentTime}
                     onChange={handleSeek}
-                    className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-slate-700 accent-[#F45C7A]"
+                    className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-white/20 accent-[#E36986]"
                     aria-label="Thanh thời gian bài hát"
                   />
                 </div>
@@ -514,7 +516,7 @@ export default function DailyLetterModal({
                     step={0.05}
                     value={isMuted ? 0 : volume}
                     onChange={handleVolumeChange}
-                    className="h-1 w-16 cursor-pointer appearance-none rounded-lg bg-slate-700 accent-[#4D8FE8]"
+                    className="h-1 w-16 cursor-pointer appearance-none rounded-lg bg-white/20 accent-[#D78AA0]"
                     aria-label="Thanh điều chỉnh âm lượng"
                   />
                 </div>
@@ -524,7 +526,7 @@ export default function DailyLetterModal({
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="mt-3 shrink-0 w-full rounded-xl border border-slate-300 bg-white py-2.5 text-xs sm:text-sm font-bold text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:text-[#172033]"
+                className="mt-3 shrink-0 w-full rounded-xl border border-[#DCC5BD] bg-[#FFFCF9] py-2.5 text-xs sm:text-sm font-bold text-[#654A56] shadow-xs transition-all hover:border-[#C88A9A] hover:bg-[#FFF4F1] hover:text-[#442D37]"
               >
                 Đóng thư
               </button>
