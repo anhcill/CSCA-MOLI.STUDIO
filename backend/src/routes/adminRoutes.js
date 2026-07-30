@@ -3,6 +3,7 @@ const router = express.Router();
 const adminController = require("../controllers/adminController");
 const adminAnalyticsController = require("../controllers/adminAnalyticsController");
 const adminCampaignController = require("../controllers/adminCampaignController");
+const adminBackupController = require("../controllers/adminBackupController");
 const {
 	authenticate,
 	authorizePermission,
@@ -119,6 +120,23 @@ router.post(
 	"/email-campaign/send",
 	authorizePermission("admin.super"),
 	adminCampaignController.send,
+);
+
+// Database backup — super admin only
+router.get(
+	"/backups",
+	authorizePermission("admin.super"),
+	adminBackupController.getStatus,
+);
+router.post(
+	"/backups",
+	authorizePermission("admin.super"),
+	adminBackupController.create,
+);
+router.get(
+	"/backups/:fileName/download",
+	authorizePermission("admin.super"),
+	adminBackupController.download,
 );
 router.post(
 	"/notification-campaign/send",

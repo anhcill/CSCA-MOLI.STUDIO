@@ -111,6 +111,24 @@ export interface AIUsageStats {
     pricing: Record<string, { input: number; inputCached: number; output: number }>;
 }
 
+export interface DatabaseBackupFile {
+    fileName: string;
+    size: number;
+    createdAt: string;
+}
+
+export interface DatabaseBackupStatus {
+    directory: string;
+    directoryWritable: boolean;
+    database: string;
+    host: string;
+    inProgress: boolean;
+    pgDumpAvailable: boolean;
+    pgDumpVersion: string | null;
+    isRailway: boolean;
+    backups: DatabaseBackupFile[];
+}
+
 export const adminApi = {
     // Get dashboard statistics
     async getDashboardStats(query = '') {
@@ -178,6 +196,24 @@ export const adminApi = {
     async getAIUsageStats(params?: { from?: string; to?: string; userId?: number; limit?: number }) {
         const response = await axios.get('/admin/ai-usage', { params });
         return response.data as { success: boolean; data: AIUsageStats };
+    },
+
+    async getDatabaseBackups() {
+        const response = await axios.get('/admin/backups');
+        return response.data as { success: boolean; data: DatabaseBackupStatus };
+    },
+
+    async createDatabaseBackup() {
+        const response = await axios.post('/admin/backups', {}, { timeout: 15 * 60 * 1000 });
+        return response.data as { success: boolean; message: string; data: DatabaseBackupFile };
+    },
+
+    async downloadDatabaseBackup(fileName: string) {
+        const response = await axios.get(`/admin/backups/${encodeURIComponent(fileName)}/download`, {
+            responseType: 'blob',
+            timeout: 15 * 60 * 1000,
+        });
+        return response.data as Blob;
     },
 
     async getEmailAudienceStats() {
