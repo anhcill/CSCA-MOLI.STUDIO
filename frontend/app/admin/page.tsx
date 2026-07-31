@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { useAuthStore } from '@/lib/store/authStore';
-import { AIUsageStats, adminApi } from '@/lib/api/admin';
+import { AIUsageStats, OnlineUsersResponse, adminApi } from '@/lib/api/admin';
 import { hasPermission } from '@/lib/utils/permissions';
 import { FiUsers, FiFileText, FiTrendingUp, FiActivity, FiAward, FiCalendar, FiWifi, FiCpu, FiDollarSign } from 'react-icons/fi';
 import Link from 'next/link';
+import { initSocket } from '@/lib/socket';
 
 interface DashboardStats {
     totalUsers: number;
@@ -23,11 +24,6 @@ interface DashboardStats {
         total_score: number;
         status: string;
     }[];
-}
-
-interface OnlineUsers {
-    online: number;
-    users: { id: number; email: string; role: string }[];
 }
 
 type DatePreset = 'all' | 'today' | 'week' | 'month' | '3months' | 'custom';
@@ -79,7 +75,12 @@ export default function AdminDashboard() {
         revenue: 0, dateRange: { from: null, to: null }, recentActivities: []
     });
     const [loading, setLoading] = useState(true);
-    const [onlineUsers, setOnlineUsers] = useState<OnlineUsers>({ online: 0, users: [] });
+    const [onlineUsers, setOnlineUsers] = useState<OnlineUsersResponse>({
+        online: 0,
+        active: 0,
+        connections: 0,
+        users: [],
+    });
     const [onlineLoading, setOnlineLoading] = useState(true);
     const [datePreset, setDatePreset] = useState<DatePreset>('all');
     const [customFrom, setCustomFrom] = useState('');
@@ -93,19 +94,43 @@ export default function AdminDashboard() {
     }, []);
 
     useEffect(() => {
+        let disposed = false;
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
         const loadOnline = async () => {
             try {
                 const data = await adminApi.getOnlineUsers();
-                setOnlineUsers(data);
+                if (!disposed) setOnlineUsers(data);
             } catch {
-                setOnlineUsers({ online: 0, users: [] });
+                if (!disposed) {
+                    setOnlineUsers({ online: 0, active: 0, connections: 0, users: [] });
+                }
             } finally {
-                setOnlineLoading(false);
+                if (!disposed) setOnlineLoading(false);
             }
         };
+
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(loadOnline, 250);
+        };
+        const joinPresenceRoom = () => socket?.emit('join_admin_presence');
+
         loadOnline();
-        const interval = setInterval(loadOnline, 30000); // refresh every 30s
-        return () => clearInterval(interval);
+        const interval = setInterval(loadOnline, 15_000);
+        const socket = initSocket();
+        joinPresenceRoom();
+        socket?.on('connect', joinPresenceRoom);
+        socket?.on('presence:changed', scheduleRefresh);
+
+        return () => {
+            disposed = true;
+            clearInterval(interval);
+            if (refreshTimer) clearTimeout(refreshTimer);
+            socket?.emit('leave_admin_presence');
+            socket?.off('connect', joinPresenceRoom);
+            socket?.off('presence:changed', scheduleRefresh);
+        };
     }, []);
 
     const getDateRange = (preset: DatePreset): { from?: string; to?: string } => {
@@ -306,6 +331,74 @@ export default function AdminDashboard() {
                         </div>
                     );
                 })}
+            </div>
+
+            <div className="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-slate-800">
+                    <div>
+                        <h3 className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-white">
+                            <FiWifi className="text-emerald-500" />
+                            Người đang truy cập
+                        </h3>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                            Tài khoản đã đăng nhập trên mọi trang của website
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-semibold">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            {onlineUsers.active} đang xem
+                        </span>
+                        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                            {onlineUsers.online} tài khoản · {onlineUsers.connections} tab
+                        </span>
+                    </div>
+                </div>
+
+                {onlineLoading ? (
+                    <div className="space-y-3 p-5">
+                        {[0, 1].map((item) => (
+                            <div key={item} className="h-14 animate-pulse rounded-xl bg-gray-100 dark:bg-slate-800" />
+                        ))}
+                    </div>
+                ) : onlineUsers.users.length === 0 ? (
+                    <div className="px-5 py-10 text-center text-sm text-gray-400">
+                        Chưa có tài khoản nào đang truy cập.
+                    </div>
+                ) : (
+                    <div className="max-h-80 divide-y divide-gray-100 overflow-y-auto dark:divide-slate-800">
+                        {onlineUsers.users.map((onlineUser) => (
+                            <div key={onlineUser.id} className="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                        onlineUser.active ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                                    }`} />
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                                            {onlineUser.fullName || onlineUser.email}
+                                        </p>
+                                        <p className="truncate text-xs text-gray-400">
+                                            {onlineUser.email} · ID {onlineUser.id}
+                                            {onlineUser.connections > 1 ? ` · ${onlineUser.connections} tab` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="min-w-0 sm:max-w-[55%] sm:text-right">
+                                    <Link
+                                        href={onlineUser.currentPage.path || '/'}
+                                        className="block truncate text-sm font-semibold text-violet-600 hover:text-violet-700 hover:underline dark:text-violet-400"
+                                        title={onlineUser.currentPage.title || onlineUser.currentPage.path}
+                                    >
+                                        {onlineUser.currentPage.title || onlineUser.currentPage.path || '/'}
+                                    </Link>
+                                    <p className="truncate text-xs text-gray-400" title={onlineUser.currentPage.path}>
+                                        {onlineUser.currentPage.path || '/'} · {onlineUser.active ? 'đang xem' : 'tab nền'}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

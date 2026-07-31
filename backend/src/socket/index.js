@@ -4,6 +4,28 @@ const db = require('../config/database');
 const { ADMIN_ROOM } = require('./riskCenterRealtime');
 const DeviceSessionService = require('../services/deviceSessionService');
 
+const ADMIN_PRESENCE_ROOM = 'admin:presence';
+
+function sanitizePresencePath(value) {
+  if (typeof value !== 'string') return '/';
+  const path = value.trim().slice(0, 500);
+  return path.startsWith('/') ? path : '/';
+}
+
+function sanitizePresenceTitle(value) {
+  return typeof value === 'string' ? value.trim().slice(0, 160) : '';
+}
+
+function notifyPresenceChanged(io) {
+  io.to(ADMIN_PRESENCE_ROOM).emit('presence:changed', { timestamp: Date.now() });
+}
+
+function isAdminRole(role) {
+  return role === 'admin' || role === 'super_admin' || (
+    typeof role === 'string' && role.endsWith('_admin')
+  );
+}
+
 /**
  * Initialize Socket.io server
  * @param {import('http').Server} httpServer - The HTTP server instance
@@ -91,9 +113,52 @@ function initSocket(httpServer) {
   io.on('connection', (socket) => {
     const userId = socket.user.id;
     console.log(`[Socket] User ${userId} connected (${socket.id})`);
+    const connectedAt = new Date().toISOString();
+    socket.data.presence = {
+      path: '/',
+      title: '',
+      visible: true,
+      connectedAt,
+      lastSeenAt: connectedAt,
+    };
 
     // Join personal room for receiving private messages
     socket.join(`user:${userId}`);
+    notifyPresenceChanged(io);
+
+    socket.on('presence:update', (payload = {}) => {
+      const safePayload = payload && typeof payload === 'object' ? payload : {};
+      socket.data.presence = {
+        ...socket.data.presence,
+        path: sanitizePresencePath(safePayload.path),
+        title: sanitizePresenceTitle(safePayload.title),
+        visible: safePayload.visible !== false,
+        lastSeenAt: new Date().toISOString(),
+      };
+      notifyPresenceChanged(io);
+    });
+
+    socket.on('presence:heartbeat', (payload = {}) => {
+      const safePayload = payload && typeof payload === 'object' ? payload : {};
+      socket.data.presence = {
+        ...socket.data.presence,
+        path: sanitizePresencePath(safePayload.path || socket.data.presence?.path),
+        title: sanitizePresenceTitle(safePayload.title || socket.data.presence?.title),
+        visible: safePayload.visible !== false,
+        lastSeenAt: new Date().toISOString(),
+      };
+    });
+
+    socket.on('join_admin_presence', () => {
+      if (isAdminRole(socket.user.role)) {
+        socket.join(ADMIN_PRESENCE_ROOM);
+        socket.emit('admin_presence_joined');
+      }
+    });
+
+    socket.on('leave_admin_presence', () => {
+      socket.leave(ADMIN_PRESENCE_ROOM);
+    });
 
     // ─── Admin Risk Center room ───────────────────────────────────────────
     socket.on('join_admin_risk_center', () => {
@@ -163,6 +228,7 @@ function initSocket(httpServer) {
     // ─── Disconnect ───────────────────────────────────────────────────────
     socket.on('disconnect', (reason) => {
       console.log(`[Socket] User ${userId} disconnected: ${reason}`);
+      notifyPresenceChanged(io);
     });
 
     // ─── Ping/Pong for keep-alive ─────────────────────────────────────────

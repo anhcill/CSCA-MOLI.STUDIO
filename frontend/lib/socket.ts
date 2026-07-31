@@ -4,7 +4,6 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
 
 type MessageHandler = (message: unknown) => void;
 type DeleteMessageHandler = (data: { messageId: number; senderId: number }) => void;
@@ -31,7 +30,9 @@ export function initSocket(): Socket {
     return null as unknown as Socket;
   }
 
-  if (socket?.connected) {
+  if (socket) {
+    socket.auth = { token };
+    if (!socket.connected) socket.connect();
     return socket;
   }
 
@@ -41,7 +42,7 @@ export function initSocket(): Socket {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+    reconnectionAttempts: Infinity,
     timeout: 20000,
     autoConnect: true,
   });
@@ -61,10 +62,6 @@ export function initSocket(): Socket {
   socket.on('connect_error', (err) => {
     reconnectAttempts++;
     console.warn(`[Socket] Connection error (attempt ${reconnectAttempts}):`, err.message);
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error('[Socket] Max reconnect attempts reached, giving up');
-      socket?.disconnect();
-    }
   });
 
   // ─── Message events ─────────────────────────────────────────────────────────

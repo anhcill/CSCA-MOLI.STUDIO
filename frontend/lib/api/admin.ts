@@ -45,6 +45,32 @@ export interface AdminActivityFilters {
     limit?: number;
 }
 
+export interface OnlineUserPage {
+    path: string;
+    title: string;
+    visible: boolean;
+    connectedAt: string | null;
+    lastSeenAt: string | null;
+}
+
+export interface OnlineUser {
+    id: number;
+    fullName: string;
+    email: string;
+    role: string;
+    active: boolean;
+    connections: number;
+    currentPage: OnlineUserPage;
+    pages: OnlineUserPage[];
+}
+
+export interface OnlineUsersResponse {
+    online: number;
+    active: number;
+    connections: number;
+    users: OnlineUser[];
+}
+
 export interface AIUsageStats {
     overview: {
         total_requests: number | string;
@@ -190,7 +216,7 @@ export const adminApi = {
     // Get online users count
     async getOnlineUsers() {
         const response = await axios.get('/admin/online-users');
-        return response.data as { online: number; users: { id: number; email: string; role: string }[] };
+        return response.data as OnlineUsersResponse;
     },
 
     async getAIUsageStats(params?: { from?: string; to?: string; userId?: number; limit?: number }) {

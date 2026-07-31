@@ -13,6 +13,7 @@ import UpdateToast from '@/components/pwa/UpdateToast';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
+import { disconnectSocket, initSocket } from '@/lib/socket';
 
 const ACTIVITY_RECORD_TTL = 5 * 60 * 1000;
 let lastActivityRecordedAt = 0;
@@ -26,7 +27,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const queryString = searchParams?.toString();
   const currentRoute = `${pathname || '/'}${queryString ? `?${queryString}` : ''}`;
   const [mounted, setMounted] = useState(false);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
@@ -53,6 +54,44 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       .catch(() => {})
       .finally(() => { activityRecordRequest = null; });
   }, [mounted, isAuthenticated, pathname]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    if (!isAuthenticated || !token) {
+      disconnectSocket();
+      return;
+    }
+
+    const socket = initSocket();
+    if (!socket) return;
+
+    const presencePayload = () => ({
+      path: pathname || '/',
+      title: document.title,
+      visible: document.visibilityState === 'visible',
+    });
+    const reportPresence = () => socket.emit('presence:update', presencePayload());
+    const reportHeartbeat = () => socket.emit('presence:heartbeat', presencePayload());
+    const reportPageHidden = () => socket.emit('presence:update', {
+      ...presencePayload(),
+      visible: false,
+    });
+
+    socket.on('connect', reportPresence);
+    reportPresence();
+
+    document.addEventListener('visibilitychange', reportPresence);
+    window.addEventListener('pagehide', reportPageHidden);
+    const heartbeat = window.setInterval(reportHeartbeat, 25_000);
+
+    return () => {
+      socket.off('connect', reportPresence);
+      document.removeEventListener('visibilitychange', reportPresence);
+      window.removeEventListener('pagehide', reportPageHidden);
+      window.clearInterval(heartbeat);
+    };
+  }, [mounted, isAuthenticated, token, pathname]);
 
   // Suppress footer on admin/auth/exam/chat/subject pages
   const isAdmin = pathname?.startsWith('/admin');

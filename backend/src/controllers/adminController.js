@@ -959,25 +959,97 @@ const AdminController = {
         }
     },
 
-    // Get online users count via Socket.io
+    // Get authenticated users currently connected anywhere on the website.
     async getOnlineUsers(req, res) {
         try {
             const { getIO } = require('../socket/singleton');
             const io = getIO();
             if (!io) {
-                return res.json({ online: 0, users: [] });
+                return res.json({ online: 0, active: 0, connections: 0, users: [] });
             }
+
             const sockets = Array.from(io.sockets.sockets.values());
-            const users = sockets
-                .filter(s => s.user?.id)
-                .map(s => ({ id: s.user.id, email: s.user.email, role: s.user.role }))
-                .filter((u, i, arr) => arr.findIndex(x => x.id === u.id) === i);
-            res.json({ online: users.length, users });
+            const groupedUsers = new Map();
+
+            sockets
+                .filter((socket) => socket.user?.id)
+                .forEach((socket) => {
+                    const userId = Number(socket.user.id);
+                    const presence = socket.data?.presence || {};
+                    const page = {
+                        path: presence.path || '/',
+                        title: presence.title || '',
+                        visible: presence.visible !== false,
+                        connectedAt: presence.connectedAt || null,
+                        lastSeenAt: presence.lastSeenAt || presence.connectedAt || null,
+                    };
+                    const current = groupedUsers.get(userId) || {
+                        id: userId,
+                        email: socket.user.email || '',
+                        role: socket.user.role || 'student',
+                        connections: 0,
+                        pages: [],
+                    };
+                    current.connections += 1;
+                    current.pages.push(page);
+                    groupedUsers.set(userId, current);
+                });
+
+            const userIds = Array.from(groupedUsers.keys());
+            let accountById = new Map();
+            if (userIds.length > 0) {
+                const accountResult = await pool.query(
+                    `SELECT id, full_name, email, role
+                     FROM users
+                     WHERE id = ANY($1::int[])`,
+                    [userIds],
+                );
+                accountById = new Map(accountResult.rows.map((account) => [Number(account.id), account]));
+            }
+
+            const users = Array.from(groupedUsers.values())
+                .map((presenceUser) => {
+                    const account = accountById.get(presenceUser.id);
+                    const pages = presenceUser.pages.sort((a, b) => {
+                        if (a.visible !== b.visible) return a.visible ? -1 : 1;
+                        return new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime();
+                    });
+                    const currentPage = pages[0] || {
+                        path: '/',
+                        title: '',
+                        visible: false,
+                        connectedAt: null,
+                        lastSeenAt: null,
+                    };
+
+                    return {
+                        id: presenceUser.id,
+                        fullName: account?.full_name || '',
+                        email: account?.email || presenceUser.email,
+                        role: account?.role || presenceUser.role,
+                        active: pages.some((page) => page.visible),
+                        connections: presenceUser.connections,
+                        currentPage,
+                        pages,
+                    };
+                })
+                .sort((a, b) => {
+                    if (a.active !== b.active) return a.active ? -1 : 1;
+                    return new Date(b.currentPage.lastSeenAt || 0).getTime()
+                        - new Date(a.currentPage.lastSeenAt || 0).getTime();
+                });
+
+            return res.json({
+                online: users.length,
+                active: users.filter((user) => user.active).length,
+                connections: sockets.filter((socket) => socket.user?.id).length,
+                users,
+            });
         } catch (error) {
             console.error('Error getting online users:', error);
-            res.status(500).json({ message: 'Server error' });
+            return res.status(500).json({ message: 'Server error' });
         }
-        },
+    },
 
     async getAIUsageStats(req, res) {
         try {
