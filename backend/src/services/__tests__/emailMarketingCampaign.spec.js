@@ -340,4 +340,26 @@ describe('EmailService marketing campaigns', () => {
     ]);
     expect(JSON.stringify(result)).not.toContain('private@example.com');
   });
+
+  test('renders the spring campaign template with safe static blossom decoration', () => {
+    jest.doMock('axios', () => ({
+      create: jest.fn(() => ({ get: jest.fn(), post: jest.fn() })),
+    }));
+
+    const emailService = require('../emailService');
+    const html = emailService.buildAdminCampaignEmail({
+      subject: 'Chúc xuân <MOLY>',
+      content: 'Bình an & nhiều niềm vui',
+      actionLabel: 'Ghé thăm MOLY',
+      actionUrl: 'https://molystudio.online',
+      recipientName: 'Bạn',
+      templateId: 'spring',
+    });
+
+    expect(html).toContain('MÙA XUÂN');
+    expect(html).toContain('🌸 🌸 🌸 🌸 🌸');
+    expect(html).toContain('#db2777');
+    expect(html).toContain('Chúc xuân &lt;MOLY&gt;');
+    expect(html).not.toContain('<script');
+  });
 });

@@ -323,6 +323,7 @@ export const adminApi = {
         discountCode?: string;
         actionLabel?: string;
         actionUrl?: string;
+        templateId?: 'classic' | 'study' | 'exam' | 'spring' | 'event' | 'promotion';
     }) {
         const response = await axios.post('/admin/email-campaign/send', payload, { timeout: 120000 });
         return response.data as {

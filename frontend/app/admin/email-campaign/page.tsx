@@ -24,6 +24,7 @@ type EmailSendLog = {
   admin_name: string;
   metadata: {
     subject?: string;
+    templateId?: string;
     deliveryType?: string;
     recipientCount?: number;
     status?: string;
@@ -38,6 +39,103 @@ type EmailSendLog = {
     }>;
   };
 };
+
+type EmailTemplateId = 'classic' | 'study' | 'exam' | 'spring' | 'event' | 'promotion';
+type EmailTemplate = {
+  id: EmailTemplateId;
+  name: string;
+  description: string;
+  emoji: string;
+  deliveryType: 'transactional' | 'marketing';
+  subject: string;
+  content: string;
+  actionLabel: string;
+  actionUrl: string;
+  discountCode?: string;
+  accent: string;
+  soft: string;
+};
+
+const EMAIL_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'classic',
+    name: 'Tự soạn',
+    description: 'Mẫu MOLY trang trọng, dùng cho nội dung bất kỳ.',
+    emoji: '✍️',
+    deliveryType: 'transactional',
+    subject: '',
+    content: '',
+    actionLabel: 'Xem thông báo',
+    actionUrl: '',
+    accent: '#b4232e',
+    soft: '#fff7ed',
+  },
+  {
+    id: 'study',
+    name: 'Cập nhật học tập',
+    description: 'Bài học, tài liệu hoặc nội dung ôn tập mới.',
+    emoji: '📚',
+    deliveryType: 'transactional',
+    subject: 'Nội dung học tập mới dành cho bạn',
+    content: 'MOLY vừa cập nhật thêm nội dung học tập mới để bạn tiếp tục hành trình ôn luyện.\n\nBạn có thể mở bài học, xem lại kiến thức quan trọng và luyện tập theo tốc độ phù hợp với mình.',
+    actionLabel: 'Vào học ngay',
+    actionUrl: 'https://molystudio.online',
+    accent: '#047857',
+    soft: '#ecfdf5',
+  },
+  {
+    id: 'exam',
+    name: 'Nhắc lịch thi',
+    description: 'Nhắc lịch, thời gian và việc cần chuẩn bị.',
+    emoji: '⏰',
+    deliveryType: 'transactional',
+    subject: 'Nhắc bạn về lịch thi sắp tới',
+    content: 'Kỳ thi của bạn đang đến gần.\n\nThời gian: [điền thời gian]\nNội dung cần chuẩn bị: [điền nội dung]\n\nHãy kiểm tra thiết bị, đường truyền và đăng nhập sớm để có trạng thái tốt nhất trước giờ thi.',
+    actionLabel: 'Xem lịch thi',
+    actionUrl: 'https://molystudio.online/exam-room',
+    accent: '#b45309',
+    soft: '#fffbeb',
+  },
+  {
+    id: 'spring',
+    name: 'Mùa xuân hoa đào',
+    description: 'Lời chúc Tết, đầu xuân hoặc một dịp nhẹ nhàng.',
+    emoji: '🌸',
+    deliveryType: 'marketing',
+    subject: 'Một lời chúc mùa xuân từ MOLY.STUDIO',
+    content: 'Mùa xuân đã ghé qua, MOLY chúc bạn và gia đình thật nhiều sức khỏe, bình an và niềm vui.\n\nMong rằng hành trình học tập trong năm mới của bạn sẽ luôn vững vàng, có thêm nhiều trải nghiệm đẹp và sớm chạm tới mục tiêu của mình.',
+    actionLabel: 'Ghé thăm MOLY',
+    actionUrl: 'https://molystudio.online',
+    accent: '#db2777',
+    soft: '#fdf2f8',
+  },
+  {
+    id: 'event',
+    name: 'Sự kiện & chúc mừng',
+    description: 'MV, livestream, thành tích hoặc sự kiện cộng đồng.',
+    emoji: '🎉',
+    deliveryType: 'marketing',
+    subject: 'Hẹn bạn tại sự kiện mới của MOLY',
+    content: 'MOLY thân mời bạn cùng đón chờ một hoạt động đặc biệt.\n\nThời gian: [điền thời gian]\nSự kiện: [điền tên sự kiện]\n\nHy vọng chúng ta sẽ cùng nhau tạo nên những khoảnh khắc thật nhiều cảm xúc.',
+    actionLabel: 'Xem chi tiết',
+    actionUrl: 'https://molystudio.online',
+    accent: '#7c3aed',
+    soft: '#f5f3ff',
+  },
+  {
+    id: 'promotion',
+    name: 'Ưu đãi',
+    description: 'Khuyến mãi có mã giảm giá và thời hạn rõ ràng.',
+    emoji: '🎁',
+    deliveryType: 'marketing',
+    subject: 'Ưu đãi đặc biệt dành riêng cho bạn',
+    content: 'MOLY gửi tặng bạn một ưu đãi để hành trình học tập nhẹ nhàng hơn.\n\nThời hạn áp dụng: [điền thời hạn]\nĐiều kiện áp dụng: [điền điều kiện]\n\nNhập mã bên dưới khi thanh toán để nhận ưu đãi.',
+    actionLabel: 'Nhận ưu đãi ngay',
+    actionUrl: 'https://molystudio.online/vip',
+    accent: '#c2410c',
+    soft: '#fff7ed',
+  },
+];
 
 const cleanCopiedContent = (value: string) => value.replace(/\*+/g, '');
 
@@ -54,6 +152,7 @@ export default function EmailCampaignPage() {
   const [searching, setSearching] = useState(false);
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
+  const [templateId, setTemplateId] = useState<EmailTemplateId>('classic');
   const [discountCode, setDiscountCode] = useState('');
   const [actionLabel, setActionLabel] = useState('Xem thông báo');
   const [actionUrl, setActionUrl] = useState('');
@@ -127,8 +226,10 @@ export default function EmailCampaignPage() {
     : selected ? 1 : 0;
   const canSend = subject.trim().length >= 3 && content.trim().length >= 3
     && recipientCount > 0 && !sending && !sentSuccessfully;
+  const hasUnfilledPlaceholders = /\[điền[^\]]*\]/i.test(content);
 
   function startNewEmail() {
+    setTemplateId('classic');
     setSubject('');
     setContent('');
     setDiscountCode('');
@@ -145,6 +246,19 @@ export default function EmailCampaignPage() {
     setEmailType(type);
     setDiscountCode('');
     setActionLabel(type === 'transactional' ? 'Xem thông báo' : 'Nhận ưu đãi ngay');
+  }
+
+  function applyEmailTemplate(template: EmailTemplate) {
+    setChannel('email');
+    setTemplateId(template.id);
+    setEmailType(template.deliveryType);
+    setSubject(template.subject);
+    setContent(template.content);
+    setDiscountCode(template.discountCode || '');
+    setActionLabel(template.actionLabel);
+    setActionUrl(template.actionUrl);
+    setNotice(null);
+    setSentSuccessfully(false);
   }
 
   async function submit(event: FormEvent) {
@@ -164,7 +278,10 @@ export default function EmailCampaignPage() {
     const allocation = channel === 'email' && mode === 'all'
       ? `\n\nPhân bổ dự kiến:\n• Tài khoản 1: ${defaultShare} email\n• Tài khoản 2: ${criticalShare} email\n• Tài khoản 2 còn khoảng ${criticalAfter} lượt (mức dự phòng: ${criticalReserve})`
       : '';
-    if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}?${allocation}\n\nHành động này không thể hoàn tác.`)) return;
+    const placeholderWarning = hasUnfilledPlaceholders
+      ? '\n\n⚠️ Nội dung vẫn còn chỗ [điền ...] chưa được thay.'
+      : '';
+    if (!window.confirm(`Xác nhận gửi ${itemName} này đến ${target}?${allocation}${placeholderWarning}\n\nHành động này không thể hoàn tác.`)) return;
 
     setSending(true);
     setNotice(null);
@@ -187,6 +304,7 @@ export default function EmailCampaignPage() {
             discountCode: emailType === 'marketing' ? discountCode.trim() : '',
             actionLabel: actionLabel.trim(),
             actionUrl: actionUrl.trim(),
+            templateId,
           });
       setNotice({ ok: true, text: response.message });
       setSentSuccessfully(true);
@@ -200,6 +318,7 @@ export default function EmailCampaignPage() {
   }
 
   const field = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
+  const selectedTemplate = EMAIL_TEMPLATES.find(template => template.id === templateId) || EMAIL_TEMPLATES[0];
 
   return (
     <AdminLayout title="Gửi thông báo" description="Gửi qua chuông trong hệ thống hoặc qua email">
@@ -359,10 +478,53 @@ export default function EmailCampaignPage() {
             )}
           </section>
 
+          {channel === 'email' && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="rounded-xl bg-pink-100 p-2.5 text-pink-700">🪄</span>
+                <div>
+                  <h2 className="font-bold text-slate-900 dark:text-white">2. Chọn mẫu email</h2>
+                  <p className="text-sm text-slate-500">Chọn mẫu để điền nhanh, sau đó bạn vẫn sửa được mọi nội dung.</p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {EMAIL_TEMPLATES.map(template => {
+                  const selected = template.id === templateId;
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      disabled={sentSuccessfully}
+                      onClick={() => applyEmailTemplate(template)}
+                      className="rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700"
+                      style={selected ? {
+                        borderColor: template.accent,
+                        backgroundColor: template.soft,
+                        boxShadow: `0 0 0 2px ${template.accent}22`,
+                      } : undefined}
+                    >
+                      <span className="flex items-start justify-between gap-3">
+                        <span className="text-2xl">{template.emoji}</span>
+                        <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-black uppercase text-slate-500 dark:bg-slate-800">
+                          {template.deliveryType === 'transactional' ? 'Học tập' : 'Marketing'}
+                        </span>
+                      </span>
+                      <span className="mt-2 block font-bold text-slate-900 dark:text-white">{template.name}</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">{template.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-3 rounded-lg bg-pink-50 px-3 py-2 text-xs font-semibold leading-5 text-pink-700 dark:bg-pink-950/30 dark:text-pink-300">
+                🌸 Mẫu hoa đào dùng cánh hoa trang trí tĩnh để hiển thị ổn định trong Gmail. Email không hỗ trợ hiệu ứng rơi bằng JavaScript như trang đăng nhập.
+              </p>
+            </section>
+          )}
+
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center gap-3">
               <span className="rounded-xl bg-amber-100 p-2.5 text-amber-700"><FiGift /></span>
-              <h2 className="font-bold text-slate-900 dark:text-white">2. Soạn nội dung</h2>
+              <h2 className="font-bold text-slate-900 dark:text-white">{channel === 'email' ? '3.' : '2.'} Soạn nội dung</h2>
             </div>
             <div className="space-y-4">
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Tiêu đề *
@@ -377,6 +539,11 @@ export default function EmailCampaignPage() {
                     ? 'Nhập nội dung học tập cần thông báo cho học sinh...'
                     : 'Nhập nội dung, thời hạn và điều kiện áp dụng...'} className={`${field} resize-y leading-6`} />
               </label>
+              {hasUnfilledPlaceholders && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                  ⚠️ Hãy thay các chỗ “[điền ...]” trước khi gửi thật.
+                </p>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 {(channel === 'notification' || emailType === 'marketing') && (
                   <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">Mã ưu đãi
@@ -399,30 +566,57 @@ export default function EmailCampaignPage() {
 
         <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
           {channel === 'email' ? (
-            <section className="overflow-hidden rounded-2xl border border-[#ded6c8] border-t-[6px] border-t-[#b4232e] bg-[#fffdf8] shadow-sm">
+            <section
+              className="overflow-hidden rounded-2xl border border-[#ded6c8] border-t-[6px] bg-[#fffdf8] shadow-sm"
+              style={{ borderTopColor: selectedTemplate.accent }}
+            >
               <div className="flex items-center justify-between border-b border-[#e8e0d3] px-5 py-4">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#b4232e] font-serif text-xl font-bold text-[#fffdf8]">学</span>
+                  <span
+                    className="flex h-10 w-10 items-center justify-center rounded-full font-serif text-xl font-bold text-[#fffdf8]"
+                    style={{ backgroundColor: selectedTemplate.accent }}
+                  >
+                    {selectedTemplate.emoji}
+                  </span>
                   <div>
                     <p className="text-sm font-black tracking-wide text-[#172033]">MOLY.STUDIO</p>
                     <p className="text-[10px] font-bold tracking-[.14em] text-[#8a7760]">CSCA · DU HỌC TRUNG QUỐC</p>
                   </div>
                 </div>
-                <span className="rounded-full border border-[#ddcdb8] px-2.5 py-1 font-serif text-xs font-bold text-[#9d2933]">留学</span>
+                <span
+                  className="rounded-full border px-2.5 py-1 text-xs font-bold"
+                  style={{ borderColor: `${selectedTemplate.accent}55`, color: selectedTemplate.accent }}
+                >
+                  {selectedTemplate.name}
+                </span>
               </div>
-              <div className="p-6">
-                <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#9d2933]">Thông báo dành cho bạn</p>
+              {templateId === 'spring' && (
+                <div className="overflow-hidden border-b border-pink-100 bg-gradient-to-r from-pink-50 via-rose-100 to-pink-50 px-4 py-2 text-center text-lg tracking-[.55em] text-pink-500">
+                  🌸　🌸　🌸　🌸　🌸
+                </div>
+              )}
+              <div className="p-6" style={{ backgroundColor: templateId === 'spring' ? '#fffafd' : '#fffdf8' }}>
+                <p className="text-[10px] font-black uppercase tracking-[.16em]" style={{ color: selectedTemplate.accent }}>
+                  Thông báo dành cho bạn
+                </p>
                 <h3 className="mt-2 font-serif text-2xl font-bold leading-tight text-[#172033]">{subject || 'Tiêu đề thông báo'}</h3>
-                <div className="my-5 h-[3px] w-10 bg-[#b4232e]" />
+                <div className="my-5 h-[3px] w-10" style={{ backgroundColor: selectedTemplate.accent }} />
                 <p className="mb-3 text-sm text-[#344054]">Chào bạn,</p>
                 <p className="whitespace-pre-wrap text-sm leading-7 text-[#475467]">{content.trim() || 'Nội dung thông báo sẽ hiển thị tại đây.'}</p>
                 {discountCode && (
                   <div className="mt-5 rounded-lg border border-dashed border-[#c69a68] bg-[#faf4e8] px-4 py-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#8a7760]">Mã dành cho bạn</p>
-                    <p className="mt-1 font-mono text-xl font-black tracking-widest text-[#9d2933]">{discountCode}</p>
+                    <p className="mt-1 font-mono text-xl font-black tracking-widest" style={{ color: selectedTemplate.accent }}>{discountCode}</p>
                   </div>
                 )}
-                {actionUrl && <div className="mt-5 w-fit rounded-lg bg-[#b4232e] px-5 py-3 text-sm font-bold text-white">{actionLabel || 'Xem thông tin'} &nbsp;→</div>}
+                {actionUrl && (
+                  <div className="mt-5 w-fit rounded-lg px-5 py-3 text-sm font-bold text-white" style={{ backgroundColor: selectedTemplate.accent }}>
+                    {actionLabel || 'Xem thông tin'} &nbsp;→
+                  </div>
+                )}
+                {templateId === 'spring' && (
+                  <p className="mt-6 text-center text-base tracking-[.35em] text-pink-400">🌸　·　🌸　·　🌸</p>
+                )}
                 <p className="mt-6 border-t border-[#e8e0d3] pt-5 text-sm leading-6 text-[#475467]">Thân mến,<br /><strong className="text-[#172033]">Đội ngũ MOLY.STUDIO</strong></p>
               </div>
               <div className="bg-[#172033] px-5 py-4 text-center">
@@ -490,7 +684,7 @@ export default function EmailCampaignPage() {
                     <div>
                       <p className="font-bold text-slate-900 dark:text-white">{log.metadata?.subject || 'Email không có tiêu đề'}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {new Date(log.created_at).toLocaleString('vi-VN')} · {log.admin_name || 'Admin'} · {log.metadata?.deliveryType || 'email'}
+                        {new Date(log.created_at).toLocaleString('vi-VN')} · {log.admin_name || 'Admin'} · {log.metadata?.deliveryType || 'email'} · mẫu {log.metadata?.templateId || 'classic'}
                       </p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${

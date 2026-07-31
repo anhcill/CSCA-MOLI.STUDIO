@@ -418,12 +418,77 @@ class EmailService {
     };
   }
 
-  buildAdminCampaignEmail({ subject, content, discountCode, actionLabel, actionUrl, recipientName }) {
+  buildAdminCampaignEmail({
+    subject,
+    content,
+    discountCode,
+    actionLabel,
+    actionUrl,
+    recipientName,
+    templateId = 'classic',
+  }) {
     const safeContent = this.escapeHtml(content).replace(/\r?\n/g, '<br>');
     const safeCode = discountCode ? this.escapeHtml(discountCode) : '';
     const safeActionUrl = actionUrl ? this.escapeHtml(actionUrl) : '';
     const safeRecipientName = this.escapeHtml(recipientName || 'bạn');
     const safeActionLabel = this.escapeHtml(actionLabel || 'Xem thông tin');
+    const themes = {
+      classic: {
+        accent: '#b4232e',
+        background: '#f4f0e7',
+        paper: '#fffdf8',
+        footer: '#172033',
+        icon: '学',
+        label: '留学',
+      },
+      study: {
+        accent: '#047857',
+        background: '#ecfdf5',
+        paper: '#ffffff',
+        footer: '#064e3b',
+        icon: '📚',
+        label: 'HỌC TẬP',
+      },
+      exam: {
+        accent: '#b45309',
+        background: '#fffbeb',
+        paper: '#fffef8',
+        footer: '#78350f',
+        icon: '⏰',
+        label: 'LỊCH THI',
+      },
+      spring: {
+        accent: '#db2777',
+        background: '#fdf2f8',
+        paper: '#fffafd',
+        footer: '#831843',
+        icon: '🌸',
+        label: 'MÙA XUÂN',
+      },
+      event: {
+        accent: '#7c3aed',
+        background: '#f5f3ff',
+        paper: '#fffefe',
+        footer: '#3b0764',
+        icon: '🎉',
+        label: 'SỰ KIỆN',
+      },
+      promotion: {
+        accent: '#c2410c',
+        background: '#fff7ed',
+        paper: '#fffdf9',
+        footer: '#7c2d12',
+        icon: '🎁',
+        label: 'ƯU ĐÃI',
+      },
+    };
+    const theme = themes[templateId] || themes.classic;
+    const springTop = templateId === 'spring'
+      ? `<tr><td style="padding:10px 18px;background:#fce7f3;border-bottom:1px solid #fbcfe8;text-align:center;color:#db2777;font-size:18px;letter-spacing:9px">🌸 🌸 🌸 🌸 🌸</td></tr>`
+      : '';
+    const springClosing = templateId === 'spring'
+      ? `<p style="margin:26px 0 0;text-align:center;color:#ec4899;font-size:16px;letter-spacing:7px">🌸 · 🌸 · 🌸</p>`
+      : '';
 
     // Keep campaign emails close to a simple study-abroad letter. The layout
     // uses table-based, inline styles so it remains stable in Gmail and mobile
@@ -435,35 +500,36 @@ class EmailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${this.escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f0e7;font-family:Arial,'Segoe UI',sans-serif;color:#172033">
+<body style="margin:0;padding:0;background:${theme.background};font-family:Arial,'Segoe UI',sans-serif;color:#172033">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${this.escapeHtml(subject)} — Thông báo mới từ MOLY.STUDIO.</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f4f0e7;padding:28px 12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${theme.background};padding:28px 12px">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;background:#fffdf8;border:1px solid #ded6c8;border-top:6px solid #b4232e;border-radius:14px;overflow:hidden">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;background:${theme.paper};border:1px solid #ded6c8;border-top:6px solid ${theme.accent};border-radius:14px;overflow:hidden">
           <tr>
             <td style="padding:24px 28px 20px;border-bottom:1px solid #e8e0d3">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="width:48px;vertical-align:middle">
-                    <div style="width:42px;height:42px;border-radius:50%;background:#b4232e;color:#fffdf8;text-align:center;line-height:42px;font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:bold">学</div>
+                    <div style="width:42px;height:42px;border-radius:50%;background:${theme.accent};color:#fffdf8;text-align:center;line-height:42px;font-family:Arial,'Segoe UI',sans-serif;font-size:21px;font-weight:bold">${theme.icon}</div>
                   </td>
                   <td style="vertical-align:middle">
                     <p style="margin:0;color:#172033;font-size:16px;line-height:1.2;font-weight:900;letter-spacing:.4px">MOLY.STUDIO</p>
                     <p style="margin:4px 0 0;color:#8a7760;font-size:11px;line-height:1.3;font-weight:bold;letter-spacing:1.2px">CSCA · DU HỌC TRUNG QUỐC</p>
                   </td>
                   <td align="right" style="vertical-align:middle">
-                    <span style="display:inline-block;border:1px solid #ddcdb8;border-radius:999px;padding:6px 10px;color:#9d2933;font-family:Georgia,'Times New Roman',serif;font-size:12px;font-weight:bold">留学</span>
+                    <span style="display:inline-block;border:1px solid ${theme.accent};border-radius:999px;padding:6px 10px;color:${theme.accent};font-family:Arial,'Segoe UI',sans-serif;font-size:11px;font-weight:bold">${theme.label}</span>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
+          ${springTop}
           <tr>
             <td style="padding:34px 28px 30px">
-              <p style="margin:0 0 10px;color:#9d2933;font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">Thông báo dành cho bạn</p>
+              <p style="margin:0 0 10px;color:${theme.accent};font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">Thông báo dành cho bạn</p>
               <h1 style="margin:0 0 24px;color:#172033;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.28;font-weight:bold">${this.escapeHtml(subject)}</h1>
-              <div style="width:42px;height:3px;margin:0 0 24px;background:#b4232e"></div>
+              <div style="width:42px;height:3px;margin:0 0 24px;background:${theme.accent}"></div>
               <p style="margin:0 0 18px;font-size:15px;line-height:1.75;color:#344054">Chào ${safeRecipientName},</p>
               <div style="font-size:15px;line-height:1.8;color:#475467">${safeContent}</div>
               ${safeCode ? `
@@ -471,18 +537,19 @@ class EmailService {
                   <tr>
                     <td style="padding:16px 18px">
                       <p style="margin:0 0 7px;color:#8a7760;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase">Mã dành cho bạn</p>
-                      <p style="margin:0;color:#9d2933;font-family:Consolas,'Courier New',monospace;font-size:21px;font-weight:900;letter-spacing:2px">${safeCode}</p>
+                      <p style="margin:0;color:${theme.accent};font-family:Consolas,'Courier New',monospace;font-size:21px;font-weight:900;letter-spacing:2px">${safeCode}</p>
                     </td>
                   </tr>
                 </table>` : ''}
               ${safeActionUrl ? `
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 0">
                   <tr>
-                    <td style="border-radius:8px;background:#b4232e">
+                    <td style="border-radius:8px;background:${theme.accent}">
                       <a href="${safeActionUrl}" style="display:inline-block;padding:13px 22px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900">${safeActionLabel} &nbsp;→</a>
                     </td>
                   </tr>
                 </table>` : ''}
+              ${springClosing}
               <p style="margin:30px 0 0;padding-top:22px;border-top:1px solid #e8e0d3;font-size:14px;line-height:1.7;color:#475467">
                 Thân mến,<br>
                 <strong style="color:#172033">Đội ngũ MOLY.STUDIO</strong>
@@ -490,7 +557,7 @@ class EmailService {
             </td>
           </tr>
           <tr>
-            <td style="padding:18px 28px;background:#172033;text-align:center">
+            <td style="padding:18px 28px;background:${theme.footer};text-align:center">
               <p style="margin:0;color:#d6d0c5;font-size:11px;line-height:1.6">Đồng hành cùng bạn trên hành trình CSCA và du học Trung Quốc.</p>
               <p style="margin:4px 0 0;color:#8e98a8;font-size:10px;line-height:1.5">Đây là email thông báo từ tài khoản MOLY.STUDIO của bạn.</p>
             </td>

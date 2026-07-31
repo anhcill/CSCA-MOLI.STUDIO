@@ -3,6 +3,7 @@ const emailService = require('../services/emailService');
 const UserActivity = require('../models/UserActivity');
 
 const cleanText = (value, max) => String(value || '').trim().slice(0, max);
+const EMAIL_TEMPLATE_IDS = new Set(['classic', 'study', 'exam', 'spring', 'event', 'promotion']);
 
 const AdminCampaignController = {
   async getEmailSendLogs(req, res) {
@@ -81,6 +82,8 @@ const AdminCampaignController = {
       const discountCode = cleanText(req.body?.discountCode, 80);
       const actionLabel = cleanText(req.body?.actionLabel, 80);
       const actionUrl = cleanText(req.body?.actionUrl, 500);
+      const requestedTemplateId = cleanText(req.body?.templateId, 32);
+      const templateId = EMAIL_TEMPLATE_IDS.has(requestedTemplateId) ? requestedTemplateId : 'classic';
 
       if (subject.length < 3 || content.length < 3) {
         return res.status(400).json({ success: false, message: 'Vui lòng nhập tiêu đề và nội dung email' });
@@ -148,6 +151,7 @@ const AdminCampaignController = {
             actionLabel,
             actionUrl,
             recipientName: recipient.name,
+            templateId,
           }),
           text: `Chào ${recipient.name || 'bạn'},\n\n${text}`,
         }));
@@ -169,6 +173,7 @@ const AdminCampaignController = {
           actionLabel,
           actionUrl,
           recipientName: '{{contact.FIRSTNAME}}',
+          templateId,
         });
         delivery = await emailService.sendCampaignBatch({
           recipients,
@@ -190,6 +195,7 @@ const AdminCampaignController = {
         status: 'accepted',
         subject,
         discountCode: discountCode || null,
+        templateId,
       });
       return res.json({
         success: true,
@@ -209,6 +215,9 @@ const AdminCampaignController = {
       await UserActivity.log(req.user?.id, 'admin.send_email_campaign_failed', {
         mode: req.body?.mode === 'single' ? 'single' : 'all',
         deliveryType: req.body?.deliveryType === 'transactional' ? 'transactional' : 'marketing',
+        templateId: EMAIL_TEMPLATE_IDS.has(cleanText(req.body?.templateId, 32))
+          ? cleanText(req.body?.templateId, 32)
+          : 'classic',
         subject: cleanText(req.body?.subject, 160),
         status: 'failed',
         errorCode: error.code || null,
