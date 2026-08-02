@@ -127,7 +127,7 @@ export default function ExamPage() {
     started,
   });
 
-  const { maxViolations } = useExamProtection({
+  const { maxViolations, resetViolations } = useExamProtection({
     enabled: !!attemptId && !submitting && !practiceMode,
     onViolation: (type: string) => {
       setViolations((v) => {
@@ -414,14 +414,21 @@ export default function ExamPage() {
         mode: options.practice ? 'practice' : options.restart ? 'restart' : 'resume',
       });
 
+      const nextPracticeMode = Boolean(options.practice || response.practiceMode);
+
       setExam(response.exam);
       setQuestions(response.questions);
       setAttemptId(response.attemptId);
       setStarted(true);
-      setPracticeMode(Boolean(options.practice || response.practiceMode));
+      setPracticeMode(nextPracticeMode);
       setCurrentQuestionIndex(0);
       setFlaggedQuestions(new Set());
       setPracticeFeedback({});
+      setViolations(0);
+      setShowViolation(false);
+      setLastViolation('');
+      setIsScreenCaptured(false);
+      resetViolations();
       setOfflineNotice(null);
       setQueuedSubmit(false);
       setDraftCheckedAttemptId(null);
@@ -435,7 +442,7 @@ export default function ExamPage() {
       setSelectedAnswers(restoredAnswers);
 
       setTimeLeft(
-        options.practice || response.practiceMode
+        nextPracticeMode
           ? 0
           : response.timeLeftSeconds ?? response.exam.duration * 60
       );
@@ -969,8 +976,8 @@ export default function ExamPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200 exam-protected"
-      style={{
+      className={`min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200 ${practiceMode ? '' : 'exam-protected'}`}
+      style={practiceMode ? undefined : {
         WebkitUserSelect: 'none',
         userSelect: 'none',
         WebkitTouchCallout: 'none',
@@ -1000,7 +1007,7 @@ export default function ExamPage() {
       )}
 
       {/* Screen Capture Shield - covers content when screenshot detected */}
-      {isScreenCaptured && (
+      {!practiceMode && isScreenCaptured && (
         <div className="exam-capture-shield" onClick={() => setIsScreenCaptured(false)}>
           <div className="exam-capture-shield-content">
             <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
@@ -1135,7 +1142,7 @@ export default function ExamPage() {
       {/* MAIN EXAM ARENA */}
       <div 
         className="max-w-[1500px] mx-auto pt-24 pb-32 sm:pb-16 px-3 sm:px-4 md:px-8 flex flex-col lg:flex-row gap-5 lg:gap-10 transition-[filter] duration-200"
-        style={{ filter: isScreenCaptured ? 'blur(30px)' : 'none' }}
+        style={{ filter: !practiceMode && isScreenCaptured ? 'blur(30px)' : 'none' }}
       >
         
         {/* Left Area: The Question Board */}
@@ -1540,7 +1547,7 @@ export default function ExamPage() {
         </div>
 
         {/* Anti-cheat violation warning overlay */}
-        {showViolation && (
+        {!practiceMode && showViolation && (
           <ViolationWarning
             count={violations}
             maxViolations={maxViolations}
