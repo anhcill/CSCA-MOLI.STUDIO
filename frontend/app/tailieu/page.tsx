@@ -284,12 +284,23 @@ export default function TaiLieuPage() {
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('vi');
+    const isAllView = !subject && category === 'all';
     return materials
       .filter((item) => {
         const matchesSearch = !keyword || item.title.toLocaleLowerCase('vi').includes(keyword) || (item.description || '').toLocaleLowerCase('vi').includes(keyword);
         return matchesSearch && (!subject || item.subject === subject) && (category === 'all' || item.category === category);
       })
-      .sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title, 'vi') : new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      .sort((a, b) => {
+        if (sort === 'title') return a.title.localeCompare(b.title, 'vi');
+        if (isAllView) {
+          const orderA = a.all_display_order ?? Number.POSITIVE_INFINITY;
+          const orderB = b.all_display_order ?? Number.POSITIVE_INFINITY;
+          if (orderA !== orderB) return orderA - orderB;
+        }
+        const dateA = new Date(a.updated_at || a.created_at).getTime();
+        const dateB = new Date(b.updated_at || b.created_at).getTime();
+        return dateB - dateA;
+      });
   }, [materials, search, subject, category, sort]);
 
   const clearFilters = () => {

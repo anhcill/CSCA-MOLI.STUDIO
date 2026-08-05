@@ -54,6 +54,9 @@ const db = require("../config/database");
     await db.query(
       `ALTER TABLE materials ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb`,
     );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS all_display_order INTEGER`,
+    );
     await ensureMaterialPdfBlobTable();
     // silent init
   } catch (e) {

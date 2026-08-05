@@ -328,13 +328,18 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS content_text TEXT,
       ADD COLUMN IF NOT EXISTS content_html TEXT,
       ADD COLUMN IF NOT EXISTS content_source VARCHAR(30) DEFAULT 'file',
-      ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb
+      ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS all_display_order INTEGER
     `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)`,
     );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_subject ON materials(subject)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_materials_all_display_order
+       ON materials(all_display_order ASC NULLS LAST, updated_at DESC)`,
     );
     await pool.query(`
       CREATE TABLE IF NOT EXISTS material_pdf_blobs (

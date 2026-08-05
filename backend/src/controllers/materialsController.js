@@ -3,6 +3,13 @@ const { checkVipAccess } = require("../middleware/authMiddleware");
 const UserActivity = require("../models/UserActivity");
 const { prepareMaterialContent } = require("../services/materialContentService");
 
+const normalizeAllDisplayOrder = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 999999) return undefined;
+  return parsed;
+};
+
 // GET /api/materials?category=cau-truc-de&subject=toan&topic=...&limit=20&offset=0
 exports.getMaterials = async (req, res) => {
   try {
@@ -26,7 +33,9 @@ exports.getMaterials = async (req, res) => {
       params.push(topic);
       query += ` AND topic = $${params.length}`;
     }
-    query += " ORDER BY subject, topic, created_at DESC";
+    query += category || subject || topic
+      ? " ORDER BY subject, topic, created_at DESC"
+      : " ORDER BY all_display_order ASC NULLS LAST, updated_at DESC NULLS LAST, created_at DESC";
     query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
@@ -58,7 +67,16 @@ exports.createMaterial = async (req, res) => {
       content_text,
       content_html,
       content_meta,
+      all_display_order,
     } = req.body;
+
+    const normalizedAllDisplayOrder = normalizeAllDisplayOrder(all_display_order);
+    if (normalizedAllDisplayOrder === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Thứ tự ở mục Tất cả phải là số nguyên từ 1 đến 999999",
+      });
+    }
 
     const preparedContent = prepareMaterialContent({
       content_text,
@@ -82,9 +100,10 @@ exports.createMaterial = async (req, res) => {
     const result = await db.query(
       `INSERT INTO materials (
          title, description, file_url, file_type, category, subject, topic,
-         uploaded_by, is_active, is_premium, content_text, content_html, content_source, content_meta
+         uploaded_by, is_active, is_premium, content_text, content_html, content_source, content_meta,
+         all_display_order
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12, $13::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12, $13::jsonb, $14)
        RETURNING *`,
       [
         title,
@@ -100,6 +119,7 @@ exports.createMaterial = async (req, res) => {
         preparedContent.contentHtml,
         (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
+        normalizedAllDisplayOrder,
       ],
     );
 
@@ -132,7 +152,16 @@ exports.updateMaterial = async (req, res) => {
       content_text,
       content_html,
       content_meta,
+      all_display_order,
     } = req.body;
+
+    const normalizedAllDisplayOrder = normalizeAllDisplayOrder(all_display_order);
+    if (normalizedAllDisplayOrder === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Thứ tự ở mục Tất cả phải là số nguyên từ 1 đến 999999",
+      });
+    }
 
     const preparedContent = prepareMaterialContent({
       content_text,
@@ -157,8 +186,9 @@ exports.updateMaterial = async (req, res) => {
       `UPDATE materials SET
          title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6,
          is_active=$7, is_premium=$8, content_text=$9, content_html=$10,
-         content_source=$11, content_meta=$12::jsonb, updated_at=NOW()
-       WHERE id=$13 RETURNING *`,
+         content_source=$11, content_meta=$12::jsonb, all_display_order=$13,
+         updated_at=NOW()
+       WHERE id=$14 RETURNING *`,
       [
         title,
         description,
@@ -172,6 +202,7 @@ exports.updateMaterial = async (req, res) => {
         preparedContent.contentHtml,
         (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
+        normalizedAllDisplayOrder,
         id,
       ],
     );

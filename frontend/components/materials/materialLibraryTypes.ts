@@ -9,6 +9,8 @@ export interface Material {
   category: string;
   subject: string;
   created_at: string;
+  updated_at?: string;
+  all_display_order?: number | null;
   is_premium?: boolean;
   content_html?: string;
   content_text?: string;

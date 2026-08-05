@@ -20,6 +20,7 @@ interface Material {
   topic?: string;
   is_active: boolean;
   created_at: string;
+  all_display_order?: number | null;
   is_premium?: boolean;
   content_text?: string;
   content_html?: string;
@@ -62,6 +63,7 @@ const DEFAULT_FORM_DATA = {
   subject: 'toan',
   topic: '',
   is_premium: false,
+  all_display_order: null as number | null,
   content_text: '',
   content_html: '',
   content_meta: {} as Record<string, any>,
@@ -464,6 +466,7 @@ export default function AdminMaterialsPage() {
       subject: material.subject || 'toan',
       topic: material.topic || '',
       is_premium: material.is_premium || false,
+      all_display_order: material.all_display_order ?? null,
       content_text: material.content_text || '',
       content_html: material.content_html || '',
       content_meta: material.content_meta || {},
@@ -583,6 +586,7 @@ export default function AdminMaterialsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Danh Mục</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Môn / Chủ đề</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Ngày Tạo</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Thứ tự ở Tất cả</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">VIP</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Thao Tác</th>
                 </tr>
@@ -590,7 +594,7 @@ export default function AdminMaterialsPage() {
               <tbody className="divide-y divide-gray-100">
                 {filteredMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500 text-sm">
+                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500 text-sm">
                       Chưa có tài liệu nào
                     </td>
                   </tr>
@@ -635,6 +639,15 @@ export default function AdminMaterialsPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {new Date(material.created_at).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {material.all_display_order ? (
+                          <span className="inline-flex min-w-8 items-center justify-center rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-700">
+                            {material.all_display_order}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">Tự động</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {material.is_premium ? (
@@ -1032,6 +1045,28 @@ export default function AdminMaterialsPage() {
               </div>
 
               {/* VIP Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Thứ tự ở mục Tất cả
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={999999}
+                  step={1}
+                  value={formData.all_display_order ?? ''}
+                  onChange={e => setFormData(prev => ({
+                    ...prev,
+                    all_display_order: e.target.value === '' ? null : Number(e.target.value),
+                  }))}
+                  placeholder="VD: 1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Số 1 nằm trên cùng, sau đó 2, 3... Để trống thì tài liệu tự xếp theo ngày cập nhật.
+                </p>
+              </div>
+
               <div className="border-t pt-4">
                 <label className="flex items-center gap-3 cursor-pointer select-none">
                   <div className="relative">
