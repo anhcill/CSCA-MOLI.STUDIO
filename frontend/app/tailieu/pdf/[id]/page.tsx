@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { FiDownload, FiRefreshCw } from 'react-icons/fi';
+import MobilePdfViewer from '@/components/materials/MobilePdfViewer';
 
 function getAuthToken() {
   const sessionToken = sessionStorage.getItem('token');
@@ -24,6 +25,7 @@ export default function MaterialPdfViewerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
+  const [useMobileViewer, setUseMobileViewer] = useState<boolean | null>(null);
 
   const endpoint = useMemo(() => `/api/materials/pdf/${id}`, [id]);
 
@@ -80,9 +82,23 @@ export default function MaterialPdfViewerPage() {
     setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
   }, [endpoint, title]);
 
+  const handleMobileReady = useCallback(() => setLoading(false), []);
+  const handleMobileError = useCallback((message: string) => {
+    setError(message);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     loadPdf();
   }, [loadPdf]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 820px), (pointer: coarse)');
+    const update = () => setUseMobileViewer(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col bg-slate-100 text-slate-950">
@@ -138,7 +154,16 @@ export default function MaterialPdfViewerPage() {
           </div>
         )}
 
-        {pdfUrl && (
+        {pdfUrl && useMobileViewer === true && (
+          <MobilePdfViewer
+            url={pdfUrl}
+            title={title}
+            onReady={handleMobileReady}
+            onError={handleMobileError}
+          />
+        )}
+
+        {pdfUrl && useMobileViewer === false && (
           <iframe
             src={`${pdfUrl}#view=FitH&navpanes=0&toolbar=${allowDownload ? 1 : 0}`}
             title={title}
