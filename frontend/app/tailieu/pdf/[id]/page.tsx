@@ -164,12 +164,11 @@ export default function MaterialPdfViewerPage() {
         )}
 
         {pdfUrl && useMobileViewer === false && (
-          <MobilePdfViewer
-            url={pdfUrl}
+          <iframe
+            src={`${pdfUrl}#view=FitH&navpanes=0&toolbar=${allowDownload ? 1 : 0}`}
             title={title}
-            twoPage
-            onReady={handleMobileReady}
-            onError={handleMobileError}
+            onLoad={() => setLoading(false)}
+            className="h-[calc(100svh-6rem)] w-full rounded-2xl border border-slate-200 bg-white shadow-sm"
           />
         )}
       </section>
