@@ -135,7 +135,7 @@ async function findMaterialByStoredPdfToken(token) {
 
   const blobUrl = getStoredPdfUrl(normalizedToken);
   const result = await db.query(
-    `SELECT id, title, is_premium, is_active
+    `SELECT id, title, is_premium, is_active, allow_download
      FROM materials
      WHERE file_url = $1 OR file_url LIKE $2
      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST

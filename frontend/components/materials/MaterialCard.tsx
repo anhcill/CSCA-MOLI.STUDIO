@@ -256,7 +256,7 @@ export function MaterialCard({ material }: { material: Material }) {
             ) : (
               <span className="inline-flex h-10 items-center rounded-xl bg-slate-100 px-4 text-sm font-bold text-slate-400">Chưa có file</span>
             )}
-            {!locked && hasFile && !hasImages && (
+            {!locked && hasFile && !hasImages && material.allow_download !== false && (
               <a
                 href={downloadUrl}
                 onClick={handleDownloadClick}

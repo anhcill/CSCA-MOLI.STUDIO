@@ -57,6 +57,9 @@ const db = require("../config/database");
     await db.query(
       `ALTER TABLE materials ADD COLUMN IF NOT EXISTS all_display_order INTEGER`,
     );
+    await db.query(
+      `ALTER TABLE materials ADD COLUMN IF NOT EXISTS allow_download BOOLEAN DEFAULT TRUE`,
+    );
     await ensureMaterialPdfBlobTable();
     // silent init
   } catch (e) {
@@ -155,7 +158,7 @@ async function streamStoredPdfByToken(res, token, disposition, title) {
 async function findMaterialByR2Key(key) {
   const r2Url = getR2PdfUrl(key);
   const result = await db.query(
-    `SELECT id, title, is_premium, is_active
+    `SELECT id, title, is_premium, is_active, allow_download
      FROM materials
      WHERE file_url = $1 OR file_url LIKE $2
      ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
@@ -246,7 +249,7 @@ router.get("/", materialsController.getMaterials);
 // Helper: stream PDF from Cloudinary signed URL with given disposition
 async function streamPdf(res, id, disposition, user) {
   const result = await db.query(
-    "SELECT file_url, title, is_premium FROM materials WHERE id = $1 AND (is_active IS NULL OR is_active = TRUE)",
+    "SELECT file_url, title, is_premium, allow_download FROM materials WHERE id = $1 AND (is_active IS NULL OR is_active = TRUE)",
     [id]
   );
   if (result.rows.length === 0)
@@ -263,8 +266,17 @@ async function streamPdf(res, id, disposition, user) {
       is_vip_required: true,
     });
   }
+  if (disposition === "attachment" && material.allow_download === false) {
+    return res.status(403).json({
+      success: false,
+      message: "Tài liệu này không cho phép tải xuống",
+      code: "DOWNLOAD_DISABLED",
+    });
+  }
 
   const { file_url: fileUrl, title } = material;
+  res.setHeader("X-Material-Allow-Download", material.allow_download === false ? "false" : "true");
+  res.setHeader("Access-Control-Expose-Headers", "X-Material-Allow-Download");
   const storedPdfToken = getStoredPdfTokenFromUrl(fileUrl);
   if (storedPdfToken) {
     return streamStoredPdfByToken(res, storedPdfToken, disposition, title);
@@ -324,6 +336,13 @@ async function streamStoredPdfBlobRoute(req, res, disposition) {
       is_vip_required: true,
     });
   }
+  if (disposition === "attachment" && material?.allow_download === false) {
+    return res.status(403).json({
+      success: false,
+      message: "Tài liệu này không cho phép tải xuống",
+      code: "DOWNLOAD_DISABLED",
+    });
+  }
 
   return streamStoredPdfByToken(res, token, disposition, material?.title);
 }
@@ -354,6 +373,13 @@ async function streamR2PdfRoute(req, res, disposition) {
       message: "Tài liệu này chỉ dành cho thành viên VIP",
       code: "VIP_REQUIRED",
       is_vip_required: true,
+    });
+  }
+  if (disposition === "attachment" && material?.allow_download === false) {
+    return res.status(403).json({
+      success: false,
+      message: "Tài liệu này không cho phép tải xuống",
+      code: "DOWNLOAD_DISABLED",
     });
   }
 

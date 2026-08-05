@@ -11,6 +11,7 @@ export interface Material {
   created_at: string;
   updated_at?: string;
   all_display_order?: number | null;
+  allow_download?: boolean;
   is_premium?: boolean;
   content_html?: string;
   content_text?: string;

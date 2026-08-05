@@ -23,6 +23,7 @@ export default function MaterialPdfViewerPage() {
   const [pdfUrl, setPdfUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [allowDownload, setAllowDownload] = useState(true);
 
   const endpoint = useMemo(() => `/api/materials/pdf/${id}`, [id]);
 
@@ -47,6 +48,7 @@ export default function MaterialPdfViewerPage() {
       if (!response.ok) {
         throw new Error(response.status === 403 ? 'Bạn chưa có quyền xem tài liệu này.' : 'Không tải được PDF.');
       }
+      setAllowDownload(response.headers.get('X-Material-Allow-Download') !== 'false');
       const blob = await response.blob();
       setPdfUrl(URL.createObjectURL(blob));
     } catch (err) {
@@ -106,7 +108,7 @@ export default function MaterialPdfViewerPage() {
             <FiRefreshCw size={14} />
             <span className="hidden sm:inline">Tải lại</span>
           </button>
-          <button
+          {allowDownload && <button
             type="button"
             onClick={downloadPdf}
             disabled={!pdfUrl}
@@ -114,7 +116,7 @@ export default function MaterialPdfViewerPage() {
           >
             <FiDownload size={14} />
             <span className="hidden sm:inline">Tải xuống</span>
-          </button>
+          </button>}
         </div>
       </header>
 

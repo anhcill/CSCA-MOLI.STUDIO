@@ -68,6 +68,7 @@ exports.createMaterial = async (req, res) => {
       content_html,
       content_meta,
       all_display_order,
+      allow_download,
     } = req.body;
 
     const normalizedAllDisplayOrder = normalizeAllDisplayOrder(all_display_order);
@@ -101,9 +102,9 @@ exports.createMaterial = async (req, res) => {
       `INSERT INTO materials (
          title, description, file_url, file_type, category, subject, topic,
          uploaded_by, is_active, is_premium, content_text, content_html, content_source, content_meta,
-         all_display_order
+         all_display_order, allow_download
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12, $13::jsonb, $14)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9, $10, $11, $12, $13::jsonb, $14, $15)
        RETURNING *`,
       [
         title,
@@ -120,6 +121,7 @@ exports.createMaterial = async (req, res) => {
         (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
         normalizedAllDisplayOrder,
+        allow_download !== false,
       ],
     );
 
@@ -153,6 +155,7 @@ exports.updateMaterial = async (req, res) => {
       content_html,
       content_meta,
       all_display_order,
+      allow_download,
     } = req.body;
 
     const normalizedAllDisplayOrder = normalizeAllDisplayOrder(all_display_order);
@@ -187,8 +190,9 @@ exports.updateMaterial = async (req, res) => {
          title=$1, description=$2, file_url=$3, category=$4, subject=$5, topic=$6,
          is_active=$7, is_premium=$8, content_text=$9, content_html=$10,
          content_source=$11, content_meta=$12::jsonb, all_display_order=$13,
+         allow_download=$14,
          updated_at=NOW()
-       WHERE id=$14 RETURNING *`,
+       WHERE id=$15 RETURNING *`,
       [
         title,
         description,
@@ -203,6 +207,7 @@ exports.updateMaterial = async (req, res) => {
         (hasImageContent ? "image_gallery" : preparedContent.contentSource),
         JSON.stringify(preparedContent.contentMeta),
         normalizedAllDisplayOrder,
+        allow_download !== false,
         id,
       ],
     );

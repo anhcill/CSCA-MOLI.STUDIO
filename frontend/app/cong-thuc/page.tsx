@@ -57,6 +57,7 @@ interface Material {
   created_at: string;
   content_html?: string;
   content_text?: string;
+  allow_download?: boolean;
 }
 
 type FormulaGrade = MathFormulaGrade | PhysicsFormulaGrade | ChemistryFormulaGrade | ChineseNaturalFormulaGrade | ChineseSocialFormulaGrade;
@@ -523,7 +524,7 @@ function MaterialViewer({
         <div className="flex shrink-0 items-center gap-2">
           {material.file_url && (
             <>
-              <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>
+              {material.allow_download !== false && <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>}
               <a href={material.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white/20"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
             </>
           )}

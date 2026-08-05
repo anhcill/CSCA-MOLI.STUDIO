@@ -21,6 +21,7 @@ interface Material {
   is_active: boolean;
   created_at: string;
   all_display_order?: number | null;
+  allow_download?: boolean;
   is_premium?: boolean;
   content_text?: string;
   content_html?: string;
@@ -64,6 +65,7 @@ const DEFAULT_FORM_DATA = {
   topic: '',
   is_premium: false,
   all_display_order: null as number | null,
+  allow_download: true,
   content_text: '',
   content_html: '',
   content_meta: {} as Record<string, any>,
@@ -467,6 +469,7 @@ export default function AdminMaterialsPage() {
       topic: material.topic || '',
       is_premium: material.is_premium || false,
       all_display_order: material.all_display_order ?? null,
+      allow_download: material.allow_download !== false,
       content_text: material.content_text || '',
       content_html: material.content_html || '',
       content_meta: material.content_meta || {},
@@ -587,6 +590,7 @@ export default function AdminMaterialsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Môn / Chủ đề</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Ngày Tạo</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Thứ tự ở Tất cả</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Cho tải</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">VIP</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600">Thao Tác</th>
                 </tr>
@@ -594,7 +598,7 @@ export default function AdminMaterialsPage() {
               <tbody className="divide-y divide-gray-100">
                 {filteredMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500 text-sm">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500 text-sm">
                       Chưa có tài liệu nào
                     </td>
                   </tr>
@@ -648,6 +652,11 @@ export default function AdminMaterialsPage() {
                         ) : (
                           <span className="text-xs text-gray-400">Tự động</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${material.allow_download !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {material.allow_download !== false ? 'Bật' : 'Tắt'}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         {material.is_premium ? (
@@ -1044,7 +1053,7 @@ export default function AdminMaterialsPage() {
                 />
               </div>
 
-              {/* VIP Toggle */}
+              {/* Display order */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Thứ tự ở mục Tất cả
@@ -1065,6 +1074,25 @@ export default function AdminMaterialsPage() {
                 <p className="mt-1 text-xs text-gray-500">
                   Số 1 nằm trên cùng, sau đó 2, 3... Để trống thì tài liệu tự xếp theo ngày cập nhật.
                 </p>
+              </div>
+
+              <div className="border-t pt-4">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formData.allow_download}
+                      onChange={(e) => setFormData(prev => ({ ...prev, allow_download: e.target.checked }))}
+                      className="sr-only"
+                    />
+                    <div className={`w-11 h-6 rounded-full transition-colors ${formData.allow_download ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.allow_download ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-gray-700">Cho phép tải xuống</span>
+                    <p className="text-xs font-normal text-gray-400">Tắt để học viên chỉ được xem tài liệu trên web.</p>
+                  </div>
+                </label>
               </div>
 
               <div className="border-t pt-4">

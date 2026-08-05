@@ -26,6 +26,7 @@ interface Material {
   content_html?: string;
   content_text?: string;
   content_source?: string;
+  allow_download?: boolean;
   content_meta?: {
     cover_image?: MaterialImageMeta | string | null;
     coverImage?: MaterialImageMeta | string | null;
@@ -195,10 +196,10 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
           )}
         </div>
         <div className="flex items-center gap-2 ml-4 shrink-0">
-          <a href={material.file_url} download target="_blank" rel="noreferrer"
+          {material.allow_download !== false && <a href={material.file_url} download target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
             <FiDownload size={13} /> {t('materials.download')}
-          </a>
+          </a>}
           <a href={material.file_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
             <FiExternalLink size={13} /> {t('common.view')}
@@ -256,7 +257,7 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
             <FiBook size={11} /> {t('common.view')}
           </button>
-          {m.file_url && (
+          {m.file_url && m.allow_download !== false && (
             <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200">
               <FiDownload size={11} /> {t('materials.download')}
@@ -289,7 +290,7 @@ function InlineMaterialViewer({ material, onClose }: { material: Material; onClo
         <div className="flex items-center gap-2">
           {material.file_url && (
             <>
-              <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>
+              {material.allow_download !== false && <a href={material.file_url} download target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiDownload size={13} /> {t('materials.download')}</a>}
               <a href={material.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs transition-colors hover:bg-white/20"><FiExternalLink size={13} /> {t('materials.openFile')}</a>
             </>
           )}

@@ -329,7 +329,8 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS content_html TEXT,
       ADD COLUMN IF NOT EXISTS content_source VARCHAR(30) DEFAULT 'file',
       ADD COLUMN IF NOT EXISTS content_meta JSONB DEFAULT '{}'::jsonb,
-      ADD COLUMN IF NOT EXISTS all_display_order INTEGER
+      ADD COLUMN IF NOT EXISTS all_display_order INTEGER,
+      ADD COLUMN IF NOT EXISTS allow_download BOOLEAN DEFAULT TRUE
     `);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category)`,

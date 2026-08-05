@@ -21,6 +21,7 @@ interface Material {
   subject: string;
   topic: string;
   created_at: string;
+  allow_download?: boolean;
   content_meta?: {
     cover_image?: MaterialImageMeta | string | null;
     coverImage?: MaterialImageMeta | string | null;
@@ -126,10 +127,10 @@ function PDFModal({ material, onClose }: { material: Material; onClose: () => vo
           )}
         </div>
         <div className="flex items-center gap-2 ml-4 shrink-0">
-          <a href={material.file_url} download target="_blank" rel="noreferrer"
+          {material.allow_download !== false && <a href={material.file_url} download target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
             <FiDownload size={13} /> {t('materials.download')}
-          </a>
+          </a>}
           <a href={material.file_url} target="_blank" rel="noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition-colors">
             <FiExternalLink size={13} /> {t('materials.openNewTab')}
@@ -205,10 +206,10 @@ function PDFCard({ m, onView }: { m: Material; onView: (m: Material) => void }) 
             onClick={(e) => { e.stopPropagation(); onView(m); }}>
             <FiFileText size={11} /> {t('common.view')}
           </button>
-          <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+          {m.allow_download !== false && <a href={m.file_url} download target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200">
             <FiDownload size={11} /> {t('materials.download')}
-          </a>
+          </a>}
         </div>
       </div>
     </div>

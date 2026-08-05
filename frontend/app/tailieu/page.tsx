@@ -231,7 +231,7 @@ function MaterialRow({ material }: { material: Material }) {
           ) : (
             <span className="inline-flex h-10 flex-1 items-center justify-center rounded-lg bg-slate-100 px-3 text-sm text-slate-400">Chưa có file</span>
           )}
-          {!locked && hasFile && (
+          {!locked && hasFile && material.allow_download !== false && (
             <a href={downloadUrl} onClick={handleDownload} aria-label="Tải tài liệu" className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-violet-700">
               <FiDownload />
             </a>
