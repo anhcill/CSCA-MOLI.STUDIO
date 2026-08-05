@@ -247,11 +247,12 @@ async function uploadPdfToR2({
   };
 }
 
-async function getR2ObjectStream(key) {
+async function getR2ObjectStream(key, { range } = {}) {
   const config = assertR2Configured();
   const response = await requestR2({
     method: "GET",
     key,
+    headers: range ? { Range: range } : {},
     payloadHash: "UNSIGNED-PAYLOAD",
     config,
   });

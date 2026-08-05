@@ -6,6 +6,7 @@ const https = require("https");
 const http = require("http");
 const os = require("os");
 const path = require("path");
+const jwt = require("jsonwebtoken");
 const { v2: cloudinary } = require("cloudinary");
 const materialsController = require("../controllers/materialsController");
 const { extractPdfWebContent } = require("../services/materialContentService");
@@ -132,27 +133,68 @@ function getPdfDownloadName(title, originalName) {
   return `${encodeURIComponent(source)}.pdf`;
 }
 
-function sendStoredPdf(res, storedPdf, disposition, title) {
+function getSingleByteRange(value) {
+  const range = String(value || "").trim();
+  return /^bytes=(?:\d+-\d*|-\d+)$/.test(range) ? range : "";
+}
+
+function resolveBufferRange(rangeHeader, size) {
+  if (!rangeHeader) return null;
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || size <= 0) return undefined;
+
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return undefined;
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return undefined;
+    end = Math.min(end, size - 1);
+  }
+
+  if (start < 0 || start >= size || end < start) return undefined;
+  return { start, end };
+}
+
+function sendStoredPdf(res, storedPdf, disposition, title, rangeHeader = "") {
   const data = storedPdf?.data;
   if (!data) {
     return res.status(404).json({ success: false, message: "Không tìm thấy file PDF" });
   }
 
+  const size = data.length;
+  const range = resolveBufferRange(rangeHeader, size);
+  if (rangeHeader && range === undefined) {
+    res.setHeader("Content-Range", `bytes */${size}`);
+    return res.status(416).end();
+  }
+  const body = range ? data.subarray(range.start, range.end + 1) : data;
+
+  if (range) {
+    res.status(206);
+    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
+  }
+  res.setHeader("Accept-Ranges", "bytes");
   res.setHeader("Content-Type", storedPdf.mime_type || "application/pdf");
   res.setHeader("Content-Disposition", `${disposition}; filename="${getPdfDownloadName(title, storedPdf.original_name)}"`);
   res.setHeader("Cache-Control", "private, max-age=1800");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
-  res.setHeader("Content-Length", String(storedPdf.file_size || data.length));
-  return res.end(data);
+  res.setHeader("Content-Length", String(body.length));
+  return res.end(body);
 }
 
-async function streamStoredPdfByToken(res, token, disposition, title) {
+async function streamStoredPdfByToken(res, token, disposition, title, rangeHeader = "") {
   const storedPdf = await getStoredPdfByToken(token);
   if (!storedPdf) {
     return res.status(404).json({ success: false, message: "Không tìm thấy file PDF" });
   }
-  return sendStoredPdf(res, storedPdf, disposition, title);
+  return sendStoredPdf(res, storedPdf, disposition, title, rangeHeader);
 }
 
 async function findMaterialByR2Key(key) {
@@ -168,13 +210,18 @@ async function findMaterialByR2Key(key) {
   return result.rows[0] || null;
 }
 
-async function streamR2PdfByKey(res, key, disposition, title) {
-  const upstream = await getR2ObjectStream(key);
+async function streamR2PdfByKey(res, key, disposition, title, rangeHeader = "") {
+  const upstream = await getR2ObjectStream(key, { range: rangeHeader || undefined });
+  if (upstream.statusCode === 206) res.status(206);
   res.setHeader("Content-Type", upstream.headers["content-type"] || "application/pdf");
   res.setHeader("Content-Disposition", `${disposition}; filename="${getPdfDownloadName(title, path.basename(key))}"`);
   res.setHeader("Cache-Control", "private, max-age=1800");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
+  res.setHeader("Accept-Ranges", upstream.headers["accept-ranges"] || "bytes");
+  if (upstream.headers["content-range"]) res.setHeader("Content-Range", upstream.headers["content-range"]);
+  if (upstream.headers.etag) res.setHeader("ETag", upstream.headers.etag);
+  if (upstream.headers["last-modified"]) res.setHeader("Last-Modified", upstream.headers["last-modified"]);
   if (upstream.headers["content-length"]) res.setHeader("Content-Length", upstream.headers["content-length"]);
   upstream.pipe(res);
 }
@@ -247,7 +294,7 @@ async function uploadPdfWithStorageFallback(req) {
 router.get("/", materialsController.getMaterials);
 
 // Helper: stream PDF from Cloudinary signed URL with given disposition
-async function streamPdf(res, id, disposition, user) {
+async function streamPdf(res, id, disposition, user, rangeHeader = "") {
   const result = await db.query(
     "SELECT file_url, title, is_premium, allow_download FROM materials WHERE id = $1 AND (is_active IS NULL OR is_active = TRUE)",
     [id]
@@ -279,12 +326,12 @@ async function streamPdf(res, id, disposition, user) {
   res.setHeader("Access-Control-Expose-Headers", "X-Material-Allow-Download");
   const storedPdfToken = getStoredPdfTokenFromUrl(fileUrl);
   if (storedPdfToken) {
-    return streamStoredPdfByToken(res, storedPdfToken, disposition, title);
+    return streamStoredPdfByToken(res, storedPdfToken, disposition, title, rangeHeader);
   }
 
   const r2Key = getR2KeyFromUrl(fileUrl);
   if (r2Key) {
-    return streamR2PdfByKey(res, r2Key, disposition, title);
+    return streamR2PdfByKey(res, r2Key, disposition, title, rangeHeader);
   }
 
   const urlParts = fileUrl.match(/\/upload\/v(\d+)\/(.+)$/);
@@ -301,12 +348,15 @@ async function streamPdf(res, id, disposition, user) {
   function streamFromUrl(url, hops = 0) {
     if (hops > 5) { if (!res.headersSent) res.status(502).json({ success: false, message: "Quá nhiều redirect" }); return; }
     const proto = url.startsWith("https") ? https : http;
-    proto.get(url, (upstream) => {
+    proto.get(url, { headers: rangeHeader ? { Range: rangeHeader } : {} }, (upstream) => {
       const { statusCode, headers } = upstream;
       if ([301, 302, 307, 308].includes(statusCode) && headers.location) { upstream.resume(); return streamFromUrl(headers.location, hops + 1); }
       if (statusCode === 401 || statusCode === 403) { upstream.resume(); if (!res.headersSent) res.status(401).json({ success: false, message: "Không có quyền" }); return; }
       if (statusCode < 200 || statusCode >= 300) { upstream.resume(); if (!res.headersSent) res.status(502).json({ success: false, message: `Lỗi ${statusCode}` }); return; }
       res.setHeader("Content-Type", "application/pdf");
+      if (statusCode === 206) res.status(206);
+      res.setHeader("Accept-Ranges", headers["accept-ranges"] || "bytes");
+      if (headers["content-range"]) res.setHeader("Content-Range", headers["content-range"]);
       res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(title || "document")}.pdf"`);
       res.setHeader("Cache-Control", "public, max-age=1800");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -344,7 +394,7 @@ async function streamStoredPdfBlobRoute(req, res, disposition) {
     });
   }
 
-  return streamStoredPdfByToken(res, token, disposition, material?.title);
+  return streamStoredPdfByToken(res, token, disposition, material?.title, getSingleByteRange(req.headers.range));
 }
 
 router.get("/blob/:token", optionalAuth, async (req, res) => {
@@ -383,7 +433,7 @@ async function streamR2PdfRoute(req, res, disposition) {
     });
   }
 
-  return streamR2PdfByKey(res, key, disposition, material?.title);
+  return streamR2PdfByKey(res, key, disposition, material?.title, getSingleByteRange(req.headers.range));
 }
 
 router.get("/r2/:token", optionalAuth, async (req, res) => {
@@ -396,9 +446,91 @@ router.get("/r2/:token/download", optionalAuth, async (req, res) => {
   catch (error) { console.error("[PDF R2 Download] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
 });
 
+const MATERIAL_VIEW_TOKEN_AUDIENCE = "material-pdf-stream";
+const MATERIAL_VIEW_TOKEN_ISSUER = "csca-api";
+
+router.post("/pdf/:id/view-session", authenticate, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, title, is_premium, allow_download
+       FROM materials
+       WHERE id = $1 AND (is_active IS NULL OR is_active = TRUE)
+       LIMIT 1`,
+      [req.params.id],
+    );
+    const material = result.rows[0];
+    if (!material) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy tài liệu" });
+    }
+    if (material.is_premium && !checkVipAccess(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Tài liệu này chỉ dành cho thành viên VIP",
+        code: "VIP_REQUIRED",
+        is_vip_required: true,
+      });
+    }
+
+    const viewerUser = {
+      id: req.user.id,
+      is_vip: req.user.is_vip === true,
+      subscription_tier: req.user.subscription_tier || "basic",
+      vip_expires_at: req.user.vip_expires_at || null,
+      vip_package_id: req.user.vip_package_id || null,
+      vip_allowed_subjects: req.user.vip_allowed_subjects || [],
+    };
+    const ticket = jwt.sign(
+      { purpose: "material_pdf_view", materialId: Number(material.id), user: viewerUser },
+      process.env.JWT_SECRET,
+      { expiresIn: "4h", audience: MATERIAL_VIEW_TOKEN_AUDIENCE, issuer: MATERIAL_VIEW_TOKEN_ISSUER },
+    );
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      success: true,
+      data: {
+        stream_url: `/api/materials/pdf/${material.id}/stream?ticket=${encodeURIComponent(ticket)}`,
+        allow_download: material.allow_download !== false,
+        expires_in_seconds: 14400,
+      },
+    });
+  } catch (error) {
+    console.error("[PDF View Session] Route error:", error);
+    return res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+router.get("/pdf/:id/stream", async (req, res) => {
+  try {
+    const payload = jwt.verify(String(req.query.ticket || ""), process.env.JWT_SECRET, {
+      audience: MATERIAL_VIEW_TOKEN_AUDIENCE,
+      issuer: MATERIAL_VIEW_TOKEN_ISSUER,
+    });
+    if (
+      payload.purpose !== "material_pdf_view" ||
+      Number(payload.materialId) !== Number(req.params.id) ||
+      !payload.user?.id
+    ) {
+      return res.status(401).json({ success: false, message: "Phiên xem PDF không hợp lệ" });
+    }
+    return streamPdf(
+      res,
+      req.params.id,
+      "inline",
+      payload.user,
+      getSingleByteRange(req.headers.range),
+    );
+  } catch (error) {
+    if (error?.name === "JsonWebTokenError" || error?.name === "TokenExpiredError") {
+      return res.status(401).json({ success: false, message: "Phiên xem PDF đã hết hạn" });
+    }
+    console.error("[PDF Stream] Route error:", error);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
 // GET /api/materials/pdf/:id — Xem PDF inline (yêu cầu đăng nhập)
 router.get("/pdf/:id", authenticate, async (req, res) => {
-  try { await streamPdf(res, req.params.id, "inline", req.user); }
+  try { await streamPdf(res, req.params.id, "inline", req.user, getSingleByteRange(req.headers.range)); }
   catch (error) { console.error("[PDF] Route error:", error); if (!res.headersSent) res.status(500).json({ success: false, message: "Lỗi server" }); }
 });
 

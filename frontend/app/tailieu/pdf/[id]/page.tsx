@@ -36,24 +36,22 @@ export default function MaterialPdfViewerPage() {
 
     setLoading(true);
     setError('');
-    setPdfUrl((current) => {
-      if (current) URL.revokeObjectURL(current);
-      return '';
-    });
+    setPdfUrl('');
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${endpoint}/view-session`, {
+        method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
         throw new Error(response.status === 403 ? 'Bạn chưa có quyền xem tài liệu này.' : 'Không tải được PDF.');
       }
-      setAllowDownload(response.headers.get('X-Material-Allow-Download') !== 'false');
-      const blob = await response.blob();
-      setPdfUrl(URL.createObjectURL(blob));
+      const payload = await response.json();
+      setAllowDownload(payload.data?.allow_download !== false);
+      setPdfUrl(payload.data?.stream_url || '');
+      if (!payload.data?.stream_url) throw new Error('Không nhận được đường dẫn xem PDF.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được PDF.');
-    } finally {
       setLoading(false);
     }
   }, [endpoint]);
@@ -84,12 +82,6 @@ export default function MaterialPdfViewerPage() {
 
   useEffect(() => {
     loadPdf();
-    return () => {
-      setPdfUrl((current) => {
-        if (current) URL.revokeObjectURL(current);
-        return '';
-      });
-    };
   }, [loadPdf]);
 
   return (
@@ -120,9 +112,9 @@ export default function MaterialPdfViewerPage() {
         </div>
       </header>
 
-      <section className="min-h-0 flex-1 p-3 sm:p-4">
+      <section className="relative min-h-0 flex-1 p-3 sm:p-4">
         {loading && (
-          <div className="grid h-[calc(100svh-6rem)] place-items-center rounded-2xl border border-slate-200 bg-white">
+          <div className="absolute inset-3 z-10 grid place-items-center rounded-2xl border border-slate-200 bg-white sm:inset-4">
             <div className="text-center">
               <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
               <p className="font-bold text-slate-700">Đang mở PDF...</p>
@@ -146,10 +138,11 @@ export default function MaterialPdfViewerPage() {
           </div>
         )}
 
-        {!loading && pdfUrl && (
+        {pdfUrl && (
           <iframe
-            src={pdfUrl}
+            src={`${pdfUrl}#view=FitH&navpanes=0&toolbar=${allowDownload ? 1 : 0}`}
             title={title}
+            onLoad={() => setLoading(false)}
             className="h-[calc(100svh-6rem)] w-full rounded-2xl border border-slate-200 bg-white shadow-sm"
           />
         )}
