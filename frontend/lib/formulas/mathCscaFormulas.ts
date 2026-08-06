@@ -1,4 +1,5 @@
 export type MathFormulaGrade = '10' | '11' | '12' | 'Chung';
+export type MathFormulaIllustration = 'polyhedra' | 'round-solids' | 'spatial-relations' | 'oxyz';
 
 export interface MathFormulaLine {
   label: string;
@@ -16,6 +17,7 @@ export interface MathCscaFormulaTopic {
   keywords: string[];
   formulas: MathFormulaLine[];
   notes?: string[];
+  illustration?: MathFormulaIllustration;
 }
 
 const m = String.raw;
@@ -58,7 +60,6 @@ export const MATH_CSCA_FORMULA_TOPICS: MathCscaFormulaTopic[] = [
       { label: 'Tổng hai lập phương', value: m`\(a^3+b^3=(a+b)(a^2-ab+b^2)\)` },
       { label: 'Hiệu hai lập phương', value: m`\(a^3-b^3=(a-b)(a^2+ab+b^2)\)` },
       { label: 'Tổng bình phương', value: m`\(a^2+b^2=(a+b)^2-2ab=(a-b)^2+2ab\)` },
-      { label: 'Nhị thức Newton', value: m`\((a+b)^n=\sum_{k=0}^{n}C_n^k a^{n-k}b^k\)` },
       { label: 'Tách nhóm', value: m`\(ax+ay+bx+by=(a+b)(x+y)\)` },
     ],
     notes: ['Đưa về nhân tử trước khi rút gọn phân thức hoặc chia đa thức.'],
@@ -397,23 +398,208 @@ export const MATH_CSCA_FORMULA_TOPICS: MathCscaFormulaTopic[] = [
     notes: ['Bất phương trình log luôn xử lý điều kiện xác định trước.'],
   },
   {
-    id: 'solid-geometry',
-    title: 'Hình học không gian',
+    id: 'solid-geometry-polyhedra',
+    title: 'Khối đa diện: lăng trụ, chóp và chóp cụt',
     grade: '11',
     area: 'Hình học không gian',
-    chinese: '立体几何',
-    summary: 'Thể tích, diện tích, góc, khoảng cách, khối tròn xoay.',
-    keywords: ['khong gian', 'the tich', 'dien tich', 'khoi chop', '立体几何'],
+    chinese: '多面体、棱柱、棱锥',
+    summary: 'Thể tích, diện tích và đường chéo của các khối đa diện thường gặp; giải thích rõ từng ký hiệu.',
+    keywords: ['khong gian', 'the tich', 'dien tich', 'lang tru', 'hinh chop', 'chop cut', '立体几何', '棱柱', '棱锥'],
+    illustration: 'polyhedra',
     formulas: [
-      { label: 'Lăng trụ', value: m`\(V=B h\)` },
-      { label: 'Chóp', value: m`\(V=\frac{1}{3}Bh\)` },
-      { label: 'Chóp cụt', value: m`\(V=\frac{h}{3}(B_1+B_2+\sqrt{B_1B_2})\)` },
-      { label: 'Trụ', value: m`\(V=\pi R^2h,\quad S_{xq}=2\pi Rh,\quad S_{tp}=2\pi R(h+R)\)` },
-      { label: 'Nón', value: m`\(V=\frac{1}{3}\pi R^2h,\quad S_{xq}=\pi Rl,\quad S_{tp}=\pi R(l+R)\)` },
-      { label: 'Cầu', value: m`\(V=\frac{4}{3}\pi R^3,\quad S=4\pi R^2\)` },
-      { label: 'Góc đường mặt', value: 'Góc giữa đường thẳng và mặt phẳng là góc giữa đường thẳng đó và hình chiếu của nó trên mặt phẳng.' },
-      { label: 'Khoảng cách điểm mặt', value: 'Dựng đường vuông góc từ điểm đến mặt phẳng; trong tọa độ dùng công thức mặt phẳng.' },
-      { label: 'Tỉ số thể tích chóp', value: m`\(\frac{V_{S.A'B'C'}}{V_{S.ABC}}=\frac{SA'}{SA}\cdot\frac{SB'}{SB}\cdot\frac{SC'}{SC}\)` },
+      {
+        label: 'Lăng trụ bất kỳ',
+        value: m`\(V=Bh\)`,
+        note: m`\(B\) là diện tích một đáy; \(h\) là khoảng cách vuông góc giữa hai mặt đáy. Không lấy cạnh bên xiên thay cho \(h\).`,
+      },
+      {
+        label: 'Lăng trụ đứng',
+        value: m`\(S_{xq}=ph,\qquad S_{tp}=2B+ph\)`,
+        note: m`\(p\) là chu vi đáy. Công thức này dùng khi cạnh bên vuông góc với đáy nên cạnh bên chính là \(h\).`,
+      },
+      {
+        label: 'Hình hộp chữ nhật',
+        value: m`\(V=abc,\quad S_{tp}=2(ab+bc+ca),\quad d=\sqrt{a^2+b^2+c^2}\)`,
+        note: m`\(a,b,c\) là ba kích thước; \(d\) là đường chéo nối hai đỉnh đối diện của khối hộp.`,
+      },
+      {
+        label: 'Hình lập phương',
+        value: m`\(V=a^3,\quad S_{tp}=6a^2,\quad d=a\sqrt3\)`,
+        note: m`Đường chéo một mặt bằng \(a\sqrt2\), còn đường chéo của khối lập phương bằng \(a\sqrt3\).`,
+      },
+      {
+        label: 'Hình chóp bất kỳ',
+        value: m`\(V=\frac13Bh\)`,
+        note: m`\(h\) là đoạn vuông góc từ đỉnh xuống mặt đáy. Hình chiếu của đỉnh có thể nằm trong hoặc ngoài đa giác đáy.`,
+      },
+      {
+        label: 'Chóp đều',
+        value: m`\(S_{xq}=\frac12pl,\qquad S_{tp}=B+\frac12pl\)`,
+        note: m`\(l\) là trung đoạn (đường cao của một mặt bên), không phải cạnh bên; \(p\) là chu vi đáy.`,
+      },
+      {
+        label: 'Chóp cụt',
+        value: m`\(V=\frac{h}{3}\left(B_1+B_2+\sqrt{B_1B_2}\right)\)`,
+        note: m`\(B_1,B_2\) là diện tích hai đáy song song; \(h\) là khoảng cách giữa hai mặt đáy.`,
+      },
+      {
+        label: 'Chóp cụt đều',
+        value: m`\(S_{xq}=\frac12(p_1+p_2)l\)`,
+        note: m`\(p_1,p_2\) là chu vi hai đáy và \(l\) là đường cao của mỗi mặt bên hình thang.`,
+      },
+      {
+        label: 'Tỉ số thể tích hai chóp chung đỉnh',
+        value: m`\(\frac{V_{S.A'B'C'}}{V_{S.ABC}}=\frac{SA'}{SA}\cdot\frac{SB'}{SB}\cdot\frac{SC'}{SC}\)`,
+        note: m`Dùng khi \(A'\in SA, B'\in SB, C'\in SC\). Nếu ba tỉ số cùng bằng \(k\) thì tỉ số thể tích bằng \(k^3\).`,
+      },
+      {
+        label: 'Tứ diện bằng tích hỗn tạp',
+        value: m`\(V_{ABCD}=\frac16\left|\overrightarrow{AB}\cdot\left(\overrightarrow{AC}\times\overrightarrow{AD}\right)\right|\)`,
+        note: 'Hữu ích trong bài tọa độ khi biết bốn đỉnh; lấy trị tuyệt đối để thể tích luôn không âm.',
+      },
+    ],
+    notes: [
+      m`Quy trình an toàn: xác định đúng mặt đáy \(\rightarrow\) tính \(B\) và \(p\) \(\rightarrow\) dựng chiều cao vuông góc \(h\) \(\rightarrow\) thay vào công thức.`,
+    ],
+  },
+  {
+    id: 'solid-geometry-round-solids',
+    title: 'Khối tròn xoay: trụ, nón, nón cụt và cầu',
+    grade: '12',
+    area: 'Hình học không gian',
+    chinese: '旋转体、圆柱、圆锥、球',
+    summary: 'Bộ công thức thể tích và diện tích khối tròn xoay, kèm cách phân biệt bán kính, chiều cao và đường sinh.',
+    keywords: ['khoi tron xoay', 'hinh tru', 'hinh non', 'non cut', 'mat cau', 'hinh cau', '圆柱', '圆锥', '球'],
+    illustration: 'round-solids',
+    formulas: [
+      {
+        label: 'Khối trụ',
+        value: m`\(V=\pi R^2h\)`,
+        note: m`\(R\) là bán kính đáy, \(h\) là khoảng cách vuông góc giữa hai đáy.`,
+      },
+      {
+        label: 'Diện tích hình trụ',
+        value: m`\(S_{xq}=2\pi Rh,\qquad S_{tp}=2\pi R(h+R)\)`,
+        note: m`Khai triển mặt xung quanh được hình chữ nhật có hai cạnh \(2\pi R\) và \(h\).`,
+      },
+      {
+        label: 'Khối nón',
+        value: m`\(V=\frac13\pi R^2h\)`,
+        note: m`Chiều cao \(h\) vuông góc với đáy; trong nón tròn xoay, chân đường cao là tâm đáy.`,
+      },
+      {
+        label: 'Đường sinh nón',
+        value: m`\(l=\sqrt{R^2+h^2}\)`,
+        note: 'Áp dụng định lý Pythagore cho tam giác vuông tạo bởi bán kính, chiều cao và đường sinh.',
+      },
+      {
+        label: 'Diện tích hình nón',
+        value: m`\(S_{xq}=\pi Rl,\qquad S_{tp}=\pi R(l+R)\)`,
+        note: m`Diện tích toàn phần bằng diện tích xung quanh cộng diện tích một đáy \(\pi R^2\).`,
+      },
+      {
+        label: 'Khối nón cụt',
+        value: m`\(V=\frac{\pi h}{3}(R^2+Rr+r^2)\)`,
+        note: m`\(R,r\) là hai bán kính đáy \((R>r)\); \(h\) là khoảng cách giữa hai đáy.`,
+      },
+      {
+        label: 'Diện tích nón cụt',
+        value: m`\(S_{xq}=\pi(R+r)l,\quad S_{tp}=\pi(R+r)l+\pi(R^2+r^2)\)`,
+        note: m`Với nón cụt tròn xoay: \(l=\sqrt{h^2+(R-r)^2}\).`,
+      },
+      {
+        label: 'Khối cầu và mặt cầu',
+        value: m`\(V=\frac43\pi R^3,\qquad S=4\pi R^2\)`,
+        note: m`\(V\) là thể tích khối cầu; \(S\) là diện tích mặt cầu, không phải diện tích một hình tròn lớn.`,
+      },
+      {
+        label: 'Chỏm cầu cao h',
+        value: m`\(V=\frac{\pi h^2}{3}(3R-h),\qquad S_{xq}=2\pi Rh\)`,
+        note: m`Điều kiện \(0\le h\le2R\). \(S_{xq}\) chỉ là diện tích mặt cong của chỏm cầu.`,
+      },
+      {
+        label: 'Cầu nội tiếp hình lập phương',
+        value: m`\(R=\frac a2\)`,
+        note: 'Đường kính cầu bằng cạnh hình lập phương vì mặt cầu tiếp xúc với cả sáu mặt.',
+      },
+      {
+        label: 'Cầu ngoại tiếp hình lập phương',
+        value: m`\(R=\frac{a\sqrt3}{2}\)`,
+        note: 'Đường kính cầu bằng đường chéo của khối lập phương.',
+      },
+    ],
+    notes: [
+      m`Đừng nhầm \(l\) với \(h\): \(l\) nằm trên mặt bên, còn \(h\) vuông góc với mặt đáy.`,
+    ],
+  },
+  {
+    id: 'solid-geometry-angles-distances',
+    title: 'Góc, vuông góc và khoảng cách trong không gian',
+    grade: '11',
+    area: 'Hình học không gian',
+    chinese: '空间角与距离',
+    summary: 'Cách dựng đúng góc và đoạn khoảng cách trước khi tính bằng lượng giác hoặc định lý Pythagore.',
+    keywords: ['goc duong mat', 'goc nhi dien', 'khoang cach', 'vuong goc', 'duong cheo nhau', '空间角', '距离', '垂直'],
+    illustration: 'spatial-relations',
+    formulas: [
+      {
+        label: 'Góc đường thẳng – mặt phẳng',
+        value: m`\(\varphi=(d,d')\) với \(d'\) là hình chiếu vuông góc của \(d\) lên \((P)\).`,
+        note: m`Luôn có \(0^\circ\le\varphi\le90^\circ\). Nếu \(d\perp(P)\) thì \(\varphi=90^\circ\).`,
+      },
+      {
+        label: 'Tính góc đường – mặt',
+        value: m`\(\sin\varphi=\frac{h}{a},\qquad \tan\varphi=\frac{h}{a'}\)`,
+        note: m`Trong tam giác vuông: \(a\) là độ dài đoạn xiên trên đường thẳng, \(a'\) là độ dài hình chiếu và \(h\) là độ chênh vuông góc với mặt phẳng.`,
+      },
+      {
+        label: 'Góc giữa hai mặt phẳng',
+        value: m`\(\varphi=((P),(Q))=(a,b)\)`,
+        note: m`Chọn \(a\subset(P), b\subset(Q)\) cùng vuông góc với giao tuyến tại một điểm. Góc nhọn giữa \(a,b\) là góc giữa hai mặt phẳng.`,
+      },
+      {
+        label: 'Hai mặt phẳng vuông góc',
+        value: m`\((P)\perp(Q)\Leftarrow(P)\text{ chứa một đường thẳng }d\perp(Q)\)`,
+        note: 'Đây là dấu hiệu thường dùng nhất để chứng minh hai mặt phẳng vuông góc.',
+      },
+      {
+        label: 'Đường thẳng vuông góc mặt phẳng',
+        value: m`\(d\perp(P)\Leftarrow d\perp a,\ d\perp b\)`,
+        note: m`Hai đường \(a,b\subset(P)\) phải cắt nhau. Vuông góc với hai đường song song là chưa đủ.`,
+      },
+      {
+        label: 'Khoảng cách điểm – mặt',
+        value: m`\(d(M,(P))=MH\quad\text{khi }H\in(P),\ MH\perp(P)\)`,
+        note: 'Bài hình thuần túy cần dựng đúng chân H; sau đó tính MH trong một tam giác vuông thích hợp.',
+      },
+      {
+        label: 'Khoảng cách đường – mặt song song',
+        value: m`\(d(d,(P))=d(M,(P)),\quad M\in d,\ d\parallel(P)\)`,
+        note: 'Có thể chọn điểm M thuận lợi bất kỳ trên d vì mọi điểm của d cách mặt phẳng một khoảng bằng nhau.',
+      },
+      {
+        label: 'Khoảng cách hai mặt song song',
+        value: m`\(d((P),(Q))=d(M,(Q)),\quad M\in(P),\ (P)\parallel(Q)\)`,
+        note: 'Chọn M sao cho việc dựng đường vuông góc đến mặt phẳng còn lại đơn giản nhất.',
+      },
+      {
+        label: 'Khoảng cách hai đường chéo nhau',
+        value: m`\(d(a,b)=MN\quad\text{khi }M\in a,\ N\in b,\ MN\perp a,\ MN\perp b\)`,
+        note: 'MN là đoạn vuông góc chung. Cũng có thể dựng mặt phẳng chứa a và song song với b rồi đổi về khoảng cách đường – mặt.',
+      },
+      {
+        label: 'Thể tích để tính khoảng cách',
+        value: m`\(h=\frac{3V}{B}\)`,
+        note: m`Nếu xem khối chóp theo một mặt khác làm đáy, chiều cao \(h\) chính là khoảng cách từ đỉnh đối diện đến mặt đáy đó.`,
+      },
+      {
+        label: 'Định lý ba đường vuông góc',
+        value: m`\(a\perp d'\Rightarrow a\perp d\)`,
+        note: m`Với \(d'\) là hình chiếu của đường xiên \(d\) lên mặt phẳng chứa \(a\). Dùng để chuyển bài vuông góc trong không gian về trên mặt phẳng.`,
+      },
+    ],
+    notes: [
+      'Góc phải được dựng thành một góc phẳng cụ thể; khoảng cách phải được dựng thành một đoạn vuông góc cụ thể rồi mới tính.',
     ],
   },
   {
@@ -424,20 +610,29 @@ export const MATH_CSCA_FORMULA_TOPICS: MathCscaFormulaTopic[] = [
     chinese: '空间解析几何',
     summary: 'Vectơ 3D, mặt phẳng, đường thẳng, mặt cầu, khoảng cách, góc.',
     keywords: ['oxyz', 'khong gian', 'mat phang', 'duong thang', 'mat cau', '空间解析几何'],
+    illustration: 'oxyz',
     formulas: [
-      { label: 'Khoảng cách hai điểm', value: m`\(AB=\sqrt{(x_B-x_A)^2+(y_B-y_A)^2+(z_B-z_A)^2}\)` },
-      { label: 'Tích vô hướng', value: m`\(\vec a\cdot\vec b=x_1x_2+y_1y_2+z_1z_2\)` },
-      { label: 'Tích có hướng', value: m`\([\vec a,\vec b]=(y_1z_2-z_1y_2,\ z_1x_2-x_1z_2,\ x_1y_2-y_1x_2)\)` },
+      { label: 'Khoảng cách hai điểm', value: m`\(AB=\sqrt{(x_B-x_A)^2+(y_B-y_A)^2+(z_B-z_A)^2}\)`, note: 'Lấy hiệu tọa độ cùng trục, bình phương, cộng rồi khai căn.' },
+      { label: 'Trung điểm đoạn thẳng', value: m`\(M\left(\frac{x_A+x_B}{2},\frac{y_A+y_B}{2},\frac{z_A+z_B}{2}\right)\)` },
+      { label: 'Trọng tâm tam giác', value: m`\(G\left(\frac{x_A+x_B+x_C}{3},\frac{y_A+y_B+y_C}{3},\frac{z_A+z_B+z_C}{3}\right)\)` },
+      { label: 'Tích vô hướng', value: m`\(\vec a\cdot\vec b=x_1x_2+y_1y_2+z_1z_2\)`, note: m`\(\vec a\perp\vec b\Leftrightarrow\vec a\cdot\vec b=0\).` },
+      { label: 'Tích có hướng', value: m`\([\vec a,\vec b]=(y_1z_2-z_1y_2,\ z_1x_2-x_1z_2,\ x_1y_2-y_1x_2)\)`, note: m`Vectơ kết quả vuông góc với cả \(\vec a\) và \(\vec b\); độ dài bằng diện tích hình bình hành tạo bởi hai vectơ.` },
       { label: 'Góc hai vectơ', value: m`\(\cos(\vec a,\vec b)=\frac{\vec a\cdot\vec b}{|\vec a||\vec b|}\)` },
-      { label: 'Mặt phẳng tổng quát', value: m`\(Ax+By+Cz+D=0\)` },
-      { label: 'Mặt phẳng qua điểm', value: m`\(A(x-x_0)+B(y-y_0)+C(z-z_0)=0\)` },
-      { label: 'Khoảng cách điểm mặt', value: m`\(d(M,(P))=\frac{|Ax_M+By_M+Cz_M+D|}{\sqrt{A^2+B^2+C^2}}\)` },
-      { label: 'Đường thẳng tham số', value: m`\(\begin{cases}x=x_0+at\\y=y_0+bt\\z=z_0+ct\end{cases}\)` },
+      { label: 'Mặt phẳng tổng quát', value: m`\(Ax+By+Cz+D=0\)`, note: m`Một vectơ pháp tuyến là \(\vec n=(A,B,C)\).` },
+      { label: 'Mặt phẳng qua điểm', value: m`\(A(x-x_0)+B(y-y_0)+C(z-z_0)=0\)`, note: m`Dùng khi biết điểm \(M_0(x_0,y_0,z_0)\) và vectơ pháp tuyến \((A,B,C)\).` },
+      { label: 'Khoảng cách điểm – mặt', value: m`\(d(M,(P))=\frac{|Ax_M+By_M+Cz_M+D|}{\sqrt{A^2+B^2+C^2}}\)`, note: 'Thay tọa độ điểm vào vế trái phương trình mặt phẳng rồi lấy trị tuyệt đối.' },
+      { label: 'Khoảng cách hai mặt song song', value: m`\(d((P),(Q))=\frac{|D_1-D_2|}{\sqrt{A^2+B^2+C^2}}\)`, note: m`Hai phương trình phải được đưa về cùng bộ hệ số \(A,B,C\): \(Ax+By+Cz+D_1=0\), \(Ax+By+Cz+D_2=0\).` },
+      { label: 'Đường thẳng tham số', value: m`\(\begin{cases}x=x_0+at\\y=y_0+bt\\z=z_0+ct\end{cases}\)`, note: m`Đường thẳng đi qua \(M_0(x_0,y_0,z_0)\) và có vectơ chỉ phương \(\vec u=(a,b,c)\).` },
       { label: 'Đường thẳng chính tắc', value: m`\(\frac{x-x_0}{a}=\frac{y-y_0}{b}=\frac{z-z_0}{c}\)` },
       { label: 'Mặt cầu', value: m`\((x-a)^2+(y-b)^2+(z-c)^2=R^2\)` },
-      { label: 'Mặt cầu tổng quát', value: m`\(x^2+y^2+z^2-2ax-2by-2cz+d=0,\quad R=\sqrt{a^2+b^2+c^2-d}\)` },
-      { label: 'Góc đường mặt', value: m`\(\sin\varphi=\frac{|\vec u\cdot\vec n|}{|\vec u||\vec n|}\)` },
+      { label: 'Mặt cầu tổng quát', value: m`\(x^2+y^2+z^2-2ax-2by-2cz+d=0,\quad R=\sqrt{a^2+b^2+c^2-d}\)`, note: m`Tâm là \(I(a,b,c)\); cần \(a^2+b^2+c^2-d>0\) để có mặt cầu thực.` },
+      { label: 'Góc hai đường thẳng', value: m`\(\cos\varphi=\frac{|\vec u_1\cdot\vec u_2|}{|\vec u_1||\vec u_2|}\)`, note: 'Lấy trị tuyệt đối để nhận góc nhọn hoặc vuông giữa hai đường.' },
+      { label: 'Góc đường – mặt', value: m`\(\sin\varphi=\frac{|\vec u\cdot\vec n|}{|\vec u||\vec n|}\)`, note: m`\(\vec u\) là vectơ chỉ phương của đường, \(\vec n\) là pháp tuyến của mặt phẳng.` },
+      { label: 'Góc hai mặt phẳng', value: m`\(\cos\varphi=\frac{|\vec n_1\cdot\vec n_2|}{|\vec n_1||\vec n_2|}\)`, note: 'Góc giữa hai mặt phẳng bằng góc nhọn giữa hai vectơ pháp tuyến của chúng.' },
+      { label: 'Khoảng cách điểm – đường', value: m`\(d(M,d)=\frac{|\overrightarrow{AM}\times\vec u|}{|\vec u|},\quad A\in d\)`, note: m`Chọn điểm \(A\) bất kỳ trên đường thẳng và \(\vec u\) là vectơ chỉ phương của \(d\).` },
+      { label: 'Khoảng cách hai đường chéo nhau', value: m`\(d(d_1,d_2)=\frac{|\overrightarrow{AB}\cdot(\vec u_1\times\vec u_2)|}{|\vec u_1\times\vec u_2|}\)`, note: m`Dùng khi \(A\in d_1, B\in d_2\) và hai vectơ chỉ phương không cùng phương.` },
     ],
+    notes: ['Trước khi dùng công thức tọa độ, hãy ghi rõ điểm đi qua, vectơ chỉ phương hoặc vectơ pháp tuyến để tránh thay nhầm dữ kiện.'],
   },
   {
     id: 'combinatorics-probability',

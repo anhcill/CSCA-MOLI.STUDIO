@@ -12,6 +12,7 @@ import {
   FiSearch,
 } from 'react-icons/fi';
 import RichMathText from '@/components/common/RichMathText';
+import SolidGeometryIllustration, { type SolidGeometryIllustrationKind } from '@/components/formulas/SolidGeometryIllustration';
 import SubjectStudyShell from '@/components/layout/SubjectStudyShell';
 import { useLanguage } from '@/context/LanguageContext';
 import type {
@@ -228,6 +229,9 @@ function FormulaValue({ line }: { line: FormulaLine }) {
 
 function FormulaTopicSection({ item }: { item: FilteredFormulaTopic }) {
   const { topic, formulas } = item;
+  const illustration = 'illustration' in topic
+    ? topic.illustration as SolidGeometryIllustrationKind | undefined
+    : undefined;
 
   return (
     <section id={`formula-${topic.id}`} className="scroll-mt-5 border-t border-slate-200 pt-6 dark:border-slate-700">
@@ -245,6 +249,8 @@ function FormulaTopicSection({ item }: { item: FilteredFormulaTopic }) {
           {formulas.length} công thức
         </div>
       </div>
+
+      {illustration ? <SolidGeometryIllustration kind={illustration} /> : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {formulas.map(line => (
