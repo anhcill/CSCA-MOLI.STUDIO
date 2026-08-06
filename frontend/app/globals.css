@@ -560,6 +560,20 @@ html {
   color: #047857 !important;
 }
 /* Keep formulas comfortably readable in learner-facing exam and result screens. */
+.exam-content-text {
+  font-family:
+    "Microsoft YaHei",
+    "PingFang SC",
+    "Noto Sans CJK SC",
+    "Noto Sans",
+    var(--font-inter),
+    var(--font-jakarta),
+    Arial,
+    sans-serif;
+  font-style: normal;
+  letter-spacing: normal;
+}
+
 .exam-math-readable {
   font-size: 1.0625rem !important;
   line-height: 1.85 !important;

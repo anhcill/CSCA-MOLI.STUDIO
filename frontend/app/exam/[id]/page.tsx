@@ -976,7 +976,7 @@ export default function ExamPage() {
 
   return (
     <div
-      className={`min-h-screen bg-[#f8fafc] font-sans selection:bg-indigo-200 ${practiceMode ? '' : 'exam-protected'}`}
+      className={`exam-content-text min-h-screen bg-[#f8fafc] selection:bg-indigo-200 ${practiceMode ? '' : 'exam-protected'}`}
       style={practiceMode ? undefined : {
         WebkitUserSelect: 'none',
         userSelect: 'none',
@@ -1172,13 +1172,9 @@ export default function ExamPage() {
              {currentQuestion.groupContext && currentQuestion.groupContext.text && (
                 <div className="mb-8 bg-amber-50/50 p-6 rounded-2xl border border-amber-200/60 shadow-sm relative overflow-hidden">
                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-400 to-orange-400" />
-                   <h3 className="text-xs font-black text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
-                       <FiGrid size={14} /> 
-                       {currentQuestion.groupContext.type === 'reading_passage' || currentQuestion.groupContext.type === 'reading_passage_start' ? 'Đoạn văn đọc hiểu dùng chung' : 'Nội dung dùng chung'}
-                   </h3>
                    <RichMathText
                       value={currentQuestion.groupContext.text}
-                      className="text-[17px] text-slate-800 leading-loose font-serif"
+                      className="exam-content-text text-[17px] font-normal leading-[1.9] text-slate-800"
                    />
                    {currentQuestion.groupContext.image && (
                       <img src={currentQuestion.groupContext.image} alt="Passage" className="mt-5 max-w-full rounded-xl border border-amber-100 shadow-sm" />
@@ -1187,7 +1183,7 @@ export default function ExamPage() {
              )}
 
              {/* Question Text */}
-             <div className="text-lg sm:text-xl md:text-[22px] font-semibold text-slate-800 leading-[1.75] sm:leading-[1.8] tracking-tight mb-6 sm:mb-8">
+             <div className="exam-content-text mb-6 text-lg font-medium leading-[1.75] text-slate-800 sm:mb-8 sm:text-xl sm:leading-[1.8] md:text-[21px]">
                 <RichMathText value={questionText.primary} className="exam-math-readable exam-taking-math text-inherit" />
                 
                 {questionText.secondary && (
@@ -1312,7 +1308,7 @@ export default function ExamPage() {
                         <div className="min-w-0 flex-1 mt-0.5">
                           <RichMathText
                             value={answerText.primary}
-                            className={`exam-math-readable exam-taking-math text-base font-semibold leading-relaxed ${isSelected ? 'text-indigo-900 dark:text-violet-100' : 'text-slate-700 dark:text-slate-100'}`}
+                            className={`exam-content-text exam-math-readable exam-taking-math text-base font-medium leading-relaxed ${isSelected ? 'text-indigo-900 dark:text-violet-100' : 'text-slate-700 dark:text-slate-100'}`}
                           />
                           {answerText.secondary && (
                             <div className={`mt-2 text-sm leading-relaxed ${isSelected ? 'text-indigo-700/80 dark:text-violet-200' : 'text-slate-500 dark:text-slate-400'}`}>
