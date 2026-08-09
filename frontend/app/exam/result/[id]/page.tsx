@@ -9,7 +9,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
-import AICoinUnlock from '@/components/ai/AICoinUnlock';
+import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import LanguageSwitcher from '@/components/common/LanguageSwitcher';
@@ -29,8 +29,6 @@ import InkResultBackground, {
     inkResultSoftPanel,
     inkResultTitle,
 } from '@/components/layout/InkResultBackground';
-
-const AI_ANALYSIS_COST = 50;
 
 interface AnswerOption {
     key: string;
@@ -97,9 +95,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
     const { id: attemptId } = use(params);
     const router = useRouter();
     const user = useAuthStore((s) => s.user);
-    const updateUser = useAuthStore((s) => s.updateUser);
     const hasAIAccess = canUseAI(user);
-    const currentCoins = Math.max(0, Number(user?.coins ?? 0));
     const [result, setResult] = useState<AttemptResult | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'result' | 'review' | 'chat'>('result');
@@ -122,10 +118,10 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
     }, [attemptId]);
 
     useEffect(() => {
-        if (result?.id && !aiAnalysis && !aiLoading) {
+        if (hasAIAccess && result?.id && !aiAnalysis && !aiLoading) {
             loadAIAnalysis(result.id);
         }
-    }, [result?.id]);
+    }, [hasAIAccess, result?.id]);
 
     // Cảnh báo thoát khi AI đang phân tích
     useEffect(() => {
@@ -145,7 +141,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
             setLoading(true);
             const data = await examApi.getAttemptDetails(attemptId);
             setResult(data);
-            if (data.id) {
+            if (hasAIAccess && data.id) {
                 loadAIAnalysis(data.id);
             }
         } catch (error) {
@@ -155,23 +151,16 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
         }
     };
 
-    const loadAIAnalysis = async (attemptId: number, useCoins = false) => {
+    const loadAIAnalysis = async (attemptId: number) => {
+        if (!hasAIAccess) return;
         // Không load lại nếu đã có analysis rồi
-        if (!useCoins && aiAnalysis && aiAnalysis.attempt?.id === attemptId) return;
-        if (useCoins && currentCoins < AI_ANALYSIS_COST) return;
+        if (aiAnalysis && aiAnalysis.attempt?.id === attemptId) return;
         try {
             setAiLoading(true);
-            const url = useCoins ? `/api/ai/exam-result/${attemptId}?useCoins=true` : `/api/ai/exam-result/${attemptId}`;
-            const res = await authFetch(url, { method: 'POST' });
+            const res = await authFetch(`/api/ai/exam-result/${attemptId}`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
                 setAiAnalysis(data);
-                if (data.coin_charged) {
-                    const nextCoins = Number.isFinite(Number(data.coin_balance))
-                        ? Math.max(0, Number(data.coin_balance))
-                        : Math.max(0, currentCoins - AI_ANALYSIS_COST);
-                    updateUser({ coins: nextCoins });
-                }
                 if (!data.cached) setAiLoaded(true);
                 else setAiLoaded(true); // cached vẫn là đã load xong
             }
@@ -454,21 +443,18 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                         </div>
 
                         {/* AI Analysis */}
-                        {hasAIAccess || aiAnalysis || aiLoading ? (
+                        {hasAIAccess ? (
                             <AIExamAnalysis
                                 attemptId={result.id}
                                 aiAnalysis={aiAnalysis}
                                 aiLoading={aiLoading}
-                                onRefresh={() => loadAIAnalysis(result.id, !hasAIAccess)}
+                                onRefresh={() => loadAIAnalysis(result.id)}
                                 onAiLoaded={() => setAiLoaded(true)}
                             />
                         ) : (
-                            <AICoinUnlock
-                                coins={currentCoins}
-                                loading={aiLoading}
-                                onUseCoins={() => loadAIAnalysis(result.id, true)}
-                                title="Phân tích bài thi bằng AI"
-                            />
+                            <PremiumGate type="ai">
+                                <div />
+                            </PremiumGate>
                         )}
                     </div>
                 )}
@@ -605,20 +591,17 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
 
                         {/* AI Analysis — chỉ hiện khi đã bắt đầu xem lại */}
                         {reviewStarted && (
-                            hasAIAccess || aiAnalysis || aiLoading ? (
+                            hasAIAccess ? (
                                 <AIExamAnalysis
                                     attemptId={result.id}
                                     aiAnalysis={aiAnalysis}
                                     aiLoading={aiLoading}
-                                    onRefresh={() => loadAIAnalysis(result.id, !hasAIAccess)}
+                                    onRefresh={() => loadAIAnalysis(result.id)}
                                 />
                             ) : (
-                                <AICoinUnlock
-                                    coins={currentCoins}
-                                    loading={aiLoading}
-                                    onUseCoins={() => loadAIAnalysis(result.id, true)}
-                                    title="Phân tích bài thi bằng AI"
-                                />
+                                <PremiumGate type="ai">
+                                    <div />
+                                </PremiumGate>
                             )
                         )}
                     </div>

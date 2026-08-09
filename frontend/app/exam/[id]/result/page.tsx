@@ -8,7 +8,7 @@ import examApi, { QuestionReportType } from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
 import AIExamAnalysis from '@/components/ai/AIExamAnalysis';
-import AICoinUnlock from '@/components/ai/AICoinUnlock';
+import { PremiumGate } from '@/components/common/PremiumGate';
 import { useAuthStore } from '@/lib/store/authStore';
 import { canUseAI } from '@/lib/utils/permissions';
 import RichMathText from '@/components/common/RichMathText';
@@ -31,8 +31,6 @@ import InkResultBackground, {
   inkResultTitle,
 } from '@/components/layout/InkResultBackground';
 import { QUESTION_REPORT_TYPES } from '@/lib/questionReports';
-
-const AI_ANALYSIS_COST = 50;
 
 interface AnswerOption {
   key: string;
@@ -104,9 +102,7 @@ function ExamResultContent() {
   const examId = parseInt(params.id as string);
   const attemptId = searchParams.get('attemptId');
   const user = useAuthStore((s) => s.user);
-  const updateUser = useAuthStore((s) => s.updateUser);
   const hasAIAccess = canUseAI(user);
-  const currentCoins = Math.max(0, Number(user?.coins ?? 0));
 
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,10 +136,10 @@ function ExamResultContent() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (result?.id && !aiAnalysis && !aiLoading) {
+    if (hasAIAccess && result?.id && !aiAnalysis && !aiLoading) {
       loadAIAnalysis(result.id);
     }
-  }, [result?.id]);
+  }, [hasAIAccess, result?.id]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -163,7 +159,7 @@ function ExamResultContent() {
       setLoading(true);
       const data = await examApi.getAttemptDetail(Number(attemptId));
       setResult(data);
-      if (data.id) {
+      if (hasAIAccess && data.id) {
         loadAIAnalysis(data.id);
       }
     } catch (error: any) {
@@ -177,25 +173,18 @@ function ExamResultContent() {
     }
   };
 
-  const loadAIAnalysis = async (attemptId: number, useCoins = false) => {
+  const loadAIAnalysis = async (attemptId: number) => {
+    if (!hasAIAccess) return;
     // Không load lại nếu đã có analysis rồi
-    if (!useCoins && aiAnalysis && aiAnalysis.attempt?.id === attemptId) return;
-    if (useCoins && currentCoins < AI_ANALYSIS_COST) return;
+    if (aiAnalysis && aiAnalysis.attempt?.id === attemptId) return;
     try {
       setAiLoading(true);
-      const url = useCoins ? `/api/ai/exam-result/${attemptId}?useCoins=true` : `/api/ai/exam-result/${attemptId}`;
-      const res = await authFetch(url, { method: 'POST' });
+      const res = await authFetch(`/api/ai/exam-result/${attemptId}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setAiAnalysis(data);
         setPreviousAttempt(data.previousAttempt || null);
         setAiLoaded(true);
-        if (data.coin_charged) {
-          const nextCoins = Number.isFinite(Number(data.coin_balance))
-            ? Math.max(0, Number(data.coin_balance))
-            : Math.max(0, currentCoins - AI_ANALYSIS_COST);
-          updateUser({ coins: nextCoins });
-        }
       }
     } catch (error) {
       console.error('AI analysis error:', error);
@@ -662,22 +651,19 @@ function ExamResultContent() {
               </div>
             )}
 
-            {hasAIAccess || aiAnalysis || aiLoading ? (
+            {hasAIAccess ? (
               <AIExamAnalysis
                 attemptId={result.id}
                 aiAnalysis={aiAnalysis}
                 aiLoading={aiLoading}
-                onRefresh={() => loadAIAnalysis(result.id, !hasAIAccess)}
+                onRefresh={() => loadAIAnalysis(result.id)}
                 previousAttempt={previousAttempt}
                 onAiLoaded={() => setAiLoaded(true)}
               />
             ) : (
-              <AICoinUnlock
-                coins={currentCoins}
-                loading={aiLoading}
-                onUseCoins={() => loadAIAnalysis(result.id, true)}
-                title="Phân tích bài thi bằng AI"
-              />
+              <PremiumGate type="ai">
+                <div />
+              </PremiumGate>
             )}
           </div>
         )}
