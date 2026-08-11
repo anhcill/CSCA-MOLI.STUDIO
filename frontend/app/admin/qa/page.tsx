@@ -50,26 +50,6 @@ function authorInitial(ticket: Ticket) {
   return (ticket.author_name || ticket.author_email || 'H').charAt(0).toUpperCase();
 }
 
-function useAdminChatViewportLock() {
-  useEffect(() => {
-    const root = document.documentElement;
-    const body = document.body;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    body.style.overscrollBehavior = 'none';
-
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscroll;
-    };
-  }, []);
-}
-
 export default function AdminQADashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
@@ -81,8 +61,7 @@ export default function AdminQADashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [toast, setToast] = useState('');
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  useAdminChatViewportLock();
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const counts = useMemo(() => ({
     all: tickets.length,
@@ -151,7 +130,9 @@ export default function AdminQADashboard() {
   }, [statusFilter]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const chat = chatScrollRef.current;
+    if (!chat) return;
+    chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
   }, [messages.length, selectedTicket?.id]);
 
   const selectTicket = async (ticket: Ticket) => {
@@ -399,7 +380,7 @@ export default function AdminQADashboard() {
                   </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
+                <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
                   <div className="mx-auto max-w-4xl space-y-4">
                     {messages.map((message) => {
                       const isAdmin = message.is_admin_reply;
@@ -429,7 +410,6 @@ export default function AdminQADashboard() {
                         </div>
                       );
                     })}
-                    <div ref={chatEndRef} />
                   </div>
                 </div>
 
