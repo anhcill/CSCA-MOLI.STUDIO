@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import coursesApi from '@/lib/api/courses';
 import type { CourseFileDto, LessonAssignmentDto, LessonSubmissionDto, LessonWorkDto } from '@/lib/types/courses';
 import { CourseFilePicker } from './CourseFilePicker';
+import { LessonQuestionPanel } from './LessonQuestionPanel';
 
 const fieldClass = 'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
@@ -118,6 +119,9 @@ export function LessonWorkEditor({ courseId, lessonId, teacherMode = false }: { 
       <div className="space-y-3">
         <div><h4 className="font-black">{teacherMode ? '2. Bài học viên đã nộp' : '3. Bài học viên đã nộp'} ({work?.assignment?.submissions?.length || 0})</h4><p className="text-xs text-slate-500">Mở ảnh/file, nhập điểm và nhận xét rồi lưu chấm bài.</p></div>
         {work?.assignment?.submissions?.length ? work.assignment.submissions.map((submission) => <SubmissionGrader key={submission.id} submission={submission} maxScore={work.assignment!.maxScore} onSaved={async (score, feedback) => { if (teacherMode) await coursesApi.gradeTeachingSubmission(courseId, lessonId, submission.id, score, feedback); else await coursesApi.gradeLessonSubmission(courseId, lessonId, submission.id, score, feedback); await load(); }} />) : <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500 dark:border-slate-700">Chưa có bài nộp.</p>}
+      </div>
+      <div className="border-t border-violet-200 pt-6 dark:border-violet-500/25">
+        <LessonQuestionPanel courseId={courseId} lessonId={lessonId} teacherMode />
       </div>
       {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p> : null}
     </section>

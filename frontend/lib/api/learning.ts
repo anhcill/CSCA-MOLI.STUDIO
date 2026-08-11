@@ -12,6 +12,7 @@ import type {
   PlaybackSessionDto,
   UpdateLessonProgressInput,
   LessonSubmissionDto,
+  LessonQuestionThreadDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -127,6 +128,36 @@ export const learningApi = {
     const response = await axios.post<ApiSuccessEnvelope<LessonSubmissionDto>>(
       `/learning/lessons/${encodeURIComponent(lessonId)}/submission`,
       payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async getLessonQuestions(lessonId: number): Promise<LessonQuestionThreadDto[]> {
+    const response = await axios.get<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/learning/lessons/${encodeURIComponent(lessonId)}/questions`,
+    );
+    return unwrapData(response.data);
+  },
+
+  async createLessonQuestion(lessonId: number, subject: string, body: string, files: File[]): Promise<LessonQuestionThreadDto[]> {
+    const payload = new FormData();
+    payload.append('subject', subject);
+    payload.append('body', body);
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/learning/lessons/${encodeURIComponent(lessonId)}/questions`, payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async replyLessonQuestion(lessonId: number, threadId: number, body: string, files: File[]): Promise<LessonQuestionThreadDto[]> {
+    const payload = new FormData();
+    payload.append('body', body);
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/learning/lessons/${encodeURIComponent(lessonId)}/questions/${encodeURIComponent(threadId)}/replies`, payload,
       { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
     );
     return unwrapData(response.data);

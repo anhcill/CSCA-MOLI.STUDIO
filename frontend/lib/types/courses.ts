@@ -231,6 +231,33 @@ export interface LessonWorkDto {
   assignment: LessonAssignmentDto | null;
 }
 
+export type LessonQuestionStatus = 'open' | 'answered' | 'resolved';
+
+export interface LessonQuestionMessageDto {
+  id: number;
+  authorId: number;
+  authorKind: 'student' | 'teacher';
+  authorName: string;
+  body: string;
+  createdAt: string;
+  isMine: boolean;
+  attachments: CourseFileDto[];
+}
+
+export interface LessonQuestionThreadDto {
+  id: number;
+  lessonId: number;
+  subject: string;
+  status: LessonQuestionStatus;
+  studentId: number;
+  studentName: string;
+  studentEmail: string;
+  isOwner: boolean;
+  createdAt: string;
+  updatedAt: string;
+  messages: LessonQuestionMessageDto[];
+}
+
 export interface LessonAssignmentInput {
   title: string;
   instructions: string;

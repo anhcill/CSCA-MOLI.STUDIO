@@ -1,5 +1,6 @@
 const courseService = require("../services/adminCourseService");
 const assignmentService = require("../services/courseAssignmentService");
+const discussionService = require("../services/courseDiscussionService");
 const { sendCourseError, sendData } = require("../utils/courseResponses");
 
 function action(handler, options = {}) {
@@ -27,8 +28,18 @@ const deleteAssignmentAttachment = action((req) => assignmentService.deleteAssig
 const gradeSubmission = action((req) => assignmentService.gradeSubmission(
   req.params.courseId, req.params.lessonId, req.params.submissionId, req.body || {}, req.user,
 ));
+const listLessonQuestions = action((req) => discussionService.listTeacherQuestions(
+  req.params.courseId, req.params.lessonId, req.user,
+));
+const replyLessonQuestion = action((req) => discussionService.replyAsTeacher(
+  req.params.courseId, req.params.lessonId, req.params.threadId, req.body || {}, req.files || [], req.user,
+));
+const updateQuestionStatus = action((req) => discussionService.updateTeacherStatus(
+  req.params.courseId, req.params.lessonId, req.params.threadId, req.body || {}, req.user,
+));
 
 module.exports = {
   list, get, getLessonWork, saveAssignment, uploadAssignmentAttachments,
   deleteAssignmentAttachment, gradeSubmission,
+  listLessonQuestions, replyLessonQuestion, updateQuestionStatus,
 };

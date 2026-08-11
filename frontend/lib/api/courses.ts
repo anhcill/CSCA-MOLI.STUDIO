@@ -19,6 +19,8 @@ import type {
   LessonSubmissionDto,
   LessonWorkDto,
   CourseTeacherDto,
+  LessonQuestionStatus,
+  LessonQuestionThreadDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -353,6 +355,32 @@ export const coursesApi = {
     const response = await axios.patch<ApiSuccessEnvelope<LessonSubmissionDto>>(
       `/admin/course-teaching/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/submissions/${encodeURIComponent(submissionId)}/grade`,
       { score, feedback },
+    );
+    return unwrapData(response.data);
+  },
+
+  async getTeachingLessonQuestions(courseId: number, lessonId: number): Promise<LessonQuestionThreadDto[]> {
+    const response = await axios.get<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/admin/course-teaching/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/questions`,
+    );
+    return unwrapData(response.data);
+  },
+
+  async replyTeachingLessonQuestion(courseId: number, lessonId: number, threadId: number, body: string, files: File[]): Promise<LessonQuestionThreadDto[]> {
+    const payload = new FormData();
+    payload.append('body', body);
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/admin/course-teaching/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/questions/${encodeURIComponent(threadId)}/replies`, payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async updateTeachingQuestionStatus(courseId: number, lessonId: number, threadId: number, status: LessonQuestionStatus): Promise<LessonQuestionThreadDto[]> {
+    const response = await axios.patch<ApiSuccessEnvelope<LessonQuestionThreadDto[]>>(
+      `/admin/course-teaching/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/questions/${encodeURIComponent(threadId)}/status`,
+      { status },
     );
     return unwrapData(response.data);
   },

@@ -17,5 +17,8 @@ router.post("/lessons/:lessonId/playback-session", playbackLimiter, videoPlaybac
 router.put("/lessons/:lessonId/progress", progressLimiter, controller.updateLessonProgress);
 router.post("/lessons/:lessonId/complete", progressLimiter, controller.completeLesson);
 router.post("/lessons/:lessonId/submission", courseFiles("files"), controller.submitAssignment);
+router.get("/lessons/:lessonId/questions", controller.listLessonQuestions);
+router.post("/lessons/:lessonId/questions", courseFiles("files"), controller.createLessonQuestion);
+router.post("/lessons/:lessonId/questions/:threadId/replies", courseFiles("files"), controller.replyLessonQuestion);
 
 module.exports = router;

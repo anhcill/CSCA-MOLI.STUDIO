@@ -15,5 +15,8 @@ router.put("/:courseId/lessons/:lessonId/assignment", controller.saveAssignment)
 router.post("/:courseId/lessons/:lessonId/assignment/attachments", courseFiles("files"), controller.uploadAssignmentAttachments);
 router.delete("/:courseId/lessons/:lessonId/assignment/attachments/:attachmentId", controller.deleteAssignmentAttachment);
 router.patch("/:courseId/lessons/:lessonId/submissions/:submissionId/grade", controller.gradeSubmission);
+router.get("/:courseId/lessons/:lessonId/questions", controller.listLessonQuestions);
+router.post("/:courseId/lessons/:lessonId/questions/:threadId/replies", courseFiles("files"), controller.replyLessonQuestion);
+router.patch("/:courseId/lessons/:lessonId/questions/:threadId/status", controller.updateQuestionStatus);
 
 module.exports = router;

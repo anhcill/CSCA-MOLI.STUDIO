@@ -1,5 +1,6 @@
 const learningService = require("../services/learningService");
 const assignmentService = require("../services/courseAssignmentService");
+const discussionService = require("../services/courseDiscussionService");
 const { sendData, sendCourseError } = require("../utils/courseResponses");
 
 function handler(action) {
@@ -21,9 +22,17 @@ const getCourseProgress = handler((req) => learningService.getCourseProgress(req
 const submitAssignment = handler((req) => assignmentService.submitAssignment(
   req.params.lessonId, req.body || {}, req.files || [], req.user,
 ));
+const listLessonQuestions = handler((req) => discussionService.listLearnerQuestions(req.params.lessonId, req.user));
+const createLessonQuestion = handler((req) => discussionService.createLearnerQuestion(
+  req.params.lessonId, req.body || {}, req.files || [], req.user,
+));
+const replyLessonQuestion = handler((req) => discussionService.replyAsLearner(
+  req.params.lessonId, req.params.threadId, req.body || {}, req.files || [], req.user,
+));
 
 module.exports = {
   listMyEnrollments, getLearningCourse, getLearningLesson,
   updateLessonProgress, completeLesson, getCourseProgress,
   submitAssignment,
+  listLessonQuestions, createLessonQuestion, replyLessonQuestion,
 };

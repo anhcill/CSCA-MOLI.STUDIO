@@ -21,6 +21,7 @@ import { LearningHeader } from './LearningHeader';
 import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
 import { LessonAssignmentPanel } from './LessonAssignmentPanel';
+import { LessonQuestionPanel } from '@/components/courses/LessonQuestionPanel';
 
 type LessonPanel = 'overview' | 'notes' | 'resources' | 'assignment' | 'qa';
 
@@ -315,11 +316,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
               ) : null}
 
               {activePanel === 'qa' ? (
-                <div className="rounded-xl border border-dashed border-[#d7c6b5] bg-[#fffdf9] p-8 text-center dark:border-[#3b4a61] dark:bg-[#101e33]">
-                  <FiHelpCircle className="mx-auto h-8 w-8 text-[#a42034]" />
-                  <h2 className="mt-3 text-lg font-black text-[#202c43] dark:text-[#f2e4cf]">Hỏi đáp bài học</h2>
-                  <p className="mt-1">Khu vực trao đổi với giảng viên sẽ được cập nhật trong giai đoạn tiếp theo.</p>
-                </div>
+                <LessonQuestionPanel lessonId={lessonId} />
               ) : null}
             </div>
           </article>
