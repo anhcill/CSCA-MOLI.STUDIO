@@ -5,14 +5,15 @@ const officialExamController = require("../controllers/officialExamController");
 const questionReportActions = require("../controllers/questionReportActionsController");
 const {
   authenticate,
+  optionalAuth,
   authorizePermission,
 } = require("../middleware/authMiddleware");
 
 // Public routes
 router.get("/exams/lobby", examController.getExamLobby);
-router.get("/subjects/:subjectCode/exams", examController.getExamsBySubject);
+router.get("/subjects/:subjectCode/exams", optionalAuth, examController.getExamsBySubject);
 router.get("/exams/:examId/official-leaderboard", officialExamController.getLeaderboard);
-router.get("/exams/:examId", examController.getExamDetail);
+router.get("/exams/:examId", optionalAuth, examController.getExamDetail);
 
 // Protected routes - Require authentication
 router.get("/exams/:examId/preflight", authenticate, examController.getExamPreflight);

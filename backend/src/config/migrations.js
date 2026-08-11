@@ -495,6 +495,22 @@ async function runOptimizations() {
       `CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_active ON push_subscriptions(user_id, is_active)`,
     );
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS mobile_push_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        platform VARCHAR(20) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        last_sent_at TIMESTAMPTZ,
+        last_error TEXT
+      )
+    `);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_mobile_push_tokens_user_active ON mobile_push_tokens(user_id, is_active)`,
+    );
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS push_reminder_logs (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1088,6 +1104,13 @@ async function runOptimizations() {
       ADD COLUMN IF NOT EXISTS last_active_date DATE,
       ADD COLUMN IF NOT EXISTS coins INTEGER DEFAULT 0,
       ADD COLUMN IF NOT EXISTS exp INTEGER DEFAULT 0
+    `);
+
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS terms_version VARCHAR(30),
+      ADD COLUMN IF NOT EXISTS privacy_version VARCHAR(30)
     `);
 
     await pool.query(`

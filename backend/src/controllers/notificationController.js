@@ -109,6 +109,45 @@ exports.disablePushSubscription = async (req, res) => {
   }
 };
 
+exports.saveMobilePushToken = async (req, res) => {
+  try {
+    if (!pushNotificationService.isMobilePushConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message: "Thông báo mobile chưa được cấu hình Firebase trên server",
+      });
+    }
+    const saved = await pushNotificationService.saveMobileToken(
+      req.user.id,
+      req.body?.token,
+      req.body?.platform,
+    );
+    return res.json({ success: true, data: saved });
+  } catch (error) {
+    console.error("saveMobilePushToken error:", error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Không thể lưu thiết bị mobile",
+    });
+  }
+};
+
+exports.disableMobilePushToken = async (req, res) => {
+  try {
+    await pushNotificationService.disableMobileToken(
+      req.user.id,
+      req.body?.token,
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("disableMobilePushToken error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Không thể tắt thông báo trên thiết bị mobile",
+    });
+  }
+};
+
 exports.sendPushTest = async (req, res) => {
   try {
     const result = await pushNotificationService.sendToUser(req.user.id, {

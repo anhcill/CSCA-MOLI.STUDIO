@@ -80,7 +80,7 @@ class User {
       // Include password for auth comparison — callers must NOT forward this to clients
       const result = await db.query(
         `SELECT id, username, email, password, full_name, avatar, avatar_url, role, bio,
-                is_active, is_verified, google_id, oauth_provider, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
+                is_active, is_verified, terms_accepted_at, google_id, oauth_provider, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
          FROM users WHERE email = $1`,
         [email]
       );
@@ -98,7 +98,9 @@ class User {
   static async findByUsername(username) {
     try {
       const result = await db.query(
-        `SELECT id, username, email, full_name, avatar, role, bio, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects
+        `SELECT id, username, email, password, full_name, avatar, role, bio,
+                is_active, is_verified, terms_accepted_at, is_vip, subscription_tier, vip_expires_at,
+                vip_package_id, vip_allowed_subjects
          FROM users WHERE username = $1`,
         [username]
       );
@@ -167,9 +169,9 @@ class User {
       }
 
       const result = await db.query(
-        `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, avatar, is_active)
-         VALUES ($1, $2, $3, $4, $5, 'google', true, $6, true)
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+        `INSERT INTO users (username, email, full_name, avatar_url, google_id, oauth_provider, email_verified, is_verified, avatar, is_active)
+         VALUES ($1, $2, $3, $4, $5, 'google', true, true, $6, true)
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_verified, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [
           username,
           email,
@@ -298,10 +300,10 @@ class User {
     try {
       const result = await db.query(
         `UPDATE users
-         SET google_id = $1, oauth_provider = 'google', email_verified = true,
+         SET google_id = $1, oauth_provider = 'google', email_verified = true, is_verified = true,
              avatar_url = COALESCE(avatar_url, $2), updated_at = NOW()
          WHERE id = $3
-         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
+         RETURNING id, username, email, full_name, avatar, avatar_url, role, is_active, is_verified, is_vip, subscription_tier, vip_expires_at, vip_package_id, vip_allowed_subjects, created_at`,
         [googleId, avatarUrl, userId]
       );
       return result.rows[0];

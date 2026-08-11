@@ -1,4 +1,5 @@
 const webpush = require("web-push");
+const { GoogleAuth } = require("google-auth-library");
 const db = require("../config/database");
 
 let configured = false;
@@ -26,6 +27,53 @@ function isPushConfigured() {
 
 function getPublicKey() {
   return getVapidConfig().publicKey;
+}
+
+function getFirebaseCredentials() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "";
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+function isMobilePushConfigured() {
+  const credentials = getFirebaseCredentials();
+  return Boolean(credentials?.project_id && credentials?.client_email && credentials?.private_key);
+}
+
+async function saveMobileToken(userId, token, platform = "android") {
+  const cleanToken = String(token || "").trim();
+  const cleanPlatform = String(platform || "other").trim().toLowerCase().slice(0, 20);
+  if (!cleanToken || cleanToken.length < 20) {
+    const error = new Error("FCM token không hợp lệ");
+    error.status = 400;
+    throw error;
+  }
+  const result = await db.query(
+    `INSERT INTO mobile_push_tokens (user_id, token, platform, is_active, updated_at, last_error)
+     VALUES ($1, $2, $3, TRUE, NOW(), NULL)
+     ON CONFLICT (token) DO UPDATE
+     SET user_id = EXCLUDED.user_id,
+         platform = EXCLUDED.platform,
+         is_active = TRUE,
+         updated_at = NOW(),
+         last_error = NULL
+     RETURNING id, platform`,
+    [userId, cleanToken, cleanPlatform],
+  );
+  return result.rows[0];
+}
+
+async function disableMobileToken(userId, token) {
+  if (!token) return;
+  await db.query(
+    `UPDATE mobile_push_tokens SET is_active = FALSE, updated_at = NOW()
+     WHERE user_id = $1 AND token = $2`,
+    [userId, String(token)],
+  );
 }
 
 async function saveSubscription(userId, subscription, userAgent = "") {
@@ -67,30 +115,117 @@ async function disableSubscription(userId, endpoint) {
 }
 
 async function getUserStatus(userId) {
-  const result = await db.query(
-    `SELECT COUNT(*)::int AS active_count
-     FROM push_subscriptions
-     WHERE user_id = $1 AND is_active = TRUE`,
-    [userId],
-  );
+  const [result, mobile] = await Promise.all([
+    db.query(
+      `SELECT COUNT(*)::int AS active_count FROM push_subscriptions
+       WHERE user_id = $1 AND is_active = TRUE`,
+      [userId],
+    ),
+    db.query(
+      `SELECT COUNT(*)::int AS active_count FROM mobile_push_tokens
+       WHERE user_id = $1 AND is_active = TRUE`,
+      [userId],
+    ),
+  ]);
   return {
     configured: isPushConfigured(),
     publicKey: getPublicKey(),
     activeCount: result.rows[0]?.active_count || 0,
+    mobileConfigured: isMobilePushConfigured(),
+    mobileActiveCount: mobile.rows[0]?.active_count || 0,
   };
 }
 
-async function sendToUser(userId, payload) {
-  if (!configureWebPush()) {
-    return { sent: 0, failed: 0, skipped: true, message: "VAPID chưa cấu hình" };
+async function sendMobileToUser(userId, payload) {
+  const credentials = getFirebaseCredentials();
+  if (!credentials || !isMobilePushConfigured()) {
+    return { sent: 0, failed: 0, skipped: true };
   }
-
   const result = await db.query(
-    `SELECT id, endpoint, p256dh, auth
-     FROM push_subscriptions
+    `SELECT id, token FROM mobile_push_tokens
      WHERE user_id = $1 AND is_active = TRUE`,
     [userId],
   );
+  if (!result.rows.length) return { sent: 0, failed: 0, skipped: false };
+
+  const auth = new GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
+  });
+  const client = await auth.getClient();
+  const access = await client.getAccessToken();
+  const accessToken = typeof access === "string" ? access : access?.token;
+  let sent = 0;
+  let failed = 0;
+
+  for (const row of result.rows) {
+    try {
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${credentials.project_id}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            message: {
+              token: row.token,
+              notification: {
+                title: payload?.title || "CSCA MOLY",
+                body: payload?.body || "Bạn có thông báo mới.",
+              },
+              data: {
+                url: String(payload?.url || "/"),
+                tag: String(payload?.tag || "csca-notification"),
+              },
+              android: { priority: "high" },
+              apns: { payload: { aps: { sound: "default" } } },
+            },
+          }),
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text();
+        const permanent = response.status === 404 || body.includes("UNREGISTERED");
+        await db.query(
+          `UPDATE mobile_push_tokens
+           SET is_active = CASE WHEN $2 THEN FALSE ELSE is_active END,
+               last_error = $3, updated_at = NOW() WHERE id = $1`,
+          [row.id, permanent, body.slice(0, 500)],
+        );
+        failed += 1;
+      } else {
+        sent += 1;
+        await db.query(
+          `UPDATE mobile_push_tokens
+           SET last_sent_at = NOW(), last_error = NULL, updated_at = NOW()
+           WHERE id = $1`,
+          [row.id],
+        );
+      }
+    } catch (error) {
+      failed += 1;
+      await db.query(
+        `UPDATE mobile_push_tokens SET last_error = $2, updated_at = NOW()
+         WHERE id = $1`,
+        [row.id, String(error?.message || error).slice(0, 500)],
+      );
+    }
+  }
+  return { sent, failed, skipped: false };
+}
+
+async function sendToUser(userId, payload) {
+  const webConfigured = configureWebPush();
+
+  const result = webConfigured
+    ? await db.query(
+        `SELECT id, endpoint, p256dh, auth FROM push_subscriptions
+         WHERE user_id = $1 AND is_active = TRUE`,
+        [userId],
+      )
+    : { rows: [] };
 
   let sent = 0;
   let failed = 0;
@@ -125,7 +260,14 @@ async function sendToUser(userId, payload) {
     }
   }
 
-  return { sent, failed, skipped: false };
+  const mobile = await sendMobileToUser(userId, payload);
+  return {
+    sent: sent + mobile.sent,
+    failed: failed + mobile.failed,
+    skipped: !webConfigured && mobile.skipped,
+    webSent: sent,
+    mobileSent: mobile.sent,
+  };
 }
 
 async function sendStudyReminder(userId, options = {}) {
@@ -170,12 +312,12 @@ async function sendStudyReminders(options = {}) {
   const reminderKey = `study:${dateKey}`;
 
   const result = await db.query(
-    `SELECT DISTINCT ps.user_id
-     FROM push_subscriptions ps
-     INNER JOIN users u ON u.id = ps.user_id
-     WHERE ps.is_active = TRUE
+    `SELECT u.id AS user_id
+     FROM users u
+     WHERE (EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id AND ps.is_active = TRUE)
+        OR EXISTS (SELECT 1 FROM mobile_push_tokens mt WHERE mt.user_id = u.id AND mt.is_active = TRUE))
        AND COALESCE(u.is_active, TRUE) = TRUE
-     ORDER BY ps.user_id
+     ORDER BY u.id
      LIMIT $1`,
     [limit],
   );
@@ -209,8 +351,9 @@ async function sendUpcomingExamReminders(options = {}) {
      FROM exam_registrations er
      INNER JOIN exams e ON e.id = er.exam_id
      INNER JOIN users u ON u.id = er.user_id
-     INNER JOIN push_subscriptions ps ON ps.user_id = er.user_id AND ps.is_active = TRUE
      WHERE er.status IN ('registered', 'approved', 'checked_in')
+       AND (EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = er.user_id AND ps.is_active = TRUE)
+        OR EXISTS (SELECT 1 FROM mobile_push_tokens mt WHERE mt.user_id = er.user_id AND mt.is_active = TRUE))
        AND COALESCE(u.is_active, TRUE) = TRUE
        AND e.deleted_at IS NULL
        AND e.start_time IS NOT NULL
@@ -259,4 +402,7 @@ module.exports = {
   sendStudyReminders,
   sendUpcomingExamReminders,
   isPushConfigured,
+  isMobilePushConfigured,
+  saveMobileToken,
+  disableMobileToken,
 };

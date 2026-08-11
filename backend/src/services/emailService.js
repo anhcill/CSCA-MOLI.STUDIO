@@ -46,7 +46,7 @@ class EmailService {
     });
   }
 
-  async _send({ to, subject, html, text, account = 'default' }) {
+  async _send({ to, subject, html, text, account = 'default', throwOnError = false }) {
     const useCriticalAccount = account === 'critical';
     const apiKey = useCriticalAccount ? this.criticalApiKey : this.apiKey;
     const client = useCriticalAccount ? this.criticalClient : this.client;
@@ -54,8 +54,10 @@ class EmailService {
     const senderName = useCriticalAccount ? this.criticalSenderName : this.senderName;
     if (!apiKey) {
       const variableName = useCriticalAccount ? 'BREVO_CRITICAL_API_KEY' : 'BREVO_API_KEY';
-      console.warn(`${variableName} not configured, email skipped:`, subject);
-      return;
+      const error = new Error(`${variableName} not configured`);
+      console.warn(`${error.message}, email skipped:`, subject);
+      if (throwOnError) throw error;
+      return { sent: false, error: error.message };
     }
 
     try {
@@ -67,9 +69,12 @@ class EmailService {
         textContent: text || subject,
       });
       console.log(`Email sent: "${subject}" -> ${Array.isArray(to) ? to.join(', ') : to}`);
+      return { sent: true };
     } catch (err) {
       const msg = err?.response?.data?.message || err.message;
       console.error(`Email failed: "${subject}" - ${msg}`);
+      if (throwOnError) throw err;
+      return { sent: false, error: msg };
     }
   }
 
@@ -816,6 +821,7 @@ class EmailService {
       to: email,
       subject: '📧 Xác nhận email MOLY.STUDIO',
       account: 'critical',
+      throwOnError: true,
       html: this._wrapper({
         title: 'Xác nhận email',
         emoji: '📧',
@@ -878,6 +884,7 @@ class EmailService {
       to: email,
       subject: `🔐 Mã OTP MOLY - ${otp}`,
       account: 'critical',
+      throwOnError: true,
       html: this._wrapper({
         title: 'Mã xác thực MOLY',
         emoji: '🔐',
@@ -900,6 +907,7 @@ class EmailService {
       to: email,
       subject: '🔐 Đặt lại mật khẩu MOLY.STUDIO',
       account: 'critical',
+      throwOnError: true,
       html: this._wrapper({
         title: 'Đặt lại mật khẩu',
         emoji: '🔐',

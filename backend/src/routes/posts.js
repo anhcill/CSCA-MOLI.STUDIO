@@ -64,6 +64,9 @@ router.post("/:id/comments", authenticate, postController.addComment);
 router.post("/comments/:commentId/like", authenticate, postController.likeComment);
 router.delete("/comments/:commentId/like", authenticate, postController.unlikeComment);
 
+// Single post for deep links. Keep after all named routes to avoid collisions.
+router.get("/:id", optionalAuth, postController.getPost);
+
 // Update post - requires auth (must be before DELETE /:id)
 router.put("/:id", authenticate, postController.updatePost);
 

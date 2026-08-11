@@ -842,7 +842,7 @@ function MolyChibiSvg({ id }: { id: string }) {
   const shadow = `moly-chibi-shadow-${id}`;
 
   return (
-    <svg className="h-full w-full overflow-visible" viewBox="0 0 96 96" role="img" aria-label="Moly chibi áo mèo">
+    <svg className="h-full w-full overflow-visible" viewBox="0 0 96 104" role="img" aria-label="Moly chibi áo mèo">
       <defs>
         <radialGradient id={hood} cx="35%" cy="22%" r="78%">
           <stop offset="0%" stopColor="#fff7f7" />
@@ -868,21 +868,92 @@ function MolyChibiSvg({ id }: { id: string }) {
         <filter id={shadow} x="-35%" y="-35%" width="170%" height="180%">
           <feDropShadow dx="0" dy="9" stdDeviation="5" floodColor="#fb7185" floodOpacity="0.28" />
         </filter>
+        <radialGradient id={`${shadow}-shoe`} cx="35%" cy="25%" r="78%">
+          <stop offset="0%" stopColor="#ffd4df" />
+          <stop offset="55%" stopColor="#ffb6c9" />
+          <stop offset="100%" stopColor="#e88aa0" />
+        </radialGradient>
       </defs>
 
-      <ellipse cx="48" cy="88" rx="28" ry="6" fill="#0f172a" opacity="0.15" />
+      {/* Ground shadow */}
+      <ellipse cx="48" cy="100" rx="24" ry="4" fill="#0f172a" opacity="0.12" />
+
+      {/* Cat hood ears */}
       <path d="M22 34 12 9l24 15Z" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="2.4" />
       <path d="M18 27 15 15l12 8Z" fill="#ffc4d0" opacity="0.96" />
       <path d="M74 34 84 9 60 24Z" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="2.4" />
       <path d="M78 27 81 15l-12 8Z" fill="#ffc4d0" opacity="0.96" />
 
+      {/* Hood head */}
       <ellipse cx="48" cy="41" rx="34" ry="34" fill={`url(#${hood})`} filter={`url(#${shadow})`} />
+
+      {/* Body / torso under hood */}
       <path d="M21 44c-4 20 12 35 27 35s31-15 27-35c-7 12-47 12-54 0Z" fill={`url(#${hood})`} filter={`url(#${shadow})`} />
+
+      {/* ===== ARMS - chibi style ===== */}
+      {/* Left arm - short chubby arm */}
+      <path
+        d="M20 64c-5 3-9 8-9 14s3 8 7 7 6-6 5-12"
+        fill={`url(#${skin})`}
+        stroke="#dba090"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      {/* Left hand - round mitten */}
+      <ellipse cx="14" cy="78" rx="5.8" ry="5.2" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1.4" />
+      {/* Left thumb nub */}
+      <ellipse cx="18.5" cy="80.5" rx="2.5" ry="2" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1" transform="rotate(-20 18.5 80.5)" />
+      {/* Left finger line hint */}
+      <path d="M11 76.5c0 3.5 1 5.5 2 6.5" fill="none" stroke="#e0a898" strokeLinecap="round" strokeWidth="0.9" opacity="0.5" />
+      {/* Left hand highlight */}
+      <ellipse cx="13.5" cy="76.5" rx="2.6" ry="2" fill="#fff6ed" opacity="0.45" />
+
+      {/* Right arm - short chubby arm */}
+      <path
+        d="M76 64c5 3 9 8 9 14s-3 8-7 7-6-6-5-12"
+        fill={`url(#${skin})`}
+        stroke="#dba090"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      {/* Right hand - round mitten */}
+      <ellipse cx="82" cy="78" rx="5.8" ry="5.2" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1.4" />
+      {/* Right thumb nub */}
+      <ellipse cx="77.5" cy="80.5" rx="2.5" ry="2" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1" transform="rotate(20 77.5 80.5)" />
+      {/* Right finger line hint */}
+      <path d="M85 76.5c0 3.5-1 5.5-2 6.5" fill="none" stroke="#e0a898" strokeLinecap="round" strokeWidth="0.9" opacity="0.5" />
+      {/* Right hand highlight */}
+      <ellipse cx="82.5" cy="76.5" rx="2.6" ry="2" fill="#fff6ed" opacity="0.45" />
+
+      {/* Hood sleeve cuffs */}
+      <path d="M20 62c-3 2-5 6-5 10 3-3 6-5 10-4" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M76 62c3 2 5 6 5 10-3-3-6-5-10-4" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.4" strokeLinejoin="round" />
+
+      {/* ===== BODY BOTTOM / SKIRT ===== */}
+      <path d="M32 72c8 9 24 9 32 0 2 11-5 17-16 17S30 83 32 72Z" fill="#fff1f3" stroke="#f1a5b5" strokeWidth="1.4" />
+      <path d="M42 72c2 4 10 4 12 0" fill="none" stroke="#f18ba6" strokeLinecap="round" strokeWidth="2" />
+
+      {/* ===== LEGS - short chibi legs ===== */}
+      {/* Left leg */}
+      <ellipse cx="40" cy="88" rx="4.5" ry="7" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1.2" />
+      {/* Left shoe */}
+      <ellipse cx="40" cy="96" rx="6" ry="3.5" fill={`url(#${shadow}-shoe)`} stroke="#d4768e" strokeWidth="1.3" />
+      <ellipse cx="38.5" cy="95" rx="2.4" ry="1.3" fill="#ffd6e2" opacity="0.6" />
+
+      {/* Right leg */}
+      <ellipse cx="56" cy="88" rx="4.5" ry="7" fill={`url(#${skin})`} stroke="#dba090" strokeWidth="1.2" />
+      {/* Right shoe */}
+      <ellipse cx="56" cy="96" rx="6" ry="3.5" fill={`url(#${shadow}-shoe)`} stroke="#d4768e" strokeWidth="1.3" />
+      <ellipse cx="54.5" cy="95" rx="2.4" ry="1.3" fill="#ffd6e2" opacity="0.6" />
+
+      {/* Face skin */}
       <ellipse cx="48" cy="43" rx="26" ry="25" fill={`url(#${skin})`} />
+      {/* Hair bangs */}
       <path d="M25 37c7-18 41-18 47 0-11-8-36-8-47 0Z" fill={`url(#${hair})`} />
       <path d="M29 32c7 11 30 12 39 2-1 10-4 17-8 21-6-7-18-8-25-1-5-5-7-12-6-22Z" fill={`url(#${hair})`} opacity="0.96" />
       <path d="M31 32c6 5 8 13 5 20M42 29c5 6 5 13 2 19M56 29c-1 8 1 14 6 19" fill="none" stroke="#f0b5a7" strokeLinecap="round" strokeWidth="1.8" opacity="0.5" />
 
+      {/* Eyes */}
       <g className="moli-blink" style={{ transformBox: 'fill-box', transformOrigin: 'center' } as CSSProperties}>
         <circle cx="36" cy="45" r="7.1" fill={`url(#${eye})`} />
         <circle cx="60" cy="45" r="7.1" fill={`url(#${eye})`} />
@@ -891,18 +962,15 @@ function MolyChibiSvg({ id }: { id: string }) {
         <circle cx="39.5" cy="48.5" r="1" fill="#ffffff" opacity="0.9" />
         <circle cx="63.5" cy="48.5" r="1" fill="#ffffff" opacity="0.9" />
       </g>
+      {/* Blush cheeks */}
       <ellipse cx="29" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
       <ellipse cx="67" cy="55" rx="5.4" ry="3.3" fill="#ff9aaf" opacity="0.78" />
+      {/* Nose & mouth */}
       <path d="M45.5 54.2c1.7 1.4 3.3 1.4 5 0" fill="none" stroke="#7d303c" strokeLinecap="round" strokeWidth="2" />
       <path d="M41.5 57.6c3.2 4.4 9.8 4.4 13 0" fill="none" stroke="#b84055" strokeLinecap="round" strokeWidth="2.25" />
       <path d="M44.5 59.1c2.2 2 4.8 2 7 0" fill="none" stroke="#ff8aa4" strokeLinecap="round" strokeWidth="1.2" opacity="0.55" />
 
-      <path d="M21 68c-10 1-13 13-5 16 8 3 15-3 18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
-      <path d="M75 68c10 1 13 13 5 16-8 3-15-3-18-10" fill={`url(#${hood})`} stroke="#e88aa0" strokeWidth="1.7" />
-      <circle cx="27" cy="74" r="7" fill="#fff5f5" stroke="#f1a5b5" strokeWidth="1.4" />
-      <circle cx="69" cy="74" r="7" fill="#fff5f5" stroke="#f1a5b5" strokeWidth="1.4" />
-      <path d="M32 72c8 9 24 9 32 0 2 11-5 17-16 17S30 83 32 72Z" fill="#fff1f3" stroke="#f1a5b5" strokeWidth="1.4" />
-      <path d="M42 72c2 4 10 4 12 0" fill="none" stroke="#f18ba6" strokeLinecap="round" strokeWidth="2" />
+      {/* Hair highlight */}
       <path d="M57 19c7-5 18 2 15 12-7-6-15-7-24-4 1-4 4-6 9-8Z" fill="#fff8fb" opacity="0.65" />
     </svg>
   );

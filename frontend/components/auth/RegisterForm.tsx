@@ -32,6 +32,7 @@ export default function RegisterForm() {
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
 
   const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
@@ -70,6 +71,9 @@ export default function RegisterForm() {
     if (isTurnstileEnabled && !turnstileToken) {
       newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng ký.';
     }
+    if (!acceptedTerms) {
+      newErrors.terms = 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -88,9 +92,16 @@ export default function RegisterForm() {
         password: formData.password,
         full_name: formData.full_name || formData.username,
         turnstileToken,
+        acceptedTerms,
+        termsVersion: '2026-04',
+        privacyVersion: '2026-04',
       });
       if (response.success && response.data) {
         const { user: registerUser, token, refreshToken } = response.data;
+        if (!registerUser || !token || !refreshToken) {
+          router.push(`/login?verification=sent&email=${encodeURIComponent(formData.email)}`);
+          return;
+        }
         setAuth(registerUser, token, refreshToken);
         let effectiveUser = registerUser;
         try {
@@ -121,7 +132,16 @@ export default function RegisterForm() {
     setErrors({});
 
     try {
-      const response = await googleAuth({ accessToken });
+      if (!acceptedTerms) {
+        setErrors({ terms: 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.' });
+        return;
+      }
+      const response = await googleAuth({
+        accessToken,
+        acceptedTerms: true,
+        termsVersion: '2026-04',
+        privacyVersion: '2026-04',
+      });
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
         setAuth(loginUser, token, refreshToken);
@@ -278,7 +298,17 @@ export default function RegisterForm() {
         </div>
 
         <div className="flex items-start rounded-2xl border border-white/60 bg-white/35 p-3">
-          <input type="checkbox" id="terms" className="mt-0.5 h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" required />
+          <input
+            type="checkbox"
+            id="terms"
+            checked={acceptedTerms}
+            onChange={(event) => {
+              setAcceptedTerms(event.target.checked);
+              if (errors.terms) setErrors((current) => ({ ...current, terms: '' }));
+            }}
+            className="mt-0.5 h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]"
+            required
+          />
           <label htmlFor="terms" className="ml-2 text-sm font-semibold leading-relaxed text-[#44372f]">
             {t('auth.registerConsentPrefix')}{' '}
             <button
@@ -299,6 +329,7 @@ export default function RegisterForm() {
             {t('auth.consentSuffix')}
           </label>
         </div>
+        {errors.terms && <p className="-mt-2 text-sm font-semibold text-red-600">{errors.terms}</p>}
 
         <TurnstileBox
           action="register"

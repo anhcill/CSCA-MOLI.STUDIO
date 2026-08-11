@@ -12,6 +12,25 @@ const { getAuthorizationContext } = require("../services/rbacService");
 const adminMfaService = require("../services/adminMfaService");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const CURRENT_TERMS_VERSION = "2026-04";
+const CURRENT_PRIVACY_VERSION = "2026-04";
+
+const createEmailVerification = async (userId) => {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.query(
+    `UPDATE users
+     SET email_verify_token = $1, email_verify_expires = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [tokenHash, expiresAt, userId],
+  );
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  return {
+    verifyUrl: `${frontendUrl}/verify-email?token=${rawToken}&id=${userId}`,
+    expiresAt,
+  };
+};
 
 const getGooglePayloadFromCredential = async (credential) => {
   const ticket = await googleClient.verifyIdToken({
@@ -422,13 +441,29 @@ const resolveAuthorizationContext = async (user) => {
 // ─── Register ─────────────────────────────────────────────────────────────────
 const register = async (req, res) => {
   try {
-    const { username, email, password, full_name } = req.body;
+    const {
+      username,
+      email,
+      password,
+      full_name,
+      acceptedTerms,
+      termsVersion = CURRENT_TERMS_VERSION,
+      privacyVersion = CURRENT_PRIVACY_VERSION,
+    } = req.body;
 
     // Validate input
     if (!username || !email || !password) {
       return res
         .status(400)
         .json({ success: false, message: "Vui lòng điền đầy đủ thông tin" });
+    }
+
+    if (acceptedTerms !== true) {
+      return res.status(400).json({
+        success: false,
+        code: "LEGAL_CONSENT_REQUIRED",
+        message: "Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật",
+      });
     }
 
     if (!validateEmail(email)) {
@@ -460,6 +495,15 @@ const register = async (req, res) => {
     // Check duplicates
     const existingEmail = await User.findByEmail(email);
     if (existingEmail) {
+      if (!existingEmail.is_verified) {
+        return res.status(409).json({
+          success: false,
+          code: "EMAIL_ALREADY_REGISTERED_UNVERIFIED",
+          message:
+            "Email đã được đăng ký nhưng chưa xác minh. Vui lòng gửi lại email xác minh.",
+          data: { email: existingEmail.email },
+        });
+      }
       return res
         .status(409)
         .json({ success: false, message: "Email này đã được đăng ký" });
@@ -475,40 +519,32 @@ const register = async (req, res) => {
     // Create user
     const user = await User.create({ username, email, password, full_name });
 
-    // ── Email verification (S11) ──────────────────────────────────────────────
-    const rawVerifyToken = crypto.randomBytes(32).toString("hex");
-    const verifyTokenHash = crypto
-      .createHash("sha256")
-      .update(rawVerifyToken)
-      .digest("hex");
-    const verifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
     await db.query(
-      "UPDATE users SET email_verify_token = $1, email_verify_expires = $2 WHERE id = $3",
-      [verifyTokenHash, verifyExpires, user.id],
+      `UPDATE users
+       SET terms_accepted_at = NOW(), terms_version = $1, privacy_version = $2
+       WHERE id = $3`,
+      [termsVersion, privacyVersion, user.id],
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const verifyUrl = `${frontendUrl}/verify-email?token=${rawVerifyToken}&id=${user.id}`;
-    // Send welcome + verification email (non-blocking)
-    Promise.all([
-      emailService.sendWelcomeEmail(email, user.full_name || username),
-      emailService.sendVerificationEmail(email, user.full_name || username, verifyUrl),
-    ]).catch((err) => {
-      console.error(`❌ Error sending welcome/verification email: ${err.message}`);
-    });
-
-    // Register the initial session.
-    const jti = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + (parseInt(process.env.JWT_REFRESH_EXPIRES_MS || '604800000')));
-    await DeviceSessionService.registerSession({
-      userId: user.id,
-      jti,
-      deviceInfo: req.get('User-Agent')?.substring(0, 200) || 'Unknown',
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      expiresAt,
-    });
+    // ── Email verification (S11) ──────────────────────────────────────────────
+    const { verifyUrl } = await createEmailVerification(user.id);
+    try {
+      await emailService.sendVerificationEmail(
+        email,
+        user.full_name || username,
+        verifyUrl,
+      );
+      emailService.sendWelcomeEmail(email, user.full_name || username).catch(() => {});
+    } catch (emailError) {
+      console.error(`❌ Error sending verification email: ${emailError.message}`);
+      return res.status(503).json({
+        success: false,
+        code: "EMAIL_DELIVERY_FAILED",
+        message:
+          "Tài khoản đã được tạo nhưng chưa gửi được email xác minh. Vui lòng dùng chức năng gửi lại email.",
+        data: { email },
+      });
+    }
 
     // Log hành vi đăng ký
     UserActivity.log(user.id, 'register', {
@@ -516,34 +552,12 @@ const register = async (req, res) => {
       userAgent: req.get('User-Agent'),
     });
 
-    const token = generateToken(buildTokenPayload({ ...user, jti, subscription_tier: user.subscription_tier || 'basic' }));
-    const refreshToken = generateRefreshToken(buildRefreshPayloadWithMfa({ ...user, jti }, jti));
-
-    const authz = await resolveAuthorizationContext(user);
-
     return res.status(201).json({
       success: true,
       message:
         "Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản.",
       data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          full_name: user.full_name,
-          avatar: user.avatar,
-          role: user.role,
-          is_verified: false,
-          is_vip: false,
-          vip_expires_at: null,
-          vip_package_id: null,
-          vip_allowed_subjects: [],
-          roles: authz.roles,
-          permissions: authz.permissions,
-          created_at: user.created_at,
-        },
-        token,
-        refreshToken,
+        email: user.email,
         emailVerificationSent: true,
       },
     });
@@ -612,6 +626,15 @@ const login = async (req, res) => {
         .json({ success: false, message: "Tên đăng nhập hoặc mật khẩu không đúng" });
     }
 
+    if (!user.is_verified && user.terms_accepted_at) {
+      return res.status(403).json({
+        success: false,
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Email chưa được xác minh. Vui lòng kiểm tra hộp thư hoặc gửi lại email xác minh.",
+        data: { email: user.email },
+      });
+    }
+
     // Success - clear attempts
     clearAttempts(identifier);
 
@@ -652,13 +675,13 @@ const login = async (req, res) => {
     const clientIp = getClientIp(req);
     const device = parseUserAgent(req.get('User-Agent'));
 
-    Promise.all([
-      emailService.sendOtpEmail({
+    try {
+      await emailService.sendOtpEmail({
         email: user.email,
         name: user.full_name || user.username,
         otp,
         reason: 'login',
-      }),
+      });
       emailService.sendSecurityAlert({
         email: user.email,
         name: user.full_name || user.username,
@@ -667,8 +690,15 @@ const login = async (req, res) => {
         location: null,
         device,
         time: new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
-      }),
-    ]).catch(err => console.error('Login email error:', err.message));
+      }).catch(err => console.error('Login security email error:', err.message));
+    } catch (emailError) {
+      console.error('Login OTP email error:', emailError.message);
+      return res.status(503).json({
+        success: false,
+        code: 'OTP_EMAIL_DELIVERY_FAILED',
+        message: 'Chưa thể gửi mã OTP. Vui lòng thử đăng nhập lại sau.',
+      });
+    }
 
     // Gửi OTP + security alert thành công → yêu cầu xác thực OTP
     return res.json({
@@ -1133,7 +1163,13 @@ const facebookAuthCallback = async (req, res) => {
 // ─── Google OAuth ─────────────────────────────────────────────────────────────
 const googleAuth = async (req, res) => {
   try {
-    const { credential, accessToken } = req.body;
+    const {
+      credential,
+      accessToken,
+      acceptedTerms,
+      termsVersion = CURRENT_TERMS_VERSION,
+      privacyVersion = CURRENT_PRIVACY_VERSION,
+    } = req.body;
 
     if (!credential && !accessToken) {
       return res
@@ -1177,7 +1213,22 @@ const googleAuth = async (req, res) => {
         user = await User.linkGoogleAccount(existingUser.id, googleId, picture);
       } else {
         // 3. Tạo user mới từ Google
+        if (acceptedTerms !== true) {
+          return res.status(400).json({
+            success: false,
+            code: "LEGAL_CONSENT_REQUIRED",
+            message:
+              "Để tạo tài khoản mới bằng Google, vui lòng đăng ký và đồng ý Điều khoản sử dụng cùng Chính sách bảo mật.",
+          });
+        }
         user = await User.createFromGoogle({ googleId, email, name, picture });
+        await db.query(
+          `UPDATE users
+           SET terms_accepted_at = NOW(), terms_version = $1, privacy_version = $2,
+               is_verified = TRUE, email_verified = TRUE
+           WHERE id = $3`,
+          [termsVersion, privacyVersion, user.id],
+        );
 
         // Gửi email chào mừng (không block response)
         emailService.sendWelcomeEmail(email, name).catch(() => {});
@@ -1742,6 +1793,45 @@ const resendOtp = async (req, res) => {
   }
 };
 
+// ─── Resend Email Verification ───────────────────────────────────────────────
+const resendVerificationEmail = async (req, res) => {
+  const genericResponse = {
+    success: true,
+    message:
+      "Nếu tài khoản tồn tại và chưa xác minh, Moly đã gửi một email xác minh mới.",
+  };
+
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!validateEmail(email)) {
+      return res.status(400).json({ success: false, message: "Email không hợp lệ" });
+    }
+
+    const user = await User.findByEmail(email);
+    if (!user || !user.is_active || user.is_verified) {
+      return res.json(genericResponse);
+    }
+
+    const { verifyUrl } = await createEmailVerification(user.id);
+    try {
+      await emailService.sendVerificationEmail(
+        user.email,
+        user.full_name || user.username,
+        verifyUrl,
+      );
+    } catch (emailError) {
+      console.error("Resend verification email failed:", emailError.message);
+    }
+    return res.json(genericResponse);
+  } catch (error) {
+    console.error("Resend verification email error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Chưa thể gửi lại email xác minh. Vui lòng thử lại sau.",
+    });
+  }
+};
+
 // ─── Verify Email ─────────────────────────────────────────────────────────────
 const verifyEmail = async (req, res) => {
   try {
@@ -1754,6 +1844,25 @@ const verifyEmail = async (req, res) => {
     }
 
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const accountResult = await db.query(
+      "SELECT id, email, is_verified FROM users WHERE id = $1",
+      [userId],
+    );
+    const account = accountResult.rows[0];
+    if (!account) {
+      return res.status(400).json({
+        success: false,
+        code: "EMAIL_VERIFICATION_LINK_INVALID",
+        message: "Liên kết xác nhận không hợp lệ hoặc đã hết hạn",
+      });
+    }
+    if (account.is_verified) {
+      return res.json({
+        success: true,
+        message: "Email đã được xác minh trước đó. Bạn có thể đăng nhập.",
+      });
+    }
 
     const result = await db.query(
       `SELECT id FROM users
@@ -1768,7 +1877,9 @@ const verifyEmail = async (req, res) => {
         .status(400)
         .json({
           success: false,
+          code: "EMAIL_VERIFICATION_LINK_INVALID",
           message: "Liên kết xác nhận không hợp lệ hoặc đã hết hạn",
+          data: { email: account.email },
         });
     }
 
@@ -1809,6 +1920,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  resendVerificationEmail,
   verifyOtp: verifyOtpController,
   getDeviceLoginRequestStatus,
   getDeviceLoginRequestQr,

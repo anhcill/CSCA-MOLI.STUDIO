@@ -45,6 +45,24 @@ exports.getPosts = async (req, res) => {
   }
 };
 
+// Get one post for mobile deep links and notification navigation.
+exports.getPost = async (req, res) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(postId) || postId <= 0) {
+      return res.status(400).json({ success: false, message: "ID bài viết không hợp lệ" });
+    }
+    const post = await Post.getById(postId, req.user?.id || null);
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Bài viết không tồn tại" });
+    }
+    return res.json({ success: true, data: post });
+  } catch (error) {
+    logger.error("Get post error", { error: error.message, postId: req.params.id });
+    return res.status(500).json({ success: false, message: "Lỗi khi tải bài viết" });
+  }
+};
+
 // Create new post
 exports.createPost = async (req, res) => {
   try {

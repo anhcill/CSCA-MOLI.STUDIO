@@ -9,6 +9,7 @@ import {
   getCurrentUser,
   verifyOtp,
   resendOtp,
+  resendVerificationEmail,
   getDeviceLoginStatus,
   selectDeviceLoginTarget,
   approveDeviceLogin,
@@ -49,6 +50,8 @@ export default function LoginForm() {
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [verificationResending, setVerificationResending] = useState(false);
   const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
@@ -300,6 +303,7 @@ export default function LoginForm() {
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
+    setUnverifiedEmail('');
 
     try {
       const response = await login({ ...formData, turnstileToken });
@@ -341,6 +345,11 @@ export default function LoginForm() {
         setErrors({});
         return;
       }
+      if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(error.response?.data?.data?.email || formData.email);
+        setErrors({ general: error.response?.data?.message || 'Email chưa được xác minh.' });
+        return;
+      }
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
 
@@ -356,6 +365,26 @@ export default function LoginForm() {
     } finally {
       setIsSubmitting(false);
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return;
+    if (isTurnstileEnabled && !turnstileToken) {
+      setErrors({ general: 'Vui lòng xác nhận Cloudflare trước khi gửi lại email.' });
+      return;
+    }
+    setVerificationResending(true);
+    try {
+      const response = await resendVerificationEmail(unverifiedEmail, turnstileToken);
+      setErrors({ general: response.message });
+      setUnverifiedEmail('');
+    } catch (error: any) {
+      setErrors({ general: error.response?.data?.message || 'Chưa thể gửi lại email xác minh.' });
+    } finally {
+      setTurnstileToken('');
+      setTurnstileResetKey(key => key + 1);
+      setVerificationResending(false);
     }
   };
 
@@ -960,6 +989,16 @@ export default function LoginForm() {
         {errors.general && (
           <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">
             {errors.general}
+            {unverifiedEmail && (
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={verificationResending || (isTurnstileEnabled && !turnstileToken)}
+                className="mt-3 block w-full rounded-xl bg-[#bd111c] px-3 py-2 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {verificationResending ? 'Đang gửi…' : 'Gửi lại email xác minh'}
+              </button>
+            )}
           </div>
         )}
 

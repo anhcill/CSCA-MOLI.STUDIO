@@ -8,6 +8,8 @@ router.get("/unread-count", authenticate, ctrl.getUnreadCount);
 router.get("/push/status", authenticate, ctrl.getPushStatus);
 router.post("/push/subscribe", authenticate, ctrl.savePushSubscription);
 router.post("/push/unsubscribe", authenticate, ctrl.disablePushSubscription);
+router.post("/push/mobile/register", authenticate, ctrl.saveMobilePushToken);
+router.post("/push/mobile/unregister", authenticate, ctrl.disableMobilePushToken);
 router.post("/push/test", authenticate, ctrl.sendPushTest);
 router.post("/push/reminders/study", ctrl.sendStudyReminderCron);
 router.post("/push/reminders/exams", ctrl.sendExamReminderCron);

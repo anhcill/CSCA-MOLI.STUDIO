@@ -6,6 +6,9 @@ export interface RegisterData {
   password: string;
   full_name?: string;
   turnstileToken?: string;
+  acceptedTerms: boolean;
+  termsVersion?: string;
+  privacyVersion?: string;
 }
 
 export interface LoginData {
@@ -55,6 +58,8 @@ export interface AuthResponse {
     user: User;
     token: string;
     refreshToken: string;
+    email?: string;
+    emailVerificationSent?: boolean;
   };
 }
 
@@ -148,7 +153,7 @@ export const refreshToken = async (refreshToken: string): Promise<{ success: boo
  * Google OAuth authentication
  */
 export const googleAuth = async (
-  auth: string | { credential?: string; accessToken?: string }
+  auth: string | { credential?: string; accessToken?: string; acceptedTerms?: boolean; termsVersion?: string; privacyVersion?: string }
 ): Promise<AuthResponse> => {
   const payload = typeof auth === 'string' ? { credential: auth } : auth;
   const response = await axios.post('/auth/google', payload);
@@ -199,6 +204,17 @@ export const verifyOtp = async (userId: number, otp: string): Promise<OtpVerifyR
  */
 export const resendOtp = async (userId: number): Promise<{ success: boolean; message: string }> => {
   const response = await axios.post('/auth/otp/resend', { userId, reason: 'login' });
+  return response.data;
+};
+
+export const resendVerificationEmail = async (
+  email: string,
+  turnstileToken: string,
+): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post('/auth/resend-verification-email', {
+    email,
+    turnstileToken,
+  });
   return response.data;
 };
 

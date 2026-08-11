@@ -443,7 +443,7 @@ const examController = {
   async saveAnswer(req, res) {
     try {
       const { attemptId } = req.params;
-      const { questionId, answerKey, timeSpent, essayAnswer, practiceMode } = req.body;
+      const { questionId, answerKey, timeSpent, essayAnswer } = req.body;
       const parsedAttemptId = parseInt(attemptId, 10);
       const parsedQuestionId = parseInt(questionId, 10);
 
@@ -465,9 +465,18 @@ const examController = {
         req.user.id
       );
 
+      const db = require("../config/database");
+      const attemptModeResult = await db.query(
+        `SELECT status
+         FROM exam_attempts
+         WHERE id = $1 AND user_id = $2
+         LIMIT 1`,
+        [parsedAttemptId, req.user.id]
+      );
+      const isPracticeAttempt = attemptModeResult.rows[0]?.status === "practice";
+
       let feedback = null;
-      if (practiceMode) {
-        const db = require("../config/database");
+      if (isPracticeAttempt) {
         const feedbackResult = await db.query(
           `SELECT
              q.explanation,
@@ -494,7 +503,7 @@ const examController = {
       res.json({
         success: true,
         message: "Lưu câu trả lời thành công",
-        data: practiceMode ? { ...answer, feedback } : answer,
+        data: isPracticeAttempt ? { ...answer, feedback } : answer,
       });
     } catch (error) {
       console.error("Save answer error:", error);

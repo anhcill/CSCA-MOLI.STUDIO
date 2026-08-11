@@ -49,6 +49,22 @@ const validateRegister = [
     .isLength({ min: 1, max: 100 })
     .withMessage("Full name must be between 1 and 100 characters"),
 
+  body("acceptedTerms")
+    .custom((value) => value === true)
+    .withMessage("Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật"),
+
+  body("termsVersion")
+    .optional()
+    .isString()
+    .isLength({ min: 1, max: 30 })
+    .withMessage("Phiên bản điều khoản không hợp lệ"),
+
+  body("privacyVersion")
+    .optional()
+    .isString()
+    .isLength({ min: 1, max: 30 })
+    .withMessage("Phiên bản chính sách bảo mật không hợp lệ"),
+
   handleValidationErrors,
 ];
 

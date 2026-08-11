@@ -23,6 +23,21 @@ const otpLimiter = rateLimit({
   },
 });
 
+const verificationEmailLimiter = rateLimit({
+  windowMs: Number(process.env.VERIFICATION_EMAIL_RATE_LIMIT_WINDOW_MS || 10 * 60 * 1000),
+  max: Number(process.env.VERIFICATION_EMAIL_RATE_LIMIT_MAX || 3),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    return `${ipKeyGenerator(req.ip)}:${email || "unknown"}`;
+  },
+  message: {
+    success: false,
+    message: "Bạn đã yêu cầu quá nhiều lần. Vui lòng đợi 10 phút rồi thử lại.",
+  },
+});
+
 router.post("/register", verifyTurnstile, validateRegister, authController.register);
 router.post("/login", verifyTurnstile, validateLogin, authController.login);
 router.get("/me", authenticate, authController.getCurrentUser);
@@ -38,6 +53,12 @@ router.post("/forgot-password", verifyTurnstile, authController.forgotPassword);
 router.post("/reset-password", verifyTurnstile, authController.resetPassword);
 
 router.post("/verify-email", authController.verifyEmail);
+router.post(
+  "/resend-verification-email",
+  verificationEmailLimiter,
+  verifyTurnstile,
+  authController.resendVerificationEmail,
+);
 
 // OTP routes
 router.post("/otp/verify", otpLimiter, authController.verifyOtp);
