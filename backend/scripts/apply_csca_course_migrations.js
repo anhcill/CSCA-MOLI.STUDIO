@@ -7,6 +7,7 @@ const MIGRATIONS = [
   "053_csca_course_progress.sql",
   "054_csca_video_assets.sql",
   "055_csca_course_package_access.sql",
+  "057_course_assignments.sql",
 ];
 
 const EXPECTED_TABLES = [
@@ -21,6 +22,10 @@ const EXPECTED_TABLES = [
   "courses",
   "lesson_progress",
   "lesson_resources",
+  "lesson_assignments",
+  "assignment_attachments",
+  "lesson_submissions",
+  "submission_attachments",
   "video_assets",
   "video_upload_sessions",
   "video_variants",

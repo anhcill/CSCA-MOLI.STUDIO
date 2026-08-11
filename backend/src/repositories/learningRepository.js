@@ -66,7 +66,8 @@ async function findPublishedLesson(lessonId) {
 
 async function listLessonResources(lessonId) {
   const result = await db.query(
-    `SELECT id, title, resource_type, url, material_id, is_downloadable, sort_order
+    `SELECT id, title, resource_type, url, material_id, is_downloadable, sort_order,
+       original_name, mime_type, size_bytes, storage_public_id, file_kind
      FROM lesson_resources WHERE lesson_id = $1 ORDER BY sort_order, id`,
     [lessonId],
   );

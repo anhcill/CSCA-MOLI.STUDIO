@@ -92,6 +92,7 @@ const NAV_SECTIONS = [
         icon: FiVideo,
         href: '/admin/courses',
         permission: 'content.manage',
+        anyPermissions: ['courses.manage_assigned'],
         roles: [],
       },
       {

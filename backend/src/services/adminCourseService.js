@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const sanitizeHtml = require("sanitize-html");
 const repository = require("../repositories/adminCourseRepository");
 const { CourseApiError } = require("../utils/courseResponses");
+const { invalidateAuthorizationCache } = require("./rbacService");
 
 const SUBJECTS = new Set(["MATH", "PHYSICS", "CHEMISTRY", "CHINESE_SCI", "CHINESE_SOC"]);
 const LEVELS = new Set(["basic", "intermediate", "advanced"]);
@@ -242,13 +243,13 @@ async function ensurePublishedCourseRemainsReady(course, courseId, client) {
   }
 }
 
-async function listCourses(query) {
+async function listCourses(query, scopeUserId = null) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit, 10) || 20));
   const subjectCode = query.subjectCode ? enumValue(query.subjectCode, "subjectCode", SUBJECTS) : null;
   const status = query.status ? enumValue(query.status, "status", COURSE_STATUSES) : null;
   const q = query.q ? stringValue(query.q, "q", { max: 100 }) : null;
-  const rows = await repository.list({ q, subjectCode, status, page, limit });
+  const rows = await repository.list({ q, subjectCode, status, page, limit, scopeUserId });
   const total = rows[0]?.total_count || 0;
   return { items: rows.map(mapCourse), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
@@ -425,9 +426,39 @@ async function transition(courseIdValue, targetStatus) {
   return mapCourse(row);
 }
 
+function mapTeacher(row) {
+  return { id: Number(row.id), name: row.name, email: row.email };
+}
+
+async function listTeacherOptions() {
+  return (await repository.listTeacherOptions()).map(mapTeacher);
+}
+
+async function listCourseTeachers(courseIdValue) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  await ensureCourse(courseId);
+  return (await repository.listCourseTeachers(courseId)).map(mapTeacher);
+}
+
+async function replaceCourseTeachers(courseIdValue, values, user) {
+  const courseId = positiveId(courseIdValue, "courseId");
+  const userIds = positiveIdList(values, "userIds") || [];
+  try {
+    await ensureCourse(courseId);
+    const existing = await repository.listCourseTeachers(courseId);
+    const rows = await repository.replaceCourseTeachers(courseId, userIds, user.id);
+    [...new Set([...existing.map((row) => Number(row.id)), ...userIds])].forEach(invalidateAuthorizationCache);
+    return rows.map(mapTeacher);
+  } catch (error) {
+    if (error.code === "COURSE_TEACHER_NOT_FOUND") fail(422, "COURSE_TEACHER_NOT_FOUND", "Một hoặc nhiều tài khoản giáo viên không tồn tại hoặc đã bị khóa.");
+    throw error;
+  }
+}
+
 module.exports = {
   listCourses, getCourse, createCourse, updateCourse, createSection, updateSection,
   createLesson, updateLesson, publishCourse: (id) => transition(id, "published"),
   unpublishCourse: (id) => transition(id, "draft"), archiveCourse: (id) => transition(id, "archived"),
+  listTeacherOptions, listCourseTeachers, replaceCourseTeachers,
   _validation: { normalizeCourseInput, normalizeSectionInput, normalizeLessonInput, requiredTierFor, positiveId, positiveIdList },
 };

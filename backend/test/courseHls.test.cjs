@@ -134,6 +134,7 @@ test("deletes every object under only the requested video asset prefix", async (
 test("deletes R2 objects before detaching and soft-deleting a video asset", async () => {
   const events = [];
   const service = createCourseMediaService({
+    authorizeCourse: async (_actor, courseId) => assert.equal(courseId, 3),
     storage: {
       async deletePrefix({ prefix }) {
         events.push(["storage", prefix]);

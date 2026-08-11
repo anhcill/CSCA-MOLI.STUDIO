@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const mediaRepository = require("../repositories/courseMediaRepository");
+const { assertCanManageCourse } = require("../middleware/courseManagementScope");
 const { CourseApiError } = require("../utils/courseResponses");
 const { parseMasterPlaylist, parseVariantPlaylist } = require("../utils/hlsManifest");
 const { createR2VideoStorageAdapter } = require("./videoStorageAdapter");
@@ -69,7 +70,7 @@ async function verifySegmentObjects(storage, objectKeys, concurrency = 16) {
   await Promise.all(Array.from({ length: Math.min(concurrency, objectKeys.length) }, () => worker()));
 }
 
-function createCourseMediaService({ storage, repository = mediaRepository, now = () => new Date() } = {}) {
+function createCourseMediaService({ storage, repository = mediaRepository, now = () => new Date(), authorizeCourse = assertCanManageCourse } = {}) {
   const getStorage = () => {
     try { return storage || createR2VideoStorageAdapter(); }
     catch (error) {
@@ -82,6 +83,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       const createdBy = positiveId(actor?.id, "actor.id");
       const courseId = positiveId(input.courseId, "courseId");
       const lessonId = positiveId(input.lessonId, "lessonId");
+      await authorizeCourse(actor, courseId);
       const validated = validateSourceUpload(input);
       if (!await repository.findCourseLesson(courseId, lessonId)) {
         throw new CourseApiError(404, "COURSE_LESSON_NOT_FOUND", "The lesson does not belong to the selected course.");
@@ -115,6 +117,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       if (!asset.course_id || !asset.lesson_id) {
         throw new CourseApiError(409, "VIDEO_ASSET_NOT_DELETABLE", "Video asset is not attached to a course lesson.");
       }
+      await authorizeCourse(actor, asset.course_id);
       const prefix = createAssetPrefix({
         courseId: asset.course_id,
         lessonId: asset.lesson_id,
@@ -150,6 +153,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       if (!/^[0-9a-f-]{36}$/i.test(key)) throw new CourseApiError(400, "VIDEO_UPLOAD_ID_INVALID", "Upload session id is invalid.");
       const session = await repository.findSessionForAdmin(key, createdBy);
       if (!session) throw new CourseApiError(404, "VIDEO_UPLOAD_NOT_FOUND", "Upload session was not found.");
+      await authorizeCourse(actor, session.course_id);
       if (session.status === "completed") return { sessionId: key, videoAssetId: Number(session.video_asset_id), status: "processing", alreadyCompleted: true };
       if (new Date(session.expires_at) <= now()) {
         await repository.expireSession(key, createdBy);
@@ -190,6 +194,7 @@ function createCourseMediaService({ storage, repository = mediaRepository, now =
       }
       const asset = await repository.findAssetForFinalize(assetId);
       if (!asset) throw new CourseApiError(404, "VIDEO_ASSET_NOT_FOUND", "Video asset was not found.");
+      await authorizeCourse(actor, asset.course_id);
       if (!asset.course_id || !asset.lesson_id || !["processing", "ready"].includes(asset.status)) {
         throw new CourseApiError(409, "VIDEO_ASSET_NOT_FINALIZABLE", "Video asset is not ready for HLS finalization.");
       }

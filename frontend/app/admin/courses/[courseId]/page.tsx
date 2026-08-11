@@ -6,10 +6,15 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import coursesApi from '@/lib/api/courses';
 import type { CourseAdminDto, CourseAdminInput } from '@/lib/types/courses';
 import { CourseAdminForm } from '../_components/CourseAdminForm';
+import { CourseTeacherAccess } from '@/components/courses/CourseTeacherAccess';
+import { useAuthStore } from '@/lib/store/authStore';
+import { hasPermission } from '@/lib/utils/permissions';
 
 export default function EditCoursePage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = use(params);
   const id = Number(courseId);
+  const user = useAuthStore((state) => state.user);
+  const isGlobalAdmin = hasPermission(user, '*');
   const [course, setCourse] = useState<CourseAdminDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -41,6 +46,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ courseId:
           {course.status !== 'published' ? <button type="button" disabled={publishing} onClick={() => void publish()} className="rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white disabled:opacity-50">{publishing ? 'Đang xuất bản...' : 'Xuất bản'}</button> : null}
         </div>
         {publishError ? <p role="alert" className="mb-4 text-sm font-semibold text-red-600">{publishError}</p> : null}
+        {isGlobalAdmin ? <CourseTeacherAccess courseId={id} /> : null}
         <CourseAdminForm initialValue={{ title: course.title, slug: course.slug, shortDescription: course.shortDescription, descriptionHtml: course.descriptionHtml, subjectCode: course.subjectCode, level: course.level, accessType: course.accessType, packageIds: course.packageIds, thumbnailUrl: course.thumbnailUrl, priceVnd: course.priceVnd, compareAtPriceVnd: course.compareAtPriceVnd, certificateEnabled: course.certificateEnabled }} submitLabel="Lưu thay đổi" onSubmit={update} />
       </>}
     </AdminLayout>

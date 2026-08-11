@@ -11,6 +11,7 @@ import type {
   MyLearningItemDto,
   PlaybackSessionDto,
   UpdateLessonProgressInput,
+  LessonSubmissionDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -31,6 +32,7 @@ function lesson(raw: LearningLessonDto & {
     progressStatus: raw.progressStatus ?? raw.progress?.status ?? 'not_started',
     contentHtml: raw.contentHtml ?? null,
     resources: Array.isArray(raw.resources) ? raw.resources : [],
+    assignment: raw.assignment ?? null,
     previousLessonId: raw.previousLessonId ?? null,
     nextLessonId: raw.nextLessonId ?? null,
   };
@@ -114,6 +116,18 @@ export const learningApi = {
   async completeLesson(lessonId: number): Promise<LessonProgressDto> {
     const response = await axios.post<ApiSuccessEnvelope<LessonProgressDto>>(
       `/learning/lessons/${encodeURIComponent(lessonId)}/complete`,
+    );
+    return unwrapData(response.data);
+  },
+
+  async submitAssignment(lessonId: number, textContent: string, files: File[]): Promise<LessonSubmissionDto> {
+    const payload = new FormData();
+    payload.append('textContent', textContent);
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<LessonSubmissionDto>>(
+      `/learning/lessons/${encodeURIComponent(lessonId)}/submission`,
+      payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
     );
     return unwrapData(response.data);
   },

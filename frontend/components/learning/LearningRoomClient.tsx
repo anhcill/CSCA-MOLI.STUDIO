@@ -11,6 +11,7 @@ import {
   FiFileText,
   FiHelpCircle,
   FiSave,
+  FiSend,
 } from 'react-icons/fi';
 import learningApi from '@/lib/api/learning';
 import type { LearningRoomDto, PlaybackSessionDto } from '@/lib/types/courses';
@@ -19,8 +20,9 @@ import { LearningFooter } from './LearningFooter';
 import { LearningHeader } from './LearningHeader';
 import { LearningRoomLoading } from './LearningRoomLoading';
 import { LearningSidebar } from './LearningSidebar';
+import { LessonAssignmentPanel } from './LessonAssignmentPanel';
 
-type LessonPanel = 'overview' | 'notes' | 'resources' | 'qa';
+type LessonPanel = 'overview' | 'notes' | 'resources' | 'assignment' | 'qa';
 
 function updateCompletedLesson(room: LearningRoomDto, lessonId: number): LearningRoomDto {
   const curriculum = room.curriculum.map((section) => ({
@@ -200,6 +202,7 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
     { id: 'overview', label: 'Tổng quan', icon: FiBookOpen },
     { id: 'notes', label: 'Ghi chú của tôi', icon: FiBookmark },
     { id: 'resources', label: `Tài liệu (${room.lesson.resources.length})`, icon: FiFileText },
+    ...(room.lesson.assignment ? [{ id: 'assignment' as const, label: 'Nộp bài', icon: FiSend }] : []),
     { id: 'qa', label: 'Hỏi đáp', icon: FiHelpCircle },
   ];
 
@@ -305,6 +308,10 @@ export function LearningRoomClient({ courseSlug, lessonId }: { courseSlug: strin
                     ))}
                   </ul>
                 ) : <p>Chưa có tài liệu đính kèm cho bài học này.</p>
+              ) : null}
+
+              {activePanel === 'assignment' && room.lesson.assignment ? (
+                <LessonAssignmentPanel lessonId={lessonId} initialAssignment={room.lesson.assignment} />
               ) : null}
 
               {activePanel === 'qa' ? (

@@ -3,6 +3,7 @@ const learningRepository = require("../repositories/learningRepository");
 const courseService = require("./courseService");
 const { CourseApiError } = require("../utils/courseResponses");
 const { mapCourse, mapEnrollment, mapLesson, mapProgress, toFiniteNumber } = require("../utils/courseContract");
+const courseAssignmentService = require("./courseAssignmentService");
 
 function progressSummary(row) {
   const totalLessons = toFiniteNumber(row?.total_lessons ?? row?.progress_total_lessons);
@@ -121,11 +122,12 @@ async function getLearningLesson(lessonIdValue, user) {
   const lesson = await learningRepository.findPublishedLesson(lessonId);
   if (!lesson) throw new CourseApiError(404, "LESSON_NOT_FOUND", "Lesson not found.");
   const { course, enrollment } = await courseService.requireLearningAccess(lesson.course_id, user);
-  const [{ sections, lessons }, resources, navigation, progressRow] = await Promise.all([
+  const [{ sections, lessons }, resources, navigation, progressRow, assignment] = await Promise.all([
     courseRepository.listCurriculum(course.id, { userId: user.id, includeContent: true }),
     learningRepository.listLessonResources(lesson.id),
     learningRepository.getLessonNavigation(course.id, lesson.id),
     learningRepository.getCourseProgress(user.id, course.id),
+    courseAssignmentService.getLearnerAssignment(lesson.id, user),
   ]);
   const fullLesson = mapLesson(lessons.find((item) => String(item.id) === String(lesson.id)) || lesson);
   return {
@@ -155,9 +157,14 @@ async function getLearningLesson(lessonIdValue, user) {
         // Material delivery needs its own entitlement-checked endpoint; do not invent
         // or expose a storage URL from this metadata response.
         url: item.url || "",
+        originalName: item.original_name || item.title,
+        mimeType: item.mime_type || null,
+        fileKind: item.file_kind || (item.resource_type === "link" ? "link" : "document"),
+        sizeBytes: toFiniteNumber(item.size_bytes),
       })),
       previousLessonId: navigation.previous_lesson_id == null ? null : toFiniteNumber(navigation.previous_lesson_id),
       nextLessonId: navigation.next_lesson_id == null ? null : toFiniteNumber(navigation.next_lesson_id),
+      assignment,
     },
   };
 }

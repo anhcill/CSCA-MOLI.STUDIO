@@ -144,6 +144,7 @@ const ADMIN_PANEL_PERMISSION_PRIORITY: Array<{ permission: string; route: string
   { permission: 'game.manage', route: '/admin/gamification' },
   { permission: 'exams.manage', route: '/admin/exams' },
   { permission: 'content.manage', route: '/admin/materials' },
+  { permission: 'courses.manage_assigned', route: '/admin/courses' },
   { permission: 'forum.manage', route: '/admin/posts' },
   { permission: 'roadmap.manage', route: '/admin/roadmap' },
   { permission: 'system.manage', route: '/admin' },
@@ -157,6 +158,7 @@ const ADMIN_ROLE_ROUTE_PRIORITY: Array<{ role: string; route: string }> = [
   { role: 'user_admin', route: '/admin/users' },
   { role: 'exam_admin', route: '/admin/exams' },
   { role: 'content_admin', route: '/admin/materials' },
+  { role: 'course_teacher', route: '/admin/courses' },
   { role: 'forum_admin', route: '/admin/posts' },
   { role: 'roadmap_admin', route: '/admin/roadmap' },
 ];

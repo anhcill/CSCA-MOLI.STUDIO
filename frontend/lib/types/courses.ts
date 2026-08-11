@@ -171,6 +171,7 @@ export interface MyLearningItemDto {
 export interface LearningLessonDto extends CurriculumLessonDto {
   contentHtml: string | null;
   resources: LessonResourceDto[];
+  assignment: LessonAssignmentDto | null;
   previousLessonId: number | null;
   nextLessonId: number | null;
 }
@@ -180,6 +181,68 @@ export interface LessonResourceDto {
   title: string;
   kind: 'file' | 'link';
   url: string;
+  originalName?: string;
+  mimeType?: string | null;
+  fileKind?: 'image' | 'document' | 'link';
+  sizeBytes?: number;
+}
+
+export interface CourseFileDto {
+  id: number;
+  originalName: string;
+  title?: string;
+  mimeType: string;
+  fileKind: 'image' | 'document';
+  kind?: 'file' | 'link';
+  url: string;
+  sizeBytes: number;
+}
+
+export interface LessonSubmissionDto {
+  id: number;
+  assignmentId: number;
+  userId: number;
+  studentName: string | null;
+  studentEmail: string | null;
+  textContent: string;
+  status: 'submitted' | 'graded';
+  submittedAt: string;
+  score: number | null;
+  teacherFeedback: string;
+  gradedAt: string | null;
+  attachments: CourseFileDto[];
+}
+
+export interface LessonAssignmentDto {
+  id: number;
+  lessonId: number;
+  title: string;
+  instructions: string;
+  dueAt: string | null;
+  maxScore: number;
+  isPublished: boolean;
+  attachments: CourseFileDto[];
+  submission?: LessonSubmissionDto | null;
+  submissions?: LessonSubmissionDto[];
+}
+
+export interface LessonWorkDto {
+  resources: CourseFileDto[];
+  assignment: LessonAssignmentDto | null;
+}
+
+export interface LessonAssignmentInput {
+  title: string;
+  instructions: string;
+  dueAt: string | null;
+  maxScore: number;
+  isPublished: boolean;
+}
+
+export interface CourseTeacherDto {
+  id: number;
+  name: string;
+  email: string;
 }
 
 export interface LearningRoomDto {

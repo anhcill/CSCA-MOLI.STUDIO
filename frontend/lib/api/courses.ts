@@ -13,6 +13,12 @@ import type {
   CurriculumSectionInput,
   EnrollmentDto,
   VipPackageDto,
+  CourseFileDto,
+  LessonAssignmentDto,
+  LessonAssignmentInput,
+  LessonSubmissionDto,
+  LessonWorkDto,
+  CourseTeacherDto,
 } from '@/lib/types/courses';
 
 function unwrapData<T>(payload: unknown): T {
@@ -150,6 +156,24 @@ function adminInput(input: Partial<CourseAdminInput>): Record<string, unknown> {
 }
 
 export const coursesApi = {
+  async getTeacherOptions(): Promise<CourseTeacherDto[]> {
+    const response = await axios.get<ApiSuccessEnvelope<CourseTeacherDto[]>>('/admin/courses/teacher-options');
+    return unwrapData(response.data);
+  },
+
+  async getCourseTeachers(courseId: number): Promise<CourseTeacherDto[]> {
+    const response = await axios.get<ApiSuccessEnvelope<CourseTeacherDto[]>>(`/admin/courses/${encodeURIComponent(courseId)}/teachers`);
+    return unwrapData(response.data);
+  },
+
+  async replaceCourseTeachers(courseId: number, userIds: number[]): Promise<CourseTeacherDto[]> {
+    const response = await axios.put<ApiSuccessEnvelope<CourseTeacherDto[]>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/teachers`,
+      { userIds },
+    );
+    return unwrapData(response.data);
+  },
+
   async getActivePackages(): Promise<VipPackageDto[]> {
     const response = await axios.get<ApiSuccessEnvelope<VipPackageDto[]>>('/vip/packages');
     return unwrapData<VipPackageDto[]>(response.data).filter((pkg) => pkg.is_active !== false);
@@ -222,6 +246,59 @@ export const coursesApi = {
     const response = await axios.patch<ApiSuccessEnvelope<CurriculumLessonDto>>(
       `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`,
       input,
+    );
+    return unwrapData(response.data);
+  },
+
+  async getLessonWork(courseId: number, lessonId: number): Promise<LessonWorkDto> {
+    const response = await axios.get<ApiSuccessEnvelope<LessonWorkDto>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/work`,
+    );
+    return unwrapData(response.data);
+  },
+
+  async uploadLessonResources(courseId: number, lessonId: number, files: File[]): Promise<CourseFileDto[]> {
+    const payload = new FormData();
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<CourseFileDto[]>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/resources`,
+      payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async deleteLessonResource(courseId: number, lessonId: number, resourceId: number): Promise<void> {
+    await axios.delete(`/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/resources/${encodeURIComponent(resourceId)}`);
+  },
+
+  async saveLessonAssignment(courseId: number, lessonId: number, input: LessonAssignmentInput): Promise<LessonAssignmentDto> {
+    const response = await axios.put<ApiSuccessEnvelope<LessonAssignmentDto>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/assignment`,
+      input,
+    );
+    return unwrapData(response.data);
+  },
+
+  async uploadAssignmentAttachments(courseId: number, lessonId: number, files: File[]): Promise<CourseFileDto[]> {
+    const payload = new FormData();
+    files.forEach((file) => payload.append('files', file));
+    const response = await axios.post<ApiSuccessEnvelope<CourseFileDto[]>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/assignment/attachments`,
+      payload,
+      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+    );
+    return unwrapData(response.data);
+  },
+
+  async deleteAssignmentAttachment(courseId: number, lessonId: number, attachmentId: number): Promise<void> {
+    await axios.delete(`/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/assignment/attachments/${encodeURIComponent(attachmentId)}`);
+  },
+
+  async gradeLessonSubmission(courseId: number, lessonId: number, submissionId: number, score: number, feedback: string): Promise<LessonSubmissionDto> {
+    const response = await axios.patch<ApiSuccessEnvelope<LessonSubmissionDto>>(
+      `/admin/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/submissions/${encodeURIComponent(submissionId)}/grade`,
+      { score, feedback },
     );
     return unwrapData(response.data);
   },

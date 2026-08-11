@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { VideoUploadPanel } from '@/components/courses/VideoUploadPanel';
+import { LessonWorkEditor } from '@/components/courses/LessonWorkEditor';
 import coursesApi from '@/lib/api/courses';
 import type { CourseAdminDto, CurriculumLessonDto, CurriculumSectionDto, LessonType } from '@/lib/types/courses';
 
@@ -132,6 +133,7 @@ function LessonEditor({ courseId, lesson, reload }: { courseId: number; lesson: 
               />
             </div>
           ) : null}
+          <LessonWorkEditor courseId={courseId} lessonId={lesson.id} />
           {error ? <p role="alert" className="text-sm font-semibold text-red-600">{error}</p> : null}
           <button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-indigo-600 px-5 py-2.5 font-bold text-white disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu toàn bộ bài học'}</button>
         </div>

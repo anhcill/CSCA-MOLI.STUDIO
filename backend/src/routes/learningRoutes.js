@@ -4,6 +4,7 @@ const videoPlaybackController = require("../controllers/videoPlaybackController"
 const { authenticate } = require("../middleware/authMiddleware");
 const { playbackLimiter, progressLimiter } = require("./courseRateLimiters");
 const { requireCoursePreviewAdmin } = require("../middleware/coursePreviewMiddleware");
+const { courseFiles } = require("../middleware/courseFileUpload");
 
 const router = express.Router();
 
@@ -15,5 +16,6 @@ router.get("/lessons/:lessonId", controller.getLearningLesson);
 router.post("/lessons/:lessonId/playback-session", playbackLimiter, videoPlaybackController.createPlaybackSession);
 router.put("/lessons/:lessonId/progress", progressLimiter, controller.updateLessonProgress);
 router.post("/lessons/:lessonId/complete", progressLimiter, controller.completeLesson);
+router.post("/lessons/:lessonId/submission", courseFiles("files"), controller.submitAssignment);
 
 module.exports = router;

@@ -26,7 +26,7 @@ async function transaction(work) {
   }
 }
 
-async function list({ q = null, subjectCode = null, status = null, page = 1, limit = 20 }) {
+async function list({ q = null, subjectCode = null, status = null, page = 1, limit = 20, scopeUserId = null }) {
   const offset = (page - 1) * limit;
   const result = await db.query(
     `SELECT ${COURSE_COLUMNS},
@@ -39,8 +39,11 @@ async function list({ q = null, subjectCode = null, status = null, page = 1, lim
      WHERE ($1::text IS NULL OR subject_code = $1)
        AND ($2::text IS NULL OR status = $2)
        AND ($3::text IS NULL OR title ILIKE '%' || $3 || '%' OR slug ILIKE '%' || $3 || '%' OR external_key ILIKE '%' || $3 || '%')
+       AND ($6::int IS NULL OR instructor_id = $6 OR EXISTS (
+         SELECT 1 FROM course_instructors ci WHERE ci.course_id = courses.id AND ci.user_id = $6
+       ))
      ORDER BY updated_at DESC, id DESC LIMIT $4 OFFSET $5`,
-    [subjectCode, status, q, limit, offset],
+    [subjectCode, status, q, limit, offset, scopeUserId],
   );
   return result.rows;
 }
@@ -279,9 +282,73 @@ async function setStatus(courseId, status, client) {
   return result.rows[0] || null;
 }
 
+async function listTeacherOptions() {
+  const result = await db.query(
+    `SELECT DISTINCT u.id, COALESCE(NULLIF(u.full_name, ''), u.username, u.email) AS name, u.email
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     LEFT JOIN roles r ON r.id = ur.role_id
+     WHERE u.is_active = TRUE AND (u.role = 'teacher' OR r.code IN ('content_admin', 'course_teacher'))
+     ORDER BY name, u.id`,
+  );
+  return result.rows;
+}
+
+async function listCourseTeachers(courseId) {
+  const result = await db.query(
+    `SELECT u.id, COALESCE(NULLIF(u.full_name, ''), u.username, u.email) AS name, u.email
+     FROM course_instructors ci JOIN users u ON u.id = ci.user_id
+     WHERE ci.course_id = $1 ORDER BY ci.sort_order, u.id`,
+    [courseId],
+  );
+  return result.rows;
+}
+
+async function replaceCourseTeachers(courseId, userIds, assignedBy) {
+  return transaction(async (client) => {
+    const before = await client.query(`SELECT user_id FROM course_instructors WHERE course_id = $1`, [courseId]);
+    if (userIds.length) {
+      const valid = await client.query(`SELECT id FROM users WHERE id = ANY($1::int[]) AND is_active = TRUE`, [userIds]);
+      if (valid.rows.length !== userIds.length) {
+        const error = new Error("COURSE_TEACHER_NOT_FOUND"); error.code = "COURSE_TEACHER_NOT_FOUND"; throw error;
+      }
+    }
+    await client.query(`DELETE FROM course_instructors WHERE course_id = $1`, [courseId]);
+    for (let index = 0; index < userIds.length; index += 1) {
+      await client.query(
+        `INSERT INTO course_instructors (course_id, user_id, sort_order) VALUES ($1,$2,$3)`,
+        [courseId, userIds[index], index],
+      );
+      await client.query(
+        `INSERT INTO user_roles (user_id, role_id, assigned_by)
+         SELECT $1, id, $2 FROM roles WHERE code = 'course_teacher'
+         ON CONFLICT (user_id, role_id) DO NOTHING`,
+        [userIds[index], assignedBy],
+      );
+    }
+    const removed = before.rows.map((row) => Number(row.user_id)).filter((userId) => !userIds.includes(userId));
+    if (removed.length) {
+      await client.query(
+        `DELETE FROM user_roles ur USING roles r
+         WHERE ur.role_id = r.id AND r.code = 'course_teacher' AND ur.user_id = ANY($1::int[])
+           AND NOT EXISTS (SELECT 1 FROM course_instructors ci WHERE ci.user_id = ur.user_id)`,
+        [removed],
+      );
+    }
+    const current = await client.query(
+      `SELECT u.id, COALESCE(NULLIF(u.full_name, ''), u.username, u.email) AS name, u.email
+       FROM course_instructors ci JOIN users u ON u.id = ci.user_id
+       WHERE ci.course_id = $1 ORDER BY ci.sort_order, u.id`,
+      [courseId],
+    );
+    return current.rows;
+  });
+}
+
 module.exports = {
   transaction, list, findById, listCurriculum, createCourse, updateCourse,
   replacePackageAccess,
   createSection, updateSection, findSection, createLesson, updateLesson, findLesson,
   claimVideoAsset, findPreviewAsset, recalculateAggregates, getPublishReadiness, setStatus,
+  listTeacherOptions, listCourseTeachers, replaceCourseTeachers,
 };

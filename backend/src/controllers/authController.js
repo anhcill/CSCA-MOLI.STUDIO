@@ -201,7 +201,7 @@ const buildTokenPayload = (user) => ({
   vip_allowed_subjects: user.vip_allowed_subjects || [],
 });
 
-const MODULE_ROLE_CODES = ['user_admin', 'exam_admin', 'content_admin', 'forum_admin', 'roadmap_admin'];
+const MODULE_ROLE_CODES = ['user_admin', 'exam_admin', 'content_admin', 'forum_admin', 'roadmap_admin', 'course_teacher'];
 const ADMIN_MFA_TOKEN_AUDIENCE = "admin-mfa";
 
 const isAdminUser = (user) => user?.role === "admin";
