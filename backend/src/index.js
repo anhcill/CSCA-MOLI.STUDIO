@@ -264,6 +264,7 @@ if (coursesEnabled) {
   app.use("/api/me", require("./routes/meCourseRoutes"));
   app.use("/api/learning", require("./routes/learningRoutes"));
   app.use("/api/admin/courses", adminWriteLimiter, require("./routes/adminCourseRoutes"));
+  app.use("/api/admin/course-teaching", adminWriteLimiter, require("./routes/teacherCourseRoutes"));
   app.use("/api/admin/course-media", require("./routes/courseMediaRoutes"));
 }
 

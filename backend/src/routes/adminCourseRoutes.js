@@ -7,12 +7,13 @@ const { requireGlobalCourseScope, scopeCourseList, requireAssignedCourse } = req
 const router = express.Router();
 
 router.use(authenticate, authorizeAnyPermission("content.manage", "courses.manage_assigned"));
+router.use(requireGlobalCourseScope);
 
-router.get("/teacher-options", requireGlobalCourseScope, controller.listTeacherOptions);
-router.get("/:courseId/teachers", requireGlobalCourseScope, controller.listCourseTeachers);
-router.put("/:courseId/teachers", requireGlobalCourseScope, controller.replaceCourseTeachers);
+router.get("/teacher-options", controller.listTeacherOptions);
+router.get("/:courseId/teachers", controller.listCourseTeachers);
+router.put("/:courseId/teachers", controller.replaceCourseTeachers);
 router.get("/", scopeCourseList, controller.list);
-router.post("/", requireGlobalCourseScope, controller.create);
+router.post("/", controller.create);
 router.use("/:courseId", requireAssignedCourse);
 router.get("/:courseId", controller.get);
 router.patch("/:courseId", controller.update);

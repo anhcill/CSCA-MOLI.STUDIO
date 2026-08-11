@@ -52,7 +52,7 @@ function SubmissionGrader({ submission, maxScore, onSaved }: { submission: Lesso
   );
 }
 
-export function LessonWorkEditor({ courseId, lessonId }: { courseId: number; lessonId: number }) {
+export function LessonWorkEditor({ courseId, lessonId, teacherMode = false }: { courseId: number; lessonId: number; teacherMode?: boolean }) {
   const [work, setWork] = useState<LessonWorkDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -67,7 +67,9 @@ export function LessonWorkEditor({ courseId, lessonId }: { courseId: number; les
 
   const load = useCallback(async () => {
     try {
-      const next = await coursesApi.getLessonWork(courseId, lessonId);
+      const next = teacherMode
+        ? await coursesApi.getTeachingLessonWork(courseId, lessonId)
+        : await coursesApi.getLessonWork(courseId, lessonId);
       setWork(next);
       setTitle(next.assignment?.title || '');
       setInstructions(next.assignment?.instructions || '');
@@ -77,7 +79,7 @@ export function LessonWorkEditor({ courseId, lessonId }: { courseId: number; les
       setError('');
     } catch { setError('Không thể tải tài liệu và bài tập của bài học.'); }
     finally { setLoading(false); }
-  }, [courseId, lessonId]);
+  }, [courseId, lessonId, teacherMode]);
 
   useEffect(() => { void load(); }, [load]);
   const assignmentInput = () => ({ title: title.trim(), instructions: instructions.trim(), dueAt: dueAt ? new Date(dueAt).toISOString() : null, maxScore, isPublished: published });
@@ -85,17 +87,17 @@ export function LessonWorkEditor({ courseId, lessonId }: { courseId: number; les
   if (loading) return <div className="h-40 animate-pulse rounded-xl bg-slate-200 dark:bg-slate-800" />;
   return (
     <section className="space-y-6 rounded-2xl border border-violet-200 bg-violet-50/50 p-5 dark:border-violet-500/25 dark:bg-violet-950/15">
-      <div><h3 className="text-lg font-black text-violet-950 dark:text-violet-200">Tài liệu & bài tập của bài học</h3><p className="text-sm text-violet-800 dark:text-violet-300">Ảnh có thể tải hàng loạt hoặc dán bằng Ctrl+V. DOC, DOCX và PDF đều được hỗ trợ.</p></div>
+      <div><h3 className="text-lg font-black text-violet-950 dark:text-violet-200">{teacherMode ? 'Giao & chấm bài' : 'Tài liệu & bài tập của bài học'}</h3><p className="text-sm text-violet-800 dark:text-violet-300">Ảnh có thể tải hàng loạt hoặc dán bằng Ctrl+V. DOC, DOCX và PDF đều được hỗ trợ.</p></div>
 
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950/60">
+      {!teacherMode ? <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950/60">
         <h4 className="font-black">1. File học kèm theo bài</h4>
         <StoredFiles files={work?.resources || []} deleting={busy} onDelete={async (fileId) => { try { setBusy(true); await coursesApi.deleteLessonResource(courseId, lessonId, fileId); await load(); } finally { setBusy(false); } }} />
         <CourseFilePicker files={resourceFiles} onChange={setResourceFiles} disabled={busy} label="Chọn file tài liệu bài học" />
         <button type="button" disabled={busy || !resourceFiles.length} onClick={async () => { try { setBusy(true); setError(''); await coursesApi.uploadLessonResources(courseId, lessonId, resourceFiles); setResourceFiles([]); await load(); } catch { setError('Không thể tải file bài học. Kiểm tra định dạng/kích thước rồi thử lại.'); } finally { setBusy(false); } }} className="rounded-lg bg-indigo-600 px-4 py-2 font-bold text-white disabled:opacity-50">Tải {resourceFiles.length || ''} file lên bài học</button>
-      </div>
+      </div> : null}
 
       <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950/60">
-        <div><h4 className="font-black">2. Bài tập để học viên nộp</h4><p className="text-xs text-slate-500">Không bắt buộc có file đề. Giáo viên có thể chỉ nhập mô tả, hoặc tải/dán nhiều ảnh.</p></div>
+        <div><h4 className="font-black">{teacherMode ? '1. Giao bài cho học viên' : '2. Bài tập để học viên nộp'}</h4><p className="text-xs text-slate-500">Không bắt buộc có file đề. Giáo viên có thể chỉ nhập mô tả, hoặc tải/dán nhiều ảnh.</p></div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="text-sm font-bold">Tên bài tập *<input value={title} onChange={(e) => setTitle(e.target.value)} className={fieldClass} placeholder="Ví dụ: Bài luyện tập sau video" /></label>
           <label className="text-sm font-bold">Hạn nộp (không bắt buộc)<input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className={fieldClass} /></label>
@@ -103,19 +105,19 @@ export function LessonWorkEditor({ courseId, lessonId }: { courseId: number; les
           <label className="flex items-end gap-2 pb-2 text-sm font-bold"><input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} className="h-4 w-4" /> Mở bài tập cho học viên</label>
         </div>
         <label className="block text-sm font-bold">Yêu cầu bài làm<textarea rows={5} value={instructions} onChange={(e) => setInstructions(e.target.value)} className={fieldClass} placeholder="Mô tả yêu cầu, tiêu chí chấm..." /></label>
-        <button type="button" disabled={busy || !title.trim()} onClick={async () => { try { setBusy(true); setError(''); await coursesApi.saveLessonAssignment(courseId, lessonId, assignmentInput()); await load(); } catch { setError('Không thể lưu bài tập.'); } finally { setBusy(false); } }} className="rounded-lg bg-violet-700 px-4 py-2 font-bold text-white disabled:opacity-50">{work?.assignment ? 'Lưu thay đổi bài tập' : 'Tạo bài tập'}</button>
+        <button type="button" disabled={busy || !title.trim()} onClick={async () => { try { setBusy(true); setError(''); if (teacherMode) await coursesApi.saveTeachingAssignment(courseId, lessonId, assignmentInput()); else await coursesApi.saveLessonAssignment(courseId, lessonId, assignmentInput()); await load(); } catch { setError('Không thể lưu bài tập.'); } finally { setBusy(false); } }} className="rounded-lg bg-violet-700 px-4 py-2 font-bold text-white disabled:opacity-50">{work?.assignment ? 'Lưu thay đổi bài tập' : 'Tạo bài tập'}</button>
 
         <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
           <h5 className="mb-3 font-black">Ảnh / file đề đính kèm (không bắt buộc)</h5>
-          <StoredFiles files={work?.assignment?.attachments || []} deleting={busy} onDelete={async (fileId) => { try { setBusy(true); await coursesApi.deleteAssignmentAttachment(courseId, lessonId, fileId); await load(); } finally { setBusy(false); } }} />
+          <StoredFiles files={work?.assignment?.attachments || []} deleting={busy} onDelete={async (fileId) => { try { setBusy(true); if (teacherMode) await coursesApi.deleteTeachingAttachment(courseId, lessonId, fileId); else await coursesApi.deleteAssignmentAttachment(courseId, lessonId, fileId); await load(); } finally { setBusy(false); } }} />
           <div className="mt-3"><CourseFilePicker files={assignmentFiles} onChange={setAssignmentFiles} disabled={busy} label="Chọn hoặc dán ảnh/file đề" /></div>
-          <button type="button" disabled={busy || !assignmentFiles.length || !title.trim()} onClick={async () => { try { setBusy(true); setError(''); await coursesApi.saveLessonAssignment(courseId, lessonId, assignmentInput()); await coursesApi.uploadAssignmentAttachments(courseId, lessonId, assignmentFiles); setAssignmentFiles([]); await load(); } catch { setError('Không thể tải ảnh/file đề. Hãy nhập tên bài tập rồi thử lại.'); } finally { setBusy(false); } }} className="mt-3 rounded-lg bg-slate-900 px-4 py-2 font-bold text-white disabled:opacity-50 dark:bg-indigo-600">Tải {assignmentFiles.length || ''} ảnh/file đề</button>
+          <button type="button" disabled={busy || !assignmentFiles.length || !title.trim()} onClick={async () => { try { setBusy(true); setError(''); if (teacherMode) { await coursesApi.saveTeachingAssignment(courseId, lessonId, assignmentInput()); await coursesApi.uploadTeachingAttachments(courseId, lessonId, assignmentFiles); } else { await coursesApi.saveLessonAssignment(courseId, lessonId, assignmentInput()); await coursesApi.uploadAssignmentAttachments(courseId, lessonId, assignmentFiles); } setAssignmentFiles([]); await load(); } catch { setError('Không thể tải ảnh/file đề. Hãy nhập tên bài tập rồi thử lại.'); } finally { setBusy(false); } }} className="mt-3 rounded-lg bg-slate-900 px-4 py-2 font-bold text-white disabled:opacity-50 dark:bg-indigo-600">Tải {assignmentFiles.length || ''} ảnh/file đề</button>
         </div>
       </div>
 
       <div className="space-y-3">
-        <div><h4 className="font-black">3. Bài học viên đã nộp ({work?.assignment?.submissions?.length || 0})</h4><p className="text-xs text-slate-500">Mở ảnh/file, nhập điểm và nhận xét rồi lưu chấm bài.</p></div>
-        {work?.assignment?.submissions?.length ? work.assignment.submissions.map((submission) => <SubmissionGrader key={submission.id} submission={submission} maxScore={work.assignment!.maxScore} onSaved={async (score, feedback) => { await coursesApi.gradeLessonSubmission(courseId, lessonId, submission.id, score, feedback); await load(); }} />) : <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500 dark:border-slate-700">Chưa có bài nộp.</p>}
+        <div><h4 className="font-black">{teacherMode ? '2. Bài học viên đã nộp' : '3. Bài học viên đã nộp'} ({work?.assignment?.submissions?.length || 0})</h4><p className="text-xs text-slate-500">Mở ảnh/file, nhập điểm và nhận xét rồi lưu chấm bài.</p></div>
+        {work?.assignment?.submissions?.length ? work.assignment.submissions.map((submission) => <SubmissionGrader key={submission.id} submission={submission} maxScore={work.assignment!.maxScore} onSaved={async (score, feedback) => { if (teacherMode) await coursesApi.gradeTeachingSubmission(courseId, lessonId, submission.id, score, feedback); else await coursesApi.gradeLessonSubmission(courseId, lessonId, submission.id, score, feedback); await load(); }} />) : <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500 dark:border-slate-700">Chưa có bài nộp.</p>}
       </div>
       {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300">{error}</p> : null}
     </section>

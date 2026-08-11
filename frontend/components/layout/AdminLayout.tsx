@@ -91,8 +91,14 @@ const NAV_SECTIONS = [
         label: 'Khóa học',
         icon: FiVideo,
         href: '/admin/courses',
-        permission: 'content.manage',
-        anyPermissions: ['courses.manage_assigned'],
+        permission: '*',
+        roles: [],
+      },
+      {
+        label: 'Giao & chấm bài',
+        icon: FiFileText,
+        href: '/admin/teaching',
+        permission: 'courses.manage_assigned',
         roles: [],
       },
       {
