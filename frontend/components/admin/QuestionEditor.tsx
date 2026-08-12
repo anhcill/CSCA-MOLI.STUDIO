@@ -582,47 +582,17 @@ export default function QuestionEditor({ questionNumber, initialData, initialQue
             }, 'Xem trước đáp án Trung:', `answer-${i}-textCn`)}
 
             {/* Ảnh đính kèm đáp án */}
-            {ans.imageUrl && (
-              <div className="mt-1">
-                <img src={ans.imageUrl} alt={`Option ${key}`} className="h-20 rounded border object-contain bg-white" />
-              </div>
-            )}
-            <div className="mt-1.5">
-              <label className="text-xs text-gray-400 cursor-pointer hover:text-blue-500">
-                <span className="underline">+ Thêm ảnh đáp án</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    try {
-                      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                      const data = await res.json();
-                      if (data.url) {
-                        const a = [...form.answers]; a[i] = { ...a[i], imageUrl: data.url };
-                        set('answers', a);
-                      }
-                    } catch {
-                      alert('Upload ảnh thất bại');
-                    }
-                  }}
-                />
-              </label>
-              {ans.imageUrl && (
-                <button
-                  onClick={() => {
-                    const a = [...form.answers]; a[i] = { ...a[i], imageUrl: '' };
-                    set('answers', a);
-                  }}
-                  className="ml-2 text-xs text-red-400 hover:text-red-600 underline"
-                >
-                  Xóa ảnh
-                </button>
-              )}
+            <div className="mt-2">
+              <ImageUpload
+                label={`Ảnh đáp án ${key} (tùy chọn)`}
+                currentImage={ans.imageUrl}
+                onImageUploaded={url => {
+                  const answers = [...form.answers];
+                  answers[i] = { ...answers[i], imageUrl: url };
+                  set('answers', answers);
+                }}
+                compact
+              />
             </div>
           </div>
         );

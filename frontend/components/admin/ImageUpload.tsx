@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect, useId } from 'react';
-import { FiX, FiImage, FiAlertCircle } from 'react-icons/fi';
+import { FiX, FiImage, FiAlertCircle, FiClipboard } from 'react-icons/fi';
 import axios from '@/lib/utils/axios';
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 interface ImageUploadProps {
     onImageUploaded: (url: string) => void;
@@ -22,7 +24,19 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
         setPreview(currentImage);
     }, [currentImage]);
 
-    const uploadImage = async (file: File) => {
+    const uploadImage = useCallback(async (file: File) => {
+        if (uploading) return;
+
+        if (!file.type.startsWith('image/')) {
+            setError('Vui lòng chọn hoặc dán một tệp ảnh hợp lệ');
+            return;
+        }
+
+        if (file.size > MAX_IMAGE_SIZE) {
+            setError('Ảnh vượt quá dung lượng tối đa 5MB');
+            return;
+        }
+
         try {
             setUploading(true);
             setError(null);
@@ -46,7 +60,7 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
         } finally {
             setUploading(false);
         }
-    };
+    }, [onImageUploaded, uploading]);
 
 
     const handleDrag = useCallback((e: React.DragEvent) => {
@@ -65,14 +79,25 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
         setDragActive(false);
 
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            uploadImage(e.dataTransfer.files[0]);
+            void uploadImage(e.dataTransfer.files[0]);
         }
-    }, []);
+    }, [uploadImage]);
 
     const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            uploadImage(e.target.files[0]);
+            void uploadImage(e.target.files[0]);
         }
+        e.target.value = '';
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+        const imageItem = Array.from(e.clipboardData.items)
+            .find(item => item.type.startsWith('image/'));
+        const file = imageItem?.getAsFile();
+        if (!file) return;
+
+        e.preventDefault();
+        void uploadImage(file);
     };
 
     const removeImage = () => {
@@ -81,7 +106,11 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
     };
 
     return (
-        <div className="space-y-2">
+        <div
+            tabIndex={0}
+            onPaste={handlePaste}
+            className="space-y-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-100"
+        >
             {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
 
             {/* Error message */}
@@ -94,18 +123,28 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
             )}
 
             {preview ? (
-                <div className="relative group">
-                    <img
-                        src={preview}
-                        alt="Preview"
-                        className={`${compact ? 'max-h-32 max-w-full' : 'max-w-xs'} rounded-lg border-2 border-gray-200 object-contain`}
-                    />
+                <div>
+                    <div className="relative group w-fit max-w-full">
+                        <img
+                            src={preview}
+                            alt="Preview"
+                            className={`${compact ? 'max-h-32 max-w-full' : 'max-w-xs'} rounded-lg border-2 border-gray-200 object-contain`}
+                        />
+                        <button
+                            type="button"
+                            onClick={removeImage}
+                            className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <FiX size={16} />
+                        </button>
+                    </div>
                     <button
                         type="button"
-                        onClick={removeImage}
-                        className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        disabled={uploading}
+                        className="mt-2 flex items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-gray-500 outline-none hover:bg-gray-50 focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
                     >
-                        <FiX size={16} />
+                        <FiClipboard size={13} />
+                        {uploading ? 'Đang upload ảnh...' : 'Bấm đây rồi nhấn Ctrl+V để thay bằng ảnh trong clipboard'}
                     </button>
                 </div>
             ) : (
@@ -139,12 +178,21 @@ export default function ImageUpload({ onImageUploaded, currentImage, label = 'Up
                             <>
                                 <FiImage className="text-gray-400" size={compact ? 28 : 48} />
                                 <div className="text-sm text-gray-600">
-                                    <span className="font-semibold text-blue-600">Click để chọn ảnh</span> hoặc kéo thả
+                                    <span className="font-semibold text-blue-600">Click để chọn ảnh</span>, kéo thả hoặc nhấn Ctrl+V
                                 </div>
                                 <p className="text-xs text-gray-500">PNG, JPG, GIF, WebP tối đa 5MB</p>
                             </>
                         )}
                     </label>
+                    {!uploading && (
+                        <button
+                            type="button"
+                            className="mx-auto mt-3 inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 outline-none hover:bg-blue-100 focus:ring-2 focus:ring-blue-200"
+                        >
+                            <FiClipboard size={13} />
+                            Bấm đây rồi nhấn Ctrl+V để dán ảnh
+                        </button>
+                    )}
                 </div>
             )}
         </div>
