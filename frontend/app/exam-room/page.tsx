@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header';
 import Link from 'next/link';
 import { 
   FiMonitor, FiUsers, FiClock, FiCalendar, 
-  FiFileText, FiAward, FiSearch, FiFilter,
+  FiAward,
   FiPlayCircle, FiChevronRight, FiSettings,
   FiArrowRight, FiCheckCircle, FiXCircle, FiMapPin, FiPrinter
 } from 'react-icons/fi';
@@ -37,8 +37,6 @@ export default function ExamRoomPage() {
   const { user } = useAuthStore();
   const isExamAdmin = hasPermission(user, 'exams.manage');
   const [mounted, setMounted] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [lobbyData, setLobbyData] = useState<LobbyData>({ live: [], upcoming: [], public: [], latest_completed_mock: null });
   const [registrations, setRegistrations] = useState<Record<number, ExamRegistration | null>>({});
   const [registrationLoading, setRegistrationLoading] = useState<Record<number, boolean>>({});
@@ -46,7 +44,7 @@ export default function ExamRoomPage() {
   const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
 
-  const publicExamsRef = useRef<HTMLDivElement>(null);
+  const upcomingExamsRef = useRef<HTMLElement>(null);
   const latestLeaderboardRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -142,8 +140,8 @@ export default function ExamRoomPage() {
   const colors = ['bg-rose-500', 'bg-indigo-600', 'bg-emerald-500', 'bg-orange-500'];
   const MEDAL = ['🥇', '🥈', '🥉'];
 
-  const scrollToPublicExams = () => {
-    publicExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const scrollToUpcomingExams = () => {
+    upcomingExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const scrollToLatestLeaderboard = () => {
@@ -200,13 +198,6 @@ export default function ExamRoomPage() {
       setRegistrationLoading((prev) => ({ ...prev, [examId]: false }));
     }
   };
-
-  // Filter public exams by both subject filter and search query
-  const filteredPublicExams = lobbyData.public.filter(e => {
-    const matchSubject = activeFilter === 'all' || e.subject_name?.toLowerCase().includes(activeFilter.toLowerCase());
-    const matchSearch = !searchQuery.trim() || e.title?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchSubject && matchSearch;
-  });
 
   const renderRegistrationPanel = (exam: any, compact = false) => {
     const registration = registrations[exam.id];
@@ -268,7 +259,7 @@ export default function ExamRoomPage() {
             </button>
           ) : null}
           <Link
-            href={`/exam/${exam.id}`}
+            href={`/exam-room/${exam.id}`}
             className="rounded-xl bg-white/80 px-4 py-2 text-xs font-black text-gray-800 hover:bg-white"
           >
             Chi tiết
@@ -304,15 +295,15 @@ export default function ExamRoomPage() {
                Sảnh Thi Đấu <span className="text-orange-200">Trung Tâm</span>
              </h1>
              <p className="text-rose-100 text-sm md:text-base leading-relaxed mb-6 max-w-xl">
-               Nơi diễn ra các kỳ thi sát hạch thời gian thực. Đăng ký tham gia các kỳ thi sắp tới hoặc rèn luyện kỹ năng qua kho đề thi tự do.
+               Nơi riêng dành cho kỳ thi theo lịch: đăng ký, nhận phòng và vào thi. Đề luyện tập tự do không hiển thị lẫn tại đây.
              </p>
              
              <div className="flex flex-wrap gap-3">
                <button 
-                 onClick={scrollToPublicExams}
+                 onClick={scrollToUpcomingExams}
                  className="px-6 py-2.5 bg-white text-rose-600 text-sm font-bold rounded-xl shadow-md hover:bg-rose-50 hover:scale-105 transition-all duration-300"
                >
-                 Tìm kỳ thi ngay
+                 Xem kỳ thi để đăng ký
                </button>
                <button
                  type="button"
@@ -405,11 +396,11 @@ export default function ExamRoomPage() {
                   <div className="flex items-center gap-2">
                     {isExamAdmin && (
                       <Link
-                        href={`/admin/exams/${exam.id}/schedule`}
+                        href={`/admin/exams/${exam.id}/official`}
                         className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-100 transition-colors"
-                        title="Quản lý lịch thi"
+                        title="Quản trị phòng thi"
                       >
-                        <FiSettings size={14} /> Lịch thi
+                        <FiSettings size={14} /> Quản trị
                       </Link>
                     )}
                     <Link href={`/exam-room/${exam.id}`} className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-rose-600 hover:shadow-lg transition-all duration-300">
@@ -423,12 +414,15 @@ export default function ExamRoomPage() {
         </section>
 
         {/* ── UPCOMING EXAMS ────────────────────────────────────────── */}
-        <section>
+          <section ref={upcomingExamsRef} className="scroll-mt-24">
           <div className="flex items-center gap-3 mb-6">
              <div className="p-2.5 rounded-xl bg-orange-100 text-orange-600">
                <FiCalendar className="text-xl" />
              </div>
-             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Sắp Mở Đăng Ký</h2>
+             <div>
+               <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kỳ Thi Sắp Tới</h2>
+               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký. Chọn Đăng ký để admin duyệt và phân phòng.</p>
+             </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -559,115 +553,6 @@ export default function ExamRoomPage() {
               </div>
             )}
           </section>
-
-        {/* ── PUBLIC EXAM ARCHIVE ────────────────────────────────────── */}
-        <section ref={publicExamsRef}>
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-4">
-             <div className="flex items-center gap-3">
-               <div className="p-2.5 rounded-xl bg-indigo-100 text-indigo-600">
-                 <FiFileText className="text-xl" />
-               </div>
-               <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kho Đề Thi Tự Do</h2>
-             </div>
-             
-             {/* Filter Tabs */}
-             <div className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-xl overflow-x-auto hide-scrollbar">
-               {['all', 'toan', 'tiengtrung', 'vatly', 'hoahoc'].map((filter) => (
-                 <button 
-                  key={filter}
-                  onClick={() => setActiveFilter(filter)}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${
-                    activeFilter === filter ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                 >
-                   {filter === 'all' ? 'Tất cả' : filter === 'toan' ? 'Toán' : filter === 'tiengtrung' ? 'Tiếng Trung' : filter === 'vatly' ? 'Vật Lý' : 'Hóa Học'}
-                 </button>
-               ))}
-             </div>
-          </div>
-          
-          <div className="bg-white rounded-[2rem] border border-gray-200 shadow-sm overflow-hidden">
-             {/* Search Bar for Table */}
-             <div className="p-4 border-b border-gray-100 flex items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                   <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                   <input 
-                     type="text" 
-                     placeholder="Tìm kiếm tên đề thi..." 
-                     value={searchQuery}
-                     onChange={(e) => setSearchQuery(e.target.value)}
-                     className="w-full pl-11 pr-4 py-3 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
-                   />
-                </div>
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="p-3 bg-gray-50 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors text-sm font-medium"
-                  >
-                    Xóa
-                  </button>
-                )}
-             </div>
-             
-             {/* Dynamic Table */}
-             <div className="overflow-x-auto">
-               <table className="w-full text-left border-collapse min-w-[700px]">
-                 <thead>
-                   <tr className="bg-gray-50/50">
-                     <th className="py-4 px-6 font-semibold text-gray-500 text-sm w-1/2">Tên Đề Thi</th>
-                     <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Môn Học</th>
-                     <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Thời Gian</th>
-                     <th className="py-4 px-6 font-semibold text-gray-500 text-sm">Số Câu</th>
-                     <th className="py-4 px-6 font-semibold text-gray-500 text-sm text-right">Thao Tác</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-100">
-                   {!mounted ? (
-                     <tr>
-                        <td colSpan={5} className="py-8 px-6">
-                           <div className="animate-pulse flex flex-col gap-4">
-                              <div className="h-6 bg-slate-200 rounded w-1/3"></div>
-                              <div className="h-6 bg-slate-200 rounded w-1/4"></div>
-                           </div>
-                        </td>
-                     </tr>
-                   ) : filteredPublicExams.length > 0 ? (
-                     filteredPublicExams.map(exam => (
-                      <tr key={exam.id} className="hover:bg-indigo-50/30 transition-colors group">
-                        <td className="py-4 px-6 font-bold text-gray-900">
-                          <span className="inline-flex items-center gap-1.5">
-                            {exam.title}
-                            {exam.is_premium && (
-                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-gradient-to-r from-amber-200 to-orange-300 text-orange-800 text-[10px] font-black rounded-md shadow-sm">
-                                <FaCrown size={8} /> VIP
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg">{exam.subject_name || exam.code || 'Môn học'}</span>
-                        </td>
-                        <td className="py-4 px-6 text-sm text-gray-600 font-medium">{exam.duration || 0} phút</td>
-                        <td className="py-4 px-6 text-sm text-gray-600 font-medium">{exam.question_count || exam.total_questions || 0}</td>
-                        <td className="py-4 px-6 text-right">
-                          <Link href={`/exam/${exam.id}`} className="px-5 py-2 inline-block bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors sm:bg-white sm:border sm:border-gray-200 sm:text-gray-800 sm:hover:border-indigo-600 sm:hover:text-indigo-600 sm:opacity-0 sm:group-hover:opacity-100">
-                            Làm bài
-                          </Link>
-                        </td>
-                      </tr>
-                     ))
-                   ) : (
-                     <tr>
-                       <td className="py-8 text-center text-gray-500" colSpan={5}>
-                         {searchQuery ? `Không tìm thấy đề thi cho "${searchQuery}"` : 'Chưa có đề thi tự do nào'}
-                       </td>
-                     </tr>
-                   )}
-                 </tbody>
-               </table>
-             </div>
-          </div>
-        </section>
 
       </main>
     </div>

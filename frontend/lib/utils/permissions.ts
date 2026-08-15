@@ -142,6 +142,7 @@ export function getTierBadge(tier: TierLevel): { label: string; color: string } 
 const ADMIN_PANEL_PERMISSION_PRIORITY: Array<{ permission: string; route: string }> = [
   { permission: 'users.manage', route: '/admin/users' },
   { permission: 'game.manage', route: '/admin/gamification' },
+  { permission: 'exams.manage', route: '/admin/exam-room' },
   { permission: 'exams.manage', route: '/admin/exams' },
   { permission: 'courses.manage_assigned', route: '/admin/teaching' },
   { permission: 'content.manage', route: '/admin/materials' },
@@ -156,6 +157,7 @@ const ADMIN_PANEL_PERMISSIONS = ADMIN_PANEL_PERMISSION_PRIORITY.map((item) => it
 const ADMIN_ROLE_ROUTE_PRIORITY: Array<{ role: string; route: string }> = [
   { role: 'super_admin', route: '/admin' },
   { role: 'user_admin', route: '/admin/users' },
+  { role: 'exam_admin', route: '/admin/exam-room' },
   { role: 'exam_admin', route: '/admin/exams' },
   { role: 'course_teacher', route: '/admin/teaching' },
   { role: 'content_admin', route: '/admin/materials' },

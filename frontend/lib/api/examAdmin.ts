@@ -26,6 +26,7 @@ export interface ExamCreateData {
     vip_tier?: string; // 'basic' | 'vip' | 'premium'
     start_time?: string;
     end_time?: string;
+    maxParticipants?: number;
     difficulty_level?: string; // P1: 'easy' | 'medium' | 'hard'
     languageMode?: string;
 }
@@ -308,6 +309,24 @@ export interface RoomPaperConfig {
     answers: RoomPaperAnswer[];
     attemptCount: number;
     ready: boolean;
+}
+
+export interface RoomExamSchedule {
+    id: number;
+    title: string;
+    status: string;
+    start_time: string | null;
+    end_time: string | null;
+    max_participants: number;
+    change_log?: Array<{
+        changed_by_name: string;
+        old_start_time: string | null;
+        old_end_time: string | null;
+        new_start_time: string | null;
+        new_end_time: string | null;
+        reason?: string | null;
+        changed_at: string;
+    }>;
 }
 
 export interface ApplyExamReviewFixesResult {
@@ -665,7 +684,7 @@ export const examAdminApi = {
     },
 
     // Get all exams
-    getAllExams: async (page = 1, limit = 20, type?: 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string, access?: 'normal' | 'vip') => {
+    getAllExams: async (page = 1, limit = 20, type?: 'library' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash', subject?: string, access?: 'normal' | 'vip') => {
         const response = await axios.get('/admin/exams', {
             params: { page, limit, ...(type ? { type } : {}), ...(subject ? { subject } : {}), ...(access ? { access } : {}) }
         });
@@ -788,8 +807,23 @@ export const examAdminApi = {
     },
 
     // Set exam schedule (start/end time for phong-thi)
-    setSchedule: async (examId: number, data: { start_time: string; end_time?: string | null }) => {
+    getSchedule: async (examId: number): Promise<RoomExamSchedule> => {
+        const response = await axios.get(`/admin/exams/${examId}/schedule`);
+        return response.data.data;
+    },
+
+    setSchedule: async (examId: number, data: {
+        start_time: string;
+        end_time?: string | null;
+        maxParticipants?: number;
+        reason?: string;
+    }) => {
         const response = await axios.put(`/admin/exams/${examId}/schedule`, data);
+        return response.data;
+    },
+
+    clearSchedule: async (examId: number, reason?: string) => {
+        const response = await axios.delete(`/admin/exams/${examId}/schedule`, { data: { reason } });
         return response.data;
     },
 

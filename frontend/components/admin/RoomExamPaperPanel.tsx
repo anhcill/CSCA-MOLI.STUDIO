@@ -13,7 +13,13 @@ function formatBytes(value?: number) {
   return `${bytes} B`;
 }
 
-export default function RoomExamPaperPanel({ examId }: { examId: number }) {
+export default function RoomExamPaperPanel({
+  examId,
+  onConfigChange,
+}: {
+  examId: number;
+  onConfigChange?: (config: RoomPaperConfig) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [config, setConfig] = useState<RoomPaperConfig | null>(null);
   const [questionCount, setQuestionCount] = useState(40);
@@ -28,6 +34,7 @@ export default function RoomExamPaperPanel({ examId }: { examId: number }) {
       setLoading(true);
       const next = await examAdminApi.getRoomPaperConfig(examId);
       setConfig(next);
+      onConfigChange?.(next);
       setQuestionCount(next.questionCount || 40);
       setAnswers(Object.fromEntries((next.answers || []).map((item) => [item.questionNumber, item.answerKey])));
     } catch (error: any) {

@@ -1,7 +1,7 @@
 export type AdminExamFilter = 'all' | 'phong-thi' | 'tu-do' | 'mo-phong' | 'delete-requests' | 'trash';
 export type AdminExamAccessFilter = 'all' | 'normal' | 'vip';
 
-const ADMIN_EXAM_FILTERS: AdminExamFilter[] = ['all', 'phong-thi', 'tu-do', 'mo-phong', 'delete-requests', 'trash'];
+const ADMIN_EXAM_FILTERS: AdminExamFilter[] = ['all', 'tu-do', 'mo-phong', 'delete-requests', 'trash'];
 const ADMIN_EXAM_ACCESS_FILTERS: AdminExamAccessFilter[] = ['all', 'normal', 'vip'];
 
 const STORAGE_KEY = 'moly.adminExamListState';

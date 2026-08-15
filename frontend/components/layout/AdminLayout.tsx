@@ -82,6 +82,13 @@ const NAV_SECTIONS = [
         permission: 'exams.manage',
         roles: [],
       },
+      {
+        label: 'Phòng thi',
+        icon: FiMonitor,
+        href: '/admin/exam-room',
+        permission: 'exams.manage',
+        roles: [],
+      },
     ],
   },
   {

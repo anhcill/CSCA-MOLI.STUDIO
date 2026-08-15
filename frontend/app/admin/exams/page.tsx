@@ -270,7 +270,7 @@ export default function ExamsPage() {
     const loadExams = async () => {
         try {
             setLoading(true);
-            const typeParam = filterType === 'all' ? undefined : filterType;
+            const typeParam = filterType === 'all' ? 'library' : filterType;
             const accessParam = accessFilter === 'all' ? undefined : accessFilter;
             const data = await examAdminApi.getAllExams(pagination.currentPage, pagination.limit, typeParam, subjectFilter || undefined, accessParam);
             setExams(data.exams);
@@ -793,8 +793,7 @@ export default function ExamsPage() {
                 {/* Filter Tabs */}
                 <div className="flex flex-wrap items-center gap-2">
                     {([
-                        { value: 'all', label: 'Tất cả', emoji: '📋', count: examCounts.all },
-                        { value: 'phong-thi', label: 'Phòng thi', emoji: '🏢', count: examCounts.phongThi },
+                        { value: 'all', label: 'Kho đề', emoji: '📋', count: examCounts.tuDo + examCounts.moPhong },
                         { value: 'mo-phong', label: 'Đề mô phỏng', emoji: '🎯', count: examCounts.moPhong },
                         { value: 'tu-do', label: 'Đề tự do', emoji: '📝', count: examCounts.tuDo },
                         ...(isSuperAdminUser ? [

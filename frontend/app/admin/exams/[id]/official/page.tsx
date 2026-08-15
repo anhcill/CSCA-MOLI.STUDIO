@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import RoomExamPaperPanel from '@/components/admin/RoomExamPaperPanel';
+import RoomExamSchedulePanel from '@/components/admin/RoomExamSchedulePanel';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
 import { examAdminApi } from '@/lib/api/examAdmin';
 import { adminApi, AdminUser } from '@/lib/api/admin';
-import { getAdminExamListStateHref } from '@/lib/utils/adminExamListState';
 import {
   officialExamApi,
   officialExamAdminApi,
@@ -27,7 +27,7 @@ import {
   FiTrendingUp, FiUsers, FiX,
 } from 'react-icons/fi';
 
-type TabId = 'paper' | 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'leaderboard' | 'violations' | 'certificates';
+type TabId = 'schedule' | 'paper' | 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'leaderboard' | 'violations' | 'certificates';
 
 interface ExamMeta {
   id: number;
@@ -67,13 +67,14 @@ interface MonitorData {
 }
 
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
-  { id: 'paper', label: 'Đề PDF & đáp án', icon: FiFileText },
-  { id: 'leaderboard', label: 'Xếp hạng phòng thi', icon: FiTrendingUp },
-  { id: 'registrations', label: 'Đăng ký', icon: FiUsers },
-  { id: 'rooms', label: 'Phòng thi', icon: FiMonitor },
-  { id: 'proctors', label: 'Giám thị', icon: FiUserCheck },
-  { id: 'monitor', label: 'Giám sát', icon: FiActivity },
+  { id: 'schedule', label: '1. Lịch thi', icon: FiCalendar },
+  { id: 'paper', label: '2. PDF & đáp án', icon: FiFileText },
+  { id: 'registrations', label: '3. Duyệt đăng ký', icon: FiUsers },
+  { id: 'rooms', label: '4. Phân phòng', icon: FiMonitor },
+  { id: 'proctors', label: '5. Giám thị', icon: FiUserCheck },
+  { id: 'monitor', label: '6. Giám sát', icon: FiActivity },
   { id: 'violations', label: 'Vi phạm', icon: FiShield },
+  { id: 'leaderboard', label: 'Kết quả', icon: FiTrendingUp },
   { id: 'certificates', label: 'Chứng nhận', icon: FiAward },
 ];
 
@@ -110,9 +111,6 @@ function StatTile({ label, value, icon: Icon }: { label: string; value: string |
 export default function OfficialExamAdminPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const examListHref = getAdminExamListStateHref('/admin/exams', searchParams);
-  const withExamListState = (path: string) => getAdminExamListStateHref(path, searchParams);
   const { user, isAuthenticated } = useAuthStore();
   const examId = Number(params?.id);
 
@@ -127,6 +125,8 @@ export default function OfficialExamAdminPage() {
   const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [monitor, setMonitor] = useState<MonitorData>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [paperReady, setPaperReady] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const [newRoom, setNewRoom] = useState({ room_name: '', location: '', capacity: 30 });
   const [assignment, setAssignment] = useState({ roomId: '', registrationId: '', seatNumber: '' });
@@ -199,16 +199,18 @@ export default function OfficialExamAdminPage() {
   const loadAll = async () => {
     try {
       setLoading(true);
-      const [examData, userData] = await Promise.all([
+      const [examData, userData, paperConfig] = await Promise.all([
         examAdminApi.getExamForEdit(examId),
         adminApi.getUsers({ page: 1, limit: 100 }),
+        examAdminApi.getRoomPaperConfig(examId),
       ]);
       setExam(examData.exam);
       setUsers(userData.users || []);
+      setPaperReady(Boolean(paperConfig.ready));
       await loadOperationalData(false);
     } catch (error: any) {
       alert(error.response?.data?.message || 'Không thể tải dữ liệu kỳ thi chính thức');
-      router.push(examListHref);
+      router.push('/admin/exam-room');
     } finally {
       setLoading(false);
     }
@@ -272,6 +274,33 @@ export default function OfficialExamAdminPage() {
     await loadOperationalData();
   };
 
+  const toggleRegistration = async () => {
+    if (!exam) return;
+    if (exam.status !== 'published') {
+      if (!exam.start_time || !exam.end_time) {
+        setActiveTab('schedule');
+        return alert('Bước 1 chưa xong: cần lưu đủ lịch thi.');
+      }
+      if (!paperReady) {
+        setActiveTab('paper');
+        return alert('Bước 2 chưa xong: cần tải PDF và nhập đủ đáp án.');
+      }
+    }
+    try {
+      setPublishing(true);
+      const nextStatus = exam.status === 'published' ? 'draft' : 'published';
+      const result = await examAdminApi.updateExamStatus(examId, nextStatus);
+      setExam((current) => current ? { ...current, status: result.exam?.status || nextStatus } : current);
+      alert(nextStatus === 'published'
+        ? 'Đã mở đăng ký. Kỳ thi hiện đang hiển thị ở trang Phòng thi của user.'
+        : 'Đã đóng đăng ký và ẩn kỳ thi khỏi trang user.');
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Không đổi được trạng thái đăng ký.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (loading) {
     return (
       <AdminLayout title="Kỳ thi chính thức">
@@ -289,8 +318,8 @@ export default function OfficialExamAdminPage() {
       <div className="space-y-5">
         <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
           <div>
-            <Link href={examListHref} className="mb-2 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600">
-              <FiChevronLeft /> Quay lại kho đề
+            <Link href="/admin/exam-room" className="mb-2 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600">
+              <FiChevronLeft /> Quay lại Phòng thi
             </Link>
             <h1 className="text-2xl font-black text-gray-900 dark:text-white">{exam?.title}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
@@ -301,12 +330,9 @@ export default function OfficialExamAdminPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href={withExamListState(`/admin/exams/${examId}/schedule`)} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
-              Lịch thi
-            </Link>
-            <Link href={withExamListState(`/admin/exams/${examId}`)} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50">
-              Sửa đề
-            </Link>
+            <button onClick={toggleRegistration} disabled={publishing} className={`rounded-xl px-4 py-2 text-sm font-black text-white disabled:opacity-50 ${exam?.status === 'published' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+              {publishing ? 'Đang xử lý...' : exam?.status === 'published' ? 'Đóng đăng ký' : 'Mở đăng ký cho user'}
+            </button>
             <button onClick={() => loadOperationalData()} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">
               <FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Làm mới
             </button>
@@ -340,7 +366,28 @@ export default function OfficialExamAdminPage() {
           })}
         </div>
 
-        {activeTab === 'paper' && <RoomExamPaperPanel examId={examId} />}
+        <div className="grid gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-4">
+          {[
+            ['1', 'Lịch thi', Boolean(exam?.start_time && exam?.end_time), 'schedule' as TabId],
+            ['2', 'PDF & đáp án', paperReady, 'paper' as TabId],
+            ['3', 'Mở đăng ký', exam?.status === 'published', 'registrations' as TabId],
+            ['4', 'Duyệt & phân phòng', rooms.length > 0, 'rooms' as TabId],
+          ].map(([number, label, done, target]: any) => (
+            <button key={number} onClick={() => setActiveTab(target)} className={`flex items-center gap-3 rounded-xl border p-3 text-left ${done ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white ${done ? 'bg-emerald-500' : 'bg-amber-500'}`}>{done ? '✓' : number}</span>
+              <span className={`text-sm font-black ${done ? 'text-emerald-800' : 'text-amber-800'}`}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'schedule' && (
+          <RoomExamSchedulePanel
+            examId={examId}
+            onScheduleChange={(schedule) => setExam((current) => current ? { ...current, start_time: schedule.start_time, end_time: schedule.end_time, max_participants: schedule.max_participants } : current)}
+          />
+        )}
+
+        {activeTab === 'paper' && <RoomExamPaperPanel examId={examId} onConfigChange={(config) => setPaperReady(Boolean(config.ready))} />}
 
         {activeTab === 'registrations' && (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

@@ -1880,7 +1880,7 @@ const AdminExamController = {
   async createExam(req, res) {
     try {
       // P0: destructure titleCn
-      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level, languageMode, language_mode } = req.body;
+      const { title, titleCn, subjectId, duration, totalPoints, description, descriptionCn, is_premium, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, difficulty_level, languageMode, language_mode, start_time, end_time, maxParticipants, max_participants } = req.body;
 
       if (!title || !subjectId) {
         return res.status(400).json({ message: "Title and subject required" });
@@ -1894,6 +1894,18 @@ const AdminExamController = {
 
       const parsedTotalPoints = parsePositiveNumber(totalPoints, 100);
       const parsedDuration = resolveExamDurationMinutes(duration, subjectCheck.rows[0]);
+      const hasSchedule = Boolean(start_time || end_time);
+      if (hasSchedule && (!start_time || !end_time)) {
+        return res.status(400).json({ message: 'Cần chọn đủ giờ bắt đầu và kết thúc.' });
+      }
+      const parsedStartTime = hasSchedule ? new Date(start_time) : null;
+      const parsedEndTime = hasSchedule ? new Date(end_time) : null;
+      if (hasSchedule && (!Number.isFinite(parsedStartTime.getTime())
+        || !Number.isFinite(parsedEndTime.getTime())
+        || parsedEndTime <= parsedStartTime)) {
+        return res.status(400).json({ message: 'Lịch thi không hợp lệ.' });
+      }
+      const parsedMaxParticipants = Math.max(0, Number.parseInt(maxParticipants ?? max_participants ?? 0, 10) || 0);
 
       // P1: sanitize all text inputs to prevent XSS
       const examCode = `EXAM-${subjectId}-${Date.now()}`;
@@ -1903,8 +1915,8 @@ const AdminExamController = {
       const access = normalizeExamAccess(is_premium, vip_tier);
 
       const result = await pool.query(
-        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, language_mode, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'draft', NOW(), $10, $11, $12, $13, $14, $15, $16, $17)
+        `INSERT INTO exams (code, title, title_cn, subject_id, duration, total_points, total_questions, description, difficulty_level, language_mode, status, publish_date, is_premium, allow_download, solution_video_url, solution_description, shuffle_mode, vip_tier, is_simulated, created_by, start_time, end_time, max_participants)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, 'draft', NOW(), $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
          RETURNING *`,
         [
           examCode,
@@ -1924,6 +1936,9 @@ const AdminExamController = {
           access.vipTier,
           is_simulated === true,
           req.user.id,
+          parsedStartTime,
+          parsedEndTime,
+          parsedMaxParticipants,
         ],
       );
 
@@ -1963,12 +1978,62 @@ const AdminExamController = {
       const updates = [];
       const params = [];
       let idx = 1;
-      const currentExamResult = await pool.query("SELECT is_premium, vip_tier FROM exams WHERE id = $1 AND deleted_at IS NULL", [examId]);
+      const currentExamResult = await pool.query(
+        "SELECT is_premium, vip_tier, status, start_time, end_time FROM exams WHERE id = $1 AND deleted_at IS NULL",
+        [examId],
+      );
       if (currentExamResult.rows.length === 0) {
         return res.status(404).json({ message: "Exam not found" });
       }
       const currentAccess = normalizeExamAccess(currentExamResult.rows[0].is_premium, currentExamResult.rows[0].vip_tier);
       let effectiveAccess = currentAccess;
+      if (status === 'draft'
+        && currentExamResult.rows[0].status === 'published'
+        && currentExamResult.rows[0].start_time
+        && new Date(currentExamResult.rows[0].start_time) <= new Date()) {
+        return res.status(409).json({ message: 'Kỳ thi đã bắt đầu nên không thể đóng đăng ký.' });
+      }
+      if (status === 'published'
+        && currentExamResult.rows[0].status !== 'published'
+        && currentExamResult.rows[0].start_time) {
+        const readinessResult = await pool.query(
+          `SELECT EXISTS (
+                    SELECT 1 FROM admin_exam_source_files sf
+                    WHERE sf.exam_id = $1
+                      AND sf.is_exam_paper = TRUE
+                      AND sf.file_type = 'pdf'
+                      AND sf.file_data IS NOT NULL
+                  ) AS has_paper,
+                  COUNT(q.id)::int AS question_count,
+                  COUNT(q.id) FILTER (
+                    WHERE EXISTS (
+                      SELECT 1 FROM answers a
+                      WHERE a.question_id = q.id AND a.is_correct = TRUE
+                    )
+                  )::int AS answered_count
+           FROM questions q
+           WHERE q.exam_id = $1
+             AND q.question_number > 0
+             AND q.deleted_at IS NULL
+             AND q.question_type <> ALL($2::varchar[])`,
+          [examId, ['reading_passage', 'fill_blank_pool']],
+        );
+        const readiness = readinessResult.rows[0] || {};
+        if (!currentExamResult.rows[0].end_time) {
+          return res.status(409).json({ message: 'Cần đặt đủ giờ bắt đầu và kết thúc trước khi mở đăng ký.' });
+        }
+        if (new Date(currentExamResult.rows[0].end_time) <= new Date()) {
+          return res.status(409).json({ message: 'Kỳ thi đã kết thúc; hãy cập nhật lịch mới trước khi mở đăng ký.' });
+        }
+        if (!readiness.has_paper
+          || Number(readiness.question_count) < 1
+          || Number(readiness.answered_count) !== Number(readiness.question_count)) {
+          return res.status(409).json({
+            message: 'Cần tải PDF và nhập đủ bảng đáp án trước khi mở đăng ký.',
+            code: 'ROOM_PAPER_NOT_CONFIGURED',
+          });
+        }
+      }
       // P1: sanitize all text fields + P0: handle titleCn/descriptionCn
       if (title !== undefined) { updates.push(`title = $${idx++}`); params.push(sanitize(title)); }
       if (titleCn !== undefined) { updates.push(`title_cn = $${idx++}`); params.push(titleCn ? sanitize(titleCn) : null); }
@@ -3234,6 +3299,8 @@ const AdminExamController = {
       const conditions = ["e.deleted_at IS NULL AND COALESCE(e.deletion_status, 'none') <> 'soft_deleted'"];
       if (type === 'phong-thi') {
         conditions.push('e.start_time IS NOT NULL');
+      } else if (type === 'library') {
+        conditions.push('e.start_time IS NULL');
       } else if (type === 'tu-do') {
         conditions.push('e.start_time IS NULL AND e.is_simulated = false');
       } else if (type === 'mo-phong') {
@@ -3934,7 +4001,7 @@ const AdminExamController = {
         const old = oldRes.rows[0];
 
         await client.query(
-          'UPDATE exams SET start_time = NULL, end_time = NULL, max_participants = 0, updated_at = NOW() WHERE id = $1',
+          "UPDATE exams SET start_time = NULL, end_time = NULL, max_participants = 0, status = 'draft', updated_at = NOW() WHERE id = $1",
           [examId]
         );
         await client.query(

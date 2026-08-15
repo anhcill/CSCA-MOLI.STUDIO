@@ -19,6 +19,20 @@ const Exam = {
         AND e.deleted_at IS NULL
         AND e.start_time <= CURRENT_TIMESTAMP 
         AND e.end_time >= CURRENT_TIMESTAMP
+        AND EXISTS (
+          SELECT 1 FROM admin_exam_source_files sf
+          WHERE sf.exam_id = e.id AND sf.is_exam_paper = TRUE
+            AND sf.file_type = 'pdf' AND sf.file_data IS NOT NULL
+        )
+        AND EXISTS (
+          SELECT 1 FROM questions q
+          WHERE q.exam_id = e.id AND q.question_number > 0 AND q.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM questions q
+          WHERE q.exam_id = e.id AND q.question_number > 0 AND q.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM answers a WHERE a.question_id = q.id AND a.is_correct = TRUE)
+        )
     `;
 
     // 2. Upcoming Exams: start_time > NOW
@@ -36,6 +50,21 @@ const Exam = {
       WHERE e.status = 'published'
         AND e.deleted_at IS NULL
         AND e.start_time > CURRENT_TIMESTAMP
+        AND e.end_time > e.start_time
+        AND EXISTS (
+          SELECT 1 FROM admin_exam_source_files sf
+          WHERE sf.exam_id = e.id AND sf.is_exam_paper = TRUE
+            AND sf.file_type = 'pdf' AND sf.file_data IS NOT NULL
+        )
+        AND EXISTS (
+          SELECT 1 FROM questions q
+          WHERE q.exam_id = e.id AND q.question_number > 0 AND q.deleted_at IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM questions q
+          WHERE q.exam_id = e.id AND q.question_number > 0 AND q.deleted_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM answers a WHERE a.question_id = q.id AND a.is_correct = TRUE)
+        )
       ORDER BY e.start_time ASC
       LIMIT 10
     `;

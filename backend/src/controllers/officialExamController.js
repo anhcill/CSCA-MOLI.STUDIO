@@ -115,6 +115,39 @@ const officialExamController = {
         return res.status(400).json({ success: false, message: "Ky thi da bat dau, khong the dang ky" });
       }
 
+      const readinessResult = await client.query(
+        `SELECT EXISTS (
+                  SELECT 1 FROM admin_exam_source_files sf
+                  WHERE sf.exam_id = $1 AND sf.is_exam_paper = TRUE
+                    AND sf.file_type = 'pdf' AND sf.file_data IS NOT NULL
+                ) AS has_paper,
+                COUNT(q.id)::int AS question_count,
+                COUNT(q.id) FILTER (
+                  WHERE EXISTS (
+                    SELECT 1 FROM answers a
+                    WHERE a.question_id = q.id AND a.is_correct = TRUE
+                  )
+                )::int AS answered_count
+         FROM questions q
+         WHERE q.exam_id = $1
+           AND q.question_number > 0
+           AND q.deleted_at IS NULL
+           AND q.question_type <> ALL($2::varchar[])`,
+        [examId, ['reading_passage', 'fill_blank_pool']],
+      );
+      const readiness = readinessResult.rows[0] || {};
+      if (!exam.end_time
+        || !readiness.has_paper
+        || Number(readiness.question_count) < 1
+        || Number(readiness.answered_count) !== Number(readiness.question_count)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          message: 'Kỳ thi chưa hoàn tất PDF, đáp án hoặc lịch thi.',
+          code: 'ROOM_EXAM_NOT_READY',
+        });
+      }
+
       const existing = await getRegistrationForUser(client, examId, req.user.id);
       if (existing && existing.status !== "cancelled") {
         await client.query("COMMIT");
