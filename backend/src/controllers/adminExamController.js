@@ -778,8 +778,8 @@ const AdminExamController = {
           await client.query(
             `INSERT INTO answers
                (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct)
-             VALUES ($1, $2, $2, $2, $2, $3)`,
-            [questionId, key, key === correctKey],
+             VALUES ($1, $2, $3, $3, $3, $4)`,
+            [questionId, key, key, key === correctKey],
           );
         }
       }
