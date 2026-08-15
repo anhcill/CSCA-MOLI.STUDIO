@@ -3,6 +3,7 @@ const { SOURCE_FILE_TEXT_LIMIT, SOURCE_PROMPT_TEXT_LIMIT } = require("./types");
 
 function compactSourceText(value) {
   return String(value || "")
+    .replace(/\0/g, "")
     .replace(/\r/g, "\n")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
