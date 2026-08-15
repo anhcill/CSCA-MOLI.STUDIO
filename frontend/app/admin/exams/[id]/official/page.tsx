@@ -548,7 +548,6 @@ export default function OfficialExamAdminPage() {
                 {(!monitor.recentViolations || monitor.recentViolations.length === 0) && <p className="text-sm text-gray-500">Chưa có vi phạm.</p>}
               </div>
             </div>
-          </section>
         )}
 
         {activeTab === 'leaderboard' && (
