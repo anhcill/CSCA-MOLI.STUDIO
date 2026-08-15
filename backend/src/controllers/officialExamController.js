@@ -171,7 +171,12 @@ const officialExamController = {
       if (existing) {
         const updated = await client.query(
           `UPDATE exam_registrations
-           SET status = 'registered', cancelled_at = NULL, registered_at = NOW(), updated_at = NOW()
+           SET status = 'approved',
+               approved_by = NULL,
+               approved_at = NOW(),
+               cancelled_at = NULL,
+               registered_at = NOW(),
+               updated_at = NOW()
            WHERE id = $1
            RETURNING *`,
           [existing.id],
@@ -179,8 +184,8 @@ const officialExamController = {
         registration = updated.rows[0];
       } else {
         const created = await client.query(
-          `INSERT INTO exam_registrations (exam_id, user_id, status)
-           VALUES ($1, $2, 'registered')
+          `INSERT INTO exam_registrations (exam_id, user_id, status, approved_at)
+           VALUES ($1, $2, 'approved', NOW())
            RETURNING *`,
           [examId, req.user.id],
         );
@@ -193,12 +198,17 @@ const officialExamController = {
       UserActivity.log(req.user.id, "exam_register", {
         examId,
         registrationId: registration.id,
+        autoApproved: true,
         ip: req.ip,
         userAgent: req.headers["user-agent"],
       });
       emitExamMonitor(req, examId, "exam_registration_changed", { examId, registration });
 
-      return res.status(201).json({ success: true, data: registration });
+      return res.status(201).json({
+        success: true,
+        data: registration,
+        message: "Dang ky thanh cong va da duoc tu dong duyet",
+      });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       console.error("Register official exam error:", error);
@@ -411,11 +421,11 @@ const officialExamController = {
 
       const result = await client.query(
         `UPDATE exam_registrations
-         SET status = $1,
+         SET status = $1::varchar,
              note = COALESCE($2, note),
-             approved_by = CASE WHEN $1 IN ('approved', 'checked_in') THEN COALESCE(approved_by, $3) ELSE approved_by END,
-             approved_at = CASE WHEN $1 IN ('approved', 'checked_in') THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
-             cancelled_at = CASE WHEN $1 = 'cancelled' THEN NOW() ELSE cancelled_at END,
+             approved_by = CASE WHEN $1::varchar IN ('approved', 'checked_in') THEN COALESCE(approved_by, $3) ELSE approved_by END,
+             approved_at = CASE WHEN $1::varchar IN ('approved', 'checked_in') THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+             cancelled_at = CASE WHEN $1::varchar = 'cancelled' THEN NOW() ELSE cancelled_at END,
              updated_at = NOW()
          WHERE id = $4 AND exam_id = $5
          RETURNING *`,

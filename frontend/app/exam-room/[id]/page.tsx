@@ -149,7 +149,7 @@ export default function ExamRoomDetailPage() {
       setSaving(true);
       const data = await officialExamApi.register(examId);
       setRegistration(data);
-      alert('Đã gửi đăng ký kỳ thi');
+      alert('Đăng ký thành công và đã được tự động duyệt');
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Đăng ký thất bại');
     } finally {
@@ -242,7 +242,7 @@ export default function ExamRoomDetailPage() {
               {!hasStarted && (
                 <div className="flex items-start gap-2 rounded-2xl bg-orange-50 border border-orange-100 p-4 text-sm text-orange-800">
                   <FiClock className="mt-0.5 shrink-0" />
-                  Kỳ thi chưa bắt đầu. Bạn chỉ có thể vào thi khi đến giờ và đăng ký đã được duyệt.
+                  Kỳ thi chưa bắt đầu. Bạn chỉ có thể vào thi khi đến giờ và đã được phân phòng.
                 </div>
               )}
 

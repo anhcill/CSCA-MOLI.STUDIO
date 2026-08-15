@@ -371,7 +371,7 @@ export default function OfficialExamAdminPage() {
             ['1', 'Lịch thi', Boolean(exam?.start_time && exam?.end_time), 'schedule' as TabId],
             ['2', 'PDF & đáp án', paperReady, 'paper' as TabId],
             ['3', 'Mở đăng ký', exam?.status === 'published', 'registrations' as TabId],
-            ['4', 'Duyệt & phân phòng', rooms.length > 0, 'rooms' as TabId],
+            ['4', 'Phân phòng', rooms.length > 0, 'rooms' as TabId],
           ].map(([number, label, done, target]: any) => (
             <button key={number} onClick={() => setActiveTab(target)} className={`flex items-center gap-3 rounded-xl border p-3 text-left ${done ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white ${done ? 'bg-emerald-500' : 'bg-amber-500'}`}>{done ? '✓' : number}</span>
@@ -419,7 +419,9 @@ export default function OfficialExamAdminPage() {
                       <td className="px-4 py-3 text-gray-500">{formatDateTime(reg.registered_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => updateRegistration(reg.id, 'approved')} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Duyệt</button>
+                          {reg.status === 'registered' && (
+                            <button onClick={() => updateRegistration(reg.id, 'approved')} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Duyệt</button>
+                          )}
                           <button
                             onClick={() => updateRegistration(reg.id, 'checked_in')}
                             disabled={!reg.room_id}

@@ -421,7 +421,7 @@ export default function ExamRoomPage() {
              </div>
              <div>
                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kỳ Thi Sắp Tới</h2>
-               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký. Chọn Đăng ký để admin duyệt và phân phòng.</p>
+               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký. Đăng ký được tự động duyệt; admin sẽ phân phòng sau.</p>
              </div>
           </div>
           
