@@ -12,6 +12,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 
 const crypto = require('crypto');
 const axios = require('axios');
+const { getPrimaryFrontendUrl } = require('../src/utils/frontendUrl');
 
 const pool = new (require('pg').Pool)({
   connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
@@ -21,7 +22,7 @@ const pool = new (require('pg').Pool)({
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const SENDER_EMAIL = process.env.EMAIL_SENDER || 'cloudlystudio05@gmail.com';
 const SENDER_NAME  = process.env.EMAIL_SENDER_NAME || 'CSCA Platform';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://csca-molistudio-production.up.railway.app';
+const FRONTEND_URL = getPrimaryFrontendUrl();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

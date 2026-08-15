@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { getPrimaryFrontendUrl } = require('../utils/frontendUrl');
 
 /**
  * Email Service - Brevo (Sendinblue) SMTP
@@ -585,7 +586,7 @@ class EmailService {
   }
 
   frontendUrl(path = '') {
-    const base = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    const base = getPrimaryFrontendUrl();
     return `${base}${path}`;
   }
 

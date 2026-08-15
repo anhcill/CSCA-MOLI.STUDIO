@@ -10,6 +10,7 @@ const DeviceSessionService = require("../services/deviceSessionService");
 const db = require("../config/database");
 const { getAuthorizationContext } = require("../services/rbacService");
 const adminMfaService = require("../services/adminMfaService");
+const { getPrimaryFrontendUrl } = require("../utils/frontendUrl");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const CURRENT_TERMS_VERSION = "2026-04";
@@ -25,7 +26,7 @@ const createEmailVerification = async (userId) => {
      WHERE id = $3`,
     [tokenHash, expiresAt, userId],
   );
-  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const frontendUrl = getPrimaryFrontendUrl();
   return {
     verifyUrl: `${frontendUrl}/verify-email?token=${rawToken}&id=${userId}`,
     expiresAt,
@@ -304,7 +305,7 @@ const createDeviceLimitPayload = (error) => ({
 
 const isDeviceLimitError = (error) => error?.code === "DEVICE_LIMIT_REACHED";
 
-const getFrontendUrl = () => (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
+const getFrontendUrl = () => getPrimaryFrontendUrl();
 
 const buildDeviceApprovalUrl = (challengeToken) =>
   `${getFrontendUrl()}/login?deviceApproval=${encodeURIComponent(challengeToken)}`;
@@ -904,11 +905,7 @@ const getFacebookRedirectUri = (req) => {
 };
 
 const getFrontendCallbackUrl = () => {
-  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000')
-    .split(',')
-    .map(url => url.trim())
-    .filter(Boolean)[0] || 'http://localhost:3000';
-  return `${frontendUrl.replace(/\/$/, '')}/auth/facebook/callback`;
+  return `${getPrimaryFrontendUrl()}/auth/facebook/callback`;
 };
 
 const getAllowedFacebookRedirectOrigins = () => {
@@ -1302,7 +1299,7 @@ const forgotPassword = async (req, res) => {
       [tokenHash, expiresAt, user.id],
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = getPrimaryFrontendUrl();
     const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}&id=${user.id}`;
 
     try {
