@@ -85,9 +85,9 @@ const Exam = {
       LIMIT 20
     `;
 
-    // 4. The most recently finished scheduled mock exam. This is deliberately
+    // 4. The most recently finished scheduled exam. This is deliberately
     // separate from the global leaderboard: the exam-room lobby must only show
-    // results belonging to one completed mock exam.
+    // results belonging to one completed room exam.
     const latestCompletedMockQuery = `
       SELECT
         e.id,
@@ -95,7 +95,6 @@ const Exam = {
         e.title_cn,
         e.start_time,
         e.end_time,
-        e.exam_type,
         s.name as subject_name,
         s.code as subject_code
       FROM exams e
@@ -105,7 +104,6 @@ const Exam = {
         AND e.start_time IS NOT NULL
         AND e.end_time IS NOT NULL
         AND e.end_time < CURRENT_TIMESTAMP
-        AND COALESCE(e.exam_type, 'mock') = 'mock'
       ORDER BY e.end_time DESC
       LIMIT 1
     `;
