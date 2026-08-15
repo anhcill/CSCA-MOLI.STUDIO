@@ -126,6 +126,16 @@ async function runOptimizations() {
       CREATE INDEX IF NOT EXISTS idx_admin_exam_source_files_exam_created
       ON admin_exam_source_files(exam_id, created_at DESC)
     `);
+    await pool.query(`
+      ALTER TABLE admin_exam_source_files
+      ADD COLUMN IF NOT EXISTS file_data BYTEA,
+      ADD COLUMN IF NOT EXISTS is_exam_paper BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_exam_source_files_exam_paper
+      ON admin_exam_source_files(exam_id, is_exam_paper, created_at DESC)
+      WHERE is_exam_paper = TRUE
+    `);
 
     // Forum tables
     await pool.query(`
@@ -1150,6 +1160,7 @@ async function runOptimizations() {
       "051_device_replacement_hardening.sql",
       "052_admin_user_notifications.sql",
       "056_email_deliverability_controls.sql",
+      "057_pdf_mock_exam_workspace.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",

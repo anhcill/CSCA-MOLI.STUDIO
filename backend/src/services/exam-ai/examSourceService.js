@@ -20,6 +20,7 @@ function normalizeSourceFileRow(row, options = {}) {
     fileSize: row.file_size,
     textLength: text.length || Number(row.text_length) || 0,
     pages: row.pages ?? null,
+    isExamPaper: row.is_exam_paper === true,
     uploadedBy: row.uploaded_by ?? null,
     createdAt: row.created_at,
   };
@@ -56,7 +57,7 @@ async function extractExamSourceFile(file) {
 
 async function listExamSourceFiles(client, examId) {
   const result = await client.query(
-    `SELECT id, exam_id, file_name, file_type, file_size, pages, uploaded_by, created_at,
+    `SELECT id, exam_id, file_name, file_type, file_size, pages, is_exam_paper, uploaded_by, created_at,
             LENGTH(text_content)::int AS text_length
      FROM admin_exam_source_files
      WHERE exam_id = $1
@@ -72,7 +73,7 @@ async function saveExamSourceFile(client, examId, file, userId) {
     `INSERT INTO admin_exam_source_files
        (exam_id, file_name, file_type, file_size, text_content, pages, uploaded_by, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, uploaded_by, created_at`,
+     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, uploaded_by, created_at`,
     [
       examId,
       extracted.fileName,
@@ -90,21 +91,72 @@ async function saveExamSourceFile(client, examId, file, userId) {
   };
 }
 
+async function saveExamPaper(client, examId, file, userId) {
+  const imported = await extractImportFileText(file);
+  if (imported.fileType !== "pdf" || !Buffer.isBuffer(file.buffer)) {
+    const error = new Error("EXAM_PAPER_MUST_BE_PDF");
+    error.statusCode = 400;
+    throw error;
+  }
+  const fullText = compactSourceText(imported.text);
+  const textContent = fullText.slice(0, SOURCE_FILE_TEXT_LIMIT);
+
+  await client.query(
+    `UPDATE admin_exam_source_files SET is_exam_paper = FALSE WHERE exam_id = $1 AND is_exam_paper = TRUE`,
+    [examId],
+  );
+  const result = await client.query(
+    `INSERT INTO admin_exam_source_files
+       (exam_id, file_name, file_type, file_size, file_data, is_exam_paper, text_content, pages, uploaded_by, created_at)
+     VALUES ($1, $2, 'pdf', $3, $4, TRUE, $5, $6, $7, NOW())
+     RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, uploaded_by, created_at`,
+    [
+      examId,
+      normalizeUploadedFileName(file.originalname),
+      Number(file.size) || Number(file.buffer.length) || 0,
+      file.buffer,
+      textContent,
+      imported.pages || null,
+      userId || null,
+    ],
+  );
+  return {
+    sourceFile: normalizeSourceFileRow(result.rows[0]),
+    warnings: imported.warnings || [],
+    truncated: fullText.length > SOURCE_FILE_TEXT_LIMIT,
+  };
+}
+
 async function deleteExamSourceFile(client, examId, sourceFileId) {
   const result = await client.query(
     `DELETE FROM admin_exam_source_files
      WHERE id = $1 AND exam_id = $2
-     RETURNING id, file_name`,
+     RETURNING id, file_name, is_exam_paper`,
     [sourceFileId, examId],
   );
-  return result.rows[0] || null;
+  const deleted = result.rows[0] || null;
+  if (deleted?.is_exam_paper) {
+    await client.query(
+      `UPDATE admin_exam_source_files
+       SET is_exam_paper = TRUE
+       WHERE id = (
+         SELECT id FROM admin_exam_source_files
+         WHERE exam_id = $1 AND file_type = 'pdf' AND file_data IS NOT NULL
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+       )`,
+      [examId],
+    );
+  }
+  return deleted;
 }
 
 async function getLatestExamSourceForReview(client, examId) {
   const result = await client.query(
-    `SELECT id, exam_id, file_name, file_type, file_size, text_content, pages, uploaded_by, created_at
+    `SELECT id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, uploaded_by, created_at
      FROM admin_exam_source_files
      WHERE exam_id = $1
+       AND is_exam_paper = FALSE
      ORDER BY created_at DESC, id DESC
      LIMIT 1`,
     [examId],
@@ -117,6 +169,7 @@ module.exports = {
   extractExamSourceFile,
   listExamSourceFiles,
   saveExamSourceFile,
+  saveExamPaper,
   deleteExamSourceFile,
   getLatestExamSourceForReview,
   normalizeSourceFileRow,

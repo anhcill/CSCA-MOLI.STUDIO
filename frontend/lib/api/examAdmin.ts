@@ -277,6 +277,7 @@ export interface AdminExamSourceFile {
     fileSize?: number;
     textLength?: number;
     pages?: number | null;
+    isExamPaper?: boolean;
     uploadedBy?: number | null;
     createdAt?: string;
 }
@@ -499,6 +500,16 @@ export const examAdminApi = {
         const formData = new FormData();
         formData.append('pdf', file);
         const response = await axios.post(`/admin/exams/${examId}/source-file`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000,
+        });
+        return response.data;
+    },
+
+    uploadExamPaper: async (examId: number, file: File): Promise<ExamSourceFileUploadResult> => {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const response = await axios.post(`/admin/exams/${examId}/exam-paper`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 180000,
         });

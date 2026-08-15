@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
 import type { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
+import PdfRoomExamWorkspace from '@/components/exam/PdfRoomExamWorkspace';
 import InkResultBackground, {
   inkResultButtonPanel,
   inkResultMuted,
@@ -32,6 +33,8 @@ type PendingEssaySave = {
 };
 
 const ESSAY_SAVE_DEBOUNCE_MS = 650;
+const DEFAULT_EXAM_MAX_VIOLATIONS = 4;
+const PDF_ROOM_MAX_VIOLATIONS = 3;
 
 function hasAnsweredValue(value: number | string | undefined) {
   if (typeof value === 'string') return value.trim().length > 0;
@@ -49,7 +52,9 @@ function getVietnameseTranslation(chinese?: string | null, vietnamese?: string |
 }
 
 function getExamText(values: { vi?: string | null; zh?: string | null; en?: string | null }, mode?: string | null) {
-  return getExamLanguageText(values, mode);
+  // Never render an empty question/answer when an imported localization is
+  // missing. The source field remains available while the data is repaired.
+  return getExamLanguageText(values, mode, { fallback: true });
 }
 
 export default function ExamPage() {
@@ -107,6 +112,8 @@ export default function ExamPage() {
   const activeSavePromisesRef = useRef<Set<Promise<void>>>(new Set());
   const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
+  const isPdfRoomExam = Boolean(started && exam?.start_time && exam?.has_exam_pdf && !practiceMode);
+  const violationLimit = isPdfRoomExam ? PDF_ROOM_MAX_VIOLATIONS : DEFAULT_EXAM_MAX_VIOLATIONS;
 
   const {
     isOffline,
@@ -129,6 +136,8 @@ export default function ExamPage() {
 
   const { maxViolations, resetViolations } = useExamProtection({
     enabled: !!attemptId && !submitting && !practiceMode,
+    maxViolations: violationLimit,
+    requireFullscreen: isPdfRoomExam,
     onViolation: (type: string) => {
       setViolations((v) => {
         const next = v + 1;
@@ -138,7 +147,11 @@ export default function ExamPage() {
           officialExamApi.logViolation(attemptId, {
             type,
             count: next,
-            severity: next >= 15 ? 'critical' : next >= 10 ? 'high' : 'warning',
+            severity: next >= violationLimit
+              ? 'critical'
+              : next === violationLimit - 1
+                ? 'high'
+                : 'warning',
             metadata: {
               questionIndex: currentQuestionIndex,
               timeLeft,
@@ -165,7 +178,10 @@ export default function ExamPage() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (!started || !attemptId || typeof window === 'undefined') return;
+    if (!started || !attemptId || practiceMode || typeof window === 'undefined') {
+      setTabConflict(false);
+      return;
+    }
 
     const key = `csca-active-attempt-${attemptId}`;
     const owner = tabOwnerIdRef.current || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -213,7 +229,7 @@ export default function ExamPage() {
         localStorage.removeItem(key);
       }
     };
-  }, [attemptId, started]);
+  }, [attemptId, practiceMode, started]);
 
   // Auto-dismiss capture shield after 3 seconds
   useEffect(() => {
@@ -260,13 +276,15 @@ export default function ExamPage() {
   useEffect(() => {
     if (!started) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isOffline && pendingCount <= 0) return;
+      if (!isPdfRoomExam && !isOffline && pendingCount <= 0) return;
       event.preventDefault();
-      event.returnValue = 'Bài làm vẫn đang lưu trên máy. Hãy chờ đồng bộ xong trước khi rời trang.';
+      event.returnValue = isPdfRoomExam
+        ? 'Bạn chỉ có thể rời phòng thi sau khi nộp bài thành công.'
+        : 'Bài làm vẫn đang lưu trên máy. Hãy chờ đồng bộ xong trước khi rời trang.';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [started, isOffline, pendingCount]);
+  }, [started, isOffline, pendingCount, isPdfRoomExam]);
 
   useEffect(() => {
     if (!queuedSubmit || isOffline || pendingCount > 0 || !attemptId || !examId) return;
@@ -330,6 +348,7 @@ export default function ExamPage() {
 
       const token = sessionStorage.getItem('token');
       if (!token) {
+        if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
         alert('Vui lòng đăng nhập để thực hiện tính năng này!');
         router.push('/login');
         return;
@@ -337,14 +356,25 @@ export default function ExamPage() {
 
       const response = await examApi.getExamPreflight(examId);
       setPreflight(response);
-      setPreflightLeaderboardLoading(true);
-      officialExamApi.getLeaderboard(examId)
-        .then((data) => setPreflightLeaderboard((data.leaderboard || []).slice(0, 10)))
-        .catch((error) => {
-          console.error('Exam leaderboard error:', error);
-          setPreflightLeaderboard([]);
-        })
-        .finally(() => setPreflightLeaderboardLoading(false));
+      const scheduledExamEnded = Boolean(
+        response.start_time
+        && response.end_time
+        && Date.now() > new Date(response.end_time).getTime()
+      );
+      const canLoadLeaderboard = !response.start_time || scheduledExamEnded;
+      if (canLoadLeaderboard) {
+        setPreflightLeaderboardLoading(true);
+        officialExamApi.getLeaderboard(examId)
+          .then((data) => setPreflightLeaderboard((data.leaderboard || []).slice(0, 10)))
+          .catch((error) => {
+            console.error('Exam leaderboard error:', error);
+            setPreflightLeaderboard([]);
+          })
+          .finally(() => setPreflightLeaderboardLoading(false));
+      } else {
+        setPreflightLeaderboard([]);
+        setPreflightLeaderboardLoading(false);
+      }
       if (response.start_time) {
         officialExamApi.getMyRegistration(examId)
           .then(setRegistration)
@@ -401,8 +431,19 @@ export default function ExamPage() {
     try {
       setLoading(true);
 
+      const shouldEnterPdfRoom = Boolean(preflight?.start_time && preflight?.has_exam_pdf && !options.practice);
+      if (shouldEnterPdfRoom && !document.fullscreenElement) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch {
+          alert('Bạn cần cho phép toàn màn hình để vào phòng thi PDF.');
+          return;
+        }
+      }
+
       const token = sessionStorage.getItem('token');
       if (!token) {
+        if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
         alert('Vui lòng đăng nhập để thực hiện tính năng này!');
         router.push('/login');
         return;
@@ -428,6 +469,7 @@ export default function ExamPage() {
       setShowViolation(false);
       setLastViolation('');
       setIsScreenCaptured(false);
+      setTabConflict(false);
       resetViolations();
       setOfflineNotice(null);
       setQueuedSubmit(false);
@@ -448,6 +490,9 @@ export default function ExamPage() {
       );
     } catch (error: any) {
       console.error('Error starting exam:', error);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
       const errorCode = error.response?.data?.code;
       const errorMessage = error.response?.data?.message || 'Không thể bắt đầu làm bài. Có thể do kết nối mạng.';
 
@@ -569,8 +614,23 @@ export default function ExamPage() {
     await saveAnswerForQuestion(questionId, answerKey, undefined, practiceMode);
   };
 
+  const handlePdfAnswerSelect = async (question: Question, answerId: number, answerKey: string) => {
+    if (!attemptId || submitting || tabConflict) return;
+    setSelectedAnswers((prev) => ({ ...prev, [question.id]: answerId }));
+    await saveAnswerForQuestion(question.id, answerKey, undefined, false);
+  };
+
+  const togglePdfQuestionFlag = (questionId: number) => {
+    setFlaggedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  };
+
   const handleSubmit = async (options: { force?: boolean } = {}) => {
-    if (!attemptId || submitting || submitInFlightRef.current || tabConflict) return;
+    if (!attemptId || submitting || submitInFlightRef.current || (tabConflict && !options.force)) return;
 
     if (!options.force) {
       setShowSubmitConfirm(true);
@@ -595,6 +655,9 @@ export default function ExamPage() {
         return;
       }
       await clearDraft();
+      if (isPdfRoomExam && document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => {});
+      }
       // Redirect to result page
       router.push(`/exam/${examId}/result?attemptId=${submittingAttemptId}`);
     } catch (error) {
@@ -604,6 +667,11 @@ export default function ExamPage() {
       alert('Đã có lỗi xảy ra mạng lúc Nộp. Đừng hoảng loạn, thử ấn nộp lại.');
     }
   };
+
+  useEffect(() => {
+    if (!isPdfRoomExam || violations < maxViolations || submitting || !attemptId) return;
+    handleSubmit({ force: true });
+  }, [attemptId, isPdfRoomExam, maxViolations, submitting, violations]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -678,6 +746,10 @@ export default function ExamPage() {
     const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
     const hasAssignedRoom = !isOfficialExam || Boolean(registration?.room_id);
     const canStartOfficialExam = !isOfficialExam || (isApproved && hasAssignedRoom);
+    const languageReady = Boolean((isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
+    const leaderboardAvailable = !isOfficialExam || Boolean(
+      preflight.end_time && Date.now() > new Date(preflight.end_time).getTime()
+    );
 
     return (
       <InkResultBackground>
@@ -854,14 +926,14 @@ export default function ExamPage() {
                   <>
                     <button
                       onClick={() => startExam()}
-                      disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                      disabled={loading || !canStartOfficialExam || !languageReady}
                       className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
                     <button
                       onClick={() => startExam({ restart: true })}
-                      disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                      disabled={loading || !canStartOfficialExam || !languageReady}
                       className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[#ead9bd]/85 bg-[#fffaf2]/92 px-5 py-2.5 text-sm font-black text-[#6f563f] hover:bg-[#fff8ec] disabled:opacity-60"
                     >
                       <FiRotateCcw size={18} /> Làm lại từ đầu
@@ -870,7 +942,7 @@ export default function ExamPage() {
                 ) : (
                   <button
                     onClick={() => startExam()}
-                    disabled={loading || !canStartOfficialExam || !examLanguage || !explanationLanguage}
+                    disabled={loading || !canStartOfficialExam || !languageReady}
                       className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                   >
                     <FiPlay size={18} /> Bắt đầu làm bài
@@ -879,14 +951,14 @@ export default function ExamPage() {
                 {!isOfficialExam && (
                 <button
                   onClick={() => startExam({ practice: true })}
-                  disabled={loading || !examLanguage || !explanationLanguage}
+                  disabled={loading || !languageReady}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#c99722] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(201,151,34,0.18)] hover:bg-[#a97b17] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FiBookOpen size={18} /> Luyện tập không tính giờ
                 </button>
                 )}
               </div>
-              {(!examLanguage || !explanationLanguage) && (
+              {!languageReady && (
                 <p className="mt-4 text-center text-sm font-bold text-rose-500 flex items-center justify-center gap-1.5 animate-pulse">
                   <FiAlertCircle size={16} /> Vui lòng chọn ngôn ngữ đề thi và lời giải để bắt đầu nha!
                 </p>
@@ -894,18 +966,28 @@ export default function ExamPage() {
             </div>
           </div>
 
-          <OfficialExamLeaderboard
-            entries={preflightLeaderboard}
-            examTitle={preflight.title}
-            loading={preflightLeaderboardLoading}
-            compact
-            className="lg:sticky lg:top-4"
-            badgeLabel="Bảng xếp hạng đề thi"
-            scopeLabel="Riêng đề này"
-            noRoomLabel="Luyện đề tự do"
-            emptyTitle="Chưa có xếp hạng"
-            emptyDescription="Khi có người nộp bài, 10 kết quả tốt nhất của đề này sẽ hiện ở đây."
-          />
+          {leaderboardAvailable ? (
+            <OfficialExamLeaderboard
+              entries={preflightLeaderboard}
+              examTitle={preflight.title}
+              loading={preflightLeaderboardLoading}
+              compact
+              className="lg:sticky lg:top-4"
+              badgeLabel="Bảng xếp hạng đề thi"
+              scopeLabel="Riêng đề này"
+              noRoomLabel="Luyện đề tự do"
+              emptyTitle="Chưa có xếp hạng"
+              emptyDescription="Khi có người nộp bài, 10 kết quả tốt nhất của đề này sẽ hiện ở đây."
+            />
+          ) : (
+            <div className={`rounded-3xl p-6 text-center lg:sticky lg:top-4 ${inkResultPanel}`}>
+              <FiShield className="mx-auto mb-3 text-3xl text-indigo-600" />
+              <h2 className={`text-lg font-black ${inkResultTitle}`}>Bảng xếp hạng đang được khóa</h2>
+              <p className={`mt-2 text-sm font-semibold leading-6 ${inkResultMuted}`}>
+                Kết quả của kỳ thi này chỉ hiển thị sau khi kỳ thi kết thúc.
+              </p>
+            </div>
+          )}
           </div>
         </div>
       </div>
@@ -974,6 +1056,55 @@ export default function ExamPage() {
     });
   };
 
+  if (isPdfRoomExam) {
+    return (
+      <div className="fixed inset-0 z-[90] bg-slate-950">
+        <AiAnalyzingOverlay open={submitting} mode="exam" />
+        <PdfRoomExamWorkspace
+          exam={exam}
+          questions={questions}
+          selectedAnswers={selectedAnswers}
+          flaggedQuestions={flaggedQuestions}
+          timeLeft={timeLeft}
+          userName={user?.full_name || 'Thí sinh'}
+          violations={violations}
+          maxViolations={maxViolations}
+          submitting={submitting}
+          tabConflict={tabConflict}
+          onSelectAnswer={handlePdfAnswerSelect}
+          onToggleFlag={togglePdfQuestionFlag}
+          onSubmit={() => handleSubmit()}
+        />
+
+        {!submitting && showViolation && (
+          <ViolationWarning
+            count={violations}
+            maxViolations={maxViolations}
+            onClose={handleViolationClose}
+          />
+        )}
+
+        {showSubmitConfirm && (
+          <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700"><FiSend size={21} /></div>
+                <div><h2 className="text-lg font-black text-slate-950">Nộp bài thi?</h2><p className="text-sm font-semibold text-slate-500">Nộp thành công xong bạn mới rời được phòng thi.</p></div>
+              </div>
+              <div className="mb-5 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+                Đã làm <strong className="text-slate-950">{answeredCount}/{questions.length}</strong> câu · Còn <strong className="text-slate-950">{formatTime(timeLeft)}</strong>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setShowSubmitConfirm(false)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">Kiểm tra lại</button>
+                <button type="button" onClick={() => handleSubmit({ force: true })} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700">Nộp ngay</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`exam-content-text min-h-screen bg-[#f8fafc] selection:bg-indigo-200 ${practiceMode ? '' : 'exam-protected'}`}
@@ -985,7 +1116,7 @@ export default function ExamPage() {
     >
       <AiAnalyzingOverlay open={submitting} mode={practiceMode ? 'practice' : 'exam'} />
 
-      {tabConflict && (
+      {!practiceMode && tabConflict && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-2xl">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
@@ -1026,7 +1157,7 @@ export default function ExamPage() {
       )}
 
       {/* Watermark overlay - user identity stamped across exam */}
-      {mounted && (
+      {mounted && !practiceMode && (
         <div className="fixed inset-0 pointer-events-none z-[45] overflow-hidden" aria-hidden="true" style={{ opacity: 0.04 }}>
           <div className="absolute inset-0" style={{ transform: 'rotate(-35deg)', transformOrigin: 'center center' }}>
             {Array.from({ length: 12 }).map((_, row) => (

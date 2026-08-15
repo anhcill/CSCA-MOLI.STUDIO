@@ -56,16 +56,43 @@ const Exam = {
       LIMIT 20
     `;
 
-    const [liveResult, upcomingResult, publicResult] = await Promise.all([
+    // 4. The most recently finished scheduled mock exam. This is deliberately
+    // separate from the global leaderboard: the exam-room lobby must only show
+    // results belonging to one completed mock exam.
+    const latestCompletedMockQuery = `
+      SELECT
+        e.id,
+        e.title,
+        e.title_cn,
+        e.start_time,
+        e.end_time,
+        e.exam_type,
+        s.name as subject_name,
+        s.code as subject_code
+      FROM exams e
+      INNER JOIN subjects s ON e.subject_id = s.id
+      WHERE e.status = 'published'
+        AND e.deleted_at IS NULL
+        AND e.start_time IS NOT NULL
+        AND e.end_time IS NOT NULL
+        AND e.end_time < CURRENT_TIMESTAMP
+        AND COALESCE(e.exam_type, 'mock') = 'mock'
+      ORDER BY e.end_time DESC
+      LIMIT 1
+    `;
+
+    const [liveResult, upcomingResult, publicResult, latestCompletedMockResult] = await Promise.all([
       pool.query(liveQuery),
       pool.query(upcomingQuery),
-      pool.query(publicQuery)
+      pool.query(publicQuery),
+      pool.query(latestCompletedMockQuery)
     ]);
 
     return {
       live: liveResult.rows,
       upcoming: upcomingResult.rows,
-      public: publicResult.rows
+      public: publicResult.rows,
+      latest_completed_mock: latestCompletedMockResult.rows[0] || null
     };
   },
 
@@ -198,6 +225,13 @@ const Exam = {
       `SELECT e.*,
               s.name AS subject_name,
               s.code AS subject_code,
+              EXISTS (
+                SELECT 1 FROM admin_exam_source_files sf
+                WHERE sf.exam_id = e.id
+                  AND sf.is_exam_paper = TRUE
+                  AND sf.file_type = 'pdf'
+                  AND sf.file_data IS NOT NULL
+              ) AS has_exam_pdf,
               COUNT(DISTINCT CASE WHEN q.question_number > 0 AND q.deleted_at IS NULL THEN q.id END)::int AS question_count,
               COALESCE(
                 (SELECT COUNT(*) FROM exam_attempts
@@ -238,7 +272,14 @@ const Exam = {
   async getById(examId, includeAnswers = false) {
     // Get exam info
     const examQuery = `
-      SELECT e.*, s.name as subject_name, s.code as subject_code
+      SELECT e.*, s.name as subject_name, s.code as subject_code,
+             EXISTS (
+               SELECT 1 FROM admin_exam_source_files sf
+               WHERE sf.exam_id = e.id
+                 AND sf.is_exam_paper = TRUE
+                 AND sf.file_type = 'pdf'
+                 AND sf.file_data IS NOT NULL
+             ) AS has_exam_pdf
       FROM exams e
       INNER JOIN subjects s ON e.subject_id = s.id
       WHERE e.id = $1 AND e.deleted_at IS NULL

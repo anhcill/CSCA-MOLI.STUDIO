@@ -189,6 +189,59 @@ const examController = {
   },
 
   // Tạo đề thi mới (Admin only)
+  // Serve the original PDF only while this user has an active attempt.
+  // The file is never exposed through a public/static URL.
+  async getExamPaper(req, res) {
+    try {
+      const examId = parseInt(req.params.examId, 10);
+      if (!Number.isFinite(examId) || examId <= 0) {
+        return res.status(400).json({ success: false, message: "ID de thi khong hop le" });
+      }
+
+      const result = await pool.query(
+        `SELECT sf.file_name, sf.file_data
+         FROM admin_exam_source_files sf
+         JOIN exams e ON e.id = sf.exam_id
+         WHERE sf.exam_id = $1
+           AND e.start_time IS NOT NULL
+           AND sf.is_exam_paper = TRUE
+           AND sf.file_type = 'pdf'
+           AND sf.file_data IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM exam_attempts ea
+             WHERE ea.exam_id = sf.exam_id
+               AND ea.user_id = $2
+               AND ea.status = 'in_progress'
+           )
+         ORDER BY sf.created_at DESC, sf.id DESC
+         LIMIT 1`,
+        [examId, req.user.id],
+      );
+
+      const paper = result.rows[0];
+      if (!paper) {
+        return res.status(403).json({
+          success: false,
+          code: "EXAM_PAPER_NOT_AVAILABLE",
+          message: "File de thi chi mo khi ban dang trong luot thi hop le",
+        });
+      }
+
+      const originalName = String(paper.file_name || `exam-${examId}.pdf`).replace(/[\r\n"]/g, "_");
+      const safeName = originalName.replace(/[^\x20-\x7E]/g, "_");
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(originalName)}`,
+        "Cache-Control": "private, no-store, max-age=0",
+        "X-Content-Type-Options": "nosniff",
+      });
+      return res.send(paper.file_data);
+    } catch (error) {
+      console.error("Get exam paper error:", error);
+      return res.status(500).json({ success: false, message: "Khong tai duoc file de thi" });
+    }
+  },
+
   async getExamPreflight(req, res) {
     try {
       const parsedId = parseInt(req.params.examId, 10);

@@ -7,22 +7,30 @@ import {
   FiMonitor, FiUsers, FiClock, FiCalendar, 
   FiFileText, FiAward, FiSearch, FiFilter,
   FiPlayCircle, FiChevronRight, FiSettings,
-  FiTrendingUp, FiArrowRight, FiCheckCircle, FiXCircle, FiMapPin, FiPrinter
+  FiArrowRight, FiCheckCircle, FiXCircle, FiMapPin, FiPrinter
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axiosInstance from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
-import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
+import { ExamRegistration, OfficialExamLeaderboardEntry, officialExamApi } from '@/lib/api/officialExams';
 
-interface LeaderboardEntry {
-  rank: number;
+interface LobbyExam {
   id: number;
-  full_name: string;
-  avatar_url: string | null;
-  total_attempts: number;
-  avg_score: number;
-  best_score: number;
+  title: string;
+  title_cn?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  subject_name?: string | null;
+  subject_code?: string | null;
+  [key: string]: any;
+}
+
+interface LobbyData {
+  live: LobbyExam[];
+  upcoming: LobbyExam[];
+  public: LobbyExam[];
+  latest_completed_mock: LobbyExam | null;
 }
 
 export default function ExamRoomPage() {
@@ -31,45 +39,60 @@ export default function ExamRoomPage() {
   const [mounted, setMounted] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [lobbyData, setLobbyData] = useState<{ live: any[]; upcoming: any[]; public: any[] }>({ live: [], upcoming: [], public: [] });
+  const [lobbyData, setLobbyData] = useState<LobbyData>({ live: [], upcoming: [], public: [], latest_completed_mock: null });
   const [registrations, setRegistrations] = useState<Record<number, ExamRegistration | null>>({});
   const [registrationLoading, setRegistrationLoading] = useState<Record<number, boolean>>({});
   const [now, setNow] = useState(Date.now());
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
 
   const publicExamsRef = useRef<HTMLDivElement>(null);
+  const latestLeaderboardRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMounted(true);
     
-    const interval = setInterval(() => setNow(Date.now()), 60000);
-    
-    const fetchLobby = async () => {
+    let cancelled = false;
+
+    const fetchLobbyAndLeaderboard = async () => {
       try {
         const res = await axiosInstance.get('/exams/lobby');
-        if (res.data?.success) {
-          setLobbyData(res.data.data);
+        if (!res.data?.success || cancelled) return;
+
+        const data: LobbyData = {
+          live: res.data.data?.live || [],
+          upcoming: res.data.data?.upcoming || [],
+          public: res.data.data?.public || [],
+          latest_completed_mock: res.data.data?.latest_completed_mock || null,
+        };
+        setLobbyData(data);
+
+        if (!data.latest_completed_mock?.id) {
+          setLeaderboard([]);
+          setLeaderboardLoading(false);
+          return;
         }
+
+        setLeaderboardLoading(true);
+        const result = await officialExamApi.getLeaderboard(data.latest_completed_mock.id);
+        if (!cancelled) setLeaderboard(result.leaderboard || []);
       } catch (err) {
-        console.error("Failed to fetch exam lobby:", err);
+        console.error("Failed to fetch exam lobby leaderboard:", err);
+      } finally {
+        if (!cancelled) setLeaderboardLoading(false);
       }
     };
 
-    const fetchLeaderboard = async () => {
-      try {
-        const res = await axiosInstance.get('/leaderboard?limit=5');
-        if (res.data?.success) {
-          setLeaderboard(res.data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch leaderboard:", err);
-      }
-    };
-
-    fetchLobby();
-    fetchLeaderboard();
+    fetchLobbyAndLeaderboard();
+    const interval = setInterval(() => {
+      setNow(Date.now());
+      fetchLobbyAndLeaderboard();
+    }, 30000);
     
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,6 +144,10 @@ export default function ExamRoomPage() {
 
   const scrollToPublicExams = () => {
     publicExamsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const scrollToLatestLeaderboard = () => {
+    latestLeaderboardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const registrationLabel: Record<string, string> = {
@@ -287,12 +314,13 @@ export default function ExamRoomPage() {
                >
                  Tìm kỳ thi ngay
                </button>
-               <Link 
-                 href="/bang-xep-hang"
+               <button
+                 type="button"
+                 onClick={scrollToLatestLeaderboard}
                  className="px-6 py-2.5 bg-rose-700/50 backdrop-blur-md border border-rose-400/50 text-white text-sm font-bold rounded-xl shadow-md hover:bg-rose-700 transition-all duration-300 flex items-center gap-2"
                >
-                 <FiAward /> Xem bảng xếp hạng
-               </Link>
+                 <FiAward /> Xem kết quả kỳ thi gần nhất
+               </button>
              </div>
           </div>
 
@@ -451,29 +479,46 @@ export default function ExamRoomPage() {
           </div>
         </section>
 
-        {/* ── MINI LEADERBOARD ────────────────────────────────────── */}
-        {leaderboard.length > 0 && (
-          <section>
+        {/* ── LATEST COMPLETED MOCK EXAM LEADERBOARD ─────────────── */}
+          <section ref={latestLeaderboardRef} className="scroll-mt-24">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-yellow-100 text-yellow-600">
                   <FiAward className="text-xl" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Bảng xếp hạng toàn hệ thống</h2>
-                  <p className="text-sm font-semibold text-gray-500">Bảng thường, tính mọi bài thi đã hoàn thành.</p>
+                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Bảng xếp hạng kỳ thi thử vừa kết thúc</h2>
+                  <p className="text-sm font-semibold text-gray-500">
+                    {lobbyData.latest_completed_mock
+                      ? `${lobbyData.latest_completed_mock.title} · Chỉ tính kết quả của kỳ thi này.`
+                      : 'Kết quả sẽ tự động cập nhật sau khi kỳ thi thử kết thúc.'}
+                  </p>
                 </div>
               </div>
-              <Link href="/bang-xep-hang" className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:text-violet-800 transition-colors">
-                Xem bảng thường <FiArrowRight />
-              </Link>
+              {lobbyData.latest_completed_mock && (
+                <Link href={`/exam-room/${lobbyData.latest_completed_mock.id}`} className="hidden sm:flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:text-violet-800 transition-colors">
+                  Xem chi tiết kỳ thi <FiArrowRight />
+                </Link>
+              )}
             </div>
 
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+            {leaderboardLoading ? (
+              <div className="h-36 rounded-[2rem] border border-gray-100 bg-white shadow-sm animate-pulse" />
+            ) : !lobbyData.latest_completed_mock ? (
+              <div className="rounded-[2rem] border border-dashed border-gray-200 bg-white px-6 py-10 text-center text-sm font-semibold text-gray-500">
+                Chưa có kỳ thi thử theo lịch nào đã kết thúc.
+              </div>
+            ) : leaderboard.length === 0 ? (
+              <div className="rounded-[2rem] border border-yellow-100 bg-yellow-50 px-6 py-10 text-center">
+                <p className="font-black text-gray-900">Kỳ thi đã kết thúc, kết quả đang được cập nhật.</p>
+                <p className="mt-1 text-sm font-semibold text-gray-500">Bảng này sẽ tự làm mới sau mỗi 30 giây.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
               {/* Top 3 highlight */}
               <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
                 {leaderboard.slice(0, 3).map((entry, idx) => (
-                  <div key={entry.id} className={`flex items-center gap-4 p-5 sm:p-6 ${idx === 0 ? 'bg-gradient-to-br from-yellow-50 to-orange-50' : ''}`}>
+                  <div key={entry.user_id} className={`flex items-center gap-4 p-5 sm:p-6 ${idx === 0 ? 'bg-gradient-to-br from-yellow-50 to-orange-50' : ''}`}>
                     <span className="text-2xl">{MEDAL[idx]}</span>
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden">
                       {entry.avatar_url 
@@ -483,11 +528,11 @@ export default function ExamRoomPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-gray-900 truncate text-sm">{entry.full_name}</p>
-                      <p className="text-xs text-gray-500">{entry.total_attempts} lần thi</p>
+                      <p className="text-xs text-gray-500 truncate">{entry.room_name || 'Kỳ thi thử'}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className={`text-lg font-black ${idx === 0 ? 'text-yellow-600' : 'text-gray-700'}`}>{entry.avg_score}</p>
-                      <p className="text-xs text-gray-400">ĐTB</p>
+                      <p className={`text-lg font-black ${idx === 0 ? 'text-yellow-600' : 'text-gray-700'}`}>{Number(entry.total_score).toFixed(1)}</p>
+                      <p className="text-xs text-gray-400">điểm</p>
                     </div>
                   </div>
                 ))}
@@ -497,7 +542,7 @@ export default function ExamRoomPage() {
               {leaderboard.length > 3 && (
                 <div className="border-t border-gray-100 divide-y divide-gray-50">
                   {leaderboard.slice(3).map((entry) => (
-                    <div key={entry.id} className="flex items-center gap-4 px-6 py-3">
+                    <div key={entry.user_id} className="flex items-center gap-4 px-6 py-3">
                       <span className="text-sm font-black text-gray-400 w-6 text-center">#{entry.rank}</span>
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden">
                         {entry.avatar_url 
@@ -506,14 +551,14 @@ export default function ExamRoomPage() {
                         }
                       </div>
                       <p className="flex-1 min-w-0 font-medium text-gray-800 truncate text-sm">{entry.full_name}</p>
-                      <p className="text-sm font-bold text-gray-600">{entry.avg_score} ĐTB</p>
+                      <p className="text-sm font-bold text-gray-600">{Number(entry.total_score).toFixed(1)} điểm</p>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </section>
-        )}
 
         {/* ── PUBLIC EXAM ARCHIVE ────────────────────────────────────── */}
         <section ref={publicExamsRef}>

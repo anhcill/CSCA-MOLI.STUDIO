@@ -78,6 +78,7 @@ router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExa
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
 router.get("/:examId/source-file", AdminExamController.listExamSourceFiles);
 router.post("/:examId/source-file", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamSourceFile);
+router.post("/:examId/exam-paper", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamPaper);
 router.delete("/:examId/source-file/:sourceFileId", examDeleteLimiter, AdminExamController.deleteExamSourceFile);
 router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController.normalizeExamFormulas);
 router.post("/:examId/review-quality", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewExamQuality);

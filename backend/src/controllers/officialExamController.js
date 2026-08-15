@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { pool } = require("../config/database");
 const { cache } = require("../config/cache");
 const UserActivity = require("../models/UserActivity");
+const ExamAttempt = require("../models/ExamAttempt");
 const AuditLog = require("../utils/auditLog");
 
 const ADMIN_VIOLATION_LABELS = {
@@ -819,9 +820,16 @@ const officialExamController = {
       }
 
       const attemptResult = await pool.query(
-        `SELECT ea.id, ea.exam_id, ea.user_id, er.id AS registration_id,
+        `SELECT ea.id, ea.exam_id, ea.user_id, ea.status, er.id AS registration_id,
                 room.id AS room_id, u.full_name AS user_name, u.email AS user_email,
-                e.title AS exam_title
+                e.title AS exam_title, e.start_time,
+                EXISTS (
+                  SELECT 1 FROM admin_exam_source_files sf
+                  WHERE sf.exam_id = ea.exam_id
+                    AND sf.is_exam_paper = TRUE
+                    AND sf.file_type = 'pdf'
+                    AND sf.file_data IS NOT NULL
+                ) AS has_exam_pdf
          FROM exam_attempts ea
          LEFT JOIN users u ON u.id = ea.user_id
          LEFT JOIN exams e ON e.id = ea.exam_id
@@ -872,6 +880,36 @@ const officialExamController = {
       });
       emitExamMonitor(req, attempt.exam_id, "exam_violation_logged", { examId: attempt.exam_id, violation: result.rows[0] });
 
+      const violationTotalResult = await pool.query(
+        `SELECT COUNT(*)::int AS total
+         FROM exam_violations
+         WHERE attempt_id = $1`,
+        [attempt.id],
+      );
+      const serverViolationCount = Number(violationTotalResult.rows[0]?.total) || 0;
+      const isProtectedPdfRoomAttempt = Boolean(attempt.start_time && attempt.has_exam_pdf);
+      let autoSubmitted = false;
+      let submission = null;
+
+      if (isProtectedPdfRoomAttempt && attempt.status === "in_progress" && serverViolationCount >= 3) {
+        submission = await ExamAttempt.submit(attempt.id, attempt.user_id);
+        autoSubmitted = true;
+        UserActivity.log(req.user.id, "exam_auto_submit_violation", {
+          examId: attempt.exam_id,
+          attemptId: attempt.id,
+          violationCount: serverViolationCount,
+          triggerType: type,
+          ip: req.ip,
+          userAgent: req.headers["user-agent"],
+        });
+        emitExamMonitor(req, attempt.exam_id, "exam_attempt_auto_submitted", {
+          examId: attempt.exam_id,
+          attemptId: attempt.id,
+          userId: attempt.user_id,
+          violationCount: serverViolationCount,
+        });
+      }
+
       // Keep the admin informed in real time, but collapse repeated events of
       // the same type for one attempt into a five-minute notification window.
       const recentNotification = await pool.query(
@@ -908,7 +946,15 @@ const officialExamController = {
         });
       }
 
-      return res.status(201).json({ success: true, data: result.rows[0] });
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...result.rows[0],
+          server_violation_count: serverViolationCount,
+          auto_submitted: autoSubmitted,
+          submission,
+        },
+      });
     } catch (error) {
       console.error("Log exam violation error:", error);
       return res.status(500).json({ success: false, message: "Loi ghi nhan vi pham" });
@@ -1007,6 +1053,7 @@ const officialExamController = {
 
       const examResult = await pool.query(
         `SELECT e.id, e.title, e.start_time, e.end_time,
+                (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time >= CURRENT_TIMESTAMP)) AS leaderboard_locked,
                 s.name AS subject_name, s.code AS subject_code
          FROM exams e
          LEFT JOIN subjects s ON s.id = e.subject_id
@@ -1018,6 +1065,13 @@ const officialExamController = {
       const exam = examResult.rows[0];
       if (!exam) {
         return res.status(404).json({ success: false, message: "Khong tim thay ky thi" });
+      }
+      if (exam.leaderboard_locked) {
+        return res.status(423).json({
+          success: false,
+          code: "LEADERBOARD_NOT_AVAILABLE",
+          message: "Bang xep hang chi mo sau khi ky thi ket thuc",
+        });
       }
 
       const params = [examId];

@@ -26,6 +26,8 @@ export interface Exam {
   shuffle_mode?: boolean;
   vip_tier?: string; // 'basic' | 'vip' | 'premium'
   language_mode?: string;
+  exam_type?: string;
+  has_exam_pdf?: boolean;
   // New: Stats
   pass_rate?: number;
   overall_difficulty?: string;
@@ -186,6 +188,14 @@ const examApi = {
   }> {
     const response = await axios.post(`/exams/${examId}/start`, options);
     return response.data.data;
+  },
+
+  async getExamPaper(examId: number): Promise<Blob> {
+    const response = await axios.get(`/exams/${examId}/paper`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/pdf' },
+    });
+    return response.data;
   },
 
   // Lưu câu trả lời

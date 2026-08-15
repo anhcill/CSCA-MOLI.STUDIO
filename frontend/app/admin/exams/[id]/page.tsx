@@ -694,6 +694,7 @@ export default function AdminExamDetailPage() {
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
     const [sourceFiles, setSourceFiles] = useState<AdminExamSourceFile[]>([]);
     const [sourceFileUploading, setSourceFileUploading] = useState(false);
+    const [examPaperUploading, setExamPaperUploading] = useState(false);
     const [sourceFileDeletingId, setSourceFileDeletingId] = useState<number | null>(null);
     const [normalizingFormulas, setNormalizingFormulas] = useState(false);
     const [normalizeResult, setNormalizeResult] = useState<NormalizeFormulaResult | null>(null);
@@ -1233,9 +1234,26 @@ export default function AdminExamDetailPage() {
         }
     };
 
+    const handleUploadExamPaper = async (file: File) => {
+        if (!exam?.id || examPaperUploading) return;
+        try {
+            setExamPaperUploading(true);
+            const result = await examAdminApi.uploadExamPaper(exam.id, file);
+            setSourceFiles(Array.isArray(result.sourceFiles) ? result.sourceFiles : []);
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Upload đề PDF phòng thi thất bại.');
+        } finally {
+            setExamPaperUploading(false);
+        }
+    };
+
     const handleDeleteSourceFile = async (sourceFileId: number) => {
         if (!exam?.id || sourceFileDeletingId) return;
-        if (!confirm('Xóa file gốc đối chiếu của đề này?')) return;
+        const targetFile = sourceFiles.find((file) => file.id === sourceFileId);
+        const message = targetFile?.isExamPaper
+            ? 'Xóa đề PDF đang dùng trong phòng thi?'
+            : 'Xóa file gốc đối chiếu của đề này?';
+        if (!confirm(message)) return;
         try {
             setSourceFileDeletingId(sourceFileId);
             const result = await examAdminApi.deleteExamSourceFile(exam.id, sourceFileId);
@@ -2563,8 +2581,10 @@ export default function AdminExamDetailPage() {
                     <ExamSourceFilePanel
                         sourceFiles={sourceFiles}
                         uploading={sourceFileUploading}
+                        paperUploading={examPaperUploading}
                         deletingId={sourceFileDeletingId}
                         onUpload={handleUploadSourceFile}
+                        onUploadPaper={handleUploadExamPaper}
                         onDelete={handleDeleteSourceFile}
                     />
                 )}

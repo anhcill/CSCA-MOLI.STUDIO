@@ -29,6 +29,7 @@ const {
 const {
   deleteExamSourceFile: deleteExamSourceFileRecord,
   listExamSourceFiles: listExamSourceFileRecords,
+  saveExamPaper: saveExamPaperRecord,
   saveExamSourceFile: saveExamSourceFileRecord,
 } = require("../services/exam-ai/examSourceService");
 const { buildAiModeOptions, isDeepMode } = require("../services/adminExamAiModeService");
@@ -654,6 +655,48 @@ const AdminExamController = {
         return res.status(400).json({ message: "Chỉ hỗ trợ PDF và Word .doc/.docx." });
       }
       res.status(error.statusCode || 500).json({ message: "Upload file gốc thất bại." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async uploadExamPaper(req, res) {
+    const { examId } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ message: "Can upload file PDF de thi." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const exists = await ensureExamExists(client, examId);
+      if (!exists) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const result = await saveExamPaperRecord(client, examId, req.file, req.user.id);
+      const sourceFiles = await listExamSourceFileRecords(client, examId);
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.upload_exam_paper", {
+        examId,
+        sourceFileId: result.sourceFile?.id,
+        fileName: result.sourceFile?.fileName,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      return res.status(201).json({
+        message: "Da cap nhat de PDF cho phong thi.",
+        ...result,
+        sourceFiles,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Upload exam paper error:", getSafeErrorLog(error));
+      const status = error.message === "EXAM_PAPER_MUST_BE_PDF" ? 400 : (error.statusCode || 500);
+      return res.status(status).json({ message: "Upload de PDF phong thi that bai." });
     } finally {
       client.release();
     }

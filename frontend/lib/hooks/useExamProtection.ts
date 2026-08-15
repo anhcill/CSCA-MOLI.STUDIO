@@ -6,6 +6,7 @@ interface UseExamProtectionOptions {
   onViolation?: (type: string) => void;
   maxViolations?: number;
   enabled?: boolean;
+  requireFullscreen?: boolean;
 }
 
 /**
@@ -18,13 +19,20 @@ export function useExamProtection({
   onViolation,
   maxViolations = 15,
   enabled = true,
+  requireFullscreen = false,
 }: UseExamProtectionOptions = {}) {
   const violations = useRef(0);
   const warningRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSize = useRef({ w: 0, h: 0 });
+  const lastFocusLossAt = useRef(0);
 
   const handleViolation = useCallback(
     (type: string) => {
+      if (type === 'tab_switch' || type === 'window_blur' || type === 'fullscreen_exit') {
+        const now = Date.now();
+        if (now - lastFocusLossAt.current < 900) return;
+        lastFocusLossAt.current = now;
+      }
       violations.current += 1;
       if (onViolation) onViolation(type);
     },
@@ -65,9 +73,25 @@ export function useExamProtection({
 
     // 3. Detect window blur (clicking outside browser)
     const handleBlur = () => {
-      handleViolation('window_blur');
+      // Focusing the embedded PDF creates a blur event on the parent window in
+      // some browsers. That is an in-exam interaction, not a focus-loss event.
+      window.setTimeout(() => {
+        const activeElement = document.activeElement as HTMLElement | null;
+        const focusedPdfViewer = !document.hidden
+          && activeElement?.tagName === 'IFRAME'
+          && activeElement.dataset.examPdfViewer === 'true';
+        if (!focusedPdfViewer) handleViolation('window_blur');
+      }, 0);
     };
     window.addEventListener('blur', handleBlur);
+
+    // 3b. A protected room exam must remain in browser fullscreen.
+    const handleFullscreenChange = () => {
+      if (requireFullscreen && !document.fullscreenElement) {
+        handleViolation('fullscreen_exit');
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     // 4. Block keyboard shortcuts: print, save, screenshot
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -140,6 +164,7 @@ export function useExamProtection({
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('beforeprint', handleBeforePrint);
       window.removeEventListener('resize', handleResize);
@@ -150,7 +175,7 @@ export function useExamProtection({
       document.body.style.transition = '';
       if (warningRef.current) clearTimeout(warningRef.current);
     };
-  }, [enabled, handleViolation]);
+  }, [enabled, handleViolation, requireFullscreen]);
 
   const resetViolations = useCallback(() => {
     violations.current = 0;

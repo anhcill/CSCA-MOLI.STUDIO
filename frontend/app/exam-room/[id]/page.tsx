@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import examApi from '@/lib/api/exams';
 import { officialExamApi, ExamRegistration, OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
-import { FiArrowLeft, FiCalendar, FiCheckCircle, FiClock, FiMapPin, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiAward, FiCalendar, FiCheckCircle, FiClock, FiMapPin, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
 
 type ExamDetail = {
   id: number;
@@ -118,8 +118,19 @@ export default function ExamRoomDetailPage() {
 
   useEffect(() => {
     loadData();
-    loadLeaderboard();
   }, [examId]);
+
+  useEffect(() => {
+    if (!examId || !hasEnded) {
+      setLeaderboard([]);
+      setLeaderboardLoading(false);
+      return;
+    }
+
+    loadLeaderboard();
+    const leaderboardTimer = setInterval(loadLeaderboard, 30000);
+    return () => clearInterval(leaderboardTimer);
+  }, [examId, hasEnded]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000);
@@ -275,11 +286,21 @@ export default function ExamRoomDetailPage() {
           </div>
         </section>
 
-        <OfficialExamLeaderboard
-          entries={leaderboard}
-          examTitle={exam.title}
-          loading={leaderboardLoading}
-        />
+        {hasEnded ? (
+          <OfficialExamLeaderboard
+            entries={leaderboard}
+            examTitle={exam.title}
+            loading={leaderboardLoading}
+          />
+        ) : (
+          <section className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center">
+            <FiAward className="mx-auto mb-3 text-3xl text-amber-500" />
+            <h2 className="text-xl font-black text-slate-950">Bảng xếp hạng mở sau khi kỳ thi kết thúc</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              Kết quả của riêng kỳ thi này sẽ được tự động cập nhật sau khi hết giờ.
+            </p>
+          </section>
+        )}
       </main>
     </div>
   );
