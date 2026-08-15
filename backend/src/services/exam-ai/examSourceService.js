@@ -10,6 +10,14 @@ function compactSourceText(value) {
     .trim();
 }
 
+function postgresSafeText(value) {
+  return String(value || "").replace(/\0/g, "");
+}
+
+function normalizeSourceFileName(value) {
+  return postgresSafeText(normalizeUploadedFileName(value)).trim();
+}
+
 function normalizeSourceFileRow(row, options = {}) {
   if (!row) return null;
   const text = String(row.text_content || "");
@@ -46,7 +54,7 @@ async function extractExamSourceFile(file) {
   }
 
   return {
-    fileName: normalizeUploadedFileName(file.originalname),
+    fileName: normalizeSourceFileName(file.originalname),
     fileType: extracted.fileType,
     fileSize: Number(file.size) || Number(file.buffer?.length) || 0,
     textContent: text,
@@ -101,6 +109,9 @@ async function saveExamPaper(client, examId, file, userId) {
   }
   const fullText = compactSourceText(imported.text);
   const textContent = fullText.slice(0, SOURCE_FILE_TEXT_LIMIT);
+  // Send the PDF as base64 text and decode it inside PostgreSQL. This keeps NUL
+  // bytes out of the query parameter path while the decoded value remains BYTEA.
+  const fileDataBase64 = file.buffer.toString("base64");
 
   // A room exam has exactly one display PDF. Keeping demoted copies makes an
   // old paper look like an AI reference file and can accidentally restore it.
@@ -112,13 +123,13 @@ async function saveExamPaper(client, examId, file, userId) {
   const result = await client.query(
     `INSERT INTO admin_exam_source_files
        (exam_id, file_name, file_type, file_size, file_data, is_exam_paper, text_content, pages, uploaded_by, created_at)
-     VALUES ($1, $2, 'pdf', $3, $4, TRUE, $5, $6, $7, NOW())
+     VALUES ($1, $2, 'pdf', $3, decode($4, 'base64'), TRUE, $5, $6, $7, NOW())
      RETURNING id, exam_id, file_name, file_type, file_size, text_content, pages, is_exam_paper, uploaded_by, created_at`,
     [
       examId,
-      normalizeUploadedFileName(file.originalname),
+      normalizeSourceFileName(file.originalname),
       Number(file.size) || Number(file.buffer.length) || 0,
-      file.buffer,
+      fileDataBase64,
       textContent,
       imported.pages || null,
       userId || null,
