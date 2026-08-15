@@ -423,6 +423,32 @@ const examController = {
             registration,
           });
         }
+
+        const roomPaperResult = await db.query(
+          `SELECT COUNT(*)::int AS question_count,
+                  COUNT(*) FILTER (
+                    WHERE EXISTS (
+                      SELECT 1 FROM answers a
+                      WHERE a.question_id = q.id AND a.is_correct = TRUE
+                    )
+                  )::int AS answered_count
+           FROM questions q
+           WHERE q.exam_id = $1
+             AND q.question_number > 0
+             AND q.deleted_at IS NULL
+             AND q.question_type <> ALL($2::varchar[])`,
+          [parsedId, ['reading_passage', 'fill_blank_pool']],
+        );
+        const roomPaper = roomPaperResult.rows[0] || {};
+        if (!exam.has_exam_pdf
+          || Number(roomPaper.question_count) < 1
+          || Number(roomPaper.answered_count) !== Number(roomPaper.question_count)) {
+          return res.status(409).json({
+            success: false,
+            message: 'Phòng thi chưa có đủ file PDF và đáp án. Vui lòng báo quản trị viên.',
+            code: 'ROOM_PAPER_NOT_CONFIGURED',
+          });
+        }
       }
 
       const existingAttempt = !restart && !practiceMode

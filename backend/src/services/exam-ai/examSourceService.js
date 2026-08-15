@@ -101,8 +101,11 @@ async function saveExamPaper(client, examId, file, userId) {
   const fullText = compactSourceText(imported.text);
   const textContent = fullText.slice(0, SOURCE_FILE_TEXT_LIMIT);
 
+  // A room exam has exactly one display PDF. Keeping demoted copies makes an
+  // old paper look like an AI reference file and can accidentally restore it.
   await client.query(
-    `UPDATE admin_exam_source_files SET is_exam_paper = FALSE WHERE exam_id = $1 AND is_exam_paper = TRUE`,
+    `DELETE FROM admin_exam_source_files
+     WHERE exam_id = $1 AND file_data IS NOT NULL`,
     [examId],
   );
   const result = await client.query(
@@ -135,19 +138,6 @@ async function deleteExamSourceFile(client, examId, sourceFileId) {
     [sourceFileId, examId],
   );
   const deleted = result.rows[0] || null;
-  if (deleted?.is_exam_paper) {
-    await client.query(
-      `UPDATE admin_exam_source_files
-       SET is_exam_paper = TRUE
-       WHERE id = (
-         SELECT id FROM admin_exam_source_files
-         WHERE exam_id = $1 AND file_type = 'pdf' AND file_data IS NOT NULL
-         ORDER BY created_at DESC, id DESC
-         LIMIT 1
-       )`,
-      [examId],
-    );
-  }
   return deleted;
 }
 

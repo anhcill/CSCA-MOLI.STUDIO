@@ -694,7 +694,6 @@ export default function AdminExamDetailPage() {
     const [pdfImportSaving, setPdfImportSaving] = useState(false);
     const [sourceFiles, setSourceFiles] = useState<AdminExamSourceFile[]>([]);
     const [sourceFileUploading, setSourceFileUploading] = useState(false);
-    const [examPaperUploading, setExamPaperUploading] = useState(false);
     const [sourceFileDeletingId, setSourceFileDeletingId] = useState<number | null>(null);
     const [normalizingFormulas, setNormalizingFormulas] = useState(false);
     const [normalizeResult, setNormalizeResult] = useState<NormalizeFormulaResult | null>(null);
@@ -1231,19 +1230,6 @@ export default function AdminExamDetailPage() {
             alert(error?.response?.data?.message || 'Upload file gốc thất bại.');
         } finally {
             setSourceFileUploading(false);
-        }
-    };
-
-    const handleUploadExamPaper = async (file: File) => {
-        if (!exam?.id || examPaperUploading) return;
-        try {
-            setExamPaperUploading(true);
-            const result = await examAdminApi.uploadExamPaper(exam.id, file);
-            setSourceFiles(Array.isArray(result.sourceFiles) ? result.sourceFiles : []);
-        } catch (error: any) {
-            alert(error?.response?.data?.message || 'Upload đề PDF phòng thi thất bại.');
-        } finally {
-            setExamPaperUploading(false);
         }
     };
 
@@ -2581,10 +2567,8 @@ export default function AdminExamDetailPage() {
                     <ExamSourceFilePanel
                         sourceFiles={sourceFiles}
                         uploading={sourceFileUploading}
-                        paperUploading={examPaperUploading}
                         deletingId={sourceFileDeletingId}
                         onUpload={handleUploadSourceFile}
-                        onUploadPaper={handleUploadExamPaper}
                         onDelete={handleDeleteSourceFile}
                     />
                 )}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
+import RoomExamPaperPanel from '@/components/admin/RoomExamPaperPanel';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
@@ -26,7 +27,7 @@ import {
   FiTrendingUp, FiUsers, FiX,
 } from 'react-icons/fi';
 
-type TabId = 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'leaderboard' | 'violations' | 'certificates';
+type TabId = 'paper' | 'registrations' | 'rooms' | 'proctors' | 'monitor' | 'leaderboard' | 'violations' | 'certificates';
 
 interface ExamMeta {
   id: number;
@@ -66,6 +67,7 @@ interface MonitorData {
 }
 
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
+  { id: 'paper', label: 'Đề PDF & đáp án', icon: FiFileText },
   { id: 'leaderboard', label: 'Xếp hạng phòng thi', icon: FiTrendingUp },
   { id: 'registrations', label: 'Đăng ký', icon: FiUsers },
   { id: 'rooms', label: 'Phòng thi', icon: FiMonitor },
@@ -114,7 +116,7 @@ export default function OfficialExamAdminPage() {
   const { user, isAuthenticated } = useAuthStore();
   const examId = Number(params?.id);
 
-  const [activeTab, setActiveTab] = useState<TabId>('registrations');
+  const [activeTab, setActiveTab] = useState<TabId>('paper');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exam, setExam] = useState<ExamMeta | null>(null);
@@ -337,6 +339,8 @@ export default function OfficialExamAdminPage() {
             );
           })}
         </div>
+
+        {activeTab === 'paper' && <RoomExamPaperPanel examId={examId} />}
 
         {activeTab === 'registrations' && (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

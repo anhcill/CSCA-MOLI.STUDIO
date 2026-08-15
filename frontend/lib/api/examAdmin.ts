@@ -293,6 +293,23 @@ export interface ExamSourceFileUploadResult extends ExamSourceFileListResult {
     truncated?: boolean;
 }
 
+export interface RoomPaperAnswer {
+    questionId?: number;
+    questionNumber: number;
+    answerKey: string;
+    points?: number;
+}
+
+export interface RoomPaperConfig {
+    paper: AdminExamSourceFile | null;
+    questionCount: number;
+    totalPoints: number;
+    optionKeys: string[];
+    answers: RoomPaperAnswer[];
+    attemptCount: number;
+    ready: boolean;
+}
+
 export interface ApplyExamReviewFixesResult {
     examId?: number;
     message: string;
@@ -493,6 +510,19 @@ export const examAdminApi = {
 
     getExamSourceFiles: async (examId: number): Promise<ExamSourceFileListResult> => {
         const response = await axios.get(`/admin/exams/${examId}/source-file`);
+        return response.data;
+    },
+
+    getRoomPaperConfig: async (examId: number): Promise<RoomPaperConfig> => {
+        const response = await axios.get(`/admin/exams/${examId}/room-paper-config`);
+        return response.data;
+    },
+
+    saveRoomPaperConfig: async (
+        examId: number,
+        data: { questionCount: number; answers: RoomPaperAnswer[] },
+    ): Promise<{ message: string; questionCount: number; ready: boolean }> => {
+        const response = await axios.put(`/admin/exams/${examId}/room-paper-config`, data);
         return response.data;
     },
 

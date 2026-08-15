@@ -611,6 +611,205 @@ const AdminExamController = {
     }
   },
 
+  async getRoomPaperConfig(req, res) {
+    const { examId } = req.params;
+    const client = await pool.connect();
+    try {
+      const examResult = await client.query(
+        `SELECT id, total_points
+         FROM exams
+         WHERE id = $1 AND deleted_at IS NULL
+         LIMIT 1`,
+        [examId],
+      );
+      if (examResult.rows.length === 0) {
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const [sourceFiles, answerResult, attemptResult] = await Promise.all([
+        listExamSourceFileRecords(client, examId),
+        client.query(
+          `SELECT q.id AS question_id,
+                  q.question_number,
+                  q.points,
+                  MAX(a.answer_key) FILTER (WHERE a.is_correct = TRUE) AS answer_key
+           FROM questions q
+           LEFT JOIN answers a ON a.question_id = q.id
+           WHERE q.exam_id = $1
+             AND q.question_number > 0
+             AND q.deleted_at IS NULL
+             AND q.question_type <> ALL($2::varchar[])
+           GROUP BY q.id
+           ORDER BY q.question_number`,
+          [examId, ['reading_passage', 'fill_blank_pool']],
+        ),
+        client.query(
+          `SELECT COUNT(*)::int AS count
+           FROM exam_attempts
+           WHERE exam_id = $1`,
+          [examId],
+        ),
+      ]);
+
+      const paper = sourceFiles.find((file) => file.isExamPaper) || null;
+      const answers = answerResult.rows.map((row) => ({
+        questionId: row.question_id,
+        questionNumber: Number(row.question_number),
+        answerKey: row.answer_key ? String(row.answer_key).trim() : '',
+        points: Number(row.points) || 0,
+      }));
+
+      return res.json({
+        paper,
+        questionCount: answers.length,
+        totalPoints: Number(examResult.rows[0].total_points) || 100,
+        optionKeys: ['A', 'B', 'C', 'D'],
+        answers,
+        attemptCount: Number(attemptResult.rows[0]?.count) || 0,
+        ready: Boolean(paper)
+          && answers.length > 0
+          && answers.every((item) => ['A', 'B', 'C', 'D'].includes(item.answerKey)),
+      });
+    } catch (error) {
+      console.error('Get room paper config error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không tải được đề PDF và đáp án phòng thi.' });
+    } finally {
+      client.release();
+    }
+  },
+
+  async updateRoomPaperConfig(req, res) {
+    const { examId } = req.params;
+    const questionCount = Number.parseInt(req.body?.questionCount, 10);
+    const rawAnswers = Array.isArray(req.body?.answers) ? req.body.answers : [];
+    const allowedKeys = ['A', 'B', 'C', 'D'];
+
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > MAX_QUESTIONS_PER_EXAM) {
+      return res.status(400).json({ message: `Số câu phải từ 1 đến ${MAX_QUESTIONS_PER_EXAM}.` });
+    }
+
+    const answerMap = new Map();
+    for (const item of rawAnswers) {
+      const number = Number.parseInt(item?.questionNumber, 10);
+      const key = String(item?.answerKey || '').trim().toUpperCase();
+      if (Number.isInteger(number) && number >= 1 && number <= questionCount && allowedKeys.includes(key)) {
+        answerMap.set(number, key);
+      }
+    }
+    const missing = Array.from({ length: questionCount }, (_, index) => index + 1)
+      .filter((number) => !answerMap.has(number));
+    if (missing.length > 0) {
+      return res.status(400).json({
+        message: `Chưa nhập đáp án cho câu ${missing.slice(0, 12).join(', ')}${missing.length > 12 ? '...' : ''}.`,
+        missingQuestions: missing,
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [Number.parseInt(examId, 10)]);
+
+      const examResult = await client.query(
+        `SELECT id, total_points
+         FROM exams
+         WHERE id = $1 AND deleted_at IS NULL
+         FOR UPDATE`,
+        [examId],
+      );
+      if (examResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+
+      const paperResult = await client.query(
+        `SELECT 1
+         FROM admin_exam_source_files
+         WHERE exam_id = $1
+           AND is_exam_paper = TRUE
+           AND file_type = 'pdf'
+           AND file_data IS NOT NULL
+         LIMIT 1`,
+        [examId],
+      );
+      if (paperResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Hãy tải file PDF đề thi trước khi lưu đáp án.' });
+      }
+
+      const attemptResult = await client.query(
+        'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
+        [examId],
+      );
+      if (Number(attemptResult.rows[0]?.count) > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'Đề đã có lượt thi nên không thể thay số câu hoặc đáp án.',
+          code: 'ROOM_PAPER_CONFIG_LOCKED',
+        });
+      }
+
+      await client.query(
+        `UPDATE questions
+         SET deleted_at = CURRENT_TIMESTAMP,
+             deleted_by = $2,
+             delete_reason = 'replaced_by_room_paper_answer_key',
+             deleted_question_number = question_number
+         WHERE exam_id = $1 AND deleted_at IS NULL`,
+        [examId, req.user.id],
+      );
+
+      const totalPoints = Math.max(1, Number(examResult.rows[0].total_points) || 100);
+      const pointsPerQuestion = Math.floor((totalPoints * 100) / questionCount) / 100;
+      for (let number = 1; number <= questionCount; number += 1) {
+        const questionPoints = number === questionCount
+          ? Math.round((totalPoints - pointsPerQuestion * (questionCount - 1)) * 100) / 100
+          : pointsPerQuestion;
+        const questionResult = await client.query(
+          `INSERT INTO questions
+             (exam_id, question_number, question_type, question_text, points, difficulty)
+           VALUES ($1, $2, 'single_choice', $3, $4, 'medium')
+           RETURNING id`,
+          [examId, number, `Câu ${number} – xem nội dung trong file PDF`, questionPoints],
+        );
+        const questionId = questionResult.rows[0].id;
+        const correctKey = answerMap.get(number);
+        for (const key of allowedKeys) {
+          await client.query(
+            `INSERT INTO answers
+               (question_id, answer_key, answer_text, answer_text_cn, answer_text_en, is_correct)
+             VALUES ($1, $2, $2, $2, $2, $3)`,
+            [questionId, key, key === correctKey],
+          );
+        }
+      }
+
+      await syncExamTotals(client, examId);
+      await client.query('COMMIT');
+      cache.delByPrefix('exams:');
+      cache.del('exams:lobby');
+
+      UserActivity.log(req.user.id, 'admin.update_room_paper_answers', {
+        examId,
+        questionCount,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      return res.json({
+        message: `Đã lưu đáp án cho ${questionCount} câu.`,
+        questionCount,
+        ready: true,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('Update room paper config error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Lưu đáp án phòng thi thất bại.' });
+    } finally {
+      client.release();
+    }
+  },
+
   async uploadExamSourceFile(req, res) {
     const { examId } = req.params;
     if (!req.file) {
@@ -675,6 +874,18 @@ const AdminExamController = {
         return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
       }
 
+      const attemptResult = await client.query(
+        'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
+        [examId],
+      );
+      if (Number(attemptResult.rows[0]?.count) > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'Đề đã có lượt thi nên không thể thay file PDF.',
+          code: 'ROOM_PAPER_CONFIG_LOCKED',
+        });
+      }
+
       const result = await saveExamPaperRecord(client, examId, req.file, req.user.id);
       const sourceFiles = await listExamSourceFileRecords(client, examId);
       await client.query("COMMIT");
@@ -707,6 +918,26 @@ const AdminExamController = {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      const targetResult = await client.query(
+        `SELECT is_exam_paper
+         FROM admin_exam_source_files
+         WHERE id = $1 AND exam_id = $2
+         LIMIT 1`,
+        [sourceFileId, examId],
+      );
+      if (targetResult.rows[0]?.is_exam_paper) {
+        const attemptResult = await client.query(
+          'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
+          [examId],
+        );
+        if (Number(attemptResult.rows[0]?.count) > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            message: 'Đề đã có lượt thi nên không thể xóa file PDF.',
+            code: 'ROOM_PAPER_CONFIG_LOCKED',
+          });
+        }
+      }
       const deleted = await deleteExamSourceFileRecord(client, examId, sourceFileId);
       if (!deleted) {
         await client.query("ROLLBACK");

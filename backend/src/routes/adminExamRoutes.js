@@ -76,6 +76,8 @@ router.post("/:examId/delete-request/approve", examWriteLimiter, AdminExamContro
 router.post("/:examId/delete-request/reject", examWriteLimiter, AdminExamController.rejectDeleteRequest);
 router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
+router.get("/:examId/room-paper-config", AdminExamController.getRoomPaperConfig);
+router.put("/:examId/room-paper-config", examWriteLimiter, AdminExamController.updateRoomPaperConfig);
 router.get("/:examId/source-file", AdminExamController.listExamSourceFiles);
 router.post("/:examId/source-file", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamSourceFile);
 router.post("/:examId/exam-paper", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamPaper);
