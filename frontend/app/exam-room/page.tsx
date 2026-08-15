@@ -123,7 +123,7 @@ export default function ExamRoomPage() {
     };
   }, [user?.id, lobbyData.live, lobbyData.upcoming]);
 
-  const getTimeRemaining = (endTime: string) => {
+  const getTimeRemaining = (endTime?: string | null) => {
     if (!endTime) return "N/A";
     const end = new Date(endTime).getTime();
     const diff = end - now;
@@ -133,7 +133,7 @@ export default function ExamRoomPage() {
     return `${h > 0 ? h + 'h ' : ''}${m}m`;
   };
 
-  const formatUpcomingTime = (startTime: string) => {
+  const formatUpcomingTime = (startTime?: string | null) => {
     if (!startTime) return "N/A";
     const date = new Date(startTime);
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')} - ${date.toLocaleDateString('vi-VN')}`;
