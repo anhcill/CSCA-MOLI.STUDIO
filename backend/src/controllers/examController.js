@@ -377,10 +377,8 @@ const examController = {
       if (exam.start_time) {
         const db = require("../config/database");
         const registrationResult = await db.query(
-          `SELECT er.status, room.id AS room_id, room.room_name, room.location, ers.seat_number
+          `SELECT er.status
            FROM exam_registrations er
-           LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
-           LEFT JOIN exam_rooms room ON room.id = ers.room_id
            WHERE er.exam_id = $1 AND er.user_id = $2
            LIMIT 1`,
           [parsedId, userId],
@@ -395,15 +393,6 @@ const examController = {
             registration,
           });
         }
-        if (!registration.room_id) {
-          return res.status(403).json({
-            success: false,
-            message: "Dang ky da duoc duyet nhung chua duoc phan phong thi",
-            code: "ROOM_ASSIGNMENT_REQUIRED",
-            registration,
-          });
-        }
-
         const now = Date.now();
         const startsAt = new Date(exam.start_time).getTime();
         const endsAt = exam.end_time ? new Date(exam.end_time).getTime() : null;

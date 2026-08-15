@@ -329,14 +329,6 @@ const officialExamController = {
           code: "REGISTRATION_NOT_APPROVED",
         });
       }
-      if (!ticket.room_id) {
-        return res.status(403).json({
-          success: false,
-          message: "Dang ky da duoc duyet nhung chua duoc phan phong thi",
-          code: "ROOM_ASSIGNMENT_REQUIRED",
-        });
-      }
-
       const checkInCode = `CSCA-CHECKIN:${ticket.exam_id}:${ticket.registration_id}:${ticket.user_id}`;
       return res.json({
         success: true,
@@ -401,9 +393,8 @@ const officialExamController = {
       await client.query("BEGIN");
 
       const registrationCheck = await client.query(
-        `SELECT er.id, ers.room_id
+        `SELECT er.id
          FROM exam_registrations er
-         LEFT JOIN exam_room_students ers ON ers.registration_id = er.id
          WHERE er.id = $1 AND er.exam_id = $2
          FOR UPDATE OF er`,
         [registrationId, examId],
@@ -412,11 +403,6 @@ const officialExamController = {
       if (!registrationCheck.rows[0]) {
         await client.query("ROLLBACK");
         return res.status(404).json({ success: false, message: "Khong tim thay dang ky" });
-      }
-
-      if (status === "checked_in" && !registrationCheck.rows[0].room_id) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ success: false, message: "Can phan phong truoc khi check-in" });
       }
 
       const result = await client.query(

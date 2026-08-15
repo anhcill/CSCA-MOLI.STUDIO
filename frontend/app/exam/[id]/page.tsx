@@ -744,8 +744,7 @@ export default function ExamPage() {
     const isOfficialExam = Boolean(preflight.start_time);
     const registrationStatus = registration?.status;
     const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
-    const hasAssignedRoom = !isOfficialExam || Boolean(registration?.room_id);
-    const canStartOfficialExam = !isOfficialExam || (isApproved && hasAssignedRoom);
+    const canStartOfficialExam = !isOfficialExam || isApproved;
     const languageReady = Boolean((isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
     const leaderboardAvailable = !isOfficialExam || Boolean(
       preflight.end_time && Date.now() > new Date(preflight.end_time).getTime()
@@ -870,25 +869,13 @@ export default function ExamPage() {
                       <p className="font-black">
                         Trạng thái đăng ký: {registrationStatus === 'approved' ? 'Đã duyệt' :
                           registrationStatus === 'checked_in' ? 'Đã check-in' :
-                          registrationStatus === 'registered' ? 'Chờ duyệt' :
+                          registrationStatus === 'registered' ? 'Đã đăng ký' :
                           registrationStatus === 'cancelled' ? 'Đã hủy' : 'Chưa đăng ký'}
                       </p>
                       <p className="mt-1">
                         Giờ thi: {preflight.start_time ? new Date(preflight.start_time).toLocaleString('vi-VN') : 'Chưa đặt'}
                       </p>
-                      {registration?.room_name && (
-                        <p className="mt-1">
-                          Phòng: {registration.room_name}
-                          {registration.location ? ` - ${registration.location}` : ''}
-                          {registration.seat_number ? ` · Ghế ${registration.seat_number}` : ''}
-                        </p>
-                      )}
                     </div>
-                    {isApproved && !hasAssignedRoom && (
-                      <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-                        Dang ky da duoc duyet, dang cho admin phan phong thi.
-                      </p>
-                    )}
                     <div className="flex flex-wrap gap-2">
                       {(!registrationStatus || registrationStatus === 'cancelled') && (
                         <button
@@ -908,7 +895,7 @@ export default function ExamPage() {
                           {registrationLoading ? 'Đang xử lý...' : 'Hủy đăng ký'}
                         </button>
                       )}
-                      {isApproved && hasAssignedRoom && (
+                      {isApproved && (
                         <button
                           onClick={() => router.push(`/exam/${examId}/ticket`)}
                           className="rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100"

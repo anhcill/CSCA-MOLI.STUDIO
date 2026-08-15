@@ -54,13 +54,13 @@ export default function AdminExamRoomPage() {
   const finished = exams.filter((exam) => exam.end_time && new Date(exam.end_time).getTime() < now);
 
   return (
-    <AdminLayout title="Phòng thi" description="Một luồng riêng cho kỳ thi PDF có đăng ký, phân phòng và giám sát">
+    <AdminLayout title="Phòng thi" description="Một luồng riêng cho kỳ thi PDF có đăng ký tự động và giám sát">
       <div className="space-y-6">
         <div className="rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-white shadow-lg">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="text-2xl font-black">Quản lý Phòng thi</h1>
-              <p className="mt-1 text-sm font-semibold text-violet-100">Tạo kỳ thi → PDF & đáp án → lịch thi → mở đăng ký → duyệt → phân phòng → giám sát → kết quả.</p>
+              <p className="mt-1 text-sm font-semibold text-violet-100">Tạo kỳ thi → PDF & đáp án → lịch thi → mở đăng ký → giám sát → kết quả.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={load} className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-2 text-sm font-bold hover:bg-white/10"><FiRefreshCw className={loading ? 'animate-spin' : ''} /> Làm mới</button>

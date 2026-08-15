@@ -69,10 +69,8 @@ interface MonitorData {
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'schedule', label: '1. Lịch thi', icon: FiCalendar },
   { id: 'paper', label: '2. PDF & đáp án', icon: FiFileText },
-  { id: 'registrations', label: '3. Duyệt đăng ký', icon: FiUsers },
-  { id: 'rooms', label: '4. Phân phòng', icon: FiMonitor },
-  { id: 'proctors', label: '5. Giám thị', icon: FiUserCheck },
-  { id: 'monitor', label: '6. Giám sát', icon: FiActivity },
+  { id: 'registrations', label: '3. Đăng ký', icon: FiUsers },
+  { id: 'monitor', label: '4. Giám sát', icon: FiActivity },
   { id: 'violations', label: 'Vi phạm', icon: FiShield },
   { id: 'leaderboard', label: 'Kết quả', icon: FiTrendingUp },
   { id: 'certificates', label: 'Chứng nhận', icon: FiAward },
@@ -366,12 +364,11 @@ export default function OfficialExamAdminPage() {
           })}
         </div>
 
-        <div className="grid gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-4">
+        <div className="grid gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-3">
           {[
             ['1', 'Lịch thi', Boolean(exam?.start_time && exam?.end_time), 'schedule' as TabId],
             ['2', 'PDF & đáp án', paperReady, 'paper' as TabId],
             ['3', 'Mở đăng ký', exam?.status === 'published', 'registrations' as TabId],
-            ['4', 'Phân phòng', rooms.length > 0, 'rooms' as TabId],
           ].map(([number, label, done, target]: any) => (
             <button key={number} onClick={() => setActiveTab(target)} className={`flex items-center gap-3 rounded-xl border p-3 text-left ${done ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white ${done ? 'bg-emerald-500' : 'bg-amber-500'}`}>{done ? '✓' : number}</span>
@@ -400,7 +397,6 @@ export default function OfficialExamAdminPage() {
                   <tr>
                     <th className="px-4 py-3">Thí sinh</th>
                     <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Phòng</th>
                     <th className="px-4 py-3">Đăng ký lúc</th>
                     <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
@@ -413,9 +409,6 @@ export default function OfficialExamAdminPage() {
                         <p className="text-xs text-gray-500">{reg.email}</p>
                       </td>
                       <td className="px-4 py-3"><span className={statusBadge(reg.status)}>{reg.status}</span></td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
-                        {reg.room_name ? `${reg.room_name}${reg.seat_number ? ` - ghế ${reg.seat_number}` : ''}` : '--'}
-                      </td>
                       <td className="px-4 py-3 text-gray-500">{formatDateTime(reg.registered_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
@@ -424,8 +417,6 @@ export default function OfficialExamAdminPage() {
                           )}
                           <button
                             onClick={() => updateRegistration(reg.id, 'checked_in')}
-                            disabled={!reg.room_id}
-                            title={!reg.room_id ? 'Cần phân phòng trước khi check-in' : undefined}
                             className="rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Check-in
@@ -437,7 +428,7 @@ export default function OfficialExamAdminPage() {
                     </tr>
                   ))}
                   {registrations.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Chưa có thí sinh đăng ký.</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">Chưa có thí sinh đăng ký.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -545,32 +536,13 @@ export default function OfficialExamAdminPage() {
         )}
 
         {activeTab === 'monitor' && (
-          <section className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="mb-4 font-black text-gray-900 dark:text-white">Theo dõi phòng thi</h2>
-              <div className="space-y-3">
-                {(monitor.rooms || []).map((room) => (
-                  <div key={room.id} className="rounded-xl border border-gray-100 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="font-black text-gray-900">{room.room_name}</p>
-                      <span className="text-xs font-bold text-gray-500">{room.assigned_count}/{room.capacity}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <span className="rounded-lg bg-violet-50 p-2 font-bold text-violet-700">{room.checked_in} check-in</span>
-                      <span className="rounded-lg bg-red-50 p-2 font-bold text-red-700">{room.violations} vi phạm</span>
-                      <span className="rounded-lg bg-gray-50 p-2 font-bold text-gray-700">{room.location || '--'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="mb-4 font-black text-gray-900 dark:text-white">Vi phạm gần đây</h2>
+              <h2 className="mb-4 font-black text-gray-900 dark:text-white">Giám sát kỳ thi · Vi phạm gần đây</h2>
               <div className="space-y-2">
                 {(monitor.recentViolations || []).map((v) => (
                   <div key={v.id} className="rounded-xl bg-red-50 px-3 py-2">
                     <p className="font-bold text-red-800">{v.full_name || v.email} - {v.violation_type}</p>
-                    <p className="text-xs text-red-600">{v.room_name || 'Chưa phân phòng'} · {formatDateTime(v.created_at)}</p>
+                    <p className="text-xs text-red-600">{formatDateTime(v.created_at)}</p>
                   </div>
                 ))}
                 {(!monitor.recentViolations || monitor.recentViolations.length === 0) && <p className="text-sm text-gray-500">Chưa có vi phạm.</p>}

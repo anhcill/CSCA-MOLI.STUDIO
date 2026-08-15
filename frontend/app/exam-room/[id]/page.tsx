@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import examApi from '@/lib/api/exams';
 import { officialExamApi, ExamRegistration, OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
-import { FiArrowLeft, FiAward, FiCalendar, FiCheckCircle, FiClock, FiMapPin, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiAward, FiCalendar, FiCheckCircle, FiClock, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
 
 type ExamDetail = {
   id: number;
@@ -38,7 +38,7 @@ function formatDateTime(value?: string | null) {
 function registrationLabel(status?: string | null) {
   switch (status) {
     case 'registered':
-      return 'Đã đăng ký, đang chờ duyệt';
+      return 'Đã đăng ký';
     case 'approved':
       return 'Đã duyệt';
     case 'checked_in':
@@ -75,8 +75,7 @@ export default function ExamRoomDetailPage() {
   const endMs = exam?.end_time ? new Date(exam.end_time).getTime() : null;
   const hasStarted = !!startMs && now >= startMs;
   const hasEnded = !!endMs && now > endMs;
-  const hasAssignedRoom = !!registration?.room_id;
-  const canEnter = !!registration && ['approved', 'checked_in'].includes(registration.status) && hasAssignedRoom && hasStarted && !hasEnded;
+  const canEnter = !!registration && ['approved', 'checked_in'].includes(registration.status) && hasStarted && !hasEnded;
   const canRegister = !!exam?.start_time && !hasStarted && (!registration || registration.status === 'cancelled');
   const canCancel = !!registration && ['registered', 'approved'].includes(registration.status) && !hasStarted;
 
@@ -225,24 +224,12 @@ export default function ExamRoomDetailPage() {
                   <FiUserCheck /> Trạng thái đăng ký
                 </div>
                 <div className="text-lg font-black text-slate-950">{registrationLabel(registration?.status)}</div>
-                {registration?.room_name && (
-                  <div className="mt-3 text-sm text-slate-600 space-y-1">
-                    <p className="flex items-center gap-2"><FiMapPin /> Phòng: {registration.room_name}</p>
-                    {registration.location && <p>Địa điểm: {registration.location}</p>}
-                    {registration.seat_number && <p>Số ghế: {registration.seat_number}</p>}
-                  </div>
-                )}
-                {registration && ['approved', 'checked_in'].includes(registration.status) && !hasAssignedRoom && (
-                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-                    Dang ky da duoc duyet, dang cho admin phan phong thi.
-                  </p>
-                )}
               </div>
 
               {!hasStarted && (
                 <div className="flex items-start gap-2 rounded-2xl bg-orange-50 border border-orange-100 p-4 text-sm text-orange-800">
                   <FiClock className="mt-0.5 shrink-0" />
-                  Kỳ thi chưa bắt đầu. Bạn chỉ có thể vào thi khi đến giờ và đã được phân phòng.
+                  Kỳ thi chưa bắt đầu. Bạn có thể vào thi ngay khi đến giờ.
                 </div>
               )}
 

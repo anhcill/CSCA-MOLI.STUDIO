@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import { AdmissionTicket, officialExamApi } from '@/lib/api/officialExams';
-import { FiArrowLeft, FiCalendar, FiClock, FiHash, FiMapPin, FiPrinter, FiShield, FiUser } from 'react-icons/fi';
+import { FiArrowLeft, FiCalendar, FiClock, FiMonitor, FiPrinter, FiShield, FiUser } from 'react-icons/fi';
 
 function formatDateTime(value?: string | null) {
   if (!value) return 'Chưa có';
@@ -129,8 +129,7 @@ export default function AdmissionTicketPage() {
                 <InfoCard icon={FiShield} label="Trạng thái" value={ticket.status === 'checked_in' ? 'Đã check-in' : 'Đã duyệt'} />
                 <InfoCard icon={FiCalendar} label="Giờ bắt đầu" value={formatDateTime(ticket.start_time)} />
                 <InfoCard icon={FiClock} label="Giờ kết thúc" value={formatDateTime(ticket.end_time)} />
-                <InfoCard icon={FiMapPin} label="Phòng thi" value={ticket.room_name || 'Chưa phân phòng'} sub={ticket.location || undefined} />
-                <InfoCard icon={FiHash} label="Số ghế" value={ticket.seat_number ? String(ticket.seat_number) : 'Chưa phân ghế'} />
+                <InfoCard icon={FiMonitor} label="Hình thức" value="Thi trực tuyến" />
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
@@ -159,7 +158,7 @@ export default function AdmissionTicketPage() {
               )}
               <p className="mt-4 break-all font-mono text-xs font-bold text-slate-500">{ticket.check_in_code}</p>
               <p className="mt-3 text-xs leading-5 text-slate-400">
-                Xuất trình QR này khi vào phòng thi để giám thị check-in.
+                Dùng QR này nếu admin cần xác nhận check-in.
               </p>
             </aside>
           </div>

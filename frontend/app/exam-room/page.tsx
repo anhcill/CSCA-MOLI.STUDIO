@@ -7,7 +7,7 @@ import {
   FiMonitor, FiUsers, FiClock, FiCalendar, 
   FiAward,
   FiPlayCircle, FiChevronRight, FiSettings,
-  FiArrowRight, FiCheckCircle, FiXCircle, FiMapPin, FiPrinter
+  FiArrowRight, FiCheckCircle, FiXCircle, FiPrinter
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axiosInstance from '@/lib/utils/axios';
@@ -149,7 +149,7 @@ export default function ExamRoomPage() {
   };
 
   const registrationLabel: Record<string, string> = {
-    registered: 'Chờ duyệt',
+    registered: 'Đã đăng ký',
     approved: 'Đã duyệt',
     checked_in: 'Đã check-in',
     completed: 'Đã hoàn tất',
@@ -216,27 +216,12 @@ export default function ExamRoomPage() {
             {approved ? <FiCheckCircle size={14} /> : status === 'cancelled' ? <FiXCircle size={14} /> : <FiCalendar size={14} />}
             {status ? registrationLabel[status] || status : 'Chưa đăng ký'}
           </span>
-          {approved && registration?.room_id && (
+          {approved && (
             <Link href={`/exam/${exam.id}/ticket`} className="inline-flex items-center gap-1 text-xs font-black text-emerald-700 hover:text-emerald-900">
               <FiPrinter size={13} /> Vé dự thi
             </Link>
           )}
         </div>
-
-        {registration?.room_name && (
-          <div className="grid gap-1 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5">
-              <FiMapPin size={13} /> {registration.room_name}{registration.location ? ` - ${registration.location}` : ''}
-            </span>
-            {registration.seat_number ? <span>Ghế: {registration.seat_number}</span> : null}
-          </div>
-        )}
-
-        {approved && !registration?.room_id && (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-            Dang cho admin phan phong thi.
-          </p>
-        )}
 
         <div className="flex flex-wrap gap-2">
           {canRegister ? (
@@ -295,7 +280,7 @@ export default function ExamRoomPage() {
                Sảnh Thi Đấu <span className="text-orange-200">Trung Tâm</span>
              </h1>
              <p className="text-rose-100 text-sm md:text-base leading-relaxed mb-6 max-w-xl">
-               Nơi riêng dành cho kỳ thi theo lịch: đăng ký, nhận phòng và vào thi. Đề luyện tập tự do không hiển thị lẫn tại đây.
+               Nơi riêng dành cho kỳ thi theo lịch: đăng ký và vào thi đúng giờ. Đề luyện tập tự do không hiển thị lẫn tại đây.
              </p>
              
              <div className="flex flex-wrap gap-3">
@@ -421,7 +406,7 @@ export default function ExamRoomPage() {
              </div>
              <div>
                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kỳ Thi Sắp Tới</h2>
-               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký. Đăng ký được tự động duyệt; admin sẽ phân phòng sau.</p>
+               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký và được tự động duyệt.</p>
              </div>
           </div>
           
