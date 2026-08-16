@@ -179,7 +179,10 @@ const Exam = {
         LEFT JOIN users u ON e.created_by = u.id
         LEFT JOIN questions q ON e.id = q.exam_id AND q.deleted_at IS NULL
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
-        WHERE s.slug = $1 AND e.status = 'published' AND e.deleted_at IS NULL
+        WHERE s.slug = $1
+          AND e.status = 'published'
+          AND e.deleted_at IS NULL
+          AND e.start_time IS NULL
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;
@@ -236,7 +239,10 @@ const Exam = {
         LEFT JOIN users u ON e.created_by = u.id
         LEFT JOIN questions q ON e.id = q.exam_id AND q.deleted_at IS NULL
         LEFT JOIN exam_attempts ea ON e.id = ea.exam_id
-        WHERE s.code = $1 AND e.status = 'published' AND e.deleted_at IS NULL
+        WHERE s.code = $1
+          AND e.status = 'published'
+          AND e.deleted_at IS NULL
+          AND e.start_time IS NULL
         GROUP BY e.id, s.id, u.id
         ORDER BY e.publish_date DESC, e.created_at DESC
       `;

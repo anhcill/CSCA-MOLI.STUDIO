@@ -716,7 +716,10 @@ export default function ExamPage() {
     const bestScore = Number(preflight.user_best_score || 0);
     const isOfficialExam = Boolean(preflight.start_time);
     const attemptLimitReached = Boolean(
-      isOfficialExam && preflight.has_used_official_attempt && !inProgress
+      isOfficialExam
+        && user?.role !== 'admin'
+        && preflight.has_used_official_attempt
+        && !inProgress
     );
     const officialHasStarted = !preflight.start_time
       || scheduleNow >= new Date(preflight.start_time).getTime();

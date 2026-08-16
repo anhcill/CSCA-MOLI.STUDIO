@@ -355,6 +355,7 @@ const examController = {
     try {
       const { examId } = req.params;
       const userId = req.user.id;
+      const isAdmin = req.user.role === 'admin';
       const restart = req.body?.restart === true || req.body?.mode === "restart";
       const practiceMode = req.body?.practiceMode === true || req.body?.mode === "practice";
 
@@ -443,7 +444,7 @@ const examController = {
       const attempt = await ExamAttempt.start(userId, parsedId, {
         restart,
         practiceMode,
-        singleAttempt: Boolean(exam.start_time),
+        singleAttempt: Boolean(exam.start_time && !isAdmin),
       });
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)
