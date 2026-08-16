@@ -23,7 +23,7 @@ import {
 import { initSocket, getSocket } from '@/lib/socket';
 import {
   FiActivity, FiAward, FiCalendar, FiCheck, FiChevronLeft, FiClock,
-  FiFileText, FiMonitor, FiRefreshCw, FiShield, FiTrash2, FiUserCheck,
+  FiFileText, FiMonitor, FiRefreshCw, FiShield, FiTrash2,
   FiTrendingUp, FiUsers, FiX,
 } from 'react-icons/fi';
 
@@ -40,12 +40,27 @@ interface ExamMeta {
 
 interface MonitorData {
   overview?: {
-    registrations?: number;
-    checked_in?: number;
+    participants?: number;
     in_progress?: number;
     completed?: number;
     violations?: number;
   };
+  participants?: Array<{
+    attempt_id: number;
+    user_id: number;
+    status: string;
+    start_time?: string | null;
+    submit_time?: string | null;
+    duration_seconds?: number | null;
+    total_correct?: number | null;
+    total_incorrect?: number | null;
+    total_unanswered?: number | null;
+    score_100?: number | null;
+    full_name?: string | null;
+    username?: string | null;
+    email?: string | null;
+    avatar_url?: string | null;
+  }>;
   rooms?: Array<{
     id: number;
     room_name: string;
@@ -69,10 +84,10 @@ interface MonitorData {
 const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'schedule', label: '1. Lịch thi', icon: FiCalendar },
   { id: 'paper', label: '2. PDF & đáp án', icon: FiFileText },
-  { id: 'registrations', label: '3. Đăng ký', icon: FiUsers },
+  { id: 'registrations', label: '3. Thí sinh', icon: FiUsers },
   { id: 'monitor', label: '4. Giám sát', icon: FiActivity },
   { id: 'violations', label: 'Vi phạm', icon: FiShield },
-  { id: 'leaderboard', label: 'Kết quả', icon: FiTrendingUp },
+  { id: 'leaderboard', label: 'Bảng xếp hạng', icon: FiTrendingUp },
   { id: 'certificates', label: 'Chứng nhận', icon: FiAward },
 ];
 
@@ -86,6 +101,7 @@ function statusBadge(status?: string) {
     registered: 'bg-blue-50 text-blue-700 border-blue-200',
     approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     checked_in: 'bg-violet-50 text-violet-700 border-violet-200',
+    in_progress: 'bg-blue-50 text-blue-700 border-blue-200',
     completed: 'bg-slate-100 text-slate-700 border-slate-200',
     no_show: 'bg-amber-50 text-amber-700 border-amber-200',
     cancelled: 'bg-red-50 text-red-700 border-red-200',
@@ -160,6 +176,7 @@ export default function OfficialExamAdminPage() {
     socket?.on('exam_room_assignment_changed', reload);
     socket?.on('exam_proctor_assignment_changed', reload);
     socket?.on('exam_violation_logged', reload);
+    socket?.on('exam_attempt_changed', reload);
 
     return () => {
       const current = getSocket();
@@ -169,6 +186,7 @@ export default function OfficialExamAdminPage() {
       current?.off('exam_room_assignment_changed', reload);
       current?.off('exam_proctor_assignment_changed', reload);
       current?.off('exam_violation_logged', reload);
+      current?.off('exam_attempt_changed', reload);
     };
   }, [examId]);
 
@@ -211,15 +229,6 @@ export default function OfficialExamAdminPage() {
       router.push('/admin/exam-room');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const updateRegistration = async (registrationId: number, status: string) => {
-    try {
-      await officialExamAdminApi.updateRegistrationStatus(examId, registrationId, { status });
-      await loadOperationalData();
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể cập nhật trạng thái đăng ký');
     }
   };
 
@@ -290,10 +299,10 @@ export default function OfficialExamAdminPage() {
       const result = await examAdminApi.updateExamStatus(examId, nextStatus);
       setExam((current) => current ? { ...current, status: result.exam?.status || nextStatus } : current);
       alert(nextStatus === 'published'
-        ? 'Đã mở đăng ký. Kỳ thi hiện đang hiển thị ở trang Phòng thi của user.'
-        : 'Đã đóng đăng ký và ẩn kỳ thi khỏi trang user.');
+        ? 'Đã hiển thị kỳ thi ở trang Phòng thi của user.'
+        : 'Đã ẩn kỳ thi khỏi trang Phòng thi của user.');
     } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không đổi được trạng thái đăng ký.');
+      alert(error?.response?.data?.message || 'Không đổi được trạng thái hiển thị kỳ thi.');
     } finally {
       setPublishing(false);
     }
@@ -329,7 +338,7 @@ export default function OfficialExamAdminPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={toggleRegistration} disabled={publishing} className={`rounded-xl px-4 py-2 text-sm font-black text-white disabled:opacity-50 ${exam?.status === 'published' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-              {publishing ? 'Đang xử lý...' : exam?.status === 'published' ? 'Đóng đăng ký' : 'Mở đăng ký cho user'}
+              {publishing ? 'Đang xử lý...' : exam?.status === 'published' ? 'Ẩn kỳ thi với user' : 'Hiện kỳ thi cho user'}
             </button>
             <button onClick={() => loadOperationalData()} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-bold text-white hover:bg-violet-700">
               <FiRefreshCw className={refreshing ? 'animate-spin' : ''} /> Làm mới
@@ -337,11 +346,10 @@ export default function OfficialExamAdminPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <StatTile icon={FiUsers} label="Đăng ký" value={overview.registrations || registrations.length} />
-          <StatTile icon={FiUserCheck} label="Check-in" value={overview.checked_in || 0} />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile icon={FiUsers} label="Số người thi" value={overview.participants || 0} />
           <StatTile icon={FiClock} label="Đang thi" value={overview.in_progress || 0} />
-          <StatTile icon={FiCheck} label="Hoàn tất" value={overview.completed || 0} />
+          <StatTile icon={FiCheck} label="Đã nộp" value={overview.completed || 0} />
           <StatTile icon={FiShield} label="Vi phạm" value={overview.violations || violations.length} />
         </div>
 
@@ -368,7 +376,7 @@ export default function OfficialExamAdminPage() {
           {[
             ['1', 'Lịch thi', Boolean(exam?.start_time && exam?.end_time), 'schedule' as TabId],
             ['2', 'PDF & đáp án', paperReady, 'paper' as TabId],
-            ['3', 'Mở đăng ký', exam?.status === 'published', 'registrations' as TabId],
+            ['3', 'Hiển thị kỳ thi', exam?.status === 'published', 'registrations' as TabId],
           ].map(([number, label, done, target]: any) => (
             <button key={number} onClick={() => setActiveTab(target)} className={`flex items-center gap-3 rounded-xl border p-3 text-left ${done ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-black text-white ${done ? 'bg-emerald-500' : 'bg-amber-500'}`}>{done ? '✓' : number}</span>
@@ -389,7 +397,8 @@ export default function OfficialExamAdminPage() {
         {activeTab === 'registrations' && (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="border-b border-gray-100 p-4 dark:border-slate-800">
-              <h2 className="font-black text-gray-900 dark:text-white">Danh sách thí sinh đăng ký</h2>
+              <h2 className="font-black text-gray-900 dark:text-white">Danh sách thí sinh đã vào thi</h2>
+              <p className="mt-1 text-sm text-gray-500">Điểm hiện ngay sau khi từng thí sinh nộp bài.</p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-slate-800">
@@ -397,38 +406,32 @@ export default function OfficialExamAdminPage() {
                   <tr>
                     <th className="px-4 py-3">Thí sinh</th>
                     <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Đăng ký lúc</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
+                    <th className="px-4 py-3">Bắt đầu</th>
+                    <th className="px-4 py-3">Nộp bài</th>
+                    <th className="px-4 py-3 text-right">Điểm</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                  {registrations.map((reg: any) => (
-                    <tr key={reg.id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
+                  {(monitor.participants || []).map((participant) => (
+                    <tr key={participant.attempt_id} className="hover:bg-gray-50 dark:hover:bg-slate-800">
                       <td className="px-4 py-3">
-                        <p className="font-bold text-gray-900 dark:text-white">{reg.full_name || reg.username || `User #${reg.user_id}`}</p>
-                        <p className="text-xs text-gray-500">{reg.email}</p>
+                        <p className="font-bold text-gray-900 dark:text-white">{participant.full_name || participant.username || `User #${participant.user_id}`}</p>
+                        <p className="text-xs text-gray-500">{participant.email}</p>
                       </td>
-                      <td className="px-4 py-3"><span className={statusBadge(reg.status)}>{reg.status}</span></td>
-                      <td className="px-4 py-3 text-gray-500">{formatDateTime(reg.registered_at)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          {reg.status === 'registered' && (
-                            <button onClick={() => updateRegistration(reg.id, 'approved')} className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Duyệt</button>
-                          )}
-                          <button
-                            onClick={() => updateRegistration(reg.id, 'checked_in')}
-                            className="rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Check-in
-                          </button>
-                          <button onClick={() => updateRegistration(reg.id, 'no_show')} className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100">Vắng</button>
-                          <button onClick={() => updateRegistration(reg.id, 'cancelled')} className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100">Hủy</button>
-                        </div>
+                      <td className="px-4 py-3"><span className={statusBadge(participant.status)}>{participant.status === 'in_progress' ? 'Đang thi' : participant.status === 'completed' ? 'Đã nộp' : participant.status}</span></td>
+                      <td className="px-4 py-3 text-gray-500">{formatDateTime(participant.start_time)}</td>
+                      <td className="px-4 py-3 text-gray-500">{formatDateTime(participant.submit_time)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-lg font-black text-violet-700">
+                          {participant.status === 'completed' && participant.score_100 != null
+                            ? `${Number(participant.score_100).toFixed(1)}/100`
+                            : '--'}
+                        </span>
                       </td>
                     </tr>
                   ))}
-                  {registrations.length === 0 && (
-                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">Chưa có thí sinh đăng ký.</td></tr>
+                  {(!monitor.participants || monitor.participants.length === 0) && (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Chưa có thí sinh vào thi.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -551,11 +554,19 @@ export default function OfficialExamAdminPage() {
         )}
 
         {activeTab === 'leaderboard' && (
-          <OfficialExamLeaderboard
-            entries={leaderboard}
-            examTitle={exam?.title}
-            loading={refreshing}
-          />
+          exam?.end_time && Date.now() > new Date(exam.end_time).getTime() ? (
+            <OfficialExamLeaderboard
+              entries={leaderboard}
+              examTitle={exam?.title}
+              loading={refreshing}
+            />
+          ) : (
+            <section className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <FiTrendingUp className="mx-auto mb-3 text-3xl text-violet-500" />
+              <h2 className="font-black text-gray-900 dark:text-white">Bảng xếp hạng mở sau khi kỳ thi kết thúc</h2>
+              <p className="mt-2 text-sm text-gray-500">Điểm hiện tại xem tại tab Thí sinh.</p>
+            </section>
+          )
         )}
 
         {activeTab === 'violations' && (
@@ -612,10 +623,6 @@ export default function OfficialExamAdminPage() {
           </section>
         )}
 
-        <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600 dark:border-slate-700 dark:bg-slate-900/40">
-          <FiFileText className="mr-2 inline" />
-          Luồng này dùng dữ liệu thật từ các bảng official exam workflow. Nút đăng ký cho học viên có thể nối vào trang sảnh thi ở bước tiếp theo.
-        </div>
       </div>
     </AdminLayout>
   );

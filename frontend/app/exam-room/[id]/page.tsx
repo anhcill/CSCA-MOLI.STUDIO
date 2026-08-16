@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import examApi from '@/lib/api/exams';
-import { officialExamApi, ExamRegistration, OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
-import { FiArrowLeft, FiAward, FiCalendar, FiCheckCircle, FiClock, FiMonitor, FiUserCheck, FiUsers, FiXCircle } from 'react-icons/fi';
+import { officialExamApi, OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
+import { FiArrowLeft, FiAward, FiCalendar, FiCheckCircle, FiClock, FiMonitor, FiUsers, FiXCircle } from 'react-icons/fi';
 
 type ExamDetail = {
   id: number;
@@ -35,25 +35,6 @@ function formatDateTime(value?: string | null) {
   });
 }
 
-function registrationLabel(status?: string | null) {
-  switch (status) {
-    case 'registered':
-      return 'Đã đăng ký';
-    case 'approved':
-      return 'Đã duyệt';
-    case 'checked_in':
-      return 'Đã check-in';
-    case 'completed':
-      return 'Đã hoàn thành';
-    case 'cancelled':
-      return 'Đã hủy đăng ký';
-    case 'no_show':
-      return 'Vắng thi';
-    default:
-      return 'Chưa đăng ký';
-  }
-}
-
 export default function ExamRoomDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -64,20 +45,16 @@ export default function ExamRoomDetailPage() {
   }, [params?.id]);
 
   const [exam, setExam] = useState<ExamDetail | null>(null);
-  const [registration, setRegistration] = useState<ExamRegistration | null>(null);
   const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const startMs = exam?.start_time ? new Date(exam.start_time).getTime() : null;
   const endMs = exam?.end_time ? new Date(exam.end_time).getTime() : null;
   const hasStarted = !!startMs && now >= startMs;
   const hasEnded = !!endMs && now > endMs;
-  const canEnter = !!registration && ['approved', 'checked_in'].includes(registration.status) && hasStarted && !hasEnded;
-  const canRegister = !!exam?.start_time && !hasStarted && (!registration || registration.status === 'cancelled');
-  const canCancel = !!registration && ['registered', 'approved'].includes(registration.status) && !hasStarted;
+  const canEnter = hasStarted && !hasEnded;
 
   const loadData = async () => {
     if (!examId) {
@@ -88,11 +65,6 @@ export default function ExamRoomDetailPage() {
     try {
       const data = await examApi.getExamDetail(examId);
       setExam(data);
-      const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-      if (token) {
-        const myRegistration = await officialExamApi.getMyRegistration(examId);
-        setRegistration(myRegistration);
-      }
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Không thể tải chi tiết kỳ thi');
       router.push('/exam-room');
@@ -135,40 +107,6 @@ export default function ExamRoomDetailPage() {
     const timer = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
-
-  const handleRegister = async () => {
-    if (!examId) return;
-    const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
-    if (!token) {
-      alert('Vui lòng đăng nhập để đăng ký kỳ thi');
-      router.push('/login');
-      return;
-    }
-    try {
-      setSaving(true);
-      const data = await officialExamApi.register(examId);
-      setRegistration(data);
-      alert('Đăng ký thành công và đã được tự động duyệt');
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Đăng ký thất bại');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!examId || !confirm('Hủy đăng ký kỳ thi này?')) return;
-    try {
-      setSaving(true);
-      const data = await officialExamApi.cancelRegistration(examId);
-      setRegistration(data);
-      alert('Đã hủy đăng ký');
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Hủy đăng ký thất bại');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -221,9 +159,10 @@ export default function ExamRoomDetailPage() {
             <div className="p-6 md:p-8 space-y-4">
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-slate-500 mb-2">
-                  <FiUserCheck /> Trạng thái đăng ký
+                  <FiCheckCircle /> Cách vào thi
                 </div>
-                <div className="text-lg font-black text-slate-950">{registrationLabel(registration?.status)}</div>
+                <div className="text-lg font-black text-slate-950">Không cần đăng ký</div>
+                <p className="mt-1 text-sm font-semibold text-slate-500">Đến đúng giờ và bấm Vào thi.</p>
               </div>
 
               {!hasStarted && (
@@ -241,24 +180,6 @@ export default function ExamRoomDetailPage() {
               )}
 
               <div className="flex flex-col sm:flex-row gap-3">
-                {canRegister && (
-                  <button
-                    onClick={handleRegister}
-                    disabled={saving}
-                    className="flex-1 rounded-xl bg-orange-600 px-5 py-3 font-black text-white hover:bg-orange-700 disabled:opacity-60"
-                  >
-                    Đăng ký
-                  </button>
-                )}
-                {canCancel && (
-                  <button
-                    onClick={handleCancel}
-                    disabled={saving}
-                    className="flex-1 rounded-xl border-2 border-slate-200 bg-white px-5 py-3 font-black text-slate-800 hover:border-slate-900 disabled:opacity-60"
-                  >
-                    Hủy đăng ký
-                  </button>
-                )}
                 <button
                   onClick={() => router.push(`/exam/${exam.id}`)}
                   disabled={!canEnter}

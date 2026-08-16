@@ -8,7 +8,7 @@ import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
 import { useAuthStore } from '@/lib/store/authStore';
-import { ExamRegistration, officialExamApi } from '@/lib/api/officialExams';
+import { officialExamApi } from '@/lib/api/officialExams';
 import type { OfficialExamLeaderboardEntry } from '@/lib/api/officialExams';
 import OfficialExamLeaderboard from '@/components/exam/OfficialExamLeaderboard';
 import PdfRoomExamWorkspace from '@/components/exam/PdfRoomExamWorkspace';
@@ -78,8 +78,7 @@ export default function ExamPage() {
 
   const [exam, setExam] = useState<Exam | null>(null);
   const [preflight, setPreflight] = useState<Exam | null>(null);
-  const [registration, setRegistration] = useState<ExamRegistration | null>(null);
-  const [registrationLoading, setRegistrationLoading] = useState(false);
+  const [scheduleNow, setScheduleNow] = useState(Date.now());
   const [preflightLeaderboard, setPreflightLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [preflightLeaderboardLoading, setPreflightLeaderboardLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -114,6 +113,12 @@ export default function ExamPage() {
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
   const isPdfRoomExam = Boolean(started && exam?.start_time && exam?.has_exam_pdf && !practiceMode);
   const violationLimit = isPdfRoomExam ? PDF_ROOM_MAX_VIOLATIONS : DEFAULT_EXAM_MAX_VIOLATIONS;
+
+  useEffect(() => {
+    if (!preflight?.start_time || started) return;
+    const timer = window.setInterval(() => setScheduleNow(Date.now()), 15000);
+    return () => window.clearInterval(timer);
+  }, [preflight?.start_time, started]);
 
   const {
     isOffline,
@@ -375,11 +380,6 @@ export default function ExamPage() {
         setPreflightLeaderboard([]);
         setPreflightLeaderboardLoading(false);
       }
-      if (response.start_time) {
-        officialExamApi.getMyRegistration(examId)
-          .then(setRegistration)
-          .catch(() => setRegistration(null));
-      }
     } catch (error: any) {
       console.error('Error loading exam preflight:', error);
       const errorCode = error.response?.data?.code;
@@ -393,33 +393,6 @@ export default function ExamPage() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleOfficialRegister = async () => {
-    if (examId === null || Number.isNaN(examId)) return;
-    try {
-      setRegistrationLoading(true);
-      const data = await officialExamApi.register(examId);
-      setRegistration(data);
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể đăng ký kỳ thi lúc này.');
-    } finally {
-      setRegistrationLoading(false);
-    }
-  };
-
-  const handleOfficialCancel = async () => {
-    if (examId === null || Number.isNaN(examId)) return;
-    if (!confirm('Hủy đăng ký kỳ thi này?')) return;
-    try {
-      setRegistrationLoading(true);
-      const data = await officialExamApi.cancelRegistration(examId);
-      setRegistration(data);
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể hủy đăng ký lúc này.');
-    } finally {
-      setRegistrationLoading(false);
     }
   };
 
@@ -745,12 +718,15 @@ export default function ExamPage() {
     const attemptLimitReached = Boolean(
       isOfficialExam && preflight.has_used_official_attempt && !inProgress
     );
-    const registrationStatus = registration?.status;
-    const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
-    const canStartOfficialExam = !isOfficialExam || isApproved;
+    const officialHasStarted = !preflight.start_time
+      || scheduleNow >= new Date(preflight.start_time).getTime();
+    const officialHasEnded = Boolean(
+      preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
+    );
+    const canStartOfficialExam = !isOfficialExam || (officialHasStarted && !officialHasEnded);
     const languageReady = Boolean((isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
     const leaderboardAvailable = !isOfficialExam || Boolean(
-      preflight.end_time && Date.now() > new Date(preflight.end_time).getTime()
+      preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
 
     return (
@@ -865,53 +841,19 @@ export default function ExamPage() {
 
               {isOfficialExam && (
                 <div className={`mb-3 rounded-2xl border p-3 text-sm ${
-                  isApproved
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                    : registrationStatus === 'registered'
-                      ? 'border-amber-200 bg-amber-50 text-amber-900'
-                      : 'border-slate-200 bg-slate-50 text-slate-700'
+                  officialHasEnded
+                    ? 'border-slate-200 bg-slate-50 text-slate-700'
+                    : officialHasStarted
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-amber-200 bg-amber-50 text-amber-900'
                 }`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-black">
-                        Trạng thái đăng ký: {registrationStatus === 'approved' ? 'Đã duyệt' :
-                          registrationStatus === 'checked_in' ? 'Đã check-in' :
-                          registrationStatus === 'registered' ? 'Đã đăng ký' :
-                          registrationStatus === 'cancelled' ? 'Đã hủy' : 'Chưa đăng ký'}
-                      </p>
-                      <p className="mt-1">
-                        Giờ thi: {preflight.start_time ? new Date(preflight.start_time).toLocaleString('vi-VN') : 'Chưa đặt'}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(!registrationStatus || registrationStatus === 'cancelled') && (
-                        <button
-                          onClick={handleOfficialRegister}
-                          disabled={registrationLoading}
-                          className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-60"
-                        >
-                          {registrationLoading ? 'Đang xử lý...' : 'Đăng ký'}
-                        </button>
-                      )}
-                      {(registrationStatus === 'registered' || registrationStatus === 'approved') && (
-                        <button
-                          onClick={handleOfficialCancel}
-                          disabled={registrationLoading}
-                          className="rounded-xl border border-current px-4 py-2 text-xs font-black hover:bg-white/70 disabled:opacity-60"
-                        >
-                          {registrationLoading ? 'Đang xử lý...' : 'Hủy đăng ký'}
-                        </button>
-                      )}
-                      {isApproved && (
-                        <button
-                          onClick={() => router.push(`/exam/${examId}/ticket`)}
-                          className="rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100"
-                        >
-                          Vé dự thi
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <p className="font-black">
+                    {officialHasEnded ? 'Kỳ thi đã kết thúc' : officialHasStarted ? 'Phòng thi đang mở' : 'Kỳ thi sắp tới'}
+                  </p>
+                  <p className="mt-1">
+                    Giờ thi: {preflight.start_time ? new Date(preflight.start_time).toLocaleString('vi-VN') : 'Chưa đặt'}
+                  </p>
+                  <p className="mt-1 font-semibold">Không cần đăng ký. Đến giờ thi bạn có thể vào trực tiếp.</p>
                 </div>
               )}
 

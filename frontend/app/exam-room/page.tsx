@@ -7,13 +7,13 @@ import {
   FiMonitor, FiUsers, FiClock, FiCalendar, 
   FiAward,
   FiPlayCircle, FiChevronRight, FiSettings,
-  FiArrowRight, FiCheckCircle, FiXCircle, FiPrinter
+  FiArrowRight
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import axiosInstance from '@/lib/utils/axios';
 import { useAuthStore } from '@/lib/store/authStore';
 import { hasPermission } from '@/lib/utils/permissions';
-import { ExamRegistration, OfficialExamLeaderboardEntry, officialExamApi } from '@/lib/api/officialExams';
+import { OfficialExamLeaderboardEntry, officialExamApi } from '@/lib/api/officialExams';
 
 interface LobbyExam {
   id: number;
@@ -38,8 +38,6 @@ export default function ExamRoomPage() {
   const isExamAdmin = hasPermission(user, 'exams.manage');
   const [mounted, setMounted] = useState(false);
   const [lobbyData, setLobbyData] = useState<LobbyData>({ live: [], upcoming: [], public: [], latest_completed_mock: null });
-  const [registrations, setRegistrations] = useState<Record<number, ExamRegistration | null>>({});
-  const [registrationLoading, setRegistrationLoading] = useState<Record<number, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [leaderboard, setLeaderboard] = useState<OfficialExamLeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
@@ -93,34 +91,6 @@ export default function ExamRoomPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    const officialExams = [...lobbyData.live, ...lobbyData.upcoming];
-    if (officialExams.length === 0) return;
-
-    let cancelled = false;
-    Promise.all(
-      officialExams.map(async (exam) => {
-        try {
-          const registration = await officialExamApi.getMyRegistration(exam.id);
-          return [exam.id, registration] as const;
-        } catch {
-          return [exam.id, null] as const;
-        }
-      })
-    ).then((items) => {
-      if (cancelled) return;
-      setRegistrations((prev) => ({
-        ...prev,
-        ...Object.fromEntries(items),
-      }));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, lobbyData.live, lobbyData.upcoming]);
-
   const getTimeRemaining = (endTime?: string | null) => {
     if (!endTime) return "N/A";
     const end = new Date(endTime).getTime();
@@ -146,112 +116,6 @@ export default function ExamRoomPage() {
 
   const scrollToLatestLeaderboard = () => {
     latestLeaderboardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const registrationLabel: Record<string, string> = {
-    registered: 'Đã đăng ký',
-    approved: 'Đã duyệt',
-    checked_in: 'Đã check-in',
-    completed: 'Đã hoàn tất',
-    no_show: 'Vắng thi',
-    cancelled: 'Đã hủy',
-  };
-
-  const registrationClass = (status?: string) => {
-    if (status === 'approved' || status === 'checked_in') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (status === 'registered') return 'bg-amber-50 text-amber-700 border-amber-200';
-    if (status === 'cancelled' || status === 'no_show') return 'bg-gray-50 text-gray-500 border-gray-200';
-    return 'bg-slate-50 text-slate-600 border-slate-200';
-  };
-
-  const refreshRegistration = async (examId: number) => {
-    const registration = await officialExamApi.getMyRegistration(examId);
-    setRegistrations((prev) => ({ ...prev, [examId]: registration }));
-  };
-
-  const handleRegister = async (examId: number) => {
-    if (!user?.id) {
-      window.location.href = '/login';
-      return;
-    }
-    try {
-      setRegistrationLoading((prev) => ({ ...prev, [examId]: true }));
-      const registration = await officialExamApi.register(examId);
-      setRegistrations((prev) => ({ ...prev, [examId]: registration }));
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể đăng ký kỳ thi lúc này.');
-    } finally {
-      setRegistrationLoading((prev) => ({ ...prev, [examId]: false }));
-    }
-  };
-
-  const handleCancelRegistration = async (examId: number) => {
-    if (!confirm('Hủy đăng ký kỳ thi này?')) return;
-    try {
-      setRegistrationLoading((prev) => ({ ...prev, [examId]: true }));
-      const registration = await officialExamApi.cancelRegistration(examId);
-      setRegistrations((prev) => ({ ...prev, [examId]: registration }));
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Không thể hủy đăng ký lúc này.');
-      await refreshRegistration(examId).catch(() => {});
-    } finally {
-      setRegistrationLoading((prev) => ({ ...prev, [examId]: false }));
-    }
-  };
-
-  const renderRegistrationPanel = (exam: any, compact = false) => {
-    const registration = registrations[exam.id];
-    const loading = registrationLoading[exam.id];
-    const status = registration?.status;
-    const approved = status === 'approved' || status === 'checked_in';
-    const startMs = exam.start_time ? new Date(exam.start_time).getTime() : null;
-    const hasStarted = !!startMs && now >= startMs;
-    const canRegister = (!status || status === 'cancelled') && !hasStarted;
-    const canCancel = (status === 'registered' || status === 'approved') && !hasStarted;
-
-    return (
-      <div className={`rounded-2xl border ${registrationClass(status)} ${compact ? 'p-3' : 'p-4'} space-y-3`}>
-        <div className="flex items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wide">
-            {approved ? <FiCheckCircle size={14} /> : status === 'cancelled' ? <FiXCircle size={14} /> : <FiCalendar size={14} />}
-            {status ? registrationLabel[status] || status : 'Chưa đăng ký'}
-          </span>
-          {approved && (
-            <Link href={`/exam/${exam.id}/ticket`} className="inline-flex items-center gap-1 text-xs font-black text-emerald-700 hover:text-emerald-900">
-              <FiPrinter size={13} /> Vé dự thi
-            </Link>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {canRegister ? (
-            <button
-              type="button"
-              onClick={() => handleRegister(exam.id)}
-              disabled={loading}
-              className="rounded-xl bg-gray-900 px-4 py-2 text-xs font-black text-white hover:bg-rose-600 disabled:opacity-60"
-            >
-              {loading ? 'Đang xử lý...' : 'Đăng ký'}
-            </button>
-          ) : canCancel ? (
-            <button
-              type="button"
-              onClick={() => handleCancelRegistration(exam.id)}
-              disabled={loading}
-              className="rounded-xl border border-current px-4 py-2 text-xs font-black hover:bg-white/70 disabled:opacity-60"
-            >
-              {loading ? 'Đang xử lý...' : 'Hủy đăng ký'}
-            </button>
-          ) : null}
-          <Link
-            href={`/exam-room/${exam.id}`}
-            className="rounded-xl bg-white/80 px-4 py-2 text-xs font-black text-gray-800 hover:bg-white"
-          >
-            Chi tiết
-          </Link>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -280,7 +144,7 @@ export default function ExamRoomPage() {
                Sảnh Thi Đấu <span className="text-orange-200">Trung Tâm</span>
              </h1>
              <p className="text-rose-100 text-sm md:text-base leading-relaxed mb-6 max-w-xl">
-               Nơi riêng dành cho kỳ thi theo lịch: đăng ký và vào thi đúng giờ. Đề luyện tập tự do không hiển thị lẫn tại đây.
+               Nơi riêng dành cho kỳ thi theo lịch: xem thông tin và vào thi đúng giờ. Đề luyện tập tự do không hiển thị lẫn tại đây.
              </p>
              
              <div className="flex flex-wrap gap-3">
@@ -288,7 +152,7 @@ export default function ExamRoomPage() {
                  onClick={scrollToUpcomingExams}
                  className="px-6 py-2.5 bg-white text-rose-600 text-sm font-bold rounded-xl shadow-md hover:bg-rose-50 hover:scale-105 transition-all duration-300"
                >
-                 Xem kỳ thi để đăng ký
+                 Xem lịch kỳ thi
                </button>
                <button
                  type="button"
@@ -361,10 +225,6 @@ export default function ExamRoomPage() {
                 
                 <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6 group-hover:text-rose-600 transition-colors leading-tight">{exam.title}</h3>
                 
-                <div className="mb-5">
-                  {renderRegistrationPanel(exam)}
-                </div>
-
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-6">
                     <div className="flex flex-col">
@@ -406,7 +266,7 @@ export default function ExamRoomPage() {
              </div>
              <div>
                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Kỳ Thi Sắp Tới</h2>
-               <p className="mt-1 text-sm font-semibold text-gray-500">Các kỳ thi dưới đây đang mở đăng ký và được tự động duyệt.</p>
+               <p className="mt-1 text-sm font-semibold text-gray-500">Xem trước thông tin và vào thi trực tiếp khi đến giờ.</p>
              </div>
           </div>
           
@@ -439,12 +299,10 @@ export default function ExamRoomPage() {
                         <span className="font-semibold text-gray-900">{formatUpcomingTime(exam.start_time)}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500 flex items-center gap-2"><FiUsers /> Đã đăng ký</span>
-                        <span className="font-semibold text-gray-900">{exam.registered || 0} người</span>
+                        <span className="text-gray-500 flex items-center gap-2"><FiMonitor /> Thời lượng</span>
+                        <span className="font-semibold text-gray-900">{exam.duration || 0} phút</span>
                       </div>
                     </div>
-                    {renderRegistrationPanel(exam, true)}
-
                     <Link 
                       href={`/exam-room/${exam.id}`}
                       className="w-full py-3 bg-white border-2 border-gray-200 text-gray-800 font-bold rounded-xl hover:border-gray-900 transition-colors text-center block"

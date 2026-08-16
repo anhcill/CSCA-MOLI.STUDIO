@@ -1017,19 +1017,49 @@ const officialExamController = {
       const examId = parsePositiveInt(req.params.examId);
       if (!examId) return res.status(400).json({ success: false, message: "ID ky thi khong hop le" });
 
-      const [overview, rooms, recentViolations] = await Promise.all([
+      const [overview, participants, rooms, recentViolations] = await Promise.all([
         pool.query(
           `SELECT
-             COUNT(DISTINCT er.id)::int AS registrations,
-             COUNT(DISTINCT CASE WHEN er.status = 'checked_in' THEN er.id END)::int AS checked_in,
-             COUNT(DISTINCT CASE WHEN ea.status = 'in_progress' THEN ea.id END)::int AS in_progress,
-             COUNT(DISTINCT CASE WHEN ea.status = 'completed' THEN ea.id END)::int AS completed,
+             COUNT(DISTINCT CASE WHEN ea.status <> 'practice' AND participant_user.role = 'student' THEN ea.user_id END)::int AS participants,
+             COUNT(DISTINCT CASE WHEN ea.status = 'in_progress' AND participant_user.role = 'student' THEN ea.user_id END)::int AS in_progress,
+             COUNT(DISTINCT CASE WHEN ea.status = 'completed' AND participant_user.role = 'student' THEN ea.user_id END)::int AS completed,
              COUNT(DISTINCT ev.id)::int AS violations
            FROM exams e
-           LEFT JOIN exam_registrations er ON er.exam_id = e.id AND er.status <> 'cancelled'
            LEFT JOIN exam_attempts ea ON ea.exam_id = e.id
+           LEFT JOIN users participant_user ON participant_user.id = ea.user_id
            LEFT JOIN exam_violations ev ON ev.exam_id = e.id
            WHERE e.id = $1`,
+          [examId],
+        ),
+        pool.query(
+          `SELECT ea.id AS attempt_id, ea.user_id, ea.status,
+                  ea.start_time, ea.submit_time, ea.duration_seconds,
+                  ea.total_correct, ea.total_incorrect, ea.total_unanswered,
+                  CASE WHEN ea.status = 'completed' THEN
+                    LEAST(100, GREATEST(0, ROUND((
+                      CASE
+                        WHEN qp.possible_points > 0 THEN ea.total_score::numeric / qp.possible_points * 100
+                        WHEN e.total_questions > 0 THEN ea.total_correct::numeric / e.total_questions * 100
+                        WHEN ea.total_score <= 10 THEN ea.total_score::numeric * 10
+                        ELSE ea.total_score::numeric
+                      END
+                    ), 1)))::float
+                  ELSE NULL END AS score_100,
+                  u.email, u.username,
+                  COALESCE(NULLIF(u.full_name, ''), u.username, u.email, 'User #' || u.id) AS full_name,
+                  COALESCE(u.avatar_url, u.avatar) AS avatar_url
+           FROM exam_attempts ea
+           JOIN exams e ON e.id = ea.exam_id
+           JOIN users u ON u.id = ea.user_id
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(q.points), 0)::numeric AS possible_points
+             FROM questions q
+             WHERE q.exam_id = e.id AND q.deleted_at IS NULL
+           ) qp ON true
+           WHERE ea.exam_id = $1
+             AND ea.status <> 'practice'
+             AND u.role = 'student'
+           ORDER BY ea.start_time DESC, ea.id DESC`,
           [examId],
         ),
         pool.query(
@@ -1063,6 +1093,7 @@ const officialExamController = {
         success: true,
         data: {
           overview: overview.rows[0],
+          participants: participants.rows,
           rooms: rooms.rows,
           recentViolations: recentViolations.rows,
         },

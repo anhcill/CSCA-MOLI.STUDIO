@@ -384,23 +384,6 @@ const examController = {
         }
 
         const db = require("../config/database");
-        const registrationResult = await db.query(
-          `SELECT er.status
-           FROM exam_registrations er
-           WHERE er.exam_id = $1 AND er.user_id = $2
-           LIMIT 1`,
-          [parsedId, userId],
-        );
-        const registration = registrationResult.rows[0];
-        const allowedStatuses = new Set(["approved", "checked_in"]);
-        if (!registration || !allowedStatuses.has(registration.status)) {
-          return res.status(403).json({
-            success: false,
-            message: "Bạn cần đăng ký và được duyệt trước khi vào kỳ thi chính thức",
-            code: "OFFICIAL_REGISTRATION_REQUIRED",
-            registration,
-          });
-        }
         const now = Date.now();
         const startsAt = new Date(exam.start_time).getTime();
         const endsAt = exam.end_time ? new Date(exam.end_time).getTime() : null;
@@ -409,7 +392,6 @@ const examController = {
             success: false,
             message: "Kỳ thi chưa đến giờ bắt đầu",
             code: "EXAM_NOT_STARTED",
-            registration,
           });
         }
         if (endsAt && Number.isFinite(endsAt) && now > endsAt) {
@@ -417,7 +399,6 @@ const examController = {
             success: false,
             message: "Kỳ thi đã kết thúc",
             code: "EXAM_ENDED",
-            registration,
           });
         }
 
@@ -472,6 +453,13 @@ const examController = {
         examTitle: exam.title,
         attemptId: attempt.id,
       });
+      if (exam.start_time) {
+        req.app.locals.io?.to(`exam-monitor:${parsedId}`).emit('exam_attempt_changed', {
+          examId: parsedId,
+          attemptId: attempt.id,
+          status: attempt.status,
+        });
+      }
 
       // Shuffle questions if exam has shuffle_mode enabled
       let questions = (exam.questions || [])
@@ -689,6 +677,13 @@ const examController = {
       console.log('Submit exam request:', { attemptId });
 
       const result = await ExamAttempt.submit(parsedAttemptId, req.user.id);
+
+      req.app.locals.io?.to(`exam-monitor:${result.exam_id}`).emit('exam_attempt_changed', {
+        examId: result.exam_id,
+        attemptId: parsedAttemptId,
+        status: result.status,
+        score: result.score_scale_100,
+      });
 
       // Log hành vi nộp bài
       if (!result.already_completed) {
