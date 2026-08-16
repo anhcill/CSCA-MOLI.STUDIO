@@ -375,6 +375,14 @@ const examController = {
       }
 
       if (exam.start_time) {
+        if (practiceMode) {
+          return res.status(403).json({
+            success: false,
+            message: 'Kỳ thi chính thức không hỗ trợ chế độ luyện tập.',
+            code: 'OFFICIAL_PRACTICE_DISABLED',
+          });
+        }
+
         const db = require("../config/database");
         const registrationResult = await db.query(
           `SELECT er.status
@@ -440,10 +448,14 @@ const examController = {
         }
       }
 
-      const existingAttempt = !restart && !practiceMode
+      const existingAttempt = !practiceMode && (!restart || Boolean(exam.start_time))
         ? await ExamAttempt.getInProgress(userId, parsedId)
         : null;
-      const attempt = await ExamAttempt.start(userId, parsedId, { restart, practiceMode });
+      const attempt = await ExamAttempt.start(userId, parsedId, {
+        restart,
+        practiceMode,
+        singleAttempt: Boolean(exam.start_time),
+      });
       const savedAnswers = existingAttempt
         ? await ExamAttempt.getSavedAnswers(attempt.id)
         : [];
@@ -499,9 +511,10 @@ const examController = {
       });
     } catch (error) {
       console.error("Start exam error:", error);
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         success: false,
-        message: "Lỗi khi bắt đầu làm bài",
+        message: error.statusCode ? error.message : "Lỗi khi bắt đầu làm bài",
+        code: error.appCode,
         error: error.message,
       });
     }

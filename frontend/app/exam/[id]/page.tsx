@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import examApi, { Exam, PracticeFeedback, Question } from '@/lib/api/exams';
-import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiRotateCcw, FiBookOpen } from 'react-icons/fi';
+import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
@@ -496,11 +496,11 @@ export default function ExamPage() {
       const errorCode = error.response?.data?.code;
       const errorMessage = error.response?.data?.message || 'Không thể bắt đầu làm bài. Có thể do kết nối mạng.';
 
-      if (errorCode === 'VIP_REQUIRED') {
+      if (errorCode === 'VIP_REQUIRED' || errorCode === 'PREMIUM_REQUIRED') {
         setVipError(errorMessage);
       } else {
         alert(errorMessage);
-        router.push('/login');
+        if (error.response?.status === 401) router.push('/login');
       }
     } finally {
       setLoading(false);
@@ -742,6 +742,9 @@ export default function ExamPage() {
     const totalQuestions = preflight.question_count || preflight.total_questions || 0;
     const bestScore = Number(preflight.user_best_score || 0);
     const isOfficialExam = Boolean(preflight.start_time);
+    const attemptLimitReached = Boolean(
+      isOfficialExam && preflight.has_used_official_attempt && !inProgress
+    );
     const registrationStatus = registration?.status;
     const isApproved = registrationStatus === 'approved' || registrationStatus === 'checked_in';
     const canStartOfficialExam = !isOfficialExam || isApproved;
@@ -914,7 +917,6 @@ export default function ExamPage() {
 
               <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
                 {inProgress ? (
-                  <>
                     <button
                       onClick={() => startExam()}
                       disabled={loading || !canStartOfficialExam || !languageReady}
@@ -922,21 +924,13 @@ export default function ExamPage() {
                     >
                       <FiPlay size={18} /> Tiếp tục bài đang làm
                     </button>
-                    <button
-                      onClick={() => startExam({ restart: true })}
-                      disabled={loading || !canStartOfficialExam || !languageReady}
-                      className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[#ead9bd]/85 bg-[#fffaf2]/92 px-5 py-2.5 text-sm font-black text-[#6f563f] hover:bg-[#fff8ec] disabled:opacity-60"
-                    >
-                      <FiRotateCcw size={18} /> Làm lại từ đầu
-                    </button>
-                  </>
                 ) : (
                   <button
                     onClick={() => startExam()}
-                    disabled={loading || !canStartOfficialExam || !languageReady}
+                    disabled={loading || !canStartOfficialExam || !languageReady || attemptLimitReached}
                       className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
                   >
-                    <FiPlay size={18} /> Bắt đầu làm bài
+                    <FiPlay size={18} /> {attemptLimitReached ? 'Bạn đã dùng lượt thi' : 'Bắt đầu làm bài'}
                   </button>
                 )}
                 {!isOfficialExam && (

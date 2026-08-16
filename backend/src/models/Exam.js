@@ -265,6 +265,12 @@ const Exam = {
                  WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),
                 0
               )::int AS user_attempt_count,
+              EXISTS (
+                SELECT 1 FROM exam_attempts
+                WHERE exam_id = e.id
+                  AND user_id = $2
+                  AND status <> 'practice'
+              ) AS has_used_official_attempt,
               COALESCE(
                 (SELECT MAX(total_score) FROM exam_attempts
                  WHERE exam_id = e.id AND user_id = $2 AND status = 'completed'),

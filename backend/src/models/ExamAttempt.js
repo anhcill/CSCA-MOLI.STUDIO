@@ -143,6 +143,61 @@ const ExamAttempt = {
       return result.rows[0];
     }
 
+    if (options.singleAttempt) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          'SELECT pg_advisory_xact_lock($1::integer, $2::integer)',
+          [userId, examId],
+        );
+
+        const existingResult = await client.query(
+          `SELECT *
+           FROM exam_attempts
+           WHERE user_id = $1
+             AND exam_id = $2
+             AND status <> 'practice'
+           ORDER BY start_time DESC, id DESC
+           LIMIT 1`,
+          [userId, examId],
+        );
+        const existing = existingResult.rows[0];
+
+        if (existing?.status === 'in_progress') {
+          await client.query('COMMIT');
+          return existing;
+        }
+        if (existing) {
+          const error = createAttemptError(
+            'Mỗi thí sinh chỉ được tham gia kỳ thi chính thức một lần.',
+            409,
+          );
+          error.appCode = 'OFFICIAL_ATTEMPT_LIMIT_REACHED';
+          throw error;
+        }
+
+        const result = await client.query(
+          `INSERT INTO exam_attempts (user_id, exam_id, attempt_number, status)
+           VALUES (
+             $1,
+             $2,
+             (SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM exam_attempts WHERE user_id = $1 AND exam_id = $2),
+             'in_progress'
+           )
+           RETURNING *`,
+          [userId, examId],
+        );
+        await client.query('COMMIT');
+        return result.rows[0];
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
     if (options.restart) {
       await this.abandonInProgress(userId, examId);
     }

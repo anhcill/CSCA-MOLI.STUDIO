@@ -15,6 +15,7 @@ export interface Exam {
   subject_code?: string;
   question_count: number;
   user_attempt_count: number;
+  has_used_official_attempt?: boolean;
   user_best_score: number;
   publish_date?: string;
   start_time?: string | null;
