@@ -792,6 +792,8 @@ export default function ExamPage() {
             </div>
 
             <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
+              {!isOfficialExam && (
+                <>
               <div className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
                 <p className={`mb-3 flex items-center gap-1.5 text-sm font-black ${inkResultTitle}`}>
                   <span>🎨</span> Chọn ngôn ngữ hiển thị đề thi:
@@ -846,6 +848,8 @@ export default function ExamPage() {
                   ))}
                 </div>
               </div>
+                </>
+              )}
 
               <div className="mb-3 rounded-2xl border border-[#ead9bd]/80 bg-[#fff7ec]/75 p-3 text-sm text-[#6f563f]">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
@@ -1046,7 +1050,7 @@ export default function ExamPage() {
   if (isPdfRoomExam) {
     return (
       <div className="fixed inset-0 z-[90] bg-slate-950">
-        <AiAnalyzingOverlay open={submitting} mode="exam" />
+        <AiAnalyzingOverlay open={submitting} mode="submit" />
         <PdfRoomExamWorkspace
           exam={exam}
           questions={questions}

@@ -93,6 +93,7 @@ interface ExamResult {
   total_questions: number;
   answers: QuestionResult[];
   allow_download?: boolean;
+  is_room_exam?: boolean;
 }
 
 function ExamResultContent() {
@@ -136,10 +137,10 @@ function ExamResultContent() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (hasAIAccess && result?.id && !aiAnalysis && !aiLoading) {
+    if (hasAIAccess && result?.id && !result.is_room_exam && !aiAnalysis && !aiLoading) {
       loadAIAnalysis(result.id);
     }
-  }, [hasAIAccess, result?.id]);
+  }, [hasAIAccess, result?.id, result?.is_room_exam]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -159,7 +160,7 @@ function ExamResultContent() {
       setLoading(true);
       const data = await examApi.getAttemptDetail(Number(attemptId));
       setResult(data);
-      if (hasAIAccess && data.id) {
+      if (hasAIAccess && data.id && !data.is_room_exam) {
         loadAIAnalysis(data.id);
       }
     } catch (error: any) {
@@ -356,7 +357,7 @@ function ExamResultContent() {
 
   return (
     <InkResultBackground>
-      <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
+      <AiAnalyzingOverlay open={!result.is_room_exam && aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
 
       <style>{`
         @media print {
@@ -392,7 +393,7 @@ function ExamResultContent() {
           {[
             { key: 'result', label: '📊 Kết quả', icon: FiBarChart2 },
             { key: 'review', label: '📝 Xem lại bài', icon: FiPrinter },
-            { key: 'chat', label: '🤖 Hỏi AI', icon: FiMessageCircle },
+            ...(!result.is_room_exam ? [{ key: 'chat', label: '🤖 Hỏi AI', icon: FiMessageCircle }] : []),
           ].map(tab => (
             <button key={tab.key}
               onClick={() => {
@@ -455,7 +456,9 @@ function ExamResultContent() {
                   <p className={`text-xs font-black uppercase tracking-wide ${inkResultScore}`}>Gợi ý nhanh</p>
                   <p className={`mt-1 text-xs font-medium leading-5 ${inkResultTitle}`}>
                     {totalIncorrect > 0
-                      ? `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
+                      ? result.is_room_exam
+                        ? `Ưu tiên đối chiếu lại ${totalIncorrect} câu sai với đề PDF và đáp án.`
+                        : `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
                       : totalUnanswered > 0
                         ? `Bạn còn ${totalUnanswered} câu bỏ qua, nên luyện cách suy luận nhanh.`
                         : 'Bài này khá ổn, hãy củng cố dấu hiệu nhận biết để giữ phong độ.'}
@@ -535,7 +538,7 @@ function ExamResultContent() {
                   </div>
                 </button>
 
-                <button
+                {!result.is_room_exam && <button
                   onClick={openChatTab}
                   className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
                   <div className="flex items-center gap-3.5">
@@ -548,7 +551,7 @@ function ExamResultContent() {
                     </div>
                     <span className="text-purple-400 dark:text-purple-505 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
                   </div>
-                </button>
+                </button>}
 
                 <button
                   onClick={() => router.push('/')}
@@ -651,7 +654,7 @@ function ExamResultContent() {
               </div>
             )}
 
-            {hasAIAccess ? (
+            {!result.is_room_exam && (hasAIAccess ? (
               <AIExamAnalysis
                 attemptId={result.id}
                 aiAnalysis={aiAnalysis}
@@ -664,7 +667,7 @@ function ExamResultContent() {
               <PremiumGate type="ai">
                 <div />
               </PremiumGate>
-            )}
+            ))}
           </div>
         )}
 
@@ -810,7 +813,7 @@ function ExamResultContent() {
                     <QuestionExplanationBlock question={q} languageMode={languageMode} className="mt-4 sm:ml-8" />
 
                     {/* AI buttons */}
-                    {!isEssayQuestion && (
+                    {!result.is_room_exam && !isEssayQuestion && (
                       <div className="mt-3 ml-8 flex items-center gap-3 flex-wrap">
                         <ReviewAIButtons
                           status={status}
@@ -848,19 +851,19 @@ function ExamResultContent() {
         )}
 
         {/* ── TAB: CHATBOT AI ── */}
-        {activeTab === 'chat' && (
+        {!result.is_room_exam && activeTab === 'chat' && (
           <div ref={chatAnchorRef} className={`scroll-mt-24 overflow-hidden rounded-2xl ${inkResultSoftPanel}`}>
             <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
           </div>
         )}
       </main>
 
-      <ReviewAIHost
+      {!result.is_room_exam && <ReviewAIHost
         ref={reviewAIHostRef}
         attemptId={result.id}
         languageMode={languageMode}
         onOpenChat={openChatTab}
-      />
+      />}
 
       {reportQuestion && (
         <QuestionReportModal

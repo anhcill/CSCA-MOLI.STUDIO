@@ -665,6 +665,14 @@ const ExamAttempt = {
         e.code as exam_code,
         e.title as exam_title,
         e.language_mode,
+        (e.start_time IS NOT NULL AND EXISTS (
+          SELECT 1
+          FROM admin_exam_source_files sf
+          WHERE sf.exam_id = e.id
+            AND sf.is_exam_paper = TRUE
+            AND sf.file_type = 'pdf'
+            AND sf.file_data IS NOT NULL
+        )) AS is_room_exam,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,
           ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100,

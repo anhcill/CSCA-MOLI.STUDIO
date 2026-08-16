@@ -89,6 +89,7 @@ interface AttemptResult {
     total_questions: number;
     answers: QuestionResult[];
     allow_download?: boolean;
+    is_room_exam?: boolean;
 }
 
 export default function ExamResultPage({ params }: { params: Promise<{ id: string }> }) {
@@ -118,10 +119,10 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
     }, [attemptId]);
 
     useEffect(() => {
-        if (hasAIAccess && result?.id && !aiAnalysis && !aiLoading) {
+        if (hasAIAccess && result?.id && !result.is_room_exam && !aiAnalysis && !aiLoading) {
             loadAIAnalysis(result.id);
         }
-    }, [hasAIAccess, result?.id]);
+    }, [hasAIAccess, result?.id, result?.is_room_exam]);
 
     // Cảnh báo thoát khi AI đang phân tích
     useEffect(() => {
@@ -141,7 +142,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
             setLoading(true);
             const data = await examApi.getAttemptDetails(attemptId);
             setResult(data);
-            if (hasAIAccess && data.id) {
+            if (hasAIAccess && data.id && !data.is_room_exam) {
                 loadAIAnalysis(data.id);
             }
         } catch (error) {
@@ -235,7 +236,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
 
     return (
         <InkResultBackground>
-            <AiAnalyzingOverlay open={aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
+            <AiAnalyzingOverlay open={!result.is_room_exam && aiLoading && !aiAnalysis} mode="exam" compactAfterMs={2600} />
 
             <style>{`
         @media print {
@@ -266,7 +267,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                     {[
                         { key: 'result', label: '📊 Kết quả', icon: FiBarChart2 },
                         { key: 'review', label: '📝 Xem lại bài', icon: FiPrinter },
-                        { key: 'chat', label: '🤖 Hỏi AI', icon: FiMessageCircle },
+                        ...(!result.is_room_exam ? [{ key: 'chat', label: '🤖 Hỏi AI', icon: FiMessageCircle }] : []),
                     ].map(tab => (
                         <button key={tab.key}
                             onClick={() => {
@@ -330,7 +331,9 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                                     <p className={`text-xs font-black uppercase tracking-wide ${inkResultScore}`}>Gợi ý nhanh</p>
                                     <p className={`mt-1 text-xs font-medium leading-5 ${inkResultTitle}`}>
                                         {totalIncorrect > 0
-                                            ? `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
+                                            ? result.is_room_exam
+                                                ? `Ưu tiên đối chiếu lại ${totalIncorrect} câu sai với đề PDF và đáp án.`
+                                                : `Ưu tiên xem lại ${totalIncorrect} câu sai trước, rồi hỏi AI giải thích từng lỗi.`
                                             : totalUnanswered > 0
                                                 ? `Bạn còn ${totalUnanswered} câu bỏ qua, nên luyện cách suy luận nhanh.`
                                                 : 'Bài này khá ổn, hãy củng cố dấu hiệu nhận biết để giữ phong độ.'}
@@ -410,7 +413,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                                     </div>
                                 </button>
 
-                                <button
+                                {!result.is_room_exam && <button
                                     onClick={openChatTab}
                                     className={`w-full rounded-2xl p-4 text-left transition-all duration-200 group hover:border-[#d9b784] hover:shadow-md ${inkResultButtonPanel}`}>
                                     <div className="flex items-center gap-3.5">
@@ -423,7 +426,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                                         </div>
                                         <span className="text-purple-400 dark:text-purple-550 text-sm font-bold group-hover:translate-x-1 transition-transform duration-200">→</span>
                                     </div>
-                                </button>
+                                </button>}
 
                                 <button
                                     onClick={() => router.push('/')}
@@ -443,7 +446,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                         </div>
 
                         {/* AI Analysis */}
-                        {hasAIAccess ? (
+                        {!result.is_room_exam && (hasAIAccess ? (
                             <AIExamAnalysis
                                 attemptId={result.id}
                                 aiAnalysis={aiAnalysis}
@@ -455,7 +458,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                             <PremiumGate type="ai">
                                 <div />
                             </PremiumGate>
-                        )}
+                        ))}
                     </div>
                 )}
 
@@ -469,7 +472,9 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                                 </div>
                                 <h3 className="font-bold text-gray-900 text-lg mb-2">Xem lại từng câu</h3>
                                 <p className="text-gray-500 text-sm mb-5 max-w-md mx-auto">
-                                    Hãy xem lại đáp án từng câu bên dưới. Sau khi xem hết, AI phân tích sẽ hiện ra giúp bạn tổng hợp kiến thức.
+                                    {result.is_room_exam
+                                        ? 'Hãy đối chiếu từng câu với đề PDF và đáp án đúng bên dưới.'
+                                        : 'Hãy xem lại đáp án từng câu bên dưới. Sau khi xem hết, AI phân tích sẽ hiện ra giúp bạn tổng hợp kiến thức.'}
                                 </p>
                                 <button
                                     onClick={() => setReviewStarted(true)}
@@ -574,7 +579,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                                         <QuestionExplanationBlock question={q} languageMode={languageMode} className="mt-4 sm:ml-8" />
 
                                         {/* AI giải thích thêm */}
-                                        {q.question_type !== 'essay' && q.question_type !== 'translation' && (
+                                        {!result.is_room_exam && q.question_type !== 'essay' && q.question_type !== 'translation' && (
                                             <div className="mt-3 flex flex-wrap items-center gap-3 sm:ml-8">
                                                 <ReviewAIButtons
                                                     status={status}
@@ -590,7 +595,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                         )}
 
                         {/* AI Analysis — chỉ hiện khi đã bắt đầu xem lại */}
-                        {reviewStarted && (
+                        {!result.is_room_exam && reviewStarted && (
                             hasAIAccess ? (
                                 <AIExamAnalysis
                                     attemptId={result.id}
@@ -608,19 +613,19 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                 )}
 
                 {/* ── TAB: CHATBOT AI ── */}
-                {activeTab === 'chat' && (
+                {!result.is_room_exam && activeTab === 'chat' && (
                     <div ref={chatAnchorRef} className={`scroll-mt-24 min-w-0 overflow-hidden rounded-xl sm:rounded-2xl ${inkResultSoftPanel}`}>
                         <AIChatbot attemptId={result.id} examTitle={result.exam_title} />
                     </div>
                 )}
             </main>
 
-            <ReviewAIHost
+            {!result.is_room_exam && <ReviewAIHost
                 ref={reviewAIHostRef}
                 attemptId={result.id}
                 languageMode={languageMode}
                 onOpenChat={openChatTab}
-            />
+            />}
         </InkResultBackground>
     );
 }

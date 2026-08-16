@@ -408,6 +408,14 @@ async function analyzeExamResult(req, res) {
          ea.start_time, ea.submit_time,
          e.id as exam_id, e.title as exam_title, e.title_cn,
          e.subject_id, e.total_questions, e.duration,
+         (e.start_time IS NOT NULL AND EXISTS (
+           SELECT 1
+           FROM admin_exam_source_files sf
+           WHERE sf.exam_id = e.id
+             AND sf.is_exam_paper = TRUE
+             AND sf.file_type = 'pdf'
+             AND sf.file_data IS NOT NULL
+         )) AS is_room_exam,
          s.name as subject_name, s.name_cn
        FROM exam_attempts ea
        JOIN exams e ON ea.exam_id = e.id
@@ -421,6 +429,13 @@ async function analyzeExamResult(req, res) {
     }
 
     const attempt = attemptResult.rows[0];
+    if (attempt.is_room_exam) {
+      return res.status(403).json({
+        success: false,
+        message: 'Phan tich AI da duoc tat cho ky thi PDF phong thi.',
+        code: 'ROOM_EXAM_AI_DISABLED',
+      });
+    }
     // Package access must be checked before cached data is read. Otherwise a
     // free or expired account could still receive an older AI analysis.
     if (!isVip) {

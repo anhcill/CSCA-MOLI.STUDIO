@@ -17,16 +17,29 @@ const PRACTICE_MESSAGES = [
   'Đang tổng hợp kết quả luyện tập...',
 ];
 
+const SUBMIT_MESSAGES = [
+  'Đang gửi bài làm của bạn...',
+  'Đang chấm điểm từng câu...',
+  'Đang chuẩn bị kết quả...',
+];
+
 interface AiAnalyzingOverlayProps {
   open: boolean;
-  mode?: 'exam' | 'practice';
+  mode?: 'exam' | 'practice' | 'submit';
   compactAfterMs?: number;
 }
 
 export default function AiAnalyzingOverlay({ open, mode = 'exam', compactAfterMs = 0 }: AiAnalyzingOverlayProps) {
   const [messageIndex, setMessageIndex] = useState(0);
   const [compact, setCompact] = useState(false);
-  const messages = mode === 'practice' ? PRACTICE_MESSAGES : EXAM_MESSAGES;
+  const messages = mode === 'practice'
+    ? PRACTICE_MESSAGES
+    : mode === 'submit'
+      ? SUBMIT_MESSAGES
+      : EXAM_MESSAGES;
+  const steps = mode === 'submit'
+    ? ['Gửi bài làm', 'Chấm điểm', 'Chuẩn bị kết quả']
+    : ['Chấm bài', 'Phân tích lỗi sai', 'Tạo gợi ý học tiếp'];
 
   useEffect(() => {
     if (!open) {
@@ -100,8 +113,12 @@ export default function AiAnalyzingOverlay({ open, mode = 'exam', compactAfterMs
               <FiActivity size={24} />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-white/75">AI Analysis</p>
-              <h2 className="text-xl font-black">AI đang phân tích bài làm</h2>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-white/75">
+                {mode === 'submit' ? 'Nộp bài' : 'AI Analysis'}
+              </p>
+              <h2 className="text-xl font-black">
+                {mode === 'submit' ? 'Đang xử lý bài làm' : 'AI đang phân tích bài làm'}
+              </h2>
             </div>
           </div>
         </div>
@@ -122,11 +139,7 @@ export default function AiAnalyzingOverlay({ open, mode = 'exam', compactAfterMs
           </div>
 
           <div className="grid gap-2 rounded-2xl bg-slate-50 p-4 text-sm">
-            {[
-              'Chấm bài',
-              'Phân tích lỗi sai',
-              'Tạo gợi ý học tiếp',
-            ].map((step, index) => (
+            {steps.map((step, index) => (
               <div key={step} className="flex items-center gap-2 font-semibold text-slate-600">
                 <FiCheckCircle className={index <= messageIndex % 3 ? 'text-emerald-500' : 'text-slate-300'} />
                 <span>{step}</span>
