@@ -853,7 +853,6 @@ export default function ExamPage() {
                   <p className="mt-1">
                     Giờ thi: {preflight.start_time ? new Date(preflight.start_time).toLocaleString('vi-VN') : 'Chưa đặt'}
                   </p>
-                  <p className="mt-1 font-semibold">Không cần đăng ký. Đến giờ thi bạn có thể vào trực tiếp.</p>
                 </div>
               )}
 

@@ -157,14 +157,6 @@ export default function ExamRoomDetailPage() {
             </div>
 
             <div className="p-6 md:p-8 space-y-4">
-              <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-slate-500 mb-2">
-                  <FiCheckCircle /> Cách vào thi
-                </div>
-                <div className="text-lg font-black text-slate-950">Không cần đăng ký</div>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Đến đúng giờ và bấm Vào thi.</p>
-              </div>
-
               {!hasStarted && (
                 <div className="flex items-start gap-2 rounded-2xl bg-orange-50 border border-orange-100 p-4 text-sm text-orange-800">
                   <FiClock className="mt-0.5 shrink-0" />
