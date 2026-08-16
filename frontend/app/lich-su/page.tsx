@@ -30,6 +30,8 @@ interface HistoryItem {
   submitted_at?: string | null;
   submit_time?: string | null;
   attempt_number: number;
+  review_locked?: boolean;
+  exam_end_time?: string | null;
 }
 
 const SUBJECT_META: Record<string, { color: string; bg: string; emoji: string }> = {
@@ -370,24 +372,34 @@ export default function LichSuPage() {
                   </div>
 
                   <div className="col-span-2 text-center text-sm text-gray-600">
-                    <span className="font-semibold text-gray-800">{item.total_correct || 0}</span>
-                    <span className="text-gray-400">/{item.total_questions || '?'}</span>
-                    <div className="mt-1 h-1 w-full rounded-full bg-gray-100">
-                      <div
-                        className={`h-1 rounded-full ${pct >= 70 ? 'bg-emerald-400' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                    {item.review_locked ? (
+                      <span className="font-bold text-gray-400">--</span>
+                    ) : (
+                      <>
+                        <span className="font-semibold text-gray-800">{item.total_correct || 0}</span>
+                        <span className="text-gray-400">/{item.total_questions || '?'}</span>
+                        <div className="mt-1 h-1 w-full rounded-full bg-gray-100">
+                          <div
+                            className={`h-1 rounded-full ${pct >= 70 ? 'bg-emerald-400' : pct >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="col-span-2 text-center text-sm text-gray-500">
-                    {formatTime(item.time_spent)}
+                    {item.review_locked ? '--' : formatTime(item.time_spent)}
                   </div>
 
                   <div className="col-span-1 flex justify-center">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${badge.cls}`}>
-                      {badge.label}
-                    </span>
+                    {item.review_locked ? (
+                      <span className="text-xs font-bold text-gray-400">Đang khóa</span>
+                    ) : (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    )}
                   </div>
 
                   <div className="col-span-1 flex justify-center">

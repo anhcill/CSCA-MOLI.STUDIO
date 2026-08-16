@@ -94,6 +94,8 @@ interface ExamResult {
   answers: QuestionResult[];
   allow_download?: boolean;
   is_room_exam?: boolean;
+  review_locked?: boolean;
+  exam_end_time?: string | null;
 }
 
 function ExamResultContent() {
@@ -137,10 +139,16 @@ function ExamResultContent() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (hasAIAccess && result?.id && !result.is_room_exam && !aiAnalysis && !aiLoading) {
+    if (hasAIAccess && result?.id && !result.is_room_exam && !result.review_locked && !aiAnalysis && !aiLoading) {
       loadAIAnalysis(result.id);
     }
-  }, [hasAIAccess, result?.id, result?.is_room_exam]);
+  }, [hasAIAccess, result?.id, result?.is_room_exam, result?.review_locked]);
+
+  useEffect(() => {
+    if (!result?.review_locked) return;
+    const timer = window.setInterval(() => fetchResult(), 30000);
+    return () => window.clearInterval(timer);
+  }, [result?.review_locked]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -160,7 +168,7 @@ function ExamResultContent() {
       setLoading(true);
       const data = await examApi.getAttemptDetail(Number(attemptId));
       setResult(data);
-      if (hasAIAccess && data.id && !data.is_room_exam) {
+      if (hasAIAccess && data.id && !data.is_room_exam && !data.review_locked) {
         loadAIAnalysis(data.id);
       }
     } catch (error: any) {
@@ -307,6 +315,33 @@ function ExamResultContent() {
             className="px-6 py-2 bg-[#d52a1e] text-white rounded-lg hover:bg-[#b91f16]">
             Quay lại
           </button>
+        </div>
+      </InkResultBackground>
+    );
+  }
+
+  if (result.review_locked) {
+    const storedScore = Number(result.score_scale_100 ?? result.score_percentage);
+    const possibleScore = Number(result.total_possible_score) || 0;
+    const score = Number.isFinite(storedScore)
+      ? Math.max(0, Math.min(100, storedScore))
+      : possibleScore > 0
+        ? Math.max(0, Math.min(100, (Number(result.total_score) || 0) / possibleScore * 100))
+        : 0;
+
+    return (
+      <InkResultBackground className="flex items-center justify-center px-4">
+        <button
+          onClick={() => router.back()}
+          className="absolute left-4 top-4 flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-[#6f563f] hover:bg-white/70"
+        >
+          <FiArrowLeft size={18} /> Quay lại
+        </button>
+        <div className={`w-full max-w-md rounded-3xl p-8 text-center ${inkResultPanel}`}>
+          <p className={`text-sm font-black uppercase tracking-widest ${inkResultMuted}`}>Điểm của bạn</p>
+          <p className={`mt-5 text-7xl font-black ${inkResultScore}`}>{score.toFixed(1)}</p>
+          <p className={`mt-1 text-xl font-black ${inkResultMuted}`}>/100 điểm</p>
+          <p className={`mt-6 text-sm font-semibold ${inkResultMuted}`}>Chi tiết bài thi mở sau khi kỳ thi kết thúc.</p>
         </div>
       </InkResultBackground>
     );

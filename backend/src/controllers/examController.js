@@ -164,6 +164,14 @@ const examController = {
         return res.status(403).json({ success: false, message: "Chỉ đề miễn phí mới được tải xuống" });
       }
 
+      if (exam.start_time && (!exam.end_time || Date.now() < new Date(exam.end_time).getTime())) {
+        return res.status(423).json({
+          success: false,
+          code: 'EXAM_REVIEW_LOCKED',
+          message: 'Chi tiết bài thi chỉ mở sau khi kỳ thi kết thúc',
+        });
+      }
+
       const completed = await pool.query(
         `SELECT 1
          FROM exam_attempts
@@ -822,7 +830,7 @@ const examController = {
         });
       }
 
-      detail.allow_download = detail.status === "completed"
+      detail.allow_download = !detail.review_locked && detail.status === "completed"
         && getExamAllowDownload(getRequiredVipTier(detail));
 
       res.json({

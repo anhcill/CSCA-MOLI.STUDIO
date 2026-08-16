@@ -659,6 +659,8 @@ const ExamAttempt = {
         e.is_premium,
         e.vip_tier,
         e.total_questions,
+        e.end_time AS exam_end_time,
+        (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time > CURRENT_TIMESTAMP)) AS review_locked,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,
           ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100,
@@ -691,7 +693,15 @@ const ExamAttempt = {
     }
 
     const result = await pool.query(query, params);
-    return result.rows;
+    return result.rows.map((row) => row.review_locked
+      ? {
+          ...row,
+          total_correct: null,
+          total_incorrect: null,
+          total_unanswered: null,
+          total_pending_grading: null,
+        }
+      : row);
   },
 
   // Lấy thống kê theo topic
@@ -720,6 +730,8 @@ const ExamAttempt = {
         e.code as exam_code,
         e.title as exam_title,
         e.language_mode,
+        e.end_time AS exam_end_time,
+        (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time > CURRENT_TIMESTAMP)) AS review_locked,
         (e.start_time IS NOT NULL AND EXISTS (
           SELECT 1
           FROM admin_exam_source_files sf
@@ -755,6 +767,27 @@ const ExamAttempt = {
     }
 
     const attempt = attemptResult.rows[0];
+
+    if (attempt.review_locked) {
+      const normalizedScore = normalizeScore(attempt.total_score, attempt.total_possible_score);
+      return {
+        id: attempt.id,
+        exam_id: attempt.exam_id,
+        exam_code: attempt.exam_code,
+        exam_title: attempt.exam_title,
+        subject_name: attempt.subject_name,
+        status: attempt.status,
+        submit_time: attempt.submit_time,
+        total_score: attempt.total_score,
+        total_possible_score: attempt.total_possible_score,
+        score_percentage: attempt.score_percentage,
+        ...normalizedScore,
+        is_room_exam: attempt.is_room_exam,
+        review_locked: true,
+        exam_end_time: attempt.exam_end_time,
+        answers: [],
+      };
+    }
 
     // Get all questions with answers
     const questionsQuery = `

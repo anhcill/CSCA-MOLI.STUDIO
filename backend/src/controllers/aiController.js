@@ -408,6 +408,7 @@ async function analyzeExamResult(req, res) {
          ea.start_time, ea.submit_time,
          e.id as exam_id, e.title as exam_title, e.title_cn,
          e.subject_id, e.total_questions, e.duration,
+         (e.start_time IS NOT NULL AND (e.end_time IS NULL OR e.end_time > CURRENT_TIMESTAMP)) AS review_locked,
          (e.start_time IS NOT NULL AND EXISTS (
            SELECT 1
            FROM admin_exam_source_files sf
@@ -429,6 +430,13 @@ async function analyzeExamResult(req, res) {
     }
 
     const attempt = attemptResult.rows[0];
+    if (attempt.review_locked) {
+      return res.status(423).json({
+        success: false,
+        message: 'Chi tiet bai thi chi mo sau khi ky thi ket thuc.',
+        code: 'EXAM_REVIEW_LOCKED',
+      });
+    }
     if (attempt.is_room_exam) {
       return res.status(403).json({
         success: false,
