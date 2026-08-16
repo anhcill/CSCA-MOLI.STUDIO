@@ -677,7 +677,12 @@ const ExamAttempt = {
       FROM exam_attempts ea
       INNER JOIN exams e ON ea.exam_id = e.id
       INNER JOIN subjects s ON e.subject_id = s.id
-      WHERE ea.user_id = $1 AND ea.status = 'completed'
+      WHERE ea.user_id = $1
+        AND ea.status = 'completed'
+        AND (
+          e.start_time IS NULL
+          OR (e.end_time IS NOT NULL AND e.end_time <= CURRENT_TIMESTAMP)
+        )
     `;
 
     const params = [userId];
