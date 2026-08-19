@@ -123,6 +123,7 @@ app.use(
       "Cache-Control",
       "Pragma",
       "X-Requested-With",
+      "X-Integration-Key",
     ],
   }),
 );
@@ -216,6 +217,7 @@ app.get("/health", async (req, res) => {
 // API ROUTES
 // ====================================
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/integrations/v1", require("./routes/integrationRoutes"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api", require("./routes/exams"));
 app.use("/api", require("./routes/upload"));
