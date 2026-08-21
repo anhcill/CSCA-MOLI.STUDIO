@@ -74,6 +74,10 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning className={`${inter.variable} ${plusJakarta.variable}`}>
       <head>
+        {/* Start the Turnstile connection before the auth form mounts. */}
+        <link rel="preconnect" href="https://challenges.cloudflare.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="//challenges.cloudflare.com" />
+
         {/* PWA Manifest */}
         <link rel="manifest" href="/manifest.webmanifest?v=4.0" />
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-v3-32x32.png" />

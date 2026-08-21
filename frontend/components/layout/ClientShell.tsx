@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
@@ -23,11 +23,22 @@ const PREVIOUS_ROUTE_KEY = 'moli:previousRoute';
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const queryString = searchParams?.toString();
+  const [queryString, setQueryString] = useState('');
   const currentRoute = `${pathname || '/'}${queryString ? `?${queryString}` : ''}`;
   const [mounted, setMounted] = useState(false);
   const { isAuthenticated, token } = useAuthStore();
+
+  // Keep query-dependent shell behavior without useSearchParams(), which would
+  // force the entire root Suspense boundary into client-side rendering.
+  useEffect(() => {
+    const syncQueryString = () => {
+      setQueryString(window.location.search.replace(/^\?/, ''));
+    };
+
+    syncQueryString();
+    window.addEventListener('popstate', syncQueryString);
+    return () => window.removeEventListener('popstate', syncQueryString);
+  }, [pathname]);
 
   useEffect(() => {
     setMounted(true);
@@ -107,7 +118,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const isGame = pathname?.startsWith('/games');
   const isCoursePage = pathname?.startsWith('/khoa-hoc') || pathname?.startsWith('/hoc');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
-  const isSubjectScopedPage = !!searchParams?.get('subject') && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
+  const isSubjectScopedPage = Boolean(new URLSearchParams(queryString).get('subject')) && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;

@@ -1,6 +1,5 @@
 'use client';
 
-import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
 
 type TurnstileBoxProps = {
@@ -37,10 +36,35 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const didMountRef = useRef(false);
-  const [scriptReady, setScriptReady] = useState(false);
+  const [scriptReady, setScriptReady] = useState(() =>
+    typeof window !== 'undefined' && Boolean(window.turnstile),
+  );
 
   useEffect(() => {
-    if (window.turnstile) setScriptReady(true);
+    if (!siteKey) return;
+
+    let cancelled = false;
+    let retryTimer: number | undefined;
+
+    const detectTurnstile = () => {
+      if (window.turnstile) {
+        setScriptReady(true);
+        return;
+      }
+
+      if (!cancelled) {
+        retryTimer = window.setTimeout(detectTurnstile, 50);
+      }
+    };
+
+    detectTurnstile();
+    window.addEventListener('load', detectTurnstile);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+      window.removeEventListener('load', detectTurnstile);
+    };
   }, []);
 
   useEffect(() => {
@@ -82,15 +106,9 @@ export default function TurnstileBox({ action, disabled = false, resetKey = 0, o
 
   return (
     <div className="space-y-2">
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-        onLoad={() => setScriptReady(true)}
-        onReady={() => setScriptReady(true)}
-      />
       <div
         ref={containerRef}
-        className={disabled ? 'pointer-events-none opacity-60' : undefined}
+        className={`min-h-[28px] ${disabled ? 'pointer-events-none opacity-60' : ''}`}
       />
       <p className="text-xs font-semibold text-[#5a4538]">
         Xác nhận Cloudflare để bảo vệ tài khoản khỏi spam.
