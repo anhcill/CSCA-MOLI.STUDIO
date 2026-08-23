@@ -40,6 +40,10 @@ const verificationEmailLimiter = rateLimit({
 
 router.post("/register", verifyTurnstile, validateRegister, authController.register);
 router.post("/login", verifyTurnstile, validateLogin, authController.login);
+// Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Dùng
+// cùng controller (mật khẩu, tài khoản, phiên thiết bị và OTP) qua endpoint
+// có giới hạn tốc độ riêng, không làm yếu luồng đăng nhập trên web.
+router.post("/mobile-login", validateLogin, authController.login);
 router.get("/me", authenticate, authController.getCurrentUser);
 router.post("/logout", authenticate, authController.logout);
 router.post("/refresh", authController.refreshToken);
