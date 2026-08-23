@@ -72,8 +72,8 @@ const db = require("../config/database");
 router.get("/", optionalAuth, async (req, res, next) => {
   try {
     const { subject, topic, search, limit, offset, is_premium, vip_tier } = req.query;
-    const pageLimit = parseInt(limit) || 50;
-    const pageOffset = parseInt(offset) || 0;
+    const pageLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const pageOffset = Math.max(0, parseInt(offset, 10) || 0);
     const isVip = checkVipAccess(req.user);
 
     let whereClause = "WHERE is_active = TRUE";
@@ -120,14 +120,16 @@ router.get("/topics", optionalAuth, async (req, res, next) => {
     const isVip = checkVipAccess(req.user);
 
     let whereClause = "WHERE is_active = TRUE";
+    const params = [];
     if (!isVip) { whereClause += " AND (is_premium = FALSE OR is_premium IS NULL)"; }
     if (subject) {
-      const safe = subject.replace(/'/g, "''");
-      whereClause += ` AND subject = '${safe}'`;
+      params.push(subject);
+      whereClause += ` AND subject = $${params.length}`;
     }
 
     const result = await db.query(
-      `SELECT DISTINCT topic, subject FROM vocabulary_items ${whereClause} ORDER BY subject, topic`
+      `SELECT DISTINCT topic, subject FROM vocabulary_items ${whereClause} ORDER BY subject, topic`,
+      params,
     );
     res.json({ success: true, data: result.rows });
   } catch (err) {

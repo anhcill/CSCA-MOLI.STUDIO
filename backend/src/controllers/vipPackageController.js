@@ -1,4 +1,8 @@
 const db = require('../config/database');
+const { cache, TTL } = require('../config/cache');
+
+const PACKAGE_CACHE_KEY = 'vip:packages:active';
+const COMPARISON_CACHE_KEY = 'vip:comparison';
 
 const VipPackageController = {
   /**
@@ -7,12 +11,17 @@ const VipPackageController = {
    */
   async getPackages(req, res) {
     try {
+      const cached = cache.get(PACKAGE_CACHE_KEY);
+      if (cached) {
+        return res.json({ success: true, data: cached, fromCache: true });
+      }
       const result = await db.query(
         `SELECT id, name, tier, duration_days, price, original_price, price_note, original_price_note, subject_prices, subject_original_prices, allowed_subjects, requires_subject_choice, description, features, is_active, sort_order, created_at
          FROM vip_packages
          WHERE is_active = TRUE
          ORDER BY sort_order ASC, price ASC`
       );
+      cache.set(PACKAGE_CACHE_KEY, result.rows, TTL.LONG);
       res.json({ success: true, data: result.rows });
     } catch (err) {
       console.error('getPackages error:', err);
@@ -56,6 +65,8 @@ const VipPackageController = {
          RETURNING *`,
         [name, tier, duration_days, price, original_price || null, price_note || null, original_price_note || null, subject_prices || {}, subject_original_prices || {}, allowed_subjects || [], requires_subject_choice === true, description || '', features || [], sort_order || 0]
       );
+
+      cache.del(PACKAGE_CACHE_KEY);
 
       res.json({ success: true, message: 'Đã tạo gói VIP', data: result.rows[0] });
     } catch (err) {
@@ -109,6 +120,7 @@ const VipPackageController = {
         return res.status(404).json({ success: false, message: 'Gói VIP không tồn tại' });
       }
 
+      cache.del(PACKAGE_CACHE_KEY);
       res.json({ success: true, message: 'Đã cập nhật gói VIP', data: result.rows[0] });
     } catch (err) {
       console.error('updatePackage error:', err);
@@ -130,6 +142,7 @@ const VipPackageController = {
       if (!result.rows[0]) {
         return res.status(404).json({ success: false, message: 'Gói VIP không tồn tại' });
       }
+      cache.del(PACKAGE_CACHE_KEY);
       res.json({ success: true, message: `Đã xóa gói "${result.rows[0].name}"` });
     } catch (err) {
       console.error('deletePackage error:', err);
@@ -145,11 +158,16 @@ const VipPackageController = {
    */
   async getComparisonFeatures(req, res) {
     try {
+      const cached = cache.get(COMPARISON_CACHE_KEY);
+      if (cached) {
+        return res.json({ success: true, data: cached, fromCache: true });
+      }
       const result = await db.query(
         `SELECT id, feature_name, COALESCE(basic_has, false) as basic_has, COALESCE(vip_has, false) as vip_has, COALESCE(premium_has, false) as premium_has, sort_order
          FROM vip_features_comparison
          ORDER BY sort_order ASC, id ASC`
       );
+      cache.set(COMPARISON_CACHE_KEY, result.rows, TTL.LONG);
       res.json({ success: true, data: result.rows });
     } catch (err) {
       console.error('getComparisonFeatures error:', err);
@@ -174,6 +192,7 @@ const VipPackageController = {
          RETURNING *`,
         [feature_name, basic_has || false, vip_has || false, premium_has || false, sort_order || 0]
       );
+      cache.del(COMPARISON_CACHE_KEY);
       res.json({ success: true, message: 'Đã thêm tính năng', data: result.rows[0] });
     } catch (err) {
       console.error('createComparisonFeature error:', err);
@@ -216,6 +235,7 @@ const VipPackageController = {
         return res.status(404).json({ success: false, message: 'Tính năng không tồn tại' });
       }
 
+      cache.del(COMPARISON_CACHE_KEY);
       res.json({ success: true, message: 'Đã cập nhật tính năng', data: result.rows[0] });
     } catch (err) {
       console.error('updateComparisonFeature error:', err);
@@ -237,6 +257,7 @@ const VipPackageController = {
       if (!result.rows[0]) {
         return res.status(404).json({ success: false, message: 'Tính năng không tồn tại' });
       }
+      cache.del(COMPARISON_CACHE_KEY);
       res.json({ success: true, message: 'Đã xóa tính năng' });
     } catch (err) {
       console.error('deleteComparisonFeature error:', err);

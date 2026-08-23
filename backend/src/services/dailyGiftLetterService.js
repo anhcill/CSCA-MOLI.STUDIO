@@ -4,6 +4,10 @@ const {
   getCuratedDailyGiftLetter,
 } = require('./dailyGiftLetterBank');
 
+let letterCache = null;
+let letterCacheDate = null;
+let letterRequest = null;
+
 function getVietnamDateKey(date = new Date()) {
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -89,10 +93,24 @@ async function upsertCuratedLetter(giftDate) {
 }
 
 async function getOrCreateDailyGiftLetter(giftDate = getVietnamDateKey()) {
-  const existing = await findLetter(giftDate);
-  if (existing?.source_model === CURATED_DAILY_GIFT_SOURCE) return mapLetter(existing);
+  if (letterCacheDate === giftDate && letterCache) return letterCache;
+  if (letterRequest?.giftDate === giftDate) return letterRequest.promise;
 
-  return mapLetter(await upsertCuratedLetter(giftDate));
+  const promise = (async () => {
+    const existing = await findLetter(giftDate);
+    const letter = existing?.source_model === CURATED_DAILY_GIFT_SOURCE
+      ? mapLetter(existing)
+      : mapLetter(await upsertCuratedLetter(giftDate));
+    letterCacheDate = giftDate;
+    letterCache = letter;
+    return letter;
+  })();
+  letterRequest = { giftDate, promise };
+  try {
+    return await promise;
+  } finally {
+    if (letterRequest?.promise === promise) letterRequest = null;
+  }
 }
 
 async function hasOpened(userId, giftDate = getVietnamDateKey()) {

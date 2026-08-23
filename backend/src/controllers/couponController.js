@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { cache, TTL } = require('../config/cache');
 
 function getPositivePriceValues(map) {
   return Object.values(map || {})
@@ -31,6 +32,14 @@ const CouponController = {
         ? req.query.placement.trim()
         : 'checkout';
 
+      const cacheKey = placement === 'checkout'
+        ? 'promotion:active:checkout'
+        : null;
+      const cached = cacheKey ? cache.get(cacheKey) : null;
+      if (cached) {
+        return res.json({ success: true, data: cached.data, fromCache: true });
+      }
+
       const result = await db.query(
         `SELECT pb.id, pb.title, pb.content, pb.coupon_code, pb.cta_text, pb.badge_text,
                 pb.theme, pb.placement, pb.ends_at, pb.priority,
@@ -57,7 +66,9 @@ const CouponController = {
         [placement]
       );
 
-      res.json({ success: true, data: result.rows[0] || null });
+      const data = result.rows[0] || null;
+      if (cacheKey) cache.set(cacheKey, { data }, TTL.SHORT);
+      res.json({ success: true, data });
     } catch (err) {
       console.error('get active promotion error:', err);
       res.status(500).json({ success: false, message: 'Lỗi lấy khuyến mãi' });

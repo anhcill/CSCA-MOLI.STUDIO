@@ -86,7 +86,13 @@ class Transaction {
   static async findByUserId(user_id) {
     try {
       const result = await db.query(
-        "SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at DESC",
+        `SELECT id, transaction_code, package_id, package_name, package_duration,
+                amount, payment_method, payment_channel, status, paid_at,
+                vip_expires_at, created_at, updated_at
+         FROM transactions
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
         [user_id]
       );
       return result.rows;

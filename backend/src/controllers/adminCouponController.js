@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { cache } = require('../config/cache');
 const UserActivity = require('../models/UserActivity');
 
 const PROMOTION_THEMES = new Set(['gold', 'violet', 'emerald', 'rose', 'blue']);
@@ -360,6 +361,7 @@ const AdminCouponController = {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       });
+      cache.delByPrefix('promotion:active:');
       res.status(201).json({ success: true, message: 'Đã tạo quảng cáo khuyến mãi', data: result.rows[0] });
     } catch (err) {
       console.error('AdminCouponController.createPromotion error:', err);
@@ -424,6 +426,7 @@ const AdminCouponController = {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       });
+      cache.delByPrefix('promotion:active:');
       res.json({ success: true, message: 'Đã cập nhật quảng cáo khuyến mãi', data: result.rows[0] });
     } catch (err) {
       console.error('AdminCouponController.updatePromotion error:', err);
@@ -453,6 +456,7 @@ const AdminCouponController = {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       });
+      cache.delByPrefix('promotion:active:');
       res.json({ success: true, message: `Đã xóa quảng cáo "${result.rows[0].title}"` });
     } catch (err) {
       console.error('AdminCouponController.deletePromotion error:', err);

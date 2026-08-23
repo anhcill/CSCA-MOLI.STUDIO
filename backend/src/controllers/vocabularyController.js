@@ -54,8 +54,8 @@ async function findVocabularyDuplicate(client, wordCn, subject, excludeId = null
 exports.getVocabulary = async (req, res) => {
   try {
     const { subject, topic, search, is_premium, vip_tier } = req.query;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
     let whereClause = "WHERE is_active = TRUE";
     const params = [];

@@ -1162,6 +1162,7 @@ async function runOptimizations() {
       "056_email_deliverability_controls.sql",
       "057_pdf_mock_exam_workspace.sql",
       "058_auth_challenge_hardening.sql",
+      "059_vocabulary_search_performance.sql",
       "20260714_create_seo_blog_posts.sql",
       "20260714_create_seo_blog_ideas.sql",
       "20260714_remove_seo_blog_bold_markers.sql",
