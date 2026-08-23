@@ -160,6 +160,27 @@ async function createOtpChallenge(user, purpose = "login") {
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [Number(user.id)]);
+    const activeChallenge = await client.query(
+      `SELECT otp_sent_at
+       FROM auth_challenges
+       WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [user.id, purpose],
+    );
+    if (activeChallenge.rows[0]) {
+      const elapsed = Date.now() - new Date(activeChallenge.rows[0].otp_sent_at).getTime();
+      if (elapsed < OTP_RESEND_COOLDOWN_MS) {
+        const error = new Error("OTP resend cooldown");
+        error.code = "OTP_RESEND_TOO_SOON";
+        error.statusCode = 429;
+        error.retryAfterSeconds = Math.ceil(
+          (OTP_RESEND_COOLDOWN_MS - elapsed) / 1000,
+        );
+        throw error;
+      }
+    }
     await client.query(
       `UPDATE auth_challenges
        SET consumed_at = COALESCE(consumed_at, NOW())
@@ -829,7 +850,20 @@ const login = async (req, res) => {
     }
 
     // ── OTP: gửi mã khi đăng nhập ────────────────────────────────────────
-    const challenge = await createOtpChallenge(user, "login");
+    let challenge;
+    try {
+      challenge = await createOtpChallenge(user, "login");
+    } catch (challengeError) {
+      if (challengeError.code === "OTP_RESEND_TOO_SOON") {
+        return res.status(429).json({
+          success: false,
+          code: challengeError.code,
+          retryAfterSeconds: challengeError.retryAfterSeconds,
+          message: `Vui lòng đợi ${challengeError.retryAfterSeconds} giây trước khi gửi lại OTP.`,
+        });
+      }
+      throw challengeError;
+    }
     const clientIp = getClientIp(req);
     const device = parseUserAgent(req.get('User-Agent'));
 
