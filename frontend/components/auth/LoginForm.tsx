@@ -55,7 +55,7 @@ export default function LoginForm() {
   const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
-  const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [pendingChallengeToken, setPendingChallengeToken] = useState('');
   const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState('');
   const [otpResending, setOtpResending] = useState(false);
@@ -315,8 +315,8 @@ export default function LoginForm() {
         }
 
         // ── OTP Flow ──────────────────────────────────────────────────────
-        if (response.requiresOtp && response.userId) {
-          setPendingUserId(response.userId);
+        if (response.requiresOtp && response.challengeToken) {
+          setPendingChallengeToken(response.challengeToken);
           setOtpStep(true);
           setOtpCountdown(60);
           setOtpValues(['', '', '', '', '', '']);
@@ -474,12 +474,12 @@ export default function LoginForm() {
   };
 
   const handleOtpVerify = async (otp: string) => {
-    if (!pendingUserId) return;
+    if (!pendingChallengeToken) return;
     setIsSubmitting(true);
     setOtpError('');
 
     try {
-      const response = await verifyOtp(pendingUserId, otp);
+      const response = await verifyOtp(pendingChallengeToken, otp);
       if (response.success && await startAdminMfaFlow(response)) {
         return;
       }
@@ -500,10 +500,10 @@ export default function LoginForm() {
   };
 
   const handleResendOtp = async () => {
-    if (!pendingUserId || otpResending) return;
+    if (!pendingChallengeToken || otpResending) return;
     setOtpResending(true);
     try {
-      await resendOtp(pendingUserId);
+      await resendOtp(pendingChallengeToken);
       setOtpCountdown(60);
       setOtpValues(['', '', '', '', '', '']);
       setOtpError('');
@@ -517,7 +517,7 @@ export default function LoginForm() {
 
   const handleBackToLogin = () => {
     setOtpStep(false);
-    setPendingUserId(null);
+    setPendingChallengeToken('');
     setOtpValues(['', '', '', '', '', '']);
     setOtpError('');
   };

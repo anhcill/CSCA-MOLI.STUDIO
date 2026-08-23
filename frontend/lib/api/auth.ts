@@ -49,7 +49,9 @@ export interface AuthResponse {
   message: string;
   code?: string;
   requiresOtp?: boolean;
-  userId?: number;
+  challengeToken?: string;
+  maskedEmail?: string;
+  expiresAt?: string;
   requiresAdminMfa?: boolean;
   requiresAdminMfaSetup?: boolean;
   mfaToken?: string;
@@ -194,16 +196,16 @@ export interface OtpVerifyResponse {
 /**
  * Verify OTP sent during login
  */
-export const verifyOtp = async (userId: number, otp: string): Promise<OtpVerifyResponse> => {
-  const response = await axios.post('/auth/otp/verify', { userId, otp, reason: 'login' });
+export const verifyOtp = async (challengeToken: string, otp: string): Promise<OtpVerifyResponse> => {
+  const response = await axios.post('/auth/otp/verify', { challengeToken, otp });
   return response.data;
 };
 
 /**
  * Resend OTP code
  */
-export const resendOtp = async (userId: number): Promise<{ success: boolean; message: string }> => {
-  const response = await axios.post('/auth/otp/resend', { userId, reason: 'login' });
+export const resendOtp = async (challengeToken: string): Promise<{ success: boolean; message: string }> => {
+  const response = await axios.post('/auth/otp/resend', { challengeToken });
   return response.data;
 };
 
@@ -246,7 +248,7 @@ export const verifyDeviceReplacementOtp = async (token: string, otp: string): Pr
 /**
  * Verify OTP for password change
  */
-export const verifyOtpForPasswordReset = async (userId: number, otp: string): Promise<OtpVerifyResponse> => {
-  const response = await axios.post('/auth/otp/verify', { userId, otp, reason: 'password_change' });
+export const verifyOtpForPasswordReset = async (challengeToken: string, otp: string): Promise<OtpVerifyResponse> => {
+  const response = await axios.post('/auth/otp/verify', { challengeToken, otp });
   return response.data;
 };
