@@ -170,7 +170,9 @@ const authLimiter = rateLimit({
     success: false,
     message: "Quá nhiều yêu cầu xác thực, vui lòng thử lại sau 15 phút",
   },
-  skipSuccessfulRequests: true, // only count failed requests
+  // A successful response from /login may only mean that an OTP was sent.
+  // Count it as well so attackers cannot spam email OTPs indefinitely.
+  skipSuccessfulRequests: false,
 });
 
 app.use("/api", globalLimiter);

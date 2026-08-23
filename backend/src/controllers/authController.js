@@ -120,50 +120,204 @@ function validatePassword(password) {
 
 // ─── OTP helpers ──────────────────────────────────────────────────────────────
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 phút
-const OTP_LENGTH = 6;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
 
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6 chữ số
+  // Math.random() không phù hợp cho mã xác thực. randomInt dùng nguồn ngẫu
+  // nhiên mật mã của Node và không tạo ra giới hạn modulo dễ đoán.
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
-async function storeOtp(userId, email, reason) {
+const hashChallengeToken = (token) =>
+  crypto.createHash("sha256").update(String(token)).digest("hex");
+
+const isValidChallengeToken = (token) =>
+  typeof token === "string" && /^[A-Za-z0-9_-]{40,128}$/.test(token);
+
+const invalidateAuthChallenge = async (challengeToken) => {
+  if (!isValidChallengeToken(challengeToken)) return;
+  await db.query(
+    `UPDATE auth_challenges
+     SET consumed_at = COALESCE(consumed_at, NOW())
+     WHERE challenge_hash = $1 AND consumed_at IS NULL`,
+    [hashChallengeToken(challengeToken)],
+  );
+};
+
+/**
+ * Tạo challenge OTP opaque. Client không nhận userId/reason; mọi ràng buộc
+ * của challenge được giữ trong DB và challenge cũ cùng mục đích sẽ bị hủy.
+ */
+async function createOtpChallenge(user, purpose = "login") {
+  const challengeToken = crypto.randomBytes(32).toString("base64url");
+  const challengeHash = hashChallengeToken(challengeToken);
   const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
-  // Lưu hash OTP (không lưu OTP plain)
   const otpHash = await bcrypt.hash(otp, 10);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  const client = await db.pool.connect();
 
-  await db.query(
-    `INSERT INTO user_otps (user_id, email, otp_hash, reason, expires_at, created_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     ON CONFLICT (user_id, reason)
-     DO UPDATE SET otp_hash = $3, expires_at = $5, created_at = NOW(), is_used = FALSE`,
-    [userId, email, otpHash, reason, expiresAt]
-  );
-  return otp; // Trả plain OTP để gửi email
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [Number(user.id)]);
+    await client.query(
+      `UPDATE auth_challenges
+       SET consumed_at = COALESCE(consumed_at, NOW())
+       WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
+      [user.id, purpose],
+    );
+    await client.query(
+      `INSERT INTO auth_challenges (
+         challenge_hash, user_id, purpose, otp_hash, otp_expires_at, otp_sent_at
+       ) VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [challengeHash, user.id, purpose, otpHash, expiresAt],
+    );
+    await client.query("COMMIT");
+    return { challengeToken, otp, expiresAt };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
-async function verifyOtp(userId, otp, reason) {
-  const result = await db.query(
-    `SELECT otp_hash, expires_at, is_used FROM user_otps
-     WHERE user_id = $1 AND reason = $2
-     ORDER BY created_at DESC LIMIT 1`,
-    [userId, reason]
-  );
-  if (!result.rows[0]) return { valid: false, reason: 'no_otp' };
+/**
+ * Xác thực và consume challenge trong transaction. FOR UPDATE + điều kiện
+ * consumed_at bảo đảm hai request song song không thể dùng lại cùng một OTP.
+ */
+async function verifyOtp(challengeToken, otp) {
+  if (!isValidChallengeToken(challengeToken)) {
+    return { valid: false, reason: "no_otp" };
+  }
 
-  const { otp_hash, expires_at, is_used } = result.rows[0];
-  if (is_used) return { valid: false, reason: 'already_used' };
-  if (new Date(expires_at) < new Date()) return { valid: false, reason: 'expired' };
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT id, user_id, otp_hash, otp_expires_at, attempts, consumed_at
+       FROM auth_challenges
+       WHERE challenge_hash = $1 AND purpose = 'login'
+       FOR UPDATE`,
+      [hashChallengeToken(challengeToken)],
+    );
+    const challenge = result.rows[0];
+    if (!challenge) {
+      await client.query("ROLLBACK");
+      return { valid: false, reason: "no_otp" };
+    }
+    if (challenge.consumed_at) {
+      await client.query("ROLLBACK");
+      return { valid: false, reason: "already_used" };
+    }
+    if (new Date(challenge.otp_expires_at) <= new Date()) {
+      await client.query("ROLLBACK");
+      return { valid: false, reason: "expired" };
+    }
+    if (Number(challenge.attempts) >= OTP_MAX_ATTEMPTS) {
+      await client.query("ROLLBACK");
+      return { valid: false, reason: "locked" };
+    }
 
-  const match = await bcrypt.compare(otp, otp_hash);
-  if (!match) return { valid: false, reason: 'invalid' };
+    const match = await bcrypt.compare(String(otp), challenge.otp_hash);
+    if (!match) {
+      await client.query(
+        `UPDATE auth_challenges
+         SET attempts = attempts + 1,
+             consumed_at = CASE
+               WHEN attempts + 1 >= $2 THEN NOW()
+               ELSE consumed_at
+             END
+         WHERE id = $1`,
+        [challenge.id, OTP_MAX_ATTEMPTS],
+      );
+      await client.query("COMMIT");
+      return {
+        valid: false,
+        reason: Number(challenge.attempts) + 1 >= OTP_MAX_ATTEMPTS
+          ? "locked"
+          : "invalid",
+      };
+    }
 
-  // Đánh dấu OTP đã dùng
-  await db.query(
-    `UPDATE user_otps SET is_used = TRUE WHERE user_id = $1 AND reason = $2`,
-    [userId, reason]
-  );
-  return { valid: true };
+    await client.query(
+      `UPDATE auth_challenges
+       SET consumed_at = NOW()
+       WHERE id = $1 AND consumed_at IS NULL`,
+      [challenge.id],
+    );
+    await client.query("COMMIT");
+    return { valid: true, userId: Number(challenge.user_id) };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function resendOtpForChallenge(challengeToken) {
+  if (!isValidChallengeToken(challengeToken)) {
+    return { ok: false, reason: "no_otp" };
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT c.id, c.user_id, c.otp_expires_at, c.otp_sent_at, c.consumed_at,
+              u.email, u.full_name, u.username, u.is_active
+       FROM auth_challenges c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.challenge_hash = $1 AND c.purpose = 'login'
+       FOR UPDATE`,
+      [hashChallengeToken(challengeToken)],
+    );
+    const challenge = result.rows[0];
+    if (!challenge || challenge.consumed_at || !challenge.is_active) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "no_otp" };
+    }
+    if (new Date(challenge.otp_expires_at) <= new Date()) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "expired" };
+    }
+    const sentAt = new Date(challenge.otp_sent_at).getTime();
+    const elapsed = Date.now() - sentAt;
+    if (elapsed < OTP_RESEND_COOLDOWN_MS) {
+      await client.query("ROLLBACK");
+      return {
+        ok: false,
+        reason: "too_soon",
+        retryAfterSeconds: Math.ceil((OTP_RESEND_COOLDOWN_MS - elapsed) / 1000),
+      };
+    }
+
+    const otp = generateOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+
+    await client.query(
+      `UPDATE auth_challenges
+       SET otp_hash = $2,
+           otp_expires_at = $3,
+           otp_sent_at = NOW(),
+           attempts = 0
+       WHERE id = $1 AND consumed_at IS NULL`,
+      [challenge.id, otpHash, new Date(Date.now() + OTP_EXPIRY_MS)],
+    );
+    await client.query("COMMIT");
+    return {
+      ok: true,
+      otp,
+      email: challenge.email,
+      name: challenge.full_name || challenge.username,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Parse user agent ────────────────────────────────────────────────────────
@@ -582,7 +736,10 @@ const login = async (req, res) => {
     }
 
     // Accept email or username as identifier
-    const identifier = email.trim();
+    const rawIdentifier = String(email).trim();
+    const identifier = rawIdentifier.includes("@")
+      ? rawIdentifier.toLowerCase()
+      : rawIdentifier;
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
     if (isEmail) {
       if (!validateEmail(identifier)) {
@@ -672,7 +829,7 @@ const login = async (req, res) => {
     }
 
     // ── OTP: gửi mã khi đăng nhập ────────────────────────────────────────
-    const otp = await storeOtp(user.id, user.email, 'login');
+    const challenge = await createOtpChallenge(user, "login");
     const clientIp = getClientIp(req);
     const device = parseUserAgent(req.get('User-Agent'));
 
@@ -680,7 +837,7 @@ const login = async (req, res) => {
       await emailService.sendOtpEmail({
         email: user.email,
         name: user.full_name || user.username,
-        otp,
+        otp: challenge.otp,
         reason: 'login',
       });
       emailService.sendSecurityAlert({
@@ -694,6 +851,7 @@ const login = async (req, res) => {
       }).catch(err => console.error('Login security email error:', err.message));
     } catch (emailError) {
       console.error('Login OTP email error:', emailError.message);
+      await invalidateAuthChallenge(challenge.challengeToken).catch(() => {});
       return res.status(503).json({
         success: false,
         code: 'OTP_EMAIL_DELIVERY_FAILED',
@@ -705,7 +863,9 @@ const login = async (req, res) => {
     return res.json({
       success: true,
       requiresOtp: true,
-      userId: user.id,
+      challengeToken: challenge.challengeToken,
+      maskedEmail: maskEmail(user.email),
+      expiresAt: challenge.expiresAt,
       message: 'Đã gửi mã OTP đến email của bạn. Vui lòng nhập mã để đăng nhập.',
     });
   } catch (error) {
@@ -803,7 +963,11 @@ const logout = async (req, res) => {
     return res.json({ success: true, message: "Đăng xuất thành công" });
   } catch (error) {
     console.error("Logout error:", error.message);
-    return res.json({ success: true, message: "Đăng xuất thành công" }); // still succeed client-side
+    return res.status(503).json({
+      success: false,
+      code: "LOGOUT_REVOCATION_FAILED",
+      message: "Chưa thể thu hồi phiên trên máy chủ. Vui lòng thử lại.",
+    });
   }
 };
 
@@ -1268,7 +1432,7 @@ const googleAuth = async (req, res) => {
 // ─── Forgot Password ──────────────────────────────────────────────────────────
 const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
 
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       return res
@@ -1325,8 +1489,16 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { token, userId, newPassword } = req.body;
+    const numericUserId = Number(userId);
 
-    if (!token || !userId || !newPassword) {
+    if (
+      typeof token !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(token) ||
+      !Number.isInteger(numericUserId) ||
+      numericUserId <= 0 ||
+      typeof newPassword !== "string" ||
+      !newPassword
+    ) {
       return res
         .status(400)
         .json({ success: false, message: "Thiếu thông tin bắt buộc" });
@@ -1349,35 +1521,63 @@ const resetPassword = async (req, res) => {
     // Hash the incoming token to compare with stored hash
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-    const result = await db.query(
-      `SELECT id FROM users
-       WHERE id = $1
-         AND password_reset_token = $2
-         AND password_reset_expires > NOW()`,
-      [userId, tokenHash],
-    );
+    const newHash = await bcrypt.hash(newPassword, 12);
 
-    if (result.rows.length === 0) {
-      return res
-        .status(400)
-        .json({
+    // Đổi mật khẩu và thu hồi mọi phiên trong cùng transaction. Điều này
+    // ngăn token reset bị dùng hai lần và không để phiên cũ còn hiệu lực.
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE users
+         SET password = $1,
+             password_reset_token = NULL,
+             password_reset_expires = NULL,
+             updated_at = NOW()
+         WHERE id = $2
+           AND password_reset_token = $3
+           AND password_reset_expires > NOW()
+         RETURNING id`,
+        [newHash, numericUserId, tokenHash],
+      );
+
+      if (updated.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
           success: false,
           message: "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn",
         });
+      }
+
+      const sessions = await client.query(
+        `DELETE FROM user_sessions
+         WHERE user_id = $1
+         RETURNING jti, user_id, expires_at`,
+        [numericUserId],
+      );
+      if (sessions.rows.length > 0) {
+        const values = sessions.rows
+          .map((_, index) => `($${index * 3 + 1}, $${index * 3 + 2}, $${index * 3 + 3})`)
+          .join(', ');
+        const params = sessions.rows.flatMap((session) => [
+          session.jti,
+          session.user_id,
+          session.expires_at,
+        ]);
+        await client.query(
+          `INSERT INTO token_blacklist (token_jti, user_id, expires_at)
+           VALUES ${values}
+           ON CONFLICT (token_jti) DO NOTHING`,
+          params,
+        );
+      }
+      await client.query("COMMIT");
+    } catch (transactionError) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw transactionError;
+    } finally {
+      client.release();
     }
-
-    const newHash = await bcrypt.hash(newPassword, 12);
-
-    // Update password, clear token (one-time use only)
-    await db.query(
-      `UPDATE users
-       SET password = $1,
-           password_reset_token = NULL,
-           password_reset_expires = NULL,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [newHash, userId],
-    );
 
     return res.json({
       success: true,
@@ -1395,29 +1595,35 @@ const resetPassword = async (req, res) => {
 // ─── Verify OTP ────────────────────────────────────────────────────────────────
 const verifyOtpController = async (req, res) => {
   try {
-    const { userId, otp, reason = 'login' } = req.body;
+    const challengeToken = String(req.body?.challengeToken || '').trim();
+    const otp = String(req.body?.otp || '').trim();
 
-    if (!userId || !otp) {
-      return res.status(400).json({ success: false, message: 'Thiếu userId hoặc OTP.' });
+    if (!isValidChallengeToken(challengeToken) || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, message: 'Thiếu challenge hoặc OTP hợp lệ.' });
     }
 
-    const user = await User.findById(userId);
+    const result = await verifyOtp(challengeToken, otp);
+    if (!result.valid) {
+      const msgs = {
+        no_otp: 'Không tìm thấy phiên xác thực. Vui lòng đăng nhập lại.',
+        expired: 'Mã OTP đã hết hạn. Vui lòng đăng nhập lại để nhận mã mới.',
+        already_used: 'Mã OTP đã được sử dụng. Vui lòng đăng nhập lại.',
+        invalid: 'Mã OTP không đúng. Vui lòng thử lại.',
+        locked: 'Bạn đã nhập sai OTP quá nhiều lần. Vui lòng đăng nhập lại.',
+      };
+      return res.status(result.reason === 'locked' ? 429 : 400).json({
+        success: false,
+        code: result.reason === 'locked' ? 'OTP_ATTEMPTS_EXCEEDED' : 'OTP_INVALID',
+        message: msgs[result.reason] || 'OTP không hợp lệ.',
+      });
+    }
+
+    const user = await User.findById(result.userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
     }
 
-    const result = await verifyOtp(userId, otp, reason);
-    if (!result.valid) {
-      const msgs = {
-        no_otp: 'Không tìm thấy mã OTP. Vui lòng yêu cầu mã mới.',
-        expired: 'Mã OTP đã hết hạn. Vui lòng yêu cầu mã mới.',
-        already_used: 'Mã OTP đã được sử dụng. Vui lòng yêu cầu mã mới.',
-        invalid: 'Mã OTP không đúng. Vui lòng thử lại.',
-      };
-      return res.status(400).json({ success: false, message: msgs[result.reason] || 'OTP không hợp lệ.' });
-    }
-
-    if (isAdminUser(user) && reason === 'login') {
+    if (isAdminUser(user)) {
       const mfaResponse = await createAdminMfaRequiredResponse(user);
       return res.json(mfaResponse);
     }
@@ -1769,21 +1975,40 @@ const verifyDeviceReplacementOtp = async (req, res) => {
 
 const resendOtp = async (req, res) => {
   try {
-    const { userId, reason = 'login' } = req.body;
-    if (!userId) return res.status(400).json({ success: false, message: 'Thiếu userId.' });
+    const challengeToken = String(req.body?.challengeToken || '').trim();
+    if (!isValidChallengeToken(challengeToken)) {
+      return res.status(400).json({ success: false, message: 'Phiên xác thực không hợp lệ.' });
+    }
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng.' });
+    const result = await resendOtpForChallenge(challengeToken);
+    if (!result.ok) {
+      if (result.reason === 'too_soon') {
+        return res.status(429).json({
+          success: false,
+          code: 'OTP_RESEND_TOO_SOON',
+          retryAfterSeconds: result.retryAfterSeconds,
+          message: `Vui lòng đợi ${result.retryAfterSeconds} giây trước khi gửi lại OTP.`,
+        });
+      }
+      return res.status(result.reason === 'expired' ? 410 : 400).json({
+        success: false,
+        code: 'OTP_CHALLENGE_INVALID',
+        message: 'Phiên xác thực đã hết hạn. Vui lòng đăng nhập lại.',
+      });
+    }
 
-    const otp = await storeOtp(userId, user.email, reason);
     await emailService.sendOtpEmail({
-      email: user.email,
-      name: user.full_name || user.username,
-      otp,
-      reason,
+      email: result.email,
+      name: result.name,
+      otp: result.otp,
+      reason: 'login',
     });
 
-    return res.json({ success: true, message: 'Đã gửi lại mã OTP.' });
+    return res.json({
+      success: true,
+      message: 'Đã gửi lại mã OTP.',
+      retryAfterSeconds: OTP_RESEND_COOLDOWN_MS / 1000,
+    });
   } catch (error) {
     console.error('Resend OTP error:', error);
     return res.status(500).json({ success: false, message: 'Lỗi gửi lại OTP.' });

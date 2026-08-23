@@ -13,10 +13,9 @@ const otpLimiter = rateLimit({
   max: Number(process.env.OTP_RATE_LIMIT_MAX || 8),
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const userId = String(req.body?.userId || "").trim();
-    return `${ipKeyGenerator(req.ip)}:${userId || "unknown"}`;
-  },
+  // IP-only prevents an attacker from bypassing the limiter by rotating
+  // guessed userId/challenge values. Per-challenge attempts are enforced in DB.
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     success: false,
     message: "Bạn nhập OTP quá nhiều lần. Vui lòng đợi vài phút rồi thử lại.",
@@ -40,9 +39,9 @@ const verificationEmailLimiter = rateLimit({
 
 router.post("/register", verifyTurnstile, validateRegister, authController.register);
 router.post("/login", verifyTurnstile, validateLogin, authController.login);
-// Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Dùng
-// cùng controller (mật khẩu, tài khoản, phiên thiết bị và OTP) qua endpoint
-// có giới hạn tốc độ riêng, không làm yếu luồng đăng nhập trên web.
+// Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Endpoint
+// này vẫn chạy đủ mật khẩu, giới hạn tốc độ, device limit và OTP challenge;
+// không coi header client là một cơ chế bảo mật.
 router.post("/mobile-login", validateLogin, authController.login);
 router.get("/me", authenticate, authController.getCurrentUser);
 router.post("/logout", authenticate, authController.logout);

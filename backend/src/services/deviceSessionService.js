@@ -565,7 +565,7 @@ class DeviceSessionService {
        VALUES ($1, $2, COALESCE($3, NOW() + INTERVAL '1 day'))
        ON CONFLICT (token_jti) DO NOTHING`,
       [session.jti, session.user_id, session.expires_at],
-    ).catch(() => {});
+    );
 
     return true;
   }

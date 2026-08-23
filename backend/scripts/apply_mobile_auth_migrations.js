@@ -3,6 +3,7 @@ const path = require("path");
 const { Client } = require("pg");
 
 const MIGRATIONS = [
+  "058_auth_challenge_hardening.sql",
   "059_mobile_push_tokens.sql",
   "060_auth_legal_email_verification.sql",
 ];
@@ -36,7 +37,8 @@ async function verifySchema(client) {
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'users'
           AND column_name = 'privacy_version'
-      ) AS privacy_version
+      ) AS privacy_version,
+      to_regclass('public.auth_challenges') IS NOT NULL AS auth_challenges
   `);
   const missing = Object.entries(result.rows[0])
     .filter(([, exists]) => !exists)
@@ -70,7 +72,7 @@ async function main() {
     await client.query("BEGIN");
     await client.query("SET LOCAL statement_timeout = '120s'");
     await client.query(
-      "SELECT pg_advisory_xact_lock(hashtext('csca-mobile-auth-migrations-059-060'))",
+      "SELECT pg_advisory_xact_lock(hashtext('csca-mobile-auth-migrations-058-060'))",
     );
     for (const filename of MIGRATIONS) {
       const sqlPath = path.resolve(

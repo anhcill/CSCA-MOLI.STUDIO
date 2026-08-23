@@ -9,10 +9,49 @@ const getClientIp = (req) =>
   req.headers["x-real-ip"] ||
   req.ip;
 
+const isProduction = () => process.env.NODE_ENV === "production";
+
+const allowFailOpen = () =>
+  process.env.TURNSTILE_ALLOW_FAIL_OPEN === "true" && !isProduction();
+
+const getAllowedHostnames = () => {
+  const configured =
+    process.env.TURNSTILE_ALLOWED_HOSTNAMES || process.env.FRONTEND_URL || "";
+  return configured
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      try {
+        return new URL(value).hostname.toLowerCase();
+      } catch {
+        return value.toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
+      }
+    })
+    .filter(Boolean);
+};
+
+const hostnameMatches = (hostname, allowed) => {
+  if (!hostname || !allowed) return false;
+  if (allowed.startsWith("*.")) {
+    const suffix = allowed.slice(1);
+    return hostname.endsWith(suffix) && hostname !== suffix.slice(1);
+  }
+  return hostname === allowed;
+};
+
 const verifyTurnstile = async (req, res, next) => {
   const secret = getTurnstileSecret();
-  if (!secret || process.env.TURNSTILE_DISABLED === "true") {
+  const disabled = process.env.TURNSTILE_DISABLED === "true";
+  if ((!secret || disabled) && (allowFailOpen() || !isProduction())) {
     return next();
+  }
+  if (!secret || disabled) {
+    return res.status(503).json({
+      success: false,
+      message: "Dịch vụ xác minh đang được cấu hình, vui lòng thử lại sau.",
+      code: "TURNSTILE_NOT_CONFIGURED",
+    });
   }
 
   const token =
@@ -51,6 +90,27 @@ const verifyTurnstile = async (req, res, next) => {
         success: false,
         message: "Xác minh Cloudflare thất bại. Vui lòng thử lại.",
         code: "TURNSTILE_FAILED",
+      });
+    }
+
+    const allowedHostnames = getAllowedHostnames();
+    if (
+      allowedHostnames.length > 0 &&
+      !hostnameMatches(String(data.hostname || "").toLowerCase(), allowedHostnames)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Phiên xác minh Cloudflare không thuộc website này.",
+        code: "TURNSTILE_HOSTNAME_MISMATCH",
+      });
+    }
+
+    const expectedAction = String(process.env.TURNSTILE_EXPECTED_ACTION || "").trim();
+    if (expectedAction && data.action !== expectedAction) {
+      return res.status(403).json({
+        success: false,
+        message: "Phiên xác minh Cloudflare không hợp lệ.",
+        code: "TURNSTILE_ACTION_MISMATCH",
       });
     }
 
