@@ -2,6 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const db = require("../config/database");
 const coinService = require("../services/coinService");
+const DeviceSessionService = require("../services/deviceSessionService");
 
 const SUBJECT_ALIASES = {
   toan: "MATH",
@@ -199,6 +200,13 @@ exports.changePassword = async (req, res) => {
 
     const newHash = await bcrypt.hash(newPassword, 12);
     await db.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [newHash, id]);
+
+    // Đổi mật khẩu phải thu hồi các phiên khác để token bị lộ trước đó không
+    // tiếp tục truy cập tài khoản. Giữ lại phiên hiện tại để người dùng không
+    // bị đá khỏi màn hình vừa thao tác.
+    await DeviceSessionService.removeAllUserSessions(id, {
+      exceptJti: req.user.jti,
+    });
 
     return res.json({ success: true, message: "Đổi mật khẩu thành công" });
   } catch (error) {
