@@ -30,7 +30,7 @@ import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
-import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
+import TurnstileBox, { isLoginTurnstileEnabled, isTurnstileEnabled } from './TurnstileBox';
 import { FiArrowRight, FiLock, FiMail, FiMonitor, FiShield } from 'react-icons/fi';
 
 export default function LoginForm() {
@@ -145,7 +145,7 @@ export default function LoginForm() {
     } else if (formData.password.length < 6) {
       newErrors.password = t('auth.passwordMin6');
     }
-    if (isTurnstileEnabled && !turnstileToken) {
+    if (isLoginTurnstileEnabled && !turnstileToken) {
       newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng nhập.';
     }
     setErrors(newErrors);
@@ -1040,12 +1040,14 @@ export default function LoginForm() {
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
-        <TurnstileBox
-          action="login"
-          disabled={isSubmitting || isLocked}
-          resetKey={turnstileResetKey}
-          onTokenChange={handleTurnstileToken}
-        />
+        {(isLoginTurnstileEnabled || (isTurnstileEnabled && Boolean(unverifiedEmail))) && (
+          <TurnstileBox
+            action="login"
+            disabled={isSubmitting || isLocked}
+            resetKey={turnstileResetKey}
+            onTokenChange={handleTurnstileToken}
+          />
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
@@ -1057,7 +1059,7 @@ export default function LoginForm() {
 
         <button
           type="submit"
-          disabled={isSubmitting || isLocked || (isTurnstileEnabled && !turnstileToken)}
+          disabled={isSubmitting || isLocked || (isLoginTurnstileEnabled && !turnstileToken)}
           className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (

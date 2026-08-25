@@ -43,6 +43,12 @@ const hostnameMatches = (hostname, allowed) => {
 const verifyTurnstile = async (req, res, next) => {
   const secret = getTurnstileSecret();
   const disabled = process.env.TURNSTILE_DISABLED === "true";
+  // Temporary login-only bypass. Set TURNSTILE_LOGIN_DISABLED=false to restore
+  // Cloudflare verification for the web login route.
+  const loginDisabled = req.path === "/login" && process.env.TURNSTILE_LOGIN_DISABLED !== "false";
+  if (loginDisabled) {
+    return next();
+  }
   if ((!secret || disabled) && (allowFailOpen() || !isProduction())) {
     return next();
   }
