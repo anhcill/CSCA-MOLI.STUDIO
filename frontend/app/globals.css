@@ -605,6 +605,83 @@ html {
   font-size: 1.25em;
 }
 
+/* Temporary National Day skin: only enabled by the scoped homepage wrapper. */
+.national-day-home {
+  background-color: #760a15;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 210 165'%3E%3Cpolygon points='30,1 35,15 50,15 38,24 43,39 30,30 17,39 22,24 10,15 25,15' fill='%23ffe274' fill-opacity='.42'/%3E%3Cpolygon points='160,34 163,42 172,42 165,47 168,56 160,51 152,56 155,47 148,42 157,42' fill='%23ffe274' fill-opacity='.36'/%3E%3Cpolygon points='100,106 104,118 117,118 107,126 111,139 100,131 89,139 93,126 83,118 96,118' fill='%23fff0a6' fill-opacity='.31'/%3E%3Cpolygon points='194,116 197,124 206,124 199,130 202,139 194,134 186,139 189,130 182,124 191,124' fill='%23ffe274' fill-opacity='.4'/%3E%3Cpolygon points='56,79 58,85 65,85 60,89 62,96 56,92 50,96 52,89 47,85 54,85' fill='%23fff0a6' fill-opacity='.3'/%3E%3Cpolygon points='174,144 177,153 187,153 179,159 182,169 174,163 166,169 169,159 161,153 171,153' fill='%23ffe274' fill-opacity='.34'/%3E%3C/svg%3E"),
+    linear-gradient(135deg, rgba(77, 3, 13, 0.9), rgba(159, 10, 28, 0.8) 48%, rgba(92, 4, 15, 0.9));
+  background-attachment: fixed;
+  background-size: 210px 165px, auto;
+}
+
+.national-day-home .national-day-content > section {
+  background: transparent !important;
+  border-color: rgba(255, 213, 92, 0.28) !important;
+}
+
+.national-day-home .national-day-content .text-gray-900,
+.national-day-home .national-day-content .text-gray-800,
+.national-day-home .national-day-content .text-slate-950,
+.national-day-home .national-day-content .text-slate-900 {
+  color: #fff5d7 !important;
+}
+
+.national-day-home .national-day-content .text-gray-700,
+.national-day-home .national-day-content .text-gray-600,
+.national-day-home .national-day-content .text-slate-700,
+.national-day-home .national-day-content .text-slate-600 {
+  color: #ffe8b1 !important;
+}
+
+.national-day-home .national-day-content .text-gray-500,
+.national-day-home .national-day-content .text-gray-400,
+.national-day-home .national-day-content .text-slate-500,
+.national-day-home .national-day-content .text-slate-400 {
+  color: rgba(255, 234, 187, 0.76) !important;
+}
+
+.national-day-home .national-day-content .border-gray-100,
+.national-day-home .national-day-content .border-gray-200,
+.national-day-home .national-day-content .border-slate-100 {
+  border-color: rgba(255, 216, 111, 0.28) !important;
+}
+
+.national-day-home .national-day-content [class~="bg-white"],
+.national-day-home .national-day-content [class~="bg-gray-50"],
+.national-day-home .national-day-content [class~="bg-slate-50"],
+.national-day-home .national-day-content [class~="bg-[#fff9f4]"] {
+  background-color: rgba(55, 5, 15, 0.82) !important;
+}
+
+.national-day-home .national-day-content .text-indigo-600,
+.national-day-home .national-day-content .text-indigo-700,
+.national-day-home .national-day-content .text-indigo-800,
+.national-day-home .national-day-content .text-purple-600,
+.national-day-home .national-day-content .text-purple-700 {
+  color: #ffd86d !important;
+}
+
+.national-day-home .national-day-subject-card {
+  background: linear-gradient(135deg, #101a2c 0%, #31070e 58%, #590b16 100%) !important;
+  border-color: rgba(255, 214, 96, 0.64) !important;
+  box-shadow: 0 14px 30px rgba(53, 0, 9, 0.28);
+}
+
+.national-day-home .national-day-subject-card:hover {
+  border-color: #ffe58c !important;
+  box-shadow: 0 18px 38px rgba(53, 0, 9, 0.42);
+}
+
+.national-day-home .national-day-subject-card .bg-gray-100 {
+  background-color: #fff4d8 !important;
+  color: #c27614 !important;
+}
+
+.national-day-home .national-day-subject-card .text-gray-300 {
+  color: rgba(255, 233, 174, 0.64) !important;
+}
+
 @media (min-width: 640px) {
   .exam-taking-math {
     font-size: 1.25rem !important;

@@ -339,7 +339,7 @@ export default function HomeContent() {
               <Link
                 key={subject.id}
                 href={subject.href}
-                className="group relative overflow-hidden rounded-2xl border-2 border-gray-100 bg-white p-6 transition-all duration-200 hover:-translate-y-1.5 hover:border-transparent hover:shadow-xl dark:border-gray-700 dark:bg-gray-900"
+                className="national-day-subject-card group relative overflow-hidden rounded-2xl border-2 border-gray-100 bg-white p-6 transition-all duration-200 hover:-translate-y-1.5 hover:border-transparent hover:shadow-xl dark:border-gray-700 dark:bg-gray-900"
               >
                 <div className={`absolute left-0 right-0 top-0 h-1 bg-gradient-to-r ${subject.gradient} opacity-0 transition-opacity group-hover:opacity-100`} />
                 <div className={`absolute inset-0 bg-gradient-to-br ${subject.gradient} opacity-0 transition-opacity group-hover:opacity-[0.04]`} />

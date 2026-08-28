@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
-import Banner from '@/components/layout/Banner';
+import NationalDayBanner from '@/components/layout/NationalDayBanner';
 import Header from '@/components/layout/Header';
 import HomeContent from '@/components/layout/HomeContent';
 import VipSuccessCelebration from '@/components/checkout/VipSuccessCelebration';
+import { isNationalDayThemeActive } from '@/lib/nationalDayTheme';
+
+// The seasonal skin expires automatically after 2 September in Vietnam.
+// This keeps the existing homepage as the default without a manual rollback.
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'CSCA | Ôn Thi Học Bổng Du Học Trung Quốc',
@@ -26,13 +31,17 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
+  const nationalDayThemeEnabled = isNationalDayThemeActive();
+
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className={`min-h-screen flex flex-col ${nationalDayThemeEnabled ? 'national-day-home' : 'bg-white'}`}>
       <Header />
       {/* Hero Banner — full width, no padding */}
-      <Banner />
+      <NationalDayBanner initiallyEnabled={nationalDayThemeEnabled} />
       {/* All homepage sections */}
-      <HomeContent />
+      <div className={nationalDayThemeEnabled ? 'national-day-content' : undefined}>
+        <HomeContent />
+      </div>
       <VipSuccessCelebration />
     </div>
   );

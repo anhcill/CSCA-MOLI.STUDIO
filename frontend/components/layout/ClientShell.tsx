@@ -6,14 +6,15 @@ import Footer from '@/components/layout/Footer';
 import FloatingContactButtons from '@/components/common/FloatingContactButtons';
 import MoliPet from '@/components/common/MoliPet';
 import DailyGiftBox from '@/components/daily-gift/DailyGiftBox';
+import NationalDayGreeting from '@/components/national-day/NationalDayGreeting';
 import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
-import PWAInstallPrompt from '@/components/pwa/PWAInstallPrompt';
 import NotificationPermissionPrompt from '@/components/pwa/NotificationPermissionPrompt';
 import UpdateToast from '@/components/pwa/UpdateToast';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
 import { disconnectSocket, initSocket } from '@/lib/socket';
+import { isNationalDayThemeActive, NATIONAL_DAY_THEME_END } from '@/lib/nationalDayTheme';
 
 const ACTIVITY_RECORD_TTL = 5 * 60 * 1000;
 let lastActivityRecordedAt = 0;
@@ -26,6 +27,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const [queryString, setQueryString] = useState('');
   const currentRoute = `${pathname || '/'}${queryString ? `?${queryString}` : ''}`;
   const [mounted, setMounted] = useState(false);
+  const [nationalDayTheme, setNationalDayTheme] = useState(isNationalDayThemeActive);
   const { isAuthenticated, token } = useAuthStore();
 
   // Keep query-dependent shell behavior without useSearchParams(), which would
@@ -43,6 +45,19 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!nationalDayTheme) return;
+
+    const remaining = NATIONAL_DAY_THEME_END.getTime() - Date.now();
+    if (remaining <= 0) {
+      setNationalDayTheme(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setNationalDayTheme(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [nationalDayTheme]);
 
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') return;
@@ -122,9 +137,11 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
-  const showDailyGift = showMoliPet && isAuthenticated;
+  // The National Day greeting takes the daily letter's exact corner position
+  // during the campaign.  The original daily-letter behavior resumes after it.
+  const showDailyGift = showMoliPet && isAuthenticated && !nationalDayTheme;
+  const showNationalDayGreeting = nationalDayTheme && !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
-  const showPwaPrompt = !isAuth && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = !isChat;
   const moliPetPosition = 'left';
@@ -137,7 +154,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showFloatingContacts && mounted && <FloatingContactButtons />}
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
-      {mounted && showPwaPrompt && <PWAInstallPrompt />}
+      {showNationalDayGreeting && mounted && <NationalDayGreeting />}
       {mounted && showNotificationPrompt && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast

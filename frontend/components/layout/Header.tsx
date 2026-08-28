@@ -32,6 +32,7 @@ import MessageBadge from './MessageBadge';
 import DailyQuestsBtn from './DailyQuestsBtn';
 import ThemeToggle from './ThemeToggle';
 import DailyQuestBanner from './DailyQuestBanner';
+import { isNationalDayThemeActive, NATIONAL_DAY_THEME_END } from '@/lib/nationalDayTheme';
 
 const COURSE_ITEMS = [
   { id: 'math', labelKey: 'subject.math', href: '/toan/de-mo-phong' },
@@ -67,6 +68,7 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [visible, setVisible] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [nationalDayTheme, setNationalDayTheme] = useState(isNationalDayThemeActive);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const courseMenuRef = useRef<HTMLDivElement>(null);
   const lastScrollY = useRef(0);
@@ -108,11 +110,29 @@ export default function Header() {
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
+  useEffect(() => {
+    if (!nationalDayTheme) return;
+    const remaining = NATIONAL_DAY_THEME_END.getTime() - Date.now();
+    if (remaining <= 0) {
+      setNationalDayTheme(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setNationalDayTheme(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [nationalDayTheme]);
+
   const isActive = (href: string) => pathname === href || (href !== '/' && pathname.startsWith(href));
   const courseActive = pathname.includes('/mon/') || pathname.includes('tiengtrung') || pathname === '/vat-ly' || pathname === '/hoa';
   const streak = user?.current_streak ?? 0;
 
   const navLinkClass = (active: boolean) =>
+    nationalDayTheme
+      ? `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+          active
+            ? 'bg-[#ffd568]/20 text-[#fff0b6] shadow-[inset_0_0_0_1px_rgba(255,215,104,0.42)]'
+            : 'text-white/90 hover:bg-white/12 hover:text-[#ffe49a]'
+        }`
+      :
     `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 ${
       active
         ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400'
@@ -121,17 +141,34 @@ export default function Header() {
 
   return (
     <>
-    <header className={`sticky top-0 z-[60] overflow-visible border-b border-gray-100 bg-white/95 py-2.5 backdrop-blur-md transition-all duration-300 dark:border-gray-800 dark:bg-gray-900/95 ${scrolled ? 'shadow-lg' : 'shadow-sm'} ${visible ? 'translate-y-0' : '-translate-y-full shadow-none'}`}>
-      <div className="mx-auto w-full max-w-[1600px] overflow-visible px-3 sm:px-4 2xl:px-6">
+    <header className={`sticky top-0 z-[60] overflow-visible border-b py-2.5 backdrop-blur-md transition-all duration-300 ${nationalDayTheme ? 'national-day-header border-[#f5c95e]/55 bg-[linear-gradient(112deg,#9d0715_0%,#d31325_48%,#850512_100%)] shadow-[0_8px_28px_rgba(85,0,10,0.35)]' : 'border-gray-100 bg-white/95 dark:border-gray-800 dark:bg-gray-900/95'} ${scrolled ? 'shadow-lg' : 'shadow-sm'} ${visible ? 'translate-y-0' : '-translate-y-full shadow-none'}`}>
+      {nationalDayTheme && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <span className="absolute -left-2 top-[-1.65rem] text-8xl leading-none text-[#ffe074]/[0.16]">★</span>
+          <span className="absolute left-[8%] bottom-[-0.8rem] text-5xl leading-none text-[#ffe074]/[0.12]">★</span>
+          <span className="absolute left-[15%] top-[-0.5rem] text-3xl leading-none text-[#ffe074]/[0.17]">★</span>
+          <span className="absolute left-[25%] top-2 text-4xl leading-none text-[#ffe074]/[0.14]">★</span>
+          <span className="absolute left-[34%] bottom-[-1rem] text-6xl leading-none text-[#ffe074]/[0.13]">★</span>
+          <span className="absolute left-[43%] top-[-0.65rem] text-5xl leading-none text-[#ffe074]/[0.12]">★</span>
+          <span className="absolute left-[54%] bottom-1 text-3xl leading-none text-[#ffe074]/[0.16]">★</span>
+          <span className="absolute left-[64%] top-2 text-4xl leading-none text-[#ffe074]/[0.13]">★</span>
+          <span className="absolute left-[73%] bottom-[-0.75rem] text-6xl leading-none text-[#ffe074]/[0.12]">★</span>
+          <span className="absolute right-[24%] top-[-0.9rem] text-7xl leading-none text-[#ffe074]/[0.14]">★</span>
+          <span className="absolute right-[15%] top-3 text-3xl leading-none text-[#ffe074]/[0.16]">★</span>
+          <span className="absolute -right-1 bottom-[-1.9rem] text-8xl leading-none text-[#ffe074]/[0.16]">★</span>
+          <span className="absolute right-[8%] bottom-1 text-3xl leading-none text-[#ffe074]/[0.12]">★</span>
+        </div>
+      )}
+      <div className="relative z-10 mx-auto w-full max-w-[1600px] overflow-visible px-3 sm:px-4 2xl:px-6">
         {/* Top Row: Logo, Nav, Search, Actions */}
         <div className="flex items-center justify-between gap-4 overflow-visible">
           {/* Logo */}
           <Link href="/" className="group flex shrink-0 items-center gap-2.5 sm:gap-3">
-            <div className="relative flex h-9.5 w-9.5 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-500 shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5">
+            <div className={`relative flex h-9.5 w-9.5 items-center justify-center rounded-2xl shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:h-10.5 sm:w-10.5 ${nationalDayTheme ? 'bg-gradient-to-br from-[#ffd768] via-[#f6b72c] to-[#cf7d0d]' : 'bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-500'}`}>
               <span className="text-lg font-black leading-none text-white sm:text-xl">m</span>
             </div>
-            <span className="hidden text-xl font-black tracking-tight text-gray-900 dark:text-white sm:inline sm:text-2xl">
-              CSCA Moly
+            <span className={`hidden text-xl font-black tracking-tight sm:inline sm:text-2xl ${nationalDayTheme ? 'text-white drop-shadow-sm' : 'text-gray-900 dark:text-white'}`}>
+              Moly
             </span>
           </Link>
 
@@ -151,7 +188,7 @@ export default function Header() {
                 >
                   <FiBookOpen className="text-lg" />
                   {t('nav.courses')}
-                  <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? 'rotate-180 text-violet-600' : ''}`} />
+                  <FiChevronDown className={`transition-transform duration-200 ${showCourseMenu ? nationalDayTheme ? 'rotate-180 text-[#ffe49a]' : 'rotate-180 text-violet-600' : ''}`} />
                 </button>
 
                 {showCourseMenu && (
@@ -190,23 +227,23 @@ export default function Header() {
               })}
             </nav>
 
-            <div className="w-full max-w-[220px] shrink-0">
+            <div className={`w-full max-w-[220px] shrink-0 ${nationalDayTheme ? 'national-day-search' : ''}`}>
               <SearchBar />
             </div>
           </div>
 
           {/* Right Side Icons & Actions */}
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
-            <Link href="/vip" className="hidden items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 px-3 py-2 text-xs font-extrabold text-white shadow-md shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/20 xl:flex 2xl:px-4">
+            <Link href="/vip" className={`hidden items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-extrabold text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg xl:flex 2xl:px-4 ${nationalDayTheme ? 'border border-[#ffd66d]/55 bg-[#790914]/45 shadow-[#68000a]/20 hover:bg-[#67050e]/60' : 'bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 shadow-indigo-500/10 hover:shadow-indigo-500/20'}`}>
               <FaCrown className="text-white" size={12} />
               <span className="hidden 2xl:inline">{t('nav.upgrade')}</span>
             </Link>
 
-            <div className="hidden lg:block">
+            <div className={`hidden lg:block ${nationalDayTheme ? 'national-day-language' : ''}`}>
               <LanguageSwitcher compact />
             </div>
 
-            <div className="hidden sm:block">
+            <div className={`hidden sm:block ${nationalDayTheme ? 'national-day-theme-toggle' : ''}`}>
               <ThemeToggle />
             </div>
 
@@ -226,9 +263,9 @@ export default function Header() {
               </div>
             )}
 
-            <MessageBadge />
-            <NotificationBell />
-            <div className="hidden sm:block">
+            <div className={nationalDayTheme ? 'national-day-message' : ''}><MessageBadge /></div>
+            <div className={nationalDayTheme ? 'national-day-notifications' : ''}><NotificationBell /></div>
+            <div className={`hidden sm:block ${nationalDayTheme ? 'national-day-quests' : ''}`}>
               <DailyQuestsBtn />
             </div>
 
@@ -295,10 +332,10 @@ export default function Header() {
               </div>
             ) : mounted ? (
               <div className="hidden items-center gap-2 sm:flex">
-                <Link href="/login" className="rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 sm:px-4 sm:py-2">
+                <Link href="/login" className={`rounded-xl px-3 py-1.5 text-sm font-bold transition-colors sm:px-4 sm:py-2 ${nationalDayTheme ? 'text-white hover:bg-white/12' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
                   {t('nav.login')}
                 </Link>
-                <Link href="/register" className="rounded-xl bg-gray-900 px-3 py-1.5 text-sm font-bold text-white shadow-md transition-all hover:bg-gray-800 hover:shadow-lg dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200 sm:px-4 sm:py-2">
+                <Link href="/register" className={`rounded-xl px-3 py-1.5 text-sm font-bold shadow-md transition-all hover:shadow-lg sm:px-4 sm:py-2 ${nationalDayTheme ? 'bg-[#fff0b6] text-[#9d0715] hover:bg-white' : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200'}`}>
                   {t('nav.register')}
                 </Link>
               </div>
@@ -309,29 +346,28 @@ export default function Header() {
               </div>
             )}
 
-            <button type="button" onClick={() => setMobileOpen((open) => !open)} className="rounded-xl p-2 text-gray-800 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 xl:hidden" aria-label="Menu">
+            <button type="button" onClick={() => setMobileOpen((open) => !open)} className={`rounded-xl p-2 transition-colors xl:hidden ${nationalDayTheme ? 'text-white hover:bg-white/12' : 'text-gray-800 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'}`} aria-label="Menu">
               {mobileOpen ? <FiX size={22} /> : <FiMenu size={22} />}
             </button>
           </div>
         </div>
 
         {/* Divider line under top row (Hidden on Mobile) */}
-        <div className="my-2.5 hidden border-t border-gray-100 dark:border-gray-800 xl:block" />
+        <div className={`my-2.5 hidden border-t xl:block ${nationalDayTheme ? 'border-[#ffdf83]/30' : 'border-gray-100 dark:border-gray-800'}`} />
 
         {/* Desktop Secondary Navigation Bar (Hidden on Mobile) */}
         <div className="hidden xl:block">
           <nav className="flex items-center gap-1.5 py-0.5 pl-1.5">
-            <span className="mr-3 text-xs font-bold text-gray-400 dark:text-gray-500">{t('nav.more')}</span>
+            <span className={`mr-3 text-xs font-bold ${nationalDayTheme ? 'text-[#ffe7a8]/80' : 'text-gray-400 dark:text-gray-500'}`}>{t('nav.more')}</span>
             {MAIN_NAV_BOTTOM.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.id}
                   href={item.href}
-                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${
-                    isActive(item.href)
-                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${nationalDayTheme
+                    ? isActive(item.href) ? 'bg-white/18 text-[#fff0ba]' : 'text-white/80 hover:bg-white/12 hover:text-[#ffe49a]'
+                    : isActive(item.href) ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
                   }`}
                 >
                   {Icon && <Icon className="text-sm" />}
@@ -341,10 +377,9 @@ export default function Header() {
             })}
             <Link
               href="/bang-xep-hang"
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${
-                isActive('/bang-xep-hang')
-                  ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${nationalDayTheme
+                ? isActive('/bang-xep-hang') ? 'bg-white/18 text-[#fff0ba]' : 'text-white/80 hover:bg-white/12 hover:text-[#ffe49a]'
+                : isActive('/bang-xep-hang') ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400' : 'text-gray-500 hover:bg-gray-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-violet-400'
               }`}
             >
               <FaTrophy className="text-sm" />
@@ -463,6 +498,58 @@ export default function Header() {
           )}
         </div>
       </div>
+      <style jsx global>{`
+        .national-day-header .national-day-search > div > div:first-child {
+          border-color: rgba(255, 216, 111, 0.58) !important;
+          background: rgba(102, 5, 19, 0.58) !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 14px rgba(74,0,8,0.14);
+        }
+        .national-day-header .national-day-search > div > div:first-child:hover,
+        .national-day-header .national-day-search > div > div:first-child:focus-within {
+          border-color: rgba(255, 230, 146, 0.9) !important;
+          background: rgba(119, 7, 22, 0.76) !important;
+        }
+        .national-day-header .national-day-search input {
+          color: #fff5d0 !important;
+        }
+        .national-day-header .national-day-search input::placeholder {
+          color: rgba(255, 235, 179, 0.68) !important;
+        }
+        .national-day-header .national-day-search > div > div:first-child svg {
+          color: #ffe49a !important;
+        }
+        .national-day-header .national-day-search > div > div:first-child > span:last-child {
+          border-color: rgba(255, 224, 137, 0.45) !important;
+          background: rgba(73, 3, 12, 0.5) !important;
+          color: #ffe8ad !important;
+          box-shadow: none !important;
+        }
+        .national-day-header .national-day-language > button,
+        .national-day-header .national-day-theme-toggle > button,
+        .national-day-header .national-day-message > a,
+        .national-day-header .national-day-notifications > div > button,
+        .national-day-header .national-day-quests > div > button {
+          border: 1px solid rgba(255, 216, 111, 0.45) !important;
+          background: rgba(102, 5, 19, 0.52) !important;
+          color: #fff0bd !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+        .national-day-header .national-day-language > button:hover,
+        .national-day-header .national-day-theme-toggle > button:hover,
+        .national-day-header .national-day-message > a:hover,
+        .national-day-header .national-day-notifications > div > button:hover,
+        .national-day-header .national-day-quests > div > button:hover {
+          background: rgba(123, 8, 23, 0.78) !important;
+          color: #fff5d2 !important;
+        }
+        .national-day-header .national-day-language > button svg,
+        .national-day-header .national-day-theme-toggle > button svg,
+        .national-day-header .national-day-message > a svg,
+        .national-day-header .national-day-notifications > div > button svg,
+        .national-day-header .national-day-quests > div > button svg {
+          color: #ffe49a !important;
+        }
+      `}</style>
     </header>
     <DailyQuestBanner />
     </>
