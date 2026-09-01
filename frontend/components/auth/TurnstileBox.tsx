@@ -31,8 +31,8 @@ declare global {
 
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 export const isTurnstileEnabled = Boolean(siteKey);
-// Login Turnstile is temporarily opt-in. Registration and password recovery
-// continue to use the existing site-key based protection.
+// Keep this component available for future high-risk forms. Authentication
+// forms currently rely on their existing rate limits instead of a widget.
 export const isLoginTurnstileEnabled =
   isTurnstileEnabled && process.env.NEXT_PUBLIC_TURNSTILE_LOGIN_ENABLED === 'true';
 

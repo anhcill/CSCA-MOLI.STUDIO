@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -30,7 +30,6 @@ import { sanitizeInput } from '@/lib/utils/security';
 import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
-import TurnstileBox, { isLoginTurnstileEnabled, isTurnstileEnabled } from './TurnstileBox';
 import { FiArrowRight, FiLock, FiMonitor, FiShield, FiUser } from 'react-icons/fi';
 
 export default function LoginForm() {
@@ -48,11 +47,8 @@ export default function LoginForm() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [verificationResending, setVerificationResending] = useState(false);
-  const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
   // ── OTP Step ────────────────────────────────────────────────────────────────
   const [otpStep, setOtpStep] = useState(false);
   const [pendingChallengeToken, setPendingChallengeToken] = useState('');
@@ -145,9 +141,6 @@ export default function LoginForm() {
       newErrors.password = t('auth.requiredPassword');
     } else if (formData.password.length < 6) {
       newErrors.password = t('auth.passwordMin6');
-    }
-    if (isLoginTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng nhập.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -307,7 +300,7 @@ export default function LoginForm() {
     setUnverifiedEmail('');
 
     try {
-      const response = await login({ ...formData, turnstileToken });
+      const response = await login(formData);
       if (response.success) {
         if (await startAdminMfaFlow(response)) {
           setIsSubmitting(false);
@@ -333,8 +326,6 @@ export default function LoginForm() {
         await completeAuthData(response.data);
       }
     } catch (error: any) {
-      setTurnstileToken('');
-      setTurnstileResetKey(key => key + 1);
       if (error.response?.data?.code === 'DEVICE_LIMIT_REACHED' && error.response?.data?.data) {
         setDeviceLimitData(error.response.data.data as DeviceLimitData);
         setDeviceApprovalMessage('');
@@ -371,20 +362,14 @@ export default function LoginForm() {
 
   const handleResendVerification = async () => {
     if (!unverifiedEmail) return;
-    if (isTurnstileEnabled && !turnstileToken) {
-      setErrors({ general: 'Vui lòng xác nhận Cloudflare trước khi gửi lại email.' });
-      return;
-    }
     setVerificationResending(true);
     try {
-      const response = await resendVerificationEmail(unverifiedEmail, turnstileToken);
+      const response = await resendVerificationEmail(unverifiedEmail);
       setErrors({ general: response.message });
       setUnverifiedEmail('');
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || 'Chưa thể gửi lại email xác minh.' });
     } finally {
-      setTurnstileToken('');
-      setTurnstileResetKey(key => key + 1);
       setVerificationResending(false);
     }
   };
@@ -994,7 +979,7 @@ export default function LoginForm() {
               <button
                 type="button"
                 onClick={handleResendVerification}
-                disabled={verificationResending || (isTurnstileEnabled && !turnstileToken)}
+                disabled={verificationResending}
                 className="mt-3 block w-full rounded-xl bg-[#bd111c] px-3 py-2 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {verificationResending ? 'Đang gửi…' : 'Gửi lại email xác minh'}
@@ -1041,15 +1026,6 @@ export default function LoginForm() {
           {errors.password && <p className="mt-1.5 text-sm text-red-600">{errors.password}</p>}
         </div>
 
-        {(isLoginTurnstileEnabled || (isTurnstileEnabled && Boolean(unverifiedEmail))) && (
-          <TurnstileBox
-            action="login"
-            disabled={isSubmitting || isLocked}
-            resetKey={turnstileResetKey}
-            onTokenChange={handleTurnstileToken}
-          />
-        )}
-
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center">
             <input type="checkbox" className="h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]" />
@@ -1060,7 +1036,7 @@ export default function LoginForm() {
 
         <button
           type="submit"
-          disabled={isSubmitting || isLocked || (isLoginTurnstileEnabled && !turnstileToken)}
+          disabled={isSubmitting || isLocked}
           className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (

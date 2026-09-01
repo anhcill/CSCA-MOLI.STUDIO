@@ -13,7 +13,6 @@ export interface RegisterData {
 export interface LoginData {
   email: string;
   password: string;
-  turnstileToken?: string;
 }
 
 export interface User {
@@ -210,11 +209,9 @@ export const resendOtp = async (challengeToken: string): Promise<{ success: bool
 
 export const resendVerificationEmail = async (
   email: string,
-  turnstileToken: string,
 ): Promise<{ success: boolean; message: string }> => {
   const response = await axios.post('/auth/resend-verification-email', {
     email,
-    turnstileToken,
   });
   return response.data;
 };

@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import axios from '@/lib/utils/axios';
 import { FiLock, FiEye, FiEyeOff, FiCheckCircle, FiAlertTriangle } from 'react-icons/fi';
-import TurnstileBox, { isTurnstileEnabled } from '@/components/auth/TurnstileBox';
 
 function ResetPasswordForm() {
     const searchParams = useSearchParams();
@@ -21,9 +20,6 @@ function ResetPasswordForm() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState('');
-    const [turnstileToken, setTurnstileToken] = useState('');
-    const [turnstileResetKey, setTurnstileResetKey] = useState(0);
-    const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
 
     const isInvalid = !token || !userId;
 
@@ -52,19 +48,12 @@ function ResetPasswordForm() {
             return;
         }
 
-        if (isTurnstileEnabled && !turnstileToken) {
-            setError('Vui lòng xác nhận Cloudflare trước khi tiếp tục.');
-            return;
-        }
-
         setLoading(true);
         try {
-            await axios.post('/auth/reset-password', { token, userId, newPassword, turnstileToken });
+            await axios.post('/auth/reset-password', { token, userId, newPassword });
             setSuccess(true);
             setTimeout(() => router.push('/login'), 3000);
         } catch (err: any) {
-            setTurnstileToken('');
-            setTurnstileResetKey(key => key + 1);
             setError(err.response?.data?.message || 'Có lỗi xảy ra, vui lòng thử lại');
         } finally {
             setLoading(false);
@@ -183,16 +172,9 @@ function ResetPasswordForm() {
                                     <li className={/[a-zA-Z]/.test(newPassword) && /[0-9]/.test(newPassword) ? 'text-emerald-500' : ''}>• Bao gồm chữ cái và số</li>
                                 </ul>
 
-                                <TurnstileBox
-                                    action="reset_password"
-                                    disabled={loading}
-                                    resetKey={turnstileResetKey}
-                                    onTokenChange={handleTurnstileToken}
-                                />
-
                                 <button
                                     type="submit"
-                                    disabled={loading || !newPassword || !confirm || (isTurnstileEnabled && !turnstileToken)}
+                                    disabled={loading || !newPassword || !confirm}
                                     className="w-full py-3 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
                                 >
                                     {loading ? 'Đang lưu...' : 'Đặt lại mật khẩu'}

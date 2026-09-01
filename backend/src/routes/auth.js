@@ -4,7 +4,6 @@ const rateLimit = require("express-rate-limit");
 const { ipKeyGenerator } = require("express-rate-limit");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/authMiddleware");
-const { verifyTurnstile } = require("../middleware/turnstileMiddleware");
 const { validateRegister, validateLogin } = require("../utils/validators");
 const DeviceSessionService = require("../services/deviceSessionService");
 
@@ -37,11 +36,11 @@ const verificationEmailLimiter = rateLimit({
   },
 });
 
-// Registration does not use the browser Turnstile widget. Keep legal consent
-// validation in validateRegister/authController and leave Turnstile enabled
-// for login and recovery flows below.
+// Registration and authentication forms do not use the browser Turnstile widget.
+// Keep abuse protection through the route-specific rate limits and the existing
+// credential/device/OTP checks.
 router.post("/register", validateRegister, authController.register);
-router.post("/login", verifyTurnstile, validateLogin, authController.login);
+router.post("/login", validateLogin, authController.login);
 // Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Endpoint
 // này vẫn chạy đủ mật khẩu, giới hạn tốc độ, device limit và OTP challenge;
 // không coi header client là một cơ chế bảo mật.
@@ -55,14 +54,13 @@ router.get("/facebook", authController.facebookAuthStart);
 router.get("/facebook/callback", authController.facebookAuthCallback);
 
 // Password reset (public - no auth needed)
-router.post("/forgot-password", verifyTurnstile, authController.forgotPassword);
-router.post("/reset-password", verifyTurnstile, authController.resetPassword);
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/reset-password", authController.resetPassword);
 
 router.post("/verify-email", authController.verifyEmail);
 router.post(
   "/resend-verification-email",
   verificationEmailLimiter,
-  verifyTurnstile,
   authController.resendVerificationEmail,
 );
 
