@@ -23,7 +23,7 @@ export default function AuthSupport() {
             href={ZALO_URL}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-white px-3 py-2 text-xs font-black text-[#2d2926] transition-colors hover:border-[#bd8f68] hover:bg-[#fff7ef]"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-[#fffaf5] px-3 py-2 text-xs font-black text-[#2d2926] transition-colors hover:border-[#bd8f68] hover:bg-[#fff7ef]"
           >
             <FiMessageCircle className="h-4 w-4 text-[#087df1]" />
             Zalo {ZALO_NUMBER}
@@ -31,7 +31,7 @@ export default function AuthSupport() {
 
           <a
             href={`mailto:${SUPPORT_EMAILS[0]}`}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-white px-3 py-2 text-xs font-black text-[#2d2926] transition-colors hover:border-[#bd8f68] hover:bg-[#fff7ef]"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#d8bfa8] bg-[#fffaf5] px-3 py-2 text-xs font-black text-[#2d2926] transition-colors hover:border-[#bd8f68] hover:bg-[#fff7ef]"
           >
             <FiMail className="h-4 w-4 text-[#bd111c]" />
             Email IT
