@@ -22,7 +22,7 @@ function VerifyEmailContent() {
 
         const verify = async () => {
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/verify-email`, {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify-email`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token, userId: id }),
