@@ -2,6 +2,7 @@ import LoginForm from '@/components/auth/LoginForm';
 import Link from 'next/link';
 import { FaGraduationCap } from 'react-icons/fa';
 import { FiBarChart2, FiBookOpen, FiEdit3, FiHome, FiUsers } from 'react-icons/fi';
+import AuthSupport from '@/components/auth/AuthSupport';
 
 const LOGIN_BG_IMAGE = '/images/auth/csca-scholarship-bg-20260705b.png';
 
@@ -548,6 +549,7 @@ export default function LoginPage() {
         <section className="flex items-center justify-center lg:justify-end">
           <div className="auth-login-card w-full max-w-[450px] rounded-[28px] border border-white/[0.85] bg-white/[0.82] px-7 py-8 text-[#2f2926] shadow-[0_28px_90px_rgba(88,58,34,0.22)] backdrop-blur-xl sm:px-9">
             <LoginForm />
+            <AuthSupport />
           </div>
         </section>
 
