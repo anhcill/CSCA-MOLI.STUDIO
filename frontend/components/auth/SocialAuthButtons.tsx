@@ -12,6 +12,7 @@ interface SocialAuthButtonsProps {
   onGoogleError: () => void;
   onGoogleNotConfigured: () => void;
   onFacebookClick: () => void;
+  onBeforeSocialAuth?: () => boolean;
 }
 
 declare global {
@@ -62,6 +63,7 @@ export default function SocialAuthButtons({
   onGoogleError,
   onGoogleNotConfigured,
   onFacebookClick,
+  onBeforeSocialAuth,
 }: SocialAuthButtonsProps) {
   const { clientId } = useGoogleOAuth();
   const resolvedClientId = clientId?.trim() || '';
@@ -71,6 +73,7 @@ export default function SocialAuthButtons({
 
   const handleGoogleClick = async () => {
     if (disabled) return;
+    if (onBeforeSocialAuth && !onBeforeSocialAuth()) return;
     if (!isGoogleEnabled) {
       onGoogleNotConfigured();
       return;
@@ -120,7 +123,15 @@ export default function SocialAuthButtons({
           <span className="truncate">Google</span>
         </button>
 
-        <button type="button" onClick={onFacebookClick} disabled={disabled} className={buttonClass}>
+        <button
+          type="button"
+          onClick={() => {
+            if (onBeforeSocialAuth && !onBeforeSocialAuth()) return;
+            onFacebookClick();
+          }}
+          disabled={disabled}
+          className={buttonClass}
+        >
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-white">
             <FaFacebookF className="h-3 w-3" />
           </span>

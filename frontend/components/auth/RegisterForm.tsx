@@ -40,6 +40,13 @@ export default function RegisterForm() {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
+  const ensureTermsAccepted = () => {
+    if (acceptedTerms) return true;
+    const message = t('auth.registerTermsRequired');
+    setErrors({ general: message, terms: message });
+    return false;
+  };
+
   const validateForm = () => {
     const newErrors: typeof errors = {};
     if (!formData.username) {
@@ -117,15 +124,12 @@ export default function RegisterForm() {
 
   const handleGoogleAccessToken = async (accessToken: string) => {
     if (!accessToken) return;
+    if (!ensureTermsAccepted()) return;
     setIsSubmitting(true);
     setLoading(true);
     setErrors({});
 
     try {
-      if (!acceptedTerms) {
-        setErrors({ terms: 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.' });
-        return;
-      }
       const response = await googleAuth({
         accessToken,
         acceptedTerms: true,
@@ -164,6 +168,7 @@ export default function RegisterForm() {
   };
 
   const handleFacebookLogin = () => {
+    if (!ensureTermsAccepted()) return;
     if (typeof window === 'undefined') return;
 
     setIsSubmitting(true);
@@ -295,8 +300,17 @@ export default function RegisterForm() {
             id="terms"
             checked={acceptedTerms}
             onChange={(event) => {
-              setAcceptedTerms(event.target.checked);
-              if (errors.terms) setErrors((current) => ({ ...current, terms: '' }));
+              const checked = event.target.checked;
+              setAcceptedTerms(checked);
+              if (checked && (errors.terms || errors.general === t('auth.registerTermsRequired'))) {
+                setErrors((current) => ({
+                  ...current,
+                  terms: '',
+                  general: current.general === t('auth.registerTermsRequired') ? '' : current.general,
+                }));
+              } else if (errors.terms) {
+                setErrors((current) => ({ ...current, terms: '' }));
+              }
             }}
             className="mt-0.5 h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]"
           />
@@ -343,16 +357,15 @@ export default function RegisterForm() {
           )}
         </button>
 
-        {acceptedTerms && (
-          <SocialAuthButtons
-            dividerLabel={t('auth.socialRegister')}
-            disabled={isSubmitting}
-            onGoogleAccessToken={handleGoogleAccessToken}
-            onGoogleError={handleGoogleError}
-            onGoogleNotConfigured={handleGoogleNotConfigured}
-            onFacebookClick={handleFacebookLogin}
-          />
-        )}
+        <SocialAuthButtons
+          dividerLabel={t('auth.socialRegister')}
+          disabled={isSubmitting}
+          onGoogleAccessToken={handleGoogleAccessToken}
+          onGoogleError={handleGoogleError}
+          onGoogleNotConfigured={handleGoogleNotConfigured}
+          onFacebookClick={handleFacebookLogin}
+          onBeforeSocialAuth={ensureTermsAccepted}
+        />
       </form>
 
       <p className="mt-6 text-center text-sm font-semibold text-[#44372f]">

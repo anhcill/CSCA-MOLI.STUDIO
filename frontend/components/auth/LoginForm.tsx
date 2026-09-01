@@ -31,7 +31,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
 import TurnstileBox, { isLoginTurnstileEnabled, isTurnstileEnabled } from './TurnstileBox';
-import { FiArrowRight, FiLock, FiMail, FiMonitor, FiShield } from 'react-icons/fi';
+import { FiArrowRight, FiLock, FiMonitor, FiShield, FiUser } from 'react-icons/fi';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -135,10 +135,11 @@ export default function LoginForm() {
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
-    if (!formData.email) {
-      newErrors.email = t('auth.requiredEmail');
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = t('auth.invalidEmail');
+    const identifier = formData.email.trim();
+    if (!identifier) {
+      newErrors.email = t('auth.requiredIdentifier');
+    } else if (identifier.includes('@') && !/\S+@\S+\.\S+/.test(identifier)) {
+      newErrors.email = t('auth.invalidIdentifier');
     }
     if (!formData.password) {
       newErrors.password = t('auth.requiredPassword');
@@ -1003,19 +1004,19 @@ export default function LoginForm() {
         )}
 
         <div>
-          <label htmlFor="email" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.email')}</label>
+          <label htmlFor="email" className="mb-2 block text-sm font-black text-[#342a24]">{t('auth.identifier')}</label>
           <div className="relative">
-            <FiMail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
+            <FiUser className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#bd111c]" />
             <input
-              type="email"
+              type="text"
               id="email"
               name="email"
-              autoComplete="email"
+              autoComplete="username"
               value={formData.email}
               onChange={handleChange}
               disabled={isSubmitting || isLocked}
               className={`${loginInputBaseClass} ${errors.email ? 'border-red-500' : 'border-white/80'}`}
-              placeholder="example@email.com"
+              placeholder={t('auth.identifierPlaceholder')}
             />
           </div>
           {errors.email && <p className="mt-1.5 text-sm text-red-600">{errors.email}</p>}
