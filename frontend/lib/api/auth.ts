@@ -5,7 +5,6 @@ export interface RegisterData {
   email: string;
   password: string;
   full_name?: string;
-  turnstileToken?: string;
   acceptedTerms: boolean;
   termsVersion?: string;
   privacyVersion?: string;

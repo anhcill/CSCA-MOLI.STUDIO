@@ -37,7 +37,10 @@ const verificationEmailLimiter = rateLimit({
   },
 });
 
-router.post("/register", verifyTurnstile, validateRegister, authController.register);
+// Registration does not use the browser Turnstile widget. Keep legal consent
+// validation in validateRegister/authController and leave Turnstile enabled
+// for login and recovery flows below.
+router.post("/register", validateRegister, authController.register);
 router.post("/login", verifyTurnstile, validateLogin, authController.login);
 // Ứng dụng di động không thể nhúng widget Turnstile của trình duyệt. Endpoint
 // này vẫn chạy đủ mật khẩu, giới hạn tốc độ, device limit và OTP challenge;

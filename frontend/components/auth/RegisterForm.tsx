@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FiArrowRight, FiLock, FiMail, FiUser } from 'react-icons/fi';
@@ -12,7 +12,6 @@ import { useLanguage } from '@/context/LanguageContext';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 import SocialAuthButtons from './SocialAuthButtons';
 import TermsModal from './TermsModal';
-import TurnstileBox, { isTurnstileEnabled } from './TurnstileBox';
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -30,10 +29,7 @@ export default function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsModalType, setTermsModalType] = useState<'terms' | 'privacy'>('terms');
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
 
   const inputBaseClass = 'auth-login-input w-full rounded-2xl border px-4 py-3.5 pl-12 font-semibold text-[#2f2926] shadow-[0_12px_30px_rgba(90,54,24,0.08)] outline-none transition-all placeholder:text-[#7a675a] focus:border-[#c1121f] focus:ring-4 focus:ring-[#c1121f]/12 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -68,9 +64,6 @@ export default function RegisterForm() {
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = t('auth.passwordMismatch');
     }
-    if (isTurnstileEnabled && !turnstileToken) {
-      newErrors.general = 'Vui lòng xác nhận Cloudflare trước khi đăng ký.';
-    }
     if (!acceptedTerms) {
       newErrors.terms = 'Bạn cần đồng ý Điều khoản sử dụng và Chính sách bảo mật.';
     }
@@ -91,10 +84,9 @@ export default function RegisterForm() {
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name || formData.username,
-        turnstileToken,
         acceptedTerms,
-        termsVersion: '2026-04',
-        privacyVersion: '2026-04',
+        termsVersion: '2026-08',
+        privacyVersion: '2026-08',
       });
       if (response.success && response.data) {
         const { user: registerUser, token, refreshToken } = response.data;
@@ -116,8 +108,6 @@ export default function RegisterForm() {
         router.push(getDefaultAdminRoute(effectiveUser));
       }
     } catch (error: any) {
-      setTurnstileToken('');
-      setTurnstileResetKey(key => key + 1);
       setErrors({ general: error.response?.data?.message || t('auth.registerFailed') });
     } finally {
       setIsSubmitting(false);
@@ -139,8 +129,8 @@ export default function RegisterForm() {
       const response = await googleAuth({
         accessToken,
         acceptedTerms: true,
-        termsVersion: '2026-04',
-        privacyVersion: '2026-04',
+        termsVersion: '2026-08',
+        privacyVersion: '2026-08',
       });
       if (response.success && response.data) {
         const { user: loginUser, token, refreshToken } = response.data;
@@ -197,7 +187,9 @@ export default function RegisterForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
         {errors.general && (
-          <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm text-red-700">{errors.general}</div>
+          <div role="alert" aria-live="assertive" className="rounded-2xl border border-red-300 bg-red-50/95 px-4 py-3 text-sm font-bold text-red-700 shadow-sm">
+            {errors.general}
+          </div>
         )}
 
         <div>
@@ -307,7 +299,6 @@ export default function RegisterForm() {
               if (errors.terms) setErrors((current) => ({ ...current, terms: '' }));
             }}
             className="mt-0.5 h-4 w-4 rounded border-[#d8bca0] text-[#c1121f] focus:ring-[#c1121f]"
-            required
           />
           <label htmlFor="terms" className="ml-2 text-sm font-semibold leading-relaxed text-[#44372f]">
             {t('auth.registerConsentPrefix')}{' '}
@@ -331,16 +322,9 @@ export default function RegisterForm() {
         </div>
         {errors.terms && <p className="-mt-2 text-sm font-semibold text-red-600">{errors.terms}</p>}
 
-        <TurnstileBox
-          action="register"
-          disabled={isSubmitting}
-          resetKey={turnstileResetKey}
-          onTokenChange={handleTurnstileToken}
-        />
-
         <button
           type="submit"
-          disabled={isSubmitting || (isTurnstileEnabled && !turnstileToken)}
+          disabled={isSubmitting}
           className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#df1f24] to-[#a80f14] px-4 py-3.5 font-black text-white shadow-[0_18px_34px_rgba(190,28,32,0.28)] transition-all hover:translate-y-[-1px] hover:shadow-[0_22px_42px_rgba(190,28,32,0.34)] focus:outline-none focus:ring-4 focus:ring-[#c1121f]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? (
@@ -359,14 +343,16 @@ export default function RegisterForm() {
           )}
         </button>
 
-        <SocialAuthButtons
-          dividerLabel={t('auth.socialRegister')}
-          disabled={isSubmitting}
-          onGoogleAccessToken={handleGoogleAccessToken}
-          onGoogleError={handleGoogleError}
-          onGoogleNotConfigured={handleGoogleNotConfigured}
-          onFacebookClick={handleFacebookLogin}
-        />
+        {acceptedTerms && (
+          <SocialAuthButtons
+            dividerLabel={t('auth.socialRegister')}
+            disabled={isSubmitting}
+            onGoogleAccessToken={handleGoogleAccessToken}
+            onGoogleError={handleGoogleError}
+            onGoogleNotConfigured={handleGoogleNotConfigured}
+            onFacebookClick={handleFacebookLogin}
+          />
+        )}
       </form>
 
       <p className="mt-6 text-center text-sm font-semibold text-[#44372f]">
