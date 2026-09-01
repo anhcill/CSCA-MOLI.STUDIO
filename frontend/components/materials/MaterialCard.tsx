@@ -71,6 +71,26 @@ export function MaterialCard({ material }: { material: Material }) {
         return;
       }
 
+      if (download) {
+        const sessionResponse = await fetch(`/api/materials/pdf/${material.id}/view-session`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (sessionResponse.ok) {
+          const sessionPayload = await sessionResponse.json();
+          const directUrl = sessionPayload.data?.download_url;
+          if (directUrl) {
+            const link = document.createElement('a');
+            link.href = directUrl;
+            link.rel = 'noreferrer';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            return;
+          }
+        }
+      }
+
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });

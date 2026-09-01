@@ -2,9 +2,12 @@ const crypto = require("crypto");
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
+const { GetObjectCommand, S3Client } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const R2_URL_PREFIX = "/api/materials/r2/";
 const DEFAULT_REGION = "auto";
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
 
 function getR2Config() {
   return {
@@ -83,6 +86,45 @@ function getSafeFileName(originalName) {
     .slice(0, 80) || "material";
   const ext = (parsed.ext || ".pdf").toLowerCase() === ".pdf" ? ".pdf" : ".pdf";
   return `${name}${ext}`;
+}
+
+function getSignedUrlTtlSeconds(value) {
+  const configured = Number(value ?? process.env.MATERIAL_R2_SIGNED_URL_TTL_SECONDS ?? DEFAULT_SIGNED_URL_TTL_SECONDS);
+  if (!Number.isFinite(configured)) return DEFAULT_SIGNED_URL_TTL_SECONDS;
+  return Math.min(4 * 60 * 60, Math.max(60, Math.trunc(configured)));
+}
+
+function createR2Client(config) {
+  return new S3Client({
+    region: config.region || DEFAULT_REGION,
+    endpoint: getR2Endpoint(config),
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+}
+
+async function getR2ObjectSignedUrl(
+  key,
+  {
+    disposition = "inline",
+    fileName = "material.pdf",
+    expiresIn,
+  } = {},
+) {
+  const config = assertR2Configured();
+  const safeDisposition = disposition === "attachment" ? "attachment" : "inline";
+  const command = new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    ResponseContentType: "application/pdf",
+    ResponseContentDisposition: `${safeDisposition}; filename="${getSafeFileName(fileName)}"`,
+    ResponseCacheControl: safeDisposition === "inline" ? "private, max-age=300" : "private, max-age=60",
+  });
+  return getSignedUrl(createR2Client(config), command, {
+    expiresIn: getSignedUrlTtlSeconds(expiresIn),
+  });
 }
 
 function createR2ObjectKey(originalName) {
@@ -276,6 +318,7 @@ module.exports = {
   assertR2Configured,
   deleteR2Object,
   getR2KeyFromUrl,
+  getR2ObjectSignedUrl,
   getR2ObjectStream,
   getR2PdfUrl,
   uploadPdfToR2,

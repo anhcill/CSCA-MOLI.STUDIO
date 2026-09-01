@@ -114,6 +114,27 @@ function MaterialRow({ material }: { material: Material }) {
       window.location.href = '/login';
       return;
     }
+
+    if (download) {
+      const sessionResponse = await fetch(`/api/materials/pdf/${material.id}/view-session`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (sessionResponse.ok) {
+        const sessionPayload = await sessionResponse.json();
+        const directUrl = sessionPayload.data?.download_url;
+        if (directUrl) {
+          const anchor = document.createElement('a');
+          anchor.href = directUrl;
+          anchor.rel = 'noreferrer';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          return;
+        }
+      }
+    }
+
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) throw new Error('PDF request failed');
     const objectUrl = URL.createObjectURL(await response.blob());

@@ -13,7 +13,7 @@ const { extractPdfWebContent } = require("../services/materialContentService");
 const { getMaterialPdfUploadError, uploadPdfToCloudinary } = require("../services/materialPdfUploadService");
 const {
   getR2KeyFromUrl,
-  getR2ObjectStream,
+  getR2ObjectSignedUrl,
   getR2PdfUrl,
   uploadPdfToR2,
 } = require("../services/materialR2StorageService");
@@ -210,20 +210,15 @@ async function findMaterialByR2Key(key) {
   return result.rows[0] || null;
 }
 
-async function streamR2PdfByKey(res, key, disposition, title, rangeHeader = "") {
-  const upstream = await getR2ObjectStream(key, { range: rangeHeader || undefined });
-  if (upstream.statusCode === 206) res.status(206);
-  res.setHeader("Content-Type", upstream.headers["content-type"] || "application/pdf");
-  res.setHeader("Content-Disposition", `${disposition}; filename="${getPdfDownloadName(title, path.basename(key))}"`);
-  res.setHeader("Cache-Control", "private, max-age=1800");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "http://localhost:3000");
-  res.setHeader("Accept-Ranges", upstream.headers["accept-ranges"] || "bytes");
-  if (upstream.headers["content-range"]) res.setHeader("Content-Range", upstream.headers["content-range"]);
-  if (upstream.headers.etag) res.setHeader("ETag", upstream.headers.etag);
-  if (upstream.headers["last-modified"]) res.setHeader("Last-Modified", upstream.headers["last-modified"]);
-  if (upstream.headers["content-length"]) res.setHeader("Content-Length", upstream.headers["content-length"]);
-  upstream.pipe(res);
+async function streamR2PdfByKey(res, key, disposition, title) {
+  // Keep Railway in the authorization path, but send the PDF bytes directly
+  // from R2 to the browser so Railway does not pay egress for the file body.
+  const signedUrl = await getR2ObjectSignedUrl(key, {
+    disposition,
+    fileName: title || path.basename(key),
+  });
+  res.setHeader("Cache-Control", "no-store");
+  return res.redirect(302, signedUrl);
 }
 
 function canUseR2PdfFallback(uploadError) {
@@ -452,7 +447,7 @@ const MATERIAL_VIEW_TOKEN_ISSUER = "csca-api";
 router.post("/pdf/:id/view-session", authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, title, is_premium, allow_download
+      `SELECT id, title, file_url, is_premium, allow_download
        FROM materials
        WHERE id = $1 AND (is_active IS NULL OR is_active = TRUE)
        LIMIT 1`,
@@ -468,6 +463,29 @@ router.post("/pdf/:id/view-session", authenticate, async (req, res) => {
         message: "Tài liệu này chỉ dành cho thành viên VIP",
         code: "VIP_REQUIRED",
         is_vip_required: true,
+      });
+    }
+
+    const r2Key = getR2KeyFromUrl(material.file_url);
+    if (r2Key) {
+      const streamUrl = await getR2ObjectSignedUrl(r2Key, {
+        disposition: "inline",
+        fileName: material.title,
+      });
+      const downloadUrl = material.allow_download === false
+        ? ""
+        : await getR2ObjectSignedUrl(r2Key, {
+          disposition: "attachment",
+          fileName: material.title,
+        });
+      return res.json({
+        success: true,
+        data: {
+          stream_url: streamUrl,
+          download_url: downloadUrl,
+          delivery: "r2-direct",
+          allow_download: material.allow_download !== false,
+        },
       });
     }
 

@@ -25,6 +25,8 @@ export default function MaterialPdfViewerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [directDelivery, setDirectDelivery] = useState(false);
   const [useMobileViewer, setUseMobileViewer] = useState<boolean | null>(null);
 
   const endpoint = useMemo(() => `/api/materials/pdf/${id}`, [id]);
@@ -39,6 +41,8 @@ export default function MaterialPdfViewerPage() {
     setLoading(true);
     setError('');
     setPdfUrl('');
+    setDownloadUrl('');
+    setDirectDelivery(false);
 
     try {
       const response = await fetch(`${endpoint}/view-session`, {
@@ -51,6 +55,8 @@ export default function MaterialPdfViewerPage() {
       const payload = await response.json();
       setAllowDownload(payload.data?.allow_download !== false);
       setPdfUrl(payload.data?.stream_url || '');
+      setDownloadUrl(payload.data?.download_url || '');
+      setDirectDelivery(payload.data?.delivery === 'r2-direct');
       if (!payload.data?.stream_url) throw new Error('Không nhận được đường dẫn xem PDF.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được PDF.');
@@ -62,6 +68,15 @@ export default function MaterialPdfViewerPage() {
     const token = getAuthToken();
     if (!token) {
       window.location.href = '/login';
+      return;
+    }
+    if (downloadUrl) {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.rel = 'noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       return;
     }
     const response = await fetch(`${endpoint}/download`, {
@@ -80,7 +95,7 @@ export default function MaterialPdfViewerPage() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-  }, [endpoint, title]);
+  }, [downloadUrl, endpoint, title]);
 
   const handleMobileReady = useCallback(() => setLoading(false), []);
   const handleMobileError = useCallback((message: string) => {
@@ -154,7 +169,7 @@ export default function MaterialPdfViewerPage() {
           </div>
         )}
 
-        {pdfUrl && useMobileViewer === true && (
+        {pdfUrl && useMobileViewer === true && !directDelivery && (
           <MobilePdfViewer
             url={pdfUrl}
             title={title}
@@ -163,7 +178,7 @@ export default function MaterialPdfViewerPage() {
           />
         )}
 
-        {pdfUrl && useMobileViewer === false && (
+        {pdfUrl && (useMobileViewer === false || directDelivery) && (
           <iframe
             src={`${pdfUrl}#view=FitH&navpanes=0&toolbar=${allowDownload ? 1 : 0}`}
             title={title}
