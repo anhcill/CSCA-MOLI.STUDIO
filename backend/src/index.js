@@ -14,7 +14,10 @@ const { getHttpOrigin, parseFeatureFlag } = require("./utils/courseFeatureConfig
 const app = express();
 const PORT = process.env.PORT || 5000;
 const SERVER_TIMEOUT_MS = Number.parseInt(process.env.API_SERVER_TIMEOUT_MS || "1200000", 10);
-const coursesEnabled = parseFeatureFlag(process.env.CSCA_COURSES_ENABLED, "CSCA_COURSES_ENABLED");
+// Course migrations are live, so courses are available by default. Keep the
+// env flag as an explicit kill switch for deployments that need to disable the
+// module temporarily.
+const coursesEnabled = parseFeatureFlag(process.env.CSCA_COURSES_ENABLED ?? "true", "CSCA_COURSES_ENABLED");
 const videoGatewayOrigin = getHttpOrigin(process.env.VIDEO_GATEWAY_BASE_URL, {
   requireHttps: process.env.NODE_ENV === "production",
 });
@@ -261,7 +264,8 @@ app.use("/api/messages", require("./routes/messages")); // Private messaging
 app.use("/api/users", require("./routes/userProfile")); // Public user profiles
 app.use("/api/users", require("./routes/userActions")); // Block/Report actions
 
-// CSCA Courses are opt-in so Railway can apply migrations before any route is exposed.
+// CSCA Courses stay isolated behind the feature flag, while being enabled by
+// default now that the course schema has been rolled out.
 // Keep requires inside this block: a disabled/incomplete deployment must remain isolated.
 if (coursesEnabled) {
   const { adminWriteLimiter } = require("./routes/courseRateLimiters");

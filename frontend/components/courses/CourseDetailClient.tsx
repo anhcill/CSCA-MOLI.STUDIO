@@ -33,6 +33,11 @@ export function CourseDetailClient({ slug }: { slug: string }) {
       <CourseHero course={course} />
       <div className="mt-10 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px] xl:gap-10">
         <main className="space-y-8">
+          <div id="online-course" className="rounded-[1.75rem] border border-[#c9dfe0] bg-gradient-to-br from-[#eff9f7] via-white to-[#fff8ef] p-6 shadow-sm dark:border-[#294f5d] dark:from-[#102b34] dark:via-[#0b172b] dark:to-[#2a211c] sm:p-8">
+            <p className="text-xs font-black uppercase tracking-[.16em] text-[#247d7e] dark:text-[#70cdc1]">Khóa học online</p>
+            <h2 className="mt-2 font-sans text-2xl font-black text-[#17243d] dark:text-[#f4e5d1] sm:text-3xl">Học video theo lộ trình của bạn</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#675e57] dark:text-slate-300">Nội dung được chia thành từng bài ngắn, dễ theo dõi trên điện thoại hoặc máy tính. Tiến độ học sẽ được lưu lại để bạn tiếp tục bất cứ lúc nào.</p>
+          </div>
           <section className="rounded-[1.75rem] border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
             <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><FiTarget /></span><div><p className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Kết quả sau khóa học</p><h2 className="text-2xl font-black text-slate-950 dark:text-white sm:text-3xl">Bạn sẽ học được gì?</h2></div></div>
             {course.outcomes.length ? <ul className="mt-6 grid gap-3 sm:grid-cols-2">{course.outcomes.map((outcome) => <li key={outcome} className="flex gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm font-semibold leading-6 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs text-white"><FiCheck /></span>{outcome}</li>)}</ul> : <p className="mt-4 text-slate-500 dark:text-slate-400">Nội dung đang được cập nhật.</p>}

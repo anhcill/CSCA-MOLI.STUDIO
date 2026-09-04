@@ -10,6 +10,7 @@ import {
   FiTrendingUp,
 } from 'react-icons/fi';
 import { CourseCatalogClient } from '@/components/courses/CourseCatalogClient';
+import { CourseTutorShowcase } from '@/components/courses/CourseTutorShowcase';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 
 export const metadata: Metadata = {
@@ -61,7 +62,7 @@ export default function CoursesPage() {
         </nav>
 
         <section
-          className="relative isolate min-h-[440px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#071228] text-white shadow-[0_30px_70px_-32px_rgba(23,26,42,.75)] sm:min-h-[470px]"
+          className="relative isolate min-h-[350px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#071228] text-white shadow-[0_30px_70px_-32px_rgba(23,26,42,.75)] sm:min-h-[385px]"
           style={{
             backgroundImage: `linear-gradient(90deg, rgba(4,14,36,.98) 0%, rgba(5,18,44,.91) 36%, rgba(11,19,48,.28) 72%, rgba(7,14,36,.18) 100%), url("${HERO_IMAGE}")`,
             backgroundPosition: 'center',
@@ -71,33 +72,33 @@ export default function CoursesPage() {
           <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(2,9,24,.72),transparent_48%)]" />
           <div className="absolute inset-y-0 left-1/2 hidden w-px bg-gradient-to-b from-transparent via-white/10 to-transparent lg:block" />
 
-          <div className="relative flex min-h-[440px] max-w-[830px] flex-col justify-between px-6 py-8 sm:min-h-[470px] sm:px-10 sm:py-10 lg:px-16">
+          <div className="relative flex min-h-[350px] max-w-[830px] flex-col justify-between px-6 py-6 sm:min-h-[385px] sm:px-10 sm:py-7 lg:px-14">
             <div>
               <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/35 bg-emerald-300/10 px-4 py-2 text-xs font-black uppercase tracking-[.18em] text-emerald-200 backdrop-blur">
                 <FiBookOpen /> CSCA Learning
               </span>
-              <h1 className="mt-5 max-w-3xl font-sans text-4xl font-black leading-[1.05] tracking-tight text-[#fff4df] sm:text-5xl lg:text-6xl">
+              <h1 className="mt-4 max-w-3xl font-sans text-3xl font-black leading-[1.05] tracking-tight text-[#fff4df] sm:text-4xl lg:text-5xl">
                 Học đúng trọng tâm,
                 <span className="block text-white">tiến bộ theo từng bài.</span>
               </h1>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base lg:text-lg">
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200 sm:text-base lg:text-[17px]">
                 Lộ trình video dành riêng cho Toán, Vật lý, Hóa học và Tiếng Trung CSCA — từ nền tảng đến luyện đề, giúp bạn vững kiến thức và tự tin chinh phục mục tiêu du học Trung Quốc.
               </p>
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-5 flex flex-wrap gap-2.5">
                 {benefits.map(({ icon: Icon, label }) => (
-                  <span key={label} className="inline-flex items-center gap-2 rounded-full border border-[#d8b58c]/45 bg-[#071228]/45 px-4 py-2.5 text-sm font-bold text-[#f9e7cc] backdrop-blur">
+                  <span key={label} className="inline-flex items-center gap-2 rounded-full border border-[#d8b58c]/45 bg-[#071228]/45 px-3.5 py-2 text-xs font-bold text-[#f9e7cc] backdrop-blur sm:text-sm">
                     <Icon className="text-emerald-300" /> {label}
                   </span>
                 ))}
               </div>
             </div>
 
-            <div className="mt-8 grid max-w-2xl grid-cols-3 gap-3 border-t border-white/15 pt-5">
+            <div className="mt-5 grid max-w-2xl grid-cols-3 gap-3 border-t border-white/15 pt-4">
               {stats.map(({ icon: Icon, value, label }) => (
                 <div key={label} className="flex items-center gap-3">
-                  <Icon className="hidden h-8 w-8 shrink-0 text-emerald-300 sm:block" />
+                  <Icon className="hidden h-7 w-7 shrink-0 text-emerald-300 sm:block" />
                   <div>
-                    <p className="font-sans text-2xl font-black text-[#ffe8c4] sm:text-3xl">{value}</p>
+                    <p className="font-sans text-xl font-black text-[#ffe8c4] sm:text-2xl">{value}</p>
                     <p className="mt-0.5 text-[10px] font-semibold text-slate-300 sm:text-xs">{label}</p>
                   </div>
                 </div>
@@ -105,6 +106,8 @@ export default function CoursesPage() {
             </div>
           </div>
         </section>
+
+        <CourseTutorShowcase courseTitle="các khóa học online của MOLY" />
 
         <div className="mt-8">
           <CourseCatalogClient />

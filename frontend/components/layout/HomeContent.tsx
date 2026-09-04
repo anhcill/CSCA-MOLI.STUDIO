@@ -21,6 +21,7 @@ import {
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import { useLanguage } from '@/context/LanguageContext';
+import { CourseTutorShowcase } from '@/components/courses/CourseTutorShowcase';
 import ChinaCampusShowcase from './ChinaCampusShowcase';
 
 type StatsData = { users: number; exams: number; materials: number; passRate: number };
@@ -321,6 +322,12 @@ export default function HomeContent() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="w-full bg-white px-4 pb-14 pt-4 dark:bg-gray-900 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <CourseTutorShowcase courseTitle="hành trình luyện thi CSCA cùng MOLY" />
         </div>
       </section>
 

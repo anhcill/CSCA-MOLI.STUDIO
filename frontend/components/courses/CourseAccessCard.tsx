@@ -13,6 +13,7 @@ import {
 } from 'react-icons/fi';
 import coursesApi from '@/lib/api/courses';
 import type { CourseDetailDto } from '@/lib/types/courses';
+import { MOLY_ZALO_URL } from '@/lib/constants/moly';
 
 const levelLabels = {
   basic: 'Cơ bản',
@@ -84,7 +85,8 @@ export function CourseAccessCard({ course }: { course: CourseDetailDto }) {
         return router.push(`/login?redirect=${encodeURIComponent(redirect)}`);
       }
       if (course.accessType === 'contact' || course.accessType === 'private') {
-        return router.push('/lien-he');
+        window.open(MOLY_ZALO_URL, '_blank', 'noopener,noreferrer');
+        return;
       }
       return router.push(`/vip?course=${encodeURIComponent(course.slug)}`);
     }
