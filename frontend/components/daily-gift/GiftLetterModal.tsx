@@ -11,7 +11,6 @@ import {
   FaTimes,
 } from 'react-icons/fa';
 import type { DailyGiftLetter } from '@/hooks/useDailyGift';
-import { PetFace } from '@/components/common/MoliPet';
 
 interface GiftLetterModalProps {
   letter: DailyGiftLetter;
@@ -31,17 +30,6 @@ const DOODLES = [
 
 function normalizeDisplayText(value?: string | null) {
   return String(value || '').normalize('NFC').trim();
-}
-
-function GiftPetBadge() {
-  return (
-    <div className="pointer-events-none absolute -right-1 -top-9 z-20 h-20 w-20 rounded-[28px] border border-white/80 bg-white/75 shadow-xl shadow-rose-200/60 ring-4 ring-white/70 backdrop-blur sm:-right-5 sm:-top-12 sm:h-24 sm:w-24">
-      <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-sky-50 via-white to-rose-50" />
-      <div className="absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 scale-[0.82] sm:scale-95">
-        <PetFace color="ocean" variant="cat" mood="happy" facing="left" waving />
-      </div>
-    </div>
-  );
 }
 
 export default function GiftLetterModal({
@@ -78,8 +66,6 @@ export default function GiftLetterModal({
         transition={{ type: 'spring', stiffness: 240, damping: 24 }}
         onClick={(event) => event.stopPropagation()}
       >
-        <GiftPetBadge />
-
         {DOODLES.map(({ Icon, className, rotate }) => (
           <motion.span
             key={className}
