@@ -10,6 +10,7 @@ import NationalDayGreeting from '@/components/national-day/NationalDayGreeting';
 import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
 import NotificationPermissionPrompt from '@/components/pwa/NotificationPermissionPrompt';
 import UpdateToast from '@/components/pwa/UpdateToast';
+import OnlineClassAnnouncement from '@/components/layout/OnlineClassAnnouncement';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import { useAuthStore } from '@/lib/store/authStore';
 import axios from '@/lib/utils/axios';
@@ -142,6 +143,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const showDailyGift = showMoliPet && isAuthenticated && !nationalDayTheme;
   const showNationalDayGreeting = nationalDayTheme && !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   const showPwaBanner = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
+  const showOnlineClassAnnouncement = !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showNotificationPrompt = isAuthenticated && !isAdmin && !isAuth && !isExam && !isGame && !isChat;
   const showUpdateToast = !isChat;
   const moliPetPosition = 'left';
@@ -155,6 +157,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
       {showMoliPet && mounted && <MoliPet defaultPosition={moliPetPosition} />}
       {showDailyGift && mounted && <DailyGiftBox />}
       {showNationalDayGreeting && mounted && <NationalDayGreeting />}
+      {showOnlineClassAnnouncement && mounted && <OnlineClassAnnouncement />}
       {mounted && showNotificationPrompt && <NotificationPermissionPrompt />}
       {mounted && showUpdateToast && (
         <UpdateToast
