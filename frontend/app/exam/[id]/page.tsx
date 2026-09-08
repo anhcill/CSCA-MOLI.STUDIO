@@ -54,19 +54,19 @@ const EXAM_LANGUAGE_OPTIONS = [
 const EXPLANATION_LANGUAGE_OPTIONS = [
   {
     lang: 'vi',
-    label: 'Tiếng Việt thui',
+    label: 'Tiếng Việt',
     flag: '🇻🇳',
     desc: 'Lời giải thuần tiếng Việt',
   },
   {
     lang: 'en',
-    label: 'Tiếng Anh nè',
+    label: 'Tiếng Anh',
     flag: '🇬🇧',
     desc: 'Lời giải thuần tiếng Anh',
   },
   {
     lang: 'zh',
-    label: 'Tiếng Trung nha',
+    label: 'Tiếng Trung',
     flag: '🇨🇳',
     desc: 'Lời giải nguyên bản tiếng Trung',
   },
@@ -90,7 +90,7 @@ const EXPLANATION_LANGUAGE_OPTIONS = [
   },
   {
     lang: 'vi_en_zh',
-    label: 'Full 3 thứ tiếng lun!',
+    label: 'Full 3 thứ tiếng',
     flag: '🌐',
     desc: 'Hiển thị cả 3 thứ tiếng: Việt - Trung - Anh',
   },
