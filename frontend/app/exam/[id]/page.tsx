@@ -1265,7 +1265,7 @@ export default function ExamPage() {
                   <img
                     src={currentQuestion.image_url}
                     alt="Phụ lục câu hỏi"
-                    className="max-h-[400px] max-w-full rounded-xl bg-white object-contain"
+                    className="h-auto w-full max-w-full rounded-xl bg-white object-contain"
                   />
                 </div>
               )}

@@ -47,6 +47,25 @@ function restoreReadableBreaks(value: string) {
   return tidyReadableBreaks(applyReadableBreakRules(normalized));
 }
 
+function shouldRenderNaturalLanguagePlainText(value: string) {
+  const text = value.trim();
+  if (!text || /[\u4e00-\u9fff]/.test(text)) return false;
+
+  // Do not let the loose-math repair pass consume an entire English sentence
+  // just because it contains an assignment such as `B=0.4 T`. Explicit
+  // delimiters/commands still go through the normal Markdown + KaTeX path.
+  if (
+    /(?:\\\(|\\\[|\$\$?|\\(?:frac|dfrac|tfrac|sqrt|sin|cos|tan|cot|log|ln|lg|vec|binom|mathbb|mathrm)\b)/.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+
+  const words = text.match(/\b[A-Za-z]{2,}\b/g) || [];
+  return words.length >= 4 && /[.!?:;]/.test(text);
+}
+
 function canRenderLatex(formula: string, displayMode = false) {
   try {
     katex.renderToString(formula.trim(), {
@@ -181,14 +200,29 @@ function autoWrapLooseMathLines(text: string) {
 function RichMathText({ value, className = '', readableBreaks = false }: RichMathTextProps) {
   const isPlainText = isPlainTextMathValue(value);
   const cleanValue = stripPlainTextMathMarker(value);
-  const source = useMemo(() => (readableBreaks ? restoreReadableBreaks(cleanValue) : cleanValue), [readableBreaks, cleanValue]);
-  const markdown = useMemo(() => (source ? normalizeMathDelimiters(source) : ''), [source]);
+  const preserveNaturalLanguage = shouldRenderNaturalLanguagePlainText(cleanValue);
+  const source = useMemo(
+    () => (readableBreaks ? restoreReadableBreaks(cleanValue) : cleanValue),
+    [readableBreaks, cleanValue],
+  );
+  const markdown = useMemo(
+    () => (preserveNaturalLanguage || !source ? '' : normalizeMathDelimiters(source)),
+    [preserveNaturalLanguage, source],
+  );
 
   if (!value) return null;
 
   if (isPlainText) {
     return (
       <div className={`rich-math-text whitespace-pre-wrap text-sm leading-relaxed [&_.katex]:text-current [&_.katex_*]:text-current ${className}`}>
+        {source}
+      </div>
+    );
+  }
+
+  if (preserveNaturalLanguage) {
+    return (
+      <div className={`rich-math-text whitespace-pre-wrap text-sm leading-relaxed ${className}`}>
         {source}
       </div>
     );
