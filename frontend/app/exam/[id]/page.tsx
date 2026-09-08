@@ -892,7 +892,7 @@ export default function ExamPage() {
               {!isOfficialExam && (
                 <div
                   ref={languageSelectorRef}
-                  className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}
+                  className={`relative z-30 mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}
                 >
                   <div className="mb-3.5 flex items-center justify-between gap-2">
                     <p className={`flex items-center gap-2 text-sm font-black ${inkResultTitle}`}>
@@ -905,211 +905,237 @@ export default function ExamPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-3.5">
                     {/* Bảng chọn 1: Ngôn ngữ đề thi */}
-                    <div className="relative">
-                      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
-                        <span>🎨</span> Ngôn ngữ đề thi:
-                      </label>
+                    {(() => {
+                      const currentOpt = EXAM_LANGUAGE_OPTIONS.find((o) => o.mode === examLanguage);
+                      const isOpen = openDropdown === 'exam';
 
-                      {(() => {
-                        const currentOpt = EXAM_LANGUAGE_OPTIONS.find((o) => o.mode === examLanguage);
-                        const isOpen = openDropdown === 'exam';
+                      return (
+                        <div className={`relative ${isOpen ? 'z-50' : 'z-20'}`}>
+                          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
+                            <span>🎨</span> Ngôn ngữ đề thi:
+                          </label>
 
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setOpenDropdown(isOpen ? null : 'exam')}
-                              className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
-                                isOpen
-                                  ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
-                                  : currentOpt
-                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
-                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdown(isOpen ? null : 'exam')}
+                            className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
+                              isOpen
+                                ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
+                                : currentOpt
+                                  ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
+                                  : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                            }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              {currentOpt ? (
+                                <>
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ead9bd]/40 text-xs font-black text-[#4f3521] dark:bg-slate-800 dark:text-slate-200">
+                                    {currentOpt.flag}
+                                  </span>
+                                  <span className="truncate text-sm font-black text-[#4f3521] dark:text-slate-100">
+                                    {currentOpt.label}
+                                  </span>
+                                  <span className="hidden sm:inline text-xs font-semibold text-[#9d8a77] dark:text-slate-400">
+                                    · {currentOpt.desc}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ead9bd]/30 text-xs font-bold text-[#9d8a77] dark:bg-slate-800/60 dark:text-slate-400">
+                                    🎨
+                                  </span>
+                                  <span className="truncate text-sm font-bold text-[#9d8a77] dark:text-slate-400">
+                                    Chọn ngôn ngữ đề thi...
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <FiChevronDown
+                              size={16}
+                              className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
+                                isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
                               }`}
-                            >
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                {currentOpt ? (
-                                  <>
-                                    <span className="text-xl shrink-0 leading-none">{currentOpt.flag}</span>
-                                    <span className="truncate text-xs font-black sm:text-sm text-[#4f3521] dark:text-slate-100">
-                                      {currentOpt.label}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="text-base shrink-0 opacity-60">🎨</span>
-                                    <span className="truncate text-xs font-bold text-[#9d8a77] dark:text-slate-400">
-                                      Chọn ngôn ngữ đề thi...
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                              <FiChevronDown
-                                size={16}
-                                className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
-                                  isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
-                                }`}
-                              />
-                            </button>
+                            />
+                          </button>
 
-                            {isOpen && (
-                              <div
-                                className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-[#ead9bd] bg-[#fffdfa] p-1.5 shadow-2xl backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900"
-                                style={{
-                                  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08)',
-                                }}
-                              >
-                                <div className="space-y-1">
-                                  {EXAM_LANGUAGE_OPTIONS.map((opt) => {
-                                    const isSelected = examLanguage === opt.mode;
-                                    return (
-                                      <button
-                                        key={opt.mode}
-                                        type="button"
-                                        onClick={() => handleSelectExamLanguage(opt.mode)}
-                                        className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
-                                          isSelected
-                                            ? 'bg-[#d52a1e] text-white shadow-sm'
-                                            : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
-                                        }`}
-                                      >
-                                        <div className="flex min-w-0 items-center gap-2.5">
-                                          <span className="text-xl shrink-0 leading-none">{opt.flag}</span>
-                                          <div className="min-w-0">
-                                            <p
-                                              className={`truncate text-xs font-black sm:text-sm ${
-                                                isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
-                                              }`}
-                                            >
-                                              {opt.label}
-                                            </p>
-                                            <p
-                                              className={`truncate text-[11px] font-medium ${
-                                                isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
-                                              }`}
-                                            >
-                                              {opt.desc}
-                                            </p>
-                                          </div>
+                          {isOpen && (
+                            <div
+                              className="absolute left-0 right-0 top-full z-[100] mt-1.5 overflow-hidden rounded-2xl border border-[#ead9bd] bg-white p-1.5 shadow-2xl dark:border-slate-700 dark:bg-slate-900 hide-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                              style={{
+                                boxShadow: '0 20px 45px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.12)',
+                              }}
+                            >
+                              <div className="space-y-1">
+                                {EXAM_LANGUAGE_OPTIONS.map((opt) => {
+                                  const isSelected = examLanguage === opt.mode;
+                                  return (
+                                    <button
+                                      key={opt.mode}
+                                      type="button"
+                                      onClick={() => handleSelectExamLanguage(opt.mode)}
+                                      className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
+                                        isSelected
+                                          ? 'bg-[#d52a1e] text-white shadow-sm'
+                                          : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
+                                      }`}
+                                    >
+                                      <div className="flex min-w-0 items-center gap-2.5">
+                                        <span
+                                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                                            isSelected
+                                              ? 'bg-white/20 text-white'
+                                              : 'bg-[#ead9bd]/40 text-[#4f3521] dark:bg-slate-800 dark:text-slate-200'
+                                          }`}
+                                        >
+                                          {opt.flag}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p
+                                            className={`truncate text-sm font-black ${
+                                              isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
+                                            }`}
+                                          >
+                                            {opt.label}
+                                          </p>
+                                          <p
+                                            className={`truncate text-xs font-medium ${
+                                              isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
+                                            }`}
+                                          >
+                                            {opt.desc}
+                                          </p>
                                         </div>
-                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                                      </div>
+                                      {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Bảng chọn 2: Ngôn ngữ lời giải */}
-                    <div className="relative">
-                      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
-                        <span>💡</span> Ngôn ngữ lời giải:
-                      </label>
+                    {(() => {
+                      const currentOpt = EXPLANATION_LANGUAGE_OPTIONS.find((o) => o.lang === explanationLanguage);
+                      const isOpen = openDropdown === 'explanation';
 
-                      {(() => {
-                        const currentOpt = EXPLANATION_LANGUAGE_OPTIONS.find((o) => o.lang === explanationLanguage);
-                        const isOpen = openDropdown === 'explanation';
+                      return (
+                        <div className={`relative ${isOpen ? 'z-50' : 'z-20'}`}>
+                          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
+                            <span>💡</span> Ngôn ngữ lời giải:
+                          </label>
 
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setOpenDropdown(isOpen ? null : 'explanation')}
-                              className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
-                                isOpen
-                                  ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
-                                  : currentOpt
-                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
-                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdown(isOpen ? null : 'explanation')}
+                            className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
+                              isOpen
+                                ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
+                                : currentOpt
+                                  ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
+                                  : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                            }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              {currentOpt ? (
+                                <>
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ead9bd]/40 text-xs font-black text-[#4f3521] dark:bg-slate-800 dark:text-slate-200">
+                                    {currentOpt.flag}
+                                  </span>
+                                  <span className="truncate text-sm font-black text-[#4f3521] dark:text-slate-100">
+                                    {currentOpt.label}
+                                  </span>
+                                  <span className="hidden sm:inline text-xs font-semibold text-[#9d8a77] dark:text-slate-400">
+                                    · {currentOpt.desc}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ead9bd]/30 text-xs font-bold text-[#9d8a77] dark:bg-slate-800/60 dark:text-slate-400">
+                                    💡
+                                  </span>
+                                  <span className="truncate text-sm font-bold text-[#9d8a77] dark:text-slate-400">
+                                    Chọn ngôn ngữ lời giải...
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <FiChevronDown
+                              size={16}
+                              className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
+                                isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
                               }`}
-                            >
-                              <div className="flex min-w-0 items-center gap-2.5">
-                                {currentOpt ? (
-                                  <>
-                                    <span className="text-xl shrink-0 leading-none">{currentOpt.flag}</span>
-                                    <span className="truncate text-xs font-black sm:text-sm text-[#4f3521] dark:text-slate-100">
-                                      {currentOpt.label}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="text-base shrink-0 opacity-60">💡</span>
-                                    <span className="truncate text-xs font-bold text-[#9d8a77] dark:text-slate-400">
-                                      Chọn ngôn ngữ lời giải...
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                              <FiChevronDown
-                                size={16}
-                                className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
-                                  isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
-                                }`}
-                              />
-                            </button>
+                            />
+                          </button>
 
-                            {isOpen && (
-                              <div
-                                className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-[#ead9bd] bg-[#fffdfa] p-1.5 shadow-2xl backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900"
-                                style={{
-                                  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08)',
-                                }}
-                              >
-                                <div className="space-y-1">
-                                  {EXPLANATION_LANGUAGE_OPTIONS.map((opt) => {
-                                    const isSelected = explanationLanguage === opt.lang;
-                                    return (
-                                      <button
-                                        key={opt.lang}
-                                        type="button"
-                                        onClick={() => handleSelectExplanationLanguage(opt.lang)}
-                                        className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
-                                          isSelected
-                                            ? 'bg-[#d52a1e] text-white shadow-sm'
-                                            : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
-                                        }`}
-                                      >
-                                        <div className="flex min-w-0 items-center gap-2.5">
-                                          <span className="text-xl shrink-0 leading-none">{opt.flag}</span>
-                                          <div className="min-w-0">
-                                            <p
-                                              className={`truncate text-xs font-black sm:text-sm ${
-                                                isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
-                                              }`}
-                                            >
-                                              {opt.label}
-                                            </p>
-                                            <p
-                                              className={`truncate text-[11px] font-medium ${
-                                                isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
-                                              }`}
-                                            >
-                                              {opt.desc}
-                                            </p>
-                                          </div>
+                          {isOpen && (
+                            <div
+                              className="absolute left-0 right-0 top-full z-[100] mt-1.5 max-h-72 overflow-y-auto overflow-x-hidden rounded-2xl border border-[#ead9bd] bg-white p-1.5 shadow-2xl dark:border-slate-700 dark:bg-slate-900 hide-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                              style={{
+                                boxShadow: '0 20px 45px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.12)',
+                              }}
+                            >
+                              <div className="space-y-1">
+                                {EXPLANATION_LANGUAGE_OPTIONS.map((opt) => {
+                                  const isSelected = explanationLanguage === opt.lang;
+                                  return (
+                                    <button
+                                      key={opt.lang}
+                                      type="button"
+                                      onClick={() => handleSelectExplanationLanguage(opt.lang)}
+                                      className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
+                                        isSelected
+                                          ? 'bg-[#d52a1e] text-white shadow-sm'
+                                          : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
+                                      }`}
+                                    >
+                                      <div className="flex min-w-0 items-center gap-2.5">
+                                        <span
+                                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                                            isSelected
+                                              ? 'bg-white/20 text-white'
+                                              : 'bg-[#ead9bd]/40 text-[#4f3521] dark:bg-slate-800 dark:text-slate-200'
+                                          }`}
+                                        >
+                                          {opt.flag}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p
+                                            className={`truncate text-sm font-black ${
+                                              isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
+                                            }`}
+                                          >
+                                            {opt.label}
+                                          </p>
+                                          <p
+                                            className={`truncate text-xs font-medium ${
+                                              isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
+                                            }`}
+                                          >
+                                            {opt.desc}
+                                          </p>
                                         </div>
-                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                                      </div>
+                                      {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                    </button>
+                                  );
+                                })}
                               </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
 
-              <div className="mb-3 rounded-2xl border border-[#ead9bd]/80 bg-[#fff7ec]/75 p-3 text-sm text-[#6f563f]">
+              <div className="relative z-10 mb-3 rounded-2xl border border-[#ead9bd]/80 bg-[#fff7ec]/75 p-3 text-sm text-[#6f563f]">
                 <span className="font-black">Điểm tốt nhất:</span> {bestScore ? bestScore.toFixed(1) : 'Chưa có'}
                 {inProgress && (
                   <span className="ml-0 mt-2 block sm:ml-3 sm:mt-0 sm:inline">
@@ -1119,7 +1145,7 @@ export default function ExamPage() {
               </div>
 
               {isOfficialExam && (
-                <div className={`mb-3 rounded-2xl border p-3 text-sm ${
+                <div className={`relative z-10 mb-3 rounded-2xl border p-3 text-sm ${
                   officialHasEnded
                     ? 'border-slate-200 bg-slate-50 text-slate-700'
                     : officialHasStarted
@@ -1135,7 +1161,7 @@ export default function ExamPage() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+              <div className="relative z-10 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
                 {inProgress ? (
                     <button
                       onClick={() => startExam()}
