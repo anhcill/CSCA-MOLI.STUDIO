@@ -41,7 +41,7 @@ export default function OnlineClassAnnouncement() {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 px-3 py-6 backdrop-blur-[3px] sm:px-5">
       <section
-        className="relative max-h-[calc(100dvh-3rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/25 bg-slate-900 bg-cover bg-center text-white shadow-2xl shadow-slate-950/50"
+        className="relative max-h-[calc(100dvh-3rem)] w-full max-w-2xl overflow-y-auto overflow-x-hidden rounded-[2rem] border border-white/25 bg-slate-900 bg-cover bg-center text-white shadow-2xl shadow-slate-950/50 hide-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{
           backgroundImage: `linear-gradient(115deg, rgba(6, 20, 46, .96) 0%, rgba(12, 42, 88, .88) 52%, rgba(21, 70, 128, .68) 100%), url("${ANNOUNCEMENT_BACKGROUND}")`,
         }}
@@ -50,8 +50,10 @@ export default function OnlineClassAnnouncement() {
         aria-label="Thông báo lớp online MOLY"
         aria-describedby="online-class-announcement-description"
       >
-        <div className="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-sky-200/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-8 h-48 w-48 rounded-full bg-indigo-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[2rem]">
+          <div className="absolute -right-16 -top-20 h-60 w-60 rounded-full bg-sky-200/20 blur-3xl" />
+          <div className="absolute -bottom-24 left-8 h-48 w-48 rounded-full bg-indigo-300/20 blur-3xl" />
+        </div>
 
         <div className="relative p-6 sm:p-8">
         <button
