@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import examApi, { Exam, PracticeFeedback, Question } from '@/lib/api/exams';
-import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen } from 'react-icons/fi';
+import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiChevronDown, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
 import { useExamProtection } from '@/lib/hooks/useExamProtection';
@@ -35,6 +35,66 @@ type PendingEssaySave = {
 const ESSAY_SAVE_DEBOUNCE_MS = 650;
 const DEFAULT_EXAM_MAX_VIOLATIONS = 4;
 const PDF_ROOM_MAX_VIOLATIONS = 3;
+
+const EXAM_LANGUAGE_OPTIONS = [
+  {
+    mode: 'zh',
+    label: 'Tiếng Trung',
+    flag: '🇨🇳',
+    desc: 'Đề thi gốc chuẩn CSCA',
+  },
+  {
+    mode: 'en',
+    label: 'Tiếng Anh',
+    flag: '🇬🇧',
+    desc: 'Bản dịch tiếng Anh',
+  },
+] as const;
+
+const EXPLANATION_LANGUAGE_OPTIONS = [
+  {
+    lang: 'vi',
+    label: 'Tiếng Việt thui',
+    flag: '🇻🇳',
+    desc: 'Lời giải thuần tiếng Việt',
+  },
+  {
+    lang: 'en',
+    label: 'Tiếng Anh nè',
+    flag: '🇬🇧',
+    desc: 'Lời giải thuần tiếng Anh',
+  },
+  {
+    lang: 'zh',
+    label: 'Tiếng Trung nha',
+    flag: '🇨🇳',
+    desc: 'Lời giải nguyên bản tiếng Trung',
+  },
+  {
+    lang: 'vi_en',
+    label: 'Song ngữ Việt Anh',
+    flag: '🇻🇳🇬🇧',
+    desc: 'Đối chiếu song ngữ Việt - Anh',
+  },
+  {
+    lang: 'vi_zh',
+    label: 'Song ngữ Việt Trung',
+    flag: '🇻🇳🇨🇳',
+    desc: 'Đối chiếu song ngữ Việt - Trung',
+  },
+  {
+    lang: 'en_zh',
+    label: 'Song ngữ Anh Trung',
+    flag: '🇬🇧🇨🇳',
+    desc: 'Đối chiếu song ngữ Anh - Trung',
+  },
+  {
+    lang: 'vi_en_zh',
+    label: 'Full 3 thứ tiếng lun!',
+    flag: '🌐',
+    desc: 'Hiển thị đầy đủ cả 3 thứ tiếng',
+  },
+] as const;
 
 function hasAnsweredValue(value: number | string | undefined) {
   if (typeof value === 'string') return value.trim().length > 0;
@@ -90,6 +150,61 @@ export default function ExamPage() {
   const [showVietnameseTranslations, setShowVietnameseTranslations] = useState(false);
   const [examLanguage, setExamLanguage] = useState<string>('');
   const [explanationLanguage, setExplanationLanguage] = useState<string>('');
+  const [openDropdown, setOpenDropdown] = useState<'exam' | 'explanation' | null>(null);
+  const languageSelectorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const savedExamLang = localStorage.getItem('csca_selected_exam_lang');
+      const savedExpLang = localStorage.getItem('csca_selected_explanation_lang');
+      if (savedExamLang && EXAM_LANGUAGE_OPTIONS.some((o) => o.mode === savedExamLang)) {
+        setExamLanguage(savedExamLang);
+      }
+      if (savedExpLang && EXPLANATION_LANGUAGE_OPTIONS.some((o) => o.lang === savedExpLang)) {
+        setExplanationLanguage(savedExpLang);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePointerDown = (e: MouseEvent) => {
+      if (
+        languageSelectorRef.current &&
+        !languageSelectorRef.current.contains(e.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleSelectExamLanguage = useCallback((mode: string) => {
+    setExamLanguage(mode);
+    setOpenDropdown(null);
+    try {
+      localStorage.setItem('csca_selected_exam_lang', mode);
+    } catch {}
+  }, []);
+
+  const handleSelectExplanationLanguage = useCallback((lang: string) => {
+    setExplanationLanguage(lang);
+    setOpenDropdown(null);
+    try {
+      localStorage.setItem('csca_selected_explanation_lang', lang);
+    } catch {}
+  }, []);
   const [practiceFeedback, setPracticeFeedback] = useState<Record<number, PracticeFeedback>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<number>>(new Set());
   const [navFilter, setNavFilter] = useState<'all' | 'unanswered' | 'answered' | 'flagged'>('all');
@@ -744,7 +859,7 @@ export default function ExamPage() {
           </button>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-start">
-          <div className={`overflow-hidden rounded-3xl transition-all ${inkResultPanel}`}>
+          <div className={`relative rounded-3xl transition-all ${inkResultPanel}`}>
             <div className="border-b border-[#ead9bd]/75 p-5 sm:p-6">
               <p className="mb-2 text-xs font-black uppercase tracking-widest text-indigo-600">
                 {preflight.subject_name || 'CSCA'}
@@ -775,62 +890,223 @@ export default function ExamPage() {
 
             <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
               {!isOfficialExam && (
-                <>
-              <div className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
-                <p className={`mb-3 flex items-center gap-1.5 text-sm font-black ${inkResultTitle}`}>
-                  <span>🎨</span> Chọn ngôn ngữ hiển thị đề thi:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { mode: 'zh', label: '🇨🇳 Tiếng Trung' },
-                    { mode: 'en', label: '🇬🇧 Tiếng Anh' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.mode}
-                      type="button"
-                      onClick={() => setExamLanguage(opt.mode)}
-                      className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
-                        examLanguage === opt.mode
-                          ? 'scale-105 border-[#d52a1e] bg-[#d52a1e] text-white shadow-[0_4px_14px_rgba(213,42,30,0.18)]'
-                          : 'border-[#ead9bd]/85 bg-[#fffaf2]/92 text-[#6f563f] hover:border-[#d8bd94] hover:bg-[#fff8ec]'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                <div
+                  ref={languageSelectorRef}
+                  className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}
+                >
+                  <div className="mb-3.5 flex items-center justify-between gap-2">
+                    <p className={`flex items-center gap-2 text-sm font-black ${inkResultTitle}`}>
+                      <span>🌐</span> Chọn ngôn ngữ bài thi:
+                    </p>
+                    {languageReady && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-black text-emerald-600 dark:text-emerald-400">
+                        <FiCheck size={12} /> Đã chọn xong
+                      </span>
+                    )}
+                  </div>
 
-              <div className={`mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}>
-                <p className={`mb-3 flex items-center gap-1.5 text-sm font-black ${inkResultTitle}`}>
-                  <span>💡</span> Chọn ngôn ngữ hiển thị lời giải:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { lang: 'vi', label: '🇻🇳 Tiếng Việt thui' },
-                    { lang: 'en', label: '🇬🇧 Tiếng Anh nè' },
-                    { lang: 'zh', label: '🇨🇳 Tiếng Trung nha' },
-                    { lang: 'vi_en', label: '🇻🇳🇬🇧 Song ngữ Việt Anh' },
-                    { lang: 'vi_zh', label: '🇻🇳🇨🇳 Song ngữ Việt Trung' },
-                    { lang: 'en_zh', label: '🇬🇧🇨🇳 Song ngữ Anh Trung' },
-                    { lang: 'vi_en_zh', label: '🌐 Full 3 thứ tiếng lun!' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.lang}
-                      type="button"
-                      onClick={() => setExplanationLanguage(opt.lang)}
-                      className={`px-4 py-2.5 text-xs font-black rounded-2xl border-2 transition-all duration-200 shadow-sm ${
-                        explanationLanguage === opt.lang
-                          ? 'scale-105 border-[#d52a1e] bg-[#d52a1e] text-white shadow-[0_4px_14px_rgba(213,42,30,0.18)]'
-                          : 'border-[#ead9bd]/85 bg-[#fffaf2]/92 text-[#6f563f] hover:border-[#d8bd94] hover:bg-[#fff8ec]'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {/* Bảng chọn 1: Ngôn ngữ đề thi */}
+                    <div className="relative">
+                      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
+                        <span>🎨</span> Ngôn ngữ đề thi:
+                      </label>
+
+                      {(() => {
+                        const currentOpt = EXAM_LANGUAGE_OPTIONS.find((o) => o.mode === examLanguage);
+                        const isOpen = openDropdown === 'exam';
+
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setOpenDropdown(isOpen ? null : 'exam')}
+                              className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
+                                isOpen
+                                  ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
+                                  : currentOpt
+                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
+                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                {currentOpt ? (
+                                  <>
+                                    <span className="text-xl shrink-0 leading-none">{currentOpt.flag}</span>
+                                    <span className="truncate text-xs font-black sm:text-sm text-[#4f3521] dark:text-slate-100">
+                                      {currentOpt.label}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-base shrink-0 opacity-60">🎨</span>
+                                    <span className="truncate text-xs font-bold text-[#9d8a77] dark:text-slate-400">
+                                      Chọn ngôn ngữ đề thi...
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <FiChevronDown
+                                size={16}
+                                className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
+                                  isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
+                                }`}
+                              />
+                            </button>
+
+                            {isOpen && (
+                              <div
+                                className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-[#ead9bd] bg-[#fffdfa] p-1.5 shadow-2xl backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900"
+                                style={{
+                                  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08)',
+                                }}
+                              >
+                                <div className="space-y-1">
+                                  {EXAM_LANGUAGE_OPTIONS.map((opt) => {
+                                    const isSelected = examLanguage === opt.mode;
+                                    return (
+                                      <button
+                                        key={opt.mode}
+                                        type="button"
+                                        onClick={() => handleSelectExamLanguage(opt.mode)}
+                                        className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
+                                          isSelected
+                                            ? 'bg-[#d52a1e] text-white shadow-sm'
+                                            : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
+                                        }`}
+                                      >
+                                        <div className="flex min-w-0 items-center gap-2.5">
+                                          <span className="text-xl shrink-0 leading-none">{opt.flag}</span>
+                                          <div className="min-w-0">
+                                            <p
+                                              className={`truncate text-xs font-black sm:text-sm ${
+                                                isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
+                                              }`}
+                                            >
+                                              {opt.label}
+                                            </p>
+                                            <p
+                                              className={`truncate text-[11px] font-medium ${
+                                                isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
+                                              }`}
+                                            >
+                                              {opt.desc}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Bảng chọn 2: Ngôn ngữ lời giải */}
+                    <div className="relative">
+                      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#9d8a77] dark:text-slate-400">
+                        <span>💡</span> Ngôn ngữ lời giải:
+                      </label>
+
+                      {(() => {
+                        const currentOpt = EXPLANATION_LANGUAGE_OPTIONS.find((o) => o.lang === explanationLanguage);
+                        const isOpen = openDropdown === 'explanation';
+
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setOpenDropdown(isOpen ? null : 'explanation')}
+                              className={`group flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 text-left transition-all duration-200 ${
+                                isOpen
+                                  ? 'border-[#d52a1e] ring-2 ring-[#d52a1e]/20 dark:border-rose-500 dark:ring-rose-500/20 bg-[#fffaf2] dark:bg-slate-800'
+                                  : currentOpt
+                                    ? 'border-[#ead9bd] bg-[#fffaf2] text-[#4f3521] shadow-sm hover:border-[#d52a1e] dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:hover:border-rose-400'
+                                    : 'border-2 border-dashed border-[#d8bd94] bg-[#fffaf2]/60 text-[#9d8a77] hover:border-[#d52a1e] hover:bg-[#fffaf2] dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400 dark:hover:border-rose-400'
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                {currentOpt ? (
+                                  <>
+                                    <span className="text-xl shrink-0 leading-none">{currentOpt.flag}</span>
+                                    <span className="truncate text-xs font-black sm:text-sm text-[#4f3521] dark:text-slate-100">
+                                      {currentOpt.label}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-base shrink-0 opacity-60">💡</span>
+                                    <span className="truncate text-xs font-bold text-[#9d8a77] dark:text-slate-400">
+                                      Chọn ngôn ngữ lời giải...
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <FiChevronDown
+                                size={16}
+                                className={`shrink-0 text-[#9d8a77] transition-transform duration-200 group-hover:text-[#4f3521] dark:text-slate-400 dark:group-hover:text-slate-200 ${
+                                  isOpen ? 'rotate-180 text-[#d52a1e] dark:text-rose-400' : ''
+                                }`}
+                              />
+                            </button>
+
+                            {isOpen && (
+                              <div
+                                className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-[#ead9bd] bg-[#fffdfa] p-1.5 shadow-2xl backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900"
+                                style={{
+                                  boxShadow: '0 16px 36px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08)',
+                                }}
+                              >
+                                <div className="space-y-1">
+                                  {EXPLANATION_LANGUAGE_OPTIONS.map((opt) => {
+                                    const isSelected = explanationLanguage === opt.lang;
+                                    return (
+                                      <button
+                                        key={opt.lang}
+                                        type="button"
+                                        onClick={() => handleSelectExplanationLanguage(opt.lang)}
+                                        className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left transition-all ${
+                                          isSelected
+                                            ? 'bg-[#d52a1e] text-white shadow-sm'
+                                            : 'text-[#4f3521] hover:bg-[#f7eedf] dark:text-slate-200 dark:hover:bg-slate-800'
+                                        }`}
+                                      >
+                                        <div className="flex min-w-0 items-center gap-2.5">
+                                          <span className="text-xl shrink-0 leading-none">{opt.flag}</span>
+                                          <div className="min-w-0">
+                                            <p
+                                              className={`truncate text-xs font-black sm:text-sm ${
+                                                isSelected ? 'text-white' : 'text-[#4f3521] dark:text-slate-100'
+                                              }`}
+                                            >
+                                              {opt.label}
+                                            </p>
+                                            <p
+                                              className={`truncate text-[11px] font-medium ${
+                                                isSelected ? 'text-white/80' : 'text-[#9d8a77] dark:text-slate-400'
+                                              }`}
+                                            >
+                                              {opt.desc}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        {isSelected && <FiCheck size={16} className="shrink-0 text-white" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
-              </div>
-                </>
               )}
 
               <div className="mb-3 rounded-2xl border border-[#ead9bd]/80 bg-[#fff7ec]/75 p-3 text-sm text-[#6f563f]">
