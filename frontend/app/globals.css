@@ -517,11 +517,13 @@ html {
 
 /* Hide scrollbar for filter tabs */
 .hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 .hide-scrollbar::-webkit-scrollbar {
-  display: none;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* The ink leaderboard always uses a light paper background, even when the
