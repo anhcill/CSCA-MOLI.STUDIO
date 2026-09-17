@@ -312,6 +312,12 @@ function writeAIStreamPublicError(res, message = PUBLIC_AI_UNAVAILABLE_MESSAGE) 
   res.end();
 }
 
+function finishAIStream(res) {
+  if (res.writableEnded || res.destroyed) return;
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+
 function extractOpenAICompatibleText(data) {
   if (!data) return '';
   if (typeof data !== 'string') {
@@ -1708,12 +1714,14 @@ async function askAIStream(question, context = {}, res) {
   if (isAIPrivacyQuestion(question)) {
     const answer = PUBLIC_AI_IDENTITY_MESSAGE;
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\n`);
+    finishAIStream(res);
     return { answer };
   }
 
   const directReply = aiChatIntentService.getDirectReply(question, context);
   if (directReply) {
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: directReply } }] })}\n\n`);
+    finishAIStream(res);
     return { answer: directReply };
   }
 
@@ -1743,6 +1751,7 @@ async function askAIStream(question, context = {}, res) {
       : await callPublicAIMessages(messages, publicOptions);
     const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
+    finishAIStream(res);
     return { answer: safeAnswer };
   } catch (err) {
     if (useDeepSeekChat) {
@@ -1751,6 +1760,7 @@ async function askAIStream(question, context = {}, res) {
         const answer = await callPublicAIMessages(messages, publicOptions);
         const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
+        finishAIStream(res);
         return { answer: safeAnswer };
       } catch (fallbackError) {
         console.error('Public AI stream fallback failed:', fallbackError.message);

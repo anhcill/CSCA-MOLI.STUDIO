@@ -1,6 +1,7 @@
 const {
   PUBLIC_AI_IDENTITY_MESSAGE,
   PUBLIC_AI_UNAVAILABLE_MESSAGE,
+  askAIStream,
   isAIPrivacyQuestion,
   sanitizeAIAnswerForQuestion,
 } = require('../aiService');
@@ -23,5 +24,19 @@ describe('public AI privacy routing', () => {
       .toBe(PUBLIC_AI_UNAVAILABLE_MESSAGE);
     expect(sanitizeAIAnswerForQuestion('Model: gpt-5. Hãy dùng đáp án này.', studyQuestion))
       .toBe(PUBLIC_AI_UNAVAILABLE_MESSAGE);
+  });
+
+  test('ends the stream after a direct reply so the chat composer unlocks', async () => {
+    const res = {
+      writableEnded: false,
+      destroyed: false,
+      write: jest.fn(),
+      end: jest.fn(function end() { this.writableEnded = true; }),
+    };
+
+    await askAIStream('Bạn đang dùng model gì vậy?', {}, res);
+
+    expect(res.write).toHaveBeenCalledWith('data: [DONE]\n\n');
+    expect(res.end).toHaveBeenCalledTimes(1);
   });
 });
