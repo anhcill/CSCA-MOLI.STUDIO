@@ -884,16 +884,35 @@ async function askAI(req, res) {
           cacheContext: tieredCacheContext,
         });
         if (cached) {
-          const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
-          return res.json({
-            success: true,
-            cached: true,
-            cacheSource: 'db',
-            cacheAge: age,
-            answer: aiService.sanitizePublicAIText(cached.answer),
-            timestamp: new Date().toISOString(),
-            error: false,
-          });
+          const cachedAnswer = String(cached.answer || '').trim();
+          const isPrivacyQuestion = aiService.isAIPrivacyQuestion(question);
+          const isBadForStudyQuestion = !isPrivacyQuestion && (
+            !cachedAnswer ||
+            aiService.hasPrivateAIOutputDetails(cachedAnswer) ||
+            aiService.isPublicAIIdentityResponse(cachedAnswer)
+          );
+          // Do not keep serving a legacy cache entry that was replaced by the
+          // privacy notice. The next request regenerates the answer and
+          // overwrites the same cache key with the corrected response.
+          if (!isBadForStudyQuestion) {
+            const age = Math.floor((Date.now() - new Date(cached.createdAt)) / 60000);
+            const answer = aiService.sanitizeAIAnswerForQuestion(cachedAnswer, question);
+            return res.json({
+              success: true,
+              cached: true,
+              cacheSource: 'db',
+              cacheAge: age,
+              answer,
+              timestamp: new Date().toISOString(),
+              error: false,
+              ai_output_id: await persistReportableAiOutput({
+                userId,
+                outputType: 'exam_chat',
+                attemptId,
+                payload: { answer },
+              }),
+            });
+          }
         }
       } catch (error) {
         console.error('AI ask cache lookup failed:', error.message);
@@ -946,6 +965,14 @@ async function askAI(req, res) {
       answer: result.answer,
       timestamp: result.timestamp,
       error: result.error || false,
+      ai_output_id: result.error
+        ? null
+        : await persistReportableAiOutput({
+          userId,
+          outputType: 'exam_chat',
+          attemptId,
+          payload: { answer: result.answer },
+        }),
     });
   } catch (error) {
     console.error('askAI error:', error);

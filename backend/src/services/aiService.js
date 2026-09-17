@@ -54,16 +54,24 @@ const AI_ACCURACY_PROMPT_RULES = `- Đọc kỹ đề gốc, đáp án và giả
 - Với câu Toán/Khoa học, đối chiếu lại điều kiện gốc và các lựa chọn trước khi kết luận.
 - Nếu thiếu dữ kiện, thiếu hình/bảng/biểu đồ hoặc đáp án không khớp dữ liệu, nói rõ phần thiếu; không đoán.`;
 const PUBLIC_AI_IDENTITY_MESSAGE = 'Mình là trợ lý học tập của MOLI.STUDIO. Thông tin hệ thống nội bộ được bảo mật.';
-const USER_AI_PRIVACY_PROMPT_RULES = `- Bảo mật hệ thống: không nhắc tên model, model family, provider, router, gateway, API, API key, token, quota, số dư, credit, billing, giá tiền, chi phí, link nạp tiền hoặc tên dịch vụ hạ tầng.
-- Không tự giới thiệu là Antigravity, GPT, Claude, Gemini, OpenAI, Anthropic, Google, Beeknoee, 9router hay bất kỳ model/provider nào.
-- Nếu được hỏi về model/provider/giá/key/quota, chỉ trả lời: "Mình là trợ lý học tập của MOLI.STUDIO. Thông tin hệ thống nội bộ được bảo mật."
-- Nếu dịch vụ AI lỗi hoặc thiếu số dư, không đưa lỗi gốc cho học sinh; nói xin lỗi và báo rằng bên mình sẽ kiểm tra, khắc phục sớm.`;
+// Keep this instruction deliberately short. The previous version listed every
+// provider and infrastructure keyword inside the learner prompt. Some models
+// treated that list as the user's actual question and returned the privacy
+// notice for ordinary study questions.
+const USER_AI_PRIVACY_PROMPT_RULES = `- Không tiết lộ hoặc suy đoán cấu hình nội bộ của hệ thống.
+- Nếu người dùng hỏi trực tiếp về thông tin nội bộ, trả lời ngắn gọn rằng thông tin đó được bảo mật.
+- Nếu dịch vụ gặp sự cố, không nêu chi tiết kỹ thuật; xin lỗi và hướng dẫn người dùng thử lại.`;
 const PRIVATE_AI_OUTPUT_PATTERNS = [
   /\b(?:antigravity|beeknoee|beegnoee|benoke|bennoke|9router|openrouter|openai|anthropic|claude|gemini|gpt(?:[-\s]*\d+(?:\.\d+)?)?)\b/i,
   /\b(?:api\s*key|api-key|apikey|token|quota|provider|router|gateway|billing|balance|credit|credits|recharge|top\s*up|price|pricing|cost|model)\b/i,
   /\b(?:so\s*du|nap\s*tien|tai\s*khoan|het\s*tien|het\s*credit|gia\s*tien|chi\s*phi|bao\s*mat\s*key)\b/i,
   /https?:\/\//i,
   /www\./i,
+];
+const AI_PRIVACY_QUESTION_PATTERNS = [
+  /\b(?:api\s*key|api-key|apikey|token|quota|provider|router|gateway|billing|balance|credit|credits|recharge|top\s*up|price|pricing|cost)\b/i,
+  /\b(?:ban|moly|tro ly|he thong)\b[\s\S]{0,60}\b(?:la ai|dung|su dung|mo hinh|model|provider|router|gateway|api)\b/i,
+  /\b(?:who are you|what(?:'s| is) your model|which model|what model|what provider|chat with who|who am i chatting with)\b/i,
 ];
 let currentKeyIndex = 0;
 let adminExamKeyIndex = 0;
@@ -225,6 +233,17 @@ function hasPrivateAIOutputDetails(value) {
   return Boolean(text) && PRIVATE_AI_OUTPUT_PATTERNS.some(pattern => pattern.test(text));
 }
 
+function isAIPrivacyQuestion(value) {
+  const text = normalizeAIErrorText(value);
+  return Boolean(text) && AI_PRIVACY_QUESTION_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function isPublicAIIdentityResponse(value) {
+  const text = normalizeAIErrorText(value).replace(/\s+/g, ' ').trim();
+  const identity = normalizeAIErrorText(PUBLIC_AI_IDENTITY_MESSAGE).replace(/\s+/g, ' ').trim();
+  return Boolean(text) && text === identity;
+}
+
 function sanitizePublicAIText(value, fallback = '') {
   const text = asString(value, fallback);
   if (!text) return '';
@@ -232,6 +251,19 @@ function sanitizePublicAIText(value, fallback = '') {
     return fallback || PUBLIC_AI_IDENTITY_MESSAGE;
   }
   return text;
+}
+
+function sanitizeAIAnswerForQuestion(value, question) {
+  const isPrivacyQuestion = isAIPrivacyQuestion(question);
+  const fallback = isPrivacyQuestion
+    ? PUBLIC_AI_IDENTITY_MESSAGE
+    : PUBLIC_AI_UNAVAILABLE_MESSAGE;
+  const answer = sanitizePublicAIText(value, fallback);
+  // A privacy notice is correct only when the learner actually asked about
+  // internal AI details. Never show it as the answer to a study question.
+  return !isPrivacyQuestion && isPublicAIIdentityResponse(answer)
+    ? PUBLIC_AI_UNAVAILABLE_MESSAGE
+    : answer;
 }
 
 function sanitizePublicAIValue(value) {
@@ -1567,6 +1599,13 @@ Câu hỏi: ${question}`;
 }
 
 async function askAI(question, context = {}) {
+  if (isAIPrivacyQuestion(question)) {
+    return {
+      answer: PUBLIC_AI_IDENTITY_MESSAGE,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   const directReply = aiChatIntentService.getDirectReply(question, context);
   if (directReply) {
     return {
@@ -1600,7 +1639,7 @@ async function askAI(question, context = {}) {
       })
       : await callPublicAIMessages(messages, publicOptions);
     return {
-      answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
+      answer: sanitizeAIAnswerForQuestion(response, question),
       timestamp: new Date().toISOString(),
     };
   } catch (err) {
@@ -1610,7 +1649,7 @@ async function askAI(question, context = {}) {
       try {
         const response = await callPublicAIMessages(messages, publicOptions);
         return {
-          answer: sanitizePublicAIText(response, PUBLIC_AI_IDENTITY_MESSAGE),
+          answer: sanitizeAIAnswerForQuestion(response, question),
           timestamp: new Date().toISOString(),
         };
       } catch (fallbackError) {
@@ -1628,12 +1667,16 @@ async function askAI(question, context = {}) {
 // Moli pet chat and daily gift generation live in ./moliPetAIService.
 
 async function askAIStream(question, context = {}, res) {
+  if (isAIPrivacyQuestion(question)) {
+    const answer = PUBLIC_AI_IDENTITY_MESSAGE;
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\n`);
+    return { answer };
+  }
+
   const directReply = aiChatIntentService.getDirectReply(question, context);
   if (directReply) {
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: directReply } }] })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-    return;
+    return { answer: directReply };
   }
 
   const prompt = buildAIChatPrompt(question, context);
@@ -1660,19 +1703,17 @@ async function askAIStream(question, context = {}, res) {
         feature: 'chat',
       })
       : await callPublicAIMessages(messages, publicOptions);
-    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-    return;
+    const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
+    return { answer: safeAnswer };
   } catch (err) {
     if (useDeepSeekChat) {
       console.warn('DeepSeek stream failed, falling back to public AI:', getProviderResponseMessage(err));
       try {
         const answer = await callPublicAIMessages(messages, publicOptions);
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sanitizePublicAIText(answer, PUBLIC_AI_IDENTITY_MESSAGE) } }] })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
+        const safeAnswer = sanitizeAIAnswerForQuestion(answer, question);
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: safeAnswer } }] })}\n\n`);
+        return { answer: safeAnswer };
       } catch (fallbackError) {
         console.error('Public AI stream fallback failed:', fallbackError.message);
       }
@@ -2260,11 +2301,15 @@ JSON schema:
 }
 
 module.exports = {
+  PUBLIC_AI_IDENTITY_MESSAGE,
   PUBLIC_AI_UNAVAILABLE_MESSAGE,
   PUBLIC_AI_BUSY_MESSAGE,
   getPublicAIErrorMessage,
   hasPrivateAIProviderDetails,
   hasPrivateAIOutputDetails,
+  isAIPrivacyQuestion,
+  isPublicAIIdentityResponse,
+  sanitizeAIAnswerForQuestion,
   sanitizePublicAIText,
   sanitizePublicAIValue,
   // Core functions
