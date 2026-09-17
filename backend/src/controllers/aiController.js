@@ -905,12 +905,6 @@ async function askAI(req, res) {
               answer,
               timestamp: new Date().toISOString(),
               error: false,
-              ai_output_id: await persistReportableAiOutput({
-                userId,
-                outputType: 'exam_chat',
-                attemptId,
-                payload: { answer },
-              }),
             });
           }
         }
@@ -965,14 +959,6 @@ async function askAI(req, res) {
       answer: result.answer,
       timestamp: result.timestamp,
       error: result.error || false,
-      ai_output_id: result.error
-        ? null
-        : await persistReportableAiOutput({
-          userId,
-          outputType: 'exam_chat',
-          attemptId,
-          payload: { answer: result.answer },
-        }),
     });
   } catch (error) {
     console.error('askAI error:', error);
