@@ -2,7 +2,7 @@
 
 import { type FormEvent } from 'react';
 import { FiChevronDown, FiEyeOff, FiImage, FiMessageCircle, FiPaperclip, FiSend, FiX } from 'react-icons/fi';
-import RichMathText from '@/components/common/RichMathText';
+import AIFormattedText from '@/components/ai/AIFormattedText';
 import { PET_VARIANTS } from './constants';
 import { PetFace } from './PetFace';
 import { useMoliPetController } from './useMoliPetController';
@@ -190,7 +190,7 @@ export default function MoliPetRoot({ defaultPosition = 'left' }: MoliPetProps) 
                     />
                   </div>
                 )}
-                <RichMathText
+                <AIFormattedText
                   value={message.content}
                   className={message.role === 'user' ? 'text-white' : ''}
                 />
