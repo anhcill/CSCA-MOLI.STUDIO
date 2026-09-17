@@ -888,6 +888,8 @@ async function askAI(req, res) {
           const isPrivacyQuestion = aiService.isAIPrivacyQuestion(question);
           const isBadForStudyQuestion = !isPrivacyQuestion && (
             !cachedAnswer ||
+            cachedAnswer === aiService.PUBLIC_AI_UNAVAILABLE_MESSAGE ||
+            cachedAnswer === aiService.PUBLIC_AI_BUSY_MESSAGE ||
             aiService.hasPrivateAIOutputDetails(cachedAnswer) ||
             aiService.isPublicAIIdentityResponse(cachedAnswer)
           );
