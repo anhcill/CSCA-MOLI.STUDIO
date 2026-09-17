@@ -953,12 +953,14 @@ async function askAI(req, res) {
       }).catch((error) => console.error('Failed to save AI ask cache:', error.message));
     }
 
-    res.json({
-      success: true,
+    const failed = Boolean(result.error);
+    res.status(failed ? 503 : 200).json({
+      success: !failed,
       cached: false,
       answer: result.answer,
+      message: failed ? result.answer : undefined,
       timestamp: result.timestamp,
-      error: result.error || false,
+      error: failed,
     });
   } catch (error) {
     console.error('askAI error:', error);

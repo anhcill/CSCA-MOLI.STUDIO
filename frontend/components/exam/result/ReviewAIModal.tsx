@@ -259,13 +259,16 @@ export default function ReviewAIModal({ question, mode, attemptId, languageMode,
               <QuestionExplanationBlock question={question} languageMode={languageMode} title="📖 Giải thích có sẵn" />
             </div>
           ) : (
-            <div className="py-6 text-center text-gray-500 dark:text-gray-400">
-              <p className="mb-2 text-sm">
-                {answer?.message || 'Không thể phân tích câu này'}
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                Thử vào tab Hỏi AI để hỏi chi tiết hơn
-              </p>
+            <div className="space-y-4">
+              <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+                <p className="mb-2 text-sm">
+                  {answer?.message || answer?.answer || 'Không thể phân tích câu này'}
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Bạn vẫn có thể xem lời giải có sẵn bên dưới.
+                </p>
+              </div>
+              <QuestionExplanationBlock question={question} languageMode={languageMode} title="📖 Giải thích có sẵn" />
             </div>
           )}
         </div>

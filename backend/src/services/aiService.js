@@ -710,6 +710,19 @@ function getPublicAIKey(provider) {
   return getNextKey() || '';
 }
 
+function getPublicAIKeyCount(provider) {
+  const keys = provider === '9router' ? ADMIN_EXAM_AI.apiKeys : BEE.apiKeys;
+  return (keys || []).filter(Boolean).length;
+}
+
+function createUnusablePublicAIResponseError(provider) {
+  const error = new Error('AI_PROVIDER_ERROR');
+  error.provider = provider;
+  error.providerCode = 'AI_RESPONSE_NOT_USABLE';
+  error.providerMessage = 'Provider returned an empty or private response';
+  return error;
+}
+
 async function getPublicAIRuntime(preferredProvider) {
   const settings = await getPublicAISettings();
   const primary = normalizeRuntimeProvider(
@@ -741,33 +754,58 @@ async function callOpenAICompatibleMessages(provider, messages, options, setting
   } = options || {};
   const model = options?.model || getPublicAIModel(provider, settings);
   const baseUrl = getPublicAIBaseUrl(provider);
-  const apiKey = getPublicAIKey(provider);
+  const keyCount = getPublicAIKeyCount(provider);
 
-  if (!baseUrl || !apiKey) throw createPublicAIProviderError(provider, null, 'PUBLIC_AI_NOT_CONFIGURED');
+  if (!baseUrl || !keyCount) throw createPublicAIProviderError(provider, null, 'PUBLIC_AI_NOT_CONFIGURED');
 
-  throwIfAborted(signal);
-  const publicStartTime = Date.now();
-  const response = await axios.post(
-    getChatCompletionsUrl(baseUrl),
-    { model, messages, max_tokens: maxTokens, temperature },
-    {
-      timeout,
-      signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-    },
-  );
-  const text = extractOpenAICompatibleText(response.data);
-  aiUsageService.logUsageFromResponse(response.data, {
-    userId: options?._userId,
-    provider,
-    model,
-    feature: options?._feature || options?.feature || 'public_ai',
-    durationMs: Date.now() - publicStartTime,
-  });
-  return text || JSON.stringify(response.data);
+  let lastError = null;
+  for (let attempt = 0; attempt < keyCount; attempt++) {
+    throwIfAborted(signal);
+    const apiKey = getPublicAIKey(provider);
+    const publicStartTime = Date.now();
+
+    try {
+      const response = await axios.post(
+        getChatCompletionsUrl(baseUrl),
+        { model, messages, max_tokens: maxTokens, temperature },
+        {
+          timeout,
+          signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+        },
+      );
+      const text = extractOpenAICompatibleText(response.data);
+
+      // Some OpenAI-compatible routers return HTTP 200 even when their
+      // generated content is an upstream error. Do not cache or show that
+      // text to learners: rotate the key/provider instead.
+      if (!text || hasPrivateAIOutputDetails(text)) {
+        throw createUnusablePublicAIResponseError(provider);
+      }
+
+      aiUsageService.logUsageFromResponse(response.data, {
+        userId: options?._userId,
+        provider,
+        model,
+        feature: options?._feature || options?.feature || 'public_ai',
+        durationMs: Date.now() - publicStartTime,
+      });
+      return text;
+    } catch (error) {
+      lastError = error;
+      if (isAbortError(error, signal)) throwIfAborted(signal);
+
+      // A timeout is not likely to be fixed by immediately replaying the
+      // same long request against every key. Let the next provider take over.
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) break;
+      console.warn(`Public AI ${provider} key attempt ${attempt + 1}/${keyCount} failed:`, getProviderResponseMessage(error));
+    }
+  }
+
+  throw createPublicAIProviderError(provider, lastError);
 }
 
 async function callPublicAIMessages(messages, options = {}) {
