@@ -137,7 +137,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
   const isSubjectScopedPage = Boolean(new URLSearchParams(queryString).get('subject')) && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
   const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
-  const showMoliPet = !isAdmin && !isAuth && !isExam && !isChat && !isGame;
+  const showMoliPet = isAuthenticated && !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   // The National Day greeting takes the daily letter's exact corner position
   // during the campaign.  The original daily-letter behavior resumes after it.
   const showDailyGift = showMoliPet && isAuthenticated && !nationalDayTheme;
