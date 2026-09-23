@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { FiArrowRight, FiBarChart2, FiBookOpen, FiFileText, FiTarget } from 'react-icons/fi';
+import { FiArrowRight, FiBarChart2, FiBookOpen, FiFileText } from 'react-icons/fi';
 import { getSubjectPracticeTopics, type SubjectPracticeTopic } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 
@@ -77,9 +77,6 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
       <div className="overflow-hidden rounded-3xl border border-red-100 bg-gradient-to-br from-white via-rose-50 to-red-50/80 p-6 shadow-[0_16px_42px_rgba(127,29,29,0.08)] dark:border-slate-800 dark:from-[#111b2d] dark:via-[#101c31] dark:to-[#1d1730] dark:shadow-none sm:p-7">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div className="max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-red-700 dark:bg-red-500/15 dark:text-red-200">
-              <FiTarget /> Luyện theo file PDF
-            </div>
             <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Chọn chủ đề {subjectLabel}</h2>
           </div>
           <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-red-100 bg-white/75 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950/45">
