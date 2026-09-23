@@ -358,6 +358,9 @@ export interface TopicPracticeAdminTopic {
     name: string;
     name_cn?: string | null;
     description?: string | null;
+    subject_id: number;
+    subject_code: string;
+    subject_name: string;
 }
 
 export interface TopicPracticeParticipant {
@@ -780,9 +783,14 @@ export const examAdminApi = {
         return response.data.data || [];
     },
 
-    getTopicPracticeTopics: async (subject: string): Promise<TopicPracticeAdminTopic[]> => {
-        const response = await axios.get('/admin/exams/topic-practice/topics', { params: { subject } });
+    getTopicPracticeTopics: async (subject?: string): Promise<TopicPracticeAdminTopic[]> => {
+        const response = await axios.get('/admin/exams/topic-practice/topics', { params: subject ? { subject } : undefined });
         return response.data.data || [];
+    },
+
+    createTopicPracticeTopic: async (payload: { subjectId: number; name: string; description?: string }): Promise<{ message: string; data: TopicPracticeAdminTopic }> => {
+        const response = await axios.post('/admin/exams/topic-practice/topics', payload);
+        return response.data;
     },
 
     getTopicPracticeParticipants: async (examId: number): Promise<TopicPracticeParticipant[]> => {

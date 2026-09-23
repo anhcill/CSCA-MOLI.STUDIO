@@ -684,20 +684,85 @@ const AdminExamController = {
 
   async getTopicPracticeTopics(req, res) {
     try {
-      const subjectCode = String(req.query?.subject || '').trim().toUpperCase();
-      if (!subjectCode) return res.status(400).json({ message: 'Cần chọn môn học.' });
+      const subjectCode = String(req.query?.subject || '').trim().toUpperCase() || null;
       const result = await pool.query(
-        `SELECT qt.id, qt.name, qt.name_cn, qt.description
+        `SELECT
+           qt.id,
+           qt.name,
+           qt.name_cn,
+           qt.description,
+           s.id AS subject_id,
+           s.code AS subject_code,
+           s.name AS subject_name
          FROM question_topics qt
          JOIN subjects s ON s.id = qt.subject_id
-         WHERE s.code = $1
-         ORDER BY qt.name ASC`,
+         WHERE ($1::text IS NULL OR s.code = $1)
+         ORDER BY s.name ASC, qt.name ASC`,
         [subjectCode],
       );
       return res.json({ success: true, data: result.rows });
     } catch (error) {
       console.error('Get topic practice topics error:', getSafeErrorLog(error));
       return res.status(500).json({ message: 'Không tải được danh sách chủ đề.' });
+    }
+  },
+
+  async createTopicPracticeTopic(req, res) {
+    try {
+      const subjectId = Number.parseInt(req.body?.subjectId, 10);
+      const name = sanitize(String(req.body?.name || '').replace(/\s+/g, ' '));
+      const description = sanitize(String(req.body?.description || '')) || null;
+
+      if (!Number.isInteger(subjectId) || subjectId <= 0 || !name) {
+        return res.status(400).json({ message: 'Chọn môn học và nhập tên chủ đề.' });
+      }
+      if (name.length > 200 || (description && description.length > 2000)) {
+        return res.status(400).json({ message: 'Tên hoặc mô tả chủ đề quá dài.' });
+      }
+
+      const subjectResult = await pool.query(
+        'SELECT id, code, name FROM subjects WHERE id = $1 LIMIT 1',
+        [subjectId],
+      );
+      const subject = subjectResult.rows[0];
+      if (!subject) return res.status(404).json({ message: 'Không tìm thấy môn học.' });
+
+      const duplicate = await pool.query(
+        `SELECT id
+         FROM question_topics
+         WHERE subject_id = $1 AND LOWER(TRIM(name)) = LOWER($2)
+         LIMIT 1`,
+        [subjectId, name],
+      );
+      if (duplicate.rows[0]) {
+        return res.status(409).json({ message: 'Chủ đề này đã có trong môn đã chọn.' });
+      }
+
+      const created = await pool.query(
+        `INSERT INTO question_topics (subject_id, name, description)
+         VALUES ($1, $2, $3)
+         RETURNING id, name, name_cn, description, subject_id, created_at`,
+        [subjectId, name, description],
+      );
+      const topic = {
+        ...created.rows[0],
+        subject_code: subject.code,
+        subject_name: subject.name,
+      };
+      cache.delByPrefix('exams:');
+
+      UserActivity.log(req.user.id, 'admin.create_topic_practice_topic', {
+        topicId: topic.id,
+        topicName: topic.name,
+        subjectId,
+        subjectCode: subject.code,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      return res.status(201).json({ success: true, message: 'Đã tạo chủ đề luyện.', data: topic });
+    } catch (error) {
+      console.error('Create topic practice topic error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không thể tạo chủ đề luyện.' });
     }
   },
 
