@@ -60,6 +60,7 @@ router.get("/stats", AdminExamController.getStats);
 router.get("/analytics", AdminExamController.getAnalytics);
 router.get("/topic-practice", AdminExamController.getTopicPracticeOverview);
 router.get("/topic-practice/topics", AdminExamController.getTopicPracticeTopics);
+router.post("/topic-practice/topics", examWriteLimiter, AdminExamController.createTopicPracticeTopic);
 router.get("/import/pdf/review-ledger", AdminExamController.getImportReviewLedger);
 router.post("/import/pdf/review-ledger", examWriteLimiter, AdminExamController.saveImportReviewLedger);
 router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);

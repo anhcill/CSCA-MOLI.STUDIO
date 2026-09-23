@@ -81,7 +81,6 @@ export default function TopicPracticeCatalog({ subjectSlug, subjectCode, subject
               <FiTarget /> Luyện theo file PDF
             </div>
             <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Chọn chủ đề {subjectLabel}</h2>
-            <p className="mt-2 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">Mỗi chủ đề dẫn tới bộ file luyện riêng. Vào một file để xem PDF bên trái và chọn đáp án ở bên phải như phòng thi.</p>
           </div>
           <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-red-100 bg-white/75 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950/45">
             <FiFileText className="text-xl text-red-600 dark:text-red-300" />
