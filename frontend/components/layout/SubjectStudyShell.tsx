@@ -13,6 +13,7 @@ import {
   FiLayers,
   FiSearch,
   FiSettings,
+  FiTarget,
   FiTrendingUp,
 } from 'react-icons/fi';
 import { BsGraphUp, BsLightbulb, BsStars } from 'react-icons/bs';
@@ -28,6 +29,7 @@ import { useLanguage } from '@/context/LanguageContext';
 
 export type SubjectStudySection =
   | 'de-mo-phong'
+  | 'luyen-chu-de'
   | 'lich-su'
   | 'cau-truc-de'
   | 'ly-thuyet'
@@ -54,11 +56,12 @@ const DEFAULT_SEARCH_PLACEHOLDER = 'Tìm nhanh đề thi... (nhấn / để focu
 
 const SIDE_LINKS = [
   { key: 'de-mo-phong', icon: FiHome, labelKey: 'course.section.mockExam', href: 'exam' },
+  { key: 'luyen-chu-de', icon: FiTarget, labelKey: 'course.section.topicPractice', href: '/luyen-chu-de' },
+  { key: 'cong-thuc', icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
+  { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
   { key: 'lich-su', icon: FiClock, labelKey: 'course.section.history', href: '/lich-su' },
   { key: 'ai-phan-tich', icon: BsGraphUp, labelKey: 'course.section.ai', href: '/lo-trinh' },
   { key: 'ly-thuyet', icon: BsLightbulb, labelKey: 'course.section.theory', href: '/ly-thuyet' },
-  { key: 'cong-thuc', icon: FiFileText, labelKey: 'course.section.formulas', href: '/cong-thuc' },
-  { key: 'tu-vung', icon: BsStars, labelKey: 'course.section.vocabulary', href: '/tu-vung' },
   { key: 'lo-trinh', icon: FiTrendingUp, labelKey: 'course.section.progress', href: '/lo-trinh' },
   { key: 'cai-dat', icon: FiSettings, labelKey: 'course.section.settings', href: '/profile' },
 ] as const;
@@ -80,6 +83,7 @@ const SUBJECT_LABEL_KEYS: Record<string, string> = {
 
 const TITLE_KEYS: Partial<Record<SubjectStudySection, string>> = {
   'de-mo-phong': 'course.title.mockExam',
+  'luyen-chu-de': 'course.title.topicPractice',
   'lich-su': 'course.title.history',
   'cau-truc-de': 'course.title.structure',
   'ly-thuyet': 'course.title.theory',
@@ -191,13 +195,13 @@ export default function SubjectStudyShell({
         }
       `}</style>
 
-      <aside className={`subject-study-sidebar fixed inset-y-0 left-0 z-30 hidden border-r border-rose-100/80 bg-white/80 px-4 py-5 shadow-[12px_0_40px_rgba(127,29,29,0.06)] backdrop-blur-xl transition-transform duration-300 ease-out xl:block ${sidebarCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
+      <aside className={`subject-study-sidebar fixed inset-y-0 left-0 z-30 hidden border-r border-rose-100/80 bg-white/80 px-4 py-5 shadow-[12px_0_40px_rgba(127,29,29,0.06)] backdrop-blur-xl transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-[#0b1628]/95 dark:shadow-none xl:block ${sidebarCollapsed ? '-translate-x-full' : 'translate-x-0'}`}>
         <button
           type="button"
           onClick={toggleSidebar}
           aria-label="Thu gọn thanh chức năng"
           title="Thu gọn thanh chức năng"
-          className="absolute -right-4 top-1/2 z-40 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-500 shadow-lg transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+          className="absolute -right-4 top-1/2 z-40 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-500 shadow-lg transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-300"
         >
           <FiChevronLeft />
         </button>
@@ -215,8 +219,8 @@ export default function SubjectStudyShell({
                 href={getScopedHref(item.href, normalizedSubject)}
                 className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
                   active
-                    ? 'bg-red-50 text-red-600 shadow-sm'
-                    : 'text-slate-500 hover:bg-rose-50 hover:text-red-600'
+                    ? 'bg-red-50 text-red-600 shadow-sm dark:bg-red-500/15 dark:text-red-300'
+                    : 'text-slate-500 hover:bg-rose-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-red-300'
                 }`}
               >
                 <Icon className="text-base" />
@@ -225,9 +229,9 @@ export default function SubjectStudyShell({
             );
           })}
         </nav>
-        <div className="absolute bottom-5 left-4 right-4 overflow-hidden rounded-2xl border border-rose-100/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl">
+        <div className="absolute bottom-5 left-4 right-4 overflow-hidden rounded-2xl border border-rose-100/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/75 dark:shadow-none">
           <div className="mb-2 text-xs font-black text-red-600">{t('course.aiCompanionTitle')}</div>
-          <p className="text-[11px] font-medium leading-relaxed text-slate-500">
+          <p className="text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-300">
             {t('course.aiCompanionDesc')}
           </p>
           <Link
@@ -245,7 +249,7 @@ export default function SubjectStudyShell({
           onClick={toggleSidebar}
           aria-label="Mở thanh chức năng"
           title="Mở thanh chức năng"
-          className="fixed left-3 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-700 shadow-xl transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 xl:flex"
+          className="fixed left-3 top-1/2 z-40 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-rose-100 bg-white text-slate-700 shadow-xl transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-none dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-300 xl:flex"
         >
           <FiChevronRight />
         </button>
@@ -254,7 +258,7 @@ export default function SubjectStudyShell({
       <main
         className={`subject-study-main relative z-10 py-4 transition-[margin,width,padding] duration-300 ease-out ${sidebarCollapsed ? 'subject-study-main--collapsed' : ''} ${className}`}
       >
-        <header className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/80 bg-white/75 px-5 py-4 shadow-[0_10px_30px_rgba(127,29,29,0.08)] backdrop-blur-xl lg:flex-row lg:items-center">
+        <header className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/80 bg-white/75 px-5 py-4 shadow-[0_10px_30px_rgba(127,29,29,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-[#111b2d]/90 dark:shadow-none lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-3">
               <BackButton fallbackHref="/" />
@@ -266,21 +270,21 @@ export default function SubjectStudyShell({
               )}
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+              <h1 className="text-2xl font-black tracking-tight text-slate-950 dark:text-slate-50 sm:text-3xl">
                 {localizedTitle} <span className="text-red-500">⚡</span>
               </h1>
-              <p className="mt-1 text-sm font-medium text-slate-500">{localizedSubtitle}</p>
+              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-300">{localizedSubtitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 lg:shrink-0">
-            <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-rose-100 bg-white/80 px-4 py-2.5 text-sm text-slate-400 shadow-sm lg:flex">
+            <div className="hidden min-w-[360px] items-center gap-2 rounded-xl border border-rose-100 bg-white/80 px-4 py-2.5 text-sm text-slate-400 shadow-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400 dark:shadow-none lg:flex">
               <FiSearch />
               <span>{localizedSearchPlaceholder}</span>
             </div>
             <button
               type="button"
               aria-label="Thông báo"
-              className="hidden h-10 w-10 items-center justify-center rounded-full border border-rose-100 bg-white/80 text-slate-500 shadow-sm transition hover:text-red-600 lg:flex"
+              className="hidden h-10 w-10 items-center justify-center rounded-full border border-rose-100 bg-white/80 text-slate-500 shadow-sm transition hover:text-red-600 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-300 dark:shadow-none dark:hover:text-red-300 lg:flex"
             >
               <FiBell />
             </button>
@@ -304,7 +308,7 @@ export default function SubjectStudyShell({
                 className={`flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl border px-3 py-2 text-xs font-black shadow-sm transition ${
                   active
                     ? 'border-red-200 bg-red-600 text-white'
-                    : 'border-rose-100 bg-white/80 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600'
+                    : 'border-rose-100 bg-white/80 text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-[#111b2d] dark:text-slate-300 dark:hover:border-red-500/50 dark:hover:bg-red-500/15 dark:hover:text-red-200'
                 }`}
               >
                 <Icon className="shrink-0 text-sm" />
@@ -321,12 +325,12 @@ export default function SubjectStudyShell({
             {FEATURE_CARDS.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.titleKey} className="rounded-2xl border border-rose-100/80 bg-white/75 p-4 shadow-sm backdrop-blur-xl">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                <div key={item.titleKey} className="rounded-2xl border border-rose-100/80 bg-white/75 p-4 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-[#111b2d]/90 dark:shadow-none">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300">
                     <Icon />
                   </div>
-                  <div className="text-sm font-black text-slate-800">{t(item.titleKey)}</div>
-                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">{t(item.textKey)}</p>
+                  <div className="text-sm font-black text-slate-800 dark:text-slate-100">{t(item.titleKey)}</div>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-300">{t(item.textKey)}</p>
                 </div>
               );
             })}

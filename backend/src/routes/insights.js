@@ -93,6 +93,8 @@ router.get("/actions/summary", learningActionController.getSummary);
 router.get("/actions/wrong-questions", learningActionController.getWrongQuestions);
 router.post("/actions/practice/wrong", learningActionController.createWrongPractice);
 router.post("/actions/practice/weak-topic", learningActionController.createWeakTopicPractice);
+router.get("/actions/topics", learningActionController.getSubjectPracticeTopics);
+router.get("/actions/topic-files", learningActionController.getTopicPracticeFiles);
 router.get("/actions/practice/:id", learningActionController.getPracticeSet);
 router.get("/actions/bookmarks", learningActionController.listBookmarks);
 router.post("/actions/bookmarks", learningActionController.saveBookmark);

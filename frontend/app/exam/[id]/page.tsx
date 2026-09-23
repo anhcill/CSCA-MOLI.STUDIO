@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import examApi, { Exam, PracticeFeedback, Question } from '@/lib/api/exams';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import examApi, { Exam, PracticeFeedback, Question, type QuestionReportType } from '@/lib/api/exams';
 import { FiClock, FiCheck, FiChevronLeft, FiChevronRight, FiChevronDown, FiAlertCircle, FiSend, FiGrid, FiShield, FiFlag, FiPlay, FiBookOpen } from 'react-icons/fi';
 import { ProUpgradeModal } from '@/components/common/ProModal';
 import { ViolationWarning } from '@/components/common/ViolationWarning';
@@ -120,7 +120,9 @@ function getExamText(values: { vi?: string | null; zh?: string | null; en?: stri
 export default function ExamPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
+  const isTopicPracticeRoute = searchParams.get('workspace') === 'topic';
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -227,6 +229,7 @@ export default function ExamPage() {
   const essaySaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const pendingEssaySavesRef = useRef<Record<number, PendingEssaySave>>({});
   const isPdfRoomExam = Boolean(started && exam?.start_time && exam?.has_exam_pdf && !practiceMode);
+  const isTopicPdfPractice = Boolean(started && isTopicPracticeRoute && practiceMode && exam?.has_exam_pdf);
   const violationLimit = isPdfRoomExam ? PDF_ROOM_MAX_VIOLATIONS : DEFAULT_EXAM_MAX_VIOLATIONS;
 
   useEffect(() => {
@@ -255,7 +258,7 @@ export default function ExamPage() {
   });
 
   const { maxViolations, resetViolations } = useExamProtection({
-    enabled: !!attemptId && !submitting && !practiceMode,
+    enabled: !!attemptId && !submitting && !practiceMode && !isTopicPdfPractice,
     maxViolations: violationLimit,
     requireFullscreen: isPdfRoomExam,
     onViolation: (type: string) => {
@@ -298,7 +301,7 @@ export default function ExamPage() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (!started || !attemptId || practiceMode || typeof window === 'undefined') {
+    if (!started || !attemptId || practiceMode || isTopicPdfPractice || typeof window === 'undefined') {
       setTabConflict(false);
       return;
     }
@@ -349,7 +352,7 @@ export default function ExamPage() {
         localStorage.removeItem(key);
       }
     };
-  }, [attemptId, practiceMode, started]);
+  }, [attemptId, isTopicPdfPractice, practiceMode, started]);
 
   // Auto-dismiss capture shield after 3 seconds
   useEffect(() => {
@@ -519,7 +522,8 @@ export default function ExamPage() {
     try {
       setLoading(true);
 
-      const shouldEnterPdfRoom = Boolean(preflight?.start_time && preflight?.has_exam_pdf && !options.practice);
+      const shouldUseTopicPractice = isTopicPracticeRoute || Boolean(options.practice);
+      const shouldEnterPdfRoom = Boolean(preflight?.start_time && preflight?.has_exam_pdf && !shouldUseTopicPractice);
       if (shouldEnterPdfRoom && !document.fullscreenElement) {
         try {
           await document.documentElement.requestFullscreen();
@@ -539,11 +543,12 @@ export default function ExamPage() {
 
       const response = await examApi.startExam(examId, {
         restart: options.restart,
-        practiceMode: options.practice,
-        mode: options.practice ? 'practice' : options.restart ? 'restart' : 'resume',
+        practiceMode: shouldUseTopicPractice,
+        mode: shouldUseTopicPractice ? 'practice' : options.restart ? 'restart' : 'resume',
+        pdfWorkspace: isTopicPracticeRoute,
       });
 
-      const nextPracticeMode = Boolean(options.practice || response.practiceMode);
+      const nextPracticeMode = Boolean(shouldUseTopicPractice || response.practiceMode);
 
       setExam(response.exam);
       setQuestions(response.questions);
@@ -670,7 +675,7 @@ export default function ExamPage() {
   };
 
   const handleAnswerSelect = async (answerId: number, answerKey: string, essayText?: string) => {
-    if (!attemptId || submitting || tabConflict) return;
+    if (!attemptId || submitting || (tabConflict && !isTopicPdfPractice)) return;
 
     const question = questions[currentQuestionIndex];
     if (!question) return;
@@ -705,7 +710,7 @@ export default function ExamPage() {
   const handlePdfAnswerSelect = async (question: Question, answerId: number, answerKey: string) => {
     if (!attemptId || submitting || tabConflict) return;
     setSelectedAnswers((prev) => ({ ...prev, [question.id]: answerId }));
-    await saveAnswerForQuestion(question.id, answerKey, undefined, false);
+    await saveAnswerForQuestion(question.id, answerKey, undefined, practiceMode);
   };
 
   const togglePdfQuestionFlag = (questionId: number) => {
@@ -717,8 +722,22 @@ export default function ExamPage() {
     });
   };
 
+  const handlePdfQuestionReport = async (
+    question: Question,
+    reportType: QuestionReportType,
+    description: string,
+  ) => {
+    if (!exam) throw new Error('Không tìm thấy file luyện.');
+    await examApi.submitQuestionReport({
+      question_id: question.id,
+      exam_id: exam.id,
+      report_type: reportType,
+      description: description || undefined,
+    });
+  };
+
   const handleSubmit = async (options: { force?: boolean } = {}) => {
-    if (!attemptId || submitting || submitInFlightRef.current || (tabConflict && !options.force)) return;
+    if (!attemptId || submitting || submitInFlightRef.current || (tabConflict && !isTopicPdfPractice && !options.force)) return;
 
     if (!options.force) {
       setShowSubmitConfirm(true);
@@ -842,7 +861,7 @@ export default function ExamPage() {
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
     const canStartOfficialExam = !isOfficialExam || (officialHasStarted && !officialHasEnded);
-    const languageReady = Boolean((isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
+    const languageReady = Boolean(isTopicPracticeRoute || (isOfficialExam && preflight.has_exam_pdf) || (examLanguage && explanationLanguage));
     const leaderboardAvailable = !isOfficialExam || Boolean(
       preflight.end_time && scheduleNow > new Date(preflight.end_time).getTime()
     );
@@ -889,7 +908,7 @@ export default function ExamPage() {
             </div>
 
             <div className="border-t border-[#ead9bd]/75 p-4 sm:p-5">
-              {!isOfficialExam && (
+              {!isOfficialExam && !isTopicPracticeRoute && (
                 <div
                   ref={languageSelectorRef}
                   className={`relative z-30 mb-4 rounded-3xl p-4 sm:p-5 ${inkResultSoftPanel}`}
@@ -1160,7 +1179,15 @@ export default function ExamPage() {
               )}
 
               <div className="relative z-10 flex flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-                {inProgress ? (
+                {isTopicPracticeRoute ? (
+                  <button
+                    onClick={() => startExam()}
+                    disabled={loading}
+                    className="disabled:cursor-not-allowed inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#d52a1e] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-[rgba(213,42,30,0.18)] hover:bg-[#b9231a] disabled:opacity-60"
+                  >
+                    <FiPlay size={18} /> Mở file luyện tập
+                  </button>
+                ) : inProgress ? (
                     <button
                       onClick={() => startExam()}
                       disabled={loading || !canStartOfficialExam || !languageReady}
@@ -1177,7 +1204,7 @@ export default function ExamPage() {
                     <FiPlay size={18} /> {attemptLimitReached ? 'Bạn đã dùng lượt thi' : 'Bắt đầu làm bài'}
                   </button>
                 )}
-                {!isOfficialExam && (
+                {!isOfficialExam && !isTopicPracticeRoute && (
                 <button
                   onClick={() => startExam({ practice: true })}
                   disabled={loading || !languageReady}
@@ -1285,7 +1312,7 @@ export default function ExamPage() {
     });
   };
 
-  if (isPdfRoomExam) {
+  if (isPdfRoomExam || isTopicPdfPractice) {
     return (
       <div className="fixed inset-0 z-[90] bg-slate-950">
         <AiAnalyzingOverlay open={submitting} mode="submit" />
@@ -1300,12 +1327,18 @@ export default function ExamPage() {
           maxViolations={maxViolations}
           submitting={submitting}
           tabConflict={tabConflict}
+          workspaceMode={isTopicPdfPractice ? 'topic-practice' : 'exam-room'}
           onSelectAnswer={handlePdfAnswerSelect}
           onToggleFlag={togglePdfQuestionFlag}
           onSubmit={() => handleSubmit()}
+          onReportQuestion={isTopicPdfPractice ? handlePdfQuestionReport : undefined}
+          onExit={isTopicPdfPractice ? () => {
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+            router.back();
+          } : undefined}
         />
 
-        {!submitting && showViolation && (
+        {!isTopicPdfPractice && !submitting && showViolation && (
           <ViolationWarning
             count={violations}
             maxViolations={maxViolations}
@@ -1317,15 +1350,15 @@ export default function ExamPage() {
           <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-700"><FiSend size={21} /></div>
-                <div><h2 className="text-lg font-black text-slate-950">Nộp bài thi?</h2><p className="text-sm font-semibold text-slate-500">Nộp thành công xong bạn mới rời được phòng thi.</p></div>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isTopicPdfPractice ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}><FiSend size={21} /></div>
+                <div><h2 className="text-lg font-black text-slate-950">{isTopicPdfPractice ? 'Nộp bài luyện?' : 'Nộp bài thi?'}</h2><p className="text-sm font-semibold text-slate-500">{isTopicPdfPractice ? 'Kết quả sẽ được lưu vào tiến độ luyện tập của bạn.' : 'Nộp thành công xong bạn mới rời được phòng thi.'}</p></div>
               </div>
               <div className="mb-5 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-                Đã làm <strong className="text-slate-950">{answeredCount}/{questions.length}</strong> câu · Còn <strong className="text-slate-950">{formatTime(timeLeft)}</strong>
+                Đã làm <strong className="text-slate-950">{answeredCount}/{questions.length}</strong> câu{!isTopicPdfPractice && <> · Còn <strong className="text-slate-950">{formatTime(timeLeft)}</strong></>}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={() => setShowSubmitConfirm(false)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">Kiểm tra lại</button>
-                <button type="button" onClick={() => handleSubmit({ force: true })} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700">Nộp ngay</button>
+                <button type="button" onClick={() => handleSubmit({ force: true })} className={`rounded-xl px-4 py-3 text-sm font-black text-white ${isTopicPdfPractice ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Nộp ngay</button>
               </div>
             </div>
           </div>

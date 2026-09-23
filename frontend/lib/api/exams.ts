@@ -86,6 +86,7 @@ export interface ExamStartOptions {
   restart?: boolean;
   practiceMode?: boolean;
   mode?: 'resume' | 'restart' | 'practice';
+  pdfWorkspace?: boolean;
 }
 
 export interface PracticeFeedback {
@@ -191,8 +192,9 @@ const examApi = {
     return response.data.data;
   },
 
-  async getExamPaper(examId: number): Promise<Blob> {
+  async getExamPaper(examId: number, topicPractice = false): Promise<Blob> {
     const response = await axios.get(`/exams/${examId}/paper`, {
+      params: topicPractice ? { workspace: 'topic' } : undefined,
       responseType: 'blob',
       headers: { Accept: 'application/pdf' },
     });
