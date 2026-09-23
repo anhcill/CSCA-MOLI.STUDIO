@@ -547,6 +547,34 @@ export interface PracticeSetSummary {
   created_at: string;
 }
 
+export interface SubjectPracticeTopic {
+  topic_id: number;
+  topic_name: string;
+  topic_name_cn?: string | null;
+  description?: string | null;
+  question_count: number;
+  practiced_count: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  accuracy: number | null;
+  file_count: number;
+}
+
+export interface TopicPracticeFile {
+  exam_id: number;
+  title: string;
+  description?: string | null;
+  duration: number;
+  difficulty_level?: string | null;
+  publish_date?: string | null;
+  topic_name: string;
+  file_name: string;
+  pages?: number | null;
+  question_count: number;
+  user_attempt_count: number;
+  user_best_score: number;
+}
+
 export interface PracticeQuestion {
   id: number;
   exam_id: number;
@@ -608,6 +636,16 @@ export async function createWrongQuestionPractice(limit = 20, options?: WrongQue
 
 export async function createWeakTopicPractice(topicId?: number, limit = 20, subject?: string): Promise<PracticeSetSummary> {
   const res = await axios.post(`${BASE}/actions/practice/weak-topic`, { topic_id: topicId, limit, subject });
+  return res.data.data;
+}
+
+export async function getSubjectPracticeTopics(subject: string): Promise<SubjectPracticeTopic[]> {
+  const res = await axios.get(`${BASE}/actions/topics`, { params: { subject } });
+  return res.data.data;
+}
+
+export async function getTopicPracticeFiles(topicId: number, subject: string): Promise<TopicPracticeFile[]> {
+  const res = await axios.get(`${BASE}/actions/topic-files`, { params: { topicId, subject } });
   return res.data.data;
 }
 

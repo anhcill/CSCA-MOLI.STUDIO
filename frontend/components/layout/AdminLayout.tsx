@@ -9,7 +9,7 @@ import {
   FiActivity, FiUsers, FiFileText, FiBook, FiMessageSquare, FiFlag,
   FiImage, FiTag, FiMap, FiSettings, FiMonitor, FiShield, FiAlertTriangle,
   FiX, FiChevronLeft, FiChevronRight, FiLogOut, FiHelpCircle, FiGift,
-  FiBarChart2, FiAward, FiVideo, FiMail, FiDatabase
+  FiBarChart2, FiAward, FiVideo, FiMail, FiDatabase, FiTarget
 } from 'react-icons/fi';
 import { FaCrown } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
@@ -86,6 +86,13 @@ const NAV_SECTIONS = [
         label: 'Phòng thi',
         icon: FiMonitor,
         href: '/admin/exam-room',
+        permission: 'exams.manage',
+        roles: [],
+      },
+      {
+        label: 'Luyện chủ đề',
+        icon: FiTarget,
+        href: '/admin/topic-practice',
         permission: 'exams.manage',
         roles: [],
       },

@@ -592,6 +592,241 @@ const AdminExamController = {
     }
   },
 
+  async getTopicPracticeOverview(req, res) {
+    try {
+      const subjectCode = String(req.query?.subject || '').trim().toUpperCase() || null;
+      const result = await pool.query(
+        `WITH question_totals AS (
+           SELECT
+             q.exam_id,
+             COUNT(*)::int AS question_count,
+             COUNT(*) FILTER (
+               WHERE EXISTS (
+                 SELECT 1 FROM answers a
+                 WHERE a.question_id = q.id AND a.is_correct = TRUE
+               )
+             )::int AS answered_count
+           FROM questions q
+           WHERE q.deleted_at IS NULL
+             AND q.question_number > 0
+             AND q.question_type <> ALL($1::varchar[])
+           GROUP BY q.exam_id
+         ), topic_links AS (
+           SELECT
+             q.exam_id,
+             MIN(qt.id)::int AS topic_id,
+             STRING_AGG(DISTINCT qt.name, ', ' ORDER BY qt.name) AS topic_name
+           FROM questions q
+           JOIN question_topic_mapping qtm ON qtm.question_id = q.id
+           JOIN question_topics qt ON qt.id = qtm.topic_id
+           WHERE q.deleted_at IS NULL
+           GROUP BY q.exam_id
+         ), attempt_metrics AS (
+           SELECT
+             ea.exam_id,
+             COUNT(*)::int AS attempt_count,
+             COUNT(*) FILTER (WHERE ea.status = 'completed')::int AS completed_count,
+             COUNT(DISTINCT ea.user_id)::int AS learner_count,
+             ROUND(AVG(ea.total_score) FILTER (WHERE ea.status = 'completed'), 1) AS average_score,
+             MAX(COALESCE(ea.submit_time, ea.start_time)) AS last_practiced_at
+           FROM exam_attempts ea
+           GROUP BY ea.exam_id
+         )
+         SELECT
+           e.id AS exam_id,
+           e.title,
+           e.description,
+           e.status,
+           e.duration,
+           e.publish_date,
+           s.id AS subject_id,
+           s.code AS subject_code,
+           s.name AS subject_name,
+           tl.topic_id,
+           tl.topic_name,
+           paper.file_name,
+           paper.pages,
+           COALESCE(qt.question_count, 0)::int AS question_count,
+           COALESCE(qt.answered_count, 0)::int AS answered_count,
+           (COALESCE(qt.question_count, 0) > 0 AND COALESCE(qt.question_count, 0) = COALESCE(qt.answered_count, 0)) AS answers_ready,
+           COALESCE(am.attempt_count, 0)::int AS attempt_count,
+           COALESCE(am.completed_count, 0)::int AS completed_count,
+           COALESCE(am.learner_count, 0)::int AS learner_count,
+           COALESCE(am.average_score, 0)::numeric AS average_score,
+           am.last_practiced_at
+         FROM exams e
+         JOIN subjects s ON s.id = e.subject_id
+         LEFT JOIN topic_links tl ON tl.exam_id = e.id
+         JOIN LATERAL (
+           SELECT sf.file_name, sf.pages
+           FROM admin_exam_source_files sf
+           WHERE sf.exam_id = e.id
+             AND sf.is_exam_paper = TRUE
+             AND sf.file_type = 'pdf'
+             AND sf.file_data IS NOT NULL
+           ORDER BY sf.created_at DESC, sf.id DESC
+           LIMIT 1
+         ) paper ON TRUE
+         LEFT JOIN question_totals qt ON qt.exam_id = e.id
+         LEFT JOIN attempt_metrics am ON am.exam_id = e.id
+         WHERE e.deleted_at IS NULL
+           AND e.start_time IS NULL
+           AND ($2::text IS NULL OR s.code = $2)
+         ORDER BY e.status = 'published' DESC, am.last_practiced_at DESC NULLS LAST, e.created_at DESC`,
+        [['reading_passage', 'fill_blank_pool'], subjectCode],
+      );
+      return res.json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error('Get topic practice overview error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không tải được danh sách luyện theo chủ đề.' });
+    }
+  },
+
+  async getTopicPracticeTopics(req, res) {
+    try {
+      const subjectCode = String(req.query?.subject || '').trim().toUpperCase();
+      if (!subjectCode) return res.status(400).json({ message: 'Cần chọn môn học.' });
+      const result = await pool.query(
+        `SELECT qt.id, qt.name, qt.name_cn, qt.description
+         FROM question_topics qt
+         JOIN subjects s ON s.id = qt.subject_id
+         WHERE s.code = $1
+         ORDER BY qt.name ASC`,
+        [subjectCode],
+      );
+      return res.json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error('Get topic practice topics error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không tải được danh sách chủ đề.' });
+    }
+  },
+
+  async getTopicPracticeParticipants(req, res) {
+    try {
+      const examId = Number.parseInt(req.params.examId, 10);
+      if (!Number.isInteger(examId) || examId <= 0) {
+        return res.status(400).json({ message: 'ID file luyện không hợp lệ.' });
+      }
+      const result = await pool.query(
+        `SELECT
+           ea.user_id,
+           COALESCE(u.full_name, 'Người học') AS user_name,
+           u.email AS user_email,
+           COUNT(*)::int AS attempt_count,
+           COUNT(*) FILTER (WHERE ea.status = 'completed')::int AS completed_count,
+           COALESCE(MAX(ea.total_score) FILTER (WHERE ea.status = 'completed'), 0)::numeric AS best_score,
+           MAX(COALESCE(ea.submit_time, ea.start_time)) AS last_activity_at
+         FROM exam_attempts ea
+         LEFT JOIN users u ON u.id = ea.user_id
+         WHERE ea.exam_id = $1
+         GROUP BY ea.user_id, u.full_name, u.email
+         ORDER BY last_activity_at DESC NULLS LAST, attempt_count DESC
+         LIMIT 250`,
+        [examId],
+      );
+      return res.json({ success: true, data: result.rows });
+    } catch (error) {
+      console.error('Get topic practice participants error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không tải được người học.' });
+    }
+  },
+
+  async setTopicPracticeTopic(req, res) {
+    const examId = Number.parseInt(req.params.examId, 10);
+    const topicId = Number.parseInt(req.body?.topicId, 10);
+    if (!Number.isInteger(examId) || examId <= 0 || !Number.isInteger(topicId) || topicId <= 0) {
+      return res.status(400).json({ message: 'File luyện và chủ đề không hợp lệ.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const examResult = await client.query(
+        `SELECT e.id, e.start_time, s.id AS subject_id
+         FROM exams e
+         JOIN subjects s ON s.id = e.subject_id
+         WHERE e.id = $1 AND e.deleted_at IS NULL
+         FOR UPDATE`,
+        [examId],
+      );
+      const exam = examResult.rows[0];
+      if (!exam) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      if (exam.start_time) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Kỳ thi có lịch không thể dùng làm file luyện chủ đề.' });
+      }
+
+      const topicResult = await client.query(
+        `SELECT id, name
+         FROM question_topics
+         WHERE id = $1 AND subject_id = $2
+         LIMIT 1`,
+        [topicId, exam.subject_id],
+      );
+      const topic = topicResult.rows[0];
+      if (!topic) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Chủ đề không thuộc môn của file luyện.' });
+      }
+
+      const attemptResult = await client.query(
+        'SELECT COUNT(*)::int AS count FROM exam_attempts WHERE exam_id = $1',
+        [examId],
+      );
+      if (Number(attemptResult.rows[0]?.count) > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          message: 'File đã có lượt làm nên không thể đổi chủ đề để bảo toàn thống kê.',
+          code: 'TOPIC_PRACTICE_TOPIC_LOCKED',
+        });
+      }
+
+      const questionResult = await client.query(
+        `SELECT COUNT(*)::int AS count
+         FROM questions
+         WHERE exam_id = $1 AND deleted_at IS NULL AND question_number > 0`,
+        [examId],
+      );
+      if (Number(questionResult.rows[0]?.count) < 1) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ message: 'Hãy lưu bảng đáp án trước khi gán file vào chủ đề.' });
+      }
+
+      await client.query(
+        `DELETE FROM question_topic_mapping
+         WHERE question_id IN (SELECT id FROM questions WHERE exam_id = $1)`,
+        [examId],
+      );
+      await client.query(
+        `INSERT INTO question_topic_mapping (question_id, topic_id)
+         SELECT id, $2
+         FROM questions
+         WHERE exam_id = $1 AND deleted_at IS NULL`,
+        [examId, topicId],
+      );
+      await client.query('COMMIT');
+      cache.delByPrefix('exams:');
+
+      UserActivity.log(req.user.id, 'admin.set_topic_practice_topic', {
+        examId,
+        topicId,
+        topicName: topic.name,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      return res.json({ success: true, message: `Đã gán file vào chủ đề ${topic.name}.`, data: { topicId, topicName: topic.name } });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error('Set topic practice topic error:', getSafeErrorLog(error));
+      return res.status(500).json({ message: 'Không thể gán file vào chủ đề.' });
+    } finally {
+      client.release();
+    }
+  },
+
   async listExamSourceFiles(req, res) {
     const { examId } = req.params;
     const client = await pool.connect();

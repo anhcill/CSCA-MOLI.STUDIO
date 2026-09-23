@@ -52,6 +52,28 @@ exports.createWeakTopicPractice = async (req, res) => {
   }
 };
 
+exports.getSubjectPracticeTopics = async (req, res) => {
+  try {
+    const data = await learningActionService.getSubjectPracticeTopics(req.user.id, req.query.subject);
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error, "Get subject practice topics");
+  }
+};
+
+exports.getTopicPracticeFiles = async (req, res) => {
+  try {
+    const data = await learningActionService.getTopicPracticeFiles(
+      req.user.id,
+      req.query.topicId,
+      req.query.subject,
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error, "Get topic practice files");
+  }
+};
+
 exports.getPracticeSet = async (req, res) => {
   try {
     const data = await learningActionService.getPracticeSet(req.user.id, req.params.id);

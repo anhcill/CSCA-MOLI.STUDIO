@@ -325,6 +325,167 @@ async function getSubjectPracticeQuestionIds(userId, subjectId, limit = 20) {
   return result.rows.map((row) => Number(row.id));
 }
 
+async function getSubjectPracticeTopics(userId, subjectCode) {
+  const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
+  if (!normalizedSubjectCode) {
+    const error = new Error("Subject is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        qt.id AS topic_id,
+        qt.name AS topic_name,
+        qt.name_cn AS topic_name_cn,
+        qt.description,
+        COUNT(DISTINCT q.id)::int AS question_count,
+        COALESCE(uts.total_questions, 0)::int AS practiced_count,
+        COALESCE(uts.correct_answers, 0)::int AS correct_answers,
+        COALESCE(uts.incorrect_answers, 0)::int AS incorrect_answers,
+        CASE
+          WHEN COALESCE(uts.total_questions, 0) > 0
+            THEN ROUND(uts.correct_answers::numeric / uts.total_questions * 100, 1)
+          ELSE NULL
+        END AS accuracy,
+        (
+          SELECT COUNT(DISTINCT e.id)::int
+          FROM exams e
+          JOIN questions paper_q ON paper_q.exam_id = e.id AND paper_q.deleted_at IS NULL
+          JOIN question_topic_mapping paper_qtm ON paper_qtm.question_id = paper_q.id
+          WHERE e.subject_id = s.id
+            AND e.status = 'published'
+            AND e.deleted_at IS NULL
+            AND e.start_time IS NULL
+            AND paper_qtm.topic_id = qt.id
+            AND EXISTS (
+              SELECT 1
+              FROM admin_exam_source_files sf
+              WHERE sf.exam_id = e.id
+                AND sf.is_exam_paper = TRUE
+                AND sf.file_type = 'pdf'
+                AND sf.file_data IS NOT NULL
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM questions configured_q
+              WHERE configured_q.exam_id = e.id
+                AND configured_q.deleted_at IS NULL
+                AND configured_q.question_number > 0
+                AND configured_q.question_type <> ALL(ARRAY['reading_passage', 'fill_blank_pool']::varchar[])
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM answers configured_a
+                  WHERE configured_a.question_id = configured_q.id
+                    AND configured_a.is_correct = TRUE
+                )
+            )
+        ) AS file_count
+      FROM subjects s
+      JOIN question_topics qt ON qt.subject_id = s.id
+      LEFT JOIN question_topic_mapping qtm ON qtm.topic_id = qt.id
+      LEFT JOIN questions q
+        ON q.id = qtm.question_id
+        AND q.deleted_at IS NULL
+        AND COALESCE(q.question_type, 'single_choice') NOT IN ('reading_passage', 'fill_blank_pool')
+      LEFT JOIN user_topic_stats uts
+        ON uts.user_id = $1
+        AND uts.subject_id = s.id
+        AND uts.topic_id = qt.id
+      WHERE s.code = $2
+      GROUP BY qt.id, uts.total_questions, uts.correct_answers, uts.incorrect_answers
+      HAVING COUNT(DISTINCT q.id) > 0
+      ORDER BY
+        CASE WHEN COALESCE(uts.total_questions, 0) > 0 THEN 0 ELSE 1 END,
+        COALESCE(uts.incorrect_answers, 0) DESC,
+        qt.name ASC
+    `,
+    [userId, normalizedSubjectCode],
+  );
+
+  return result.rows;
+}
+
+async function getTopicPracticeFiles(userId, topicId, subjectCode) {
+  const parsedTopicId = Number(topicId);
+  const normalizedSubjectCode = normalizeSubjectCode(subjectCode);
+  if (!Number.isInteger(parsedTopicId) || parsedTopicId <= 0 || !normalizedSubjectCode) {
+    const error = new Error("Topic and subject are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        e.id AS exam_id,
+        e.title,
+        e.description,
+        e.duration,
+        e.difficulty_level,
+        e.publish_date,
+        qt.name AS topic_name,
+        paper.file_name,
+        paper.pages,
+        COUNT(DISTINCT q.id)::int AS question_count,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM exam_attempts ea
+          WHERE ea.exam_id = e.id
+            AND ea.user_id = $3
+            AND ea.status = 'completed'
+        ), 0)::int AS user_attempt_count,
+        COALESCE((
+          SELECT MAX(total_score)
+          FROM exam_attempts ea
+          WHERE ea.exam_id = e.id
+            AND ea.user_id = $3
+            AND ea.status = 'completed'
+        ), 0)::numeric AS user_best_score
+      FROM exams e
+      JOIN subjects s ON s.id = e.subject_id
+      JOIN question_topics qt ON qt.id = $1 AND qt.subject_id = s.id
+      JOIN LATERAL (
+        SELECT sf.file_name, sf.pages
+        FROM admin_exam_source_files sf
+        WHERE sf.exam_id = e.id
+          AND sf.is_exam_paper = TRUE
+          AND sf.file_type = 'pdf'
+          AND sf.file_data IS NOT NULL
+        ORDER BY sf.created_at DESC, sf.id DESC
+        LIMIT 1
+      ) paper ON TRUE
+      JOIN questions q ON q.exam_id = e.id AND q.deleted_at IS NULL
+      JOIN question_topic_mapping qtm ON qtm.question_id = q.id AND qtm.topic_id = qt.id
+      WHERE s.code = $2
+        AND e.status = 'published'
+        AND e.deleted_at IS NULL
+        AND e.start_time IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM questions configured_q
+          WHERE configured_q.exam_id = e.id
+            AND configured_q.deleted_at IS NULL
+            AND configured_q.question_number > 0
+            AND configured_q.question_type <> ALL(ARRAY['reading_passage', 'fill_blank_pool']::varchar[])
+            AND NOT EXISTS (
+              SELECT 1
+              FROM answers configured_a
+              WHERE configured_a.question_id = configured_q.id
+                AND configured_a.is_correct = TRUE
+            )
+        )
+      GROUP BY e.id, qt.id, paper.file_name, paper.pages
+      HAVING COUNT(DISTINCT q.id) > 0
+      ORDER BY e.publish_date DESC NULLS LAST, e.created_at DESC
+    `,
+    [parsedTopicId, normalizedSubjectCode, userId],
+  );
+
+  return result.rows;
+}
+
 async function createWeakTopicPractice(userId, topicId, limit = 20, subjectCode = null) {
   const weakTopics = await getWeakTopics(userId, 20, subjectCode);
   const target = weakTopics.find((topic) => Number(topic.topic_id) === Number(topicId)) || weakTopics[0];
@@ -630,6 +791,8 @@ module.exports = {
   getActionSummary,
   getWrongQuestions,
   createWrongQuestionPractice,
+  getSubjectPracticeTopics,
+  getTopicPracticeFiles,
   createWeakTopicPractice,
   getPracticeSet,
   upsertBookmark,

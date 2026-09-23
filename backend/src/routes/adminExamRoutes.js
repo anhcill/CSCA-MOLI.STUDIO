@@ -58,6 +58,8 @@ router.use(authorizePermission("exams.manage"));
 router.get("/counts", AdminExamController.getCounts);
 router.get("/stats", AdminExamController.getStats);
 router.get("/analytics", AdminExamController.getAnalytics);
+router.get("/topic-practice", AdminExamController.getTopicPracticeOverview);
+router.get("/topic-practice/topics", AdminExamController.getTopicPracticeTopics);
 router.get("/import/pdf/review-ledger", AdminExamController.getImportReviewLedger);
 router.post("/import/pdf/review-ledger", examWriteLimiter, AdminExamController.saveImportReviewLedger);
 router.post("/import/pdf/preview", examImportPreviewLimiter, handlePdfUpload, AdminExamController.previewPdfImport);
@@ -76,6 +78,8 @@ router.post("/:examId/delete-request/approve", examWriteLimiter, AdminExamContro
 router.post("/:examId/delete-request/reject", examWriteLimiter, AdminExamController.rejectDeleteRequest);
 router.post("/:examId/restore", examWriteLimiter, AdminExamController.restoreExam);
 router.get("/:examId/edit", AdminExamController.getExamWithQuestions);
+router.get("/:examId/topic-practice/participants", AdminExamController.getTopicPracticeParticipants);
+router.put("/:examId/topic-practice", examWriteLimiter, AdminExamController.setTopicPracticeTopic);
 router.get("/:examId/room-paper-config", AdminExamController.getRoomPaperConfig);
 router.put("/:examId/room-paper-config", examWriteLimiter, AdminExamController.updateRoomPaperConfig);
 router.get("/:examId/source-file", AdminExamController.listExamSourceFiles);

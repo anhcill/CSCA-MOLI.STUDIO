@@ -263,6 +263,7 @@ const COPY: CopyMap = {
 
   'course.section.materials': { vi: 'Kho tài liệu', en: 'Materials', zh: '资料库' },
   'course.section.mockExam': { vi: 'Đề mô phỏng', en: 'Mock exams', zh: '模拟试卷' },
+  'course.section.topicPractice': { vi: 'Luyện chủ đề', en: 'Topic practice', zh: '专题练习' },
   'course.section.history': { vi: 'Lịch sử thi', en: 'Exam history', zh: '考试记录' },
   'course.section.structure': { vi: 'Cấu trúc đề', en: 'Exam structure', zh: '试卷结构' },
   'course.section.theory': { vi: 'Lý thuyết', en: 'Theory', zh: '理论资料' },
@@ -275,6 +276,7 @@ const COPY: CopyMap = {
   'course.defaultSubtitle': { vi: 'Luyện tập theo đề, xem lịch sử điểm và để AI phân tích lộ trình cải thiện sau mỗi lần làm bài.', en: 'Practice by exam, review your score history and let AI analyze how to improve after each attempt.', zh: '按试卷练习，查看成绩记录，并让 AI 在每次答题后分析提升路径。' },
   'course.searchPlaceholder': { vi: 'Tìm nhanh đề thi... (nhấn / để focus)', en: 'Quick search exams... (press / to focus)', zh: '快速搜索试卷...（按 / 聚焦）' },
   'course.title.mockExam': { vi: 'Đề Mô Phỏng {subject}', en: '{subject} Mock Exams', zh: '{subject}模拟试卷' },
+  'course.title.topicPractice': { vi: 'Luyện Chủ Đề {subject}', en: '{subject} Topic Practice', zh: '{subject}专题练习' },
   'course.title.history': { vi: 'Lịch Sử Làm Bài', en: 'Exam History', zh: '做题记录' },
   'course.title.structure': { vi: 'Cấu Trúc Đề', en: 'Exam Structure', zh: '试卷结构' },
   'course.title.theory': { vi: 'Lý Thuyết', en: 'Theory', zh: '理论资料' },

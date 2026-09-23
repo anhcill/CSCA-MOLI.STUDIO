@@ -202,6 +202,7 @@ const examController = {
   async getExamPaper(req, res) {
     try {
       const examId = parseInt(req.params.examId, 10);
+      const topicPractice = req.query.workspace === "topic";
       if (!Number.isFinite(examId) || examId <= 0) {
         return res.status(400).json({ success: false, message: "ID de thi khong hop le" });
       }
@@ -211,7 +212,7 @@ const examController = {
          FROM admin_exam_source_files sf
          JOIN exams e ON e.id = sf.exam_id
          WHERE sf.exam_id = $1
-           AND e.start_time IS NOT NULL
+           AND (e.start_time IS NOT NULL OR ($3::boolean = TRUE AND e.start_time IS NULL))
            AND sf.is_exam_paper = TRUE
            AND sf.file_type = 'pdf'
            AND sf.file_data IS NOT NULL
@@ -219,11 +220,11 @@ const examController = {
              SELECT 1 FROM exam_attempts ea
              WHERE ea.exam_id = sf.exam_id
                AND ea.user_id = $2
-               AND ea.status = 'in_progress'
+               AND ea.status = ANY($4::varchar[])
            )
          ORDER BY sf.created_at DESC, sf.id DESC
          LIMIT 1`,
-        [examId, req.user.id],
+        [examId, req.user.id, topicPractice, topicPractice ? ['in_progress', 'practice'] : ['in_progress']],
       );
 
       const paper = result.rows[0];
@@ -358,6 +359,7 @@ const examController = {
       const isAdmin = req.user.role === 'admin';
       const restart = req.body?.restart === true || req.body?.mode === "restart";
       const practiceMode = req.body?.practiceMode === true || req.body?.mode === "practice";
+      const pdfWorkspace = req.body?.pdfWorkspace === true;
 
       // Guard: reject NaN / non-integer IDs before touching the DB
       const parsedId = parseInt(examId, 10);
@@ -392,7 +394,6 @@ const examController = {
           });
         }
 
-        const db = require("../config/database");
         const now = Date.now();
         const startsAt = new Date(exam.start_time).getTime();
         const endsAt = exam.end_time ? new Date(exam.end_time).getTime() : null;
@@ -411,6 +412,10 @@ const examController = {
           });
         }
 
+      }
+
+      if (exam.start_time || pdfWorkspace) {
+        const db = require("../config/database");
         const roomPaperResult = await db.query(
           `SELECT COUNT(*)::int AS question_count,
                   COUNT(*) FILTER (
@@ -432,7 +437,9 @@ const examController = {
           || Number(roomPaper.answered_count) !== Number(roomPaper.question_count)) {
           return res.status(409).json({
             success: false,
-            message: 'Phòng thi chưa có đủ file PDF và đáp án. Vui lòng báo quản trị viên.',
+            message: pdfWorkspace
+              ? 'File luyện chưa có đủ PDF và đáp án. Vui lòng chọn file khác hoặc báo quản trị viên.'
+              : 'Phòng thi chưa có đủ file PDF và đáp án. Vui lòng báo quản trị viên.',
             code: 'ROOM_PAPER_NOT_CONFIGURED',
           });
         }
@@ -503,6 +510,7 @@ const examController = {
           savedAnswers,
           isResume: Boolean(existingAttempt),
           practiceMode,
+          pdfWorkspace,
           timeLeftSeconds,
         },
       });

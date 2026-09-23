@@ -329,6 +329,47 @@ export interface RoomExamSchedule {
     }>;
 }
 
+export interface TopicPracticeAdminItem {
+    exam_id: number;
+    title: string;
+    description?: string | null;
+    status: 'draft' | 'published' | 'archived' | string;
+    duration: number;
+    publish_date?: string | null;
+    subject_id: number;
+    subject_code: string;
+    subject_name: string;
+    topic_id?: number | null;
+    topic_name?: string | null;
+    file_name: string;
+    pages?: number | null;
+    question_count: number;
+    answered_count: number;
+    answers_ready: boolean;
+    attempt_count: number;
+    completed_count: number;
+    learner_count: number;
+    average_score: number;
+    last_practiced_at?: string | null;
+}
+
+export interface TopicPracticeAdminTopic {
+    id: number;
+    name: string;
+    name_cn?: string | null;
+    description?: string | null;
+}
+
+export interface TopicPracticeParticipant {
+    user_id: number;
+    user_name: string;
+    user_email?: string | null;
+    attempt_count: number;
+    completed_count: number;
+    best_score: number;
+    last_activity_at?: string | null;
+}
+
 export interface ApplyExamReviewFixesResult {
     examId?: number;
     message: string;
@@ -731,6 +772,26 @@ export const examAdminApi = {
 
     getAnalytics: async (): Promise<{ success: boolean; data: AdminExamAnalytics }> => {
         const response = await axios.get('/admin/exams/analytics');
+        return response.data;
+    },
+
+    getTopicPracticeOverview: async (subject?: string): Promise<TopicPracticeAdminItem[]> => {
+        const response = await axios.get('/admin/exams/topic-practice', { params: subject ? { subject } : undefined });
+        return response.data.data || [];
+    },
+
+    getTopicPracticeTopics: async (subject: string): Promise<TopicPracticeAdminTopic[]> => {
+        const response = await axios.get('/admin/exams/topic-practice/topics', { params: { subject } });
+        return response.data.data || [];
+    },
+
+    getTopicPracticeParticipants: async (examId: number): Promise<TopicPracticeParticipant[]> => {
+        const response = await axios.get(`/admin/exams/${examId}/topic-practice/participants`);
+        return response.data.data || [];
+    },
+
+    setTopicPracticeTopic: async (examId: number, topicId: number): Promise<{ message: string; data: { topicId: number; topicName: string } }> => {
+        const response = await axios.put(`/admin/exams/${examId}/topic-practice`, { topicId });
         return response.data;
     },
 
