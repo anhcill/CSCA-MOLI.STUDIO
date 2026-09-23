@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { FiArrowLeft, FiArrowRight, FiBookOpen, FiCheckCircle, FiClock, FiFileText, FiLayers, FiPlay, FiTarget } from 'react-icons/fi';
+import { FiArrowLeft, FiArrowRight, FiBookOpen, FiCheckCircle, FiClock, FiFileText, FiLayers, FiPlay } from 'react-icons/fi';
 import { getTopicPracticeFiles, type TopicPracticeFile } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 
@@ -58,7 +58,6 @@ export default function TopicPracticeFileList({ topicId, subjectSlug, subjectCod
       <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-black text-slate-600 transition hover:text-red-600 dark:text-slate-300 dark:hover:text-red-300"><FiArrowLeft /> Tất cả chủ đề</Link>
 
       <div className="rounded-3xl border border-red-100 bg-gradient-to-br from-white via-rose-50 to-red-50/80 p-6 shadow-[0_16px_42px_rgba(127,29,29,0.08)] dark:border-slate-800 dark:from-[#111b2d] dark:via-[#101c31] dark:to-[#1d1730] dark:shadow-none">
-        <div className="inline-flex items-center gap-2 rounded-full bg-red-100 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-red-700 dark:bg-red-500/15 dark:text-red-200"><FiTarget /> Luyện theo file</div>
         <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">{topicName}</h2>
         <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">Chọn một file để bắt đầu. Màn làm bài giữ nguyên PDF và bảng đáp án như phòng thi, nhưng không giới hạn thời gian hay cảnh báo gian lận.</p>
       </div>
