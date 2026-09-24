@@ -996,28 +996,14 @@ function ExamResultContent() {
       )}
 
       {solutionViewerOpen && comparisonUrls && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/95 p-3 backdrop-blur-sm sm:p-5">
-          <section className="mx-auto flex h-full max-w-[1800px] flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3 sm:px-6 sm:py-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Chế độ đối chiếu</p>
-                <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Đề thi và lời giải PDF</h2>
-              </div>
-              <button type="button" onClick={closeSolutionComparison} className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-black text-white transition hover:bg-slate-700">
-                <FiX size={18} /> Đóng
-              </button>
-            </header>
-            <div className="grid min-h-0 flex-1 gap-px bg-slate-700 lg:grid-cols-2">
-              <div className="flex min-h-0 flex-col bg-slate-950">
-                <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-4 py-3 text-sm font-black text-slate-100"><FiFileText className="text-sky-300" /> Đề thi</div>
-                <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="min-h-[42vh] flex-1 bg-white lg:min-h-0" />
-              </div>
-              <div className="flex min-h-0 flex-col bg-slate-950">
-                <div className="flex items-center gap-2 border-b border-slate-800 bg-emerald-950/40 px-4 py-3 text-sm font-black text-emerald-100"><FiBookOpen className="text-emerald-300" /> Lời giải</div>
-                <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="min-h-[42vh] flex-1 bg-white lg:min-h-0" />
-              </div>
-            </div>
-          </section>
+        <div className="fixed inset-0 z-[100] bg-white">
+          <button type="button" onClick={closeSolutionComparison} aria-label="Đóng đối chiếu PDF" className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-700 shadow-lg transition hover:bg-slate-100">
+            <FiX size={20} />
+          </button>
+          <div className="grid h-full gap-px bg-slate-200 lg:grid-cols-2">
+            <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="min-h-[50vh] w-full bg-white lg:min-h-0" />
+            <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="min-h-[50vh] w-full bg-white lg:min-h-0" />
+          </div>
         </div>
       )}
     </InkResultBackground>
