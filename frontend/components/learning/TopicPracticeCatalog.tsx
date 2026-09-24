@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { FiArrowRight, FiBarChart2, FiBookOpen, FiFileText } from 'react-icons/fi';
+import { FiArrowRight, FiBarChart2, FiBookOpen, FiFileText, FiTarget } from 'react-icons/fi';
 import { getSubjectPracticeTopics, type SubjectPracticeTopic } from '@/lib/api/insights';
 import { useAuthStore } from '@/lib/store/authStore';
 
