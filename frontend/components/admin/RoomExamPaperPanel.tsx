@@ -16,18 +16,23 @@ function formatBytes(value?: number) {
 export default function RoomExamPaperPanel({
   examId,
   onConfigChange,
+  showSolutionFile = false,
 }: {
   examId: number;
   onConfigChange?: (config: RoomPaperConfig) => void;
+  showSolutionFile?: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const paperInputRef = useRef<HTMLInputElement>(null);
+  const solutionInputRef = useRef<HTMLInputElement>(null);
   const [config, setConfig] = useState<RoomPaperConfig | null>(null);
   const [questionCount, setQuestionCount] = useState(40);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingPaper, setUploadingPaper] = useState(false);
+  const [uploadingSolution, setUploadingSolution] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [deletingPaper, setDeletingPaper] = useState(false);
+  const [deletingSolution, setDeletingSolution] = useState(false);
 
   const loadConfig = async () => {
     try {
@@ -61,26 +66,55 @@ export default function RoomExamPaperPanel({
       return;
     }
     try {
-      setUploading(true);
+      setUploadingPaper(true);
       await examAdminApi.uploadExamPaper(examId, file);
       await loadConfig();
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Tải đề PDF thất bại.');
     } finally {
-      setUploading(false);
+      setUploadingPaper(false);
     }
   };
 
   const deletePaper = async () => {
     if (!config?.paper || !confirm('Xóa file PDF đang dùng trong phòng thi?')) return;
     try {
-      setDeleting(true);
+      setDeletingPaper(true);
       await examAdminApi.deleteExamSourceFile(examId, config.paper.id);
       await loadConfig();
     } catch (error: any) {
       alert(error?.response?.data?.message || 'Xóa đề PDF thất bại.');
     } finally {
-      setDeleting(false);
+      setDeletingPaper(false);
+    }
+  };
+
+  const uploadSolution = async (file: File) => {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Chỉ nhận file PDF.');
+      return;
+    }
+    try {
+      setUploadingSolution(true);
+      await examAdminApi.uploadExamSolutionFile(examId, file);
+      await loadConfig();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Tải file PDF lời giải thất bại.');
+    } finally {
+      setUploadingSolution(false);
+    }
+  };
+
+  const deleteSolution = async () => {
+    if (!config?.solution || !confirm('Xóa file PDF lời giải?')) return;
+    try {
+      setDeletingSolution(true);
+      await examAdminApi.deleteExamSourceFile(examId, config.solution.id);
+      await loadConfig();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Xóa file PDF lời giải thất bại.');
+    } finally {
+      setDeletingSolution(false);
     }
   };
 
@@ -130,7 +164,7 @@ export default function RoomExamPaperPanel({
             </p>
           </div>
           <input
-            ref={inputRef}
+            ref={paperInputRef}
             type="file"
             accept="application/pdf,.pdf"
             className="hidden"
@@ -142,11 +176,11 @@ export default function RoomExamPaperPanel({
           />
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading || locked}
+            onClick={() => paperInputRef.current?.click()}
+            disabled={uploadingPaper || locked}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {uploading ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
+            {uploadingPaper ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
             {config?.paper ? 'Thay file PDF' : 'Tải file PDF'}
           </button>
         </div>
@@ -162,10 +196,10 @@ export default function RoomExamPaperPanel({
             <button
               type="button"
               onClick={deletePaper}
-              disabled={deleting || locked}
+              disabled={deletingPaper || locked}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
             >
-              <FiTrash2 /> {deleting ? 'Đang xóa...' : 'Xóa PDF'}
+              <FiTrash2 /> {deletingPaper ? 'Đang xóa...' : 'Xóa PDF'}
             </button>
           </div>
         ) : (
@@ -175,9 +209,65 @@ export default function RoomExamPaperPanel({
         )}
       </div>
 
+      {showSolutionFile && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-black"><FiFileText /> File lời giải PDF <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-100">Không bắt buộc</span></h2>
+            <p className="mt-1 max-w-3xl text-sm text-emerald-800 dark:text-emerald-200">
+              Học viên chỉ có thể mở file này ở trang kết quả sau khi đã nộp xong bài luyện. File lời giải không thay thế bảng đáp án chấm điểm.
+            </p>
+          </div>
+          <input
+            ref={solutionInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) uploadSolution(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => solutionInputRef.current?.click()}
+            disabled={uploadingSolution}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {uploadingSolution ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
+            {config?.solution ? 'Thay file lời giải' : 'Tải file lời giải'}
+          </button>
+        </div>
+
+        {config?.solution ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-white p-4 text-sm md:flex-row md:items-center md:justify-between dark:bg-slate-900">
+            <div className="min-w-0">
+              <p className="truncate font-black">{config.solution.fileName}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {formatBytes(config.solution.fileSize)}{config.solution.pages ? ` · ${config.solution.pages} trang` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={deleteSolution}
+              disabled={deletingSolution}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+            >
+              <FiTrash2 /> {deletingSolution ? 'Đang xóa...' : 'Xóa lời giải'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-dashed border-emerald-300 bg-white/60 p-4 text-sm font-bold text-emerald-700 dark:text-emerald-200">
+            Chưa có file lời giải. Bạn có thể thêm sau khi đã đăng file luyện.
+          </div>
+        )}
+      </div>}
+
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-          Đề đã có {config?.attemptCount} lượt thi. File PDF và đáp án đã được khóa để bảo toàn kết quả.
+          {showSolutionFile
+            ? `Đề đã có ${config?.attemptCount} lượt thi. File PDF và đáp án đã được khóa để bảo toàn kết quả; bạn vẫn có thể cập nhật file lời giải.`
+            : `Đề đã có ${config?.attemptCount} lượt thi. File PDF và đáp án đã được khóa để bảo toàn kết quả.`}
         </div>
       )}
 

@@ -137,10 +137,10 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
             <button type="button" onClick={saveTopic} disabled={savingTopic} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-500/35 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20"><FiTarget /> {savingTopic ? 'Đang lưu...' : 'Gán chủ đề'}</button>
             <button type="button" onClick={setPublished} disabled={publishing} className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black text-white disabled:opacity-50 ${status === 'published' ? 'bg-slate-700 hover:bg-slate-800' : 'bg-emerald-600 hover:bg-emerald-700'}`}><FiCheck /> {publishing ? 'Đang cập nhật...' : status === 'published' ? 'Gỡ đăng' : 'Đăng cho học viên'}</button>
           </div>
-          <p className="md:col-span-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-300">Trình tự: chủ đề → file → tải PDF → lưu đủ đáp án → đăng. Sau khi có người làm, hệ thống khóa đổi PDF, đáp án và chủ đề để bảo toàn thống kê.</p>
+          <p className="md:col-span-2 text-xs font-semibold leading-5 text-slate-500 dark:text-slate-300">Trình tự: chủ đề → file → tải PDF → lưu đủ đáp án → đăng. File lời giải PDF là tùy chọn và chỉ mở cho học viên sau khi nộp bài. Sau khi có người làm, hệ thống khóa đổi PDF, đáp án và chủ đề để bảo toàn thống kê.</p>
         </div>
 
-        <RoomExamPaperPanel examId={file.examId} onConfigChange={setPaperConfig} />
+        <RoomExamPaperPanel examId={file.examId} onConfigChange={setPaperConfig} showSolutionFile />
 
         <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#111b2d]">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">

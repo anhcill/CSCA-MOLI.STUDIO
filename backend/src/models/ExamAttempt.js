@@ -745,6 +745,14 @@ const ExamAttempt = {
             AND sf.file_type = 'pdf'
             AND sf.file_data IS NOT NULL
         )) AS is_room_exam,
+        (e.start_time IS NULL AND ea.status = 'completed' AND EXISTS (
+          SELECT 1
+          FROM admin_exam_source_files sf
+          WHERE sf.exam_id = e.id
+            AND sf.is_solution_file = TRUE
+            AND sf.file_type = 'pdf'
+            AND sf.file_data IS NOT NULL
+        )) AS has_solution_file,
         COALESCE(ea.total_possible_score, e.total_points, 0) AS total_possible_score,
         COALESCE(ea.score_percentage,
           ea.total_score / NULLIF(COALESCE(ea.total_possible_score, e.total_points), 0) * 100,
@@ -788,6 +796,7 @@ const ExamAttempt = {
         score_percentage: attempt.score_percentage,
         ...normalizedScore,
         is_room_exam: attempt.is_room_exam,
+        has_solution_file: attempt.has_solution_file,
         review_locked: true,
         exam_end_time: attempt.exam_end_time,
         answers: [],

@@ -94,6 +94,7 @@ interface ExamResult {
   answers: QuestionResult[];
   allow_download?: boolean;
   is_room_exam?: boolean;
+  has_solution_file?: boolean;
   review_locked?: boolean;
   exam_end_time?: string | null;
 }
@@ -122,6 +123,7 @@ function ExamResultContent() {
   const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<number>>(new Set());
   const [reportQuestion, setReportQuestion] = useState<QuestionResult | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [openingSolution, setOpeningSolution] = useState(false);
 
   const openChatTab = useCallback(() => {
     setActiveTab('chat');
@@ -233,6 +235,34 @@ function ExamResultContent() {
       alert(message);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const openSolutionFile = async () => {
+    if (!result) return;
+    const solutionWindow = window.open('', '_blank');
+    if (solutionWindow) solutionWindow.opener = null;
+
+    try {
+      setOpeningSolution(true);
+      const blob = await examApi.getExamSolution(result.exam_id);
+      const solutionUrl = URL.createObjectURL(blob);
+      if (solutionWindow) {
+        solutionWindow.location.replace(solutionUrl);
+      } else {
+        const link = document.createElement('a');
+        link.href = solutionUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(solutionUrl), 60_000);
+    } catch (error: any) {
+      solutionWindow?.close();
+      console.error('Open solution PDF error:', error);
+      alert('Không thể mở file lời giải lúc này. Vui lòng thử lại sau.');
+    } finally {
+      setOpeningSolution(false);
     }
   };
 
@@ -419,6 +449,17 @@ function ExamResultContent() {
           >
             <FiPrinter size={14} /> Tải đề PDF
           </a>
+        )}
+        {result.has_solution_file && (
+          <button
+            type="button"
+            onClick={openSolutionFile}
+            disabled={openingSolution}
+            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-200 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-xs font-bold shadow-sm no-print disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {openingSolution ? <FiRefreshCw className="animate-spin" size={14} /> : <FiBookOpen size={14} />}
+            {openingSolution ? 'Đang mở...' : 'Mở file lời giải'}
+          </button>
         )}
       </div>
       <main className="container mx-auto px-4 py-6 max-w-[1360px]">

@@ -201,6 +201,14 @@ const examApi = {
     return response.data;
   },
 
+  async getExamSolution(examId: number): Promise<Blob> {
+    const response = await axios.get(`/exams/${examId}/solution`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/pdf' },
+    });
+    return response.data;
+  },
+
   // Lưu câu trả lời
   async saveAnswer(attemptId: number, questionId: number, answerKey: string, timeSpent: number, essayAnswer?: string, practiceMode = false): Promise<any & { feedback?: PracticeFeedback }> {
     const response = await axios.post(`/attempts/${attemptId}/answers`, {

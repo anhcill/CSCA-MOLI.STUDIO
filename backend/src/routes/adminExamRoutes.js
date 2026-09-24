@@ -86,6 +86,7 @@ router.put("/:examId/room-paper-config", examWriteLimiter, AdminExamController.u
 router.get("/:examId/source-file", AdminExamController.listExamSourceFiles);
 router.post("/:examId/source-file", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamSourceFile);
 router.post("/:examId/exam-paper", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamPaper);
+router.post("/:examId/exam-solution", examWriteLimiter, handlePdfUpload, AdminExamController.uploadExamSolutionFile);
 router.delete("/:examId/source-file/:sourceFileId", examDeleteLimiter, AdminExamController.deleteExamSourceFile);
 router.post("/:examId/normalize-formulas", examWriteLimiter, AdminExamController.normalizeExamFormulas);
 router.post("/:examId/review-quality", examWriteLimiter, examAiReviewCooldown, AdminExamController.reviewExamQuality);

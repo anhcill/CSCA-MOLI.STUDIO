@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/layout/Header';
 import examApi from '@/lib/api/exams';
-import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiArrowLeft, FiPrinter, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiRefreshCw } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { authFetch } from '@/lib/utils/authFetch';
 import AIChatbot from '@/components/ai/AIChatbot';
@@ -90,6 +90,7 @@ interface AttemptResult {
     answers: QuestionResult[];
     allow_download?: boolean;
     is_room_exam?: boolean;
+    has_solution_file?: boolean;
     review_locked?: boolean;
     exam_end_time?: string | null;
 }
@@ -108,6 +109,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
     const [aiLoading, setAiLoading] = useState(false);
     const [reviewStarted, setReviewStarted] = useState(false);
     const [aiLoaded, setAiLoaded] = useState(false);
+    const [openingSolution, setOpeningSolution] = useState(false);
 
     const openChatTab = useCallback(() => {
         setActiveTab('chat');
@@ -183,6 +185,34 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
     const openReviewAI = useCallback((question: QuestionResult, mode: ReviewAIMode) => {
         reviewAIHostRef.current?.open(question, mode);
     }, []);
+
+    const openSolutionFile = async () => {
+        if (!result) return;
+        const solutionWindow = window.open('', '_blank');
+        if (solutionWindow) solutionWindow.opener = null;
+
+        try {
+            setOpeningSolution(true);
+            const blob = await examApi.getExamSolution(result.exam_id);
+            const solutionUrl = URL.createObjectURL(blob);
+            if (solutionWindow) {
+                solutionWindow.location.replace(solutionUrl);
+            } else {
+                const link = document.createElement('a');
+                link.href = solutionUrl;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.click();
+            }
+            window.setTimeout(() => URL.revokeObjectURL(solutionUrl), 60_000);
+        } catch (error) {
+            solutionWindow?.close();
+            console.error('Open solution PDF error:', error);
+            alert('Không thể mở file lời giải lúc này. Vui lòng thử lại sau.');
+        } finally {
+            setOpeningSolution(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -293,6 +323,17 @@ export default function ExamResultPage({ params }: { params: Promise<{ id: strin
                         className="flex items-center gap-2 px-3 py-1.5 bg-[#fffaf2]/75 border border-[#ead9bd]/80 text-[#6f563f] dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 rounded-lg hover:bg-[#fff8ec] dark:hover:bg-gray-750 text-xs font-medium shadow-sm no-print">
                         <FiPrinter size={14} /> Tải đề PDF
                     </a>
+                )}
+                {result.has_solution_file && (
+                    <button
+                        type="button"
+                        onClick={openSolutionFile}
+                        disabled={openingSolution}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-200 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-xs font-bold shadow-sm no-print disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {openingSolution ? <FiRefreshCw className="animate-spin" size={14} /> : <FiBookOpen size={14} />}
+                        {openingSolution ? 'Đang mở...' : 'Mở file lời giải'}
+                    </button>
                 )}
             </div>
             <main className="container mx-auto max-w-[1360px] px-3 py-4 sm:px-4 sm:py-6">

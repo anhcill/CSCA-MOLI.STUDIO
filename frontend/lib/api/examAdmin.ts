@@ -279,6 +279,7 @@ export interface AdminExamSourceFile {
     textLength?: number;
     pages?: number | null;
     isExamPaper?: boolean;
+    isSolutionFile?: boolean;
     uploadedBy?: number | null;
     createdAt?: string;
 }
@@ -303,6 +304,7 @@ export interface RoomPaperAnswer {
 
 export interface RoomPaperConfig {
     paper: AdminExamSourceFile | null;
+    solution: AdminExamSourceFile | null;
     questionCount: number;
     totalPoints: number;
     optionKeys: string[];
@@ -603,6 +605,16 @@ export const examAdminApi = {
         const formData = new FormData();
         formData.append('pdf', file);
         const response = await axios.post(`/admin/exams/${examId}/exam-paper`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000,
+        });
+        return response.data;
+    },
+
+    uploadExamSolutionFile: async (examId: number, file: File): Promise<ExamSourceFileUploadResult> => {
+        const formData = new FormData();
+        formData.append('pdf', file);
+        const response = await axios.post(`/admin/exams/${examId}/exam-solution`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 180000,
         });

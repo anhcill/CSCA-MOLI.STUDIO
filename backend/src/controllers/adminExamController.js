@@ -30,6 +30,7 @@ const {
   deleteExamSourceFile: deleteExamSourceFileRecord,
   listExamSourceFiles: listExamSourceFileRecords,
   saveExamPaper: saveExamPaperRecord,
+  saveExamSolutionFile: saveExamSolutionFileRecord,
   saveExamSourceFile: saveExamSourceFileRecord,
 } = require("../services/exam-ai/examSourceService");
 const { buildAiModeOptions, isDeepMode } = require("../services/adminExamAiModeService");
@@ -952,6 +953,7 @@ const AdminExamController = {
       ]);
 
       const paper = sourceFiles.find((file) => file.isExamPaper) || null;
+      const solution = sourceFiles.find((file) => file.isSolutionFile) || null;
       const answers = answerResult.rows.map((row) => ({
         questionId: row.question_id,
         questionNumber: Number(row.question_number),
@@ -961,6 +963,7 @@ const AdminExamController = {
 
       return res.json({
         paper,
+        solution,
         questionCount: answers.length,
         totalPoints: Number(examResult.rows[0].total_points) || 100,
         optionKeys: ['A', 'B', 'C', 'D'],
@@ -1208,6 +1211,59 @@ const AdminExamController = {
       console.error("Upload exam paper error:", getSafeErrorLog(error));
       const status = error.message === "EXAM_PAPER_MUST_BE_PDF" ? 400 : (error.statusCode || 500);
       return res.status(status).json({ message: "Upload de PDF phong thi that bai." });
+    } finally {
+      client.release();
+    }
+  },
+
+  async uploadExamSolutionFile(req, res) {
+    const { examId } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ message: "Cần upload file PDF lời giải." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const examResult = await client.query(
+        `SELECT id, start_time
+         FROM exams
+         WHERE id = $1 AND deleted_at IS NULL
+         FOR UPDATE`,
+        [examId],
+      );
+      const exam = examResult.rows[0];
+      if (!exam) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: MISSING_EXAM_MESSAGE });
+      }
+      if (exam.start_time) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "File lời giải PDF chỉ dùng cho file luyện theo chủ đề." });
+      }
+
+      const result = await saveExamSolutionFileRecord(client, examId, req.file, req.user.id);
+      const sourceFiles = await listExamSourceFileRecords(client, examId);
+      await client.query("COMMIT");
+
+      UserActivity.log(req.user.id, "admin.upload_exam_solution_file", {
+        examId,
+        sourceFileId: result.sourceFile?.id,
+        fileName: result.sourceFile?.fileName,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      return res.status(201).json({
+        message: "Đã cập nhật file PDF lời giải.",
+        ...result,
+        sourceFiles,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("Upload exam solution file error:", getSafeErrorLog(error));
+      const status = error.message === "EXAM_SOLUTION_MUST_BE_PDF" ? 400 : (error.statusCode || 500);
+      return res.status(status).json({ message: "Upload file PDF lời giải thất bại." });
     } finally {
       client.release();
     }
