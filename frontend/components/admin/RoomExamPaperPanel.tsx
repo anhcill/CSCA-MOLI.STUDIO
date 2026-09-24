@@ -33,6 +33,8 @@ export default function RoomExamPaperPanel({
   const [saving, setSaving] = useState(false);
   const [deletingPaper, setDeletingPaper] = useState(false);
   const [deletingSolution, setDeletingSolution] = useState(false);
+  const [bulkAnswerText, setBulkAnswerText] = useState('');
+  const [bulkAnswerMessage, setBulkAnswerMessage] = useState('');
 
   const loadConfig = async () => {
     try {
@@ -116,6 +118,36 @@ export default function RoomExamPaperPanel({
     } finally {
       setDeletingSolution(false);
     }
+  };
+
+  const applyBulkAnswers = () => {
+    const answerPattern = /(?:CÂU\s*)?(\d{1,3})\s*(?:[.:\-/]\s*)?(?:Đ\/A|ĐÁP\s*ÁN)?\s*[:.-]?\s*([A-D])\b/gi;
+    const parsed = new Map<number, string>();
+    const duplicateNumbers = new Set<number>();
+    let match: RegExpExecArray | null;
+
+    while ((match = answerPattern.exec(bulkAnswerText.toUpperCase())) !== null) {
+      const questionNumber = Number.parseInt(match[1], 10);
+      const answerKey = match[2];
+      if (!Number.isInteger(questionNumber) || questionNumber < 1 || questionNumber > 200) continue;
+      if (parsed.has(questionNumber)) duplicateNumbers.add(questionNumber);
+      parsed.set(questionNumber, answerKey);
+    }
+
+    if (parsed.size === 0) {
+      setBulkAnswerMessage('Chưa đọc được đáp án. Hãy dán theo dạng “1 B  2 C  3 A” hoặc “Câu 1: B”.');
+      return;
+    }
+
+    const highestQuestionNumber = Math.max(...parsed.keys());
+    const nextQuestionCount = answeredCount === 0
+      ? highestQuestionNumber
+      : Math.max(questionCount, highestQuestionNumber);
+    setQuestionCount(Math.min(200, nextQuestionCount));
+    setAnswers((current) => ({ ...current, ...Object.fromEntries(parsed) }));
+    setBulkAnswerMessage(
+      `Đã tự điền ${parsed.size} đáp án${duplicateNumbers.size ? ` (đã dùng đáp án xuất hiện sau cùng cho ${duplicateNumbers.size} câu trùng)` : ''}. Kiểm tra bảng bên dưới trước khi lưu và đăng.`,
+    );
   };
 
   const saveAnswers = async () => {
@@ -278,6 +310,34 @@ export default function RoomExamPaperPanel({
               <FiTrash2 /> {deletingSolution ? 'Đang xóa...' : 'Xóa'}
             </button>}
           </div>
+        </div>}
+
+        {showSolutionFile && config?.solution && <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4 dark:border-violet-900 dark:bg-violet-950/25">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <label className="block min-w-0 flex-1 text-sm font-black text-violet-950 dark:text-violet-100">
+              Dán bảng đáp án từ file lời giải
+              <textarea
+                value={bulkAnswerText}
+                disabled={locked}
+                onChange={(event) => {
+                  setBulkAnswerText(event.target.value);
+                  setBulkAnswerMessage('');
+                }}
+                className="mt-2 min-h-24 w-full rounded-lg border border-violet-200 bg-white p-3 font-mono text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-violet-900 dark:bg-slate-950 dark:text-slate-100 dark:disabled:bg-slate-800"
+                placeholder={'Câu  Đ/A    Câu  Đ/A\n1     B      11    B\n2     C      12    B\n3     A      13    B'}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={applyBulkAnswers}
+              disabled={locked || !bulkAnswerText.trim()}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FiCheck /> Tự điền đáp án
+            </button>
+          </div>
+          <p className="mt-2 text-xs font-semibold text-violet-800 dark:text-violet-200">Hỗ trợ dạng <span className="font-mono">1 B  2 C  3 A</span> hoặc <span className="font-mono">Câu 1: B</span>. Sau khi tự điền, bạn vẫn có thể sửa từng ô trước khi lưu.</p>
+          {bulkAnswerMessage && <p className="mt-2 text-xs font-black text-violet-700 dark:text-violet-200">{bulkAnswerMessage}</p>}
         </div>}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
