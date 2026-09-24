@@ -59,7 +59,6 @@ export default function TopicPracticeFileList({ topicId, subjectSlug, subjectCod
 
       <div className="rounded-3xl border border-red-100 bg-gradient-to-br from-white via-rose-50 to-red-50/80 p-6 shadow-[0_16px_42px_rgba(127,29,29,0.08)] dark:border-slate-800 dark:from-[#111b2d] dark:via-[#101c31] dark:to-[#1d1730] dark:shadow-none">
         <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">{topicName}</h2>
-        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">Chọn một file để bắt đầu. Màn làm bài giữ nguyên PDF và bảng đáp án như phòng thi, nhưng không giới hạn thời gian hay cảnh báo gian lận.</p>
       </div>
 
       {!isAuthenticated ? (

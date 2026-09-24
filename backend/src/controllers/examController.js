@@ -224,7 +224,7 @@ const examController = {
            )
          ORDER BY sf.created_at DESC, sf.id DESC
          LIMIT 1`,
-        [examId, req.user.id, topicPractice, topicPractice ? ['in_progress', 'practice'] : ['in_progress']],
+        [examId, req.user.id, topicPractice, topicPractice ? ['in_progress', 'practice', 'completed'] : ['in_progress']],
       );
 
       const paper = result.rows[0];

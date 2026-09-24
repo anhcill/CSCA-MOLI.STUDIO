@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiRefreshCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiRefreshCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag, FiFileText, FiX } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi, { QuestionReportType } from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
@@ -124,6 +124,8 @@ function ExamResultContent() {
   const [reportQuestion, setReportQuestion] = useState<QuestionResult | null>(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [openingSolution, setOpeningSolution] = useState(false);
+  const [solutionViewerOpen, setSolutionViewerOpen] = useState(false);
+  const [comparisonUrls, setComparisonUrls] = useState<{ paper: string; solution: string } | null>(null);
 
   const openChatTab = useCallback(() => {
     setActiveTab('chat');
@@ -151,6 +153,13 @@ function ExamResultContent() {
     const timer = window.setInterval(() => fetchResult(), 30000);
     return () => window.clearInterval(timer);
   }, [result?.review_locked]);
+
+  useEffect(() => () => {
+    if (comparisonUrls) {
+      URL.revokeObjectURL(comparisonUrls.paper);
+      URL.revokeObjectURL(comparisonUrls.solution);
+    }
+  }, [comparisonUrls]);
 
   // Cảnh báo thoát khi AI đang phân tích
   useEffect(() => {
@@ -238,32 +247,31 @@ function ExamResultContent() {
     }
   };
 
-  const openSolutionFile = async () => {
+  const openSolutionComparison = async () => {
     if (!result) return;
-    const solutionWindow = window.open('', '_blank');
-    if (solutionWindow) solutionWindow.opener = null;
 
     try {
       setOpeningSolution(true);
-      const blob = await examApi.getExamSolution(result.exam_id);
-      const solutionUrl = URL.createObjectURL(blob);
-      if (solutionWindow) {
-        solutionWindow.location.replace(solutionUrl);
-      } else {
-        const link = document.createElement('a');
-        link.href = solutionUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.click();
-      }
-      window.setTimeout(() => URL.revokeObjectURL(solutionUrl), 60_000);
+      const [paper, solution] = await Promise.all([
+        examApi.getExamPaper(result.exam_id, true),
+        examApi.getExamSolution(result.exam_id),
+      ]);
+      setComparisonUrls({
+        paper: URL.createObjectURL(paper),
+        solution: URL.createObjectURL(solution),
+      });
+      setSolutionViewerOpen(true);
     } catch (error: any) {
-      solutionWindow?.close();
-      console.error('Open solution PDF error:', error);
-      alert('Không thể mở file lời giải lúc này. Vui lòng thử lại sau.');
+      console.error('Open PDF comparison error:', error);
+      alert('Không thể tải đề và lời giải lúc này. Vui lòng thử lại sau.');
     } finally {
       setOpeningSolution(false);
     }
+  };
+
+  const closeSolutionComparison = () => {
+    setSolutionViewerOpen(false);
+    setComparisonUrls(null);
   };
 
   const handleSaveWrongQuestion = async (question: QuestionResult) => {
@@ -453,12 +461,12 @@ function ExamResultContent() {
         {result.has_solution_file && (
           <button
             type="button"
-            onClick={openSolutionFile}
+            onClick={openSolutionComparison}
             disabled={openingSolution}
             className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-200 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-xs font-bold shadow-sm no-print disabled:cursor-not-allowed disabled:opacity-60"
           >
             {openingSolution ? <FiRefreshCw className="animate-spin" size={14} /> : <FiBookOpen size={14} />}
-            {openingSolution ? 'Đang mở...' : 'Mở file lời giải'}
+            {openingSolution ? 'Đang tải...' : 'So sánh đề & lời giải'}
           </button>
         )}
       </div>
@@ -486,6 +494,32 @@ function ExamResultContent() {
             </button>
           ))}
         </div>
+
+        {result.has_solution_file && (
+          <section className="mb-6 overflow-hidden rounded-3xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-5 shadow-[0_18px_45px_rgba(5,150,105,0.16)] dark:border-emerald-500/45 dark:from-emerald-950/60 dark:via-slate-950 dark:to-teal-950/45 dark:shadow-none sm:p-7">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 sm:h-16 sm:w-16">
+                  <FiBookOpen size={30} />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Đã có file lời giải</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Đối chiếu đề và lời giải PDF</h2>
+                  <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Mở hai file song song để xem câu hỏi bên trái và lời giải tương ứng bên phải.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={openSolutionComparison}
+                disabled={openingSolution}
+                className="inline-flex min-h-14 shrink-0 items-center justify-center gap-3 rounded-2xl bg-emerald-600 px-6 py-4 text-base font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {openingSolution ? <FiRefreshCw className="animate-spin" size={20} /> : <FiFileText size={20} />}
+                {openingSolution ? 'Đang tải hai file...' : 'Xem lời giải ngay'}
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* ── TAB: KẾT QUẢ + AI PHÂN TÍCH ── */}
         {activeTab === 'result' && (
@@ -960,6 +994,32 @@ function ExamResultContent() {
             fetchResult();
           }}
         />
+      )}
+
+      {solutionViewerOpen && comparisonUrls && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/95 p-3 backdrop-blur-sm sm:p-5">
+          <section className="mx-auto flex h-full max-w-[1800px] flex-col overflow-hidden rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3 sm:px-6 sm:py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Chế độ đối chiếu</p>
+                <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Đề thi và lời giải PDF</h2>
+              </div>
+              <button type="button" onClick={closeSolutionComparison} className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-black text-white transition hover:bg-slate-700">
+                <FiX size={18} /> Đóng
+              </button>
+            </header>
+            <div className="grid min-h-0 flex-1 gap-px bg-slate-700 lg:grid-cols-2">
+              <div className="flex min-h-0 flex-col bg-slate-950">
+                <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-4 py-3 text-sm font-black text-slate-100"><FiFileText className="text-sky-300" /> Đề thi</div>
+                <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="min-h-[42vh] flex-1 bg-white lg:min-h-0" />
+              </div>
+              <div className="flex min-h-0 flex-col bg-slate-950">
+                <div className="flex items-center gap-2 border-b border-slate-800 bg-emerald-950/40 px-4 py-3 text-sm font-black text-emerald-100"><FiBookOpen className="text-emerald-300" /> Lời giải</div>
+                <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="min-h-[42vh] flex-1 bg-white lg:min-h-0" />
+              </div>
+            </div>
+          </section>
+        </div>
       )}
     </InkResultBackground>
   );
