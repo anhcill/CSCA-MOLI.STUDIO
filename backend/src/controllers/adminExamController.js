@@ -2349,9 +2349,7 @@ const AdminExamController = {
         && new Date(currentExamResult.rows[0].start_time) <= new Date()) {
         return res.status(409).json({ message: 'Kỳ thi đã bắt đầu nên không thể đóng đăng ký.' });
       }
-      if (status === 'published'
-        && currentExamResult.rows[0].status !== 'published'
-        && currentExamResult.rows[0].start_time) {
+      if (status === 'published' && currentExamResult.rows[0].status !== 'published') {
         const readinessResult = await pool.query(
           `SELECT EXISTS (
                     SELECT 1 FROM admin_exam_source_files sf
@@ -2366,7 +2364,15 @@ const AdminExamController = {
                       SELECT 1 FROM answers a
                       WHERE a.question_id = q.id AND a.is_correct = TRUE
                     )
-                  )::int AS answered_count
+                  )::int AS answered_count,
+                  EXISTS (
+                    SELECT 1
+                    FROM question_topic_mapping qtm
+                    JOIN questions mapped_q ON mapped_q.id = qtm.question_id
+                    WHERE mapped_q.exam_id = $1
+                      AND mapped_q.deleted_at IS NULL
+                      AND mapped_q.question_number > 0
+                  ) AS has_topic
            FROM questions q
            WHERE q.exam_id = $1
              AND q.question_number > 0
@@ -2375,19 +2381,36 @@ const AdminExamController = {
           [examId, ['reading_passage', 'fill_blank_pool']],
         );
         const readiness = readinessResult.rows[0] || {};
-        if (!currentExamResult.rows[0].end_time) {
-          return res.status(409).json({ message: 'Cần đặt đủ giờ bắt đầu và kết thúc trước khi mở đăng ký.' });
-        }
-        if (new Date(currentExamResult.rows[0].end_time) <= new Date()) {
-          return res.status(409).json({ message: 'Kỳ thi đã kết thúc; hãy cập nhật lịch mới trước khi mở đăng ký.' });
-        }
-        if (!readiness.has_paper
-          || Number(readiness.question_count) < 1
-          || Number(readiness.answered_count) !== Number(readiness.question_count)) {
-          return res.status(409).json({
-            message: 'Cần tải PDF và nhập đủ bảng đáp án trước khi mở đăng ký.',
-            code: 'ROOM_PAPER_NOT_CONFIGURED',
-          });
+        const paperIsReady = readiness.has_paper
+          && Number(readiness.question_count) >= 1
+          && Number(readiness.answered_count) === Number(readiness.question_count);
+
+        if (currentExamResult.rows[0].start_time) {
+          if (!currentExamResult.rows[0].end_time) {
+            return res.status(409).json({ message: 'Cần đặt đủ giờ bắt đầu và kết thúc trước khi mở đăng ký.' });
+          }
+          if (new Date(currentExamResult.rows[0].end_time) <= new Date()) {
+            return res.status(409).json({ message: 'Kỳ thi đã kết thúc; hãy cập nhật lịch mới trước khi mở đăng ký.' });
+          }
+          if (!paperIsReady) {
+            return res.status(409).json({
+              message: 'Cần tải PDF và nhập đủ bảng đáp án trước khi mở đăng ký.',
+              code: 'ROOM_PAPER_NOT_CONFIGURED',
+            });
+          }
+        } else if (readiness.has_paper) {
+          if (!paperIsReady) {
+            return res.status(409).json({
+              message: 'Cần tải PDF và nhập đủ bảng đáp án trước khi đăng file luyện.',
+              code: 'TOPIC_PRACTICE_NOT_CONFIGURED',
+            });
+          }
+          if (!readiness.has_topic) {
+            return res.status(409).json({
+              message: 'Cần gán file vào một chủ đề trước khi đăng cho học viên.',
+              code: 'TOPIC_PRACTICE_TOPIC_REQUIRED',
+            });
+          }
         }
       }
       // P1: sanitize all text fields + P0: handle titleCn/descriptionCn

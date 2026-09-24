@@ -120,7 +120,7 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     };
   }, [mounted, isAuthenticated, token, pathname]);
 
-  // Suppress footer on admin/auth/exam/chat/subject pages
+  // Suppress footer on admin/auth/exam/chat/subject/topic-practice pages
   const isAdmin = pathname?.startsWith('/admin');
   const isAuth = pathname?.startsWith('/login') ||
     pathname?.startsWith('/register') ||
@@ -133,9 +133,10 @@ export default function ClientShell({ children }: { children: React.ReactNode })
     pathname?.startsWith('/ho-tro/messages');
   const isGame = pathname?.startsWith('/games');
   const isCoursePage = pathname?.startsWith('/khoa-hoc') || pathname?.startsWith('/hoc');
+  const isTopicPractice = pathname?.startsWith('/luyen-chu-de');
   const isSubjectPage = pathname?.match(/^\/(toan|vat-ly|hoa|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|tailieu|tiengtrung-xahoi|tiengtrung-tunhien|lo-trinh|mon)/);
   const isSubjectScopedPage = Boolean(new URLSearchParams(queryString).get('subject')) && pathname?.match(/^\/(lich-su|tu-vung|cau-truc-de|ly-thuyet|cong-thuc|giai-de-chi-tiet|lo-trinh)$/);
-  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isSubjectPage || isSubjectScopedPage;
+  const noFooter = isAdmin || isAuth || isExam || isChat || isGame || isCoursePage || isTopicPractice || isSubjectPage || isSubjectScopedPage;
   const showFloatingContacts = !isAdmin && !isAuth && !isExam && !isChat && !isGame && !isSubjectPage && !isSubjectScopedPage;
   const showMoliPet = isAuthenticated && !isAdmin && !isAuth && !isExam && !isChat && !isGame;
   // The National Day greeting takes the daily letter's exact corner position

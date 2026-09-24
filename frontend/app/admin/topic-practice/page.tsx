@@ -91,6 +91,9 @@ function PracticeEditor({ file, onClose, onChanged }: { file: EditorFile; onClos
     try {
       setPublishing(true);
       const nextStatus = status === 'published' ? 'draft' : 'published';
+      if (nextStatus === 'published') {
+        await examAdminApi.setTopicPracticeTopic(file.examId, Number(selectedTopicId));
+      }
       await examAdminApi.updateExamStatus(file.examId, nextStatus);
       setStatus(nextStatus);
       await onChanged();
