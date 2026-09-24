@@ -209,60 +209,6 @@ export default function RoomExamPaperPanel({
         )}
       </div>
 
-      {showSolutionFile && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-950 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-black"><FiFileText /> File lời giải PDF <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-100">Không bắt buộc</span></h2>
-            <p className="mt-1 max-w-3xl text-sm text-emerald-800 dark:text-emerald-200">
-              Học viên chỉ có thể mở file này ở trang kết quả sau khi đã nộp xong bài luyện. File lời giải không thay thế bảng đáp án chấm điểm.
-            </p>
-          </div>
-          <input
-            ref={solutionInputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) uploadSolution(file);
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => solutionInputRef.current?.click()}
-            disabled={uploadingSolution}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {uploadingSolution ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
-            {config?.solution ? 'Thay file lời giải' : 'Tải file lời giải'}
-          </button>
-        </div>
-
-        {config?.solution ? (
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-white p-4 text-sm md:flex-row md:items-center md:justify-between dark:bg-slate-900">
-            <div className="min-w-0">
-              <p className="truncate font-black">{config.solution.fileName}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                {formatBytes(config.solution.fileSize)}{config.solution.pages ? ` · ${config.solution.pages} trang` : ''}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={deleteSolution}
-              disabled={deletingSolution}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-            >
-              <FiTrash2 /> {deletingSolution ? 'Đang xóa...' : 'Xóa lời giải'}
-            </button>
-          </div>
-        ) : (
-          <div className="mt-4 rounded-xl border border-dashed border-emerald-300 bg-white/60 p-4 text-sm font-bold text-emerald-700 dark:text-emerald-200">
-            Chưa có file lời giải. Bạn có thể thêm sau khi đã đăng file luyện.
-          </div>
-        )}
-      </div>}
-
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
           {showSolutionFile
@@ -286,10 +232,53 @@ export default function RoomExamPaperPanel({
               value={questionCount}
               disabled={locked}
               onChange={(event) => setQuestionCount(Math.max(1, Math.min(200, Number(event.target.value) || 1)))}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100"
+              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-800"
             />
           </label>
         </div>
+
+        {showSolutionFile && <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/25 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 font-black text-emerald-950 dark:text-emerald-100"><FiFileText /> File lời giải PDF <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-100">Tùy chọn</span></p>
+            {config?.solution ? (
+              <p className="mt-1 truncate text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                {config.solution.fileName} · {formatBytes(config.solution.fileSize)}{config.solution.pages ? ` · ${config.solution.pages} trang` : ''}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200">Hiển thị cho học viên sau khi đã nộp bài.</p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <input
+              ref={solutionInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) uploadSolution(file);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => solutionInputRef.current?.click()}
+              disabled={uploadingSolution}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {uploadingSolution ? <FiRefreshCw className="animate-spin" /> : <FiUpload />}
+              {config?.solution ? 'Thay file lời giải' : 'Tải file lời giải'}
+            </button>
+            {config?.solution && <button
+              type="button"
+              onClick={deleteSolution}
+              disabled={deletingSolution}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:bg-slate-950 dark:text-rose-300 dark:hover:bg-rose-950/40"
+            >
+              <FiTrash2 /> {deletingSolution ? 'Đang xóa...' : 'Xóa'}
+            </button>}
+          </div>
+        </div>}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: questionCount }, (_, index) => index + 1).map((number) => (
