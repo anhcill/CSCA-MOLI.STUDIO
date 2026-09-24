@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiAward, FiHome, FiRotateCw, FiRefreshCw, FiMessageCircle, FiBarChart2, FiBookOpen, FiCpu, FiPrinter, FiZap, FiArrowLeft, FiFlag } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import examApi, { QuestionReportType } from '@/lib/api/exams';
 import { authFetch } from '@/lib/utils/authFetch';
