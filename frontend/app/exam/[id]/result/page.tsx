@@ -505,7 +505,6 @@ function ExamResultContent() {
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Đã có file lời giải</p>
                   <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">Đối chiếu đề và lời giải PDF</h2>
-                  <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">Mở hai file song song để xem câu hỏi bên trái và lời giải tương ứng bên phải.</p>
                 </div>
               </div>
               <button
