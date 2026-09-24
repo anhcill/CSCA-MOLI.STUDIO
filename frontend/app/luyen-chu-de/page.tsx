@@ -13,7 +13,6 @@ export default function TopicPracticePage() {
   return (
     <SubjectStudyShell
       title="Luyện Chủ Đề"
-      subtitle="Chọn một chủ đề, rồi luyện theo từng file PDF với bảng đáp án như phòng thi."
       subjectSlug={subjectSlug}
       activeSection="luyen-chu-de"
       searchPlaceholder="Tìm chủ đề hoặc file luyện..."
