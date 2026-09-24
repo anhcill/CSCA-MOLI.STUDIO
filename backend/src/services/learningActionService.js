@@ -394,7 +394,7 @@ async function getSubjectPracticeTopics(userId, subjectCode) {
         AND uts.subject_id = s.id
         AND uts.topic_id = qt.id
       WHERE s.code = $2
-      GROUP BY qt.id, uts.total_questions, uts.correct_answers, uts.incorrect_answers
+      GROUP BY s.id, qt.id, uts.total_questions, uts.correct_answers, uts.incorrect_answers
       HAVING COUNT(DISTINCT q.id) > 0
       ORDER BY
         CASE WHEN COALESCE(uts.total_questions, 0) > 0 THEN 0 ELSE 1 END,
