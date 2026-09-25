@@ -19,6 +19,7 @@ import BilingualMathText from '@/components/exam/result/BilingualMathText';
 import QuestionExplanationBlock from '@/components/exam/result/QuestionExplanationBlock';
 import ReviewAIButtons from '@/components/exam/result/ReviewAIButtons';
 import ReviewAIHost, { type ReviewAIHostHandle } from '@/components/exam/result/ReviewAIHost';
+import PdfComparisonDocument from '@/components/exam/result/PdfComparisonDocument';
 import type { ReviewAIMode } from '@/components/exam/result/types';
 import { getOptionToneClass, getQuestionReviewStatus, getReviewCardClass } from '@/components/exam/result/utils';
 import InkResultBackground, {
@@ -1001,8 +1002,8 @@ function ExamResultContent() {
             <FiX size={20} />
           </button>
           <div className="grid h-full grid-rows-2 gap-px bg-slate-200 lg:grid-cols-2 lg:grid-rows-1">
-            <iframe title="Đề thi PDF" src={comparisonUrls.paper} className="h-full min-h-0 w-full bg-white" />
-            <iframe title="Lời giải PDF" src={comparisonUrls.solution} className="h-full min-h-0 w-full bg-white" />
+            <PdfComparisonDocument title="Đề thi PDF" url={comparisonUrls.paper} />
+            <PdfComparisonDocument title="Lời giải PDF" url={comparisonUrls.solution} />
           </div>
         </div>
       )}
